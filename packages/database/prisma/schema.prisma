@@ -282,7 +282,8 @@ model CanonicalContentSnapshot {
 
 model CharacterEquipmentItem {
   id                    String             @id
-  characterId           String
+  holderCharacterId     String?
+  campaignContextId     String?
   templateId            String
   category              EquipmentCategory
   displayName           String?
@@ -291,8 +292,8 @@ model CharacterEquipmentItem {
   isStackable           Boolean
   material              MaterialType
   quality               QualityType
-  locationId            String
-  carryMode             CarryMode
+  locationId            String?
+  carryMode             CarryMode?
   previousLocationId    String?
   previousCarryMode     CarryMode?
   conditionState        ItemConditionState
@@ -300,7 +301,7 @@ model CharacterEquipmentItem {
   durabilityMax         Int?
   encumbranceOverride   Float?
   valueOverride         Float?
-  specialPropertiesJson Json?
+  itemFactsJson         Json
   notes                 String?
   isEquipped            Boolean?
   isFavorite            Boolean?
@@ -308,10 +309,13 @@ model CharacterEquipmentItem {
   statusTagsJson        Json?
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
-  character             Character          @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  holderCharacter       Character?          @relation(fields: [holderCharacterId], references: [id], onDelete: SetNull)
+  campaignContext       Campaign?           @relation(fields: [campaignContextId], references: [id], onDelete: SetNull)
+  storageLocation       CharacterStorageLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
 
-  @@index([characterId])
-  @@index([characterId, locationId])
+  @@index([holderCharacterId])
+  @@index([holderCharacterId, locationId])
+  @@index([campaignContextId])
 }
 
 model CharacterStorageLocation {
@@ -327,6 +331,7 @@ model CharacterStorageLocation {
   createdAt               DateTime            @default(now())
   updatedAt               DateTime            @updatedAt
   character               Character           @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  equipmentItems          CharacterEquipmentItem[]
 
   @@index([characterId])
   @@unique([characterId, name])
@@ -364,6 +369,7 @@ model Campaign {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   assets      CampaignAsset[]
+  equipmentItems CharacterEquipmentItem[]
   gmUser      User            @relation(fields: [gmUserId], references: [id], onDelete: Cascade)
   rosterEntries CampaignRosterEntry[]
   scenarioRelationships ScenarioRelationship[]

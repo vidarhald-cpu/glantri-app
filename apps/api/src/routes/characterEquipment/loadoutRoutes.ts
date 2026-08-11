@@ -22,12 +22,12 @@ export const equipmentLoadoutRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseNullableItemIdBody(request.body);
-      await requireAccessibleCharacter(user, id);
+      const viewer = await requireAccessibleCharacter(user, id);
       await equipmentWriteService.setCharacterWornArmor(id, body.itemId);
 
       return {
         state: toEquipmentFeatureState(
-          await equipmentReadModelService.getCharacterEquipmentState(id)
+          await equipmentReadModelService.getCharacterEquipmentState(id, viewer),
         ),
       };
     } catch (error) {
@@ -43,12 +43,12 @@ export const equipmentLoadoutRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseNullableItemIdBody(request.body);
-      await requireAccessibleCharacter(user, id);
+      const viewer = await requireAccessibleCharacter(user, id);
       await equipmentWriteService.setCharacterReadyShield(id, body.itemId);
 
       return {
         state: toEquipmentFeatureState(
-          await equipmentReadModelService.getCharacterEquipmentState(id)
+          await equipmentReadModelService.getCharacterEquipmentState(id, viewer),
         ),
       };
     } catch (error) {
@@ -65,12 +65,12 @@ export const equipmentLoadoutRoutes: FastifyPluginAsync = async (app) => {
 
       try {
         const body = parseNullableItemIdBody(request.body);
-        await requireAccessibleCharacter(user, id);
+        const viewer = await requireAccessibleCharacter(user, id);
         await equipmentWriteService.setCharacterActiveWeapon(id, slot, body.itemId);
 
         return {
           state: toEquipmentFeatureState(
-            await equipmentReadModelService.getCharacterEquipmentState(id)
+            await equipmentReadModelService.getCharacterEquipmentState(id, viewer),
           ),
         };
       } catch (error) {

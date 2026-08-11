@@ -1,5 +1,6 @@
 import { equipmentTemplatesById } from "@glantri/content";
 import {
+  type AssignedEquipmentItem,
   type CarryMode,
   type CharacterLoadout,
   type EquipmentItem,
@@ -12,6 +13,7 @@ import {
   type StorageLocation,
   type StorageLocationType,
   CharacterLoadoutSchema,
+  CanonicalEquipmentItemSchema,
   EquipmentItemSchema,
   StorageLocationSchema,
   getStorageAssignmentForLocation,
@@ -54,12 +56,7 @@ interface UpdateCharacterEquipmentMetadataInput {
   notes?: string | null;
 }
 
-type LoadoutSelectionKind =
-  | "armor"
-  | "shield"
-  | "primary"
-  | "secondary"
-  | "missile";
+type LoadoutSelectionKind = "armor" | "shield" | "primary" | "secondary" | "missile";
 
 function indexById<T extends { id: string }>(items: T[]): Record<string, T> {
   return Object.fromEntries(items.map((item) => [item.id, item]));
@@ -78,9 +75,7 @@ function getActiveLoadoutForSnapshot(
   loadouts: CharacterLoadout[],
 ): CharacterLoadout {
   return (
-    loadouts.find((loadout) => loadout.isActive) ??
-    loadouts[0] ??
-    buildDefaultLoadout(characterId)
+    loadouts.find((loadout) => loadout.isActive) ?? loadouts[0] ?? buildDefaultLoadout(characterId)
   );
 }
 
@@ -109,7 +104,10 @@ function buildCharacterEquipmentItemId(characterId: string): string {
   return `${characterId}:item-${randomUUID()}`;
 }
 
-function assertItemBelongsToCharacter(item: EquipmentItem | undefined, characterId: string): EquipmentItem {
+function assertItemBelongsToCharacter(
+  item: AssignedEquipmentItem | undefined,
+  characterId: string,
+): AssignedEquipmentItem {
   if (!item || item.characterId !== characterId) {
     throw new Error("Equipment item not found for character.");
   }
@@ -132,9 +130,7 @@ function assignmentsMatch(
   left: ItemStorageAssignment | null | undefined,
   right: ItemStorageAssignment | null | undefined,
 ): boolean {
-  return (
-    left?.locationId === right?.locationId && left?.carryMode === right?.carryMode
-  );
+  return left?.locationId === right?.locationId && left?.carryMode === right?.carryMode;
 }
 
 function getReferencedLoadoutLabel(loadout: CharacterLoadout, itemId: string): string | null {
@@ -175,7 +171,7 @@ export class CharacterEquipmentWriteService {
   ) {}
 
   async ensureCharacterEquipmentInitialized(characterId: string): Promise<{
-    items: EquipmentItem[];
+    items: AssignedEquipmentItem[];
     loadouts: CharacterLoadout[];
     locations: StorageLocation[];
   }> {
@@ -204,10 +200,7 @@ export class CharacterEquipmentWriteService {
 
       return {
         items: snapshot.items,
-        loadouts: [
-          activeLoadout,
-          ...snapshot.loadouts.slice(1),
-        ],
+        loadouts: [activeLoadout, ...snapshot.loadouts.slice(1)],
         locations: snapshot.locations,
       };
     }
@@ -252,10 +245,7 @@ export class CharacterEquipmentWriteService {
     );
   }
 
-  async removeCharacterStorageLocation(
-    characterId: string,
-    locationId: string,
-  ): Promise<void> {
+  async removeCharacterStorageLocation(characterId: string, locationId: string): Promise<void> {
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
     const location = assertLocationBelongsToCharacter(
       snapshot.locations.find((entry) => entry.id === locationId),
@@ -266,17 +256,20 @@ export class CharacterEquipmentWriteService {
       throw new Error("System locations cannot be deleted.");
     }
 
-    if (
-      snapshot.items.some((item) => item.storageAssignment.locationId === locationId)
-    ) {
+    if (snapshot.items.some((item) => item.storageAssignment.locationId === locationId)) {
       throw new Error("Only empty custom locations can be deleted.");
     }
 
     await this.repository.removeCharacterStorageLocation(characterId, locationId);
   }
 
-  async createCharacterEquipmentItem(input: EquipmentItemInput): Promise<EquipmentItem> {
-    const item = EquipmentItemSchema.parse(input);
+  async createCharacterEquipmentItem(input: EquipmentItemInput): Promise<AssignedEquipmentItem> {
+    const canonicalItem = CanonicalEquipmentItemSchema.parse(input);
+    if (!canonicalItem.holderCharacterId || !canonicalItem.storageAssignment) {
+      throw new Error("This pilot workflow requires a Character holder and valid holder location.");
+    }
+
+    const item = EquipmentItemSchema.parse(canonicalItem);
     await this.ensureCharacterEquipmentInitialized(item.characterId);
 
     const locations = await this.repository.getCharacterStorageLocations(item.characterId);
@@ -296,7 +289,7 @@ export class CharacterEquipmentWriteService {
   async addCharacterEquipmentItem(
     characterId: string,
     input: AddCharacterEquipmentItemInput,
-  ): Promise<EquipmentItem> {
+  ): Promise<AssignedEquipmentItem> {
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
     const template = equipmentTemplatesById[input.templateId];
 
@@ -321,7 +314,9 @@ export class CharacterEquipmentWriteService {
     }
 
     const durabilityMax =
-      template.category === "weapon" ? (template.durabilityProfile?.maxDurabilityDefault ?? null) : null;
+      template.category === "weapon"
+        ? (template.durabilityProfile?.maxDurabilityDefault ?? null)
+        : null;
 
     const item = EquipmentItemSchema.parse({
       acquiredFrom: null,
@@ -359,7 +354,7 @@ export class CharacterEquipmentWriteService {
     return this.repository.createCharacterEquipmentItem(item);
   }
 
-  async updateCharacterEquipmentItem(input: EquipmentItemInput): Promise<EquipmentItem> {
+  async updateCharacterEquipmentItem(input: EquipmentItemInput): Promise<AssignedEquipmentItem> {
     const item = EquipmentItemSchema.parse(input);
     const snapshot = await this.ensureCharacterEquipmentInitialized(item.characterId);
 
@@ -400,7 +395,7 @@ export class CharacterEquipmentWriteService {
     itemId: string,
     locationId: string,
     carryMode: CarryMode,
-  ): Promise<EquipmentItem> {
+  ): Promise<AssignedEquipmentItem> {
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
     const item = assertItemBelongsToCharacter(
       snapshot.items.find((entry) => entry.id === itemId),
@@ -417,7 +412,7 @@ export class CharacterEquipmentWriteService {
       previousStorageAssignment:
         carryMode === "equipped"
           ? item.isEquipped
-            ? item.previousStorageAssignment ?? null
+            ? (item.previousStorageAssignment ?? null)
             : item.storageAssignment
           : null,
       storageAssignment: {
@@ -449,10 +444,7 @@ export class CharacterEquipmentWriteService {
     return this.repository.updateCharacterEquipmentItem(updatedItem);
   }
 
-  async removeCharacterEquipmentItem(
-    characterId: string,
-    itemId: string,
-  ): Promise<void> {
+  async removeCharacterEquipmentItem(characterId: string, itemId: string): Promise<void> {
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
     assertItemBelongsToCharacter(
       snapshot.items.find((entry) => entry.id === itemId),
@@ -474,7 +466,7 @@ export class CharacterEquipmentWriteService {
     characterId: string,
     itemId: string,
     quantity: number,
-  ): Promise<EquipmentItem> {
+  ): Promise<AssignedEquipmentItem> {
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
     const item = assertItemBelongsToCharacter(
       snapshot.items.find((entry) => entry.id === itemId),
@@ -522,7 +514,7 @@ export class CharacterEquipmentWriteService {
     characterId: string,
     itemId: string,
     input: UpdateCharacterEquipmentMetadataInput,
-  ): Promise<EquipmentItem> {
+  ): Promise<AssignedEquipmentItem> {
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
     const item = assertItemBelongsToCharacter(
       snapshot.items.find((entry) => entry.id === itemId),
@@ -595,9 +587,7 @@ export class CharacterEquipmentWriteService {
     );
 
     if ((snapshot.items.length > 0 || hasCustomLocations) && !options?.overwrite) {
-      throw new Error(
-        "Sample equipment bootstrap is only available for an empty equipment state.",
-      );
+      throw new Error("Sample equipment bootstrap is only available for an empty equipment state.");
     }
 
     if (options?.overwrite) {
@@ -657,16 +647,10 @@ export class CharacterEquipmentWriteService {
         characterId,
         id: `${characterId}:loadout-current`,
         readyShieldItemId: sampleEquipment.sampleActiveLoadout.readyShieldItemId
-          ? buildBootstrapItemId(
-              characterId,
-              sampleEquipment.sampleActiveLoadout.readyShieldItemId,
-            )
+          ? buildBootstrapItemId(characterId, sampleEquipment.sampleActiveLoadout.readyShieldItemId)
           : null,
         wornArmorItemId: sampleEquipment.sampleActiveLoadout.wornArmorItemId
-          ? buildBootstrapItemId(
-              characterId,
-              sampleEquipment.sampleActiveLoadout.wornArmorItemId,
-            )
+          ? buildBootstrapItemId(characterId, sampleEquipment.sampleActiveLoadout.wornArmorItemId)
           : null,
       }),
     );
@@ -735,7 +719,7 @@ export class CharacterEquipmentWriteService {
   }
 
   private getRestoredStorageAssignment(
-    item: EquipmentItem,
+    item: AssignedEquipmentItem,
     locations: StorageLocation[],
     fallbackAssignment: ItemStorageAssignment,
   ): ItemStorageAssignment {
@@ -756,12 +740,12 @@ export class CharacterEquipmentWriteService {
   }
 
   private buildEquippedLoadoutItem(
-    item: EquipmentItem,
+    item: AssignedEquipmentItem,
     targetAssignment: ItemStorageAssignment,
-  ): EquipmentItem {
+  ): AssignedEquipmentItem {
     const nextPreviousStorageAssignment =
       item.storageAssignment.carryMode === "equipped"
-        ? item.previousStorageAssignment ?? null
+        ? (item.previousStorageAssignment ?? null)
         : item.storageAssignment;
 
     return EquipmentItemSchema.parse({
@@ -773,9 +757,9 @@ export class CharacterEquipmentWriteService {
   }
 
   private buildStoredLoadoutItem(
-    item: EquipmentItem,
+    item: AssignedEquipmentItem,
     destinationAssignment: ItemStorageAssignment,
-  ): EquipmentItem {
+  ): AssignedEquipmentItem {
     return EquipmentItemSchema.parse({
       ...item,
       isEquipped: destinationAssignment.carryMode === "equipped",
@@ -825,10 +809,7 @@ export class CharacterEquipmentWriteService {
         throw new Error("Only items in with-you locations can be selected for loadout.");
       }
 
-      const updatedSelectedItem = this.buildEquippedLoadoutItem(
-        selectedItem,
-        targetAssignment,
-      );
+      const updatedSelectedItem = this.buildEquippedLoadoutItem(selectedItem, targetAssignment);
 
       const selectedErrors = validateEquipmentItem(updatedSelectedItem);
       if (selectedErrors.length > 0) {
@@ -844,15 +825,11 @@ export class CharacterEquipmentWriteService {
           snapshot.locations,
           fallbackAssignment,
         );
-        const previousDestination =
-          assignmentsMatch(selectedSourceAssignment, targetAssignment)
-            ? restoredPreviousAssignment
-            : selectedSourceAssignment;
+        const previousDestination = assignmentsMatch(selectedSourceAssignment, targetAssignment)
+          ? restoredPreviousAssignment
+          : selectedSourceAssignment;
 
-        const updatedPreviousItem = this.buildStoredLoadoutItem(
-          previousItem,
-          previousDestination,
-        );
+        const updatedPreviousItem = this.buildStoredLoadoutItem(previousItem, previousDestination);
 
         const previousErrors = validateEquipmentItem(updatedPreviousItem);
         if (previousErrors.length > 0) {

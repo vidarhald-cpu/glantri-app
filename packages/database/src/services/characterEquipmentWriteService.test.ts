@@ -3,8 +3,8 @@ import {
   CharacterLoadoutSchema,
   EquipmentItemSchema,
   StorageLocationSchema,
+  type AssignedEquipmentItem,
   type CharacterLoadout,
-  type EquipmentItem,
   type StorageLocation,
 } from "@glantri/domain";
 
@@ -13,7 +13,7 @@ import { CharacterEquipmentWriteService } from "./characterEquipmentWriteService
 
 const characterId = "char-equip";
 
-function cloneItem(item: EquipmentItem): EquipmentItem {
+function cloneItem(item: AssignedEquipmentItem): AssignedEquipmentItem {
   return EquipmentItemSchema.parse(item);
 }
 
@@ -26,13 +26,11 @@ function cloneLocation(location: StorageLocation): StorageLocation {
 }
 
 function createRepositoryStub(input?: {
-  items?: EquipmentItem[];
+  items?: AssignedEquipmentItem[];
   loadouts?: CharacterLoadout[];
   locations?: StorageLocation[];
 }) {
-  const items = new Map(
-    (input?.items ?? []).map((item) => [item.id, cloneItem(item)]),
-  );
+  const items = new Map((input?.items ?? []).map((item) => [item.id, cloneItem(item)]));
   const loadouts = new Map(
     (input?.loadouts ?? []).map((loadout) => [loadout.id, cloneLoadout(loadout)]),
   );
@@ -84,6 +82,9 @@ function createRepositoryStub(input?: {
         .filter((item) => item.characterId === currentCharacterId)
         .map(cloneItem);
     },
+    async getCanonicalEquipmentItemById(itemId) {
+      return items.get(itemId) ?? null;
+    },
     async getCharacterStorageLocations(currentCharacterId) {
       return Array.from(locations.values())
         .filter((location) => location.characterId === currentCharacterId)
@@ -129,8 +130,8 @@ function createLocation(input: {
 function createItem(input: {
   id: string;
   templateId: string;
-  category: EquipmentItem["category"];
-  storageAssignment: EquipmentItem["storageAssignment"];
+  category: AssignedEquipmentItem["category"];
+  storageAssignment: AssignedEquipmentItem["storageAssignment"];
 }) {
   return EquipmentItemSchema.parse({
     acquiredFrom: null,
@@ -160,6 +161,28 @@ function createItem(input: {
 }
 
 describe("CharacterEquipmentWriteService loadout storage restoration", () => {
+  it("keeps unheld items outside the current Character creation workflow", async () => {
+    const { repository } = createRepositoryStub();
+    const service = new CharacterEquipmentWriteService(repository);
+
+    await expect(
+      service.createCharacterEquipmentItem({
+        category: "weapon",
+        characterId: null,
+        conditionState: "intact",
+        holderCharacterId: null,
+        id: "unheld-item",
+        isStackable: false,
+        material: "steel",
+        quality: "standard",
+        quantity: 1,
+        specificityType: "specific",
+        storageAssignment: null,
+        templateId: "weapon-template-dagger",
+      }),
+    ).rejects.toThrow("This pilot workflow requires a Character holder and valid holder location.");
+  });
+
   it("returns an unequipped weapon to its prior mount location instead of backpack", async () => {
     const equippedLocation = createLocation({
       availabilityClass: "with_you",

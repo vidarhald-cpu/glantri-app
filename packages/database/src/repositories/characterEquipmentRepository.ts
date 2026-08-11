@@ -1,11 +1,12 @@
 import {
   CharacterLoadoutSchema,
+  CanonicalEquipmentItemSchema,
   EquipmentItemSchema,
-  EquipmentSpecialPropertiesSchema,
+  EquipmentItemFactsV1Schema,
   StorageLocationSchema,
   type CharacterLoadout as DomainCharacterLoadout,
-  type EquipmentItem,
-  type EquipmentSpecialProperties,
+  type AssignedEquipmentItem,
+  type CanonicalEquipmentItem,
   type ItemStorageAssignment,
   type StorageLocation,
 } from "@glantri/domain";
@@ -13,16 +14,6 @@ import { createDefaultEquipmentLocations } from "@glantri/content";
 import { Prisma, PrismaClient } from "@prisma/client";
 
 import { prisma as defaultPrisma } from "../client";
-
-function parseSpecialProperties(
-  value: unknown,
-): EquipmentSpecialProperties | null {
-  if (value == null) {
-    return null;
-  }
-
-  return EquipmentSpecialPropertiesSchema.parse(value);
-}
 
 function parseStringArrayOrNull(value: unknown): string[] | null {
   if (value == null) {
@@ -42,18 +33,15 @@ function serializeJsonArray(
   return value == null ? Prisma.JsonNull : value;
 }
 
-function serializeSpecialProperties(
-  value: EquipmentSpecialProperties | null | undefined,
-): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput | undefined {
-  return value == null
-    ? Prisma.JsonNull
-    : (value as unknown as Prisma.InputJsonValue);
+function serializeItemFacts(value: AssignedEquipmentItem["itemFacts"]): Prisma.InputJsonValue {
+  return EquipmentItemFactsV1Schema.parse(value) as unknown as Prisma.InputJsonValue;
 }
 
-function mapEquipmentItem(record: {
+function mapCanonicalEquipmentItem(record: {
   acquiredFrom: string | null;
+  campaignContextId: string | null;
   category: string;
-  characterId: string;
+  holderCharacterId: string | null;
   conditionState: string;
   displayName: string | null;
   durabilityCurrent: number | null;
@@ -63,44 +51,50 @@ function mapEquipmentItem(record: {
   isEquipped: boolean | null;
   isFavorite: boolean | null;
   isStackable: boolean;
-  locationId: string;
-  carryMode: string;
+  itemFactsJson: unknown;
+  locationId: string | null;
+  carryMode: string | null;
   previousLocationId: string | null;
   previousCarryMode: string | null;
   material: string;
   notes: string | null;
   quality: string;
   quantity: number;
-  specialPropertiesJson: unknown;
   specificityType: string;
   statusTagsJson: unknown;
   templateId: string;
   valueOverride: number | null;
-}): EquipmentItem {
-  return EquipmentItemSchema.parse({
+}): CanonicalEquipmentItem {
+  return CanonicalEquipmentItemSchema.parse({
     acquiredFrom: record.acquiredFrom,
+    campaignContextId: record.campaignContextId,
     category: record.category,
-    characterId: record.characterId,
+    characterId: record.holderCharacterId,
     conditionState: record.conditionState,
     displayName: record.displayName,
     durabilityCurrent: record.durabilityCurrent,
     durabilityMax: record.durabilityMax,
     encumbranceOverride: record.encumbranceOverride,
+    holderCharacterId: record.holderCharacterId,
     id: record.id,
     isEquipped: record.isEquipped,
     isFavorite: record.isFavorite,
     isStackable: record.isStackable,
+    itemFacts: EquipmentItemFactsV1Schema.parse(record.itemFactsJson),
     material: record.material,
     notes: record.notes,
     quality: record.quality,
     quantity: record.quantity,
-    specialProperties: parseSpecialProperties(record.specialPropertiesJson),
+    specialProperties: null,
     specificityType: record.specificityType,
     statusTags: parseStringArrayOrNull(record.statusTagsJson),
-    storageAssignment: {
-      carryMode: record.carryMode,
-      locationId: record.locationId,
-    },
+    storageAssignment:
+      record.locationId && record.carryMode
+        ? {
+            carryMode: record.carryMode,
+            locationId: record.locationId,
+          }
+        : null,
     previousStorageAssignment:
       record.previousLocationId && record.previousCarryMode
         ? {
@@ -111,6 +105,12 @@ function mapEquipmentItem(record: {
     templateId: record.templateId,
     valueOverride: record.valueOverride,
   });
+}
+
+function mapEquipmentItem(
+  record: Parameters<typeof mapCanonicalEquipmentItem>[0],
+): AssignedEquipmentItem {
+  return EquipmentItemSchema.parse(mapCanonicalEquipmentItem(record));
 }
 
 function mapStorageLocation(record: {
@@ -125,8 +125,7 @@ function mapStorageLocation(record: {
   type: string;
 }): StorageLocation {
   const availabilityClass =
-    record.availabilityClass ??
-    (record.type.endsWith("_system") ? "with_you" : "elsewhere");
+    record.availabilityClass ?? (record.type.endsWith("_system") ? "with_you" : "elsewhere");
 
   return StorageLocationSchema.parse({
     availabilityClass,
@@ -174,27 +173,30 @@ function mapLoadout(record: {
 export interface CharacterEquipmentRepository {
   createCharacterStorageLocation(location: StorageLocation): Promise<StorageLocation>;
   removeCharacterStorageLocation(characterId: string, locationId: string): Promise<void>;
-  createCharacterEquipmentItem(item: EquipmentItem): Promise<EquipmentItem>;
-  updateCharacterEquipmentItem(item: EquipmentItem): Promise<EquipmentItem>;
+  createCharacterEquipmentItem(item: AssignedEquipmentItem): Promise<AssignedEquipmentItem>;
+  updateCharacterEquipmentItem(item: AssignedEquipmentItem): Promise<AssignedEquipmentItem>;
   removeCharacterEquipmentItem(characterId: string, itemId: string): Promise<void>;
   moveCharacterEquipmentItem(
     characterId: string,
     itemId: string,
     storageAssignment: ItemStorageAssignment,
-  ): Promise<EquipmentItem>;
+  ): Promise<AssignedEquipmentItem>;
   upsertCharacterLoadout(loadout: DomainCharacterLoadout): Promise<DomainCharacterLoadout>;
   ensureDefaultEquipmentLocations(characterId: string): Promise<StorageLocation[]>;
-  getCharacterEquipmentItems(characterId: string): Promise<EquipmentItem[]>;
+  getCharacterEquipmentItems(characterId: string): Promise<AssignedEquipmentItem[]>;
+  getCanonicalEquipmentItemById(itemId: string): Promise<CanonicalEquipmentItem | null>;
   getCharacterStorageLocations(characterId: string): Promise<StorageLocation[]>;
   getCharacterLoadouts(characterId: string): Promise<DomainCharacterLoadout[]>;
   getCharacterEquipmentState(characterId: string): Promise<{
-    items: EquipmentItem[];
+    items: AssignedEquipmentItem[];
     loadouts: DomainCharacterLoadout[];
     locations: StorageLocation[];
   }>;
 }
 
-export function createPrismaCharacterEquipmentRepository(client?: PrismaClient): CharacterEquipmentRepository {
+export function createPrismaCharacterEquipmentRepository(
+  client?: PrismaClient,
+): CharacterEquipmentRepository {
   const prisma = client ?? defaultPrisma;
   return {
     async createCharacterStorageLocation(location) {
@@ -230,8 +232,9 @@ export function createPrismaCharacterEquipmentRepository(client?: PrismaClient):
       const created = await prisma.characterEquipmentItem.create({
         data: {
           acquiredFrom: item.acquiredFrom ?? null,
+          campaignContextId: item.campaignContextId,
           category: item.category,
-          characterId: item.characterId,
+          holderCharacterId: item.holderCharacterId,
           conditionState: item.conditionState,
           displayName: item.displayName ?? null,
           durabilityCurrent: item.durabilityCurrent ?? null,
@@ -241,6 +244,7 @@ export function createPrismaCharacterEquipmentRepository(client?: PrismaClient):
           isEquipped: item.isEquipped ?? null,
           isFavorite: item.isFavorite ?? null,
           isStackable: item.isStackable,
+          itemFactsJson: serializeItemFacts(item.itemFacts),
           locationId: item.storageAssignment.locationId,
           carryMode: item.storageAssignment.carryMode,
           previousLocationId: item.previousStorageAssignment?.locationId ?? null,
@@ -249,7 +253,6 @@ export function createPrismaCharacterEquipmentRepository(client?: PrismaClient):
           notes: item.notes ?? null,
           quality: item.quality,
           quantity: item.quantity,
-          specialPropertiesJson: serializeSpecialProperties(item.specialProperties),
           specificityType: item.specificityType,
           statusTagsJson: serializeJsonArray(item.statusTags),
           templateId: item.templateId,
@@ -280,7 +283,7 @@ export function createPrismaCharacterEquipmentRepository(client?: PrismaClient):
           notes: item.notes ?? null,
           quality: item.quality,
           quantity: item.quantity,
-          specialPropertiesJson: serializeSpecialProperties(item.specialProperties),
+          itemFactsJson: serializeItemFacts(item.itemFacts),
           specificityType: item.specificityType,
           statusTagsJson: serializeJsonArray(item.statusTags),
           templateId: item.templateId,
@@ -296,7 +299,7 @@ export function createPrismaCharacterEquipmentRepository(client?: PrismaClient):
     async removeCharacterEquipmentItem(characterId, itemId) {
       const result = await prisma.characterEquipmentItem.deleteMany({
         where: {
-          characterId,
+          holderCharacterId: characterId,
           id: itemId,
         },
       });
@@ -315,7 +318,7 @@ export function createPrismaCharacterEquipmentRepository(client?: PrismaClient):
           previousCarryMode: null,
         },
         where: {
-          characterId,
+          holderCharacterId: characterId,
           id: itemId,
         },
       });
@@ -412,11 +415,20 @@ export function createPrismaCharacterEquipmentRepository(client?: PrismaClient):
           createdAt: "asc",
         },
         where: {
-          characterId,
+          carryMode: { not: null },
+          holderCharacterId: characterId,
+          locationId: { not: null },
         },
       });
 
       return items.map(mapEquipmentItem);
+    },
+    async getCanonicalEquipmentItemById(itemId) {
+      const item = await prisma.characterEquipmentItem.findUnique({
+        where: { id: itemId },
+      });
+
+      return item ? mapCanonicalEquipmentItem(item) : null;
     },
     async getCharacterStorageLocations(characterId) {
       const locations = await prisma.characterStorageLocation.findMany({

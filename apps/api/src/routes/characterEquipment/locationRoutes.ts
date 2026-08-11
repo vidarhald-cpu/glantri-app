@@ -7,11 +7,7 @@ import { requireAuthenticatedUser } from "../../lib/sessionAuth";
 import { handleRouteError } from "../../lib/errors";
 import { requireAccessibleCharacter } from "./access";
 import { toEquipmentFeatureState } from "./helpers";
-import {
-  parseCharacterId,
-  parseCreateLocationBody,
-  parseDeleteLocationBody,
-} from "./parse";
+import { parseCharacterId, parseCreateLocationBody, parseDeleteLocationBody } from "./parse";
 
 const equipmentReadModelService = new CharacterEquipmentReadModelService();
 const equipmentWriteService = new CharacterEquipmentWriteService();
@@ -25,17 +21,17 @@ export const equipmentLocationRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseCreateLocationBody(request.body);
-      await requireAccessibleCharacter(user, id);
+      const viewer = await requireAccessibleCharacter(user, id);
       await equipmentWriteService.createCharacterStorageLocation(
         id,
         body.name,
         body.type,
-        body.availabilityClass
+        body.availabilityClass,
       );
 
       return {
         state: toEquipmentFeatureState(
-          await equipmentReadModelService.getCharacterEquipmentState(id)
+          await equipmentReadModelService.getCharacterEquipmentState(id, viewer),
         ),
       };
     } catch (error) {
@@ -51,12 +47,12 @@ export const equipmentLocationRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseDeleteLocationBody(request.body);
-      await requireAccessibleCharacter(user, id);
+      const viewer = await requireAccessibleCharacter(user, id);
       await equipmentWriteService.removeCharacterStorageLocation(id, body.locationId);
 
       return {
         state: toEquipmentFeatureState(
-          await equipmentReadModelService.getCharacterEquipmentState(id)
+          await equipmentReadModelService.getCharacterEquipmentState(id, viewer),
         ),
       };
     } catch (error) {

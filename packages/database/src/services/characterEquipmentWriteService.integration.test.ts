@@ -38,7 +38,7 @@ if (!process.env.DATABASE_URL_TEST) {
 
       const state = await service.ensureCharacterEquipmentInitialized(character.id);
       const withYouLocation = state.locations.find(
-        (loc) => loc.availabilityClass === "with_you" && loc.parentLocationId === null
+        (loc) => loc.availabilityClass === "with_you" && loc.parentLocationId === null,
       );
       expect(withYouLocation).toBeDefined();
 
@@ -46,12 +46,72 @@ if (!process.env.DATABASE_URL_TEST) {
         templateId: "weapon-template-dagger",
         quantity: 1,
         initialLocationId: withYouLocation!.id,
-        initialCarryMode: "equipped"
+        initialCarryMode: "equipped",
       });
 
       expect(item.characterId).toBe(character.id);
       expect(item.category).toBe("weapon");
       expect(item.conditionState).toBe("intact");
+    });
+
+    it("round-trips typed item facts without changing the shared template", async () => {
+      const user = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, user.id);
+      const repo = createPrismaCharacterEquipmentRepository(prisma!);
+      const service = new CharacterEquipmentWriteService(repo);
+      const state = await service.ensureCharacterEquipmentInitialized(character.id);
+      const location = state.locations.find(
+        (entry) => entry.availabilityClass === "with_you" && !entry.parentLocationId,
+      )!;
+
+      const created = await service.createCharacterEquipmentItem({
+        category: "weapon",
+        characterId: character.id,
+        conditionState: "intact",
+        holderCharacterId: character.id,
+        id: "item-silverston-sword",
+        isStackable: false,
+        itemFacts: {
+          activeMechanics: [{ id: "ob", kind: "final_attack_ob_delta", value: 1 }],
+          descriptiveTraits: [
+            {
+              category: "engraving",
+              id: "arms",
+              text: "Arms of House Silverston",
+              visibility: "revealed",
+            },
+          ],
+          templateOverrides: [{ id: "initiative", kind: "weapon_initiative_override", value: 1 }],
+          unsupportedCapabilities: [
+            {
+              id: "oath",
+              name: "Call the house oath",
+              rulesText: "Cast X once per day",
+            },
+          ],
+          version: 1,
+        },
+        material: "steel",
+        quality: "extraordinary",
+        quantity: 1,
+        specificityType: "specific",
+        storageAssignment: {
+          carryMode: "on_person",
+          locationId: location.id,
+        },
+        templateId: "weapon-template-dagger",
+      });
+      const reloaded = await repo.getCanonicalEquipmentItemById(created.id);
+
+      expect(reloaded?.itemFacts).toEqual(created.itemFacts);
+      expect(reloaded?.itemFacts.activeMechanics[0]).toMatchObject({
+        calculationStage: "final_attack_ob",
+        value: 1,
+      });
+      expect(reloaded?.itemFacts.unsupportedCapabilities[0]).toMatchObject({
+        rulesText: "Cast X once per day",
+        visibility: "gm_only",
+      });
     });
 
     it("throws when adding an item with an unknown template", async () => {
@@ -68,8 +128,8 @@ if (!process.env.DATABASE_URL_TEST) {
           templateId: "template-does-not-exist",
           quantity: 1,
           initialLocationId: location.id,
-          initialCarryMode: "stored"
-        })
+          initialCarryMode: "stored",
+        }),
       ).rejects.toThrow("Equipment template not found.");
     });
 
@@ -81,17 +141,88 @@ if (!process.env.DATABASE_URL_TEST) {
       const service = new CharacterEquipmentWriteService(repo);
 
       const stateA = await service.ensureCharacterEquipmentInitialized(charA.id);
-      const locationA = stateA.locations.find((l) => l.availabilityClass === "with_you" && !l.parentLocationId)!;
+      const locationA = stateA.locations.find(
+        (l) => l.availabilityClass === "with_you" && !l.parentLocationId,
+      )!;
       await service.addCharacterEquipmentItem(charA.id, {
         templateId: "weapon-template-dagger",
         quantity: 1,
         initialLocationId: locationA.id,
-        initialCarryMode: "equipped"
+        initialCarryMode: "equipped",
       });
 
       const stateB = await service.ensureCharacterEquipmentInitialized(charB.id);
 
       expect(stateB.items.length).toBe(0);
+    });
+
+    it("preserves the same item when its holder Character is deleted", async () => {
+      const user = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, user.id);
+      const repo = createPrismaCharacterEquipmentRepository(prisma!);
+      const service = new CharacterEquipmentWriteService(repo);
+      const state = await service.ensureCharacterEquipmentInitialized(character.id);
+      const location = state.locations.find(
+        (entry) => entry.availabilityClass === "with_you" && !entry.parentLocationId,
+      )!;
+      const item = await service.addCharacterEquipmentItem(character.id, {
+        initialCarryMode: "on_person",
+        initialLocationId: location.id,
+        quantity: 1,
+        templateId: "weapon-template-dagger",
+      });
+
+      await prisma!.character.delete({ where: { id: character.id } });
+
+      const preserved = await repo.getCanonicalEquipmentItemById(item.id);
+      expect(preserved).toMatchObject({
+        characterId: null,
+        holderCharacterId: null,
+        id: item.id,
+        isEquipped: false,
+        storageAssignment: null,
+      });
+      expect(preserved?.itemFacts).toEqual(item.itemFacts);
+    });
+
+    it("preserves the same held item when its campaign context is deleted", async () => {
+      const user = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, user.id);
+      const campaign = await prisma!.campaign.create({
+        data: {
+          description: "B1 campaign context fixture",
+          gmUserId: user.id,
+          name: "B1 Context",
+          settingsJson: {},
+          slug: "b1-context",
+          status: "draft",
+        },
+      });
+      const repo = createPrismaCharacterEquipmentRepository(prisma!);
+      const service = new CharacterEquipmentWriteService(repo);
+      const state = await service.ensureCharacterEquipmentInitialized(character.id);
+      const location = state.locations.find(
+        (entry) => entry.availabilityClass === "with_you" && !entry.parentLocationId,
+      )!;
+      const item = await service.addCharacterEquipmentItem(character.id, {
+        initialCarryMode: "on_person",
+        initialLocationId: location.id,
+        quantity: 1,
+        templateId: "weapon-template-dagger",
+      });
+
+      await prisma!.characterEquipmentItem.update({
+        data: { campaignContextId: campaign.id },
+        where: { id: item.id },
+      });
+      await prisma!.campaign.delete({ where: { id: campaign.id } });
+
+      const preserved = await repo.getCanonicalEquipmentItemById(item.id);
+      expect(preserved).toMatchObject({
+        campaignContextId: null,
+        holderCharacterId: character.id,
+        id: item.id,
+      });
     });
   });
 }
