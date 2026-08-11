@@ -608,6 +608,62 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("sends the canonical Observe target without rewriting it as the acting participant", async () => {
+    const gladiatorCombatantId = "scenario-cmp6v9wpm000fzgisztx5bho0";
+    const scyrianScenarioParticipantId = "cmp6vb3gw000lzgisw3s2cojw";
+    const encounter = { id: "encounter-1", scenarioId: "scenario-1" };
+    const participant = { id: scyrianScenarioParticipantId };
+    const fetchMock = stubFetch({ encounter, participant });
+    const client = await loadClient();
+
+    await client.submitCombatDeclarationOnServer({
+      actionId: "parry",
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      },
+      encounterId: encounter.id,
+      executionGroupId: "group-declaration",
+      expectedRevision: "revision-1",
+      scenarioParticipantId: scyrianScenarioParticipantId,
+      secondaryActionContext: {
+        action: "observe_opponent",
+        targetParticipantId: gladiatorCombatantId,
+      },
+      secondaryActionId: "observe_opponent",
+      taskId: "task-declaration",
+    });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        actionId: "parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+        },
+        executionGroupId: "group-declaration",
+        expectedRevision: "revision-1",
+        scenarioParticipantId: scyrianScenarioParticipantId,
+        secondaryActionContext: {
+          action: "observe_opponent",
+          targetParticipantId: gladiatorCombatantId,
+        },
+        secondaryActionId: "observe_opponent",
+        taskId: "task-declaration",
+      },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-declaration",
+    });
+  });
+
   it("rolls combat initiative through the encounter domain", async () => {
     const encounter = {
       id: "encounter-1",

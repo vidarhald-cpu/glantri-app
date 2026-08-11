@@ -133,6 +133,12 @@ describe("combat declaration target validation", () => {
     ).toMatchObject({ canonicalParticipantId: "encounter-target" });
     expect(
       resolveCombatDeclarationParticipantIdentity({
+        participantId: "scenario-actor",
+        participants,
+      }),
+    ).toMatchObject({ canonicalParticipantId: "encounter-actor" });
+    expect(
+      resolveCombatDeclarationParticipantIdentity({
         participantId: "scenario-target",
         participants,
       }),
@@ -148,6 +154,21 @@ describe("combat declaration target validation", () => {
     ).toEqual({
       action: "observe_opponent",
       targetParticipantId: "encounter-target",
+    });
+    expect(
+      validateCombatDeclarationTargets({
+        actingParticipantId: "encounter-actor",
+        actionId: "parry",
+        participantIdentities: participants,
+        secondaryActionContext: {
+          action: "observe_opponent",
+          targetParticipantId: "scenario-target",
+        },
+        secondaryActionId: "observe_opponent",
+      }),
+    ).toMatchObject({
+      message: "Select an active opponent to observe.",
+      valid: false,
     });
   });
 
@@ -173,6 +194,18 @@ describe("combat declaration target validation", () => {
         secondaryActionContext: {
           action: "observe_opponent",
           targetParticipantId: "scenario-target",
+        },
+        secondaryActionId: "observe_opponent",
+      }),
+    ).toMatchObject({ valid: true });
+    expect(
+      validateCombatDeclarationTargets({
+        actingParticipantId: "encounter-target",
+        actionId: "parry",
+        participantIdentities,
+        secondaryActionContext: {
+          action: "observe_opponent",
+          targetParticipantId: "scenario-actor",
         },
         secondaryActionId: "observe_opponent",
       }),

@@ -11190,6 +11190,176 @@ describe("scenarios route contract", () => {
     });
   });
 
+  it("accepts the persisted Gladiator and Scyrian mutual-target Observe declaration", async () => {
+    const gladiatorCombatantId = "scenario-cmp6v9wpm000fzgisztx5bho0";
+    const scyrianCombatantId = "scenario-cmp6vb3gw000lzgisw3s2cojw";
+    const gladiatorScenarioParticipantId = "cmp6v9wpm000fzgisztx5bho0";
+    const scyrianScenarioParticipantId = "cmp6vb3gw000lzgisw3s2cojw";
+    const encounterParticipants = [
+      makeEncounterCombatParticipant({
+        id: gladiatorCombatantId,
+        label: "The Gladiator",
+        order: 0,
+        scenarioParticipantId: gladiatorScenarioParticipantId,
+      }),
+      makeEncounterCombatParticipant({
+        id: scyrianCombatantId,
+        label: "Scyrian cavalry guy",
+        order: 1,
+        scenarioParticipantId: scyrianScenarioParticipantId,
+      }),
+    ];
+    const baseEncounter = makeCombatEncounter({
+      currentRound: 3,
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const initialState = initializeCombatRoundState({ encounter: baseEncounter });
+    const gladiatorDeclared = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "feint_attack",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: emptyModifierBuckets(),
+            targetParticipantId: scyrianCombatantId,
+          },
+          phase2: {
+            modifierBuckets: emptyModifierBuckets(),
+            targetParticipantId: scyrianCombatantId,
+          },
+        },
+        roundNumber: 3,
+      },
+      participantId: gladiatorCombatantId,
+      state: initialState,
+      submittedBy: "gm",
+    });
+    const observationRelationships = [
+      {
+        bestBonus: 0,
+        completedAttempts: 0,
+        id: `observation:${scyrianCombatantId}:${gladiatorCombatantId}`,
+        observerParticipantId: scyrianCombatantId,
+        roundsTowardNextAttempt: 2,
+        targetParticipantId: gladiatorCombatantId,
+      },
+    ];
+    const roundState = combatRoundStateSchema.parse({
+      ...gladiatorDeclared,
+      currentCursor: {
+        participantId: scyrianCombatantId,
+        roundNumber: 3,
+        step: "DE",
+      },
+      distanceState: setDistanceBetween({
+        distance: 3,
+        participantAId: gladiatorCombatantId,
+        participantBId: scyrianCombatantId,
+        source: "gm_set",
+        state: gladiatorDeclared.distanceState,
+      }),
+      observationRelationships,
+      selectedParticipantId: scyrianCombatantId,
+      selectedStep: "select_actions",
+    });
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: roundState,
+        currentRound: 3,
+        participants: encounterParticipants,
+      },
+      participants: [
+        {
+          characterId: "23831e49-9060-493d-9eaf-65667c210ce5",
+          controlledByUserId: "other-player",
+          id: gladiatorScenarioParticipantId,
+          snapshot: { displayName: "The Gladiator" },
+        },
+        {
+          characterId: "ef0e0c82-09e9-43b2-a942-2d12264096ef",
+          id: scyrianScenarioParticipantId,
+          snapshot: {
+            build: makeDodgeCharacterBuild(
+              "ef0e0c82-09e9-43b2-a942-2d12264096ef",
+              "Scyrian cavalry guy",
+            ),
+            displayName: "Scyrian cavalry guy",
+          },
+        },
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "parry",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        scenarioParticipantId: scyrianScenarioParticipantId,
+        secondaryActionContext: {
+          action: "observe_opponent",
+          targetParticipantId: gladiatorCombatantId,
+        },
+        secondaryActionId: "observe_opponent",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode, response.body).toBe(200);
+    const savedRoundState =
+      mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState;
+    expect(
+      savedRoundState.participants.find(
+        (participant: { participantId: string }) =>
+          participant.participantId === gladiatorCombatantId,
+      )?.declaration,
+    ).toMatchObject({
+      actionId: "feint_attack",
+      phaseContexts: {
+        phase1: { targetParticipantId: scyrianCombatantId },
+        phase2: { targetParticipantId: scyrianCombatantId },
+      },
+    });
+    expect(
+      savedRoundState.participants.find(
+        (participant: { participantId: string }) =>
+          participant.participantId === scyrianCombatantId,
+      )?.declaration,
+    ).toMatchObject({
+      actionId: "parry",
+      secondaryActionContext: {
+        action: "observe_opponent",
+        targetParticipantId: gladiatorCombatantId,
+      },
+      secondaryActionId: "observe_opponent",
+    });
+    expect(savedRoundState.observationRelationships).toEqual(observationRelationships);
+    expect(
+      savedRoundState.observationRelationships.some(
+        (relationship: { observerParticipantId: string; targetParticipantId: string }) =>
+          relationship.observerParticipantId === gladiatorCombatantId &&
+          relationship.targetParticipantId === scyrianCombatantId,
+      ),
+    ).toBe(false);
+    expect(
+      getDistanceBetween(savedRoundState.distanceState, gladiatorCombatantId, scyrianCombatantId),
+    ).toBe(3);
+    const reloadedRoundState = combatRoundStateSchema.parse(
+      JSON.parse(JSON.stringify(savedRoundState)),
+    );
+    expect(
+      reloadedRoundState.participants.find(
+        (participant) => participant.participantId === scyrianCombatantId,
+      )?.declaration?.secondaryActionContext,
+    ).toEqual({
+      action: "observe_opponent",
+      targetParticipantId: gladiatorCombatantId,
+    });
+  });
+
   it("rejects GM Double Attack declarations unless both attack phases have targets", async () => {
     setupCombatDeclarationRoute({ user: mocks.adminUser });
     const app = await buildScenarioTestApp();

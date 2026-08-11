@@ -65,6 +65,14 @@ function taskIsVisible(
   return true;
 }
 
+function contributesToProgression(task: CombatProgressionTask): boolean {
+  return !(
+    task.kind === "submit_declaration" &&
+    !task.allowedActors.includes("combatant") &&
+    task.owner?.kind === "combatant"
+  );
+}
+
 function presentationTask(task: CombatProgressionTask): CombatProgressionPresentationTask {
   const combatantMayAct = task.allowedActors.includes("combatant");
   return {
@@ -80,11 +88,7 @@ function presentationTask(task: CombatProgressionTask): CombatProgressionPresent
       },
     },
     // A submitted declaration remains GM-editable, but that optional edit is not blocking work.
-    contributesToProgression: !(
-      task.kind === "submit_declaration" &&
-      !combatantMayAct &&
-      task.owner?.kind === "combatant"
-    ),
+    contributesToProgression: contributesToProgression(task),
     executionGroupId: task.executionGroupId,
     expectedCommand: task.expectedCommand,
     id: task.id,
@@ -213,7 +217,9 @@ function canonicalOperationalTask(projection: CombatProgressionProjection):
       if (stage.state !== "active") continue;
       for (const group of stage.executionGroups) {
         if (group.completionState === "complete") continue;
-        const tasks = group.tasks.filter((task) => !isInternalDeterministicTask(task));
+        const tasks = group.tasks.filter(
+          (task) => !isInternalDeterministicTask(task) && contributesToProgression(task),
+        );
         const task = tasks.find((candidate) => candidate.state === "executable") ?? tasks[0];
         if (task) return { executionStrategy: group.executionStrategy, task };
       }

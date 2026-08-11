@@ -145,6 +145,61 @@ function boundaryCommandIdentity(
 }
 
 describe("CombatProgressionProjection", () => {
+  it("does not let a submitted participant's optional GM edit shadow the pending declaration", () => {
+    const projection = buildCombatProgressionProjection(
+      state({
+        cursorParticipantId: "guard",
+        cursorStep: "DE",
+        participantOverrides: [
+          {
+            declaration: { actionId: "move_only", roundNumber: 2, submittedBy: "gm" },
+            stepStatuses: { select_actions: "submitted" },
+          },
+          {},
+        ],
+      }),
+    );
+    const gmView = projectCombatProgressionPresentation({
+      projection,
+      viewer: { kind: "gm" },
+    });
+    const playerView = projectCombatProgressionPresentation({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set(["guard"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["hero", "guard"]),
+      },
+    });
+
+    expect(gmView.canonicalOperationalPosition).toMatchObject({
+      task: {
+        contributesToProgression: true,
+        kind: "submit_declaration",
+        owner: { participantId: "guard" },
+      },
+      trackerFacet: { owner: { participantId: "guard" }, step: "DE" },
+      waitingFor: "combatant",
+    });
+    expect(
+      gmView.processes
+        .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+        .find(
+          (task) =>
+            task.kind === "submit_declaration" &&
+            task.owner?.kind === "combatant" &&
+            task.owner.participantId === "hero",
+        ),
+    ).toMatchObject({ contributesToProgression: false });
+    expect(playerView.canonicalOperationalPosition).toMatchObject({
+      task: {
+        contributesToProgression: true,
+        kind: "submit_declaration",
+        owner: { participantId: "guard" },
+      },
+    });
+  });
+
   it("waits after completed declarations and advances to M1 only through the GM task", () => {
     const waiting = state({
       cursorParticipantId: "guard",

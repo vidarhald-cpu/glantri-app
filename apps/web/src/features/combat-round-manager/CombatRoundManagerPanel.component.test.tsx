@@ -1337,7 +1337,136 @@ describe("CombatRoundManagerPanel GM workflow selector", () => {
   });
 });
 
-describe("CombatRoundManagerPanel Double Attack declaration form", () => {
+describe("CombatRoundManagerPanel declaration form", () => {
+  it("submits the persisted Scyrian Observe target as the Gladiator combatant id", async () => {
+    const gladiatorCombatantId = "scenario-cmp6v9wpm000fzgisztx5bho0";
+    const scyrianCombatantId = "scenario-cmp6vb3gw000lzgisw3s2cojw";
+    const gladiatorScenarioParticipantId = "cmp6v9wpm000fzgisztx5bho0";
+    const scyrianScenarioParticipantId = "cmp6vb3gw000lzgisw3s2cojw";
+    const baseEncounter = encounterSessionSchema.parse({
+      ...buildEncounter(),
+      combatRoundState: undefined,
+      currentRound: 3,
+      participants: [
+        encounterParticipant({
+          id: gladiatorCombatantId,
+          label: "The Gladiator",
+          scenarioParticipantId: gladiatorScenarioParticipantId,
+        }),
+        encounterParticipant({
+          id: scyrianCombatantId,
+          label: "Scyrian cavalry guy",
+          scenarioParticipantId: scyrianScenarioParticipantId,
+        }),
+      ],
+    });
+    const initial = initializeCombatRoundState({ encounter: baseEncounter });
+    const gladiatorDeclared = recordCombatRoundDeclaration({
+      command: { createdAt: "2026-08-10T23:20:00.000Z", createdByUserId: "gm-1" },
+      declaration: {
+        actionId: "feint_attack",
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: scyrianCombatantId,
+          },
+          phase2: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: scyrianCombatantId,
+          },
+        },
+        roundNumber: 3,
+      },
+      participantId: gladiatorCombatantId,
+      state: initial,
+      submittedBy: "gm",
+    });
+    const roundState = combatRoundStateSchema.parse({
+      ...gladiatorDeclared,
+      currentCursor: { participantId: scyrianCombatantId, roundNumber: 3, step: "DE" },
+      currentStep: "select_actions",
+      observationRelationships: [
+        {
+          bestBonus: 0,
+          completedAttempts: 0,
+          id: `observation:${scyrianCombatantId}:${gladiatorCombatantId}`,
+          observerParticipantId: scyrianCombatantId,
+          roundsTowardNextAttempt: 2,
+          targetParticipantId: gladiatorCombatantId,
+        },
+      ],
+      selectedParticipantId: scyrianCombatantId,
+      selectedStep: "select_actions",
+    });
+    const encounter = encounterSessionSchema.parse({
+      ...baseEncounter,
+      combatRoundState: roundState,
+    });
+    const participants = [
+      scenarioParticipant({
+        id: gladiatorScenarioParticipantId,
+        name: "The Gladiator",
+        order: 0,
+      }),
+      scenarioParticipant({
+        id: scyrianScenarioParticipantId,
+        name: "Scyrian cavalry guy",
+        order: 1,
+      }),
+    ];
+    mocks.submitDeclaration.mockResolvedValue({
+      encounter: { ...encounter, updatedAt: "2026-08-10T23:21:00.000Z" },
+      participant: participants[1],
+    });
+    const activePresentation = buildActiveCombatPresentation({
+      encounterId: encounter.id,
+      encounterRevision: encounter.updatedAt,
+      resolveStepStatus: ({ status }) => status,
+      roundState,
+      scenarioParticipants: participants,
+    });
+    expect(activePresentation.currentAction?.primaryAction.descriptor?.participantId).toBe(
+      scyrianCombatantId,
+    );
+
+    render(<CombatRoundManagerPanel encounter={encounter} scenarioParticipants={participants} />);
+
+    expect(
+      await screen.findByText("Combat inspector — Scyrian cavalry guy · Round 3 · Declaration"),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "Action" }), {
+      target: { value: "parry" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Secondary action" }), {
+      target: { value: "observe_opponent" },
+    });
+    fireEvent.change(await screen.findByRole("combobox", { name: "Opponent" }), {
+      target: { value: gladiatorCombatantId },
+    });
+    expect(screen.getByText("The Gladiator: 2 / 3")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Declare action" }));
+
+    await waitFor(() => expect(mocks.submitDeclaration).toHaveBeenCalledTimes(1));
+    expect(mocks.submitDeclaration.mock.calls[0]?.[0]).toMatchObject({
+      scenarioParticipantId: scyrianScenarioParticipantId,
+      secondaryActionContext: {
+        action: "observe_opponent",
+        targetParticipantId: gladiatorCombatantId,
+      },
+    });
+    expect(screen.queryByText("Observe Opponent cannot target the acting participant.")).toBeNull();
+  });
+
   it("consumes the server-issued declaration suffix descriptor exactly once", async () => {
     const { accepted, before } = buildSecondDeclarationReadyEncounter();
     const participants = [
