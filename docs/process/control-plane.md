@@ -123,10 +123,11 @@ An issue reaches `Ready` only when its task contract supplies an exact baseline,
 4. Name the exact accepted baseline branch and SHA.
 5. Create one isolated, short-lived task branch/worktree.
 6. Implement only the coherent slice; record newly discovered non-blocking work separately.
-7. Open a development PR only when the target and push/PR authority are confirmed.
-8. Review code, decisions, tests, compatibility, hotspot coordination, and user-visible evidence.
-9. Move user-visible work to `Acceptance`; only the product owner accepts product behavior.
-10. Merge an accepted ordinary task PR into `dev` under the product-owner-controlled development process. Release preparation from `dev` to `main` is a separate production-boundary workflow.
+7. Run `pnpm format:check:changed` against the task's exact accepted parent. Changed files must pass Prettier and `git diff --check`; inherited untouched formatting debt does not block the task.
+8. Open a development PR only when the target and push/PR authority are confirmed.
+9. Review code, decisions, tests, compatibility, hotspot coordination, and user-visible evidence.
+10. Move user-visible work to `Acceptance`; only the product owner accepts product behavior.
+11. Merge an accepted ordinary task PR into `dev` under the product-owner-controlled development process. Release preparation from `dev` to `main` is a separate production-boundary workflow.
 
 One coherent behavior or architecture slice is the governing PR size rule. There is no rigid changed-file cap. An unusually large, high-risk, or cross-area PR must include an integration plan describing why it cannot be sliced safely, contract/merge order, hotspot ownership, review stages, verification, compatibility, rollback, and follow-up modularization.
 

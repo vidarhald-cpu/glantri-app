@@ -57,13 +57,19 @@ Before the initial or any materially reconciled `dev` baseline is published:
 
 - fetch/prune and confirm the exact remote SHAs and production-only deploy trigger;
 - preserve the declared application toolchain: Node 22.x, pnpm 10.6.0, and PostgreSQL 16;
-- run frozen install, generation, typecheck, lint, formatting, tests, coverage, build, and file-size reporting;
+- run frozen install, generation, typecheck, lint, changed-file formatting, tests, coverage, build, and file-size reporting;
 - validate migrations and database integration tests against a disposable PostgreSQL 16 test database only;
 - run targeted regression checks for reconciled semantic hotspots, including Combat progression/synchronization and main-only sync/error behavior;
 - run Docker readiness and supported Playwright/multi-perspective smoke checks when the existing local environment supports them;
 - inspect Git status after generation/build/test steps and finish with a clean committed candidate;
 - classify every failure as reconciliation regression, pre-existing issue, environment/tooling issue, or product decision; and
 - report the exact candidate topology and obtain product-owner acceptance before publishing.
+
+### Formatting debt baseline
+
+The initial reconciliation inherited 470 files that fail a full-repository Prettier check. Wholesale normalization is explicit P3 technical debt and is not part of initial `dev` publication. `pnpm format:check` remains the debt-audit command; it is not a publication gate while that debt remains.
+
+The required gate is `pnpm format:check:changed -- <accepted-parent-sha>`. It runs `git diff --check` and Prettier on added, copied, modified, renamed, type-changed, or unmerged files relative to the accepted parent. CI supplies the PR base or prior push SHA and falls back to reconciliation candidate `581841e99afd536d41cce4e5a5bac5a09f2be194` for a new branch. Thus every post-baseline touched file must be formatted while untouched historical debt remains non-blocking.
 
 After publication, verify remote `dev`, its CI run, required checks/rules, task-PR target behavior, and absence of production deployment. PR #200 may then be closed as superseded while its provenance is preserved; it should not be retargeted merely to manufacture the new baseline.
 
