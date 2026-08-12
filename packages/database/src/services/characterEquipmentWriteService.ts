@@ -1,10 +1,12 @@
 import { equipmentTemplatesById } from "@glantri/content";
 import {
   type AssignedEquipmentItem,
+  type CanonicalEquipmentItem,
   type CarryMode,
   type CharacterLoadout,
   type EquipmentItem,
   type EquipmentItemInput,
+  type EquipmentItemFactsV1,
   type ItemConditionState,
   type ItemStorageAssignment,
   type LocationAvailabilityClass,
@@ -22,6 +24,7 @@ import {
   validateEquipmentItem,
   validateLoadout,
 } from "@glantri/domain";
+import { projectEquipmentItem } from "@glantri/rules-engine";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -104,6 +107,27 @@ function buildCharacterEquipmentItemId(characterId: string): string {
   return `${characterId}:item-${randomUUID()}`;
 }
 
+function buildCampaignEquipmentItemId(campaignId: string): string {
+  return `${campaignId}:item-${randomUUID()}`;
+}
+
+export interface CreateCampaignEquipmentItemInput {
+  campaignId: string;
+  displayName?: string | null;
+  holderCharacterId?: string | null;
+  itemFacts: EquipmentItemFactsV1;
+  notes?: string | null;
+  templateId: string;
+}
+
+export interface UpdateCampaignEquipmentItemAuthoringInput {
+  campaignId: string;
+  displayName?: string | null;
+  itemFacts: EquipmentItemFactsV1;
+  itemId: string;
+  notes?: string | null;
+}
+
 function assertItemBelongsToCharacter(
   item: AssignedEquipmentItem | undefined,
   characterId: string,
@@ -113,6 +137,12 @@ function assertItemBelongsToCharacter(
   }
 
   return item;
+}
+
+function assertCharacterEquipmentAuthoringAllowed(item: AssignedEquipmentItem): void {
+  if (item.campaignContextId) {
+    throw new Error("Campaign item details can only be changed from Campaign Items.");
+  }
 }
 
 function assertLocationBelongsToCharacter(
@@ -169,6 +199,86 @@ export class CharacterEquipmentWriteService {
   constructor(
     private readonly repository: CharacterEquipmentRepository = createPrismaCharacterEquipmentRepository(),
   ) {}
+
+  async createCampaignEquipmentItem(
+    input: CreateCampaignEquipmentItemInput,
+  ): Promise<CanonicalEquipmentItem> {
+    const template = equipmentTemplatesById[input.templateId];
+    if (!template) {
+      throw new Error("Equipment template not found.");
+    }
+
+    let storageAssignment: ItemStorageAssignment | null = null;
+    if (input.holderCharacterId) {
+      const snapshot = await this.ensureCharacterEquipmentInitialized(input.holderCharacterId);
+      const onPersonLocation = snapshot.locations.find(
+        (location) => location.type === "person_system",
+      );
+      if (!onPersonLocation) {
+        throw new Error("The selected Character has no valid equipment location.");
+      }
+      storageAssignment = getStorageAssignmentForLocation(onPersonLocation);
+    }
+
+    const durabilityMax =
+      template.category === "weapon"
+        ? (template.durabilityProfile?.maxDurabilityDefault ?? null)
+        : null;
+    const item = CanonicalEquipmentItemSchema.parse({
+      acquiredFrom: null,
+      campaignContextId: input.campaignId,
+      category: template.category,
+      characterId: input.holderCharacterId ?? null,
+      conditionState: "intact",
+      displayName: input.displayName?.trim() || null,
+      durabilityCurrent: durabilityMax,
+      durabilityMax,
+      encumbranceOverride: null,
+      holderCharacterId: input.holderCharacterId ?? null,
+      id: buildCampaignEquipmentItemId(input.campaignId),
+      isEquipped: false,
+      isFavorite: null,
+      isStackable: template.category === "valuables",
+      itemFacts: input.itemFacts,
+      material: template.defaultMaterial,
+      notes: input.notes?.trim() || null,
+      previousStorageAssignment: null,
+      quality: "standard",
+      quantity: 1,
+      specificityType: template.specificityTypeDefault,
+      statusTags: null,
+      storageAssignment,
+      templateId: template.id,
+      valueOverride: null,
+    });
+
+    projectEquipmentItem(item, template);
+    return this.repository.createCampaignEquipmentItem(item);
+  }
+
+  async updateCampaignEquipmentItemAuthoring(
+    input: UpdateCampaignEquipmentItemAuthoringInput,
+  ): Promise<CanonicalEquipmentItem> {
+    const existing = await this.repository.getCanonicalEquipmentItemById(input.itemId);
+    if (!existing || existing.campaignContextId !== input.campaignId) {
+      throw new Error("Campaign item not found.");
+    }
+
+    const template = equipmentTemplatesById[existing.templateId];
+    if (!template) {
+      throw new Error("Equipment template not found.");
+    }
+
+    const updated = CanonicalEquipmentItemSchema.parse({
+      ...existing,
+      displayName: input.displayName?.trim() || null,
+      itemFacts: input.itemFacts,
+      notes: input.notes?.trim() || null,
+    });
+    projectEquipmentItem(updated, template);
+
+    return this.repository.updateCampaignEquipmentItemAuthoring(updated);
+  }
 
   async ensureCharacterEquipmentInitialized(characterId: string): Promise<{
     items: AssignedEquipmentItem[];
@@ -446,10 +556,11 @@ export class CharacterEquipmentWriteService {
 
   async removeCharacterEquipmentItem(characterId: string, itemId: string): Promise<void> {
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
-    assertItemBelongsToCharacter(
+    const item = assertItemBelongsToCharacter(
       snapshot.items.find((entry) => entry.id === itemId),
       characterId,
     );
+    assertCharacterEquipmentAuthoringAllowed(item);
 
     for (const loadout of snapshot.loadouts) {
       const referencedBy = getReferencedLoadoutLabel(loadout, itemId);
@@ -472,6 +583,7 @@ export class CharacterEquipmentWriteService {
       snapshot.items.find((entry) => entry.id === itemId),
       characterId,
     );
+    assertCharacterEquipmentAuthoringAllowed(item);
 
     if (!item.isStackable) {
       throw new Error("Only stackable items can have quantity updated.");
@@ -520,6 +632,7 @@ export class CharacterEquipmentWriteService {
       snapshot.items.find((entry) => entry.id === itemId),
       characterId,
     );
+    assertCharacterEquipmentAuthoringAllowed(item);
 
     const updatedItem = EquipmentItemSchema.parse({
       ...item,

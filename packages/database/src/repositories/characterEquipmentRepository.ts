@@ -33,7 +33,7 @@ function serializeJsonArray(
   return value == null ? Prisma.JsonNull : value;
 }
 
-function serializeItemFacts(value: AssignedEquipmentItem["itemFacts"]): Prisma.InputJsonValue {
+function serializeItemFacts(value: CanonicalEquipmentItem["itemFacts"]): Prisma.InputJsonValue {
   return EquipmentItemFactsV1Schema.parse(value) as unknown as Prisma.InputJsonValue;
 }
 
@@ -174,6 +174,10 @@ export interface CharacterEquipmentRepository {
   createCharacterStorageLocation(location: StorageLocation): Promise<StorageLocation>;
   removeCharacterStorageLocation(characterId: string, locationId: string): Promise<void>;
   createCharacterEquipmentItem(item: AssignedEquipmentItem): Promise<AssignedEquipmentItem>;
+  createCampaignEquipmentItem(item: CanonicalEquipmentItem): Promise<CanonicalEquipmentItem>;
+  updateCampaignEquipmentItemAuthoring(
+    item: CanonicalEquipmentItem,
+  ): Promise<CanonicalEquipmentItem>;
   updateCharacterEquipmentItem(item: AssignedEquipmentItem): Promise<AssignedEquipmentItem>;
   removeCharacterEquipmentItem(characterId: string, itemId: string): Promise<void>;
   moveCharacterEquipmentItem(
@@ -185,6 +189,7 @@ export interface CharacterEquipmentRepository {
   ensureDefaultEquipmentLocations(characterId: string): Promise<StorageLocation[]>;
   getCharacterEquipmentItems(characterId: string): Promise<AssignedEquipmentItem[]>;
   getCanonicalEquipmentItemById(itemId: string): Promise<CanonicalEquipmentItem | null>;
+  getCampaignEquipmentItems(campaignId: string): Promise<CanonicalEquipmentItem[]>;
   getCharacterStorageLocations(characterId: string): Promise<StorageLocation[]>;
   getCharacterLoadouts(characterId: string): Promise<DomainCharacterLoadout[]>;
   getCharacterEquipmentState(characterId: string): Promise<{
@@ -261,6 +266,64 @@ export function createPrismaCharacterEquipmentRepository(
       });
 
       return mapEquipmentItem(created);
+    },
+    async createCampaignEquipmentItem(item) {
+      const created = await prisma.characterEquipmentItem.create({
+        data: {
+          acquiredFrom: item.acquiredFrom ?? null,
+          campaignContextId: item.campaignContextId,
+          category: item.category,
+          holderCharacterId: item.holderCharacterId,
+          conditionState: item.conditionState,
+          displayName: item.displayName ?? null,
+          durabilityCurrent: item.durabilityCurrent ?? null,
+          durabilityMax: item.durabilityMax ?? null,
+          encumbranceOverride: item.encumbranceOverride ?? null,
+          id: item.id,
+          isEquipped: item.isEquipped ?? null,
+          isFavorite: item.isFavorite ?? null,
+          isStackable: item.isStackable,
+          itemFactsJson: serializeItemFacts(item.itemFacts),
+          locationId: item.storageAssignment?.locationId ?? null,
+          carryMode: item.storageAssignment?.carryMode ?? null,
+          previousLocationId: item.previousStorageAssignment?.locationId ?? null,
+          previousCarryMode: item.previousStorageAssignment?.carryMode ?? null,
+          material: item.material,
+          notes: item.notes ?? null,
+          quality: item.quality,
+          quantity: item.quantity,
+          specificityType: item.specificityType,
+          statusTagsJson: serializeJsonArray(item.statusTags),
+          templateId: item.templateId,
+          valueOverride: item.valueOverride ?? null,
+        },
+      });
+
+      return mapCanonicalEquipmentItem(created);
+    },
+    async updateCampaignEquipmentItemAuthoring(item) {
+      const result = await prisma.characterEquipmentItem.updateMany({
+        data: {
+          displayName: item.displayName ?? null,
+          itemFactsJson: serializeItemFacts(item.itemFacts),
+          notes: item.notes ?? null,
+        },
+        where: {
+          campaignContextId: item.campaignContextId,
+          id: item.id,
+        },
+      });
+
+      if (result.count === 0) {
+        throw new Error("Campaign item not found.");
+      }
+
+      const updated = await prisma.characterEquipmentItem.findUnique({ where: { id: item.id } });
+      if (!updated) {
+        throw new Error("Campaign item not found after update.");
+      }
+
+      return mapCanonicalEquipmentItem(updated);
     },
     async updateCharacterEquipmentItem(item) {
       const updated = await prisma.characterEquipmentItem.update({
@@ -429,6 +492,14 @@ export function createPrismaCharacterEquipmentRepository(
       });
 
       return item ? mapCanonicalEquipmentItem(item) : null;
+    },
+    async getCampaignEquipmentItems(campaignId) {
+      const items = await prisma.characterEquipmentItem.findMany({
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        where: { campaignContextId: campaignId },
+      });
+
+      return items.map(mapCanonicalEquipmentItem);
     },
     async getCharacterStorageLocations(characterId) {
       const locations = await prisma.characterStorageLocation.findMany({

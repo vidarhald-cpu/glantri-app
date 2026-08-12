@@ -115,21 +115,22 @@ describe("campaign workspace", () => {
   });
 
   it("keeps the intended left-to-right shared workspace tab order", () => {
-    expect(
-      buildCampaignWorkspaceTabs({ canAccessGmEncounter: true }).map((tab) => tab.id)
-    ).toEqual([
-      "campaign",
-      "scenario",
-      "encounter",
-      "skill-rolls",
-      "player-skill-rolls",
-      "character",
-      "combat",
-      "player-combat",
-    ]);
+    expect(buildCampaignWorkspaceTabs({ canAccessGmEncounter: true }).map((tab) => tab.id)).toEqual(
+      [
+        "campaign",
+        "items",
+        "scenario",
+        "encounter",
+        "skill-rolls",
+        "player-skill-rolls",
+        "character",
+        "combat",
+        "player-combat",
+      ],
+    );
 
     expect(
-      buildCampaignWorkspaceTabs({ canAccessGmEncounter: false }).map((tab) => tab.id)
+      buildCampaignWorkspaceTabs({ canAccessGmEncounter: false }).map((tab) => tab.id),
     ).toEqual([
       "campaign",
       "scenario",
@@ -139,6 +140,28 @@ describe("campaign workspace", () => {
       "character",
       "player-combat",
     ]);
+  });
+
+  it("opens Items only for a GM and fails a player request closed to Campaign", () => {
+    expect(
+      resolveCampaignWorkspaceState({
+        activeCampaignId: "camp-1",
+        canAccessGmEncounter: true,
+        encounters: [],
+        requestedTab: "items",
+        scenarios: [],
+      }).activeTab,
+    ).toBe("items");
+
+    expect(
+      resolveCampaignWorkspaceState({
+        activeCampaignId: "camp-1",
+        canAccessGmEncounter: false,
+        encounters: [],
+        requestedTab: "items",
+        scenarios: [],
+      }).activeTab,
+    ).toBe("campaign");
   });
 
   it("opens the Character tab against the active scenario context", () => {
@@ -381,9 +404,9 @@ describe("campaign workspace", () => {
           kind: "mixed",
           name: "Session one",
           status: "draft",
-          updatedAt: "2026-04-23T00:00:00.000Z"
-        }
-      ]
+          updatedAt: "2026-04-23T00:00:00.000Z",
+        },
+      ],
     });
 
     expect(state.activeScenarioId).toBeUndefined();
@@ -408,9 +431,9 @@ describe("campaign workspace", () => {
           kind: "mixed",
           name: "Session one",
           status: "draft",
-          updatedAt: "2026-04-23T00:00:00.000Z"
-        }
-      ]
+          updatedAt: "2026-04-23T00:00:00.000Z",
+        },
+      ],
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
@@ -436,8 +459,8 @@ describe("campaign workspace", () => {
           status: "setup",
           title: "Gate skirmish",
           turnOrderMode: "manual",
-          updatedAt: "2026-04-23T00:00:00.000Z"
-        }
+          updatedAt: "2026-04-23T00:00:00.000Z",
+        },
       ],
       rememberedEncounterId: "enc-1",
       rememberedScenarioId: "scn-1",
@@ -461,9 +484,9 @@ describe("campaign workspace", () => {
           kind: "mixed",
           name: "Session one",
           status: "draft",
-          updatedAt: "2026-04-23T00:00:00.000Z"
-        }
-      ]
+          updatedAt: "2026-04-23T00:00:00.000Z",
+        },
+      ],
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
@@ -498,7 +521,7 @@ describe("campaign workspace", () => {
           scenarioId: "scn-1",
         }),
       ],
-      scenarios: [scenario({ id: "scn-1", name: "Session one" })]
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
@@ -526,9 +549,9 @@ describe("campaign workspace", () => {
           kind: "mixed",
           name: "Session one",
           status: "draft",
-          updatedAt: "2026-04-23T00:00:00.000Z"
-        }
-      ]
+          updatedAt: "2026-04-23T00:00:00.000Z",
+        },
+      ],
     });
 
     expect(state.activeScenarioId).toBe("scn-1");

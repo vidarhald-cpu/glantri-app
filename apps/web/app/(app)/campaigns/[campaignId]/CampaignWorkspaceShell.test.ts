@@ -10,6 +10,15 @@ function readSource(): string {
 }
 
 describe("CampaignWorkspaceShell roleplay encounter routing", () => {
+  it("renders the real GM campaign Items workspace without changing global navigation", () => {
+    const source = readSource();
+
+    expect(source).toContain("CampaignItemsWorkspace");
+    expect(source).toContain('workspaceState.activeTab === "items"');
+    expect(source).toMatch(/canAccessGmEncounter\s*\?\s*\(\s*<CampaignItemsWorkspace/);
+    expect(source).not.toContain("appNavigation");
+  });
+
   it("routes shared Encounter and Skill rolls tabs through player-safe roleplay surfaces", () => {
     const source = readSource();
 
@@ -108,7 +117,7 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("encounterSummaries");
     expect(source).toContain("activeEncounterIdRef.current !== polledEncounterId");
     expect(source).toContain("activeEncounterRequestIdRef.current !== requestId");
-    expect(source).toContain("result.kind !== \"updated\"");
+    expect(source).toContain('result.kind !== "updated"');
     expect(source).toContain("caughtError.status === 404");
     expect(source).toContain("const intervalId = window.setInterval(refreshVisibleCombat");
     expect(source).not.toContain("loadScenarioEncounters");

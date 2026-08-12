@@ -46,9 +46,26 @@ function itemWithMixedVisibility(): AssignedEquipmentItem {
   });
 }
 
+function revealedItem(): AssignedEquipmentItem {
+  const item = itemWithMixedVisibility();
+  return EquipmentItemSchema.parse({
+    ...item,
+    itemFacts: {
+      ...item.itemFacts,
+      descriptiveTraits: item.itemFacts.descriptiveTraits.map((fact) => ({
+        ...fact,
+        visibility: "revealed",
+      })),
+    },
+  });
+}
+
 function repositoryWith(item: AssignedEquipmentItem): CharacterEquipmentRepository {
   return {
     async createCharacterEquipmentItem(value) {
+      return value;
+    },
+    async createCampaignEquipmentItem(value) {
       return value;
     },
     async createCharacterStorageLocation(value) {
@@ -59,6 +76,9 @@ function repositoryWith(item: AssignedEquipmentItem): CharacterEquipmentReposito
     },
     async getCanonicalEquipmentItemById(itemId) {
       return itemId === item.id ? item : null;
+    },
+    async getCampaignEquipmentItems() {
+      return [item];
     },
     async getCharacterEquipmentItems() {
       return [item];
@@ -78,6 +98,9 @@ function repositoryWith(item: AssignedEquipmentItem): CharacterEquipmentReposito
     async removeCharacterEquipmentItem() {},
     async removeCharacterStorageLocation() {},
     async updateCharacterEquipmentItem(value) {
+      return value;
+    },
+    async updateCampaignEquipmentItemAuthoring(value) {
       return value;
     },
     async upsertCharacterLoadout(value) {
@@ -142,5 +165,30 @@ describe("CharacterEquipmentReadModelService viewer projection", () => {
       unsupportedCapabilities: [],
       version: 1,
     });
+  });
+
+  it("omits hidden facts completely before reveal and includes them after reveal and reload", async () => {
+    const before = await new CharacterEquipmentReadModelService(
+      repositoryWith(itemWithMixedVisibility()),
+    ).getCharacterEquipmentState("character-1", {
+      characterId: "character-1",
+      kind: "holder",
+    });
+    const beforeJson = JSON.stringify(before);
+
+    expect(beforeJson).not.toContain("former owner");
+    expect(beforeJson).not.toContain("gm-history");
+    expect(beforeJson).not.toContain("gm_only");
+    expect(beforeJson).not.toContain("hidden");
+
+    const afterReload = await new CharacterEquipmentReadModelService(
+      repositoryWith(revealedItem()),
+    ).getCharacterEquipmentState("character-1", {
+      characterId: "character-1",
+      kind: "holder",
+    });
+
+    expect(JSON.stringify(afterReload)).toContain("former owner");
+    expect(afterReload.itemsById["item-1"]?.itemFacts.descriptiveTraits).toHaveLength(1);
   });
 });

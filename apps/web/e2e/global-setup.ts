@@ -46,15 +46,90 @@ function buildStorageState(cookieHeader: string, domain: string): object {
   const name = nameValue.slice(0, eqIdx).trim();
   const value = nameValue.slice(eqIdx + 1).trim();
   return {
-    cookies: [{ domain, expires: -1, httpOnly: true, name, path: "/", sameSite: "Lax", secure: false, value }],
+    cookies: [
+      {
+        domain,
+        expires: -1,
+        httpOnly: true,
+        name,
+        path: "/",
+        sameSite: "Lax",
+        secure: false,
+        value,
+      },
+    ],
     origins: [],
   };
 }
 
 const SMOKE_CHARACTER_ID = "smoke-char-00001";
+const SMOKE_NON_HOLDER_CHARACTER_ID = "smoke-char-00002";
 const SMOKE_GM_EMAIL = "smoke-gm@test.local";
+const SMOKE_NON_HOLDER_EMAIL = "smoke-non-holder@test.local";
 const SMOKE_PLAYER_EMAIL = "smoke-player@test.local";
+const SMOKE_UNRELATED_EMAIL = "smoke-unrelated@test.local";
 const SMOKE_PASSWORD = "smoketest123";
+
+async function loginOrRegister(email: string, displayName: string): Promise<string> {
+  try {
+    const { sessionCookie } = await apiPost<unknown>("/auth/register", {
+      displayName,
+      email,
+      password: SMOKE_PASSWORD,
+    });
+    return sessionCookie!;
+  } catch {
+    const { sessionCookie } = await apiPost<unknown>("/auth/login", {
+      email,
+      password: SMOKE_PASSWORD,
+    });
+    return sessionCookie!;
+  }
+}
+
+function characterPayload(id: string, name: string) {
+  return {
+    build: {
+      equipment: { items: [] },
+      id,
+      name,
+      profile: {
+        description: "",
+        distractionLevel: 3,
+        id: `profile-${id}`,
+        label: "Profile",
+        rolledStats: {
+          cha: 10,
+          com: 10,
+          con: 10,
+          dex: 10,
+          health: 10,
+          int: 10,
+          lck: 10,
+          pow: 10,
+          siz: 10,
+          str: 10,
+          will: 10,
+        },
+        societyLevel: 0,
+      },
+      progression: {
+        chargenMode: "standard",
+        educationPoints: 0,
+        flexiblePointFactor: 1,
+        level: 1,
+        primaryPoolSpent: 0,
+        primaryPoolTotal: 60,
+        secondaryPoolSpent: 0,
+        secondaryPoolTotal: 0,
+        skillGroups: [],
+        skills: [],
+        specializations: [],
+      },
+      progressionState: { availablePoints: 0, checks: [], history: [], pendingAttempts: [] },
+    },
+  };
+}
 
 export default async function globalSetup() {
   const authDir = path.join(__dirname, ".auth");
@@ -100,69 +175,99 @@ export default async function globalSetup() {
   }
 
   // --- Player user: register or login ---
-  let playerCookie: string;
-  try {
-    const { sessionCookie } = await apiPost<unknown>("/auth/register", {
-      displayName: "Smoke Player",
-      email: SMOKE_PLAYER_EMAIL,
-      password: SMOKE_PASSWORD,
-    });
-    playerCookie = sessionCookie!;
-  } catch {
-    const { sessionCookie } = await apiPost<unknown>("/auth/login", {
-      email: SMOKE_PLAYER_EMAIL,
-      password: SMOKE_PASSWORD,
-    });
-    playerCookie = sessionCookie!;
-  }
+  const playerCookie = await loginOrRegister(SMOKE_PLAYER_EMAIL, "Smoke Player");
+  const nonHolderCookie = await loginOrRegister(SMOKE_NON_HOLDER_EMAIL, "Smoke Non-holder");
+  const unrelatedCookie = await loginOrRegister(SMOKE_UNRELATED_EMAIL, "Smoke Unrelated");
 
   // --- Character for player ---
   try {
     await apiPost(
       "/characters",
-      {
-        build: {
-          equipment: { items: [] },
-          id: SMOKE_CHARACTER_ID,
-          name: "Smoke Character",
-          profile: {
-            description: "",
-            distractionLevel: 3,
-            id: `profile-${SMOKE_CHARACTER_ID}`,
-            label: "Profile",
-            rolledStats: { cha: 10, com: 10, con: 10, dex: 10, health: 10, int: 10, lck: 10, pow: 10, siz: 10, str: 10, will: 10 },
-            societyLevel: 0,
-          },
-          progression: {
-            chargenMode: "standard",
-            educationPoints: 0,
-            flexiblePointFactor: 1,
-            level: 1,
-            primaryPoolSpent: 0,
-            primaryPoolTotal: 60,
-            secondaryPoolSpent: 0,
-            secondaryPoolTotal: 0,
-            skillGroups: [],
-            skills: [],
-            specializations: [],
-          },
-          progressionState: { availablePoints: 0, checks: [], history: [], pendingAttempts: [] },
-        },
-      },
+      characterPayload(SMOKE_CHARACTER_ID, "Smoke Character"),
       playerCookie,
     );
   } catch {
     // Character already exists — idempotent
   }
 
+  try {
+    await apiPost(
+      "/characters",
+      characterPayload(SMOKE_NON_HOLDER_CHARACTER_ID, "Smoke Non-holder Character"),
+      nonHolderCookie,
+    );
+  } catch {
+    // Character already exists — idempotent
+  }
+
+  // --- B2 campaign with the player's Character available for initial item assignment ---
+  const { data: b2CampaignData } = await apiPost<{ campaign: { id: string } }>(
+    "/campaigns",
+    { name: `B2 Item Workshop ${Date.now()}` },
+    gmCookie,
+  );
+  const b2CampaignId = b2CampaignData.campaign.id;
+  await apiPost(
+    `/campaigns/${b2CampaignId}/roster`,
+    {
+      category: "pc",
+      sourceId: SMOKE_CHARACTER_ID,
+      sourceType: "character",
+    },
+    gmCookie,
+  );
+  await apiPost(
+    `/campaigns/${b2CampaignId}/roster`,
+    {
+      category: "pc",
+      sourceId: SMOKE_NON_HOLDER_CHARACTER_ID,
+      sourceType: "character",
+    },
+    gmCookie,
+  );
+  const { data: b2ScenarioData } = await apiPost<{ scenario: { id: string } }>(
+    `/campaigns/${b2CampaignId}/scenarios`,
+    { name: "B2 Perspective Scenario", status: "live" },
+    gmCookie,
+  );
+  await apiPost(
+    `/scenarios/${b2ScenarioData.scenario.id}/participants/character`,
+    { characterId: SMOKE_CHARACTER_ID },
+    playerCookie,
+  );
+  await apiPost(
+    `/scenarios/${b2ScenarioData.scenario.id}/participants/character`,
+    { characterId: SMOKE_NON_HOLDER_CHARACTER_ID },
+    nonHolderCookie,
+  );
+
   // --- Save browser auth state ---
   const domain = new URL(process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000").hostname;
-  fs.writeFileSync(path.join(authDir, "player.json"), JSON.stringify(buildStorageState(playerCookie, domain)));
-  fs.writeFileSync(path.join(authDir, "gm.json"), JSON.stringify(buildStorageState(gmCookie, domain)));
+  fs.writeFileSync(
+    path.join(authDir, "player.json"),
+    JSON.stringify(buildStorageState(playerCookie, domain)),
+  );
+  fs.writeFileSync(
+    path.join(authDir, "gm.json"),
+    JSON.stringify(buildStorageState(gmCookie, domain)),
+  );
+  fs.writeFileSync(
+    path.join(authDir, "non-holder.json"),
+    JSON.stringify(buildStorageState(nonHolderCookie, domain)),
+  );
+  fs.writeFileSync(
+    path.join(authDir, "unrelated.json"),
+    JSON.stringify(buildStorageState(unrelatedCookie, domain)),
+  );
 
   // --- Save test IDs for use in specs ---
   fs.writeFileSync(
     path.join(__dirname, "test-state.json"),
-    JSON.stringify({ campaignId, characterId: SMOKE_CHARACTER_ID }),
+    JSON.stringify({
+      b2CampaignId,
+      campaignId,
+      characterId: SMOKE_CHARACTER_ID,
+      nonHolderCharacterId: SMOKE_NON_HOLDER_CHARACTER_ID,
+    }),
   );
 }

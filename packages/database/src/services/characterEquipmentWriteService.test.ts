@@ -50,6 +50,12 @@ function createRepositoryStub(input?: {
       items.set(item.id, cloneItem(item));
       return cloneItem(item);
     },
+    async createCampaignEquipmentItem(item) {
+      throw new Error(`Unexpected campaign item create: ${item.id}`);
+    },
+    async updateCampaignEquipmentItemAuthoring(item) {
+      throw new Error(`Unexpected campaign item update: ${item.id}`);
+    },
     async updateCharacterEquipmentItem(item) {
       items.set(item.id, cloneItem(item));
       return cloneItem(item);
@@ -84,6 +90,9 @@ function createRepositoryStub(input?: {
     },
     async getCanonicalEquipmentItemById(itemId) {
       return items.get(itemId) ?? null;
+    },
+    async getCampaignEquipmentItems() {
+      return [];
     },
     async getCharacterStorageLocations(currentCharacterId) {
       return Array.from(locations.values())
@@ -128,13 +137,17 @@ function createLocation(input: {
 }
 
 function createItem(input: {
+  campaignContextId?: string | null;
   id: string;
+  isStackable?: boolean;
+  specificityType?: AssignedEquipmentItem["specificityType"];
   templateId: string;
   category: AssignedEquipmentItem["category"];
   storageAssignment: AssignedEquipmentItem["storageAssignment"];
 }) {
   return EquipmentItemSchema.parse({
     acquiredFrom: null,
+    campaignContextId: input.campaignContextId ?? null,
     category: input.category,
     characterId,
     conditionState: "intact",
@@ -145,14 +158,14 @@ function createItem(input: {
     id: input.id,
     isEquipped: input.storageAssignment.carryMode === "equipped",
     isFavorite: null,
-    isStackable: false,
+    isStackable: input.isStackable ?? false,
     material: "steel",
     notes: null,
     previousStorageAssignment: null,
     quality: "standard",
     quantity: 1,
     specialProperties: null,
-    specificityType: "specific",
+    specificityType: input.specificityType ?? "specific",
     statusTags: null,
     storageAssignment: input.storageAssignment,
     templateId: input.templateId,
@@ -255,5 +268,83 @@ describe("CharacterEquipmentWriteService loadout storage restoration", () => {
       carryMode: "backpack",
       locationId: backpackLocation.id,
     });
+  });
+});
+
+describe("CharacterEquipmentWriteService campaign item ownership", () => {
+  const personLocation = createLocation({
+    availabilityClass: "with_you",
+    id: `${characterId}:loc-person`,
+    name: "On person",
+    type: "person_system",
+  });
+
+  it("denies legacy metadata, quantity, and deletion writes for canonical campaign items", async () => {
+    const campaignItem = createItem({
+      campaignContextId: "campaign-1",
+      category: "valuables",
+      id: `${characterId}:item-campaign`,
+      isStackable: true,
+      specificityType: "generic",
+      storageAssignment: { carryMode: "on_person", locationId: personLocation.id },
+      templateId: "valuable-template-gold-coins",
+    });
+    const { items, repository } = createRepositoryStub({
+      items: [campaignItem],
+      locations: [personLocation],
+    });
+    const service = new CharacterEquipmentWriteService(repository);
+
+    await expect(
+      service.updateCharacterEquipmentMetadata(characterId, campaignItem.id, {
+        conditionState: "damaged",
+        displayName: "Player rewrite",
+        notes: "Player notes",
+      }),
+    ).rejects.toThrow("Campaign item details can only be changed from Campaign Items.");
+    await expect(
+      service.updateCharacterEquipmentQuantity(characterId, campaignItem.id, 10),
+    ).rejects.toThrow("Campaign item details can only be changed from Campaign Items.");
+    await expect(
+      service.removeCharacterEquipmentItem(characterId, campaignItem.id),
+    ).rejects.toThrow("Campaign item details can only be changed from Campaign Items.");
+
+    expect(items.get(campaignItem.id)).toMatchObject({
+      conditionState: "intact",
+      displayName: null,
+      notes: null,
+      quantity: 1,
+    });
+  });
+
+  it("keeps ordinary Character Equipment metadata, quantity, and deletion self-service", async () => {
+    const ordinaryItem = createItem({
+      category: "valuables",
+      id: `${characterId}:item-ordinary`,
+      isStackable: true,
+      specificityType: "generic",
+      storageAssignment: { carryMode: "on_person", locationId: personLocation.id },
+      templateId: "valuable-template-gold-coins",
+    });
+    const { items, repository } = createRepositoryStub({
+      items: [ordinaryItem],
+      locations: [personLocation],
+    });
+    const service = new CharacterEquipmentWriteService(repository);
+
+    await expect(
+      service.updateCharacterEquipmentMetadata(characterId, ordinaryItem.id, {
+        conditionState: "damaged",
+        displayName: "Player item",
+        notes: "Player notes",
+      }),
+    ).resolves.toMatchObject({ displayName: "Player item", notes: "Player notes" });
+    await expect(
+      service.updateCharacterEquipmentQuantity(characterId, ordinaryItem.id, 2),
+    ).resolves.toMatchObject({ quantity: 2 });
+    await expect(
+      service.removeCharacterEquipmentItem(characterId, ordinaryItem.id),
+    ).resolves.toBeUndefined();
+    expect(items.has(ordinaryItem.id)).toBe(false);
   });
 });
