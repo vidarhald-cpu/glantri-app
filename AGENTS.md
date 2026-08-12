@@ -25,6 +25,7 @@ Keep mandatory startup reading controlled and task-specific. Area documents are 
 Useful references:
 
 - Task contract: `docs/process/task-contract.md`
+- Supervisor-led Builder/QA execution: `docs/process/agent-execution.md`
 - Functional ownership/hotspots: `docs/architecture/ownership.md`
 - Global user-facing principles: `docs/product/product-presentation-principles.md`
 - Regression guidance: `docs/testing-regression-matrix.md`
