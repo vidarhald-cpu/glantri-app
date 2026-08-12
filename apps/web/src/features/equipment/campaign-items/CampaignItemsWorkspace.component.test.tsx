@@ -16,13 +16,13 @@ vi.mock("@/lib/api/equipmentClient", () => ({
 
 import CampaignItemsWorkspace from "./CampaignItemsWorkspace";
 
-const fencingSword = {
+const rapier = {
   baseEncumbrance: 1,
   category: "weapon",
   defaultMaterial: "steel",
-  id: "weapon-template-fencing-sword",
+  id: "weapon-template-rapier",
   initiative: 2,
-  name: "Fencing sword",
+  name: "Rapier",
   specificityTypeDefault: "specific",
   tags: [],
 };
@@ -31,7 +31,7 @@ const emptyResponse = {
   characters: [{ id: "character-1", name: "Alaric" }],
   state: {
     itemsById: {},
-    templatesById: { [fencingSword.id]: fencingSword },
+    templatesById: { [rapier.id]: rapier },
   },
 };
 
@@ -65,6 +65,7 @@ describe("CampaignItemsWorkspace", () => {
     await user.clear(screen.getByLabelText("Actual initiative"));
     await user.type(screen.getByLabelText("Actual initiative"), "1");
     await user.click(screen.getByRole("button", { name: "Add descriptive trait" }));
+    expect(screen.getByRole("combobox", { name: "Trait 1 category" })).toBeVisible();
     await user.type(screen.getByLabelText("Trait 1"), "House Silverston");
     await user.click(screen.getByRole("button", { name: "Create item" }));
 
@@ -74,7 +75,7 @@ describe("CampaignItemsWorkspace", () => {
         campaignId: "campaign-1",
         displayName: "Silverston",
         holderCharacterId: "character-1",
-        templateId: fencingSword.id,
+        templateId: rapier.id,
       }),
     );
     expect(mocks.create.mock.calls[0]?.[0].facts.descriptiveTraits[0]).toMatchObject({

@@ -1028,6 +1028,9 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                                         style={{ display: "grid", gap: "0.35rem", minWidth: 180 }}
                                       >
                                         <input
+                                          disabled={Boolean(
+                                            state?.itemsById[row.itemId]?.campaignContextId,
+                                          )}
                                           onChange={(event) =>
                                             setMetadataDrafts((current) => ({
                                               ...current,
@@ -1050,6 +1053,9 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                                           }}
                                         >
                                           <button
+                                            disabled={Boolean(
+                                              state?.itemsById[row.itemId]?.campaignContextId,
+                                            )}
                                             onClick={() => void handleUpdateMetadata(row.itemId)}
                                             type="button"
                                           >
@@ -1075,6 +1081,9 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                                           style={{ display: "grid", gap: "0.35rem", maxWidth: 120 }}
                                         >
                                           <input
+                                            disabled={Boolean(
+                                              state?.itemsById[row.itemId]?.campaignContextId,
+                                            )}
                                             min={1}
                                             onChange={(event) =>
                                               setQuantityDrafts((current) => ({
@@ -1090,6 +1099,9 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                                             }
                                           />
                                           <button
+                                            disabled={Boolean(
+                                              state?.itemsById[row.itemId]?.campaignContextId,
+                                            )}
                                             onClick={() => void handleUpdateQuantity(row.itemId)}
                                             type="button"
                                           >
@@ -1132,18 +1144,29 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                                           }}
                                         >
                                           <button
+                                            disabled={Boolean(
+                                              state?.itemsById[row.itemId]?.campaignContextId,
+                                            )}
                                             onClick={() => toggleExpandedItem(row.itemId)}
                                             type="button"
                                           >
                                             {expandedItemIds[row.itemId] ? "Close" : "Edit"}
                                           </button>
                                           <button
+                                            disabled={Boolean(
+                                              state?.itemsById[row.itemId]?.campaignContextId,
+                                            )}
                                             onClick={() => void handleRemoveItem(row.itemId)}
                                             type="button"
                                           >
                                             Remove item
                                           </button>
                                         </div>
+                                        {state?.itemsById[row.itemId]?.campaignContextId ? (
+                                          <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                                            Item details are managed by the GM in Campaign Items.
+                                          </div>
+                                        ) : null}
                                         {rowErrors[row.itemId] ? (
                                           <div style={{ color: "#8b3a1a", fontSize: "0.8rem" }}>
                                             {rowErrors[row.itemId]}

@@ -337,6 +337,7 @@ function CampaignItemEditor({
             }}
           >
             <select
+              aria-label={`Trait ${index + 1} category`}
               value={trait.category}
               onChange={(event) =>
                 updateFacts({

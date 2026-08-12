@@ -74,7 +74,7 @@ test.describe("B2 campaign item authoring and reveal", () => {
     await expect(page.getByText("Unassigned / in campaign", { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "Create item" }).click();
-    await page.getByLabel("Template").selectOption("weapon-template-fencing-sword");
+    await page.getByLabel("Template").selectOption("weapon-template-rapier");
     await page.getByLabel("Item name (optional)").fill(itemName);
     await page.getByLabel("Description (optional)").fill("A balanced sword prepared by the GM.");
     await page.getByLabel("Initial assignment").selectOption(characterId);
@@ -83,6 +83,7 @@ test.describe("B2 campaign item authoring and reveal", () => {
     await page.getByLabel("Add final attack OB contribution").check();
     await page.getByLabel("Final attack OB", { exact: true }).fill("1");
     await page.getByRole("button", { name: "Add descriptive trait" }).click();
+    await expect(page.getByRole("combobox", { name: "Trait 1 category" })).toBeVisible();
     await page.getByLabel("Trait 1", { exact: true }).fill(hiddenTrait);
     await page.getByRole("button", { name: "Add recorded capability" }).click();
     await page.getByLabel("Name", { exact: true }).fill("Guiding light");
@@ -91,7 +92,7 @@ test.describe("B2 campaign item authoring and reveal", () => {
     await page.getByRole("button", { name: "Create item" }).click();
 
     await expect(page.getByText(itemName, { exact: true })).toBeVisible();
-    await expect(page.getByText("Initiative 1 (standard 1)")).toBeVisible();
+    await expect(page.getByText("Initiative 1 (standard 2)")).toBeVisible();
     await expect(
       page.getByText("Recorded capabilities — not calculated or tracked by the app"),
     ).toBeVisible();
@@ -132,6 +133,48 @@ test.describe("B2 campaign item authoring and reveal", () => {
     expect(unrelatedEquipment.status()).toBe(404);
     expect(await unrelatedEquipment.text()).not.toContain(hiddenTrait);
 
+    const deniedLegacyWrites = [
+      { expectedStatus: 400, label: "holder", request: playerContext.request },
+      { expectedStatus: 404, label: "non-holder", request: nonHolderContext.request },
+      { expectedStatus: 404, label: "unrelated", request: unrelatedContext.request },
+    ];
+    for (const perspective of deniedLegacyWrites) {
+      const metadataResponse = await perspective.request.post(
+        `${API_URL}/characters/${characterId}/equipment/items/metadata`,
+        {
+          data: {
+            conditionState: "damaged",
+            displayName: `Unauthorized ${perspective.label} rewrite`,
+            isFavorite: true,
+            itemId: authoredItem!.id,
+            notes: `Unauthorized ${perspective.label} notes`,
+          },
+        },
+      );
+      expect(metadataResponse.status(), `${perspective.label} metadata write`).toBe(
+        perspective.expectedStatus,
+      );
+      expect(await metadataResponse.text()).not.toContain(hiddenTrait);
+
+      const removeResponse = await perspective.request.post(
+        `${API_URL}/characters/${characterId}/equipment/items/remove`,
+        { data: { itemId: authoredItem!.id } },
+      );
+      expect(removeResponse.status(), `${perspective.label} deletion`).toBe(
+        perspective.expectedStatus,
+      );
+      expect(await removeResponse.text()).not.toContain(hiddenTrait);
+    }
+
+    const unchangedGmPayload = await (
+      await page.request.get(`${API_URL}/campaigns/${b2CampaignId}/items`)
+    ).json();
+    expect(unchangedGmPayload.state.itemsById[authoredItem!.id]).toMatchObject({
+      conditionState: "intact",
+      displayName: itemName,
+      notes: "A balanced sword prepared by the GM.",
+    });
+
     await seedOwnedCharacterMirror(playerPage, characterId);
     const beforePayloadPromise = playerPage.waitForResponse(
       (response) =>
@@ -145,6 +188,12 @@ test.describe("B2 campaign item authoring and reveal", () => {
     expect(beforePayload).not.toContain("gm_only");
     await expect(playerPage.locator(`input[value="${itemName}"]`)).toBeVisible();
     await expect(playerPage.getByText(hiddenTrait)).toHaveCount(0);
+    const campaignItemRow = playerPage
+      .locator("tr")
+      .filter({ has: playerPage.locator(`input[value="${itemName}"]`) });
+    await expect(campaignItemRow.getByRole("button", { name: "Edit" })).toBeDisabled();
+    await expect(campaignItemRow.getByRole("button", { name: "Remove item" })).toBeDisabled();
+    await expect(campaignItemRow.getByText("Item details are managed by the GM")).toBeVisible();
 
     const itemCard = page.locator("article").filter({ hasText: itemName });
     await itemCard.getByRole("button", { name: "Edit item" }).click();
@@ -175,7 +224,7 @@ test.describe("B2 campaign item authoring and reveal", () => {
     expect(Object.values(playerEquipmentPayload.state.itemsById)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: authoredItem!.id }),
-        expect.objectContaining({ displayName: "B2 player standard dagger" }),
+        expect.objectContaining({ displayName: "B2 player standard dagger", isEquipped: true }),
       ]),
     );
 

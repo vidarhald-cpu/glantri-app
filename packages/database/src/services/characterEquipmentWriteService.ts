@@ -139,6 +139,12 @@ function assertItemBelongsToCharacter(
   return item;
 }
 
+function assertCharacterEquipmentAuthoringAllowed(item: AssignedEquipmentItem): void {
+  if (item.campaignContextId) {
+    throw new Error("Campaign item details can only be changed from Campaign Items.");
+  }
+}
+
 function assertLocationBelongsToCharacter(
   location: StorageLocation | undefined,
   characterId: string,
@@ -550,10 +556,11 @@ export class CharacterEquipmentWriteService {
 
   async removeCharacterEquipmentItem(characterId: string, itemId: string): Promise<void> {
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
-    assertItemBelongsToCharacter(
+    const item = assertItemBelongsToCharacter(
       snapshot.items.find((entry) => entry.id === itemId),
       characterId,
     );
+    assertCharacterEquipmentAuthoringAllowed(item);
 
     for (const loadout of snapshot.loadouts) {
       const referencedBy = getReferencedLoadoutLabel(loadout, itemId);
@@ -576,6 +583,7 @@ export class CharacterEquipmentWriteService {
       snapshot.items.find((entry) => entry.id === itemId),
       characterId,
     );
+    assertCharacterEquipmentAuthoringAllowed(item);
 
     if (!item.isStackable) {
       throw new Error("Only stackable items can have quantity updated.");
@@ -624,6 +632,7 @@ export class CharacterEquipmentWriteService {
       snapshot.items.find((entry) => entry.id === itemId),
       characterId,
     );
+    assertCharacterEquipmentAuthoringAllowed(item);
 
     const updatedItem = EquipmentItemSchema.parse({
       ...item,

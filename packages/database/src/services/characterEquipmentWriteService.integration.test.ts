@@ -275,5 +275,48 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(holderItems.map((item) => item.id)).toContain(assigned.id);
       expect(holderItems.find((item) => item.id === assigned.id)?.id).toBe(assigned.id);
     });
+
+    it("keeps GM-authored campaign items canonical across rejected legacy writes", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const holder = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, holder.id);
+      const campaign = await createTestCampaign(prisma!, gm.id);
+      const repo = createPrismaCharacterEquipmentRepository(prisma!);
+      const service = new CharacterEquipmentWriteService(repo);
+      const assigned = await service.createCampaignEquipmentItem({
+        campaignId: campaign.id,
+        displayName: "GM-authored sword",
+        holderCharacterId: character.id,
+        itemFacts: {
+          activeMechanics: [],
+          descriptiveTraits: [],
+          templateOverrides: [],
+          unsupportedCapabilities: [],
+          version: 1,
+        },
+        notes: "Canonical GM description",
+        templateId: "weapon-template-rapier",
+      });
+
+      await expect(
+        service.updateCharacterEquipmentMetadata(character.id, assigned.id, {
+          conditionState: "damaged",
+          displayName: "Holder rewrite",
+          notes: "Holder notes",
+        }),
+      ).rejects.toThrow("Campaign item details can only be changed from Campaign Items.");
+      await expect(service.removeCharacterEquipmentItem(character.id, assigned.id)).rejects.toThrow(
+        "Campaign item details can only be changed from Campaign Items.",
+      );
+
+      expect(await repo.getCanonicalEquipmentItemById(assigned.id)).toMatchObject({
+        conditionState: "intact",
+        displayName: "GM-authored sword",
+        notes: "Canonical GM description",
+      });
+      expect((await repo.getCampaignEquipmentItems(campaign.id)).map((item) => item.id)).toContain(
+        assigned.id,
+      );
+    });
   });
 }
