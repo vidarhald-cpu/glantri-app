@@ -50,6 +50,12 @@ function createRepositoryStub(input?: {
       items.set(item.id, cloneItem(item));
       return cloneItem(item);
     },
+    async createCampaignEquipmentItem(item) {
+      throw new Error(`Unexpected campaign item create: ${item.id}`);
+    },
+    async updateCampaignEquipmentItemAuthoring(item) {
+      throw new Error(`Unexpected campaign item update: ${item.id}`);
+    },
     async updateCharacterEquipmentItem(item) {
       items.set(item.id, cloneItem(item));
       return cloneItem(item);
@@ -84,6 +90,9 @@ function createRepositoryStub(input?: {
     },
     async getCanonicalEquipmentItemById(itemId) {
       return items.get(itemId) ?? null;
+    },
+    async getCampaignEquipmentItems() {
+      return [];
     },
     async getCharacterStorageLocations(currentCharacterId) {
       return Array.from(locations.values())

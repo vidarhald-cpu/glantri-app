@@ -105,6 +105,7 @@ export function resolveCampaignResumeDestination(input: {
         scenarioId: input.rememberedScenarioId,
         tab:
           input.rememberedTab === "campaign" ||
+          input.rememberedTab === "items" ||
           input.rememberedTab === "scenario" ||
           input.rememberedTab === "encounter" ||
           input.rememberedTab === "skill-rolls" ||

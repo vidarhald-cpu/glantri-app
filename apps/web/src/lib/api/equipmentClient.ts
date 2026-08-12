@@ -1,27 +1,113 @@
 import type {
+  CanonicalEquipmentItem,
   CarryMode,
+  DescriptiveItemTraitCategory,
+  EquipmentTemplate,
+  ItemFactVisibility,
   ItemConditionState,
   LocationAvailabilityClass,
   MaterialType,
   QualityType,
-  StorageLocationType
+  StorageLocationType,
 } from "@glantri/domain/equipment";
 
 import type { EquipmentFeatureState } from "../../features/equipment/types";
 import { sendJson } from "./apiClient";
+
+export interface CampaignItemCharacterOption {
+  id: string;
+  name: string;
+}
+
+export interface CampaignEquipmentState {
+  itemsById: Record<string, CanonicalEquipmentItem>;
+  templatesById: Record<string, EquipmentTemplate>;
+}
+
+export interface CampaignItemFactDraft {
+  initiativeOverride?: {
+    id?: string;
+    value: number;
+    visibility: ItemFactVisibility;
+  } | null;
+  finalAttackObDelta?: {
+    id?: string;
+    value: number;
+    visibility: ItemFactVisibility;
+  } | null;
+  descriptiveTraits: Array<{
+    category: DescriptiveItemTraitCategory;
+    id?: string;
+    text: string;
+    visibility: ItemFactVisibility;
+  }>;
+  unsupportedCapabilities: Array<{
+    id?: string;
+    name: string;
+    rulesText: string;
+    usageText?: string | null;
+    visibility: ItemFactVisibility;
+  }>;
+}
+
+export interface CampaignItemsResponse {
+  characters: CampaignItemCharacterOption[];
+  state: CampaignEquipmentState;
+}
 
 export interface EquipmentStateResponse {
   state: EquipmentFeatureState;
 }
 
 export async function loadCharacterEquipmentState(
-  characterId: string
+  characterId: string,
 ): Promise<EquipmentFeatureState> {
   const payload = await sendJson<EquipmentStateResponse>(`/characters/${characterId}/equipment`, {
-    method: "GET"
+    method: "GET",
   });
 
   return payload.state;
+}
+
+export async function loadCampaignItems(campaignId: string): Promise<CampaignItemsResponse> {
+  return sendJson<CampaignItemsResponse>(`/campaigns/${campaignId}/items`, { method: "GET" });
+}
+
+export async function createCampaignItemOnServer(input: {
+  campaignId: string;
+  description?: string | null;
+  displayName?: string | null;
+  facts: CampaignItemFactDraft;
+  holderCharacterId?: string | null;
+  templateId: string;
+}): Promise<CampaignItemsResponse> {
+  return sendJson<CampaignItemsResponse>(`/campaigns/${input.campaignId}/items`, {
+    body: JSON.stringify({
+      description: input.description ?? null,
+      displayName: input.displayName ?? null,
+      facts: input.facts,
+      holderCharacterId: input.holderCharacterId ?? null,
+      templateId: input.templateId,
+    }),
+    method: "POST",
+  });
+}
+
+export async function updateCampaignItemOnServer(input: {
+  campaignId: string;
+  description?: string | null;
+  displayName?: string | null;
+  facts: CampaignItemFactDraft;
+  itemId: string;
+}): Promise<CampaignItemsResponse> {
+  return sendJson<CampaignItemsResponse>(`/campaigns/${input.campaignId}/items/${input.itemId}`, {
+    body: JSON.stringify({
+      description: input.description ?? null,
+      displayName: input.displayName ?? null,
+      facts: input.facts,
+    }),
+    method: "PATCH",
+  });
 }
 
 export async function moveCharacterEquipmentItemOnServer(input: {
@@ -36,10 +122,10 @@ export async function moveCharacterEquipmentItemOnServer(input: {
       body: JSON.stringify({
         carryMode: input.carryMode,
         itemId: input.itemId,
-        locationId: input.locationId
+        locationId: input.locationId,
       }),
-      method: "POST"
-    }
+      method: "POST",
+    },
   );
 
   return payload.state;
@@ -57,10 +143,10 @@ export async function createCharacterStorageLocationOnServer(input: {
       body: JSON.stringify({
         availabilityClass: input.availabilityClass,
         name: input.name,
-        type: input.type
+        type: input.type,
       }),
-      method: "POST"
-    }
+      method: "POST",
+    },
   );
 
   return payload.state;
@@ -74,10 +160,10 @@ export async function removeCharacterStorageLocationOnServer(input: {
     `/characters/${input.characterId}/equipment/locations/remove`,
     {
       body: JSON.stringify({
-        locationId: input.locationId
+        locationId: input.locationId,
       }),
-      method: "POST"
-    }
+      method: "POST",
+    },
   );
 
   return payload.state;
@@ -91,10 +177,10 @@ export async function bootstrapSampleCharacterEquipmentOnServer(input: {
     `/characters/${input.characterId}/equipment/bootstrap-sample`,
     {
       body: JSON.stringify({
-        overwrite: input.overwrite ?? false
+        overwrite: input.overwrite ?? false,
       }),
-      method: "POST"
-    }
+      method: "POST",
+    },
   );
 
   return payload.state;
@@ -122,10 +208,10 @@ export async function addCharacterEquipmentItemOnServer(input: {
         notes: input.notes ?? null,
         quality: input.quality,
         quantity: input.quantity,
-        templateId: input.templateId
+        templateId: input.templateId,
       }),
-      method: "POST"
-    }
+      method: "POST",
+    },
   );
 
   return payload.state;
@@ -139,10 +225,10 @@ export async function removeCharacterEquipmentItemOnServer(input: {
     `/characters/${input.characterId}/equipment/items/remove`,
     {
       body: JSON.stringify({
-        itemId: input.itemId
+        itemId: input.itemId,
       }),
-      method: "POST"
-    }
+      method: "POST",
+    },
   );
 
   return payload.state;
@@ -158,10 +244,10 @@ export async function updateCharacterEquipmentQuantityOnServer(input: {
     {
       body: JSON.stringify({
         itemId: input.itemId,
-        quantity: input.quantity
+        quantity: input.quantity,
       }),
-      method: "POST"
-    }
+      method: "POST",
+    },
   );
 
   return payload.state;
@@ -183,10 +269,10 @@ export async function updateCharacterEquipmentMetadataOnServer(input: {
         displayName: input.displayName ?? null,
         isFavorite: input.isFavorite ?? null,
         itemId: input.itemId,
-        notes: input.notes ?? null
+        notes: input.notes ?? null,
       }),
-      method: "POST"
-    }
+      method: "POST",
+    },
   );
 
   return payload.state;
@@ -206,10 +292,10 @@ async function updateCharacterLoadoutOnServer(input: {
     `/characters/${input.characterId}/equipment/loadout/${input.path}`,
     {
       body: JSON.stringify({
-        itemId: input.itemId
+        itemId: input.itemId,
       }),
-      method: "POST"
-    }
+      method: "POST",
+    },
   );
 
   return payload.state;
@@ -222,7 +308,7 @@ export async function setCharacterWornArmorOnServer(input: {
   return updateCharacterLoadoutOnServer({
     characterId: input.characterId,
     itemId: input.itemId,
-    path: "worn-armor"
+    path: "worn-armor",
   });
 }
 
@@ -233,7 +319,7 @@ export async function setCharacterReadyShieldOnServer(input: {
   return updateCharacterLoadoutOnServer({
     characterId: input.characterId,
     itemId: input.itemId,
-    path: "ready-shield"
+    path: "ready-shield",
   });
 }
 
@@ -244,7 +330,7 @@ export async function setCharacterActivePrimaryWeaponOnServer(input: {
   return updateCharacterLoadoutOnServer({
     characterId: input.characterId,
     itemId: input.itemId,
-    path: "active-primary-weapon"
+    path: "active-primary-weapon",
   });
 }
 
@@ -255,7 +341,7 @@ export async function setCharacterActiveSecondaryWeaponOnServer(input: {
   return updateCharacterLoadoutOnServer({
     characterId: input.characterId,
     itemId: input.itemId,
-    path: "active-secondary-weapon"
+    path: "active-secondary-weapon",
   });
 }
 
@@ -266,6 +352,6 @@ export async function setCharacterActiveMissileWeaponOnServer(input: {
   return updateCharacterLoadoutOnServer({
     characterId: input.characterId,
     itemId: input.itemId,
-    path: "active-missile-weapon"
+    path: "active-missile-weapon",
   });
 }

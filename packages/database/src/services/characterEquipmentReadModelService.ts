@@ -2,6 +2,7 @@ import {
   createEmptyEquipmentItemFacts,
   revealableEquipmentItemFacts,
   type AssignedEquipmentItem,
+  type CanonicalEquipmentItem,
   type CharacterLoadout,
   type EquipmentTemplate,
   type StorageLocation,
@@ -21,6 +22,11 @@ export interface CharacterEquipmentReadModel {
   activeLoadoutByCharacterId: Record<string, CharacterLoadout>;
   itemsById: Record<string, AssignedEquipmentItem>;
   locationsById: Record<string, StorageLocation>;
+  templatesById: Record<string, EquipmentTemplate>;
+}
+
+export interface CampaignEquipmentReadModel {
+  itemsById: Record<string, CanonicalEquipmentItem>;
   templatesById: Record<string, EquipmentTemplate>;
 }
 
@@ -62,6 +68,13 @@ export class CharacterEquipmentReadModelService {
   constructor(
     private readonly repository: CharacterEquipmentRepository = createPrismaCharacterEquipmentRepository(),
   ) {}
+
+  async getCampaignEquipmentState(campaignId: string): Promise<CampaignEquipmentReadModel> {
+    return {
+      itemsById: indexById(await this.repository.getCampaignEquipmentItems(campaignId)),
+      templatesById: equipmentTemplatesById as Record<string, EquipmentTemplate>,
+    };
+  }
 
   async getCharacterEquipmentState(
     characterId: string,

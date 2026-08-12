@@ -54,6 +54,7 @@ import CombatRoundManagerPanel from "@/features/combat-round-manager/CombatRound
 import { selectLatestCombatViewRevision } from "@/features/combat-history";
 import { loadCampaignWorkspaceInitialData } from "@/lib/campaigns/campaignWorkspaceLoading";
 import { pollGmCombatSnapshot } from "@/lib/campaigns/gmCombatRefresh";
+import CampaignItemsWorkspace from "@/features/equipment/campaign-items/CampaignItemsWorkspace";
 
 interface CampaignWorkspaceShellProps {
   campaignId: string;
@@ -275,10 +276,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       return;
     }
 
-    if (
-      activeEncounter?.id === encounterId &&
-      activeEncounter.updatedAt >= summaryRevision
-    ) {
+    if (activeEncounter?.id === encounterId && activeEncounter.updatedAt >= summaryRevision) {
       return;
     }
 
@@ -313,9 +311,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
           return;
         }
 
-        setError(
-          caughtError instanceof Error ? caughtError.message : "Unable to load encounter.",
-        );
+        setError(caughtError instanceof Error ? caughtError.message : "Unable to load encounter.");
       });
   }, [
     acceptActiveEncounter,
@@ -345,8 +341,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       try {
         const accepted = activeEncounterRef.current;
         const result = await pollGmCombatSnapshot({
-          acceptedRevision:
-            accepted?.id === polledEncounterId ? accepted.updatedAt : undefined,
+          acceptedRevision: accepted?.id === polledEncounterId ? accepted.updatedAt : undefined,
           encounterId: polledEncounterId,
           loadEncounter: loadEncounterById,
           loadParticipants: loadScenarioParticipants,
@@ -445,53 +440,53 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       ? "You are in this scenario, but not assigned to this encounter."
       : "Waiting for GM to add you to an encounter.";
 
-  const buildWorkspaceHref = useCallback((partial: {
-    encounterId?: string | null;
-    participantId?: string | null;
-    scenarioId?: string | null;
-    tab?: CampaignWorkspaceTabId | null;
-  }): string => {
-    const nextParams = new URLSearchParams(searchParamString);
+  const buildWorkspaceHref = useCallback(
+    (partial: {
+      encounterId?: string | null;
+      participantId?: string | null;
+      scenarioId?: string | null;
+      tab?: CampaignWorkspaceTabId | null;
+    }): string => {
+      const nextParams = new URLSearchParams(searchParamString);
 
-    if (partial.scenarioId === null) {
-      nextParams.delete("scenarioId");
-    } else if (partial.scenarioId !== undefined) {
-      nextParams.set("scenarioId", partial.scenarioId);
-    }
+      if (partial.scenarioId === null) {
+        nextParams.delete("scenarioId");
+      } else if (partial.scenarioId !== undefined) {
+        nextParams.set("scenarioId", partial.scenarioId);
+      }
 
-    if (partial.encounterId === null) {
-      nextParams.delete("encounterId");
-    } else if (partial.encounterId !== undefined) {
-      nextParams.set("encounterId", partial.encounterId);
-    }
+      if (partial.encounterId === null) {
+        nextParams.delete("encounterId");
+      } else if (partial.encounterId !== undefined) {
+        nextParams.set("encounterId", partial.encounterId);
+      }
 
-    if (partial.tab === null) {
-      nextParams.delete("tab");
-    } else if (partial.tab !== undefined) {
-      nextParams.set("tab", partial.tab);
-    }
+      if (partial.tab === null) {
+        nextParams.delete("tab");
+      } else if (partial.tab !== undefined) {
+        nextParams.set("tab", partial.tab);
+      }
 
-    if (partial.participantId === null) {
-      nextParams.delete("participantId");
-    } else if (partial.participantId !== undefined) {
-      nextParams.set("participantId", partial.participantId);
-    }
+      if (partial.participantId === null) {
+        nextParams.delete("participantId");
+      } else if (partial.participantId !== undefined) {
+        nextParams.set("participantId", partial.participantId);
+      }
 
-    return buildCampaignWorkspaceHref({
-      campaignId,
-      encounterId: nextParams.get("encounterId"),
-      participantId: nextParams.get("participantId"),
-      scenarioId: nextParams.get("scenarioId"),
-      tab: (nextParams.get("tab") as CampaignWorkspaceTabId | null) ?? undefined,
-    });
-  }, [campaignId, searchParamString]);
+      return buildCampaignWorkspaceHref({
+        campaignId,
+        encounterId: nextParams.get("encounterId"),
+        participantId: nextParams.get("participantId"),
+        scenarioId: nextParams.get("scenarioId"),
+        tab: (nextParams.get("tab") as CampaignWorkspaceTabId | null) ?? undefined,
+      });
+    },
+    [campaignId, searchParamString],
+  );
 
   function selectInspectableParticipant(input: {
     participantId: string;
-    tab: Extract<
-      CampaignWorkspaceTabId,
-      "character" | "player-combat" | "player-skill-rolls"
-    >;
+    tab: Extract<CampaignWorkspaceTabId, "character" | "player-combat" | "player-skill-rolls">;
   }) {
     const nextHref = buildWorkspaceHref({
       participantId: input.participantId,
@@ -513,6 +508,10 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   }, [accessMode, campaignId, rememberedCampaignSelection]);
 
   useEffect(() => {
+    if (sessionLoading || loading) {
+      return;
+    }
+
     if (
       !rememberedScenarioSelection.hydrated ||
       !rememberedEncounterSelection.hydrated ||
@@ -571,9 +570,11 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
     rememberedEncounterSelection,
     rememberedScenarioSelection,
     rememberedWorkspaceTab.hydrated,
+    loading,
     router,
     searchParams,
     searchParamString,
+    sessionLoading,
     tabs,
     workspaceState.activeEncounterId,
     workspaceState.activeScenarioId,
@@ -687,6 +688,12 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
             </section>
           )}
         </section>
+      ) : null}
+
+      {accessMode !== "none" && workspaceState.activeTab === "items" ? (
+        canAccessGmEncounter ? (
+          <CampaignItemsWorkspace campaignId={campaignId} />
+        ) : null
       ) : null}
 
       {accessMode !== "none" && workspaceState.activeTab === "scenario" ? (
@@ -1002,9 +1009,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
 
       {accessMode !== "none" && workspaceState.activeTab === "player-combat" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
-          {canAccessGmEncounter &&
-          workspaceState.activeScenarioId &&
-          selectedActiveEncounter ? (
+          {canAccessGmEncounter && workspaceState.activeScenarioId && selectedActiveEncounter ? (
             <>
               <WorkspaceParticipantInspectionHeader
                 candidates={gmInspectableCandidates}
