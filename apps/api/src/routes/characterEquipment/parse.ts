@@ -8,8 +8,7 @@ import {
 } from "@glantri/domain/equipment";
 
 export function parseCharacterId(params: unknown): string {
-  const id =
-    params && typeof params === "object" && "id" in params ? params.id : undefined;
+  const id = params && typeof params === "object" && "id" in params ? params.id : undefined;
 
   if (typeof id !== "string" || id.length === 0) {
     throw new Error("Character id is required.");
@@ -39,6 +38,40 @@ export function parseMoveItemBody(body: unknown) {
     carryMode: CarryModeSchema.parse(carryMode),
     itemId,
     locationId,
+  };
+}
+
+export function parseTransferItemBody(body: unknown): {
+  campaignId: string;
+  targetCharacterId: string;
+  targetStorageLocationId?: string;
+} {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Transfer details are required.");
+  }
+
+  const campaignId = "campaignId" in body ? body.campaignId : undefined;
+  const targetCharacterId = "targetCharacterId" in body ? body.targetCharacterId : undefined;
+  const targetStorageLocationId =
+    "targetStorageLocationId" in body ? body.targetStorageLocationId : undefined;
+
+  if (typeof campaignId !== "string" || campaignId.length === 0) {
+    throw new Error("Choose the campaign containing this item.");
+  }
+  if (typeof targetCharacterId !== "string" || targetCharacterId.length === 0) {
+    throw new Error("Choose the Character receiving the item.");
+  }
+  if (
+    targetStorageLocationId !== undefined &&
+    (typeof targetStorageLocationId !== "string" || targetStorageLocationId.length === 0)
+  ) {
+    throw new Error("Choose valid storage for the receiving Character.");
+  }
+
+  return {
+    campaignId,
+    targetCharacterId,
+    ...(targetStorageLocationId ? { targetStorageLocationId } : {}),
   };
 }
 

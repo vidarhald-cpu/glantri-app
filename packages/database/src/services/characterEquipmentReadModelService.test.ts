@@ -103,6 +103,9 @@ function repositoryWith(item: AssignedEquipmentItem): CharacterEquipmentReposito
     async updateCampaignEquipmentItemAuthoring(value) {
       return value;
     },
+    async transferCampaignEquipmentItem(input) {
+      throw new Error(`Unexpected campaign item transfer: ${input.itemId}`);
+    },
     async upsertCharacterLoadout(value) {
       return value;
     },

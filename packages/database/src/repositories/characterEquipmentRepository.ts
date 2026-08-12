@@ -178,6 +178,9 @@ export interface CharacterEquipmentRepository {
   updateCampaignEquipmentItemAuthoring(
     item: CanonicalEquipmentItem,
   ): Promise<CanonicalEquipmentItem>;
+  transferCampaignEquipmentItem(
+    input: TransferCampaignEquipmentItemInput,
+  ): Promise<CanonicalEquipmentItem>;
   updateCharacterEquipmentItem(item: AssignedEquipmentItem): Promise<AssignedEquipmentItem>;
   removeCharacterEquipmentItem(characterId: string, itemId: string): Promise<void>;
   moveCharacterEquipmentItem(
@@ -197,6 +200,21 @@ export interface CharacterEquipmentRepository {
     loadouts: DomainCharacterLoadout[];
     locations: StorageLocation[];
   }>;
+}
+
+export interface TransferCampaignEquipmentItemInput {
+  campaignId: string;
+  itemId: string;
+  sourceCharacterId: string;
+  targetCharacterId: string;
+  targetStorageAssignment: ItemStorageAssignment;
+}
+
+export class StaleEquipmentTransferError extends Error {
+  constructor() {
+    super("This item is no longer held by the expected Character.");
+    this.name = "StaleEquipmentTransferError";
+  }
 }
 
 export function createPrismaCharacterEquipmentRepository(
@@ -325,8 +343,140 @@ export function createPrismaCharacterEquipmentRepository(
 
       return mapCanonicalEquipmentItem(updated);
     },
+    async transferCampaignEquipmentItem(input) {
+      return prisma.$transaction(async (transaction) => {
+        await transaction.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "CharacterEquipmentItem" WHERE "id" = ${input.itemId} FOR UPDATE`,
+        );
+        const current = await transaction.characterEquipmentItem.findUnique({
+          where: { id: input.itemId },
+        });
+
+        if (!current || current.campaignContextId !== input.campaignId) {
+          throw new Error("Campaign item not found.");
+        }
+        if (current.holderCharacterId !== input.sourceCharacterId) {
+          throw new StaleEquipmentTransferError();
+        }
+        if (input.sourceCharacterId === input.targetCharacterId) {
+          throw new Error("Choose a different Character to receive this item.");
+        }
+
+        const rosterCount = await transaction.campaignRosterEntry.count({
+          where: {
+            campaignId: input.campaignId,
+            sourceId: { in: [input.sourceCharacterId, input.targetCharacterId] },
+            sourceType: "character",
+          },
+        });
+        if (rosterCount !== 2) {
+          throw new Error("Choose Characters from this campaign roster.");
+        }
+
+        let targetLocation = await transaction.characterStorageLocation.findFirst({
+          where: {
+            characterId: input.targetCharacterId,
+            id: input.targetStorageAssignment.locationId,
+          },
+        });
+        if (!targetLocation) {
+          const defaultTargetLocations = createDefaultEquipmentLocations(input.targetCharacterId);
+          const isStandardTarget = defaultTargetLocations.some(
+            (location) => location.id === input.targetStorageAssignment.locationId,
+          );
+          if (!isStandardTarget) {
+            throw new Error("The receiving Character has no valid storage for this transfer.");
+          }
+
+          for (const location of defaultTargetLocations) {
+            await transaction.characterStorageLocation.upsert({
+              create: {
+                availabilityClass: location.availabilityClass,
+                characterId: location.characterId,
+                id: location.id,
+                isAccessibleInEncounter: location.isAccessibleInEncounter,
+                isMobile: location.isMobile,
+                name: location.name,
+                notes: location.notes ?? null,
+                parentLocationId: location.parentLocationId ?? null,
+                type: location.type,
+              } as Prisma.CharacterStorageLocationUncheckedCreateInput,
+              update: {},
+              where: { id: location.id },
+            });
+          }
+          targetLocation = await transaction.characterStorageLocation.findFirst({
+            where: {
+              characterId: input.targetCharacterId,
+              id: input.targetStorageAssignment.locationId,
+            },
+          });
+        }
+        if (!targetLocation || input.targetStorageAssignment.carryMode === "equipped") {
+          throw new Error("The receiving Character has no valid storage for this transfer.");
+        }
+
+        const sourceLoadouts = await transaction.characterLoadout.findMany({
+          where: { characterId: input.sourceCharacterId },
+        });
+        for (const loadout of sourceLoadouts) {
+          const quickAccessItemIds = parseStringArrayOrNull(loadout.quickAccessItemIdsJson) ?? [];
+          await transaction.characterLoadout.update({
+            data: {
+              activeAmmoItemIds: loadout.activeAmmoItemIds.filter((id) => id !== input.itemId),
+              activeMissileWeaponItemId:
+                loadout.activeMissileWeaponItemId === input.itemId
+                  ? null
+                  : loadout.activeMissileWeaponItemId,
+              activePrimaryWeaponItemId:
+                loadout.activePrimaryWeaponItemId === input.itemId
+                  ? null
+                  : loadout.activePrimaryWeaponItemId,
+              activeSecondaryWeaponItemId:
+                loadout.activeSecondaryWeaponItemId === input.itemId
+                  ? null
+                  : loadout.activeSecondaryWeaponItemId,
+              quickAccessItemIdsJson: quickAccessItemIds.filter((id) => id !== input.itemId),
+              readyShieldItemId:
+                loadout.readyShieldItemId === input.itemId ? null : loadout.readyShieldItemId,
+              wornArmorItemId:
+                loadout.wornArmorItemId === input.itemId ? null : loadout.wornArmorItemId,
+            },
+            where: { id: loadout.id },
+          });
+        }
+
+        const moved = await transaction.characterEquipmentItem.updateMany({
+          data: {
+            carryMode: input.targetStorageAssignment.carryMode,
+            holderCharacterId: input.targetCharacterId,
+            isEquipped: false,
+            locationId: input.targetStorageAssignment.locationId,
+            previousCarryMode: null,
+            previousLocationId: null,
+          },
+          where: {
+            campaignContextId: input.campaignId,
+            holderCharacterId: input.sourceCharacterId,
+            id: input.itemId,
+          },
+        });
+        if (moved.count !== 1) {
+          throw new StaleEquipmentTransferError();
+        }
+
+        const updated = await transaction.characterEquipmentItem.findUnique({
+          where: { id: input.itemId },
+        });
+        if (!updated) {
+          throw new Error("Campaign item not found after transfer.");
+        }
+
+        return mapCanonicalEquipmentItem(updated);
+      });
+    },
     async updateCharacterEquipmentItem(item) {
-      const updated = await prisma.characterEquipmentItem.update({
+      const result = await prisma.characterEquipmentItem.updateMany({
         data: {
           acquiredFrom: item.acquiredFrom ?? null,
           category: item.category,
@@ -353,9 +503,19 @@ export function createPrismaCharacterEquipmentRepository(
           valueOverride: item.valueOverride ?? null,
         },
         where: {
+          holderCharacterId: item.characterId,
           id: item.id,
         },
       });
+
+      if (result.count !== 1) {
+        throw new Error("Equipment item is no longer held by this Character.");
+      }
+
+      const updated = await prisma.characterEquipmentItem.findUnique({ where: { id: item.id } });
+      if (!updated) {
+        throw new Error("Equipment item not found after update.");
+      }
 
       return mapEquipmentItem(updated);
     },
@@ -403,36 +563,64 @@ export function createPrismaCharacterEquipmentRepository(
       return mapEquipmentItem(updated);
     },
     async upsertCharacterLoadout(loadout) {
-      const upserted = await prisma.characterLoadout.upsert({
-        create: {
-          activeAmmoItemIds: loadout.activeAmmoItemIds,
-          activeMissileWeaponItemId: loadout.activeMissileWeaponItemId ?? null,
-          activePrimaryWeaponItemId: loadout.activePrimaryWeaponItemId ?? null,
-          activeSecondaryWeaponItemId: loadout.activeSecondaryWeaponItemId ?? null,
-          characterId: loadout.characterId,
-          id: loadout.id,
-          isActive: loadout.isActive,
-          name: loadout.name,
-          notes: loadout.notes ?? null,
-          quickAccessItemIdsJson: loadout.quickAccessItemIds,
-          readyShieldItemId: loadout.readyShieldItemId ?? null,
-          wornArmorItemId: loadout.wornArmorItemId ?? null,
-        },
-        update: {
-          activeAmmoItemIds: loadout.activeAmmoItemIds,
-          activeMissileWeaponItemId: loadout.activeMissileWeaponItemId ?? null,
-          activePrimaryWeaponItemId: loadout.activePrimaryWeaponItemId ?? null,
-          activeSecondaryWeaponItemId: loadout.activeSecondaryWeaponItemId ?? null,
-          isActive: loadout.isActive,
-          name: loadout.name,
-          notes: loadout.notes ?? null,
-          quickAccessItemIdsJson: loadout.quickAccessItemIds,
-          readyShieldItemId: loadout.readyShieldItemId ?? null,
-          wornArmorItemId: loadout.wornArmorItemId ?? null,
-        },
-        where: {
-          id: loadout.id,
-        },
+      const referencedItemIds = [
+        loadout.wornArmorItemId,
+        loadout.readyShieldItemId,
+        loadout.activePrimaryWeaponItemId,
+        loadout.activeSecondaryWeaponItemId,
+        loadout.activeMissileWeaponItemId,
+        ...loadout.activeAmmoItemIds,
+        ...loadout.quickAccessItemIds,
+      ].filter((id): id is string => Boolean(id));
+      const uniqueReferencedItemIds = [...new Set(referencedItemIds)];
+
+      const upserted = await prisma.$transaction(async (transaction) => {
+        if (uniqueReferencedItemIds.length > 0) {
+          await transaction.$queryRaw(
+            Prisma.sql`SELECT "id" FROM "CharacterEquipmentItem" WHERE "id" IN (${Prisma.join(uniqueReferencedItemIds)}) FOR UPDATE`,
+          );
+          const heldCount = await transaction.characterEquipmentItem.count({
+            where: {
+              holderCharacterId: loadout.characterId,
+              id: { in: uniqueReferencedItemIds },
+            },
+          });
+          if (heldCount !== uniqueReferencedItemIds.length) {
+            throw new Error("A loadout item is no longer held by this Character.");
+          }
+        }
+
+        return transaction.characterLoadout.upsert({
+          create: {
+            activeAmmoItemIds: loadout.activeAmmoItemIds,
+            activeMissileWeaponItemId: loadout.activeMissileWeaponItemId ?? null,
+            activePrimaryWeaponItemId: loadout.activePrimaryWeaponItemId ?? null,
+            activeSecondaryWeaponItemId: loadout.activeSecondaryWeaponItemId ?? null,
+            characterId: loadout.characterId,
+            id: loadout.id,
+            isActive: loadout.isActive,
+            name: loadout.name,
+            notes: loadout.notes ?? null,
+            quickAccessItemIdsJson: loadout.quickAccessItemIds,
+            readyShieldItemId: loadout.readyShieldItemId ?? null,
+            wornArmorItemId: loadout.wornArmorItemId ?? null,
+          },
+          update: {
+            activeAmmoItemIds: loadout.activeAmmoItemIds,
+            activeMissileWeaponItemId: loadout.activeMissileWeaponItemId ?? null,
+            activePrimaryWeaponItemId: loadout.activePrimaryWeaponItemId ?? null,
+            activeSecondaryWeaponItemId: loadout.activeSecondaryWeaponItemId ?? null,
+            isActive: loadout.isActive,
+            name: loadout.name,
+            notes: loadout.notes ?? null,
+            quickAccessItemIdsJson: loadout.quickAccessItemIds,
+            readyShieldItemId: loadout.readyShieldItemId ?? null,
+            wornArmorItemId: loadout.wornArmorItemId ?? null,
+          },
+          where: {
+            id: loadout.id,
+          },
+        });
       });
 
       return mapLoadout(upserted);

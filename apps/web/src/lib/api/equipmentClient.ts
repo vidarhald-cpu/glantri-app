@@ -110,6 +110,24 @@ export async function updateCampaignItemOnServer(input: {
   });
 }
 
+export async function transferCampaignItemOnServer(input: {
+  campaignId: string;
+  itemId: string;
+  sourceCharacterId: string;
+  targetCharacterId: string;
+}): Promise<CampaignItemsResponse> {
+  return sendJson<CampaignItemsResponse>(
+    `/characters/${input.sourceCharacterId}/equipment/items/${input.itemId}/transfer`,
+    {
+      body: JSON.stringify({
+        campaignId: input.campaignId,
+        targetCharacterId: input.targetCharacterId,
+      }),
+      method: "POST",
+    },
+  );
+}
+
 export async function moveCharacterEquipmentItemOnServer(input: {
   carryMode: CarryMode;
   characterId: string;
