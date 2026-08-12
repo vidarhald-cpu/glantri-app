@@ -67,6 +67,9 @@ function repositoryStub() {
       items.set(item.id, clone(item));
       return clone(item);
     },
+    async transferCampaignEquipmentItem(input) {
+      throw new Error(`Unexpected campaign item transfer: ${input.itemId}`);
+    },
     async updateCharacterEquipmentItem() {
       throw new Error("Unexpected Character item update.");
     },

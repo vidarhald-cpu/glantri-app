@@ -318,5 +318,255 @@ if (!process.env.DATABASE_URL_TEST) {
         assigned.id,
       );
     });
+
+    it("transfers one canonical item atomically and clears every source loadout reference", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const sourceUser = await createTestUser(prisma!);
+      const targetUser = await createTestUser(prisma!);
+      const source = await createTestCharacter(prisma!, sourceUser.id);
+      const target = await createTestCharacter(prisma!, targetUser.id);
+      const campaign = await createTestCampaign(prisma!, gm.id);
+      await prisma!.campaignRosterEntry.createMany({
+        data: [source, target].map((character) => ({
+          campaignId: campaign.id,
+          category: "pc" as const,
+          createdByUserId: gm.id,
+          sourceId: character.id,
+          sourceType: "character" as const,
+        })),
+      });
+
+      const repo = createPrismaCharacterEquipmentRepository(prisma!);
+      const service = new CharacterEquipmentWriteService(repo);
+      await service.ensureCharacterEquipmentInitialized(source.id);
+      expect(await repo.getCharacterStorageLocations(target.id)).toHaveLength(0);
+      const item = await service.createCampaignEquipmentItem({
+        campaignId: campaign.id,
+        displayName: "Silverston",
+        holderCharacterId: source.id,
+        itemFacts: {
+          activeMechanics: [
+            {
+              calculationStage: "final_attack_ob",
+              id: "ob",
+              kind: "final_attack_ob_delta",
+              scope: "all_attack_modes",
+              unit: "ob_points",
+              value: 1,
+              visibility: "gm_only",
+            },
+          ],
+          descriptiveTraits: [
+            {
+              category: "engraving",
+              id: "arms",
+              text: "Arms of House Silverston",
+              visibility: "revealed",
+            },
+          ],
+          templateOverrides: [
+            {
+              id: "initiative",
+              kind: "weapon_initiative_override",
+              scope: "all_attack_modes",
+              unit: "initiative_points",
+              value: 1,
+              visibility: "revealed",
+            },
+          ],
+          unsupportedCapabilities: [
+            {
+              id: "oath",
+              name: "House oath",
+              rulesText: "Cast a guiding light once per day.",
+              visibility: "gm_only",
+            },
+          ],
+          version: 1,
+        },
+        notes: "Carried through the northern pass.",
+        templateId: "weapon-template-rapier",
+      });
+      const factsBefore = item.itemFacts;
+      const sourceLoadout = (await repo.getCharacterLoadouts(source.id))[0]!;
+      await prisma!.characterEquipmentItem.update({
+        data: {
+          carryMode: "equipped",
+          isEquipped: true,
+          locationId: `${source.id}:loc-equipped`,
+          previousCarryMode: "on_person",
+          previousLocationId: `${source.id}:loc-person`,
+        },
+        where: { id: item.id },
+      });
+      await prisma!.characterLoadout.update({
+        data: {
+          activeAmmoItemIds: [item.id, item.id],
+          activeMissileWeaponItemId: item.id,
+          activePrimaryWeaponItemId: item.id,
+          activeSecondaryWeaponItemId: item.id,
+          quickAccessItemIdsJson: [item.id, item.id],
+          readyShieldItemId: item.id,
+          wornArmorItemId: item.id,
+        },
+        where: { id: sourceLoadout.id },
+      });
+
+      const transferred = await service.transferCampaignEquipmentItem({
+        campaignId: campaign.id,
+        itemId: item.id,
+        sourceCharacterId: source.id,
+        targetCharacterId: target.id,
+      });
+
+      expect(transferred).toMatchObject({
+        campaignContextId: campaign.id,
+        displayName: "Silverston",
+        holderCharacterId: target.id,
+        id: item.id,
+        isEquipped: false,
+        notes: "Carried through the northern pass.",
+        previousStorageAssignment: null,
+        storageAssignment: {
+          carryMode: "on_person",
+          locationId: `${target.id}:loc-person`,
+        },
+        templateId: "weapon-template-rapier",
+      });
+      expect(transferred.itemFacts).toEqual(factsBefore);
+      expect(await repo.getCharacterStorageLocations(target.id)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: `${target.id}:loc-person`, type: "person_system" }),
+        ]),
+      );
+      expect(await prisma!.characterEquipmentItem.count({ where: { id: item.id } })).toBe(1);
+      expect(await repo.getCharacterEquipmentItems(source.id)).toHaveLength(0);
+      expect((await repo.getCharacterEquipmentItems(target.id)).map((entry) => entry.id)).toEqual([
+        item.id,
+      ]);
+      expect((await repo.getCharacterLoadouts(source.id))[0]).toMatchObject({
+        activeAmmoItemIds: [],
+        activeMissileWeaponItemId: null,
+        activePrimaryWeaponItemId: null,
+        activeSecondaryWeaponItemId: null,
+        quickAccessItemIds: [],
+        readyShieldItemId: null,
+        wornArmorItemId: null,
+      });
+      await expect(
+        repo.upsertCharacterLoadout({
+          ...(await repo.getCharacterLoadouts(source.id))[0]!,
+          activePrimaryWeaponItemId: item.id,
+        }),
+      ).rejects.toThrow("no longer held by this Character");
+    });
+
+    it("rolls back invalid and cross-campaign targets without changing the source", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const sourceUser = await createTestUser(prisma!);
+      const targetUser = await createTestUser(prisma!);
+      const outsiderUser = await createTestUser(prisma!);
+      const source = await createTestCharacter(prisma!, sourceUser.id);
+      const target = await createTestCharacter(prisma!, targetUser.id);
+      const outsider = await createTestCharacter(prisma!, outsiderUser.id);
+      const campaign = await createTestCampaign(prisma!, gm.id);
+      await prisma!.campaignRosterEntry.createMany({
+        data: [source, target].map((character) => ({
+          campaignId: campaign.id,
+          category: "pc" as const,
+          createdByUserId: gm.id,
+          sourceId: character.id,
+          sourceType: "character" as const,
+        })),
+      });
+      const repo = createPrismaCharacterEquipmentRepository(prisma!);
+      const service = new CharacterEquipmentWriteService(repo);
+      await service.ensureCharacterEquipmentInitialized(source.id);
+      await service.ensureCharacterEquipmentInitialized(target.id);
+      await service.ensureCharacterEquipmentInitialized(outsider.id);
+      const item = await service.createCampaignEquipmentItem({
+        campaignId: campaign.id,
+        holderCharacterId: source.id,
+        itemFacts: {
+          activeMechanics: [],
+          descriptiveTraits: [],
+          templateOverrides: [],
+          unsupportedCapabilities: [],
+          version: 1,
+        },
+        templateId: "weapon-template-dagger",
+      });
+      const before = await repo.getCanonicalEquipmentItemById(item.id);
+
+      await expect(
+        service.transferCampaignEquipmentItem({
+          campaignId: campaign.id,
+          itemId: item.id,
+          sourceCharacterId: source.id,
+          targetCharacterId: target.id,
+          targetStorageLocationId: `${source.id}:loc-person`,
+        }),
+      ).rejects.toThrow("no valid storage");
+      await expect(
+        service.transferCampaignEquipmentItem({
+          campaignId: campaign.id,
+          itemId: item.id,
+          sourceCharacterId: source.id,
+          targetCharacterId: outsider.id,
+        }),
+      ).rejects.toThrow("campaign roster");
+
+      expect(await repo.getCanonicalEquipmentItemById(item.id)).toEqual(before);
+      expect(await prisma!.characterEquipmentItem.count({ where: { id: item.id } })).toBe(1);
+    });
+
+    it("rejects a stale double transfer without duplicating or partially moving the item", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const sourceUser = await createTestUser(prisma!);
+      const targetUser = await createTestUser(prisma!);
+      const source = await createTestCharacter(prisma!, sourceUser.id);
+      const target = await createTestCharacter(prisma!, targetUser.id);
+      const campaign = await createTestCampaign(prisma!, gm.id);
+      await prisma!.campaignRosterEntry.createMany({
+        data: [source, target].map((character) => ({
+          campaignId: campaign.id,
+          category: "pc" as const,
+          sourceId: character.id,
+          sourceType: "character" as const,
+        })),
+      });
+      const repo = createPrismaCharacterEquipmentRepository(prisma!);
+      const service = new CharacterEquipmentWriteService(repo);
+      await service.ensureCharacterEquipmentInitialized(source.id);
+      await service.ensureCharacterEquipmentInitialized(target.id);
+      const item = await service.createCampaignEquipmentItem({
+        campaignId: campaign.id,
+        holderCharacterId: source.id,
+        itemFacts: {
+          activeMechanics: [],
+          descriptiveTraits: [],
+          templateOverrides: [],
+          unsupportedCapabilities: [],
+          version: 1,
+        },
+        templateId: "weapon-template-dagger",
+      });
+      const transfer = {
+        campaignId: campaign.id,
+        itemId: item.id,
+        sourceCharacterId: source.id,
+        targetCharacterId: target.id,
+      };
+
+      await service.transferCampaignEquipmentItem(transfer);
+      await expect(service.transferCampaignEquipmentItem(transfer)).rejects.toThrow(
+        "no longer held by the expected Character",
+      );
+      expect(await prisma!.characterEquipmentItem.count({ where: { id: item.id } })).toBe(1);
+      expect(await repo.getCanonicalEquipmentItemById(item.id)).toMatchObject({
+        holderCharacterId: target.id,
+        id: item.id,
+      });
+    });
   });
 }

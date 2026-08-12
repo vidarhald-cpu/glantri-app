@@ -5,12 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   load: vi.fn(),
+  transfer: vi.fn(),
   update: vi.fn(),
 }));
 
 vi.mock("@/lib/api/equipmentClient", () => ({
   createCampaignItemOnServer: mocks.create,
   loadCampaignItems: mocks.load,
+  transferCampaignItemOnServer: mocks.transfer,
   updateCampaignItemOnServer: mocks.update,
 }));
 
@@ -35,11 +37,47 @@ const emptyResponse = {
   },
 };
 
+const assignedItem = {
+  campaignContextId: "campaign-1",
+  category: "weapon",
+  characterId: "character-1",
+  conditionState: "intact",
+  displayName: "Silverston",
+  holderCharacterId: "character-1",
+  id: "item-silverston",
+  isStackable: false,
+  itemFacts: {
+    activeMechanics: [],
+    descriptiveTraits: [],
+    templateOverrides: [],
+    unsupportedCapabilities: [],
+    version: 1,
+  },
+  material: "steel",
+  quality: "standard",
+  quantity: 1,
+  specificityType: "specific",
+  storageAssignment: { carryMode: "on_person", locationId: "character-1:loc-person" },
+  templateId: rapier.id,
+};
+
+const assignedResponse = {
+  characters: [
+    { id: "character-1", name: "Alaric" },
+    { id: "character-2", name: "Beatrice" },
+  ],
+  state: {
+    itemsById: { [assignedItem.id]: assignedItem },
+    templatesById: { [rapier.id]: rapier },
+  },
+};
+
 describe("CampaignItemsWorkspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.load.mockResolvedValue(emptyResponse);
     mocks.create.mockResolvedValue(emptyResponse);
+    mocks.transfer.mockResolvedValue(assignedResponse);
   });
 
   it("creates ordinary and customized items through the same focused flow", async () => {
@@ -82,5 +120,71 @@ describe("CampaignItemsWorkspace", () => {
       text: "House Silverston",
       visibility: "gm_only",
     });
+  });
+
+  it("confirms a transfer with Character names and reports the unequipped result", async () => {
+    const user = userEvent.setup();
+    mocks.load.mockResolvedValue(assignedResponse);
+    mocks.transfer.mockResolvedValue({
+      ...assignedResponse,
+      state: {
+        ...assignedResponse.state,
+        itemsById: {
+          [assignedItem.id]: {
+            ...assignedItem,
+            characterId: "character-2",
+            holderCharacterId: "character-2",
+            storageAssignment: {
+              carryMode: "on_person",
+              locationId: "character-2:loc-person",
+            },
+          },
+        },
+      },
+    });
+    render(<CampaignItemsWorkspace campaignId="campaign-1" />);
+
+    const trigger = await screen.findByRole("button", { name: "Transfer item" });
+    await user.click(trigger);
+    expect(screen.getByRole("heading", { name: "Transfer Silverston" })).toHaveFocus();
+    expect(
+      screen.getByText(
+        "Transfer Silverston from Alaric to Beatrice. It will be On person and will not be equipped.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText("character-1")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Transfer item" }));
+    await waitFor(() =>
+      expect(mocks.transfer).toHaveBeenCalledWith({
+        campaignId: "campaign-1",
+        itemId: "item-silverston",
+        sourceCharacterId: "character-1",
+        targetCharacterId: "character-2",
+      }),
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Silverston transferred from Alaric to Beatrice. It is On person and not equipped.",
+    );
+  });
+
+  it("keeps transfer errors recoverable and returns focus when cancelled", async () => {
+    const user = userEvent.setup();
+    mocks.load.mockResolvedValue(assignedResponse);
+    mocks.transfer.mockRejectedValue(
+      new Error("This item has already moved. Refresh Campaign Items before trying again."),
+    );
+    render(<CampaignItemsWorkspace campaignId="campaign-1" />);
+
+    const trigger = await screen.findByRole("button", { name: "Transfer item" });
+    await user.click(trigger);
+    await user.click(screen.getByRole("button", { name: "Transfer item" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Nothing changed. This item has already moved. Refresh Campaign Items before trying again.",
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Transfer item" })).toHaveFocus(),
+    );
   });
 });

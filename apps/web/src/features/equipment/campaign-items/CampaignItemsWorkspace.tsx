@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type {
   CanonicalEquipmentItem,
   DescriptiveItemTraitCategory,
@@ -10,6 +10,7 @@ import type {
 import {
   createCampaignItemOnServer,
   loadCampaignItems,
+  transferCampaignItemOnServer,
   updateCampaignItemOnServer,
   type CampaignEquipmentState,
   type CampaignItemCharacterOption,
@@ -528,6 +529,137 @@ function CampaignItemEditor({
   );
 }
 
+function TransferItemDialog({
+  characters,
+  item,
+  itemName,
+  onCancel,
+  onTransferred,
+  sourceName,
+}: {
+  characters: CampaignItemCharacterOption[];
+  item: CanonicalEquipmentItem;
+  itemName: string;
+  onCancel: () => void;
+  onTransferred: (
+    response: { characters: CampaignItemCharacterOption[]; state: CampaignEquipmentState },
+    targetName: string,
+  ) => void;
+  sourceName: string;
+}) {
+  const targets = characters.filter((character) => character.id !== item.holderCharacterId);
+  const [targetCharacterId, setTargetCharacterId] = useState(targets[0]?.id ?? "");
+  const [error, setError] = useState<string>();
+  const [saving, setSaving] = useState(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const targetName = targets.find((character) => character.id === targetCharacterId)?.name;
+
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+
+  async function transfer() {
+    if (!item.campaignContextId || !item.holderCharacterId || !targetCharacterId || !targetName) {
+      setError("Choose a Character to receive this item.");
+      return;
+    }
+
+    setSaving(true);
+    setError(undefined);
+    try {
+      const response = await transferCampaignItemOnServer({
+        campaignId: item.campaignContextId,
+        itemId: item.id,
+        sourceCharacterId: item.holderCharacterId,
+        targetCharacterId,
+      });
+      onTransferred(response, targetName);
+    } catch (caught) {
+      setError(
+        `Nothing changed. ${caught instanceof Error ? caught.message : "Unable to transfer this item."}`,
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape" && !saving) {
+      onCancel();
+      return;
+    }
+    if (event.key !== "Tab") return;
+
+    const focusable = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), select:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first && last) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last && first) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  return (
+    <section
+      aria-labelledby="transfer-item-heading"
+      aria-modal="true"
+      onKeyDown={handleDialogKeyDown}
+      role="dialog"
+      style={panelStyle}
+    >
+      <h2 id="transfer-item-heading" ref={headingRef} style={{ margin: 0 }} tabIndex={-1}>
+        Transfer {itemName}
+      </h2>
+      <p style={{ margin: 0 }}>
+        Move this same item from {sourceName} to another Character in the campaign.
+      </p>
+      <label style={{ display: "grid", gap: "0.25rem" }}>
+        <span>Receiving Character</span>
+        <select
+          disabled={saving || targets.length === 0}
+          onChange={(event) => setTargetCharacterId(event.target.value)}
+          value={targetCharacterId}
+        >
+          {targets.length === 0 ? <option value="">No other Character available</option> : null}
+          {targets.map((character) => (
+            <option key={character.id} value={character.id}>
+              {character.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      {targetName ? (
+        <div>
+          Transfer {itemName} from {sourceName} to {targetName}. It will be On person and will not
+          be equipped.
+        </div>
+      ) : (
+        <div>Add another Character to the campaign roster before transferring this item.</div>
+      )}
+      {error ? (
+        <div role="alert" style={{ color: "#8b3a1a" }}>
+          {error}
+        </div>
+      ) : null}
+      <div style={{ display: "flex", gap: "0.75rem" }}>
+        <button disabled={saving || !targetName} onClick={() => void transfer()} type="button">
+          {saving ? "Transferring..." : "Transfer item"}
+        </button>
+        <button disabled={saving} onClick={onCancel} type="button">
+          Cancel
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export default function CampaignItemsWorkspace({ campaignId }: { campaignId: string }) {
   const [state, setState] = useState<CampaignEquipmentState>();
   const [characters, setCharacters] = useState<CampaignItemCharacterOption[]>([]);
@@ -535,11 +667,24 @@ export default function CampaignItemsWorkspace({ campaignId }: { campaignId: str
   const [error, setError] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
   const [editingItemId, setEditingItemId] = useState<string | null>();
+  const [transferringItemId, setTransferringItemId] = useState<string>();
+  const transferButtonRef = useRef<HTMLButtonElement | null>(null);
+  const transferTriggerItemIdRef = useRef<string | undefined>(undefined);
+  const feedbackRef = useRef<HTMLDivElement>(null);
   const editingItem = editingItemId ? (state?.itemsById[editingItemId] ?? null) : null;
   const holders = useMemo(
     () => new Map(characters.map((character) => [character.id, character.name])),
     [characters],
   );
+
+  useEffect(() => {
+    if (feedback) feedbackRef.current?.focus();
+  }, [feedback]);
+
+  function closeTransfer() {
+    setTransferringItemId(undefined);
+    requestAnimationFrame(() => transferButtonRef.current?.focus());
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -589,6 +734,30 @@ export default function CampaignItemsWorkspace({ campaignId }: { campaignId: str
     );
   }
 
+  const transferringItem = transferringItemId ? state.itemsById[transferringItemId] : undefined;
+  if (transferringItem?.holderCharacterId) {
+    const template = state.templatesById[transferringItem.templateId];
+    const itemName = transferringItem.displayName || template?.name || "item";
+    const sourceName = holders.get(transferringItem.holderCharacterId) ?? "Character";
+    return (
+      <TransferItemDialog
+        characters={characters}
+        item={transferringItem}
+        itemName={itemName}
+        onCancel={closeTransfer}
+        onTransferred={(response, targetName) => {
+          setState(response.state);
+          setCharacters(response.characters);
+          setFeedback(
+            `${itemName} transferred from ${sourceName} to ${targetName}. It is On person and not equipped.`,
+          );
+          setTransferringItemId(undefined);
+        }}
+        sourceName={sourceName}
+      />
+    );
+  }
+
   const items = Object.values(state.itemsById);
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
@@ -607,7 +776,11 @@ export default function CampaignItemsWorkspace({ campaignId }: { campaignId: str
           Create item
         </button>
       </header>
-      {feedback ? <div role="status">{feedback}</div> : null}
+      {feedback ? (
+        <div ref={feedbackRef} role="status" tabIndex={-1}>
+          {feedback}
+        </div>
+      ) : null}
       {items.length === 0 ? (
         <section style={panelStyle}>
           <strong>No campaign items yet.</strong>
@@ -636,15 +809,35 @@ export default function CampaignItemsWorkspace({ campaignId }: { campaignId: str
                       : "Unassigned / in campaign"}
                   </div>
                 </div>
-                <button
-                  onClick={() => {
-                    setFeedback(undefined);
-                    setEditingItemId(item.id);
-                  }}
-                  type="button"
-                >
-                  Edit item
-                </button>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  {item.holderCharacterId ? (
+                    <button
+                      onClick={(event) => {
+                        transferTriggerItemIdRef.current = item.id;
+                        transferButtonRef.current = event.currentTarget;
+                        setFeedback(undefined);
+                        setTransferringItemId(item.id);
+                      }}
+                      ref={(button) => {
+                        if (button && transferTriggerItemIdRef.current === item.id) {
+                          transferButtonRef.current = button;
+                        }
+                      }}
+                      type="button"
+                    >
+                      Transfer item
+                    </button>
+                  ) : null}
+                  <button
+                    onClick={() => {
+                      setFeedback(undefined);
+                      setEditingItemId(item.id);
+                    }}
+                    type="button"
+                  >
+                    Edit item
+                  </button>
+                </div>
               </div>
               {item.notes ? <p style={{ margin: 0 }}>{item.notes}</p> : null}
               <ItemFactsPresentation item={item} showVisibility template={template} />

@@ -1,4 +1,4 @@
-import { equipmentTemplatesById } from "@glantri/content";
+import { createDefaultEquipmentLocations, equipmentTemplatesById } from "@glantri/content";
 import {
   type AssignedEquipmentItem,
   type CanonicalEquipmentItem,
@@ -29,8 +29,11 @@ import { randomUUID } from "node:crypto";
 
 import {
   createPrismaCharacterEquipmentRepository,
+  StaleEquipmentTransferError,
   type CharacterEquipmentRepository,
 } from "../repositories/characterEquipmentRepository";
+
+export { StaleEquipmentTransferError } from "../repositories/characterEquipmentRepository";
 
 export type ActiveWeaponSlot = "primary" | "secondary" | "missile";
 
@@ -126,6 +129,14 @@ export interface UpdateCampaignEquipmentItemAuthoringInput {
   itemFacts: EquipmentItemFactsV1;
   itemId: string;
   notes?: string | null;
+}
+
+export interface TransferCampaignEquipmentItemInput {
+  campaignId: string;
+  itemId: string;
+  sourceCharacterId: string;
+  targetCharacterId: string;
+  targetStorageLocationId?: string;
 }
 
 function assertItemBelongsToCharacter(
@@ -278,6 +289,48 @@ export class CharacterEquipmentWriteService {
     projectEquipmentItem(updated, template);
 
     return this.repository.updateCampaignEquipmentItemAuthoring(updated);
+  }
+
+  async transferCampaignEquipmentItem(
+    input: TransferCampaignEquipmentItemInput,
+  ): Promise<CanonicalEquipmentItem> {
+    if (input.sourceCharacterId === input.targetCharacterId) {
+      throw new Error("Choose a different Character to receive this item.");
+    }
+
+    const existing = await this.repository.getCanonicalEquipmentItemById(input.itemId);
+    if (!existing || existing.campaignContextId !== input.campaignId) {
+      throw new Error("Campaign item not found.");
+    }
+    if (!existing.holderCharacterId) {
+      throw new Error("Only an item held by a Character can be transferred.");
+    }
+    if (existing.holderCharacterId !== input.sourceCharacterId) {
+      throw new StaleEquipmentTransferError();
+    }
+
+    const targetLocations = input.targetStorageLocationId
+      ? await this.repository.getCharacterStorageLocations(input.targetCharacterId)
+      : createDefaultEquipmentLocations(input.targetCharacterId);
+    const targetLocation = input.targetStorageLocationId
+      ? targetLocations.find((location) => location.id === input.targetStorageLocationId)
+      : targetLocations.find((location) => location.type === "person_system");
+    if (!targetLocation || targetLocation.characterId !== input.targetCharacterId) {
+      throw new Error("The receiving Character has no valid storage for this transfer.");
+    }
+
+    const targetStorageAssignment = getStorageAssignmentForLocation(targetLocation);
+    if (targetStorageAssignment.carryMode === "equipped") {
+      throw new Error("Choose storage where the item will not be equipped.");
+    }
+
+    return this.repository.transferCampaignEquipmentItem({
+      campaignId: input.campaignId,
+      itemId: input.itemId,
+      sourceCharacterId: input.sourceCharacterId,
+      targetCharacterId: input.targetCharacterId,
+      targetStorageAssignment,
+    });
   }
 
   async ensureCharacterEquipmentInitialized(characterId: string): Promise<{
