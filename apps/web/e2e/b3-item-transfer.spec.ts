@@ -22,7 +22,7 @@ async function seedOwnedCharacterMirror(page: Page, characterId: string): Promis
   expect(response.ok()).toBe(true);
   const payload = (await response.json()) as {
     characters: Array<{
-      build: unknown;
+      build: { name: string };
       createdAt: string;
       id: string;
       ownerId: string | null;
@@ -33,6 +33,7 @@ async function seedOwnedCharacterMirror(page: Page, characterId: string): Promis
   expect(character).toBeTruthy();
 
   await page.goto("/characters");
+  await expect(page.getByText(character!.build.name, { exact: true })).toBeVisible();
   await page.evaluate((serverCharacter) => {
     return new Promise<void>((resolve, reject) => {
       const request = indexedDB.open("glantri-app");
