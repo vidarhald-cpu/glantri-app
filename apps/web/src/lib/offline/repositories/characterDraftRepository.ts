@@ -1,10 +1,7 @@
 import { characterBuildSchema, type CharacterBuild } from "@glantri/domain";
 
-import {
-  localDb,
-  type LocalCharacterDraft,
-  type LocalCharacterRecord
-} from "../glantriDexie";
+import { localDb, type LocalCharacterDraft, type LocalCharacterRecord } from "../glantriDexie";
+import { getServerCharacterRevision } from "./localCharacterRepository";
 
 export interface SaveCharacterDraftInput {
   advancementPointsSpent: number;
@@ -12,6 +9,7 @@ export interface SaveCharacterDraftInput {
   build: CharacterBuild;
   characterId: string;
   id: string;
+  serverUpdatedAt?: string;
   syncStatus?: LocalCharacterDraft["syncStatus"];
   updatedAt?: string;
 }
@@ -26,7 +24,7 @@ export class CharacterDraftRepository {
 
     return {
       ...record,
-      build: characterBuildSchema.parse(record.build)
+      build: characterBuildSchema.parse(record.build),
     };
   }
 
@@ -42,8 +40,9 @@ export class CharacterDraftRepository {
       characterId: input.characterId,
       createdAt: existing?.createdAt ?? now,
       id: input.id,
+      serverUpdatedAt: input.serverUpdatedAt ?? existing?.serverUpdatedAt,
       syncStatus: input.syncStatus ?? existing?.syncStatus ?? "local",
-      updatedAt: now
+      updatedAt: now,
     };
 
     await localDb.characterDrafts.put(record);
@@ -52,7 +51,7 @@ export class CharacterDraftRepository {
 
   async createFromCharacter(
     record: LocalCharacterRecord,
-    advancementPointsTotal = 0
+    advancementPointsTotal = 0,
   ): Promise<LocalCharacterDraft> {
     const existing = await this.get(record.id);
 
@@ -66,7 +65,8 @@ export class CharacterDraftRepository {
       build: structuredClone(record.build),
       characterId: record.id,
       id: record.id,
-      syncStatus: record.syncStatus
+      serverUpdatedAt: getServerCharacterRevision(record),
+      syncStatus: record.syncStatus,
     });
   }
 
@@ -75,7 +75,7 @@ export class CharacterDraftRepository {
 
     return records.map((record) => ({
       ...record,
-      build: characterBuildSchema.parse(record.build)
+      build: characterBuildSchema.parse(record.build),
     }));
   }
 

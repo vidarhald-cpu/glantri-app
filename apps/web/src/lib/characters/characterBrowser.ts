@@ -2,7 +2,11 @@ import type { AuthUser } from "@glantri/auth";
 
 import type { ServerCharacterRecord } from "../api/characterClient";
 import type { LocalCharacterRecord } from "../offline/glantriDexie";
-import { UNNAMED_CHARACTER_PLACEHOLDER } from "../offline/repositories/localCharacterRepository";
+import {
+  buildServerBackedLocalCharacterRecord,
+  UNNAMED_CHARACTER_PLACEHOLDER,
+} from "../offline/repositories/localCharacterRepository";
+import { canPresentRetainedLocalCharacter } from "./localCharacterAccess";
 
 export type CharacterBrowserTypeFilter = "all" | "pc" | "npc";
 export type CharacterBrowserSourceFilter = "all" | "server" | "local";
@@ -36,7 +40,7 @@ export interface CharacterBrowserOwnerOption {
 export function canBrowseAllCharacterOwners(currentUser: AuthUser | null): boolean {
   return Boolean(
     currentUser &&
-      (currentUser.roles.includes("game_master") || currentUser.roles.includes("admin"))
+    (currentUser.roles.includes("game_master") || currentUser.roles.includes("admin")),
   );
 }
 
@@ -49,16 +53,12 @@ function parseSortableDate(value: string | undefined): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-function canOpenCharacter(record: LocalCharacterRecord, currentUser: AuthUser | null): boolean {
-  if (!currentUser) {
-    return false;
-  }
-
-  if (currentUser.roles.includes("game_master") || currentUser.roles.includes("admin")) {
-    return true;
-  }
-
-  return record.creatorId === currentUser.id;
+function canOpenCharacter(input: {
+  currentUser: AuthUser | null;
+  hasServerAccess: boolean;
+  record: LocalCharacterRecord;
+}): boolean {
+  return canPresentRetainedLocalCharacter(input);
 }
 
 function deriveCharacterType(record: LocalCharacterRecord): "npc" | "pc" {
@@ -69,7 +69,10 @@ function deriveCharacterType(record: LocalCharacterRecord): "npc" | "pc" {
   return "npc";
 }
 
-function deriveOwnerDescriptor(record: LocalCharacterRecord, currentUser: AuthUser | null): {
+function deriveOwnerDescriptor(
+  record: LocalCharacterRecord,
+  currentUser: AuthUser | null,
+): {
   filterValue: CharacterBrowserOwnerFilter;
   label: string;
 } {
@@ -79,9 +82,10 @@ function deriveOwnerDescriptor(record: LocalCharacterRecord, currentUser: AuthUs
 
     return {
       filterValue: `owner:${record.creatorId}`,
-      label: record.creatorDisplayName && record.creatorEmail
-        ? `${record.creatorDisplayName} (${record.creatorEmail})${suffix}`
-        : `${identity}${suffix}`
+      label:
+        record.creatorDisplayName && record.creatorEmail
+          ? `${record.creatorDisplayName} (${record.creatorEmail})${suffix}`
+          : `${identity}${suffix}`,
     };
   }
 
@@ -90,33 +94,34 @@ function deriveOwnerDescriptor(record: LocalCharacterRecord, currentUser: AuthUs
       filterValue: `owner:${record.creatorEmail}`,
       label: record.creatorDisplayName
         ? `${record.creatorDisplayName} (${record.creatorEmail})`
-        : record.creatorEmail
+        : record.creatorEmail,
     };
   }
 
   if (record.creatorDisplayName) {
     return {
       filterValue: `owner:${record.creatorDisplayName}`,
-      label: record.creatorDisplayName
+      label: record.creatorDisplayName,
     };
   }
 
   return {
     filterValue: "owner:none",
-    label: "No recorded owner"
+    label: "No recorded owner",
   };
 }
 
 function deriveAccessState(
   record: LocalCharacterRecord,
-  currentUser: AuthUser | null
+  currentUser: AuthUser | null,
+  hasServerAccess: boolean,
 ): CharacterBrowserAccessState {
-  return canOpenCharacter(record, currentUser) ? "openable" : "restricted";
+  return canOpenCharacter({ currentUser, hasServerAccess, record }) ? "openable" : "restricted";
 }
 
 function deriveAccessLabel(
   accessState: CharacterBrowserAccessState,
-  record: LocalCharacterRecord
+  record: LocalCharacterRecord,
 ): string {
   if (accessState === "openable") {
     return record.syncStatus === "synced" ? "Openable here" : "Openable from local data";
@@ -127,21 +132,8 @@ function deriveAccessLabel(
     : "Local-only, not openable here";
 }
 
-function normalizeServerCharacterRecord(record: ServerCharacterRecord): LocalCharacterRecord {
-  return {
-    build: record.build,
-    createdAt: record.createdAt,
-    creatorDisplayName: record.owner?.displayName ?? undefined,
-    creatorEmail: record.owner?.email ?? undefined,
-    creatorId: record.ownerId ?? record.owner?.id ?? undefined,
-    finalizedAt: record.createdAt,
-    id: record.id,
-    syncStatus: "synced",
-    updatedAt: record.updatedAt
-  };
-}
-
 function mergeCharacterRecords(input: {
+  currentUser: AuthUser | null;
   localRecords: LocalCharacterRecord[];
   serverRecords: ServerCharacterRecord[];
 }): LocalCharacterRecord[] {
@@ -153,26 +145,23 @@ function mergeCharacterRecords(input: {
       continue;
     }
 
+    if (
+      !canPresentRetainedLocalCharacter({
+        currentUser: input.currentUser,
+        hasServerAccess: serverRecordIds.has(localRecord.id),
+        record: localRecord,
+      })
+    ) {
+      continue;
+    }
+
     mergedById.set(localRecord.id, localRecord);
   }
 
   for (const serverRecord of input.serverRecords) {
-    const normalizedServerRecord = normalizeServerCharacterRecord(serverRecord);
     const existing = mergedById.get(serverRecord.id);
 
-    mergedById.set(serverRecord.id, {
-      ...existing,
-      ...normalizedServerRecord,
-      build: normalizedServerRecord.build,
-      createdAt: existing?.createdAt ?? normalizedServerRecord.createdAt,
-      creatorDisplayName:
-        normalizedServerRecord.creatorDisplayName ?? existing?.creatorDisplayName,
-      creatorEmail: normalizedServerRecord.creatorEmail ?? existing?.creatorEmail,
-      creatorId: normalizedServerRecord.creatorId ?? existing?.creatorId,
-      finalizedAt: existing?.finalizedAt ?? normalizedServerRecord.finalizedAt,
-      syncStatus: "synced",
-      updatedAt: normalizedServerRecord.updatedAt
-    });
+    mergedById.set(serverRecord.id, buildServerBackedLocalCharacterRecord(serverRecord, existing));
   }
 
   return [...mergedById.values()];
@@ -184,16 +173,21 @@ export function buildCharacterBrowserEntries(input: {
   serverRecords: ServerCharacterRecord[];
 }): CharacterBrowserEntry[] {
   return mergeCharacterRecords({
+    currentUser: input.currentUser,
     localRecords: input.localRecords,
-    serverRecords: input.serverRecords
+    serverRecords: input.serverRecords,
   })
     .sort(
       (left, right) =>
         parseSortableDate(right.updatedAt || right.finalizedAt) -
-        parseSortableDate(left.updatedAt || left.finalizedAt)
+        parseSortableDate(left.updatedAt || left.finalizedAt),
     )
     .map((record) => {
-      const accessState = deriveAccessState(record, input.currentUser);
+      const accessState = deriveAccessState(
+        record,
+        input.currentUser,
+        input.serverRecords.some((serverRecord) => serverRecord.id === record.id),
+      );
       const owner = deriveOwnerDescriptor(record, input.currentUser);
 
       return {
@@ -212,13 +206,13 @@ export function buildCharacterBrowserEntries(input: {
           record.build.socialClass ?? record.build.profile.socialClassResult ?? "Not set",
         sourceFilterValue: record.syncStatus === "synced" ? "server" : "local",
         sourceLabel: record.syncStatus === "synced" ? "Server-backed" : "Local-only",
-        type: deriveCharacterType(record)
+        type: deriveCharacterType(record),
       };
     });
 }
 
 export function buildCharacterBrowserOwnerOptions(
-  entries: CharacterBrowserEntry[]
+  entries: CharacterBrowserEntry[],
 ): CharacterBrowserOwnerOption[] {
   const options = new Map<CharacterBrowserOwnerFilter, CharacterBrowserOwnerOption>();
 
@@ -232,7 +226,7 @@ export function buildCharacterBrowserOwnerOptions(
     if (!options.has(entry.ownerFilterValue)) {
       options.set(entry.ownerFilterValue, {
         label: entry.ownerLabel,
-        value: entry.ownerFilterValue
+        value: entry.ownerFilterValue,
       });
     }
   }
@@ -252,7 +246,7 @@ export function filterCharacterBrowserEntries(
     ownerFilter: CharacterBrowserOwnerFilter;
     sourceFilter: CharacterBrowserSourceFilter;
     typeFilter: CharacterBrowserTypeFilter;
-  }
+  },
 ): CharacterBrowserEntry[] {
   return entries.filter((entry) => {
     if (input.typeFilter !== "all" && entry.type !== input.typeFilter) {

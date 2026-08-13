@@ -13,13 +13,20 @@ export interface CreateCharacterRecordInput {
   ownerId?: string | null;
 }
 
+export interface VersionedCharacterRecordInput extends CreateCharacterRecordInput {
+  expectedUpdatedAt: string;
+}
+
 export interface CharacterRepository {
+  createOwned(input: CreateCharacterRecordInput): Promise<CharacterRecord>;
+  deleteVersioned(id: string, expectedUpdatedAt: string): Promise<boolean>;
   findById(id: string): Promise<CharacterRecord | null>;
   findInGmCampaigns(gmUserId: string, id: string): Promise<CharacterRecord | null>;
   findOwnedById(ownerId: string, id: string): Promise<CharacterRecord | null>;
   listAll(): Promise<CharacterRecord[]>;
-  saveOwned(input: CreateCharacterRecordInput): Promise<CharacterRecord>;
+  listInGmCampaigns(gmUserId: string): Promise<CharacterRecord[]>;
   listByOwner(ownerId: string): Promise<CharacterRecord[]>;
+  updateVersioned(input: VersionedCharacterRecordInput): Promise<CharacterRecord | null>;
 }
 
 function mapCharacterRecord(character: {
@@ -46,43 +53,81 @@ function mapCharacterRecord(character: {
       ? {
           displayName: character.owner.displayName,
           email: character.owner.email,
-          id: character.owner.id
+          id: character.owner.id,
         }
       : null,
     ownerId: character.ownerId,
-    updatedAt: character.updatedAt.toISOString()
+    updatedAt: character.updatedAt.toISOString(),
   };
 }
 
 export function createPrismaCharacterRepository(client?: PrismaClient): CharacterRepository {
   const prisma = client ?? defaultPrisma;
 
-  return {
-    async findById(id) {
-      const character = await prisma.character.findUnique({
-        include: {
-          owner: {
-            select: {
-              displayName: true,
-              email: true,
-              id: true
-            }
-          }
+  async function findById(id: string): Promise<CharacterRecord | null> {
+    const character = await prisma.character.findUnique({
+      include: {
+        owner: {
+          select: {
+            displayName: true,
+            email: true,
+            id: true,
+          },
         },
-        where: {
-          id
-        }
+      },
+      where: {
+        id,
+      },
+    });
+
+    return character ? mapCharacterRecord(character) : null;
+  }
+
+  return {
+    async createOwned(input) {
+      const character = await prisma.character.create({
+        data: {
+          build: input.build,
+          id: input.id,
+          level: input.level ?? 1,
+          name: input.name,
+          ownerId: input.ownerId ?? null,
+        },
       });
 
-      return character ? mapCharacterRecord(character) : null;
+      return mapCharacterRecord(character);
     },
+    async deleteVersioned(id, expectedUpdatedAt) {
+      return prisma.$transaction(async (transaction) => {
+        const result = await transaction.character.deleteMany({
+          where: {
+            id,
+            updatedAt: new Date(expectedUpdatedAt),
+          },
+        });
+
+        if (result.count !== 1) {
+          return false;
+        }
+
+        await transaction.campaignRosterEntry.deleteMany({
+          where: {
+            sourceId: id,
+            sourceType: "character",
+          },
+        });
+
+        return true;
+      });
+    },
+    findById,
     async findInGmCampaigns(gmUserId, id) {
       const entry = await prisma.campaignRosterEntry.findFirst({
         where: {
           sourceType: "character",
           sourceId: id,
-          campaign: { gmUserId }
-        }
+          campaign: { gmUserId },
+        },
       });
 
       if (!entry) return null;
@@ -93,11 +138,11 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
             select: {
               displayName: true,
               email: true,
-              id: true
-            }
-          }
+              id: true,
+            },
+          },
         },
-        where: { id }
+        where: { id },
       });
 
       return character ? mapCharacterRecord(character) : null;
@@ -109,14 +154,14 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
             select: {
               displayName: true,
               email: true,
-              id: true
-            }
-          }
+              id: true,
+            },
+          },
         },
         where: {
           id,
-          ownerId
-        }
+          ownerId,
+        },
       });
 
       return character ? mapCharacterRecord(character) : null;
@@ -128,51 +173,52 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
             select: {
               displayName: true,
               email: true,
-              id: true
-            }
-          }
+              id: true,
+            },
+          },
         },
         orderBy: {
-          createdAt: "desc"
-        }
+          createdAt: "desc",
+        },
       });
 
       return characters.map(mapCharacterRecord);
     },
-    async saveOwned(input) {
-      const existing = await prisma.character.findUnique({
+    async listInGmCampaigns(gmUserId) {
+      const rosterEntries = await prisma.campaignRosterEntry.findMany({
+        select: {
+          sourceId: true,
+        },
         where: {
-          id: input.id
-        }
+          campaign: { gmUserId },
+          sourceType: "character",
+        },
       });
+      const characterIds = [...new Set(rosterEntries.map((entry) => entry.sourceId))];
 
-      if (existing && existing.ownerId !== input.ownerId) {
-        throw new Error("Character ownership mismatch.");
+      if (characterIds.length === 0) {
+        return [];
       }
 
-      const character = existing
-        ? await prisma.character.update({
-            data: {
-              build: input.build,
-              level: input.level ?? 1,
-              name: input.name,
-              ownerId: input.ownerId ?? null
+      const characters = await prisma.character.findMany({
+        include: {
+          owner: {
+            select: {
+              displayName: true,
+              email: true,
+              id: true,
             },
-            where: {
-              id: input.id
-            }
-          })
-        : await prisma.character.create({
-            data: {
-              build: input.build,
-              id: input.id,
-              level: input.level ?? 1,
-              name: input.name,
-              ownerId: input.ownerId ?? null
-            }
-          });
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        where: {
+          id: { in: characterIds },
+        },
+      });
 
-      return mapCharacterRecord(character);
+      return characters.map(mapCharacterRecord);
     },
     async listByOwner(ownerId) {
       const characters = await prisma.character.findMany({
@@ -181,19 +227,35 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
             select: {
               displayName: true,
               email: true,
-              id: true
-            }
-          }
+              id: true,
+            },
+          },
         },
         orderBy: {
-          createdAt: "desc"
+          createdAt: "desc",
         },
         where: {
-          ownerId
-        }
+          ownerId,
+        },
       });
 
       return characters.map(mapCharacterRecord);
-    }
+    },
+    async updateVersioned(input) {
+      const result = await prisma.character.updateMany({
+        data: {
+          build: input.build,
+          level: input.level ?? 1,
+          name: input.name,
+          ownerId: input.ownerId ?? null,
+        },
+        where: {
+          id: input.id,
+          updatedAt: new Date(input.expectedUpdatedAt),
+        },
+      });
+
+      return result.count === 1 ? findById(input.id) : null;
+    },
   };
 }

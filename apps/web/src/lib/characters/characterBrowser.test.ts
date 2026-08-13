@@ -7,14 +7,16 @@ import {
   canBrowseAllCharacterOwners,
   buildCharacterBrowserEntries,
   buildCharacterBrowserOwnerOptions,
-  filterCharacterBrowserEntries
+  filterCharacterBrowserEntries,
 } from "./characterBrowser";
 
-function createLocalRecord(input: Partial<LocalCharacterRecord> & Pick<LocalCharacterRecord, "id">): LocalCharacterRecord {
+function createLocalRecord(
+  input: Partial<LocalCharacterRecord> & Pick<LocalCharacterRecord, "id">,
+): LocalCharacterRecord {
   return {
     build: {
       equipment: {
-        items: []
+        items: [],
       },
       id: input.id,
       name: input.build?.name ?? "Character",
@@ -34,11 +36,11 @@ function createLocalRecord(input: Partial<LocalCharacterRecord> & Pick<LocalChar
           pow: 10,
           siz: 10,
           str: 10,
-          will: 10
+          will: 10,
         },
         socialClassResult: "Common",
         socialClassRoll: 10,
-        societyLevel: 0
+        societyLevel: 0,
       },
       professionId: input.build?.professionId,
       progression: input.build?.progression ?? {
@@ -52,16 +54,16 @@ function createLocalRecord(input: Partial<LocalCharacterRecord> & Pick<LocalChar
         secondaryPoolTotal: 0,
         skillGroups: [],
         skills: [],
-        specializations: []
+        specializations: [],
       },
       progressionState: input.build?.progressionState ?? {
         availablePoints: 0,
         checks: [],
         history: [],
-        pendingAttempts: []
+        pendingAttempts: [],
       },
       socialClass: input.build?.socialClass,
-      societyId: input.build?.societyId
+      societyId: input.build?.societyId,
     },
     createdAt: input.createdAt ?? "2026-04-10T10:00:00.000Z",
     creatorDisplayName: input.creatorDisplayName,
@@ -70,12 +72,12 @@ function createLocalRecord(input: Partial<LocalCharacterRecord> & Pick<LocalChar
     finalizedAt: input.finalizedAt ?? "2026-04-10T10:00:00.000Z",
     id: input.id,
     syncStatus: input.syncStatus ?? "local",
-    updatedAt: input.updatedAt ?? "2026-04-10T10:00:00.000Z"
+    updatedAt: input.updatedAt ?? "2026-04-10T10:00:00.000Z",
   };
 }
 
 function createServerRecord(
-  input: Partial<ServerCharacterRecord> & Pick<ServerCharacterRecord, "id">
+  input: Partial<ServerCharacterRecord> & Pick<ServerCharacterRecord, "id">,
 ): ServerCharacterRecord {
   return {
     build: input.build ?? createLocalRecord({ id: input.id }).build,
@@ -85,7 +87,7 @@ function createServerRecord(
     name: input.name ?? input.build?.name ?? "Character",
     owner: input.owner,
     ownerId: input.ownerId,
-    updatedAt: input.updatedAt ?? "2026-04-12T10:00:00.000Z"
+    updatedAt: input.updatedAt ?? "2026-04-12T10:00:00.000Z",
   };
 }
 
@@ -93,7 +95,7 @@ describe("characterBrowser", () => {
   const currentUser: AuthUser = {
     email: "gm@example.com",
     id: "gm-1",
-    roles: ["game_master"]
+    roles: ["game_master"],
   };
 
   it("merges local and server-backed characters and sorts by most recent save", () => {
@@ -101,15 +103,16 @@ describe("characterBrowser", () => {
       currentUser,
       localRecords: [
         createLocalRecord({
+          creatorId: "gm-1",
           id: "local-only",
-          updatedAt: "2026-04-10T10:00:00.000Z"
+          updatedAt: "2026-04-10T10:00:00.000Z",
         }),
         createLocalRecord({
           creatorId: "player-1",
           id: "server-copy",
           syncStatus: "synced",
-          updatedAt: "2026-04-09T10:00:00.000Z"
-        })
+          updatedAt: "2026-04-09T10:00:00.000Z",
+        }),
       ],
       serverRecords: [
         createServerRecord({
@@ -117,10 +120,10 @@ describe("characterBrowser", () => {
           owner: {
             displayName: "Player One",
             email: "player@example.com",
-            id: "player-1"
+            id: "player-1",
           },
           ownerId: "player-1",
-          updatedAt: "2026-04-12T10:00:00.000Z"
+          updatedAt: "2026-04-12T10:00:00.000Z",
         }),
         createServerRecord({
           id: "the-gladiator",
@@ -128,18 +131,18 @@ describe("characterBrowser", () => {
           owner: {
             displayName: "Arena GM",
             email: "arena@example.com",
-            id: "gm-2"
+            id: "gm-2",
           },
           ownerId: "gm-2",
-          updatedAt: "2026-04-11T10:00:00.000Z"
-        })
-      ]
+          updatedAt: "2026-04-11T10:00:00.000Z",
+        }),
+      ],
     });
 
     expect(entries.map((entry) => entry.id)).toEqual([
       "server-copy",
       "the-gladiator",
-      "local-only"
+      "local-only",
     ]);
     expect(entries.find((entry) => entry.id === "server-copy")?.sourceLabel).toBe("Server-backed");
     expect(entries.find((entry) => entry.id === "local-only")?.sourceLabel).toBe("Local-only");
@@ -153,15 +156,16 @@ describe("characterBrowser", () => {
           creatorId: "player-1",
           id: "stale-server-copy",
           syncStatus: "synced",
-          updatedAt: "2026-04-09T10:00:00.000Z"
+          updatedAt: "2026-04-09T10:00:00.000Z",
         }),
         createLocalRecord({
+          creatorId: "gm-1",
           id: "local-only",
           syncStatus: "local",
-          updatedAt: "2026-04-10T10:00:00.000Z"
-        })
+          updatedAt: "2026-04-10T10:00:00.000Z",
+        }),
       ],
-      serverRecords: []
+      serverRecords: [],
     });
 
     expect(entries.map((entry) => entry.id)).toEqual(["local-only"]);
@@ -171,7 +175,14 @@ describe("characterBrowser", () => {
   it("builds owner options from distinct owners and filters by specific owner", () => {
     const entries = buildCharacterBrowserEntries({
       currentUser,
-      localRecords: [createLocalRecord({ id: "local-only" })],
+      localRecords: [
+        createLocalRecord({
+          creatorDisplayName: "Current GM",
+          creatorEmail: "gm@example.com",
+          creatorId: "gm-1",
+          id: "local-only",
+        }),
+      ],
       serverRecords: [
         createServerRecord({
           id: "the-gladiator",
@@ -179,35 +190,35 @@ describe("characterBrowser", () => {
           owner: {
             displayName: "Arena GM",
             email: "arena@example.com",
-            id: "gm-2"
+            id: "gm-2",
           },
-          ownerId: "gm-2"
+          ownerId: "gm-2",
         }),
         createServerRecord({
           id: "scribe",
           owner: {
             displayName: "Player One",
             email: "player@example.com",
-            id: "player-1"
+            id: "player-1",
           },
-          ownerId: "player-1"
-        })
-      ]
+          ownerId: "player-1",
+        }),
+      ],
     });
 
     expect(buildCharacterBrowserOwnerOptions(entries)).toEqual([
       { label: "All owners", value: "all" },
       { label: "Arena GM (arena@example.com)", value: "owner:gm-2" },
-      { label: "No recorded owner", value: "owner:none" },
-      { label: "Player One (player@example.com)", value: "owner:player-1" }
+      { label: "Current GM (gm@example.com) (You)", value: "owner:gm-1" },
+      { label: "Player One (player@example.com)", value: "owner:player-1" },
     ]);
 
     expect(
       filterCharacterBrowserEntries(entries, {
         ownerFilter: "owner:gm-2",
         sourceFilter: "all",
-        typeFilter: "all"
-      }).map((entry) => entry.id)
+        typeFilter: "all",
+      }).map((entry) => entry.id),
     ).toEqual(["the-gladiator"]);
   });
 
@@ -216,22 +227,22 @@ describe("characterBrowser", () => {
       canBrowseAllCharacterOwners({
         email: "gm@example.com",
         id: "gm-1",
-        roles: ["game_master"]
-      })
+        roles: ["game_master"],
+      }),
     ).toBe(true);
     expect(
       canBrowseAllCharacterOwners({
         email: "admin@example.com",
         id: "admin-1",
-        roles: ["admin"]
-      })
+        roles: ["admin"],
+      }),
     ).toBe(true);
     expect(
       canBrowseAllCharacterOwners({
         email: "player@example.com",
         id: "player-1",
-        roles: ["player"]
-      })
+        roles: ["player"],
+      }),
     ).toBe(false);
   });
 
@@ -240,17 +251,18 @@ describe("characterBrowser", () => {
       currentUser: {
         email: "player@example.com",
         id: "player-1",
-        roles: ["player"]
+        roles: ["player"],
       },
       localRecords: [
         createLocalRecord({
           build: {
             ...createLocalRecord({ id: "local-npc-base" }).build,
-            name: "Street Tough"
+            name: "Street Tough",
           },
+          creatorId: "player-1",
           id: "local-npc",
-          syncStatus: "local"
-        })
+          syncStatus: "local",
+        }),
       ],
       serverRecords: [
         createServerRecord({
@@ -259,17 +271,17 @@ describe("characterBrowser", () => {
             name: "The Gladiator",
             professionId: "gladiator",
             socialClass: "Common",
-            societyId: "glantri"
+            societyId: "glantri",
           },
           id: "the-gladiator",
           owner: {
             displayName: "Arena GM",
             email: "arena@example.com",
-            id: "gm-2"
+            id: "gm-2",
           },
-          ownerId: "gm-2"
-        })
-      ]
+          ownerId: "gm-2",
+        }),
+      ],
     });
 
     expect(entries.find((entry) => entry.id === "local-npc")?.type).toBe("npc");
@@ -279,24 +291,24 @@ describe("characterBrowser", () => {
       filterCharacterBrowserEntries(entries, {
         ownerFilter: "all",
         sourceFilter: "local",
-        typeFilter: "all"
-      }).map((entry) => entry.id)
+        typeFilter: "all",
+      }).map((entry) => entry.id),
     ).toEqual(["local-npc"]);
 
     expect(
       filterCharacterBrowserEntries(entries, {
         ownerFilter: "all",
         sourceFilter: "all",
-        typeFilter: "npc"
-      }).map((entry) => entry.id)
+        typeFilter: "npc",
+      }).map((entry) => entry.id),
     ).toEqual(["local-npc"]);
   });
 
-  it("marks non-owned server-backed records as restricted for non-gm users", () => {
+  it("treats records returned by the scoped server list as authorized for the current account", () => {
     const playerUser: AuthUser = {
       email: "player@example.com",
       id: "player-1",
-      roles: ["player"]
+      roles: ["player"],
     };
 
     const entries = buildCharacterBrowserEntries({
@@ -308,30 +320,80 @@ describe("characterBrowser", () => {
           owner: {
             displayName: "Someone Else",
             email: "other@example.com",
-            id: "player-2"
+            id: "player-2",
           },
-          ownerId: "player-2"
+          ownerId: "player-2",
         }),
         createServerRecord({
           id: "own-character",
           owner: {
             displayName: "Player One",
             email: "player@example.com",
-            id: "player-1"
+            id: "player-1",
           },
-          ownerId: "player-1"
-        })
-      ]
+          ownerId: "player-1",
+        }),
+      ],
     });
 
-    const restrictedEntry = entries.find((entry) => entry.id === "other-player-character");
+    const scopedEntry = entries.find((entry) => entry.id === "other-player-character");
     const ownEntry = entries.find((entry) => entry.id === "own-character");
 
-    expect(restrictedEntry).toBeDefined();
+    expect(scopedEntry).toBeDefined();
     expect(ownEntry).toBeDefined();
-    expect(restrictedEntry!.canOpenSheet).toBe(false);
-    expect(restrictedEntry!.accessLabel).toBe("Server-backed, not openable here");
+    expect(scopedEntry!.canOpenSheet).toBe(true);
+    expect(scopedEntry!.accessLabel).toBe("Openable here");
     expect(ownEntry!.canOpenSheet).toBe(true);
     expect(ownEntry!.canJoinScenario).toBe(true);
+  });
+
+  it("does not expose another account's retained local draft to an unrelated GM", () => {
+    const retainedDraft = createLocalRecord({
+      creatorId: "player-1",
+      id: "retained-private-draft",
+      syncStatus: "local",
+    });
+
+    const unrelatedGmEntries = buildCharacterBrowserEntries({
+      currentUser: {
+        email: "other-gm@example.com",
+        id: "gm-2",
+        roles: ["game_master"],
+      },
+      localRecords: [retainedDraft],
+      serverRecords: [],
+    });
+    const ownerEntries = buildCharacterBrowserEntries({
+      currentUser: {
+        email: "player@example.com",
+        id: "player-1",
+        roles: ["player"],
+      },
+      localRecords: [retainedDraft],
+      serverRecords: [],
+    });
+    const owningGmEntries = buildCharacterBrowserEntries({
+      currentUser: {
+        email: "owning-gm@example.com",
+        id: "gm-1",
+        roles: ["game_master"],
+      },
+      localRecords: [retainedDraft],
+      serverRecords: [createServerRecord({ id: retainedDraft.id, ownerId: "player-1" })],
+    });
+    const adminEntries = buildCharacterBrowserEntries({
+      currentUser: {
+        email: "admin@example.com",
+        id: "admin-1",
+        roles: ["admin"],
+      },
+      localRecords: [retainedDraft],
+      serverRecords: [],
+    });
+
+    expect(unrelatedGmEntries).toEqual([]);
+    expect(ownerEntries.map((entry) => entry.id)).toEqual([retainedDraft.id]);
+    expect(owningGmEntries.map((entry) => entry.id)).toEqual([retainedDraft.id]);
+    expect(adminEntries.map((entry) => entry.id)).toEqual([retainedDraft.id]);
   });
 });

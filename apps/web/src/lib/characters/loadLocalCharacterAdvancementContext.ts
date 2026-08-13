@@ -1,27 +1,86 @@
 import type { CanonicalContent } from "@glantri/content";
 
-import { loadCanonicalContent } from "../content/loadCanonicalContent";
 import type { LocalCharacterDraft, LocalCharacterRecord } from "../offline/glantriDexie";
 import { CharacterDraftRepository } from "../offline/repositories/characterDraftRepository";
-import { LocalCharacterRepository } from "../offline/repositories/localCharacterRepository";
+import { getServerCharacterRevision } from "../offline/repositories/localCharacterRepository";
+import { loadLocalCharacterContext } from "./loadLocalCharacterContext";
 
 const characterDraftRepository = new CharacterDraftRepository();
-const localCharacterRepository = new LocalCharacterRepository();
 
 export interface LocalCharacterAdvancementContext {
   content: CanonicalContent;
   draft?: LocalCharacterDraft;
+  hasRevisionConflict: boolean;
   record?: LocalCharacterRecord;
+  recoveryDraft?: LocalCharacterDraft;
+  recoveryRecord?: LocalCharacterRecord;
 }
 
 export async function loadLocalCharacterAdvancementContext(
-  id: string
+  id: string,
 ): Promise<LocalCharacterAdvancementContext> {
-  const [content, existingDraft, record] = await Promise.all([
-    loadCanonicalContent(),
+  const [characterContext, existingDraft] = await Promise.all([
+    loadLocalCharacterContext(id),
     characterDraftRepository.get(id),
-    localCharacterRepository.get(id)
   ]);
+  const { content, record, recoveryRecord } = characterContext;
+
+  if (!record) {
+    return {
+      content,
+      hasRevisionConflict: characterContext.hasRevisionConflict,
+      recoveryDraft: existingDraft,
+      recoveryRecord,
+    };
+  }
+
+  const serverRevision = getServerCharacterRevision(record);
+  const draftServerRevision =
+    existingDraft?.serverUpdatedAt ??
+    (existingDraft?.syncStatus === "synced" ? existingDraft.updatedAt : undefined);
+  const draftHasPendingChanges = existingDraft?.syncStatus !== "synced";
+  const draftHasRevisionConflict = Boolean(
+    existingDraft &&
+    draftHasPendingChanges &&
+    (!draftServerRevision || draftServerRevision !== serverRevision),
+  );
+  const hasRevisionConflict = characterContext.hasRevisionConflict || draftHasRevisionConflict;
+  const canonicalDraft: LocalCharacterDraft = {
+    advancementPointsSpent: 0,
+    advancementPointsTotal: record.build.progressionState?.availablePoints ?? 0,
+    build: structuredClone(record.build),
+    characterId: record.id,
+    createdAt: existingDraft?.createdAt ?? record.createdAt,
+    id: record.id,
+    serverUpdatedAt: serverRevision,
+    syncStatus: "synced",
+    updatedAt: record.updatedAt,
+  };
+
+  if (hasRevisionConflict || recoveryRecord) {
+    const recoveryDraft =
+      existingDraft && existingDraft.syncStatus !== "synced"
+        ? existingDraft
+        : recoveryRecord
+          ? {
+              ...canonicalDraft,
+              build: structuredClone(recoveryRecord.build),
+              serverUpdatedAt: getServerCharacterRevision(recoveryRecord),
+              syncStatus: "local" as const,
+              updatedAt: recoveryRecord.updatedAt,
+            }
+          : existingDraft;
+
+    return {
+      content,
+      draft: canonicalDraft,
+      hasRevisionConflict,
+      record,
+      recoveryDraft,
+      recoveryRecord,
+    };
+  }
+
   const recordIsNewer =
     record &&
     (!existingDraft || Date.parse(record.updatedAt) > Date.parse(existingDraft.updatedAt));
@@ -33,14 +92,17 @@ export async function loadLocalCharacterAdvancementContext(
           build: structuredClone(record.build),
           characterId: record.id,
           id: record.id,
+          serverUpdatedAt: serverRevision,
           syncStatus: record.syncStatus,
-          updatedAt: record.updatedAt
+          updatedAt: record.updatedAt,
         })
       : existingDraft;
 
   return {
     content,
     draft,
-    record
+    hasRevisionConflict: false,
+    record,
+    recoveryRecord,
   };
 }
