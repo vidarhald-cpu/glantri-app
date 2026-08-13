@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
+import type {
+  EncounterSession,
+  GlantriCharacteristicKey,
+  RoleplayDifficulty,
+  Scenario,
+  ScenarioParticipant,
+} from "@glantri/domain";
 import {
   advanceEncounterRound,
   addAdHocParticipant,
@@ -26,6 +32,7 @@ import {
 
 import {
   addScenarioParticipantFromEntityOnServer,
+  assignRoleplayStatCheckOnServer,
   loadEncounterById,
   loadScenarioById,
   loadServerCharacters,
@@ -329,6 +336,25 @@ export default function EncounterDetail({
     return savedEncounter;
   }
 
+  async function handleAssignRoleplayStatCheck(input: {
+    difficulty: RoleplayDifficulty;
+    participantId: string;
+    statId: GlantriCharacteristicKey;
+  }) {
+    if (!encounter) {
+      throw new Error("Encounter not found.");
+    }
+
+    const savedEncounter = await assignRoleplayStatCheckOnServer({
+      ...input,
+      encounterId: encounter.id,
+      expectedRevision: encounter.updatedAt,
+    });
+    setEncounter(savedEncounter);
+    setFeedback("Assigned roleplaying Stat check.");
+    return savedEncounter;
+  }
+
   async function handleAddCharacterParticipant() {
     if (!encounter || !selectedCharacterId) {
       return;
@@ -550,6 +576,7 @@ export default function EncounterDetail({
         content={content}
         embedded={embedded}
         encounter={encounter}
+        onAssignStatCheck={handleAssignRoleplayStatCheck}
         onPersist={persistEncounter}
         scenario={scenarioRecord}
         scenarioId={scenarioId}

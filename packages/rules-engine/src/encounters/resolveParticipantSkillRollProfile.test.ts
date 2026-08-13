@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import type { CharacterBuild, SkillDefinition, SkillGroupDefinition } from "@glantri/domain";
+import {
+  createParticipantSnapshotFromEntity,
+  type CharacterBuild,
+  type SkillDefinition,
+  type SkillGroupDefinition,
+} from "@glantri/domain";
 
-import { resolveParticipantSkillRollProfile } from "./resolveParticipantSkillRollProfile";
+import {
+  resolveParticipantSkillRollProfile,
+  resolveParticipantStatRollProfile,
+} from "./resolveParticipantSkillRollProfile";
 
 const perceptionSkill: Pick<
   SkillDefinition,
@@ -588,5 +596,97 @@ describe("resolveParticipantSkillRollProfile", () => {
       unknownSkillPenalty: -3,
     });
     expect(profile.warning).toBe("No stats available for this actor.");
+  });
+});
+
+describe("resolveParticipantStatRollProfile", () => {
+  it("reads the resolved Character Stat without Skill contributions", () => {
+    const profile = resolveParticipantStatRollProfile({
+      build: {
+        ...build,
+        profile: {
+          ...build.profile,
+          resolvedStats: { ...build.profile.rolledStats, dex: 17 },
+        },
+      },
+      participantId: "encounter-participant-1",
+      participantName: "The Gladiator",
+      statId: "dex",
+    });
+
+    expect(profile).toEqual({
+      participantId: "encounter-participant-1",
+      participantName: "The Gladiator",
+      sourceQuality: "full",
+      statId: "dex",
+      statLabel: "Dex",
+      statValue: 17,
+      warning: undefined,
+    });
+  });
+
+  it("uses the canonical Current Character Stat after permanent and current modifiers", () => {
+    const profile = resolveParticipantStatRollProfile({
+      build: {
+        ...build,
+        developedStatModifiers: { dex: 1 },
+        currentStatModifiers: { dex: 2 },
+        profile: {
+          ...build.profile,
+          resolvedStats: { ...build.profile.rolledStats, dex: 17 },
+        },
+      },
+      statId: "dex",
+    });
+
+    expect(profile).toMatchObject({
+      sourceQuality: "full",
+      statId: "dex",
+      statLabel: "Dex",
+      statValue: 20,
+    });
+  });
+
+  it("reads a generated actor's real persisted entity participant Stat shape", () => {
+    const persisted = createParticipantSnapshotFromEntity({
+      entity: {
+        kind: "npc",
+        name: "Ari",
+        snapshot: {
+          generatedHumanoidNpc: {
+            stats: {
+              base: { dex: 12, pow: 22 },
+              final: { dex: 14, pow: 26 },
+            },
+          },
+        },
+      },
+    }).snapshot;
+
+    expect(persisted).toMatchObject({
+      build: {
+        generatedHumanoidNpc: {
+          stats: { final: { dex: 14, pow: 26 } },
+        },
+      },
+    });
+    expect(
+      resolveParticipantStatRollProfile({
+        snapshot: persisted,
+        statId: "dex",
+      }),
+    ).toMatchObject({ sourceQuality: "snapshot", statLabel: "Dex", statValue: 14 });
+    expect(resolveParticipantStatRollProfile({ snapshot: persisted, statId: "pow" })).toMatchObject(
+      { sourceQuality: "snapshot", statLabel: "Pow", statValue: 26 },
+    );
+  });
+
+  it("reports a missing canonical Stat instead of inventing a value", () => {
+    expect(resolveParticipantStatRollProfile({ snapshot: {}, statId: "will" })).toMatchObject({
+      sourceQuality: "missing",
+      statLabel: "Will",
+      statValue: undefined,
+      warning: "No Will Stat is available for this actor.",
+    });
   });
 });

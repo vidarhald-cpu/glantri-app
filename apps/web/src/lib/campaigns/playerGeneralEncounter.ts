@@ -3,6 +3,7 @@ import type {
   EncounterSession,
   RoleplayDifficulty,
   RoleplayActionLogEntry,
+  RoleplayPendingStatCheck,
   RoleplayPendingSkillRoll,
   ScenarioParticipant,
 } from "@glantri/domain";
@@ -30,9 +31,11 @@ export interface PlayerGeneralEncounterAssignedRoll {
   opponentLabel?: string;
   participantId: string;
   participantName: string;
+  rollKind: "skill" | "stat";
   skillId: string;
   skillLabel: string;
   skillValue?: number;
+  statId?: string;
   result?: PlayerGeneralEncounterRollResult;
   rollSetId?: string;
   supportResult?: PlayerGeneralEncounterRollResult;
@@ -274,6 +277,7 @@ function buildAssignedRoll(input: {
         : undefined,
     participantId: participant?.id ?? input.pendingRoll.participantId,
     participantName,
+    rollKind: "skill",
     result: input.result
       ? {
           dieResult: input.result.dieResult,
@@ -308,6 +312,53 @@ function buildAssignedRoll(input: {
   };
 }
 
+function buildAssignedStatCheck(input: {
+  encounterParticipantsById: Map<string, EncounterParticipant>;
+  pendingCheck: RoleplayPendingStatCheck;
+  participant?: EncounterParticipant;
+  result?: RoleplayActionLogEntry;
+  state: ReturnType<typeof normalizeRoleplayState>;
+}): PlayerGeneralEncounterAssignedRoll {
+  const participant =
+    input.participant ?? input.encounterParticipantsById.get(input.pendingCheck.participantId);
+  const participantName = participant
+    ? getPlayerSafeParticipantName({
+        fallbackLabel: participant.label,
+        participantId: participant.id,
+        state: input.state,
+      })
+    : "Assigned participant";
+
+  return {
+    difficulty: input.pendingCheck.difficulty,
+    difficultyLabel:
+      difficultyLabels[input.pendingCheck.difficulty] ?? input.pendingCheck.difficulty,
+    id: input.pendingCheck.id,
+    mode: "difficulty",
+    otherMod: 0,
+    participantId: participant?.id ?? input.pendingCheck.participantId,
+    participantName,
+    result: input.result
+      ? {
+          dieResult: input.result.dieResult,
+          fumble: input.result.fumble,
+          id: input.result.id,
+          openEndedD10s: input.result.openEndedD10s,
+          rollD20: input.result.rollD20,
+          total: input.result.numericSubtotal ?? input.result.finalTotal,
+        }
+      : undefined,
+    rollKind: "stat",
+    skillId: input.pendingCheck.statId,
+    skillLabel: input.pendingCheck.statLabel,
+    skillValue: input.pendingCheck.statValue,
+    statId: input.pendingCheck.statId,
+    useDbMod: false,
+    useGenMod: false,
+    useObSkillMod: false,
+  };
+}
+
 function findVisibleResultForPendingRoll(input: {
   entries: RoleplayActionLogEntry[];
   pendingRoll: RoleplayPendingSkillRoll;
@@ -324,6 +375,20 @@ function findVisibleResultForPendingRoll(input: {
   );
 
   return matchingEntries.sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+}
+
+function findVisibleResultForPendingStatCheck(input: {
+  entries: RoleplayActionLogEntry[];
+  pendingCheck: RoleplayPendingStatCheck;
+}): RoleplayActionLogEntry | undefined {
+  return input.entries
+    .filter(
+      (entry) =>
+        entry.type === "stat_check_result" &&
+        entry.pendingRollId === input.pendingCheck.id &&
+        !entry.silent,
+    )
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
 }
 
 function isPlayerVisibleRankedResult(input: {
@@ -405,7 +470,7 @@ function buildPlayerCharacterLog(input: {
       const participant = input.resolveParticipant(entry.participantId);
 
       return (
-        entry.type === "gm_skill_roll" &&
+        (entry.type === "gm_skill_roll" || entry.type === "stat_check_result") &&
         !entry.silent &&
         participant != null &&
         input.controlledParticipantIds.has(participant.id)
@@ -417,9 +482,15 @@ function buildPlayerCharacterLog(input: {
       const modifier = entry.otherMod ?? 0;
       const detail = [
         entry.participantName,
-        entry.skillLabel,
+        entry.type === "stat_check_result" ? `${entry.statLabel} Stat check` : entry.skillLabel,
         entry.supportCalculationText ? `support ${entry.supportCalculationText}` : undefined,
-        entry.skillValue == null ? undefined : `skill ${entry.skillValue}`,
+        entry.type === "stat_check_result"
+          ? entry.statValue == null
+            ? undefined
+            : `Stat ${entry.statValue}`
+          : entry.skillValue == null
+            ? undefined
+            : `skill ${entry.skillValue}`,
         `mod ${modifier >= 0 ? "+" : ""}${modifier}`,
         entry.dieResult == null ? undefined : `roll ${entry.dieResult}`,
         total == null ? undefined : `total ${total}`,
@@ -433,7 +504,10 @@ function buildPlayerCharacterLog(input: {
       return {
         detail,
         id: entry.id,
-        skillLabel: entry.skillLabel ?? "Skill",
+        skillLabel:
+          entry.type === "stat_check_result"
+            ? `${entry.statLabel ?? "Stat"} check`
+            : (entry.skillLabel ?? "Skill"),
         timestamp: entry.createdAt,
         total,
       };
@@ -541,31 +615,57 @@ export function buildPlayerGeneralEncounterView(input: {
       visibleParticipantIds.has(participant.id)
     );
   });
-  const latestPendingRoll = [...visiblePendingRolls].sort((left, right) =>
-    right.assignedAt.localeCompare(left.assignedAt),
-  )[0];
-  const latestPendingRollSetId = latestPendingRoll?.rollSetId;
-  const assignedRolls = visiblePendingRolls
-    .filter((roll) =>
-      latestPendingRollSetId
-        ? roll.rollSetId === latestPendingRollSetId
-        : latestPendingRoll
-          ? roll.id === latestPendingRoll.id
-          : false,
-    )
-    .map((pendingRoll) =>
-      buildAssignedRoll({
-        encounterParticipantsById,
-        pendingRoll,
-        participant: resolveParticipant(pendingRoll.participantId),
-        result: findVisibleResultForPendingRoll({
-          entries: state.actionLog,
-          pendingRoll,
-        }),
-        state,
-        visibleParticipantIds,
-      }),
+  const visiblePendingStatChecks = state.pendingStatChecks.filter((check) => {
+    const participant = resolveParticipant(check.participantId);
+
+    return (
+      participant != null &&
+      controlledParticipantIds.has(participant.id) &&
+      visibleParticipantIds.has(participant.id)
     );
+  });
+  const latestPendingRoll = [...visiblePendingRolls, ...visiblePendingStatChecks].sort(
+    (left, right) => right.assignedAt.localeCompare(left.assignedAt),
+  )[0];
+  const latestPendingRollSetId =
+    latestPendingRoll && "rollSetId" in latestPendingRoll ? latestPendingRoll.rollSetId : undefined;
+  const assignedRolls = [
+    ...visiblePendingRolls
+      .filter((roll) =>
+        latestPendingRollSetId
+          ? roll.rollSetId === latestPendingRollSetId
+          : latestPendingRoll
+            ? roll.id === latestPendingRoll.id
+            : false,
+      )
+      .map((pendingRoll) =>
+        buildAssignedRoll({
+          encounterParticipantsById,
+          pendingRoll,
+          participant: resolveParticipant(pendingRoll.participantId),
+          result: findVisibleResultForPendingRoll({
+            entries: state.actionLog,
+            pendingRoll,
+          }),
+          state,
+          visibleParticipantIds,
+        }),
+      ),
+    ...visiblePendingStatChecks
+      .filter((check) => check.id === latestPendingRoll?.id)
+      .map((pendingCheck) =>
+        buildAssignedStatCheck({
+          encounterParticipantsById,
+          pendingCheck,
+          participant: resolveParticipant(pendingCheck.participantId),
+          result: findVisibleResultForPendingStatCheck({
+            entries: state.actionLog,
+            pendingCheck,
+          }),
+          state,
+        }),
+      ),
+  ];
   const visibleRankedEntries = state.actionLog.filter((entry) => {
     const participant = resolveParticipant(entry.participantId);
 

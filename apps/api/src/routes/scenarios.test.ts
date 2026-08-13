@@ -19,6 +19,7 @@ import {
   commitCombatRoundEndParticipantReview,
   commitCombatRoundPhaseDamage,
   commitCombatRoundPhaseInitiativeResolution,
+  createParticipantSnapshotFromEntity,
   ensureCombatRoundPhaseResolutionResultsForPhase,
   fingerprintCombatModifierResolution,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
@@ -28,6 +29,7 @@ import {
   getCombatRoundParticipantPhaseStepStatus,
   initializeCombatRoundState,
   encounterSessionSchema,
+  normalizeRoleplayState,
   prepareCombatRoundEndReview,
   projectProcessRestrictionToCanonicalModifierLifecycle,
   projectActiveCombatParticipation,
@@ -142,6 +144,15 @@ vi.mock("@glantri/database", () => ({
     ) {
       super(message);
       this.name = "EncounterCombatWriteError";
+    }
+  },
+  EncounterWriteError: class EncounterWriteError extends Error {
+    constructor(
+      readonly code: "stale_revision" | "transaction_conflict",
+      message: string,
+    ) {
+      super(message);
+      this.name = "EncounterWriteError";
     }
   },
   EncounterService: vi.fn(() => mocks.encounterService),
@@ -5870,6 +5881,373 @@ describe("scenarios route contract", () => {
       skillId: "perception",
       type: "gm_skill_roll",
     });
+  });
+
+  it("assigns a canonical Stat check from a real persisted entity snapshot and rejects stale assignment", async () => {
+    const encounter = encounterSessionSchema.parse({
+      actionLog: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      currentRound: 1,
+      currentTurnIndex: 0,
+      declarationsLocked: false,
+      id: "encounter-1",
+      kind: "roleplay",
+      participants: [
+        {
+          id: "encounter-player-1",
+          label: "Player hero",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-1",
+        },
+      ],
+      roleplayState: {},
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Courtyard",
+      turnOrderMode: "manual",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const scenarioParticipant = scenarioParticipantSchema.parse({
+      controlledByUserId: "player-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      id: "participant-1",
+      isActive: true,
+      joinSource: "gm_added",
+      role: "player_character",
+      scenarioId: "scenario-1",
+      snapshot: createParticipantSnapshotFromEntity({
+        entity: {
+          kind: "npc",
+          name: "Player hero",
+          snapshot: {
+            generatedHumanoidNpc: {
+              stats: {
+                base: { dex: 12, pow: 22 },
+                final: { dex: 14, pow: 26 },
+              },
+            },
+          },
+        },
+      }).snapshot,
+      sourceType: "entity",
+      state: {
+        combat: { combatContext: { modifierBuckets: emptyModifierBuckets() } },
+        conditions: [],
+        equipment: {},
+        health: {},
+        modifiers: [],
+        resources: {},
+      },
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    mocks.encounterService.getEncounterById.mockResolvedValue(encounter);
+    mocks.encounterService.updateEncounter.mockImplementation(
+      async (input: { session: EncounterSession }) => input.session,
+    );
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      status: "live",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      status: "active",
+    });
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([scenarioParticipant]);
+    const app = await buildScenarioTestApp();
+
+    const assigned = await app.inject({
+      method: "POST",
+      payload: {
+        difficulty: "medium",
+        expectedRevision: encounter.updatedAt,
+        participantId: "encounter-player-1",
+        statId: "dex",
+      },
+      url: "/encounters/encounter-1/roleplay/stat-checks",
+    });
+    const stale = await app.inject({
+      method: "POST",
+      payload: {
+        difficulty: "hard",
+        expectedRevision: "stale-revision",
+        participantId: "encounter-player-1",
+        statId: "dex",
+      },
+      url: "/encounters/encounter-1/roleplay/stat-checks",
+    });
+
+    await app.close();
+
+    expect(assigned.statusCode).toBe(200);
+    expect(assigned.json().encounter.roleplayState.pendingStatChecks[0]).toMatchObject({
+      difficulty: "medium",
+      participantId: "encounter-player-1",
+      statId: "dex",
+      statLabel: "Dex",
+      statValue: 14,
+    });
+    expect(assigned.json().encounter.roleplayState.actionLog[0]).toMatchObject({
+      statId: "dex",
+      type: "stat_check_assigned",
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves an assigned Stat check once and returns only the player's Stat payload", async () => {
+    let persistedEncounter = encounterSessionSchema.parse({
+      actionLog: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      currentRound: 1,
+      currentTurnIndex: 0,
+      declarationsLocked: false,
+      id: "encounter-1",
+      kind: "roleplay",
+      participantMembershipMode: "explicit",
+      participants: [
+        {
+          id: "encounter-player-1",
+          label: "Player hero",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-1",
+        },
+        {
+          id: "encounter-player-2",
+          label: "Other hero",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-2",
+        },
+      ],
+      roleplayState: {
+        pendingStatChecks: [
+          {
+            assignedAt: "2026-01-01T00:02:00.000Z",
+            difficulty: "medium",
+            id: "stat-check-own",
+            participantId: "encounter-player-1",
+            statId: "dex",
+            statLabel: "Dex",
+            statValue: 14,
+          },
+          {
+            assignedAt: "2026-01-01T00:03:00.000Z",
+            difficulty: "medium",
+            id: "stat-check-auto",
+            participantId: "encounter-player-1",
+            statId: "pow",
+            statLabel: "Pow",
+            statValue: 26,
+          },
+          {
+            assignedAt: "2026-01-01T00:01:00.000Z",
+            difficulty: "hard",
+            id: "stat-check-other",
+            participantId: "encounter-player-2",
+            statId: "will",
+            statLabel: "Will",
+            statValue: 19,
+          },
+          {
+            assignedAt: "2026-01-01T00:04:00.000Z",
+            difficulty: "medium",
+            id: "stat-check-race",
+            participantId: "encounter-player-1",
+            statId: "dex",
+            statLabel: "Dex",
+            statValue: 14,
+          },
+        ],
+      },
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Courtyard",
+      turnOrderMode: "manual",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const scenarioParticipants = [
+      scenarioParticipantSchema.parse({
+        controlledByUserId: "player-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        id: "participant-1",
+        isActive: true,
+        joinSource: "gm_added",
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "Player hero" },
+        sourceType: "character",
+        state: {
+          combat: { combatContext: { modifierBuckets: emptyModifierBuckets() } },
+          conditions: [],
+          equipment: {},
+          health: {},
+          modifiers: [],
+          resources: {},
+        },
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+      scenarioParticipantSchema.parse({
+        controlledByUserId: "player-2",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        id: "participant-2",
+        isActive: true,
+        joinSource: "gm_added",
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "Other hero" },
+        sourceType: "character",
+        state: {
+          combat: { combatContext: { modifierBuckets: emptyModifierBuckets() } },
+          conditions: [],
+          equipment: {},
+          health: {},
+          modifiers: [],
+          resources: {},
+        },
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+    ];
+    const { EncounterWriteError } = await import("@glantri/database");
+    let releaseRacingWrites!: () => void;
+    const racingWritesReady = new Promise<void>((resolve) => {
+      releaseRacingWrites = resolve;
+    });
+    let racingWriteAttempts = 0;
+    let persistedRevision = 0;
+    mocks.encounterService.getEncounterById.mockImplementation(async () => persistedEncounter);
+    mocks.encounterService.updateEncounter.mockImplementation(
+      async (input: { expectedRevision?: string; session: EncounterSession }) => {
+        const resolvesRacingCheck = normalizeRoleplayState(input.session).actionLog.some(
+          (entry) =>
+            entry.type === "stat_check_result" && entry.pendingRollId === "stat-check-race",
+        );
+        if (resolvesRacingCheck) {
+          racingWriteAttempts += 1;
+          if (racingWriteAttempts === 2) {
+            releaseRacingWrites();
+          } else {
+            await racingWritesReady;
+          }
+        }
+        if (input.expectedRevision && input.expectedRevision !== persistedEncounter.updatedAt) {
+          throw new EncounterWriteError(
+            "transaction_conflict",
+            "Prisma transaction failed at /private/internal/repository.ts.",
+          );
+        }
+        persistedRevision += 1;
+        persistedEncounter = encounterSessionSchema.parse({
+          ...input.session,
+          updatedAt: `2026-01-01T00:00:0${persistedRevision}.000Z`,
+        });
+        return persistedEncounter;
+      },
+    );
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      status: "live",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      status: "active",
+    });
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue(scenarioParticipants);
+    const app = await buildScenarioTestApp();
+
+    const first = await app.inject({
+      method: "POST",
+      payload: {
+        expectedRevision: persistedEncounter.updatedAt,
+        pendingRollId: "stat-check-own",
+        roll: { openEndedD10s: [], rollD20: 9 },
+      },
+      url: "/encounters/encounter-1/player-roll",
+    });
+    const automatic = await app.inject({
+      method: "POST",
+      payload: {
+        acceptAutomaticSuccess: true,
+        expectedRevision: persistedEncounter.updatedAt,
+        pendingRollId: "stat-check-auto",
+      },
+      url: "/encounters/encounter-1/player-roll",
+    });
+    const second = await app.inject({
+      method: "POST",
+      payload: {
+        expectedRevision: persistedEncounter.updatedAt,
+        pendingRollId: "stat-check-own",
+        roll: { openEndedD10s: [], rollD20: 9 },
+      },
+      url: "/encounters/encounter-1/player-roll",
+    });
+    const concurrentRevision = persistedEncounter.updatedAt;
+    const concurrent = await Promise.all(
+      [4, 19].map((rollD20) =>
+        app.inject({
+          method: "POST",
+          payload: {
+            expectedRevision: concurrentRevision,
+            pendingRollId: "stat-check-race",
+            roll: { openEndedD10s: [], rollD20 },
+          },
+          url: "/encounters/encounter-1/player-roll",
+        }),
+      ),
+    );
+
+    await app.close();
+
+    expect(first.statusCode).toBe(200);
+    expect(first.json().encounter.roleplayState.pendingStatChecks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "stat-check-own", statLabel: "Dex" }),
+        expect.objectContaining({ id: "stat-check-auto", statLabel: "Pow" }),
+      ]),
+    );
+    expect(first.json().encounter.roleplayState.actionLog[0]).toMatchObject({
+      achievedSuccessLevelLabel: "Medium",
+      numericSubtotal: 23,
+      pendingRollId: "stat-check-own",
+      success: true,
+      type: "stat_check_result",
+    });
+    expect(automatic.statusCode).toBe(200);
+    expect(automatic.json().encounter.roleplayState.actionLog[0]).toMatchObject({
+      autoSuccess: true,
+      pendingRollId: "stat-check-auto",
+      statId: "pow",
+      success: true,
+      type: "stat_check_result",
+    });
+    expect(automatic.json().encounter.roleplayState.actionLog[0].rollD20).toBeUndefined();
+    expect(JSON.stringify(first.json())).not.toContain("stat-check-other");
+    expect(JSON.stringify(first.json())).not.toContain('"statLabel":"Will"');
+    expect(second.statusCode).toBe(409);
+    expect(concurrent.map((response) => response.statusCode).sort()).toEqual([200, 409]);
+    const accepted = concurrent.find((response) => response.statusCode === 200)!;
+    const rejected = concurrent.find((response) => response.statusCode === 409)!;
+    const acceptedRaceResult = accepted
+      .json()
+      .encounter.roleplayState.actionLog.find(
+        (entry: { pendingRollId?: string }) => entry.pendingRollId === "stat-check-race",
+      );
+    const durableRaceResult = normalizeRoleplayState(persistedEncounter).actionLog.find(
+      (entry) => entry.pendingRollId === "stat-check-race",
+    );
+    expect([4, 19]).toContain(acceptedRaceResult.rollD20);
+    expect(durableRaceResult?.rollD20).toBe(acceptedRaceResult.rollD20);
+    expect(rejected.json()).toMatchObject({
+      code: "stale_revision",
+      error: "This Stat check changed before the result was accepted. Refresh and review it.",
+    });
+    expect(rejected.body).not.toContain("Prisma");
+    expect(rejected.body).not.toContain("/private/");
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(4);
   });
 
   it("allows a GM to submit a selected participant's player-facing assigned roleplay roll", async () => {

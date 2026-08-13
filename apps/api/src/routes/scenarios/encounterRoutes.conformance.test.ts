@@ -360,7 +360,7 @@ describe("combat route canonical-conformance guards", () => {
   it("persists ordinary combat mutations through the revision-guarded split boundary", () => {
     const combatStart = source.indexOf('app.post("/encounters/:encounterId/combat-declaration"');
     const roleplayStart = source.indexOf(
-      'app.post("/encounters/:encounterId/player-roll"',
+      'app.post("/encounters/:encounterId/roleplay/stat-checks"',
       combatStart,
     );
     const combatRoutes = source.slice(combatStart, roleplayStart);
