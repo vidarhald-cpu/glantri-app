@@ -17,6 +17,8 @@
     "lint": "turbo lint --force",
     "test": "turbo test --force",
     "coverage": "vitest run --coverage --passWithNoTests",
+    "critical-effects:generate": "node scripts/generateCriticalEffectsTable.mjs --generate",
+    "critical-effects:verify": "node scripts/generateCriticalEffectsTable.mjs --verify",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:migrate": "pnpm --filter @glantri/database db:migrate",
