@@ -29,6 +29,7 @@ import {
   getCombatRoundParticipantPhaseStepStatus,
   initializeCombatRoundState,
   encounterSessionSchema,
+  normalizeRoleplayState,
   prepareCombatRoundEndReview,
   projectProcessRestrictionToCanonicalModifierLifecycle,
   projectActiveCombatParticipation,
@@ -143,6 +144,15 @@ vi.mock("@glantri/database", () => ({
     ) {
       super(message);
       this.name = "EncounterCombatWriteError";
+    }
+  },
+  EncounterWriteError: class EncounterWriteError extends Error {
+    constructor(
+      readonly code: "stale_revision" | "transaction_conflict",
+      message: string,
+    ) {
+      super(message);
+      this.name = "EncounterWriteError";
     }
   },
   EncounterService: vi.fn(() => mocks.encounterService),
@@ -6039,6 +6049,15 @@ describe("scenarios route contract", () => {
             statLabel: "Will",
             statValue: 19,
           },
+          {
+            assignedAt: "2026-01-01T00:04:00.000Z",
+            difficulty: "medium",
+            id: "stat-check-race",
+            participantId: "encounter-player-1",
+            statId: "dex",
+            statLabel: "Dex",
+            statValue: 14,
+          },
         ],
       },
       scenarioId: "scenario-1",
@@ -6089,10 +6108,39 @@ describe("scenarios route contract", () => {
         updatedAt: "2026-01-01T00:00:00.000Z",
       }),
     ];
+    const { EncounterWriteError } = await import("@glantri/database");
+    let releaseRacingWrites!: () => void;
+    const racingWritesReady = new Promise<void>((resolve) => {
+      releaseRacingWrites = resolve;
+    });
+    let racingWriteAttempts = 0;
+    let persistedRevision = 0;
     mocks.encounterService.getEncounterById.mockImplementation(async () => persistedEncounter);
     mocks.encounterService.updateEncounter.mockImplementation(
-      async (input: { session: EncounterSession }) => {
-        persistedEncounter = input.session;
+      async (input: { expectedRevision?: string; session: EncounterSession }) => {
+        const resolvesRacingCheck = normalizeRoleplayState(input.session).actionLog.some(
+          (entry) =>
+            entry.type === "stat_check_result" && entry.pendingRollId === "stat-check-race",
+        );
+        if (resolvesRacingCheck) {
+          racingWriteAttempts += 1;
+          if (racingWriteAttempts === 2) {
+            releaseRacingWrites();
+          } else {
+            await racingWritesReady;
+          }
+        }
+        if (input.expectedRevision && input.expectedRevision !== persistedEncounter.updatedAt) {
+          throw new EncounterWriteError(
+            "transaction_conflict",
+            "Prisma transaction failed at /private/internal/repository.ts.",
+          );
+        }
+        persistedRevision += 1;
+        persistedEncounter = encounterSessionSchema.parse({
+          ...input.session,
+          updatedAt: `2026-01-01T00:00:0${persistedRevision}.000Z`,
+        });
         return persistedEncounter;
       },
     );
@@ -6137,6 +6185,20 @@ describe("scenarios route contract", () => {
       },
       url: "/encounters/encounter-1/player-roll",
     });
+    const concurrentRevision = persistedEncounter.updatedAt;
+    const concurrent = await Promise.all(
+      [4, 19].map((rollD20) =>
+        app.inject({
+          method: "POST",
+          payload: {
+            expectedRevision: concurrentRevision,
+            pendingRollId: "stat-check-race",
+            roll: { openEndedD10s: [], rollD20 },
+          },
+          url: "/encounters/encounter-1/player-roll",
+        }),
+      ),
+    );
 
     await app.close();
 
@@ -6166,7 +6228,26 @@ describe("scenarios route contract", () => {
     expect(JSON.stringify(first.json())).not.toContain("stat-check-other");
     expect(JSON.stringify(first.json())).not.toContain('"statLabel":"Will"');
     expect(second.statusCode).toBe(409);
-    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(2);
+    expect(concurrent.map((response) => response.statusCode).sort()).toEqual([200, 409]);
+    const accepted = concurrent.find((response) => response.statusCode === 200)!;
+    const rejected = concurrent.find((response) => response.statusCode === 409)!;
+    const acceptedRaceResult = accepted
+      .json()
+      .encounter.roleplayState.actionLog.find(
+        (entry: { pendingRollId?: string }) => entry.pendingRollId === "stat-check-race",
+      );
+    const durableRaceResult = normalizeRoleplayState(persistedEncounter).actionLog.find(
+      (entry) => entry.pendingRollId === "stat-check-race",
+    );
+    expect([4, 19]).toContain(acceptedRaceResult.rollD20);
+    expect(durableRaceResult?.rollD20).toBe(acceptedRaceResult.rollD20);
+    expect(rejected.json()).toMatchObject({
+      code: "stale_revision",
+      error: "This Stat check changed before the result was accepted. Refresh and review it.",
+    });
+    expect(rejected.body).not.toContain("Prisma");
+    expect(rejected.body).not.toContain("/private/");
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(4);
   });
 
   it("allows a GM to submit a selected participant's player-facing assigned roleplay roll", async () => {

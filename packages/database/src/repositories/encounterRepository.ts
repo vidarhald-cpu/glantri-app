@@ -75,6 +75,7 @@ export interface EncounterRepository {
   updateEncounter(input: {
     campaignId?: string | null;
     encounterId: string;
+    expectedRevision?: string;
     scenarioId?: string | null;
     session: EncounterSession;
   }): Promise<EncounterSession>;

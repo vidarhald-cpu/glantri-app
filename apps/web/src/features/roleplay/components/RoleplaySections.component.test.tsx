@@ -10,7 +10,29 @@ import {
   type ScenarioParticipant,
 } from "@glantri/domain";
 
-import { GmRoleplayingEncounterScreen } from "../RoleplayEncounterScreens";
+const roleplayApiMocks = vi.hoisted(() => ({
+  loadCampaignById: vi.fn(),
+  loadEncounterById: vi.fn(),
+  loadScenarioById: vi.fn(),
+  loadScenarioMyParticipant: vi.fn(),
+  loadScenarioParticipants: vi.fn(),
+  submitPlayerRoleplayRollOnServer: vi.fn(),
+}));
+
+vi.mock("@/lib/api/localServiceClient", () => roleplayApiMocks);
+vi.mock("@/lib/auth/SessionUserContext", () => ({
+  useSessionUser: () => ({
+    currentUser: { id: "player-1", roles: ["player"] },
+  }),
+}));
+vi.mock("@/lib/content/loadCanonicalContent", () => ({
+  loadCanonicalContent: vi.fn().mockResolvedValue({ skills: [] }),
+}));
+
+import {
+  GmRoleplayingEncounterScreen,
+  PlayerRoleplayingEncounterScreen,
+} from "../RoleplayEncounterScreens";
 import { ParticipantDescriptionsSection } from "./RoleplaySections";
 
 const participant: EncounterParticipant = {
@@ -126,6 +148,72 @@ describe("GM Stat check assignment controls", () => {
       }),
     );
     expect(screen.getByRole("status")).toHaveTextContent("Assigned Dex 14 at Medium.");
+  });
+});
+
+describe("Player Stat check mobile presentation", () => {
+  afterEach(() => cleanup());
+
+  it("keeps the Stat fields, outcome, and keyboard action in responsive flow at 390px", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    window.dispatchEvent(new Event("resize"));
+    const encounter = {
+      ...statCheckEncounter(),
+      participantMembershipMode: "explicit" as const,
+      roleplayState: {
+        ...roleplayState({}),
+        pendingStatChecks: [
+          {
+            assignedAt: "2026-08-13T10:01:00.000Z",
+            difficulty: "medium" as const,
+            id: "stat-check-dex",
+            participantId: participant.id,
+            statId: "dex" as const,
+            statLabel: "Dex",
+            statValue: 14,
+          },
+        ],
+      },
+    };
+    roleplayApiMocks.loadEncounterById.mockResolvedValue(encounter);
+    roleplayApiMocks.loadScenarioById.mockResolvedValue({
+      id: "scenario-1",
+      name: "Council session",
+      status: "live",
+    });
+    roleplayApiMocks.loadCampaignById.mockResolvedValue({
+      id: "campaign-1",
+      name: "Council campaign",
+      status: "active",
+    });
+    roleplayApiMocks.loadScenarioMyParticipant.mockResolvedValue(scenarioParticipantWithStats);
+
+    render(
+      <PlayerRoleplayingEncounterScreen
+        campaignId="campaign-1"
+        encounterId={encounter.id}
+        scenarioId="scenario-1"
+        surface="skill-rolls"
+      />,
+    );
+
+    const statRegion = await screen.findByRole("region", { name: "Dex Stat check" });
+    const statField = screen.getByLabelText("Assigned Stat");
+    const difficultyField = screen.getByLabelText("Assigned Stat check difficulty");
+    const action = screen.getByRole("button", { name: "Roll Stat check" });
+
+    expect((statRegion as HTMLElement).style.gridTemplateColumns).toBe(
+      "repeat(auto-fit, minmax(min(100%, 22rem), 1fr))",
+    );
+    expect(statField).toBeVisible();
+    expect(statField).toHaveValue("Dex (14)");
+    expect(difficultyField).toBeVisible();
+    expect(difficultyField).toHaveValue("Medium");
+    expect(screen.getByText("Calculation")).toBeVisible();
+    expect(screen.getByText(/Result:/)).toBeVisible();
+    expect(action).toBeVisible();
+    action.focus();
+    expect(document.activeElement).toBe(action);
   });
 });
 

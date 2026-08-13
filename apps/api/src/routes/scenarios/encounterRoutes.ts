@@ -13,6 +13,7 @@ import {
   CombatStateReadService,
   EncounterCombatWriteError,
   EncounterService,
+  EncounterWriteError,
   ScenarioService,
 } from "@glantri/database";
 import {
@@ -1346,6 +1347,17 @@ function sendCombatWriteError(reply: FastifyReply, error: unknown): unknown | un
   return reply.code(409).send({
     code: "stale_revision",
     error: "Combat state changed before this task could be completed.",
+  });
+}
+
+function sendRoleplayStatWriteError(reply: FastifyReply, error: unknown): unknown | undefined {
+  if (!(error instanceof EncounterWriteError)) {
+    return undefined;
+  }
+
+  return reply.code(409).send({
+    code: "stale_revision",
+    error: "This Stat check changed before the result was accepted. Refresh and review it.",
   });
 }
 
@@ -15707,6 +15719,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const savedEncounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
         encounterId,
+        expectedRevision: body.expectedRevision,
         scenarioId: encounter.scenarioId,
         session: {
           ...nextEncounter,
@@ -15728,6 +15741,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       return { encounter: savedEncounter };
     } catch (error) {
+      const conflictResponse = sendRoleplayStatWriteError(reply, error);
+      if (conflictResponse) {
+        return conflictResponse;
+      }
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to assign Stat check.",
       });
@@ -15978,6 +15995,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const savedEncounter = await encounterService.updateEncounter({
         campaignId: encounter.campaignId,
         encounterId,
+        expectedRevision: pendingStatCheck ? body.expectedRevision : undefined,
         scenarioId: encounter.scenarioId,
         session: {
           ...nextEncounter,
@@ -15995,6 +16013,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             }),
       };
     } catch (error) {
+      const conflictResponse = sendRoleplayStatWriteError(reply, error);
+      if (conflictResponse) {
+        return conflictResponse;
+      }
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to submit player roll.",
       });

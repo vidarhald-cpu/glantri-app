@@ -42,6 +42,25 @@ export class EncounterCombatWriteError extends Error {
   }
 }
 
+export class EncounterWriteError extends Error {
+  constructor(
+    readonly code: "stale_revision" | "transaction_conflict",
+    message: string,
+    cause?: unknown,
+  ) {
+    super(message);
+    this.name = "EncounterWriteError";
+    if (cause !== undefined) {
+      Object.defineProperty(this, "cause", {
+        configurable: true,
+        enumerable: false,
+        value: cause,
+        writable: true,
+      });
+    }
+  }
+}
+
 export class EncounterService {
   constructor(
     private readonly encounterRepository: EncounterRepository = createPrismaEncounterRepository(),
@@ -76,10 +95,21 @@ export class EncounterService {
   async updateEncounter(input: {
     campaignId?: string | null;
     encounterId: string;
+    expectedRevision?: string;
     scenarioId?: string | null;
     session: EncounterSession;
   }): Promise<EncounterSession> {
-    return this.encounterRepository.updateEncounter(input);
+    try {
+      return await this.encounterRepository.updateEncounter(input);
+    } catch (error) {
+      if (
+        error instanceof CombatPersistenceError &&
+        (error.code === "stale_revision" || error.code === "transaction_conflict")
+      ) {
+        throw new EncounterWriteError(error.code, error.message, error);
+      }
+      throw error;
+    }
   }
 
   async updateCombatEncounter(input: {
