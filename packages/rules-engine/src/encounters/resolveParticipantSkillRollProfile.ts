@@ -1,4 +1,6 @@
 import {
+  characterBuildSchema,
+  deriveCharacterStatLayers,
   getSkillGroupIds,
   type CharacterBuild,
   type ProfessionDefinition,
@@ -53,7 +55,7 @@ export interface ResolveParticipantSkillRollProfileInput {
   sheetSummary?: unknown;
   /** Rule-specific characteristic override; skill XP remains the canonical effectiveSkillNumber. */
   linkedStatsOverride?: string[];
-  /** Prefer the sheet's adjusted characteristic values for rules that consume characteristic XP. */
+  /** @deprecated Character gameplay reads always prefer Current characteristic values. */
   preferAdjustedStats?: boolean;
   skill: Pick<SkillDefinition, "groupId" | "groupIds" | "id" | "linkedStats" | "name">;
 }
@@ -115,6 +117,11 @@ function readStatsFromRecord(value: unknown): Record<string, number> | undefined
 }
 
 function readProfileStats(build: unknown): Record<string, number> | undefined {
+  const parsedBuild = characterBuildSchema.safeParse(build);
+  if (parsedBuild.success) {
+    return deriveCharacterStatLayers(parsedBuild.data).original;
+  }
+
   if (!isRecord(build) || !isRecord(build.profile)) {
     return undefined;
   }
@@ -337,9 +344,7 @@ export function resolveParticipantSkillRollProfile(
   });
   const profileStats = readProfileStats(input.build) ?? readSnapshotStats(input.build);
   const adjustedStats = readSheetStats(sheetSummary);
-  const stats = input.preferAdjustedStats
-    ? adjustedStats ?? profileStats
-    : profileStats ?? adjustedStats;
+  const stats = adjustedStats ?? profileStats;
   const linkedStats = input.linkedStatsOverride ?? input.skill.linkedStats;
   const baseAvgStats = getLinkedStatAverage({ linkedStats, stats: profileStats }) ?? 0;
   const avgStats =

@@ -90,9 +90,23 @@ describe("buildScenarioPlayerProjection", () => {
           siz: 16,
         },
       },
-    } as CharacterBuild;
+    } as unknown as CharacterBuild;
 
     expect(calculateCharacterGeneralHitpoints(build)).toBe(17);
+  });
+
+  it("uses the Character snapshot's Current CON/SIZ values for general hitpoints", () => {
+    const build = {
+      currentStatModifiers: { con: 2, siz: 2 },
+      profile: {
+        rolledStats: {
+          con: 10,
+          siz: 10,
+        },
+      },
+    } as unknown as CharacterBuild;
+
+    expect(calculateCharacterGeneralHitpoints(build)).toBe(12);
   });
 
   it("resolves the active controlled player character and builds a visible participant list", () => {

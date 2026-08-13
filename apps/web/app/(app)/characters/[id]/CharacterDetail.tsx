@@ -449,10 +449,13 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                 <tr key={row.stat} style={{ borderBottom: "1px solid #eee8dc" }}>
                   <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>{row.label}</td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
-                    {row.statsDieRollValue}
+                    {row.statsDieRollValue ?? "—"}
                   </td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
                     {row.originalValue}
+                  </td>
+                  <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                    {row.developedValue}
                   </td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
                     {row.currentValue}
@@ -462,6 +465,9 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
               ))}
               <tr style={{ borderBottom: "1px solid #eee8dc" }}>
                 <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>Distraction</td>
+                <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                  {sheetSummary.distractionLevel}
+                </td>
                 <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
                   {sheetSummary.distractionLevel}
                 </td>

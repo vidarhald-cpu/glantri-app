@@ -10,7 +10,7 @@ import {
   applyChargenStatExchange,
   buildResolvedProfile,
   createChargenStatAdjustmentState,
-  resolveGlantriCharacterStats
+  resolveGlantriCharacterStats,
 } from "./statResolution";
 
 describe("chargen stat resolution", () => {
@@ -21,25 +21,25 @@ describe("chargen stat resolution", () => {
         exchangeCount: 1,
         flexiblePointFactor: 1,
         ordinarySkillPoints: 60,
-        statRollCount: 3
-      }
+        statRollCount: 3,
+      },
     });
     const initialState = createChargenStatAdjustmentState(profiles[0].rolledStats);
     const firstExchange = applyChargenStatExchange({
       firstStat: "str",
       policy: {
-        maxExchanges: 1
+        maxExchanges: 1,
       },
       secondStat: "dex",
-      state: initialState
+      state: initialState,
     });
     const secondExchange = applyChargenStatExchange({
       firstStat: "con",
       policy: {
-        maxExchanges: 1
+        maxExchanges: 1,
       },
       secondStat: "int",
-      state: firstExchange.state
+      state: firstExchange.state,
     });
 
     expect(profiles).toHaveLength(3);
@@ -64,10 +64,10 @@ describe("chargen stat resolution", () => {
           pow: 10,
           siz: 10,
           str: 10,
-          will: 10
-        }
+          will: 10,
+        },
       ],
-      rng: () => rolls.shift() ?? 0
+      rng: () => rolls.shift() ?? 0,
     });
 
     expect(profile.socialClassRoll).toBe(1);
@@ -89,16 +89,16 @@ describe("chargen stat resolution", () => {
           pow: 13,
           siz: 16,
           str: 10,
-          will: 7
-        }
-      ]
+          will: 7,
+        },
+      ],
     });
 
     expect(profile.rolledStats).toMatchObject({
       cha: 12,
       dex: 11,
       health: 10,
-      str: 10
+      str: 10,
     });
     expect(profile.resolvedStats).toBeUndefined();
   });
@@ -115,18 +115,18 @@ describe("chargen stat resolution", () => {
       pow: 17,
       siz: 18,
       str: 9,
-      will: 8
+      will: 8,
     });
 
     const exchanged = applyChargenStatExchange({
       firstStat: "str",
       secondStat: "dex",
-      state: initialState
+      state: initialState,
     });
     const built = applyChargenStatBuild({
       decreaseStat: "pow",
       increaseStat: "str",
-      state: exchanged.state
+      state: exchanged.state,
     });
 
     expect(exchanged.error).toBeUndefined();
@@ -151,22 +151,22 @@ describe("chargen stat resolution", () => {
       pow: 17,
       siz: 18,
       str: 9,
-      will: 8
+      will: 8,
     });
 
     expect(
       applyChargenStatExchange({
         firstStat: "str",
         secondStat: "str",
-        state: initialState
-      }).error
+        state: initialState,
+      }).error,
     ).toBe("Choose two different stats to exchange.");
     expect(
       applyChargenStatBuild({
         decreaseStat: "str",
         increaseStat: "str",
-        state: initialState
-      }).error
+        state: initialState,
+      }).error,
     ).toBe("Choose different stats when building.");
   });
 
@@ -183,17 +183,17 @@ describe("chargen stat resolution", () => {
         pow: 13,
         siz: 16,
         str: 10,
-        will: 7
-      })
+        will: 7,
+      }),
     ).toMatchObject({
       cha: 14,
       dex: 10,
       health: 11,
-      str: 12
+      str: 12,
     });
   });
 
-  it("uses resolved stats for downstream linked-stat calculations while storing adjusted base stats", () => {
+  it("uses finalized Original stats downstream while preserving the raw rolled/base values", () => {
     const profile: RolledCharacterProfile = buildResolvedProfile({
       adjustedStats: {
         cha: 12,
@@ -205,8 +205,8 @@ describe("chargen stat resolution", () => {
         lck: 8,
         pow: 13,
         siz: 16,
-        str: 10,
-        will: 7
+        str: 13,
+        will: 7,
       },
       profile: {
         distractionLevel: 3,
@@ -222,11 +222,11 @@ describe("chargen stat resolution", () => {
           lck: 8,
           pow: 13,
           siz: 16,
-          str: 10,
-          will: 7
+          str: 12,
+          will: 7,
         },
-        societyLevel: 0
-      }
+        societyLevel: 0,
+      },
     });
 
     const draftView = buildChargenDraftView({
@@ -239,8 +239,8 @@ describe("chargen stat resolution", () => {
             description: "Martial",
             id: "martial",
             name: "Martial",
-            sortOrder: 1
-          }
+            sortOrder: 1,
+          },
         ],
         skills: [
           {
@@ -256,11 +256,11 @@ describe("chargen stat resolution", () => {
             name: "Blade",
             requiresLiteracy: "no",
             societyLevel: 1,
-            sortOrder: 1
-          }
+            sortOrder: 1,
+          },
         ],
         societyLevels: [],
-        specializations: []
+        specializations: [],
       }),
       profile,
       progression: {
@@ -274,14 +274,15 @@ describe("chargen stat resolution", () => {
             primaryRanks: 1,
             ranks: 1,
             secondaryRanks: 0,
-            skillId: "blade"
-          }
-        ]
-      }
+            skillId: "blade",
+          },
+        ],
+      },
     });
 
-    expect(profile.rolledStats.str).toBe(10);
-    expect(profile.resolvedStats?.str).toBe(12);
-    expect(draftView.skills[0]?.linkedStatAverage).toBe(11);
+    expect(profile.rolledStats.str).toBe(12);
+    expect(profile.resolvedStats?.str).toBe(15);
+    expect(profile.statLayerVersion).toBe(1);
+    expect(draftView.skills[0]?.linkedStatAverage).toBe(12);
   });
 });

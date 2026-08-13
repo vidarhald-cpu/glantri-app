@@ -57,6 +57,31 @@ async function failCharacterUpdates(page: Page, characterId: string): Promise<vo
 test.describe("Character Sheet failed-save recovery", () => {
   test.use({ storageState: "e2e/.auth/player.json" });
 
+  test("shows one coherent Rolled/Base, Original, Developed, and Current stat chain", async ({
+    page,
+  }) => {
+    const characterId = loadCharacterId();
+    await page.goto(`/characters/${characterId}`);
+
+    const headers = page.getByRole("columnheader");
+    await expect(headers).toContainText([
+      "Stat",
+      "Rolled / base",
+      "Original",
+      "Developed",
+      "Current",
+      "GM",
+    ]);
+    const strengthCells = page
+      .getByRole("row")
+      .filter({ has: page.getByRole("cell", { name: "Str", exact: true }) })
+      .getByRole("cell");
+    await expect(strengthCells.nth(1)).toHaveText("12");
+    await expect(strengthCells.nth(2)).toHaveText("13");
+    await expect(strengthCells.nth(3)).toHaveText("14");
+    await expect(strengthCells.nth(4)).toHaveText("14");
+  });
+
   test("keeps canonical truth visible while a failed identity draft is reviewed or discarded", async ({
     page,
   }) => {

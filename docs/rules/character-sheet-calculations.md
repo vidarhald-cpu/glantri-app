@@ -22,29 +22,46 @@ Changing the active chargen rule set later does not silently change the rule-set
 
 The `Profile Stats` table shows:
 
-| Column | Meaning |
-| --- | --- |
-| `Stats die roll` | The raw rolled value from chargen. |
-| `Original` | The finished creation stat after chargen stat resolution. |
-| `Current` | The current gameplay stat. Currently this is the same as `Original`. |
-| `GM` | The game modifier calculated from `Current`. |
+| Column          | Meaning                                                                                 |
+| --------------- | --------------------------------------------------------------------------------------- |
+| `Rolled / base` | The raw chargen roll or generated-character base, before creation adjustments.          |
+| `Original`      | The finalized creation stat after authorized chargen/GM adjustments and creation rules. |
+| `Developed`     | `Original` plus permanent post-creation development.                                    |
+| `Current`       | The presently applicable stat, including temporary or semi-long-term changes.           |
+| `GM`            | The game modifier calculated from `Current`.                                            |
 
 Formula:
 
 ```text
-Original stat = resolved stat from chargen
-Current stat = Original stat for now
+Original stat = finalized chargen stat
+Developed stat = Original stat + permanent development
+Current stat = Developed stat + currently applicable changes
 GM = trunc((Current - 11) / 2)
 ```
 
+Example:
+
+```text
+Rolled / base 12
+  + authorized chargen adjustment 1
+= Original 13
+  + later permanent development 1
+= Developed 14
+= Current 14 when no temporary or semi-long-term change applies
+```
+
+Magic, rituals, drugs, curses, bodily enhancement, and similar sustained changes may eventually
+change `Current` without changing `Developed`. A modifier that applies to one roll or one
+circumstance is applied to that roll instead; it does not change the Character's `Current` stat.
+
 `trunc` means truncate toward zero.
 
-| Current | Calculation | GM |
-| ---: | --- | ---: |
-| 15 | `trunc((15 - 11) / 2)` | 2 |
-| 12 | `trunc((12 - 11) / 2)` | 0 |
-| 10 | `trunc((10 - 11) / 2)` | 0 |
-| 8 | `trunc((8 - 11) / 2)` | -1 |
+| Current | Calculation            |  GM |
+| ------: | ---------------------- | --: |
+|      15 | `trunc((15 - 11) / 2)` |   2 |
+|      12 | `trunc((12 - 11) / 2)` |   0 |
+|      10 | `trunc((10 - 11) / 2)` |   0 |
+|       8 | `trunc((8 - 11) / 2)`  |  -1 |
 
 Chargen stat resolution can adjust some rolled stats before they become `Original`:
 
@@ -55,6 +72,10 @@ Chargen stat resolution can adjust some rolled stats before they become `Origina
 
 `Distraction` displays its saved value and has no GM. The GM column shows `-`.
 
+Older Characters whose raw roll was not stored separately show `—` under `Rolled / base`. Their
+known `Original`, `Developed`, and `Current` gameplay values remain available; the app does not
+guess or rewrite missing roll provenance.
+
 ## 4. Skills table
 
 The Skills table shows each visible trained skill grouped into player-facing categories.
@@ -63,7 +84,8 @@ The Skills table shows each visible trained skill grouped into player-facing cat
 
 `Stats` lists the stats linked to the skill.
 
-`Avg stats` is the average of those linked stats, using the rounded/floored value shown by the app.
+`Avg stats` is the average of the linked `Current` stats, using the rounded/floored value shown by
+the app.
 
 Formula:
 
@@ -142,13 +164,13 @@ Specializations are shown separately from ordinary skills.
 
 The Specializations table shows:
 
-| Column | Meaning |
-| --- | --- |
-| `Specialization` | The specialization name. |
-| `Parent skill` | The skill the specialization belongs to. |
-| `Specialization XP` | XP bought for that specialization. |
-| `Derived XP` | XP from specialization or cross-training effects. |
-| `Total` | Final specialization value shown on the sheet. |
+| Column              | Meaning                                           |
+| ------------------- | ------------------------------------------------- |
+| `Specialization`    | The specialization name.                          |
+| `Parent skill`      | The skill the specialization belongs to.          |
+| `Specialization XP` | XP bought for that specialization.                |
+| `Derived XP`        | XP from specialization or cross-training effects. |
+| `Total`             | Final specialization value shown on the sheet.    |
 
 Specializations are gated by parent skill access and parent skill level requirements.
 
@@ -229,12 +251,12 @@ Choice examples:
 
 Cost examples:
 
-| Group shape | Individual-cost total | Group cost |
-| --- | ---: | ---: |
-| Three ordinary skills | `2 + 2 + 2 = 6` | `floor(0.6 * 6) = 3` |
-| Dodge, Parry, Brawling, and one selected secondary weapon | `1 + 1 + 1 + 1 = 4` | `floor(0.6 * 4) = 2` |
-| Perception, Concentration, Weapon Maintenance, and one selected secondary missile weapon | `2 + 2 + 1 + 1 = 6` | `floor(0.6 * 6) = 3` |
-| One selected ordinary craft skill | `2` | `max(1, floor(0.6 * 2)) = 1` |
+| Group shape                                                                              | Individual-cost total |                   Group cost |
+| ---------------------------------------------------------------------------------------- | --------------------: | ---------------------------: |
+| Three ordinary skills                                                                    |       `2 + 2 + 2 = 6` |         `floor(0.6 * 6) = 3` |
+| Dodge, Parry, Brawling, and one selected secondary weapon                                |   `1 + 1 + 1 + 1 = 4` |         `floor(0.6 * 4) = 2` |
+| Perception, Concentration, Weapon Maintenance, and one selected secondary missile weapon |   `2 + 2 + 1 + 1 = 6` |         `floor(0.6 * 6) = 3` |
+| One selected ordinary craft skill                                                        |                   `2` | `max(1, floor(0.6 * 2)) = 1` |
 
 ### Skill points summary
 
@@ -273,7 +295,6 @@ Education = base education
 
 ## 7. Known interim notes
 
-- Linked stat average source still needs final standardization if rolled, resolved, and adjusted stats differ.
 - Combat/loadout formulas are documented separately.
 - Character Detail and the loadout panel may still use different combat derivation paths.
 - Remaining points combine ordinary and flexible remaining pools.

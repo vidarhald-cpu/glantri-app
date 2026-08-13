@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { characterBuildSchema, type CharacterBuild } from "../character/build";
+import { deriveCharacterStatLayers } from "../character/statLayers";
 import { combatEffectsStateSchema } from "../encounter/combatEffects";
 import {
   canonicalCombatModifierEffectSchema,
@@ -468,8 +469,9 @@ function clampHealth(value: number, max: number): number {
 }
 
 export function calculateCharacterGeneralHitpoints(build: CharacterBuild): number {
-  const con = build.profile.rolledStats.con ?? 0;
-  const siz = build.profile.rolledStats.siz ?? 0;
+  const { current } = deriveCharacterStatLayers(build);
+  const con = current.con ?? 0;
+  const siz = current.siz ?? 0;
   return Math.max(1, Math.round((con + siz) / 2));
 }
 
