@@ -1,5 +1,11 @@
 import { canAccessAdmin, type AuthUser } from "@glantri/auth";
-import type { Campaign, Scenario } from "@glantri/domain";
+import type {
+  Campaign,
+  PlayerAccessibleCampaign,
+  PlayerAccessibleScenario,
+  PlayerCampaignHomeRecord,
+  Scenario,
+} from "@glantri/domain";
 
 import { ApiRequestError } from "../api/apiClient";
 import {
@@ -13,8 +19,40 @@ import { buildCampaignWorkspaceHref } from "./workspace";
 
 export interface CampaignWorkspaceAccessResult {
   accessMode: "gm" | "player" | "none";
-  campaign?: Campaign;
-  scenarios: Scenario[];
+  campaign?: Campaign | PlayerAccessibleCampaign;
+  scenarios: Array<Scenario | PlayerAccessibleScenario>;
+}
+
+export function resolvePlayerCampaignResumeDestination(input: {
+  campaigns: PlayerCampaignHomeRecord[];
+  rememberedCampaignId?: string | null;
+}): {
+  clearRememberedCampaign: boolean;
+  href: string;
+} {
+  const rememberedCampaignId = input.rememberedCampaignId ?? undefined;
+  const rememberedCampaign = rememberedCampaignId
+    ? input.campaigns.find((record) => record.campaign.id === rememberedCampaignId)
+    : undefined;
+  const campaign =
+    rememberedCampaign ?? (input.campaigns.length === 1 ? input.campaigns[0] : undefined);
+
+  if (!campaign) {
+    return {
+      clearRememberedCampaign: Boolean(rememberedCampaignId),
+      href: "/campaigns",
+    };
+  }
+
+  return {
+    clearRememberedCampaign: Boolean(rememberedCampaignId && !rememberedCampaign),
+    href: buildCampaignWorkspaceHref({
+      campaignId: campaign.campaign.id,
+      encounterId: campaign.resume.encounterId,
+      scenarioId: campaign.resume.scenarioId,
+      tab: campaign.resume.tab,
+    }),
+  };
 }
 
 function isPermissionMismatchError(error: unknown): error is ApiRequestError {

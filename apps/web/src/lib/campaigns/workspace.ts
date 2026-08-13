@@ -1,6 +1,7 @@
 import type {
   EncounterSession,
   EncounterSessionSummary,
+  PlayerAccessibleScenario,
   Scenario,
   ScenarioParticipant,
 } from "@glantri/domain";
@@ -272,7 +273,7 @@ export function resolveCampaignWorkspaceState(input: {
   requestedScenarioId?: string | null;
   requestedTab?: string | null;
   scenarioParticipants?: ScenarioParticipant[];
-  scenarios: Scenario[];
+  scenarios: Array<Scenario | PlayerAccessibleScenario>;
 }): CampaignWorkspaceState {
   const requestedScenarioId = input.requestedScenarioId ?? input.rememberedScenarioId;
   const requestedEncounterId = input.requestedEncounterId ?? input.rememberedEncounterId;

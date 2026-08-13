@@ -80,6 +80,46 @@ export class CampaignService {
     return this.repository.listCampaignsByPlayerAccess(userId);
   }
 
+  async listCampaignsByUserAccess(userId: string): Promise<Campaign[]> {
+    const ownedCharacters = await this.characterService.listCharacters(userId);
+    const [liveScenarioCampaigns, ...rosterCampaignGroups] = await Promise.all([
+      this.repository.listCampaignsByPlayerAccess(userId),
+      ...ownedCharacters.map((character) =>
+        this.repository.listCampaignsByCharacterRosterAccess(character.id),
+      ),
+    ]);
+    const accessibleById = new Map(
+      [...liveScenarioCampaigns, ...rosterCampaignGroups.flat()]
+        .filter((campaign) => campaign.status === "active")
+        .map((campaign) => [campaign.id, campaign]),
+    );
+
+    return [...accessibleById.values()].sort(
+      (left, right) =>
+        Date.parse(right.updatedAt) - Date.parse(left.updatedAt) ||
+        left.name.localeCompare(right.name),
+    );
+  }
+
+  async listPlayerCampaignCharacters(input: {
+    campaignId: string;
+    userId: string;
+  }): Promise<Array<{ id: string; name: string }>> {
+    const [ownedCharacters, rosterEntries] = await Promise.all([
+      this.characterService.listCharacters(input.userId),
+      this.repository.listCampaignRosterEntries(input.campaignId),
+    ]);
+    const rosterCharacterIds = new Set(
+      rosterEntries
+        .filter((entry) => entry.sourceType === "character")
+        .map((entry) => entry.sourceId),
+    );
+
+    return ownedCharacters
+      .filter((character) => rosterCharacterIds.has(character.id))
+      .map((character) => ({ id: character.id, name: character.name }));
+  }
+
   async getCampaignById(campaignId: string): Promise<Campaign | null> {
     return this.repository.getCampaignById(campaignId);
   }

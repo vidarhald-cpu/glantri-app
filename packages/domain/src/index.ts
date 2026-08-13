@@ -6,6 +6,7 @@ export * from "./character/equipment";
 export * from "./character/profiles";
 export * from "./character/progression";
 export * from "./campaign/scenario";
+export * from "./campaign/playerCampaignHome";
 export * from "./combat/context";
 export * from "./content/skills";
 export * from "./docs/glantriTerms";

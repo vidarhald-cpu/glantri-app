@@ -9,6 +9,8 @@ import {
   type Campaign,
   type EncounterSession,
   type EncounterSessionSummary,
+  type PlayerAccessibleCampaign,
+  type PlayerAccessibleScenario,
   type Scenario,
   type ScenarioParticipant,
 } from "@glantri/domain";
@@ -95,14 +97,16 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   const searchParams = useSearchParams();
   const searchParamString = searchParams.toString();
   const { currentUser, loading: sessionLoading } = useSessionUser();
-  const [accessibleCampaign, setAccessibleCampaign] = useState<Campaign | null>(null);
+  const [accessibleCampaign, setAccessibleCampaign] = useState<
+    Campaign | PlayerAccessibleCampaign | null
+  >(null);
   const [accessMode, setAccessMode] = useState<"gm" | "player" | "none">("gm");
   const [activeEncounter, setActiveEncounter] = useState<EncounterSession>();
   const [encounterSummaries, setEncounterSummaries] = useState<EncounterSessionSummary[]>([]);
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [scenarioParticipants, setScenarioParticipants] = useState<ScenarioParticipant[]>([]);
-  const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [scenarios, setScenarios] = useState<Array<Scenario | PlayerAccessibleScenario>>([]);
   const activeEncounterIdRef = useRef<string | undefined>(undefined);
   const activeEncounterRef = useRef<EncounterSession | undefined>(undefined);
   const activeEncounterRequestIdRef = useRef(0);
@@ -257,6 +261,10 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   const activeScenario = scenarios.find(
     (scenario) => scenario.id === workspaceState.activeScenarioId,
   );
+  const activeScenarioRoundNumber =
+    activeScenario && "liveState" in activeScenario
+      ? activeScenario.liveState?.roundNumber
+      : undefined;
   const activeEncounterSummary = activeScenarioEncounters.find(
     (summary) => summary.id === workspaceState.activeEncounterId,
   );
@@ -900,7 +908,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       {accessMode !== "none" && workspaceState.activeTab === "character" ? (
         <CharacterWorkspacePanel
           activeEncounter={selectedActiveEncounter}
-          currentRoundNumber={activeScenario?.liveState?.roundNumber}
+          currentRoundNumber={activeScenarioRoundNumber}
           currentUserId={currentUser?.id}
           isGameMaster={canAccessGmEncounter}
           onSelectParticipantId={(participantId) => {

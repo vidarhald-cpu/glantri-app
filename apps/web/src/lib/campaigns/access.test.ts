@@ -9,12 +9,12 @@ import {
   loadCampaignBrowserRecordsForUser,
   loadCampaignWorkspaceAccessForUser,
   resolveCampaignResumeDestination,
+  resolvePlayerCampaignResumeDestination,
 } from "./access";
 
 vi.mock("../api/campaignClient", async () => {
-  const actual = await vi.importActual<typeof import("../api/campaignClient")>(
-    "../api/campaignClient",
-  );
+  const actual =
+    await vi.importActual<typeof import("../api/campaignClient")>("../api/campaignClient");
 
   return {
     ...actual,
@@ -168,8 +168,60 @@ describe("campaign access", () => {
 
     expect(destination).toEqual({
       clearRememberedCampaign: false,
-      href:
-        "/campaigns/campaign-1?tab=encounter&scenarioId=scenario-1&encounterId=encounter-1&participantId=participant-1",
+      href: "/campaigns/campaign-1?tab=encounter&scenarioId=scenario-1&encounterId=encounter-1&participantId=participant-1",
+    });
+  });
+
+  it("uses the fresh server resume target instead of stale remembered Scenario state", () => {
+    expect(
+      resolvePlayerCampaignResumeDestination({
+        campaigns: [
+          {
+            campaign: { description: "", id: "campaign-1", name: "Arena" },
+            characters: [{ id: "character-1", name: "Ari" }],
+            resume: {
+              encounterId: "encounter-current",
+              scenarioId: "scenario-current",
+              tab: "player-combat",
+            },
+            scenarios: [],
+          },
+        ],
+        rememberedCampaignId: "campaign-1",
+      }),
+    ).toEqual({
+      clearRememberedCampaign: false,
+      href: "/campaigns/campaign-1?tab=player-combat&scenarioId=scenario-current&encounterId=encounter-current",
+    });
+  });
+
+  it("clears permission-lost Campaign memory and stops at Campaign Home", () => {
+    expect(
+      resolvePlayerCampaignResumeDestination({
+        campaigns: [],
+        rememberedCampaignId: "campaign-lost",
+      }),
+    ).toEqual({
+      clearRememberedCampaign: true,
+      href: "/campaigns",
+    });
+  });
+
+  it("does not guess a Campaign when several are available and none was remembered", () => {
+    const record = (id: string) => ({
+      campaign: { description: "", id, name: id },
+      characters: [],
+      resume: { tab: "campaign" as const },
+      scenarios: [],
+    });
+
+    expect(
+      resolvePlayerCampaignResumeDestination({
+        campaigns: [record("campaign-1"), record("campaign-2")],
+      }),
+    ).toEqual({
+      clearRememberedCampaign: false,
+      href: "/campaigns",
     });
   });
 });

@@ -3,43 +3,50 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import type { AccessibleCampaignRecord } from "@/lib/api/campaignClient";
+import type { PlayerCampaignHomeRecord } from "@glantri/domain";
+
+import { loadPlayerCampaignHome } from "@/lib/api/campaignClient";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import {
   REMEMBERED_SELECTION_KEYS,
-  readRememberedSelection,
   useRememberedSelection,
 } from "@/lib/browser/rememberedSelection";
 import {
-  loadCampaignBrowserRecordsForUser,
-  resolveCampaignResumeDestination,
+  canManageCampaignWorkspace,
+  resolvePlayerCampaignResumeDestination,
 } from "@/lib/campaigns/access";
-import {
-  getCampaignWorkspaceSelectionKeys,
-  getPlayerEncounterParticipantSelectionKey,
-} from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
 
 export default function CampaignsResumePageContent() {
   const router = useRouter();
   const { currentUser, loading: sessionLoading } = useSessionUser();
   const restoreAttemptedRef = useRef(false);
-  const [campaigns, setCampaigns] = useState<AccessibleCampaignRecord[]>([]);
+  const [campaigns, setCampaigns] = useState<PlayerCampaignHomeRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const rememberedCampaignSelection = useRememberedSelection(
-    REMEMBERED_SELECTION_KEYS.campaignId,
-  );
+  const rememberedCampaignSelection = useRememberedSelection(REMEMBERED_SELECTION_KEYS.campaignId);
 
   useEffect(() => {
     if (sessionLoading) {
       return;
     }
 
-    let cancelled = false;
+    if (!currentUser || canManageCampaignWorkspace(currentUser)) {
+      setCampaigns([]);
+      setLoading(false);
+      return;
+    }
 
-    loadCampaignBrowserRecordsForUser(currentUser)
+    let cancelled = false;
+    setLoading(true);
+
+    loadPlayerCampaignHome()
       .then((records) => {
         if (!cancelled) {
           setCampaigns(records);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCampaigns([]);
         }
       })
       .finally(() => {
@@ -65,37 +72,15 @@ export default function CampaignsResumePageContent() {
 
     restoreAttemptedRef.current = true;
 
+    if (!currentUser || canManageCampaignWorkspace(currentUser)) {
+      router.replace("/campaigns");
+      return;
+    }
+
     const rememberedCampaignId = rememberedCampaignSelection.value;
-
-    const workspaceSelectionKeys = rememberedCampaignId
-      ? getCampaignWorkspaceSelectionKeys(rememberedCampaignId)
-      : null;
-    const rememberedScenarioId = workspaceSelectionKeys
-      ? readRememberedSelection(workspaceSelectionKeys.scenarioId)
-      : undefined;
-    const rememberedEncounterId = workspaceSelectionKeys
-      ? readRememberedSelection(workspaceSelectionKeys.encounterId)
-      : undefined;
-    const rememberedTab = workspaceSelectionKeys
-      ? readRememberedSelection(workspaceSelectionKeys.workspaceTab)
-      : undefined;
-    const rememberedParticipantId =
-      rememberedCampaignId && rememberedScenarioId
-        ? readRememberedSelection(
-            getPlayerEncounterParticipantSelectionKey({
-              campaignId: rememberedCampaignId,
-              scenarioId: rememberedScenarioId,
-            }),
-          )
-        : undefined;
-
-    const destination = resolveCampaignResumeDestination({
-      accessibleCampaigns: campaigns,
+    const destination = resolvePlayerCampaignResumeDestination({
+      campaigns,
       rememberedCampaignId,
-      rememberedEncounterId,
-      rememberedParticipantId,
-      rememberedScenarioId,
-      rememberedTab,
     });
 
     if (destination.clearRememberedCampaign) {

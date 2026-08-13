@@ -1,7 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
 
-import { CampaignService, ScenarioService } from "@glantri/database";
+import { CampaignService, EncounterService, ScenarioService } from "@glantri/database";
 import {
+  buildPlayerAccessibleCampaign,
+  buildPlayerAccessibleScenario,
+  buildPlayerCampaignHomeRecord,
   campaignAssetTypeSchema,
   campaignRosterCategorySchema,
   campaignRosterSourceTypeSchema,
@@ -24,6 +27,7 @@ import {
 } from "./parsing";
 
 const campaignService = new CampaignService();
+const encounterService = new EncounterService();
 const scenarioService = new ScenarioService();
 
 interface RouteError extends Error {
@@ -174,14 +178,13 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const campaigns = await campaignService.listCampaignsByPlayerAccess(user.id);
+      const campaigns = await campaignService.listCampaignsByUserAccess(user.id);
       const accessibleCampaigns = await Promise.all(
         campaigns.map(async (campaign) => ({
-          campaign,
-          scenarios: await scenarioService.listScenariosByCampaignPlayerAccess(
-            campaign.id,
-            user.id,
-          ),
+          campaign: buildPlayerAccessibleCampaign(campaign),
+          scenarios: (
+            await scenarioService.listScenariosByCampaignPlayerAccess(campaign.id, user.id)
+          ).map(buildPlayerAccessibleScenario),
         })),
       );
 
@@ -189,6 +192,52 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to load accessible campaigns.",
+      });
+    }
+  });
+
+  app.get("/campaigns/player-home", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const campaigns = await campaignService.listCampaignsByUserAccess(user.id);
+      const playerCampaigns = await Promise.all(
+        campaigns.map(async (campaign) => {
+          const [rosterCharacters, scenarios] = await Promise.all([
+            campaignService.listPlayerCampaignCharacters({
+              campaignId: campaign.id,
+              userId: user.id,
+            }),
+            scenarioService.listScenariosByCampaignPlayerAccess(campaign.id, user.id),
+          ]);
+          const scenarioContexts = await Promise.all(
+            scenarios.map(async (scenario) => {
+              const [encounters, participants] = await Promise.all([
+                encounterService.listEncountersByScenario(scenario.id),
+                scenarioService.listScenarioParticipants(scenario.id),
+              ]);
+
+              return { encounters, participants, scenario };
+            }),
+          );
+
+          return buildPlayerCampaignHomeRecord({
+            campaign,
+            rosterCharacters,
+            scenarios: scenarioContexts,
+            userId: user.id,
+          });
+        }),
+      );
+
+      return { campaigns: playerCampaigns };
+    } catch {
+      return reply.code(400).send({
+        error: "Unable to load Campaign Home.",
       });
     }
   });
@@ -202,7 +251,9 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
-      const campaign = await campaignService.getCampaignById(campaignId);
+      const campaign = (await campaignService.listCampaignsByUserAccess(user.id)).find(
+        (candidate) => candidate.id === campaignId,
+      );
 
       if (!campaign) {
         return reply.code(404).send({
@@ -215,16 +266,10 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
         user.id,
       );
 
-      if (scenarios.length === 0) {
-        return reply.code(404).send({
-          error: "Campaign not found.",
-        });
-      }
-
       return {
         accessibleCampaign: {
-          campaign,
-          scenarios,
+          campaign: buildPlayerAccessibleCampaign(campaign),
+          scenarios: scenarios.map(buildPlayerAccessibleScenario),
         },
       };
     } catch (error) {

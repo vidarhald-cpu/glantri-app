@@ -78,6 +78,70 @@ describe("CampaignService access listing", () => {
       expectedCampaigns,
     );
   });
+
+  it("combines live Scenario authority with owned roster access and excludes inactive Campaigns", async () => {
+    const { campaigns, repository, rosterEntries } = createScenarioRepositoryStub();
+    const activeRosterCampaign = makeCampaign({
+      gmUserId: "gm-1",
+      id: "campaign-roster",
+      name: "Roster Campaign",
+    });
+    const liveCampaign = makeCampaign({
+      gmUserId: "gm-1",
+      id: "campaign-live",
+      name: "Live Campaign",
+    });
+    const draftCampaign = {
+      ...makeCampaign({ gmUserId: "gm-1", id: "campaign-draft" }),
+      status: "draft" as const,
+    };
+    campaigns.push(activeRosterCampaign, draftCampaign);
+    rosterEntries.push({
+      campaignId: activeRosterCampaign.id,
+      category: "pc",
+      createdAt: "2026-04-21T00:00:00.000Z",
+      id: "roster-1",
+      sourceId: "character-1",
+      sourceType: "character",
+      updatedAt: "2026-04-21T00:00:00.000Z",
+    });
+    repository.listCampaignsByPlayerAccess = async () => [liveCampaign, draftCampaign];
+    const characterService = {
+      listCharacters: async () => [
+        createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "player-1" }),
+      ],
+    } as never;
+    const service = new CampaignService(repository, characterService);
+
+    await expect(service.listCampaignsByUserAccess("player-1")).resolves.toEqual([
+      liveCampaign,
+      activeRosterCampaign,
+    ]);
+  });
+
+  it("returns only the player's Characters that are on the selected Campaign roster", async () => {
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    rosterEntries.push({
+      campaignId: "campaign-1",
+      category: "pc",
+      createdAt: "2026-04-21T00:00:00.000Z",
+      id: "roster-1",
+      sourceId: "character-1",
+      sourceType: "character",
+      updatedAt: "2026-04-21T00:00:00.000Z",
+    });
+    const characterService = {
+      listCharacters: async () => [
+        createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "player-1" }),
+        createCharacterRecord({ id: "character-2", name: "Bela", ownerId: "player-1" }),
+      ],
+    } as never;
+    const service = new CampaignService(repository, characterService);
+
+    await expect(
+      service.listPlayerCampaignCharacters({ campaignId: "campaign-1", userId: "player-1" }),
+    ).resolves.toEqual([{ id: "character-1", name: "Ari" }]);
+  });
 });
 
 describe("CampaignService campaign roster", () => {
