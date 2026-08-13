@@ -5,6 +5,23 @@ import type { Campaign, ReusableEntity } from "@glantri/domain";
 import { CampaignService } from "./campaignService";
 import { createCharacterRecord, createScenarioRepositoryStub } from "./scenarioService.testHelpers";
 
+function makeCampaign(input: { gmUserId: string; id: string; name?: string }): Campaign {
+  return {
+    createdAt: "2026-04-21T00:00:00.000Z",
+    description: "",
+    gmUserId: input.gmUserId,
+    id: input.id,
+    name: input.name ?? input.id,
+    settings: {
+      allowPlayerSelfJoin: false,
+      defaultVisibility: "hidden",
+    },
+    slug: input.id,
+    status: "active",
+    updatedAt: "2026-04-21T00:00:00.000Z",
+  };
+}
+
 describe("CampaignService access listing", () => {
   it("returns player-accessible campaigns from the repository", async () => {
     const { repository } = createScenarioRepositoryStub();
@@ -141,6 +158,8 @@ describe("CampaignService campaign roster", () => {
       ],
     ]);
     repository.getReusableEntityById = async (entityId) => reusableEntities.get(entityId) ?? null;
+    repository.getCampaignById = async (campaignId) =>
+      campaignId === "campaign-1" ? makeCampaign({ gmUserId: "gm-1", id: "campaign-1" }) : null;
     const service = new CampaignService(repository, {
       getCharacterById: async (characterId: string) => characters.get(characterId) ?? null,
     } as never);
@@ -159,6 +178,8 @@ describe("CampaignService campaign roster", () => {
     });
     await expect(
       service.addCampaignRosterEntry({
+        actorIsAdmin: false,
+        actorUserId: "gm-1",
         campaignId: "campaign-1",
         category: "npc",
         sourceId: "entity-1",
@@ -184,6 +205,115 @@ describe("CampaignService campaign roster", () => {
 
     expect(rosterEntries).toHaveLength(3);
     expect(participants).toHaveLength(0);
+  });
+
+  it("denies a foreign GM without disclosing or persisting a reusable NPC", async () => {
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const campaigns = new Map([
+      ["campaign-a", makeCampaign({ gmUserId: "gm-owner", id: "campaign-a" })],
+      ["campaign-b", makeCampaign({ gmUserId: "gm-foreign", id: "campaign-b" })],
+    ]);
+    const privateNpc: ReusableEntity = {
+      createdAt: "2026-04-21T00:00:00.000Z",
+      gmUserId: "gm-owner",
+      id: "private-npc",
+      kind: "npc",
+      name: "Private NPC",
+      snapshot: { actorClass: "campaign_npc", campaignId: "campaign-a" },
+      updatedAt: "2026-04-21T00:00:00.000Z",
+    };
+    repository.getCampaignById = async (campaignId) => campaigns.get(campaignId) ?? null;
+    repository.getReusableEntityById = async (entityId) =>
+      entityId === privateNpc.id ? privateNpc : null;
+    const service = new CampaignService(repository);
+
+    const failure = await service
+      .addCampaignRosterEntry({
+        actorIsAdmin: false,
+        actorUserId: "gm-foreign",
+        campaignId: "campaign-b",
+        category: "npc",
+        sourceId: privateNpc.id,
+        sourceType: "reusableEntity",
+      })
+      .catch((error: unknown) => error);
+
+    expect(failure).toEqual(new Error("Reusable entity not found."));
+    expect(String(failure)).not.toContain(privateNpc.name);
+    expect(rosterEntries).toEqual([]);
+  });
+
+  it("allows the owning GM and an admin to link a campaign-bound reusable NPC", async () => {
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const campaign = makeCampaign({ gmUserId: "gm-owner", id: "campaign-a" });
+    const privateNpc: ReusableEntity = {
+      createdAt: "2026-04-21T00:00:00.000Z",
+      gmUserId: "gm-owner",
+      id: "private-npc",
+      kind: "npc",
+      name: "Private NPC",
+      snapshot: { actorClass: "campaign_npc", campaignId: campaign.id },
+      updatedAt: "2026-04-21T00:00:00.000Z",
+    };
+    repository.getCampaignById = async (campaignId) =>
+      campaignId === campaign.id ? campaign : null;
+    repository.getReusableEntityById = async (entityId) =>
+      entityId === privateNpc.id ? privateNpc : null;
+    const service = new CampaignService(repository);
+
+    const ownerEntry = await service.addCampaignRosterEntry({
+      actorIsAdmin: false,
+      actorUserId: "gm-owner",
+      campaignId: campaign.id,
+      category: "npc",
+      sourceId: privateNpc.id,
+      sourceType: "reusableEntity",
+    });
+    const adminEntry = await service.addCampaignRosterEntry({
+      actorIsAdmin: true,
+      actorUserId: "admin-1",
+      campaignId: campaign.id,
+      category: "npc",
+      sourceId: privateNpc.id,
+      sourceType: "reusableEntity",
+    });
+
+    expect(ownerEntry.labelSnapshot).toBe(privateNpc.name);
+    expect(adminEntry.id).toBe(ownerEntry.id);
+    expect(rosterEntries).toEqual([ownerEntry]);
+  });
+
+  it("denies a campaign NPC in another campaign even when the same GM owns both", async () => {
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const campaigns = new Map([
+      ["campaign-a", makeCampaign({ gmUserId: "gm-owner", id: "campaign-a" })],
+      ["campaign-b", makeCampaign({ gmUserId: "gm-owner", id: "campaign-b" })],
+    ]);
+    const privateNpc: ReusableEntity = {
+      createdAt: "2026-04-21T00:00:00.000Z",
+      gmUserId: "gm-owner",
+      id: "private-npc",
+      kind: "npc",
+      name: "Private NPC",
+      snapshot: { actorClass: "campaign_npc", campaignId: "campaign-a" },
+      updatedAt: "2026-04-21T00:00:00.000Z",
+    };
+    repository.getCampaignById = async (campaignId) => campaigns.get(campaignId) ?? null;
+    repository.getReusableEntityById = async (entityId) =>
+      entityId === privateNpc.id ? privateNpc : null;
+    const service = new CampaignService(repository);
+
+    await expect(
+      service.addCampaignRosterEntry({
+        actorIsAdmin: false,
+        actorUserId: "gm-owner",
+        campaignId: "campaign-b",
+        category: "npc",
+        sourceId: privateNpc.id,
+        sourceType: "reusableEntity",
+      }),
+    ).rejects.toThrow("Reusable entity not found.");
+    expect(rosterEntries).toEqual([]);
   });
 
   it("dedupes duplicate roster links and can remove a roster entry", async () => {

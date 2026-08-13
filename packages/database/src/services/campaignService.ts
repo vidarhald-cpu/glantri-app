@@ -89,6 +89,8 @@ export class CampaignService {
   }
 
   async addCampaignRosterEntry(input: {
+    actorIsAdmin?: boolean;
+    actorUserId?: string;
     campaignId: string;
     category: CampaignRosterCategory;
     createdByUserId?: string | null;
@@ -245,6 +247,9 @@ export class CampaignService {
   }
 
   private async resolveCampaignRosterLabel(input: {
+    actorIsAdmin?: boolean;
+    actorUserId?: string;
+    campaignId: string;
     category: CampaignRosterCategory;
     sourceId: string;
     sourceType: CampaignRosterSourceType;
@@ -259,18 +264,37 @@ export class CampaignService {
       return character.name;
     }
 
-    const entity = await this.repository.getReusableEntityById(input.sourceId);
-
-    if (!entity) {
-      throw new Error("Reusable entity not found.");
-    }
-
     if (input.sourceType === "template" && input.category !== "template") {
       throw new Error("Template roster entries must use the template category.");
     }
 
     if (input.sourceType === "reusableEntity" && input.category === "template") {
       throw new Error("Reusable entity roster entries cannot use the template category.");
+    }
+
+    const entity = await this.repository.getReusableEntityById(input.sourceId);
+
+    if (!entity) {
+      throw new Error("Reusable entity not found.");
+    }
+
+    if (input.sourceType === "reusableEntity") {
+      const campaign = await this.repository.getCampaignById(input.campaignId);
+      const isOwnedRequest =
+        campaign?.gmUserId === input.actorUserId && entity.gmUserId === input.actorUserId;
+
+      if (!campaign || (!input.actorIsAdmin && !isOwnedRequest)) {
+        throw new Error("Reusable entity not found.");
+      }
+
+      const snapshot =
+        entity.snapshot && typeof entity.snapshot === "object" && !Array.isArray(entity.snapshot)
+          ? (entity.snapshot as Record<string, unknown>)
+          : undefined;
+
+      if (snapshot?.actorClass === "campaign_npc" && snapshot.campaignId !== input.campaignId) {
+        throw new Error("Reusable entity not found.");
+      }
     }
 
     return entity.name;

@@ -412,7 +412,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
       const campaign = await campaignService.getCampaignById(campaignId);
 
-      if (!campaign || campaign.gmUserId !== user.id) {
+      if (!campaign || (campaign.gmUserId !== user.id && !user.roles.includes("admin"))) {
         return reply.code(404).send({
           error: "Campaign not found.",
         });
@@ -420,6 +420,8 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
       const body = parseBodyObject(request.body, "Campaign roster payload");
       const rosterEntry = await campaignService.addCampaignRosterEntry({
+        actorIsAdmin: user.roles.includes("admin"),
+        actorUserId: user.id,
         campaignId,
         category: campaignRosterCategorySchema.parse(body.category),
         createdByUserId: user.id,
@@ -430,6 +432,10 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
       return { rosterEntry };
     } catch (error) {
+      if (error instanceof Error && error.message === "Reusable entity not found.") {
+        return reply.code(404).send({ error: "Reusable entity not found." });
+      }
+
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to add campaign roster entry.",
       });

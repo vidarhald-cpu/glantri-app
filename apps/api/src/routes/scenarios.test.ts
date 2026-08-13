@@ -70,6 +70,7 @@ const mocks = vi.hoisted(() => {
     roles: ["player"],
   };
   const campaignService = {
+    addCampaignRosterEntry: vi.fn(),
     createCampaign: vi.fn(),
     createCampaignNpc: vi.fn(),
     getCampaignById: vi.fn(),
@@ -3881,6 +3882,128 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(404);
     expect(mocks.campaignService.createCampaignNpc).not.toHaveBeenCalled();
+  });
+
+  it("adds an owned reusable NPC to its campaign roster with actor authorization context", async () => {
+    const rosterEntry = {
+      campaignId: "campaign-1",
+      category: "npc",
+      id: "roster-1",
+      labelSnapshot: "Private NPC",
+      sourceId: "entity-1",
+      sourceType: "reusableEntity",
+    };
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.campaignService.addCampaignRosterEntry.mockResolvedValue(rosterEntry);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        category: "npc",
+        sourceId: "entity-1",
+        sourceType: "reusableEntity",
+      },
+      url: "/campaigns/campaign-1/roster",
+    });
+
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(response.json()).toEqual({ rosterEntry });
+    expect(mocks.campaignService.addCampaignRosterEntry).toHaveBeenCalledWith({
+      actorIsAdmin: false,
+      actorUserId: "gm-1",
+      campaignId: "campaign-1",
+      category: "npc",
+      createdByUserId: "gm-1",
+      notes: undefined,
+      sourceId: "entity-1",
+      sourceType: "reusableEntity",
+    });
+  });
+
+  it("does not disclose a foreign or cross-campaign reusable NPC through the roster API", async () => {
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.campaignService.addCampaignRosterEntry.mockRejectedValue(
+      new Error("Reusable entity not found."),
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        category: "npc",
+        sourceId: "foreign-private-entity",
+        sourceType: "reusableEntity",
+      },
+      url: "/campaigns/campaign-1/roster",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Reusable entity not found." });
+    expect(JSON.stringify(response.json())).not.toContain("Private NPC");
+  });
+
+  it("preserves admin authority for a campaign-valid reusable NPC roster link", async () => {
+    const adminUser = {
+      email: "admin@example.test",
+      id: "admin-1",
+      roles: ["admin"],
+    };
+    const rosterEntry = {
+      campaignId: "campaign-1",
+      category: "npc",
+      id: "roster-1",
+      labelSnapshot: "Private NPC",
+      sourceId: "entity-1",
+      sourceType: "reusableEntity",
+    };
+    mocks.requireAdminUser.mockResolvedValue(adminUser);
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-owner",
+      id: "campaign-1",
+      name: "Owner Campaign",
+      status: "active",
+    });
+    mocks.campaignService.addCampaignRosterEntry.mockResolvedValue(rosterEntry);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        category: "npc",
+        sourceId: "entity-1",
+        sourceType: "reusableEntity",
+      },
+      url: "/campaigns/campaign-1/roster",
+    });
+
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(response.json()).toEqual({ rosterEntry });
+    expect(mocks.campaignService.addCampaignRosterEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorIsAdmin: true,
+        actorUserId: "admin-1",
+        campaignId: "campaign-1",
+        sourceId: "entity-1",
+        sourceType: "reusableEntity",
+      }),
+    );
   });
 
   it("lists live roster-eligible scenarios for a character without campaign self-join", async () => {
