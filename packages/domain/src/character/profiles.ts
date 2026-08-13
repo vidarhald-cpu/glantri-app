@@ -11,7 +11,7 @@ export const glantriCharacteristicKeySchema = z.enum([
   "int",
   "pow",
   "lck",
-  "will"
+  "will",
 ]);
 
 export const glantriCharacteristicOrder = [
@@ -25,7 +25,7 @@ export const glantriCharacteristicOrder = [
   "int",
   "pow",
   "lck",
-  "will"
+  "will",
 ] as const;
 
 export const glantriCharacteristicLabels: Record<
@@ -42,7 +42,7 @@ export const glantriCharacteristicLabels: Record<
   pow: "Pow",
   siz: "Siz",
   str: "Str",
-  will: "Will"
+  will: "Will",
 };
 
 export const glantriCharacteristicBlockSchema = z.object({
@@ -56,7 +56,7 @@ export const glantriCharacteristicBlockSchema = z.object({
   pow: z.number().int().min(1).max(25),
   siz: z.number().int().min(1).max(25),
   str: z.number().int().min(1).max(25),
-  will: z.number().int().min(1).max(25)
+  will: z.number().int().min(1).max(25),
 });
 
 export const rolledCharacterProfileSchema = z.object({
@@ -69,12 +69,13 @@ export const rolledCharacterProfileSchema = z.object({
   distractionLevel: z.number().int().min(2).max(6),
   rolledStats: glantriCharacteristicBlockSchema,
   resolvedStats: glantriCharacteristicBlockSchema.optional(),
+  statLayerVersion: z.literal(1).optional(),
   socialClassEducationValue: z.number().int().nonnegative().optional(),
   socialClassResult: z.string().min(1).optional(),
   socialClassRoll: z.number().int().min(1).max(20).optional(),
   socialClassTableId: z.string().min(1).optional(),
   societyLevel: z.number().int().nonnegative().default(0),
-  title: z.string().optional()
+  title: z.string().optional(),
 });
 
 export type GlantriCharacteristicKey = z.infer<typeof glantriCharacteristicKeySchema>;

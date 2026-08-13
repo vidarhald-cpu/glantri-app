@@ -3,13 +3,14 @@ import type {
   CharacterEquipmentItem,
   EquipmentItemType,
   EquipmentSlot,
+  GlantriCharacteristicKey,
   ProfessionFamilyDefinition,
   ProfessionDefinition,
   ProfessionSkillMap,
   SkillDefinition,
   SkillGroupDefinition,
   SkillSpecialization,
-  SocietyLevelAccess
+  SocietyLevelAccess,
 } from "@glantri/domain";
 
 import { characterBuildSchema } from "@glantri/domain";
@@ -100,7 +101,8 @@ function getDefaultSlot(itemType: EquipmentItemType): EquipmentSlot {
 }
 
 function normalizeEquipmentItem(item: CharacterEquipmentItem): CharacterEquipmentItem {
-  const normalizedSlot = item.equipped && item.slot === "pack" ? getDefaultSlot(item.itemType) : item.slot;
+  const normalizedSlot =
+    item.equipped && item.slot === "pack" ? getDefaultSlot(item.itemType) : item.slot;
 
   return {
     ...item,
@@ -112,7 +114,7 @@ function normalizeEquipmentItem(item: CharacterEquipmentItem): CharacterEquipmen
     shieldBonus: item.shieldBonus ?? 0,
     slot: normalizedSlot ?? getDefaultSlot(item.itemType),
     weaponBonus: item.weaponBonus ?? 0,
-    weaponSkillId: item.weaponSkillId?.trim() || undefined
+    weaponSkillId: item.weaponSkillId?.trim() || undefined,
   };
 }
 
@@ -122,14 +124,14 @@ function normalizeBuild(build: CharacterBuild): CharacterBuild {
   return {
     ...parsed,
     equipment: {
-      items: parsed.equipment.items.map(normalizeEquipmentItem)
-    }
+      items: parsed.equipment.items.map(normalizeEquipmentItem),
+    },
   };
 }
 
 function applyExclusiveEquipRules(
   items: CharacterEquipmentItem[],
-  activeItem: CharacterEquipmentItem
+  activeItem: CharacterEquipmentItem,
 ): CharacterEquipmentItem[] {
   if (!activeItem.equipped) {
     return items;
@@ -143,7 +145,7 @@ function applyExclusiveEquipRules(
     if (item.slot === activeItem.slot && activeItem.slot !== "pack") {
       return {
         ...item,
-        equipped: false
+        equipped: false,
       };
     }
 
@@ -152,7 +154,7 @@ function applyExclusiveEquipRules(
 }
 
 export function createCharacterEquipmentItem(
-  input: EquipmentItemDraftInput
+  input: EquipmentItemDraftInput,
 ): CharacterEquipmentItem {
   const itemType = input.itemType;
 
@@ -167,7 +169,7 @@ export function createCharacterEquipmentItem(
     shieldBonus: input.shieldBonus ?? 0,
     slot: input.slot ?? getDefaultSlot(itemType),
     weaponBonus: input.weaponBonus ?? 0,
-    weaponSkillId: input.weaponSkillId
+    weaponSkillId: input.weaponSkillId,
   });
 }
 
@@ -217,11 +219,11 @@ export function setCharacterEquipmentEquipped(input: {
     slot:
       input.equipped && target.slot === "pack"
         ? getDefaultSlot(target.itemType)
-        : (target.slot ?? getDefaultSlot(target.itemType))
+        : (target.slot ?? getDefaultSlot(target.itemType)),
   };
   build.equipment.items = applyExclusiveEquipRules(
     build.equipment.items.map((item) => (item.id === input.itemId ? updatedTarget : item)),
-    updatedTarget
+    updatedTarget,
   );
 
   return build;
@@ -230,6 +232,7 @@ export function setCharacterEquipmentEquipped(input: {
 export function buildCharacterEquipmentLoadoutSummary(input: {
   build: CharacterBuild;
   content: CanonicalContentShape;
+  skillLinkedStats?: Partial<Record<GlantriCharacteristicKey, number>>;
 }): CharacterEquipmentLoadoutSummary {
   const build = normalizeBuild(input.build);
   const draftView = buildChargenDraftView({
@@ -237,8 +240,9 @@ export function buildCharacterEquipmentLoadoutSummary(input: {
     professionId: build.professionId,
     profile: build.profile,
     progression: build.progression,
+    skillLinkedStats: input.skillLinkedStats,
     societyId: build.societyId,
-    societyLevel: build.societyLevel
+    societyLevel: build.societyLevel,
   });
   const equippedItems = build.equipment.items.filter((item) => item.equipped);
   const carriedItems = build.equipment.items.filter((item) => !item.equipped);
@@ -248,7 +252,7 @@ export function buildCharacterEquipmentLoadoutSummary(input: {
       id: item.id,
       name: item.name,
       shieldBonus: item.shieldBonus,
-      slot: item.slot
+      slot: item.slot,
     }));
   const shieldBonus = equippedShields.reduce((sum, shield) => sum + shield.shieldBonus, 0);
   const equippedArmor = equippedItems
@@ -258,7 +262,7 @@ export function buildCharacterEquipmentLoadoutSummary(input: {
       armorValue: item.armorValue ?? 0,
       id: item.id,
       name: item.name,
-      slot: item.slot
+      slot: item.slot,
     }));
   const equippedWeapons = equippedItems
     .filter((item): item is CharacterEquipmentItem => item.itemType === "weapon")
@@ -271,7 +275,7 @@ export function buildCharacterEquipmentLoadoutSummary(input: {
         .map((specialization) => specialization.name);
       const baseOb = calculateBaseOB({
         skill: skill?.totalSkill ?? 0,
-        weaponBonus: item.weaponBonus
+        weaponBonus: item.weaponBonus,
       });
 
       return {
@@ -279,13 +283,13 @@ export function buildCharacterEquipmentLoadoutSummary(input: {
         id: item.id,
         name: item.name,
         parryValue: calculateParryValue({
-          allocatedOb: baseOb
+          allocatedOb: baseOb,
         }),
         skillName: skill?.name,
         skillTotal: skill?.totalSkill,
         slot: item.slot,
         specializationNames,
-        weaponBonus: item.weaponBonus
+        weaponBonus: item.weaponBonus,
       };
     });
 
@@ -294,9 +298,7 @@ export function buildCharacterEquipmentLoadoutSummary(input: {
   return {
     armorSummary:
       equippedArmor.length > 0
-        ? equippedArmor
-            .map((item) => item.armorLabel ?? item.name)
-            .join(", ")
+        ? equippedArmor.map((item) => item.armorLabel ?? item.name).join(", ")
         : "No armor equipped",
     carriedItems,
     equippedArmor,
@@ -304,17 +306,16 @@ export function buildCharacterEquipmentLoadoutSummary(input: {
     equippedWeapons,
     hasEquippedShield: equippedShields.length > 0,
     readinessLabel:
-      readyCount > 0 ? `${readyCount} equipped item${readyCount === 1 ? "" : "s"} ready` : "No active loadout",
-    shieldBonus
+      readyCount > 0
+        ? `${readyCount} equipped item${readyCount === 1 ? "" : "s"} ready`
+        : "No active loadout",
+    shieldBonus,
   };
 }
 
-export function calculateEquipmentDrivenDodge(input: {
-  dex: number;
-  shieldBonus: number;
-}): number {
+export function calculateEquipmentDrivenDodge(input: { dex: number; shieldBonus: number }): number {
   return calculateDB({
     dex: input.dex,
-    shieldBonus: input.shieldBonus
+    shieldBonus: input.shieldBonus,
   });
 }

@@ -4,7 +4,10 @@ import type { CharacterBuild, SkillDefinition, SkillGroupDefinition } from "@gla
 
 import { resolveParticipantSkillRollProfile } from "./resolveParticipantSkillRollProfile";
 
-const perceptionSkill: Pick<SkillDefinition, "groupId" | "groupIds" | "id" | "linkedStats" | "name"> = {
+const perceptionSkill: Pick<
+  SkillDefinition,
+  "groupId" | "groupIds" | "id" | "linkedStats" | "name"
+> = {
   groupId: "watchfulness",
   groupIds: ["watchfulness"],
   id: "perception",
@@ -12,13 +15,14 @@ const perceptionSkill: Pick<SkillDefinition, "groupId" | "groupIds" | "id" | "li
   name: "Perception",
 };
 
-const surgerySkill: Pick<SkillDefinition, "groupId" | "groupIds" | "id" | "linkedStats" | "name"> = {
-  groupId: "medicine_group",
-  groupIds: ["medicine_group"],
-  id: "surgery",
-  linkedStats: ["dex", "int"],
-  name: "Surgery",
-};
+const surgerySkill: Pick<SkillDefinition, "groupId" | "groupIds" | "id" | "linkedStats" | "name"> =
+  {
+    groupId: "medicine_group",
+    groupIds: ["medicine_group"],
+    id: "surgery",
+    linkedStats: ["dex", "int"],
+    name: "Surgery",
+  };
 
 const firstAidSkill: SkillDefinition = {
   allowsSpecializations: false,
@@ -217,6 +221,27 @@ describe("resolveParticipantSkillRollProfile", () => {
       known: true,
       unknownSkillPenalty: 0,
       warning: undefined,
+    });
+  });
+
+  it("uses Current linked stats for scenario skill reads while retaining Original roll facts", () => {
+    const currentBuild: CharacterBuild = {
+      ...build,
+      currentStatModifiers: { dex: 2, int: 2 },
+    };
+
+    const profile = resolveParticipantSkillRollProfile({
+      build: currentBuild,
+      content,
+      sheetSummary: {},
+      skill: firstAidSkill,
+    });
+
+    expect(profile).toMatchObject({
+      avgStats: 17,
+      baseAvgStats: 15,
+      linkedStatXp: 2,
+      rollBaseValue: 17,
     });
   });
 

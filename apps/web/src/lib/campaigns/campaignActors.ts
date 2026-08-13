@@ -1,5 +1,10 @@
 import { createDefaultEquipmentLocations, type CanonicalContent } from "@glantri/content";
-import { characterBuildSchema, type CharacterBuild, type ReusableEntity } from "@glantri/domain";
+import {
+  CHARACTER_STAT_LAYER_VERSION,
+  characterBuildSchema,
+  type CharacterBuild,
+  type ReusableEntity,
+} from "@glantri/domain";
 import type { EquipmentTemplate } from "@glantri/domain/equipment";
 import { buildCharacterSheetSummary } from "@glantri/rules-engine";
 
@@ -218,6 +223,7 @@ function buildGeneratedNpcCharacterBuild(input: {
       label: input.npc.displayName,
       rolledStats: input.npc.stats.base,
       resolvedStats: input.npc.stats.final,
+      statLayerVersion: CHARACTER_STAT_LAYER_VERSION,
       societyLevel: 0,
     },
     professionId: input.npc.professionId,
@@ -262,7 +268,7 @@ function buildGeneratedNpcCharacterBuild(input: {
     },
     societyId: input.npc.societyId,
     societyLevel: 0,
-    statModifiers: {},
+    currentStatModifiers: {},
   });
 }
 

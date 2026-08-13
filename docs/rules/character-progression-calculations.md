@@ -33,13 +33,13 @@ Only one pending attempt per target is supported in this first version.
 
 Progression costs match chargen purchase costs where applicable.
 
-| Target | Cost |
-| --- | ---: |
-| Ordinary skill increase | 2 |
-| Secondary skill increase | 1 |
-| New specialization | 4 |
-| Existing specialization increase | 2 |
-| Skill group increase | Dynamic group cost |
+| Target                           |               Cost |
+| -------------------------------- | -----------------: |
+| Ordinary skill increase          |                  2 |
+| Secondary skill increase         |                  1 |
+| New specialization               |                  4 |
+| Existing specialization increase |                  2 |
+| Skill group increase             | Dynamic group cost |
 
 Skill group cost:
 
@@ -68,12 +68,12 @@ If the attempt fails, the failure is recorded in history and the skill does not 
 
 The threshold is the current XP/value before the attempted increase.
 
-| Target | Threshold |
-| --- | --- |
-| Skill | Current `Total XP`: Group XP + Skill XP + Derived XP |
-| Skill group | Current group XP / group level |
-| Specialization | Current specialization total |
-| Stat | Current stat value, but stat advancement is not enabled yet |
+| Target         | Threshold                                                   |
+| -------------- | ----------------------------------------------------------- |
+| Skill          | Current `Total XP`: Group XP + Skill XP + Derived XP        |
+| Skill group    | Current group XP / group level                              |
+| Specialization | Current specialization total                                |
+| Stat           | Current stat value, but stat advancement is not enabled yet |
 
 Skill thresholds use XP, not Total skill level. Total skill level includes linked stat average, which is used for play rolls rather than advancement thresholds.
 
@@ -100,15 +100,15 @@ Progression succeeds if final roll total >= threshold
 
 Examples:
 
-| Threshold | Roll | Result |
-| ---: | --- | --- |
-| 12 | d20 = 12 | Success |
-| 12 | d20 = 11 | Failure |
-| 20 | d20 = 20 | Success |
-| 24 | d20 20 + d10 4 | Success |
-| 31 | d20 20 + d10 10 + d10 1 | Success |
-| 45 | d20 20 + d10 10 + d10 10 + d10 5 | Success |
-| 45 | d20 20 + d10 10 + d10 10 + d10 4 | Failure |
+| Threshold | Roll                             | Result  |
+| --------: | -------------------------------- | ------- |
+|        12 | d20 = 12                         | Success |
+|        12 | d20 = 11                         | Failure |
+|        20 | d20 = 20                         | Success |
+|        24 | d20 20 + d10 4                   | Success |
+|        31 | d20 20 + d10 10 + d10 1          | Success |
+|        45 | d20 20 + d10 10 + d10 10 + d10 5 | Success |
+|        45 | d20 20 + d10 10 + d10 10 + d10 4 | Failure |
 
 ## 8. Resolve checks and history
 
@@ -133,7 +133,10 @@ After resolution, the pending attempt is removed and the check for that target i
 
 Stats can receive checks so the GM can record important stat use, but stat progression is not spendable or resolvable yet.
 
-When stat advancement is enabled later, it must increase `Current` stat only. It must not rewrite `Stats die roll`, `Original`, or resolved chargen creation stats.
+When permanent stat advancement is enabled later, it must increase `Developed`, which also raises
+`Current` while no temporary or semi-long-term change applies. It must not rewrite `Rolled / base`
+or `Original`. The cost, chance, and mutation workflow for stat advancement remain unresolved and
+are not enabled by this read-model behavior.
 
 ## 10. Known interim notes
 

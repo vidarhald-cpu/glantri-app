@@ -949,6 +949,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
               <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                 <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Stat</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Original</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Developed</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
                 <th style={{ padding: "0.5rem 0", textAlign: "right" }}>GM</th>
                 {isGameMaster ? (
@@ -976,6 +977,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                       type="number"
                       value={row.originalValue}
                     />
+                  </td>
+                  <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                    {row.developedValue}
                   </td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
                     {row.isDirectEdit ? (

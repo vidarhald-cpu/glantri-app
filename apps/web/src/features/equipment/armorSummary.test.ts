@@ -1,12 +1,28 @@
 import { describe, expect, it } from "vitest";
 
 import { armorTemplates } from "@glantri/content/equipment";
-import { buildCharacterArmorSummary, calculateWorkbookArmorEncumbrance } from "./armorSummary";
+import type { CharacterBuild } from "@glantri/domain";
+import {
+  buildCharacterArmorSummary,
+  calculateWorkbookArmorEncumbrance,
+  getWorkbookCharacterSize,
+} from "./armorSummary";
 
-const leatherJerkin = armorTemplates.find((template) => template.id === "armor-template-leather-jerkin") ?? null;
-const fullPlate = armorTemplates.find((template) => template.id === "armor-template-full-plate-armor") ?? null;
+const leatherJerkin =
+  armorTemplates.find((template) => template.id === "armor-template-leather-jerkin") ?? null;
+const fullPlate =
+  armorTemplates.find((template) => template.id === "armor-template-full-plate-armor") ?? null;
 
 describe("armorSummary", () => {
+  it("sizes item calculations from the Character's Current size", () => {
+    const build = {
+      currentStatModifiers: { siz: 2 },
+      profile: { rolledStats: { siz: 11 } },
+    } as unknown as CharacterBuild;
+
+    expect(getWorkbookCharacterSize(build)).toBe(13);
+  });
+
   it("calculates workbook-sized armor encumbrance from factor x size", () => {
     expect(
       calculateWorkbookArmorEncumbrance({
@@ -50,7 +66,9 @@ describe("armorSummary", () => {
     expect(summary?.generalArmorWithType).toBe("14E");
     expect(summary?.aaModifier).toBe(-1);
     expect(summary?.perceptionModifier).toBe(-6);
-    expect(summary?.locations.find((location) => location.key === "head")?.valueWithType).toBe("20E");
+    expect(summary?.locations.find((location) => location.key === "head")?.valueWithType).toBe(
+      "20E",
+    );
     expect(summary?.actualEncumbrance).toBeCloseTo(46.2222222241, 9);
   });
 });
