@@ -183,7 +183,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
         campaigns.map(async (campaign) => ({
           campaign: buildPlayerAccessibleCampaign(campaign),
           scenarios: (
-            await scenarioService.listScenariosByCampaignPlayerAccess(campaign.id, user.id)
+            await scenarioService.listScenariosByCampaignPlayerControl(campaign.id, user.id)
           ).map(buildPlayerAccessibleScenario),
         })),
       );
@@ -212,6 +212,8 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
               campaignId: campaign.id,
               userId: user.id,
             }),
+            // Keep ownership-visible context long enough to identify delegated roster Characters;
+            // the domain projection withholds every Scenario the requester does not control.
             scenarioService.listScenariosByCampaignPlayerAccess(campaign.id, user.id),
           ]);
           const scenarioContexts = await Promise.all(
@@ -261,7 +263,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const scenarios = await scenarioService.listScenariosByCampaignPlayerAccess(
+      const scenarios = await scenarioService.listScenariosByCampaignPlayerControl(
         campaignId,
         user.id,
       );

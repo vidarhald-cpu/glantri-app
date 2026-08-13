@@ -128,6 +128,7 @@ export function createScenarioRepositoryStub() {
     getScenarioById: async (scenarioId) => (scenarioId === scenario.id ? scenario : null),
     listScenariosByCampaign: async () => [],
     listScenariosByCampaignPlayerAccess: async () => [],
+    listScenariosByCampaignPlayerControl: async () => [],
     updateScenario: async () => {
       throw new Error("Not implemented in test stub.");
     },

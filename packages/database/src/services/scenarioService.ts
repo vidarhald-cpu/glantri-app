@@ -85,6 +85,13 @@ export class ScenarioService {
     return this.repository.listScenariosByCampaignPlayerAccess(campaignId, userId);
   }
 
+  async listScenariosByCampaignPlayerControl(
+    campaignId: string,
+    userId: string,
+  ): Promise<Scenario[]> {
+    return this.repository.listScenariosByCampaignPlayerControl(campaignId, userId);
+  }
+
   async getScenarioById(scenarioId: string): Promise<Scenario | null> {
     return this.repository.getScenarioById(scenarioId);
   }

@@ -2,10 +2,20 @@ import { expect, test } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
-function loadTestState(): { campaignId: string; characterId: string } {
+interface SmokeTestState {
+  campaignId: string;
+  characterId: string;
+  delegatedCampaignId: string;
+  delegatedCampaignName: string;
+  delegatedScenarioDescription: string;
+  delegatedScenarioId: string;
+  delegatedScenarioName: string;
+}
+
+function loadTestState(): SmokeTestState {
   return JSON.parse(
     fs.readFileSync(path.join(__dirname, "test-state.json"), "utf-8"),
-  ) as { campaignId: string; characterId: string };
+  ) as SmokeTestState;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,6 +73,63 @@ test.describe("campaign workspace", () => {
     await page.goto(`/campaigns/${testState.campaignId}`);
 
     await expect(page.getByText("Smoke Test Campaign")).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText("Smoke Test Scenario", { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("Smoke Test Scenario", { exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. Player Campaign Home delegated-control privacy
+// ---------------------------------------------------------------------------
+test.describe("player Campaign Home privacy", () => {
+  test.use({ storageState: "e2e/.auth/player.json" });
+
+  test("withholds delegated Scenario payload and presentation from the Character owner", async ({
+    page,
+  }) => {
+    const testState = loadTestState();
+    await page.setViewportSize({ height: 844, width: 390 });
+    const homeResponsePromise = page.waitForResponse(
+      (response) => response.url().endsWith("/campaigns/player-home") && response.status() === 200,
+    );
+
+    await page.goto("/campaigns");
+    const homeResponse = await homeResponsePromise;
+    const payload = (await homeResponse.json()) as {
+      campaigns: Array<{
+        campaign: { id: string };
+        characters: Array<{ id: string }>;
+        resume: { scenarioId?: string; tab: string };
+        scenarios: Array<{ scenario: { id: string } }>;
+      }>;
+    };
+    const delegatedCampaign = payload.campaigns.find(
+      (record) => record.campaign.id === testState.delegatedCampaignId,
+    );
+
+    expect(delegatedCampaign).toEqual({
+      campaign: expect.objectContaining({ id: testState.delegatedCampaignId }),
+      characters: [],
+      resume: { tab: "campaign" },
+      scenarios: [],
+    });
+    expect(JSON.stringify(payload)).not.toContain(testState.delegatedScenarioId);
+    expect(JSON.stringify(payload)).not.toContain(testState.delegatedScenarioName);
+    expect(JSON.stringify(payload)).not.toContain(testState.delegatedScenarioDescription);
+
+    const campaignCard = page
+      .getByRole("article")
+      .filter({ hasText: testState.delegatedCampaignName });
+    await expect(campaignCard).toBeVisible();
+    await expect(
+      campaignCard.getByText("No active scenario is currently available."),
+    ).toBeVisible();
+    await expect(campaignCard.getByRole("link", { name: "Open campaign" })).toHaveAttribute(
+      "href",
+      `/campaigns/${testState.delegatedCampaignId}?tab=campaign`,
+    );
+    await expect(page.getByText(testState.delegatedScenarioName)).toHaveCount(0);
+    await expect(page.getByText(testState.delegatedScenarioDescription)).toHaveCount(0);
   });
 });

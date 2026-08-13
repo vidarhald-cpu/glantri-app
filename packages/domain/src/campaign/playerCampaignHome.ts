@@ -47,6 +47,23 @@ function sortCharacters(
   );
 }
 
+function userControlsParticipant(input: {
+  participant: ScenarioParticipant;
+  rosterCharacterIds: Set<string>;
+  userId: string;
+}): boolean {
+  return (
+    input.participant.isActive &&
+    input.participant.role === "player_character" &&
+    (input.participant.controlledByUserId === input.userId ||
+      (input.participant.controlledByUserId === undefined &&
+        Boolean(
+          input.participant.characterId &&
+          input.rosterCharacterIds.has(input.participant.characterId),
+        )))
+  );
+}
+
 export function buildPlayerCampaignHomeRecord(input: {
   campaign: Campaign;
   rosterCharacters: PlayerCampaignCharacterSummary[];
@@ -64,8 +81,11 @@ export function buildPlayerCampaignHomeRecord(input: {
       participants
         .filter(
           (participant) =>
-            participant.isActive &&
-            participant.role === "player_character" &&
+            userControlsParticipant({
+              participant,
+              rosterCharacterIds,
+              userId: input.userId,
+            }) &&
             participant.characterId &&
             participant.controlledByUserId === input.userId,
         )
@@ -94,60 +114,70 @@ export function buildPlayerCampaignHomeRecord(input: {
       )
       .map((character) => [character.id, character]),
   );
-  const scenarios = liveScenarios.map(({ encounters, participants, scenario }) => {
-    const controlledCharactersById = new Map<string, PlayerCampaignCharacterSummary>();
-
-    for (const participant of participants) {
-      if (
-        !participant.isActive ||
-        participant.role !== "player_character" ||
-        !participant.characterId ||
-        (participant.controlledByUserId !== input.userId &&
-          (participant.controlledByUserId !== undefined ||
-            !rosterCharacterIds.has(participant.characterId)))
-      ) {
-        continue;
-      }
-
-      const character = {
-        id: participant.characterId,
-        name:
-          campaignCharactersById.get(participant.characterId)?.name ??
-          participant.snapshot.displayName,
-      };
-      controlledCharactersById.set(character.id, character);
-      campaignCharactersById.set(character.id, character);
-    }
-
-    const encounter = encounters
-      .filter((candidate) => candidate.status === "active" || candidate.status === "paused")
-      .filter((candidate) =>
-        isUserAssignedToEncounterMembership({
-          encounter: candidate,
-          scenarioParticipants: participants,
+  const scenarios = liveScenarios
+    .filter(({ participants }) =>
+      participants.some((participant) =>
+        userControlsParticipant({
+          participant,
+          rosterCharacterIds,
           userId: input.userId,
         }),
-      )
-      .sort(
-        (left, right) =>
-          encounterStatusRank(left.status) - encounterStatusRank(right.status) ||
-          Date.parse(right.updatedAt) - Date.parse(left.updatedAt) ||
-          left.title.localeCompare(right.title),
-      )[0];
+      ),
+    )
+    .map(({ encounters, participants, scenario }) => {
+      const controlledCharactersById = new Map<string, PlayerCampaignCharacterSummary>();
 
-    return {
-      characters: sortCharacters(controlledCharactersById.values()),
-      encounter: encounter
-        ? {
-            id: encounter.id,
-            status: encounter.status,
-            title: encounter.title,
-          }
-        : undefined,
-      encounterKind: encounter?.kind,
-      scenario: buildPlayerAccessibleScenario(scenario),
-    };
-  });
+      for (const participant of participants) {
+        if (
+          !participant.characterId ||
+          !userControlsParticipant({
+            participant,
+            rosterCharacterIds,
+            userId: input.userId,
+          })
+        ) {
+          continue;
+        }
+
+        const character = {
+          id: participant.characterId,
+          name:
+            campaignCharactersById.get(participant.characterId)?.name ??
+            participant.snapshot.displayName,
+        };
+        controlledCharactersById.set(character.id, character);
+        campaignCharactersById.set(character.id, character);
+      }
+
+      const encounter = encounters
+        .filter((candidate) => candidate.status === "active" || candidate.status === "paused")
+        .filter((candidate) =>
+          isUserAssignedToEncounterMembership({
+            encounter: candidate,
+            scenarioParticipants: participants,
+            userId: input.userId,
+          }),
+        )
+        .sort(
+          (left, right) =>
+            encounterStatusRank(left.status) - encounterStatusRank(right.status) ||
+            Date.parse(right.updatedAt) - Date.parse(left.updatedAt) ||
+            left.title.localeCompare(right.title),
+        )[0];
+
+      return {
+        characters: sortCharacters(controlledCharactersById.values()),
+        encounter: encounter
+          ? {
+              id: encounter.id,
+              status: encounter.status,
+              title: encounter.title,
+            }
+          : undefined,
+        encounterKind: encounter?.kind,
+        scenario: buildPlayerAccessibleScenario(scenario),
+      };
+    });
   const resumeScenario = [...scenarios].sort(
     (left, right) =>
       (left.encounter ? encounterStatusRank(left.encounter.status) : 50) -

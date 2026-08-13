@@ -113,6 +113,7 @@ const mocks = vi.hoisted(() => {
     addEntityParticipant: vi.fn(),
     getScenarioById: vi.fn(),
     listScenariosByCampaignPlayerAccess: vi.fn(),
+    listScenariosByCampaignPlayerControl: vi.fn(),
     listScenariosByCampaign: vi.fn(),
     listScenarioParticipants: vi.fn(),
     recordScenarioEvent: vi.fn(),
@@ -3712,7 +3713,7 @@ describe("scenarios route contract", () => {
       updatedAt: "2026-05-09T12:00:00.000Z",
     };
     mocks.campaignService.listCampaignsByUserAccess.mockResolvedValue([campaign]);
-    mocks.scenarioService.listScenariosByCampaignPlayerAccess.mockResolvedValue([scenario]);
+    mocks.scenarioService.listScenariosByCampaignPlayerControl.mockResolvedValue([scenario]);
     const app = await buildScenarioTestApp();
 
     const response = await app.inject({
@@ -3751,7 +3752,7 @@ describe("scenarios route contract", () => {
     expect(JSON.stringify(response.json())).not.toContain("private-map");
     expect(JSON.stringify(response.json())).not.toContain("allowPlayerSelfJoin");
     expect(mocks.campaignService.listCampaignsByUserAccess).toHaveBeenCalledWith("player-1");
-    expect(mocks.scenarioService.listScenariosByCampaignPlayerAccess).toHaveBeenCalledWith(
+    expect(mocks.scenarioService.listScenariosByCampaignPlayerControl).toHaveBeenCalledWith(
       "campaign-1",
       "player-1",
     );
@@ -3839,6 +3840,69 @@ describe("scenarios route contract", () => {
     expect(JSON.stringify(response.json())).not.toContain("participants");
   });
 
+  it("keeps an owned Campaign but withholds a live Scenario delegated to another player", async () => {
+    const campaign = {
+      createdAt: "2026-05-09T12:00:00.000Z",
+      description: "Campaign-level briefing.",
+      gmUserId: "gm-1",
+      id: "campaign-delegated",
+      name: "Delegated Campaign",
+      settings: { allowPlayerSelfJoin: false, defaultVisibility: "hidden" },
+      slug: "delegated-campaign",
+      status: "active",
+      updatedAt: "2026-05-09T12:00:00.000Z",
+    };
+    const delegatedScenario = {
+      campaignId: campaign.id,
+      createdAt: "2026-05-09T12:00:00.000Z",
+      description: "Private to delegated controller",
+      id: "scenario-delegated-private",
+      kind: "roleplay",
+      name: "Delegated Private Scenario",
+      status: "live",
+      updatedAt: "2026-05-09T12:00:00.000Z",
+    };
+    mocks.campaignService.listCampaignsByUserAccess.mockResolvedValue([campaign]);
+    mocks.campaignService.listPlayerCampaignCharacters.mockResolvedValue([
+      { id: "character-owned", name: "Ari" },
+    ]);
+    mocks.scenarioService.listScenariosByCampaignPlayerAccess.mockResolvedValue([
+      delegatedScenario,
+    ]);
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      makeCombatScenarioParticipant({
+        characterId: "character-owned",
+        controlledByUserId: "player-2",
+        snapshot: { displayName: "Ari" },
+      }),
+    ]);
+    mocks.encounterService.listEncountersByScenario.mockResolvedValue([]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({ method: "GET", url: "/campaigns/player-home" });
+
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(response.json()).toEqual({
+      campaigns: [
+        {
+          campaign: {
+            description: "Campaign-level briefing.",
+            id: "campaign-delegated",
+            name: "Delegated Campaign",
+          },
+          characters: [],
+          resume: { tab: "campaign" },
+          scenarios: [],
+        },
+      ],
+    });
+    expect(JSON.stringify(response.json())).not.toContain("scenario-delegated-private");
+    expect(JSON.stringify(response.json())).not.toContain("Delegated Private Scenario");
+    expect(JSON.stringify(response.json())).not.toContain("Private to delegated controller");
+  });
+
   it("keeps an active roster Campaign directly accessible with no live Scenario", async () => {
     const campaign = {
       createdAt: "2026-05-09T12:00:00.000Z",
@@ -3852,7 +3916,7 @@ describe("scenarios route contract", () => {
       updatedAt: "2026-05-09T12:00:00.000Z",
     };
     mocks.campaignService.listCampaignsByUserAccess.mockResolvedValue([campaign]);
-    mocks.scenarioService.listScenariosByCampaignPlayerAccess.mockResolvedValue([]);
+    mocks.scenarioService.listScenariosByCampaignPlayerControl.mockResolvedValue([]);
     const app = await buildScenarioTestApp();
 
     const response = await app.inject({

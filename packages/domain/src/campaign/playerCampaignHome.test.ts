@@ -263,4 +263,44 @@ describe("player Campaign Home projection", () => {
     expect(projection.scenarios).toEqual([]);
     expect(projection.resume).toEqual({ tab: "campaign" });
   });
+
+  it("keeps Campaign access but hides a live Scenario delegated to another controller", () => {
+    const privateScenario = scenario({ id: "scenario-private", name: "Private Council" });
+    const delegated = participant({
+      characterId: "character-1",
+      controlledByUserId: "player-2",
+      id: "participant-delegated",
+      name: "Ari",
+      scenarioId: privateScenario.id,
+    });
+    const projection = buildPlayerCampaignHomeRecord({
+      campaign,
+      rosterCharacters: [{ id: "character-1", name: "Ari" }],
+      scenarios: [
+        {
+          encounters: [],
+          participants: [delegated],
+          scenario: {
+            ...privateScenario,
+            description: "Private to the delegated controller.",
+          },
+        },
+      ],
+      userId: "player-1",
+    });
+
+    expect(projection).toEqual({
+      campaign: {
+        description: "Defend the eastern marches.",
+        id: "campaign-1",
+        name: "Border Trouble",
+      },
+      characters: [],
+      resume: { tab: "campaign" },
+      scenarios: [],
+    });
+    expect(JSON.stringify(projection)).not.toContain("Private Council");
+    expect(JSON.stringify(projection)).not.toContain("Private to the delegated controller");
+    expect(JSON.stringify(projection)).not.toContain("scenario-private");
+  });
 });

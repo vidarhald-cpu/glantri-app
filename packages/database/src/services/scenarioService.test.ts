@@ -410,6 +410,30 @@ describe("ScenarioService scenario relationships", () => {
     ]);
   });
 
+  it("lists only Scenarios under the player's current control", async () => {
+    const { repository } = createScenarioRepositoryStub();
+    repository.listScenariosByCampaignPlayerControl = async (campaignId, userId) =>
+      campaignId === "campaign-1" && userId === "player-1"
+        ? [
+            {
+              campaignId: "campaign-1",
+              createdAt: "2026-04-21T00:00:00.000Z",
+              description: "Controlled scenario",
+              id: "scenario-controlled",
+              kind: "mixed",
+              name: "Current Chapter",
+              status: "live",
+              updatedAt: "2026-04-21T00:00:00.000Z",
+            },
+          ]
+        : [];
+    const service = new ScenarioService(repository);
+
+    await expect(
+      service.listScenariosByCampaignPlayerControl("campaign-1", "player-1"),
+    ).resolves.toEqual([expect.objectContaining({ id: "scenario-controlled" })]);
+  });
+
   it("creates scenarios without continuation links by default", async () => {
     const { repository, scenarioRelationships } = createScenarioRepositoryStub();
     const service = new ScenarioService(repository);

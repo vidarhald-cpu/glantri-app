@@ -289,6 +289,7 @@ export interface ScenarioRepository {
   getScenarioById(scenarioId: string): Promise<Scenario | null>;
   listScenariosByCampaign(campaignId: string): Promise<Scenario[]>;
   listScenariosByCampaignPlayerAccess(campaignId: string, userId: string): Promise<Scenario[]>;
+  listScenariosByCampaignPlayerControl(campaignId: string, userId: string): Promise<Scenario[]>;
   updateScenario(input: {
     description?: string;
     kind?: Scenario["kind"];
@@ -552,6 +553,32 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
               OR: [
                 { controlledByUserId: userId },
                 {
+                  character: {
+                    ownerId: userId,
+                  },
+                },
+              ],
+            },
+          },
+        },
+      });
+
+      return records.map(mapScenario);
+    },
+    async listScenariosByCampaignPlayerControl(campaignId, userId) {
+      const records = await prisma.scenario.findMany({
+        orderBy: { createdAt: "desc" },
+        where: {
+          campaignId,
+          status: "live",
+          participants: {
+            some: {
+              isActive: true,
+              role: "player_character",
+              OR: [
+                { controlledByUserId: userId },
+                {
+                  controlledByUserId: null,
                   character: {
                     ownerId: userId,
                   },
