@@ -1,22 +1,22 @@
-import type {
-  CharacterBuild,
-  ProfessionFamilyDefinition,
-  ProfessionDefinition,
-  ProfessionSkillMap,
-  SkillDefinition,
-  SkillGroupDefinition,
-  SkillSpecialization,
-  SocietyLevelAccess
+import {
+  deriveCharacterStatLayers,
+  type CharacterBuild,
+  type CharacterStatLayers,
+  type ProfessionFamilyDefinition,
+  type ProfessionDefinition,
+  type ProfessionSkillMap,
+  type SkillDefinition,
+  type SkillGroupDefinition,
+  type SkillSpecialization,
+  type SocietyLevelAccess,
 } from "@glantri/domain";
 
 import { buildChargenDraftView, type ChargenDraftView } from "../chargen/primaryAllocation";
-import { getResolvedProfileStats } from "../chargen/statResolution";
 import {
   buildCharacterEquipmentLoadoutSummary,
   calculateEquipmentDrivenDodge,
-  type CharacterEquipmentLoadoutSummary
+  type CharacterEquipmentLoadoutSummary,
 } from "../equipment/manageCharacterEquipment";
-import { calculateAdjustedStats } from "../stats/calculateAdjustedStats";
 
 interface CanonicalContentShape {
   professionFamilies: ProfessionFamilyDefinition[];
@@ -41,6 +41,7 @@ export interface CharacterSheetCombatSkillSummary {
 }
 
 export interface CharacterSheetSummary {
+  /** @deprecated Use statLayers.current. Retained for compatible consumers. */
   adjustedStats: Record<string, number>;
   combat: {
     combatGroups: ChargenDraftView["groups"];
@@ -68,6 +69,7 @@ export interface CharacterSheetSummary {
     original: number;
     successfulProgressionGains: number;
   };
+  statLayers?: CharacterStatLayers;
   totalSkillPointsInvested: number;
 }
 
@@ -75,7 +77,7 @@ const MARTIAL_GROUP_ID = "martial";
 
 function getProfessionName(
   content: CanonicalContentShape,
-  professionId: string | undefined
+  professionId: string | undefined,
 ): string | undefined {
   if (!professionId) {
     return undefined;
@@ -87,7 +89,7 @@ function getProfessionName(
 function getSocietyLabel(
   content: CanonicalContentShape,
   societyId: string | undefined,
-  societyLevel: number | undefined
+  societyLevel: number | undefined,
 ): string | undefined {
   if (societyId === undefined && societyLevel === undefined) {
     return undefined;
@@ -96,34 +98,30 @@ function getSocietyLabel(
   return content.societyLevels.find(
     (society) =>
       (societyId === undefined || society.societyId === societyId) &&
-      (societyLevel === undefined || society.societyLevel === societyLevel)
+      (societyLevel === undefined || society.societyLevel === societyLevel),
   )?.societyName;
 }
 
 export function buildCharacterSheetSummary(input: {
   build: CharacterBuild;
   content: CanonicalContentShape;
-  statModifiers?: Record<string, number>;
+  additionalCurrentStatModifiers?: Record<string, number>;
 }): CharacterSheetSummary {
-  const resolvedStats = getResolvedProfileStats(input.build.profile) ?? input.build.profile.rolledStats;
+  const statLayers = deriveCharacterStatLayers(input.build, input.additionalCurrentStatModifiers);
   const draftView = buildChargenDraftView({
     content: input.content,
     professionId: input.build.professionId,
     profile: input.build.profile,
     progression: input.build.progression,
+    skillLinkedStats: statLayers.current,
     societyId: input.build.societyId,
-    societyLevel: input.build.societyLevel
+    societyLevel: input.build.societyLevel,
   });
-  const adjustedStats = calculateAdjustedStats({
-    baseStats: resolvedStats,
-    modifiers: {
-      ...(input.build.statModifiers ?? {}),
-      ...(input.statModifiers ?? {})
-    }
-  });
+  const adjustedStats = statLayers.current;
   const equipment = buildCharacterEquipmentLoadoutSummary({
     build: input.build,
-    content: input.content
+    content: input.content,
+    skillLinkedStats: statLayers.current,
   });
   const combatGroups = draftView.groups.filter((group) => group.groupId === MARTIAL_GROUP_ID);
   const weaponSkills = equipment.equippedWeapons.map((weapon) => {
@@ -138,17 +136,17 @@ export function buildCharacterSheetSummary(input: {
       parryValue: weapon.parryValue,
       skillId: weapon.skillName ?? weapon.id,
       specializationNames: weapon.specializationNames,
-      totalSkill: weapon.skillTotal ?? 0
+      totalSkill: weapon.skillTotal ?? 0,
     };
   });
   const totalGms = input.build.progression.skillGroups.reduce(
     (sum, group) => sum + (group.gms ?? 0),
-    0
+    0,
   );
   const successfulProgressionGains =
     input.build.progressionState?.history.reduce(
       (sum, entry) => sum + (entry.success ? entry.cost : 0),
-      0
+      0,
     ) ?? 0;
   const originalSkillPoints = draftView.totalSkillPointsInvested;
   const currentSkillPoints = originalSkillPoints + successfulProgressionGains;
@@ -159,11 +157,11 @@ export function buildCharacterSheetSummary(input: {
       combatGroups,
       dodge: calculateEquipmentDrivenDodge({
         dex: adjustedStats.dex ?? 0,
-        shieldBonus: equipment.shieldBonus
+        shieldBonus: equipment.shieldBonus,
       }),
       hasShield: equipment.hasEquippedShield,
       parry: Math.max(0, ...weaponSkills.map((skill) => skill.parryValue)),
-      weaponSkills
+      weaponSkills,
     },
     distractionLevel: input.build.profile.distractionLevel,
     draftView,
@@ -174,9 +172,9 @@ export function buildCharacterSheetSummary(input: {
         .map((group) => ({
           gms: group.gms,
           groupId: group.groupId,
-          name: group.name
+          name: group.name,
         })),
-      total: totalGms
+      total: totalGms,
     },
     professionName: getProfessionName(input.content, input.build.professionId),
     societyLabel: getSocietyLabel(input.content, input.build.societyId, input.build.societyLevel),
@@ -184,8 +182,9 @@ export function buildCharacterSheetSummary(input: {
     skillPoints: {
       current: currentSkillPoints,
       original: originalSkillPoints,
-      successfulProgressionGains
+      successfulProgressionGains,
     },
-    totalSkillPointsInvested: currentSkillPoints
+    statLayers,
+    totalSkillPointsInvested: currentSkillPoints,
   };
 }

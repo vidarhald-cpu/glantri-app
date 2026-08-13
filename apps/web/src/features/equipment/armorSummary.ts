@@ -1,4 +1,9 @@
-import type { ArmorTemplate, CharacterBuild, EquipmentItem } from "@glantri/domain";
+import {
+  deriveCharacterStatLayers,
+  type ArmorTemplate,
+  type CharacterBuild,
+  type EquipmentItem,
+} from "@glantri/domain";
 
 export type ArmorLocationKey =
   | "head"
@@ -43,10 +48,13 @@ const ARMOR_LOCATIONS: Array<{ key: ArmorLocationKey; label: string }> = [
 ];
 
 export function getWorkbookCharacterSize(build: CharacterBuild | undefined): number | null {
-  return build?.profile.rolledStats.siz ?? null;
+  return build ? deriveCharacterStatLayers(build).current.siz : null;
 }
 
-function formatWorkbookLocationValueWithType(value: number | null, type: string | null | undefined): string {
+function formatWorkbookLocationValueWithType(
+  value: number | null,
+  type: string | null | undefined,
+): string {
   if (value === null || value === undefined) {
     return "—";
   }

@@ -724,6 +724,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
               <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                 <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Stat</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Original</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Developed</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
                 <th style={{ padding: "0.5rem 0.75rem" }}>Requested</th>
                 <th style={{ padding: "0.5rem 0.75rem" }}>Approved</th>
@@ -740,6 +741,9 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
                       {statRow.originalValue}
                     </td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                      {statRow.developedValue}
+                    </td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
                       {statRow.currentValue}
                     </td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
@@ -753,6 +757,9 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
               })}
               <tr style={{ borderBottom: "1px solid #eee8dc" }}>
                 <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>Distraction</td>
+                <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                  {progressionView.sheetSummary.distractionLevel}
+                </td>
                 <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
                   {progressionView.sheetSummary.distractionLevel}
                 </td>

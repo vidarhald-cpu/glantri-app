@@ -1,7 +1,8 @@
-import type {
-  ChargenRuleSetParameters,
-  GlantriCharacteristicBlock,
-  RolledCharacterProfile
+import {
+  CHARACTER_STAT_LAYER_VERSION,
+  type ChargenRuleSetParameters,
+  type GlantriCharacteristicBlock,
+  type RolledCharacterProfile,
 } from "@glantri/domain";
 
 import { createChargenMethodPolicy } from "./policy";
@@ -19,7 +20,7 @@ const SOCIAL_CLASS_THRESHOLDS = [
   { educationValue: 2, maxRoll: 10, result: "Bønder" },
   { educationValue: 4, maxRoll: 15, result: "Håndverkere" },
   { educationValue: 6, maxRoll: 18, result: "Storbønder" },
-  { educationValue: 8, maxRoll: 20, result: "Adelen" }
+  { educationValue: 8, maxRoll: 20, result: "Adelen" },
 ] as const;
 
 function rollDie(rng: () => number, sides: number): number {
@@ -35,10 +36,7 @@ function rollDistractionLevel(rng: () => number): number {
   return rollDie(rng, 3) + rollDie(rng, 3);
 }
 
-function rollSocialClass(input: {
-  rng: () => number;
-  tableId: string;
-}): {
+function rollSocialClass(input: { rng: () => number; tableId: string }): {
   educationValue: number;
   roll: number;
   result: string;
@@ -55,7 +53,7 @@ function rollSocialClass(input: {
     educationValue: threshold?.educationValue ?? 0,
     roll,
     result: threshold?.result ?? "Bønder",
-    tableId: input.tableId
+    tableId: input.tableId,
   };
 }
 
@@ -71,7 +69,7 @@ function generateCharacteristicBlock(rng: () => number): GlantriCharacteristicBl
     pow: rollFourD6DropLowest(rng),
     siz: rollFourD6DropLowest(rng),
     str: rollFourD6DropLowest(rng),
-    will: rollFourD6DropLowest(rng)
+    will: rollFourD6DropLowest(rng),
   };
 }
 
@@ -84,7 +82,7 @@ function createRolledProfile(input: {
 }): RolledCharacterProfile {
   const socialClass = rollSocialClass({
     rng: input.rng,
-    tableId: input.socialClassTableId
+    tableId: input.socialClassTableId,
   });
 
   return {
@@ -92,11 +90,12 @@ function createRolledProfile(input: {
     id: input.id,
     label: input.label,
     rolledStats: input.rolledStats,
+    statLayerVersion: CHARACTER_STAT_LAYER_VERSION,
     socialClassEducationValue: socialClass.educationValue,
     socialClassResult: socialClass.result,
     socialClassRoll: socialClass.roll,
     socialClassTableId: socialClass.tableId,
-    societyLevel: 0
+    societyLevel: 0,
   };
 }
 
@@ -107,7 +106,7 @@ export function generateProfiles(input: GenerateProfilesInput): RolledCharacterP
   const rollSets =
     input.rollSets ??
     Array.from({ length: input.count ?? policy.displayedRollCount }, () =>
-      generateCharacteristicBlock(rng)
+      generateCharacteristicBlock(rng),
     );
 
   return rollSets.map((rolledStats, index) =>
@@ -116,7 +115,7 @@ export function generateProfiles(input: GenerateProfilesInput): RolledCharacterP
       label: `Roll ${index + 1}`,
       rng,
       rolledStats,
-      socialClassTableId
-    })
+      socialClassTableId,
+    }),
   );
 }

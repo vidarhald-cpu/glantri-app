@@ -660,7 +660,10 @@ function getScenarioParticipantRoundEndSheetFacts(participant: ScenarioParticipa
       : undefined,
     dodgeStatLabel: "Dexterity",
     dodgeStatValue: dodgeProfile?.avgStats,
-    healthStat: build.data.profile.rolledStats.health,
+    healthStat: buildCharacterSheetSummary({
+      build: build.data,
+      content: defaultCanonicalContent,
+    }).adjustedStats.health,
   };
 }
 

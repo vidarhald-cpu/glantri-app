@@ -232,6 +232,27 @@ describe("resolveParticipantSkillRollProfile", () => {
     });
   });
 
+  it("uses Current linked stats for scenario skill reads while retaining Original roll facts", () => {
+    const currentBuild: CharacterBuild = {
+      ...build,
+      currentStatModifiers: { dex: 2, int: 2 },
+    };
+
+    const profile = resolveParticipantSkillRollProfile({
+      build: currentBuild,
+      content,
+      sheetSummary: {},
+      skill: firstAidSkill,
+    });
+
+    expect(profile).toMatchObject({
+      avgStats: 17,
+      baseAvgStats: 15,
+      linkedStatXp: 2,
+      rollBaseValue: 17,
+    });
+  });
+
   it("counts group-only Character Sheet rows as known skills", () => {
     const profile = resolveParticipantSkillRollProfile({
       sheetSummary: {
@@ -601,6 +622,28 @@ describe("resolveParticipantStatRollProfile", () => {
       statLabel: "Dex",
       statValue: 17,
       warning: undefined,
+    });
+  });
+
+  it("uses the canonical Current Character Stat after permanent and current modifiers", () => {
+    const profile = resolveParticipantStatRollProfile({
+      build: {
+        ...build,
+        developedStatModifiers: { dex: 1 },
+        currentStatModifiers: { dex: 2 },
+        profile: {
+          ...build.profile,
+          resolvedStats: { ...build.profile.rolledStats, dex: 17 },
+        },
+      },
+      statId: "dex",
+    });
+
+    expect(profile).toMatchObject({
+      sourceQuality: "full",
+      statId: "dex",
+      statLabel: "Dex",
+      statValue: 20,
     });
   });
 
