@@ -2,9 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import type { CharacterBuild, SkillDefinition, SkillGroupDefinition } from "@glantri/domain";
 
-import { resolveParticipantSkillRollProfile } from "./resolveParticipantSkillRollProfile";
+import {
+  resolveParticipantSkillRollProfile,
+  resolveParticipantStatRollProfile,
+} from "./resolveParticipantSkillRollProfile";
 
-const perceptionSkill: Pick<SkillDefinition, "groupId" | "groupIds" | "id" | "linkedStats" | "name"> = {
+const perceptionSkill: Pick<
+  SkillDefinition,
+  "groupId" | "groupIds" | "id" | "linkedStats" | "name"
+> = {
   groupId: "watchfulness",
   groupIds: ["watchfulness"],
   id: "perception",
@@ -12,13 +18,14 @@ const perceptionSkill: Pick<SkillDefinition, "groupId" | "groupIds" | "id" | "li
   name: "Perception",
 };
 
-const surgerySkill: Pick<SkillDefinition, "groupId" | "groupIds" | "id" | "linkedStats" | "name"> = {
-  groupId: "medicine_group",
-  groupIds: ["medicine_group"],
-  id: "surgery",
-  linkedStats: ["dex", "int"],
-  name: "Surgery",
-};
+const surgerySkill: Pick<SkillDefinition, "groupId" | "groupIds" | "id" | "linkedStats" | "name"> =
+  {
+    groupId: "medicine_group",
+    groupIds: ["medicine_group"],
+    id: "surgery",
+    linkedStats: ["dex", "int"],
+    name: "Surgery",
+  };
 
 const firstAidSkill: SkillDefinition = {
   allowsSpecializations: false,
@@ -563,5 +570,54 @@ describe("resolveParticipantSkillRollProfile", () => {
       unknownSkillPenalty: -3,
     });
     expect(profile.warning).toBe("No stats available for this actor.");
+  });
+});
+
+describe("resolveParticipantStatRollProfile", () => {
+  it("reads the resolved Character Stat without Skill contributions", () => {
+    const profile = resolveParticipantStatRollProfile({
+      build: {
+        ...build,
+        profile: {
+          ...build.profile,
+          resolvedStats: { ...build.profile.rolledStats, dex: 17 },
+        },
+      },
+      participantId: "encounter-participant-1",
+      participantName: "The Gladiator",
+      statId: "dex",
+    });
+
+    expect(profile).toEqual({
+      participantId: "encounter-participant-1",
+      participantName: "The Gladiator",
+      sourceQuality: "full",
+      statId: "dex",
+      statLabel: "Dex",
+      statValue: 17,
+      warning: undefined,
+    });
+  });
+
+  it("reads a generated actor's persisted final Stat snapshot", () => {
+    expect(
+      resolveParticipantStatRollProfile({
+        snapshot: {
+          generatedHumanoidNpc: {
+            stats: { base: { int: 11 }, final: { int: 14 } },
+          },
+        },
+        statId: "int",
+      }),
+    ).toMatchObject({ sourceQuality: "snapshot", statLabel: "Int", statValue: 14 });
+  });
+
+  it("reports a missing canonical Stat instead of inventing a value", () => {
+    expect(resolveParticipantStatRollProfile({ snapshot: {}, statId: "will" })).toMatchObject({
+      sourceQuality: "missing",
+      statLabel: "Will",
+      statValue: undefined,
+      warning: "No Will Stat is available for this actor.",
+    });
   });
 });

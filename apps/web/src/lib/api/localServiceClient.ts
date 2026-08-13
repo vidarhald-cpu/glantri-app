@@ -73,6 +73,7 @@ export {
 } from "./scenarioClient";
 export {
   advanceDeterministicCombatOnServer,
+  assignRoleplayStatCheckOnServer,
   advanceCombatRoundCurrentStepOnServer,
   backOutPhaseAttackOnServer,
   clearCurrentCombatRoundStepOnServer,

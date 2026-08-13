@@ -1,5 +1,8 @@
 import {
   getSkillGroupIds,
+  glantriCharacteristicKeySchema,
+  glantriCharacteristicLabels,
+  type GlantriCharacteristicKey,
   type CharacterBuild,
   type ProfessionDefinition,
   type ProfessionFamilyDefinition,
@@ -56,6 +59,25 @@ export interface ResolveParticipantSkillRollProfileInput {
   /** Prefer the sheet's adjusted characteristic values for rules that consume characteristic XP. */
   preferAdjustedStats?: boolean;
   skill: Pick<SkillDefinition, "groupId" | "groupIds" | "id" | "linkedStats" | "name">;
+}
+
+export interface ParticipantStatRollProfile {
+  participantId?: string;
+  participantName?: string;
+  sourceQuality: "full" | "snapshot" | "missing";
+  statId: GlantriCharacteristicKey;
+  statLabel: string;
+  statValue?: number;
+  warning?: string;
+}
+
+export interface ResolveParticipantStatRollProfileInput {
+  build?: unknown;
+  participantId?: string;
+  participantName?: string;
+  sheetSummary?: unknown;
+  snapshot?: unknown;
+  statId: GlantriCharacteristicKey;
 }
 
 const UNKNOWN_SKILL_WARNING =
@@ -338,8 +360,8 @@ export function resolveParticipantSkillRollProfile(
   const profileStats = readProfileStats(input.build) ?? readSnapshotStats(input.build);
   const adjustedStats = readSheetStats(sheetSummary);
   const stats = input.preferAdjustedStats
-    ? adjustedStats ?? profileStats
-    : profileStats ?? adjustedStats;
+    ? (adjustedStats ?? profileStats)
+    : (profileStats ?? adjustedStats);
   const linkedStats = input.linkedStatsOverride ?? input.skill.linkedStats;
   const baseAvgStats = getLinkedStatAverage({ linkedStats, stats: profileStats }) ?? 0;
   const avgStats =
@@ -400,5 +422,42 @@ export function resolveParticipantSkillRollProfile(
     totalXP: known ? totalXP : 0,
     unknownSkillPenalty: known ? 0 : -3,
     warning,
+  };
+}
+
+/**
+ * Reads one canonical current Stat without applying Skill XP, linked-stat averaging,
+ * or Combat modifier machinery. Character resolved Stats are authoritative when
+ * available; persisted actor snapshot Stats are the bounded fallback.
+ */
+export function resolveParticipantStatRollProfile(
+  input: ResolveParticipantStatRollProfileInput,
+): ParticipantStatRollProfile {
+  const statId = glantriCharacteristicKeySchema.parse(input.statId);
+  const snapshot = isRecord(input.snapshot) ? input.snapshot : undefined;
+  const build = input.build ?? snapshot?.build;
+  const sheetSummary = input.sheetSummary ?? snapshot?.sheetSummary;
+  const fullStats = readProfileStats(build);
+  const snapshotStats = readSnapshotStats(input.snapshot ?? input.build);
+  const sheetStats = readSheetStats(sheetSummary);
+  const stats = fullStats ?? snapshotStats ?? sheetStats;
+  const statValue = stats?.[statId];
+  const sourceQuality: ParticipantStatRollProfile["sourceQuality"] = fullStats
+    ? "full"
+    : snapshotStats || sheetStats
+      ? "snapshot"
+      : "missing";
+
+  return {
+    participantId: input.participantId,
+    participantName: input.participantName,
+    sourceQuality,
+    statId,
+    statLabel: glantriCharacteristicLabels[statId],
+    statValue,
+    warning:
+      statValue == null
+        ? `No ${glantriCharacteristicLabels[statId]} Stat is available for this actor.`
+        : undefined,
   };
 }

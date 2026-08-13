@@ -29,7 +29,9 @@ import {
   EncounterParticipantMembershipMode,
   EncounterSession,
   EncounterStatus,
+  GlantriCharacteristicKey,
   MovementIntent,
+  RoleplayDifficulty,
   ScenarioParticipant,
   ScenarioParticipantCombatContext,
   ScenarioParticipantSecondaryActionContext,
@@ -1549,9 +1551,11 @@ export async function rollCombatCriticalOnServer(
 }
 
 export async function submitPlayerRoleplayRollOnServer(input: {
+  acceptAutomaticSuccess?: boolean;
   encounterId: string;
+  expectedRevision?: string;
   pendingRollId: string;
-  roll: {
+  roll?: {
     dieResult: number;
     openEndedD10s: number[];
     rollD20: number;
@@ -1566,9 +1570,34 @@ export async function submitPlayerRoleplayRollOnServer(input: {
     `/encounters/${input.encounterId}/player-roll`,
     {
       body: JSON.stringify({
+        acceptAutomaticSuccess: input.acceptAutomaticSuccess,
+        expectedRevision: input.expectedRevision,
         pendingRollId: input.pendingRollId,
         roll: input.roll,
         supportRoll: input.supportRoll,
+      }),
+      method: "POST",
+    },
+  );
+
+  return payload.encounter;
+}
+
+export async function assignRoleplayStatCheckOnServer(input: {
+  difficulty: RoleplayDifficulty;
+  encounterId: string;
+  expectedRevision: string;
+  participantId: string;
+  statId: GlantriCharacteristicKey;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/roleplay/stat-checks`,
+    {
+      body: JSON.stringify({
+        difficulty: input.difficulty,
+        expectedRevision: input.expectedRevision,
+        participantId: input.participantId,
+        statId: input.statId,
       }),
       method: "POST",
     },

@@ -7,6 +7,7 @@ import {
   buildEncounterSessionSummary,
   encounterSessionSchema,
   encounterSessionSummarySchema,
+  buildPlayerSafeRoleplayState,
   buildPlayerSafeRoleplayStateForUser,
   formatEncounterParticipantMembershipLabel,
   isUserAssignedToEncounterMembership,
@@ -532,7 +533,50 @@ describe("encounter session normalization invariants", () => {
         }),
       ],
       roleplayState: {
-        actionLog: [],
+        actionLog: [
+          {
+            autoSuccess: false,
+            createdAt: "2026-01-01T00:04:00.000Z",
+            fumble: false,
+            id: "own-stat-result",
+            mode: "difficulty",
+            openEndedD10s: [],
+            opponentFumble: false,
+            opponentOpenEndedD10s: [],
+            opponentSilent: false,
+            partial: false,
+            participantId: "scenario-scenario-participant-gladiator",
+            pendingRollId: "own-stat-check",
+            statId: "dex",
+            statLabel: "Dex",
+            statValue: 14,
+            silent: false,
+            summary: "The Gladiator rolled Dex Stat check.",
+            supportOpenEndedD10s: [],
+            type: "stat_check_result",
+          },
+          {
+            autoSuccess: false,
+            createdAt: "2026-01-01T00:03:00.000Z",
+            fumble: false,
+            id: "guard-stat-result",
+            mode: "difficulty",
+            openEndedD10s: [],
+            opponentFumble: false,
+            opponentOpenEndedD10s: [],
+            opponentSilent: false,
+            partial: false,
+            participantId: "scenario-scenario-participant-guard",
+            pendingRollId: "guard-stat-check",
+            statId: "will",
+            statLabel: "Will",
+            statValue: 18,
+            silent: false,
+            summary: "City guard rolled Will Stat check.",
+            supportOpenEndedD10s: [],
+            type: "stat_check_result",
+          },
+        ],
         gmMessage: "The courtyard is tense.",
         participantDescriptions: {
           "scenario-scenario-participant-guard": {
@@ -547,6 +591,26 @@ describe("encounter session normalization invariants", () => {
           },
         },
         pendingSkillRolls: [],
+        pendingStatChecks: [
+          {
+            assignedAt: "2026-01-01T00:02:00.000Z",
+            difficulty: "medium",
+            id: "own-stat-check",
+            participantId: "scenario-scenario-participant-gladiator",
+            statId: "dex",
+            statLabel: "Dex",
+            statValue: 14,
+          },
+          {
+            assignedAt: "2026-01-01T00:01:00.000Z",
+            difficulty: "hard",
+            id: "guard-stat-check",
+            participantId: "scenario-scenario-participant-guard",
+            statId: "will",
+            statLabel: "Will",
+            statValue: 18,
+          },
+        ],
         visibility: {
           "scenario-scenario-participant-gladiator": {
             "scenario-scenario-participant-guard": true,
@@ -560,6 +624,7 @@ describe("encounter session normalization invariants", () => {
       scenarioParticipants: [playerParticipant, visibleParticipant, hiddenParticipant],
       userId: "player-1",
     });
+    const identityFreeSafeState = buildPlayerSafeRoleplayState(session.roleplayState!);
 
     expect(safeState.visibility).toEqual({
       "scenario-scenario-participant-gladiator": {
@@ -573,6 +638,11 @@ describe("encounter session normalization invariants", () => {
         shortDescription: "Armored guard",
       },
     });
+    expect(safeState.pendingStatChecks.map((check) => check.id)).toEqual(["own-stat-check"]);
+    expect(safeState.actionLog.map((entry) => entry.id)).toEqual(["own-stat-result"]);
+    expect(identityFreeSafeState.pendingStatChecks).toEqual([]);
+    expect(identityFreeSafeState.actionLog).toEqual([]);
     expect(JSON.stringify(safeState)).not.toContain("GM-only hidden identity");
+    expect(JSON.stringify(safeState)).not.toContain("guard-stat-check");
   });
 });
