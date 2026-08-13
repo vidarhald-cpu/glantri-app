@@ -144,6 +144,51 @@ describe("ScenarioService controller assignment", () => {
     ).rejects.toThrow("already the active controlled character");
   });
 
+  it("uses Character ownership only while Scenario control is unassigned", async () => {
+    const { repository } = createScenarioRepositoryStub();
+    const character = createCharacterRecord({
+      id: "character-1",
+      name: "Ari",
+      ownerId: "owner-1",
+    });
+    const service = new ScenarioService(
+      repository,
+      {
+        getCharacterById: async () => character,
+      } as never,
+      {
+        getCharacterEquipmentState: async () => ({
+          activeLoadoutByCharacterId: {},
+          itemsById: {},
+          locationsById: {},
+          templatesById: {},
+        }),
+      } as never,
+    );
+
+    const participant = await service.addCharacterParticipant({
+      characterId: character.id,
+      joinSource: "gm_added",
+      scenarioId: "scenario-1",
+    });
+
+    await expect(
+      service.userHasPlayerScenarioAccess({ scenarioId: "scenario-1", userId: "owner-1" }),
+    ).resolves.toBe(true);
+
+    await repository.updateScenarioParticipantMetadata({
+      controlledByUserId: "controller-1",
+      participantId: participant.id,
+    });
+
+    await expect(
+      service.userHasPlayerScenarioAccess({ scenarioId: "scenario-1", userId: "owner-1" }),
+    ).resolves.toBe(false);
+    await expect(
+      service.userHasPlayerScenarioAccess({ scenarioId: "scenario-1", userId: "controller-1" }),
+    ).resolves.toBe(true);
+  });
+
   it("allows the same controller to manage multiple non-player participants", async () => {
     const { participants, repository } = createScenarioRepositoryStub();
     const service = new ScenarioService(
@@ -408,6 +453,30 @@ describe("ScenarioService scenario relationships", () => {
         name: "Arena Bout",
       }),
     ]);
+  });
+
+  it("lists only Scenarios under the player's current control", async () => {
+    const { repository } = createScenarioRepositoryStub();
+    repository.listScenariosByCampaignPlayerControl = async (campaignId, userId) =>
+      campaignId === "campaign-1" && userId === "player-1"
+        ? [
+            {
+              campaignId: "campaign-1",
+              createdAt: "2026-04-21T00:00:00.000Z",
+              description: "Controlled scenario",
+              id: "scenario-controlled",
+              kind: "mixed",
+              name: "Current Chapter",
+              status: "live",
+              updatedAt: "2026-04-21T00:00:00.000Z",
+            },
+          ]
+        : [];
+    const service = new ScenarioService(repository);
+
+    await expect(
+      service.listScenariosByCampaignPlayerControl("campaign-1", "player-1"),
+    ).resolves.toEqual([expect.objectContaining({ id: "scenario-controlled" })]);
   });
 
   it("creates scenarios without continuation links by default", async () => {

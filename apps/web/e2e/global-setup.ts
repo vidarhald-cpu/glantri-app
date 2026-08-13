@@ -194,6 +194,10 @@ export default async function globalSetup() {
   const playerCookie = await loginOrRegister(SMOKE_PLAYER_EMAIL, "Smoke Player");
   const nonHolderCookie = await loginOrRegister(SMOKE_NON_HOLDER_EMAIL, "Smoke Non-holder");
   const unrelatedCookie = await loginOrRegister(SMOKE_UNRELATED_EMAIL, "Smoke Unrelated");
+  const { user: nonHolderUser } = await apiGet<{ user: { id: string } }>(
+    "/auth/me",
+    nonHolderCookie,
+  );
 
   // --- Character for player ---
   try {
@@ -257,6 +261,83 @@ export default async function globalSetup() {
     nonHolderCookie,
   );
 
+  // --- Campaign Home privacy: owner keeps Campaign access while Scenario control is delegated ---
+  const delegatedCampaignName = `Delegated Privacy Campaign ${Date.now()}`;
+  const delegatedScenarioName = "Delegated Private Scenario";
+  const delegatedScenarioDescription = "Private to delegated controller";
+  const { data: delegatedCampaignData } = await apiPost<{ campaign: { id: string } }>(
+    "/campaigns",
+    { name: delegatedCampaignName, status: "active" },
+    gmCookie,
+  );
+  const delegatedCampaignId = delegatedCampaignData.campaign.id;
+  await apiPost(
+    `/campaigns/${delegatedCampaignId}/roster`,
+    {
+      category: "pc",
+      sourceId: SMOKE_CHARACTER_ID,
+      sourceType: "character",
+    },
+    gmCookie,
+  );
+  const { data: delegatedScenarioData } = await apiPost<{ scenario: { id: string } }>(
+    `/campaigns/${delegatedCampaignId}/scenarios`,
+    {
+      description: delegatedScenarioDescription,
+      name: delegatedScenarioName,
+      status: "live",
+    },
+    gmCookie,
+  );
+  const delegatedScenarioId = delegatedScenarioData.scenario.id;
+  const { data: delegatedParticipantData } = await apiPost<{ participant: { id: string } }>(
+    `/scenarios/${delegatedScenarioId}/participants/character`,
+    {
+      characterId: SMOKE_CHARACTER_ID,
+      controlledByUserId: nonHolderUser.id,
+    },
+    gmCookie,
+  );
+  const delegatedEncounterName = "Delegated Private Encounter";
+  const delegatedEncounterDescription = "Controller-only moment";
+  const delegatedEncounterSeed = Date.now();
+  const delegatedEncounterTimestamp = new Date().toISOString();
+  const { data: delegatedEncounterData } = await apiPost<{ encounter: { id: string } }>(
+    `/scenarios/${delegatedScenarioId}/encounters`,
+    {
+      session: {
+        campaignId: delegatedCampaignId,
+        createdAt: delegatedEncounterTimestamp,
+        description: delegatedEncounterDescription,
+        id: `delegated-encounter-${delegatedEncounterSeed}`,
+        kind: "roleplay",
+        participantMembershipMode: "explicit",
+        participants: [
+          {
+            characterId: SMOKE_CHARACTER_ID,
+            id: `delegated-encounter-participant-${delegatedEncounterSeed}`,
+            label: "Smoke Character",
+            participantType: "scenario",
+            scenarioParticipantId: delegatedParticipantData.participant.id,
+          },
+        ],
+        roleplayState: {
+          actionLog: [],
+          gmMessage: delegatedEncounterDescription,
+          participantDescriptions: {},
+          pendingSkillRolls: [],
+          visibility: {},
+        },
+        scenarioId: delegatedScenarioId,
+        status: "active",
+        title: delegatedEncounterName,
+        updatedAt: delegatedEncounterTimestamp,
+      },
+    },
+    gmCookie,
+  );
+  const delegatedEncounterId = delegatedEncounterData.encounter.id;
+
   // --- Save browser auth state ---
   const domain = new URL(process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000").hostname;
   fs.writeFileSync(
@@ -283,6 +364,14 @@ export default async function globalSetup() {
       b2CampaignId,
       campaignId,
       characterId: SMOKE_CHARACTER_ID,
+      delegatedCampaignId,
+      delegatedCampaignName,
+      delegatedEncounterDescription,
+      delegatedEncounterId,
+      delegatedEncounterName,
+      delegatedScenarioDescription,
+      delegatedScenarioId,
+      delegatedScenarioName,
       nonHolderCharacterId: SMOKE_NON_HOLDER_CHARACTER_ID,
     }),
   );

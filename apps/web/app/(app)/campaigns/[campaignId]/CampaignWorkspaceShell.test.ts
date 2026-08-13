@@ -61,7 +61,8 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain('tab: "character"');
     expect(source).toContain('selectedParticipantId={searchParams.get("participantId")}');
     expect(source).toContain("isGameMaster={canAccessGmEncounter}");
-    expect(source).toContain("currentRoundNumber={activeScenario?.liveState?.roundNumber}");
+    expect(source).toContain("currentRoundNumber={activeScenarioRoundNumber}");
+    expect(source).toContain('activeScenario && "liveState" in activeScenario');
   });
 
   it("keeps GM Skill rolls focused on GM tools and routes player operation separately", () => {

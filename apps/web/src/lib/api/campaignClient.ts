@@ -8,6 +8,7 @@ import type {
   ReusableEntity,
   Scenario,
   ScenarioRelationship,
+  PlayerCampaignHomeRecord,
 } from "@glantri/domain";
 
 import { sendJson } from "./apiClient";
@@ -31,6 +32,17 @@ export async function loadAccessibleCampaigns(): Promise<AccessibleCampaignRecor
   );
 
   return payload.accessibleCampaigns;
+}
+
+export async function loadPlayerCampaignHome(): Promise<PlayerCampaignHomeRecord[]> {
+  const payload = await sendJson<{ campaigns: PlayerCampaignHomeRecord[] }>(
+    "/campaigns/player-home",
+    {
+      method: "GET",
+    },
+  );
+
+  return payload.campaigns;
 }
 
 export async function loadTemplates(): Promise<ReusableEntity[]> {

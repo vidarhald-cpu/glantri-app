@@ -1,9 +1,13 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
+import { createPrismaCharacterEquipmentRepository } from "../repositories/characterEquipmentRepository";
+import { createPrismaCharacterRepository } from "../repositories/characterRepository";
 import { createPrismaScenarioRepository } from "../repositories/scenarioRepository";
-import { createTestUser } from "../testing/factories";
+import { createTestCharacter, createTestUser } from "../testing/factories";
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
 import { CampaignService } from "./campaignService";
+import { CharacterEquipmentReadModelService } from "./characterEquipmentReadModelService";
+import { CharacterService } from "./characterService";
 import { ScenarioService } from "./scenarioService";
 
 const prisma = getTestPrismaClient();
@@ -68,6 +72,56 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(relationships[0]?.fromScenarioId).toBe(first.id);
       expect(relationships[0]?.toScenarioId).toBe(second.id);
       expect(relationships[0]?.relationType).toBe("continues_from");
+    });
+
+    it("withholds a delegated live Scenario from its Character owner", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["gm"] });
+      const owner = await createTestUser(prisma!);
+      const delegatedController = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, owner.id, { name: "Ari" });
+      const repo = createPrismaScenarioRepository(prisma!);
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const equipmentService = new CharacterEquipmentReadModelService(
+        createPrismaCharacterEquipmentRepository(prisma!),
+      );
+      const campaignService = new CampaignService(repo, characterService);
+      const service = new ScenarioService(repo, characterService, equipmentService);
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Delegated Campaign",
+        status: "active",
+      });
+      const scenario = await service.createScenario({
+        campaignId: campaign.id,
+        description: "Private to delegated controller",
+        name: "Delegated Private Scenario",
+        status: "live",
+      });
+      await service.addCharacterParticipant({
+        characterId: character.id,
+        controlledByUserId: delegatedController.id,
+        joinSource: "gm_added",
+        scenarioId: scenario.id,
+      });
+
+      await expect(
+        service.listScenariosByCampaignPlayerAccess(campaign.id, owner.id),
+      ).resolves.toEqual([expect.objectContaining({ id: scenario.id })]);
+      await expect(
+        service.listScenariosByCampaignPlayerControl(campaign.id, owner.id),
+      ).resolves.toEqual([]);
+      await expect(
+        service.listScenariosByCampaignPlayerControl(campaign.id, delegatedController.id),
+      ).resolves.toEqual([expect.objectContaining({ id: scenario.id })]);
+      await expect(
+        service.userHasPlayerScenarioAccess({ scenarioId: scenario.id, userId: owner.id }),
+      ).resolves.toBe(false);
+      await expect(
+        service.userHasPlayerScenarioAccess({
+          scenarioId: scenario.id,
+          userId: delegatedController.id,
+        }),
+      ).resolves.toBe(true);
     });
   });
 }
