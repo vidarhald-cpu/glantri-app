@@ -7,7 +7,7 @@ import type {
   CampaignRosterSourceType,
   ReusableEntity,
   Scenario,
-  ScenarioRelationship
+  ScenarioRelationship,
 } from "@glantri/domain";
 
 import { sendJson } from "./apiClient";
@@ -16,7 +16,7 @@ export type { AccessibleCampaignRecord };
 
 export async function loadCampaigns(): Promise<Campaign[]> {
   const payload = await sendJson<{ campaigns: Campaign[] }>("/campaigns", {
-    method: "GET"
+    method: "GET",
   });
 
   return payload.campaigns;
@@ -35,7 +35,7 @@ export async function loadAccessibleCampaigns(): Promise<AccessibleCampaignRecor
 
 export async function loadTemplates(): Promise<ReusableEntity[]> {
   const payload = await sendJson<{ templates: ReusableEntity[] }>("/templates", {
-    method: "GET"
+    method: "GET",
   });
 
   return payload.templates;
@@ -49,7 +49,7 @@ export async function createCampaignOnServer(input: {
 }): Promise<Campaign> {
   const payload = await sendJson<{ campaign: Campaign }>("/campaigns", {
     body: JSON.stringify(input),
-    method: "POST"
+    method: "POST",
   });
 
   return payload.campaign;
@@ -68,9 +68,9 @@ export async function createTemplateOnServer(input: {
       kind: input.kind,
       name: input.name,
       notes: input.notes,
-      snapshot: input.snapshot
+      snapshot: input.snapshot,
     }),
-    method: "POST"
+    method: "POST",
   });
 
   return payload.template;
@@ -90,9 +90,9 @@ export async function updateTemplateOnServer(input: {
       kind: input.kind,
       name: input.name,
       notes: input.notes,
-      snapshot: input.snapshot
+      snapshot: input.snapshot,
     }),
-    method: "PUT"
+    method: "PUT",
   });
 
   return payload.template;
@@ -100,7 +100,7 @@ export async function updateTemplateOnServer(input: {
 
 export async function loadCampaignById(campaignId: string): Promise<Campaign> {
   const payload = await sendJson<{ campaign: Campaign }>(`/campaigns/${campaignId}`, {
-    method: "GET"
+    method: "GET",
   });
 
   return payload.campaign;
@@ -120,12 +120,9 @@ export async function loadAccessibleCampaignById(
 }
 
 export async function loadCampaignScenarios(campaignId: string): Promise<Scenario[]> {
-  const payload = await sendJson<{ scenarios: Scenario[] }>(
-    `/campaigns/${campaignId}/scenarios`,
-    {
-      method: "GET"
-    }
-  );
+  const payload = await sendJson<{ scenarios: Scenario[] }>(`/campaigns/${campaignId}/scenarios`, {
+    method: "GET",
+  });
 
   return payload.scenarios;
 }
@@ -148,23 +145,23 @@ export async function createScenarioOnServer(input: {
         kind: input.kind,
         mapAssetId: input.mapAssetId,
         name: input.name,
-        status: input.status
+        status: input.status,
       }),
-      method: "POST"
-    }
+      method: "POST",
+    },
   );
 
   return payload.scenario;
 }
 
 export async function loadCampaignScenarioRelationships(
-  campaignId: string
+  campaignId: string,
 ): Promise<ScenarioRelationship[]> {
   const payload = await sendJson<{ relationships: ScenarioRelationship[] }>(
     `/campaigns/${campaignId}/scenario-relationships`,
     {
-      method: "GET"
-    }
+      method: "GET",
+    },
   );
 
   return payload.relationships;
@@ -174,8 +171,8 @@ export async function loadCampaignRoster(campaignId: string): Promise<CampaignRo
   const payload = await sendJson<{ roster: CampaignRosterEntry[] }>(
     `/campaigns/${campaignId}/roster`,
     {
-      method: "GET"
-    }
+      method: "GET",
+    },
   );
 
   return payload.roster;
@@ -195,10 +192,10 @@ export async function addCampaignRosterEntryOnServer(input: {
         category: input.category,
         notes: input.notes,
         sourceId: input.sourceId,
-        sourceType: input.sourceType
+        sourceType: input.sourceType,
       }),
-      method: "POST"
-    }
+      method: "POST",
+    },
   );
 
   return payload.rosterEntry;
@@ -212,8 +209,8 @@ export async function removeCampaignRosterEntryOnServer(input: {
   await sendJson<{ ok: true; removed?: boolean }>(
     `/campaigns/${input.campaignId}/roster-membership/${encodeURIComponent(input.sourceType)}/${encodeURIComponent(input.sourceId)}`,
     {
-      method: "DELETE"
-    }
+      method: "DELETE",
+    },
   );
 }
 
@@ -221,8 +218,8 @@ export async function loadCampaignEntities(campaignId: string): Promise<Reusable
   const payload = await sendJson<{ entities: ReusableEntity[] }>(
     `/campaigns/${campaignId}/entities`,
     {
-      method: "GET"
-    }
+      method: "GET",
+    },
   );
 
   return payload.entities;
@@ -244,18 +241,41 @@ export async function createReusableEntityOnServer(input: {
         kind: input.kind,
         name: input.name,
         notes: input.notes,
-        snapshot: input.snapshot
+        snapshot: input.snapshot,
       }),
-      method: "POST"
-    }
+      method: "POST",
+    },
   );
 
   return payload.entity;
 }
 
+export async function createCampaignNpcOnServer(input: {
+  campaignId: string;
+  description?: string;
+  kind: "npc";
+  name: string;
+  notes?: string;
+  snapshot: unknown;
+}): Promise<{ entity: ReusableEntity; rosterEntry: CampaignRosterEntry }> {
+  return sendJson<{ entity: ReusableEntity; rosterEntry: CampaignRosterEntry }>(
+    `/campaigns/${input.campaignId}/npcs`,
+    {
+      body: JSON.stringify({
+        description: input.description,
+        kind: input.kind,
+        name: input.name,
+        notes: input.notes,
+        snapshot: input.snapshot,
+      }),
+      method: "POST",
+    },
+  );
+}
+
 export async function loadCampaignAssets(campaignId: string): Promise<CampaignAsset[]> {
   const payload = await sendJson<{ assets: CampaignAsset[] }>(`/campaigns/${campaignId}/assets`, {
-    method: "GET"
+    method: "GET",
   });
 
   return payload.assets;
@@ -270,17 +290,20 @@ export async function createCampaignAssetOnServer(input: {
   type: CampaignAsset["type"];
   visibility: CampaignAsset["visibility"];
 }): Promise<CampaignAsset> {
-  const payload = await sendJson<{ asset: CampaignAsset }>(`/campaigns/${input.campaignId}/assets`, {
-    body: JSON.stringify({
-      description: input.description,
-      mimeType: input.mimeType,
-      storageUrl: input.storageUrl,
-      title: input.title,
-      type: input.type,
-      visibility: input.visibility
-    }),
-    method: "POST"
-  });
+  const payload = await sendJson<{ asset: CampaignAsset }>(
+    `/campaigns/${input.campaignId}/assets`,
+    {
+      body: JSON.stringify({
+        description: input.description,
+        mimeType: input.mimeType,
+        storageUrl: input.storageUrl,
+        title: input.title,
+        type: input.type,
+        visibility: input.visibility,
+      }),
+      method: "POST",
+    },
+  );
 
   return payload.asset;
 }

@@ -223,6 +223,35 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
 
       const body = parseBodyObject(request.body, "Entity participant payload");
       const entityId = parseOptionalString(body, "entityId");
+      const isAdmin = user.roles.includes("admin");
+
+      if (entityId) {
+        const entity = await campaignService.getReusableEntityById(entityId);
+
+        if (!entity || (!isAdmin && entity.gmUserId !== user.id)) {
+          return reply.code(404).send({ error: "Reusable entity not found." });
+        }
+
+        const snapshot =
+          entity.snapshot && typeof entity.snapshot === "object" && !Array.isArray(entity.snapshot)
+            ? (entity.snapshot as Record<string, unknown>)
+            : undefined;
+
+        if (snapshot?.actorClass === "campaign_npc") {
+          if (snapshot.campaignId !== access.campaignId) {
+            return reply.code(400).send({ error: "NPC belongs to a different campaign." });
+          }
+
+          const roster = await campaignService.listCampaignRosterEntries(access.campaignId);
+          const isRosterMember = roster.some(
+            (entry) => entry.sourceType === "reusableEntity" && entry.sourceId === entity.id,
+          );
+
+          if (!isRosterMember) {
+            return reply.code(403).send({ error: "Add this NPC to the campaign roster first." });
+          }
+        }
+      }
       const entityInput =
         body.entityInput == null
           ? undefined
@@ -244,6 +273,7 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         displayOrder: parseOptionalInteger(body, "displayOrder"),
         entityId,
         entityInput,
+        expectedGmUserId: isAdmin ? undefined : user.id,
         factionId: parseOptionalNullableString(body, "factionId"),
         isTemporary: parseOptionalBoolean(body, "isTemporary"),
         joinSource:

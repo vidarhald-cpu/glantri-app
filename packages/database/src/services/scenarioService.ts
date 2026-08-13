@@ -12,7 +12,7 @@ import {
 
 import {
   createPrismaScenarioRepository,
-  type ScenarioRepository
+  type ScenarioRepository,
 } from "../repositories/scenarioRepository";
 import { CharacterEquipmentReadModelService } from "./characterEquipmentReadModelService";
 import { CharacterService } from "./characterService";
@@ -26,7 +26,7 @@ export class ScenarioService {
   constructor(
     private readonly repository: ScenarioRepository = createPrismaScenarioRepository(),
     private readonly characterService = new CharacterService(),
-    private readonly equipmentService = new CharacterEquipmentReadModelService()
+    private readonly equipmentService = new CharacterEquipmentReadModelService(),
   ) {}
 
   async createScenario(input: {
@@ -42,7 +42,10 @@ export class ScenarioService {
       ? await this.repository.getScenarioById(input.continuesFromScenarioId)
       : null;
 
-    if (input.continuesFromScenarioId && (!previousScenario || previousScenario.campaignId !== input.campaignId)) {
+    if (
+      input.continuesFromScenarioId &&
+      (!previousScenario || previousScenario.campaignId !== input.campaignId)
+    ) {
       throw new Error("Continuation scenario not found in this campaign.");
     }
 
@@ -52,7 +55,7 @@ export class ScenarioService {
       kind: input.kind ?? "mixed",
       mapAssetId: input.mapAssetId ?? null,
       name: input.name.trim(),
-      status: input.status ?? "draft"
+      status: input.status ?? "draft",
     });
 
     if (previousScenario) {
@@ -60,7 +63,7 @@ export class ScenarioService {
         campaignId: input.campaignId,
         fromScenarioId: previousScenario.id,
         relationType: "continues_from",
-        toScenarioId: scenario.id
+        toScenarioId: scenario.id,
       });
     }
 
@@ -75,7 +78,10 @@ export class ScenarioService {
     return this.repository.listScenarioRelationshipsByCampaign(campaignId);
   }
 
-  async listScenariosByCampaignPlayerAccess(campaignId: string, userId: string): Promise<Scenario[]> {
+  async listScenariosByCampaignPlayerAccess(
+    campaignId: string,
+    userId: string,
+  ): Promise<Scenario[]> {
     return this.repository.listScenariosByCampaignPlayerAccess(campaignId, userId);
   }
 
@@ -83,7 +89,10 @@ export class ScenarioService {
     return this.repository.getScenarioById(scenarioId);
   }
 
-  async userHasPlayerScenarioAccess(input: { scenarioId: string; userId: string }): Promise<boolean> {
+  async userHasPlayerScenarioAccess(input: {
+    scenarioId: string;
+    userId: string;
+  }): Promise<boolean> {
     return userHasPlayerScenarioAccess(this.repository, this.characterService, input);
   }
 
@@ -115,9 +124,9 @@ export class ScenarioService {
       throw new Error("Character not found.");
     }
 
-    const existingParticipant = (await this.repository.listScenarioParticipants(input.scenarioId)).find(
-      (participant) => participant.characterId === input.characterId
-    );
+    const existingParticipant = (
+      await this.repository.listScenarioParticipants(input.scenarioId)
+    ).find((participant) => participant.characterId === input.characterId);
 
     if (existingParticipant) {
       throw new Error("Character is already participating in this scenario.");
@@ -126,14 +135,16 @@ export class ScenarioService {
     await assertControllerAssignmentAvailable(this.repository, {
       controlledByUserId: input.controlledByUserId ?? character.ownerId ?? null,
       role: input.role ?? "player_character",
-      scenarioId: input.scenarioId
+      scenarioId: input.scenarioId,
     });
 
-    const equipmentState = await this.equipmentService.getCharacterEquipmentState(input.characterId);
+    const equipmentState = await this.equipmentService.getCharacterEquipmentState(
+      input.characterId,
+    );
     const snapshotState = createParticipantSnapshotFromCharacter({
       build: character.build,
       equipmentState,
-      sourceUpdatedAt: character.updatedAt
+      sourceUpdatedAt: character.updatedAt,
     });
     const participant = await this.repository.createScenarioParticipant({
       characterId: character.id,
@@ -147,7 +158,7 @@ export class ScenarioService {
       snapshot: snapshotState.snapshot,
       sourceType: "character",
       state: snapshotState.state,
-      tacticalGroupId: input.tacticalGroupId ?? null
+      tacticalGroupId: input.tacticalGroupId ?? null,
     });
 
     await this.repository.createScenarioEventLog({
@@ -157,10 +168,10 @@ export class ScenarioService {
         characterId: character.id,
         joinSource: participant.joinSource,
         role: participant.role,
-        sourceType: participant.sourceType
+        sourceType: participant.sourceType,
       },
       scenarioId: input.scenarioId,
-      summary: `Added ${participant.snapshot.displayName} to the scenario.`
+      summary: `Added ${participant.snapshot.displayName} to the scenario.`,
     });
 
     return participant;
@@ -173,7 +184,7 @@ export class ScenarioService {
   }): Promise<ScenarioParticipant> {
     const participant = await this.repository.getScenarioParticipantById(
       input.participantId,
-      input.scenarioId
+      input.scenarioId,
     );
 
     if (!participant?.characterId || participant.sourceType !== "character") {
@@ -187,12 +198,12 @@ export class ScenarioService {
     }
 
     const equipmentState = await this.equipmentService.getCharacterEquipmentState(
-      participant.characterId
+      participant.characterId,
     );
     const refreshed = createParticipantSnapshotFromCharacter({
       build: character.build,
       equipmentState,
-      sourceUpdatedAt: character.updatedAt
+      sourceUpdatedAt: character.updatedAt,
     });
 
     return this.repository.updateScenarioParticipantSnapshotAndState(
@@ -200,17 +211,18 @@ export class ScenarioService {
       {
         ...participant.snapshot,
         equipmentState: refreshed.snapshot.equipmentState,
-        sourceUpdatedAt: refreshed.snapshot.sourceUpdatedAt
+        sourceUpdatedAt: refreshed.snapshot.sourceUpdatedAt,
       },
       {
         ...participant.state,
-        equipment: refreshed.state.equipment
-      }
+        equipment: refreshed.state.equipment,
+      },
     );
   }
 
   async addEntityParticipant(input: {
     entityId?: string;
+    expectedGmUserId?: string;
     entityInput?: {
       description?: string;
       gmUserId: string;
@@ -238,7 +250,7 @@ export class ScenarioService {
     await assertControllerAssignmentAvailable(this.repository, {
       controlledByUserId: input.controlledByUserId ?? null,
       role: input.role,
-      scenarioId: input.scenarioId
+      scenarioId: input.scenarioId,
     });
 
     const snapshotState = createParticipantSnapshotFromEntity({
@@ -247,9 +259,9 @@ export class ScenarioService {
         kind: entity.kind,
         name: entity.name,
         notes: entity.notes,
-        snapshot: entity.snapshot
+        snapshot: entity.snapshot,
       },
-      sourceUpdatedAt: entity.updatedAt
+      sourceUpdatedAt: entity.updatedAt,
     });
     const participant = await this.repository.createScenarioParticipant({
       controlledByUserId: input.controlledByUserId ?? null,
@@ -263,7 +275,7 @@ export class ScenarioService {
       snapshot: snapshotState.snapshot,
       sourceType: "entity",
       state: snapshotState.state,
-      tacticalGroupId: input.tacticalGroupId ?? null
+      tacticalGroupId: input.tacticalGroupId ?? null,
     });
 
     await this.repository.createScenarioEventLog({
@@ -274,10 +286,10 @@ export class ScenarioService {
         isTemporary: input.isTemporary ?? false,
         joinSource: participant.joinSource,
         role: participant.role,
-        sourceType: participant.sourceType
+        sourceType: participant.sourceType,
       },
       scenarioId: input.scenarioId,
-      summary: `Added ${participant.snapshot.displayName} to the scenario.`
+      summary: `Added ${participant.snapshot.displayName} to the scenario.`,
     });
 
     return participant;
@@ -285,7 +297,7 @@ export class ScenarioService {
 
   async getScenarioParticipantById(
     participantId: string,
-    scenarioId: string
+    scenarioId: string,
   ): Promise<ScenarioParticipant | null> {
     return this.repository.getScenarioParticipantById(participantId, scenarioId);
   }
@@ -306,7 +318,7 @@ export class ScenarioService {
   }): Promise<ScenarioParticipant> {
     const participants = await this.repository.listScenarioParticipants(input.scenarioId);
     const existingParticipant = participants.find(
-      (participant) => participant.id === input.participantId
+      (participant) => participant.id === input.participantId,
     );
 
     if (!existingParticipant) {
@@ -316,12 +328,12 @@ export class ScenarioService {
     await assertControllerAssignmentAvailable(this.repository, {
       controlledByUserId:
         input.controlledByUserId === undefined
-          ? existingParticipant.controlledByUserId ?? null
+          ? (existingParticipant.controlledByUserId ?? null)
           : input.controlledByUserId,
       excludingParticipantId: existingParticipant.id,
       isActive: input.isActive ?? existingParticipant.isActive,
       role: existingParticipant.role,
-      scenarioId: input.scenarioId
+      scenarioId: input.scenarioId,
     });
 
     const participant = await this.repository.updateScenarioParticipantMetadata(input);
@@ -336,12 +348,12 @@ export class ScenarioService {
         factionId: participant.factionId ?? null,
         isActive: participant.isActive,
         roleTag: participant.roleTag ?? null,
-        tacticalGroupId: participant.tacticalGroupId ?? null
+        tacticalGroupId: participant.tacticalGroupId ?? null,
       },
       phase: scenario?.liveState?.phase,
       roundNumber: scenario?.liveState?.roundNumber,
       scenarioId: input.scenarioId,
-      summary: `Updated control and grouping for ${participant.snapshot.displayName}.`
+      summary: `Updated control and grouping for ${participant.snapshot.displayName}.`,
     });
 
     return participant;
@@ -373,7 +385,7 @@ export class ScenarioService {
       phase: scenario.liveState?.phase,
       roundNumber: scenario.liveState?.roundNumber,
       scenarioId: input.scenarioId,
-      summary: input.summary
+      summary: input.summary,
     });
   }
 }

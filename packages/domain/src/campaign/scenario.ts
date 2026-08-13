@@ -11,12 +11,15 @@ import { hitLocationTargetSchema } from "../encounter/hitLocation";
 
 const idSchema = z.string().min(1);
 const timestampSchema = z.string().min(1);
-const scenarioCanonicalCombatModifierEffectSchema = z.unknown().refine(
-  (value) => canonicalCombatModifierEffectSchema.safeParse(value).success,
-  "Invalid canonical combat modifier lifecycle.",
-);
-const scenarioCanonicalCombatModifierTransitionSchema =
-  z.unknown().refine(
+const scenarioCanonicalCombatModifierEffectSchema = z
+  .unknown()
+  .refine(
+    (value) => canonicalCombatModifierEffectSchema.safeParse(value).success,
+    "Invalid canonical combat modifier lifecycle.",
+  );
+const scenarioCanonicalCombatModifierTransitionSchema = z
+  .unknown()
+  .refine(
     (value) => canonicalCombatModifierLifecycleTransitionSchema.safeParse(value).success,
     "Invalid canonical combat modifier transition.",
   );
@@ -674,8 +677,12 @@ export function createParticipantSnapshotFromEntity(input: {
   snapshot: ScenarioParticipantSnapshot;
   state: ScenarioParticipantState;
 } {
-  const maxHp = Math.max(1, input.maxHp ?? 10);
   const build = readEntitySnapshotBuild(input.entity.snapshot);
+  const characterBuild = looksLikeCharacterBuild(build) ? build : undefined;
+  const maxHp = Math.max(
+    1,
+    input.maxHp ?? (characterBuild ? calculateCharacterGeneralHitpoints(characterBuild) : 10),
+  );
   const equipmentState = readEntitySnapshotField(input.entity.snapshot, "equipmentState");
   const sheetSummary = readEntitySnapshotField(input.entity.snapshot, "sheetSummary");
 
@@ -749,8 +756,11 @@ function stripPrivateModifierLifecycleFromPlayerCombatContext(
 ): ScenarioParticipantCombatContext | undefined {
   if (!combatContext) return undefined;
   const strip = (entry: ScenarioCombatModifierEntry): ScenarioCombatModifierEntry => {
-    const { canonicalLifecycle: _canonicalLifecycle, canonicalTransitions: _transitions, ...safe } =
-      entry;
+    const {
+      canonicalLifecycle: _canonicalLifecycle,
+      canonicalTransitions: _transitions,
+      ...safe
+    } = entry;
     return safe;
   };
   return {

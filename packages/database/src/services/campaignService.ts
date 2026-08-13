@@ -22,6 +22,22 @@ function slugify(value: string): string {
     .slice(0, 60);
 }
 
+function normalizeCampaignNpcSnapshot(input: {
+  campaignId: string;
+  snapshot?: unknown;
+}): Record<string, unknown> {
+  const snapshot =
+    input.snapshot && typeof input.snapshot === "object" && !Array.isArray(input.snapshot)
+      ? (input.snapshot as Record<string, unknown>)
+      : {};
+
+  return {
+    ...snapshot,
+    actorClass: "campaign_npc",
+    campaignId: input.campaignId,
+  };
+}
+
 export class CampaignService {
   constructor(
     private readonly repository: ScenarioRepository = createPrismaScenarioRepository(),
@@ -137,6 +153,31 @@ export class CampaignService {
       name: input.name.trim(),
       notes: input.notes ?? null,
       snapshot: input.snapshot,
+    });
+  }
+
+  async createCampaignNpc(input: {
+    campaignId: string;
+    createdByUserId?: string;
+    description?: string;
+    gmUserId: string;
+    kind: ReusableEntity["kind"];
+    name: string;
+    notes?: string;
+    snapshot?: unknown;
+  }): Promise<{ entity: ReusableEntity; rosterEntry: CampaignRosterEntry }> {
+    return this.repository.createCampaignNpcWithRosterEntry({
+      campaignId: input.campaignId,
+      createdByUserId: input.createdByUserId ?? input.gmUserId,
+      description: input.description ?? null,
+      gmUserId: input.gmUserId,
+      kind: input.kind,
+      name: input.name.trim(),
+      notes: input.notes ?? null,
+      snapshot: normalizeCampaignNpcSnapshot({
+        campaignId: input.campaignId,
+        snapshot: input.snapshot,
+      }),
     });
   }
 

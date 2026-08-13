@@ -71,7 +71,9 @@ const mocks = vi.hoisted(() => {
   };
   const campaignService = {
     createCampaign: vi.fn(),
+    createCampaignNpc: vi.fn(),
     getCampaignById: vi.fn(),
+    getReusableEntityById: vi.fn(),
     listCampaignRosterEntries: vi.fn(),
     listCampaignsByCharacterRosterAccess: vi.fn(),
     listCampaignsByGameMaster: vi.fn(),
@@ -105,6 +107,7 @@ const mocks = vi.hoisted(() => {
   const scenarioService = {
     createScenario: vi.fn(),
     addCharacterParticipant: vi.fn(),
+    addEntityParticipant: vi.fn(),
     getScenarioById: vi.fn(),
     listScenariosByCampaignPlayerAccess: vi.fn(),
     listScenariosByCampaign: vi.fn(),
@@ -3790,6 +3793,96 @@ describe("scenarios route contract", () => {
     });
   });
 
+  it("creates one concrete generated NPC and campaign roster link", async () => {
+    const campaign = {
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    };
+    const snapshot = {
+      actorClass: "generated_npc",
+      build: makeDodgeCharacterBuild("generated-npc-1", "Captain Harl"),
+      equipmentState: {
+        activeLoadoutByCharacterId: {},
+        itemsById: {},
+        locationsById: {},
+        templatesById: {},
+      },
+      generatedHumanoidNpc: {
+        actorId: "generated-npc-1",
+        sourceTemplateId: "template-guard",
+      },
+      sheetSummary: { draftView: { skills: [] } },
+    };
+    const result = {
+      entity: {
+        gmUserId: "gm-1",
+        id: "entity-1",
+        kind: "npc",
+        name: "Captain Harl",
+        snapshot: { ...snapshot, actorClass: "campaign_npc", campaignId: "campaign-1" },
+      },
+      rosterEntry: {
+        campaignId: "campaign-1",
+        category: "npc",
+        id: "roster-1",
+        sourceId: "entity-1",
+        sourceType: "reusableEntity",
+      },
+    };
+    mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
+    mocks.campaignService.createCampaignNpc.mockResolvedValue(result);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        description: "A reusable watch officer.",
+        kind: "npc",
+        name: "Captain Harl",
+        snapshot,
+      },
+      url: "/campaigns/campaign-1/npcs",
+    });
+
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(response.json()).toEqual(result);
+    expect(mocks.campaignService.createCampaignNpc).toHaveBeenCalledWith({
+      campaignId: "campaign-1",
+      createdByUserId: "gm-1",
+      description: "A reusable watch officer.",
+      gmUserId: "gm-1",
+      kind: "npc",
+      name: "Captain Harl",
+      notes: undefined,
+      snapshot,
+    });
+  });
+
+  it("does not create a concrete NPC outside the game master's campaign", async () => {
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "other-gm",
+      id: "campaign-1",
+      name: "Other campaign",
+      status: "active",
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: { kind: "npc", name: "Captain Harl", snapshot: {} },
+      url: "/campaigns/campaign-1/npcs",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(mocks.campaignService.createCampaignNpc).not.toHaveBeenCalled();
+  });
+
   it("lists live roster-eligible scenarios for a character without campaign self-join", async () => {
     const campaign = {
       gmUserId: "gm-1",
@@ -5013,6 +5106,100 @@ describe("scenarios route contract", () => {
     expect(progressionTasks).not.toContainEqual(
       expect.objectContaining({ owner: expect.objectContaining({ kind: "gm" }) }),
     );
+  });
+
+  it("adds an owned campaign-roster NPC to a scenario as the same reusable entity", async () => {
+    const entity = {
+      gmUserId: "gm-1",
+      id: "entity-1",
+      kind: "npc",
+      name: "Captain Harl",
+      snapshot: {
+        actorClass: "campaign_npc",
+        campaignId: "campaign-1",
+      },
+    };
+    const participant = {
+      controlledByUserId: "gm-1",
+      entityId: entity.id,
+      id: "participant-1",
+      role: "npc",
+      scenarioId: "scenario-1",
+      snapshot: { displayName: entity.name },
+      sourceType: "entity",
+    };
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      status: "draft",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.campaignService.getReusableEntityById.mockResolvedValue(entity);
+    mocks.campaignService.listCampaignRosterEntries.mockResolvedValue([
+      {
+        campaignId: "campaign-1",
+        category: "npc",
+        sourceId: entity.id,
+        sourceType: "reusableEntity",
+      },
+    ]);
+    mocks.scenarioService.addEntityParticipant.mockResolvedValue(participant);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: { entityId: entity.id, role: "npc" },
+      url: "/scenarios/scenario-1/participants/entity",
+    });
+
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(response.json()).toEqual({ participant });
+    expect(mocks.scenarioService.addEntityParticipant).toHaveBeenCalledWith(
+      expect.objectContaining({
+        controlledByUserId: "gm-1",
+        entityId: entity.id,
+        expectedGmUserId: "gm-1",
+        role: "npc",
+        scenarioId: "scenario-1",
+      }),
+    );
+  });
+
+  it("does not add another game master's reusable NPC to a scenario", async () => {
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      status: "draft",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.campaignService.getReusableEntityById.mockResolvedValue({
+      gmUserId: "other-gm",
+      id: "entity-foreign",
+      kind: "npc",
+      name: "Foreign NPC",
+      snapshot: { actorClass: "campaign_npc", campaignId: "campaign-1" },
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: { entityId: "entity-foreign", role: "npc" },
+      url: "/scenarios/scenario-1/participants/entity",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Reusable entity not found." });
+    expect(mocks.scenarioService.addEntityParticipant).not.toHaveBeenCalled();
   });
 
   it("filters scenario participants for player workspace access", async () => {

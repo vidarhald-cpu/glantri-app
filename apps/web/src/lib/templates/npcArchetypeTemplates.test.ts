@@ -20,20 +20,20 @@ import {
   listSuggestedSkills,
   listSocietyOptions,
   listSuggestedSkillGroupIds,
-  parseHumanoidNpcArchetypeTemplate
+  parseHumanoidNpcArchetypeTemplate,
 } from "./npcArchetypeTemplates";
 
 const testEquipmentTemplates = [
   {
     category: "weapon",
     id: "weapon-1",
-    name: "Sword"
+    name: "Sword",
   },
   {
     category: "gear",
     id: "gear-1",
-    name: "Rope"
-  }
+    name: "Rope",
+  },
 ] as EquipmentTemplate[];
 
 const content = {
@@ -41,8 +41,8 @@ const content = {
     {
       id: "glantri_language",
       name: "Glantri",
-      sourceSocietyId: "glantri"
-    }
+      sourceSocietyId: "glantri",
+    },
   ],
   civilizations: [
     {
@@ -57,7 +57,7 @@ const content = {
       period: "Current age",
       shortDescription: "Courtly magical civilization",
       spokenLanguageName: "Glantri",
-      writtenLanguageName: "Glantri"
+      writtenLanguageName: "Glantri",
     },
     {
       historicalAnalogue: "Feudal kingdom",
@@ -71,8 +71,8 @@ const content = {
       period: "Current age",
       shortDescription: "Imperial peer civilization",
       spokenLanguageName: "Common",
-      writtenLanguageName: "Common"
-    }
+      writtenLanguageName: "Common",
+    },
   ],
   professionFamilies: [{ id: "military", name: "Military" }],
   professionSkills: [
@@ -81,23 +81,23 @@ const content = {
       isCore: true,
       professionId: "military",
       scope: "family",
-      skillGroupId: "field_soldiering"
+      skillGroupId: "field_soldiering",
     },
     {
       grantType: "ordinary-skill",
       isCore: true,
       professionId: "guard",
       scope: "profession",
-      skillId: "leadership"
-    }
+      skillId: "leadership",
+    },
   ],
   professions: [
     {
       familyId: "military",
       id: "guard",
       name: "Guard",
-      subtypeName: "Guard"
-    }
+      subtypeName: "Guard",
+    },
   ],
   skillGroups: [
     {
@@ -105,15 +105,15 @@ const content = {
       id: "field_soldiering",
       name: "Field soldiering",
       skillMemberships: [{ relevance: "core", skillId: "shield_use" }],
-      sortOrder: 1
+      sortOrder: 1,
     },
     {
       description: "Urban watch",
       id: "urban_watch",
       name: "Urban watch",
       skillMemberships: [{ relevance: "core", skillId: "leadership" }],
-      sortOrder: 2
-    }
+      sortOrder: 2,
+    },
   ],
   skills: [
     {
@@ -128,7 +128,7 @@ const content = {
       linkedStats: ["dex"],
       name: "Shield Use",
       requiresLiteracy: "no",
-      sortOrder: 1
+      sortOrder: 1,
     },
     {
       allowsSpecializations: false,
@@ -142,8 +142,8 @@ const content = {
       linkedStats: ["cha"],
       name: "Leadership",
       requiresLiteracy: "no",
-      sortOrder: 2
-    }
+      sortOrder: 2,
+    },
   ],
   societies: [
     {
@@ -151,8 +151,8 @@ const content = {
       id: "glantri",
       name: "Glantri",
       shortDescription: "Ranked feudal magocracy with courtly and urban institutions.",
-      societyLevel: 4
-    }
+      societyLevel: 4,
+    },
   ],
   societyLevels: [
     {
@@ -162,7 +162,7 @@ const content = {
       socialClass: "Common",
       societyId: "glantri",
       societyLevel: 1,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["guard"],
@@ -171,7 +171,7 @@ const content = {
       socialClass: "Common",
       societyId: "glantri",
       societyLevel: 2,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["guard"],
@@ -180,7 +180,7 @@ const content = {
       socialClass: "Common",
       societyId: "glantri",
       societyLevel: 3,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["guard"],
@@ -189,10 +189,10 @@ const content = {
       socialClass: "Common",
       societyId: "glantri",
       societyLevel: 4,
-      societyName: "Glantri"
-    }
+      societyName: "Glantri",
+    },
   ],
-  specializations: []
+  specializations: [],
 } as unknown as CanonicalContent;
 
 function createEntity(snapshot: unknown): ReusableEntity {
@@ -203,7 +203,7 @@ function createEntity(snapshot: unknown): ReusableEntity {
     kind: "npc",
     name: "City Guard",
     snapshot,
-    updatedAt: "2026-04-16T10:00:00.000Z"
+    updatedAt: "2026-04-16T10:00:00.000Z",
   };
 }
 
@@ -218,12 +218,12 @@ describe("npcArchetypeTemplates", () => {
         shortDescription: "Ranked feudal magocracy with courtly and urban institutions.",
         societyId: "glantri",
         societyLevel: 4,
-        societyName: "Glantri"
-      }
+        societyName: "Glantri",
+      },
     ]);
-    expect(listProfessionsForSociety({ content, societyId: "glantri" }).map((entry) => entry.id)).toEqual([
-      "guard"
-    ]);
+    expect(
+      listProfessionsForSociety({ content, societyId: "glantri" }).map((entry) => entry.id),
+    ).toEqual(["guard"]);
   });
 
   it("combines society and profession suggestions for skill groups and skills", () => {
@@ -231,8 +231,8 @@ describe("npcArchetypeTemplates", () => {
       listSuggestedSkillGroupIds({
         content,
         professionId: "guard",
-        societyId: "glantri"
-      })
+        societyId: "glantri",
+      }),
     ).toEqual(["field_soldiering", "urban_watch"]);
 
     expect(
@@ -240,8 +240,8 @@ describe("npcArchetypeTemplates", () => {
         content,
         professionId: "guard",
         selectedSkillGroupIds: ["field_soldiering"],
-        societyId: "glantri"
-      }).map((skill) => skill.id)
+        societyId: "glantri",
+      }).map((skill) => skill.id),
     ).toEqual(["leadership", "shield_use"]);
 
     expect(
@@ -249,8 +249,8 @@ describe("npcArchetypeTemplates", () => {
         content,
         professionId: "guard",
         selectedSkillGroupIds: ["field_soldiering"],
-        societyId: "glantri"
-      }).map((skill) => skill.id)
+        societyId: "glantri",
+      }).map((skill) => skill.id),
     ).toEqual(["leadership", "shield_use"]);
   });
 
@@ -263,9 +263,15 @@ describe("npcArchetypeTemplates", () => {
     expect(getDefaultSkillLevelForSeniority("expert")).toBe(21);
     expect(getOptionalSkillLevelForSeniority("unskilled")).toBe(0);
     expect(getOptionalSkillLevelForSeniority("fully_trained")).toBe(8);
-    expect(getDefaultSkillLevelForRelevance({ relevance: "core", seniority: "fully_trained" })).toBe(13);
-    expect(getDefaultSkillLevelForRelevance({ relevance: "optional", seniority: "fully_trained" })).toBe(8);
-    expect(getDefaultSkillLevelForRelevance({ relevance: "other", seniority: "fully_trained" })).toBe(13);
+    expect(
+      getDefaultSkillLevelForRelevance({ relevance: "core", seniority: "fully_trained" }),
+    ).toBe(13);
+    expect(
+      getDefaultSkillLevelForRelevance({ relevance: "optional", seniority: "fully_trained" }),
+    ).toBe(8);
+    expect(
+      getDefaultSkillLevelForRelevance({ relevance: "other", seniority: "fully_trained" }),
+    ).toBe(13);
   });
 
   it("builds a reusable humanoid npc archetype snapshot with future generator metadata", () => {
@@ -286,7 +292,7 @@ describe("npcArchetypeTemplates", () => {
     const snapshot = buildHumanoidNpcArchetypeSnapshot({
       content,
       draft,
-      equipmentTemplates: testEquipmentTemplates
+      equipmentTemplates: testEquipmentTemplates,
     }) as Record<string, unknown>;
 
     expect(snapshot.actorClass).toBe("template");
@@ -294,31 +300,43 @@ describe("npcArchetypeTemplates", () => {
     expect(snapshot.profession).toBe("Guard");
     expect(snapshot.humanoidNpcArchetype).toMatchObject({
       gear: {
-        templateIds: draft.selectedGearTemplateIds
+        templateIds: draft.selectedGearTemplateIds,
       },
       profession: {
         familyId: "military",
         id: "guard",
-        name: "Guard"
+        name: "Guard",
       },
       seniority: "veteran",
       society: {
         societyId: "glantri",
-        societyName: "Glantri"
+        societyName: "Glantri",
       },
       variability: {
         skillVariance: 2,
-        statVariance: 1
-      }
+        statVariance: 1,
+      },
     });
-    expect((snapshot.humanoidNpcArchetype as { generationHints: HumanoidNpcArchetypeSnapshot["generationHints"] }).generationHints.competencyBands).toContainEqual({
+    expect(
+      (
+        snapshot.humanoidNpcArchetype as {
+          generationHints: HumanoidNpcArchetypeSnapshot["generationHints"];
+        }
+      ).generationHints.competencyBands,
+    ).toContainEqual({
       label: "unskilled",
       max: 0,
-      min: 0
+      min: 0,
     });
-    expect((snapshot.humanoidNpcArchetype as { generationHints: HumanoidNpcArchetypeSnapshot["generationHints"] }).generationHints.suitabilityScale).toContainEqual({
+    expect(
+      (
+        snapshot.humanoidNpcArchetype as {
+          generationHints: HumanoidNpcArchetypeSnapshot["generationHints"];
+        }
+      ).generationHints.suitabilityScale,
+    ).toContainEqual({
       bonus: 0,
-      label: "ordinary"
+      label: "ordinary",
     });
   });
 
@@ -330,32 +348,32 @@ describe("npcArchetypeTemplates", () => {
         humanoidNpcArchetype: {
           gear: {
             templateIds: ["weapon-1"],
-            templateNames: ["Sword"]
+            templateNames: ["Sword"],
           },
           profession: {
             id: "guard",
-            name: "Guard"
+            name: "Guard",
           },
           skillGroupIds: ["field_soldiering"],
           skills: [{ skillId: "shield_use", skillName: "Shield Use", targetLevel: 12 }],
           society: {
             societyId: "glantri",
-            societyName: "Glantri"
+            societyName: "Glantri",
           },
           stats: {
             base: createEmptyHumanoidNpcArchetypeDraft().stats,
-            final: createEmptyHumanoidNpcArchetypeDraft().stats
+            final: createEmptyHumanoidNpcArchetypeDraft().stats,
           },
           variability: {
             skillVariance: 2,
-            statVariance: 1
-          }
+            statVariance: 1,
+          },
         },
         profession: "Guard",
         roleLabel: "Town watch",
         tags: ["urban", "guard"],
-        templateKind: "humanoid_npc_archetype"
-      })
+        templateKind: "humanoid_npc_archetype",
+      }),
     );
 
     expect(summary).toMatchObject({
@@ -372,8 +390,8 @@ describe("npcArchetypeTemplates", () => {
       tags: ["urban", "guard"],
       variability: {
         skillVariance: 2,
-        statVariance: 1
-      }
+        statVariance: 1,
+      },
     });
   });
 
@@ -385,33 +403,33 @@ describe("npcArchetypeTemplates", () => {
           gear: {
             notes: "Optional rope",
             templateIds: ["weapon-1"],
-            templateNames: ["Sword"]
+            templateNames: ["Sword"],
           },
           profession: {
             id: "guard",
-            name: "Guard"
+            name: "Guard",
           },
           skillGroupIds: ["field_soldiering"],
           skills: [{ skillId: "shield_use", skillName: "Shield Use", targetLevel: 12 }],
           seniority: "expert",
           society: {
             societyId: "glantri",
-            societyName: "Glantri"
+            societyName: "Glantri",
           },
           stats: {
             base: createEmptyHumanoidNpcArchetypeDraft().stats,
-            final: createEmptyHumanoidNpcArchetypeDraft().stats
+            final: createEmptyHumanoidNpcArchetypeDraft().stats,
           },
           variability: {
             gearSubstitutionNotes: "Swap spear for halberd",
             notes: "Veteran captain variant",
             skillVariance: 3,
-            statVariance: 2
-          }
+            statVariance: 2,
+          },
         },
         roleLabel: "Town watch",
-        tags: ["urban", "guard"]
-      })
+        tags: ["urban", "guard"],
+      }),
     );
 
     expect(loaded.isHumanoidNpcArchetype).toBe(true);
@@ -429,8 +447,8 @@ describe("npcArchetypeTemplates", () => {
         gearSubstitutionNotes: "Swap spear for halberd",
         notes: "Veteran captain variant",
         skillVariance: 3,
-        statVariance: 2
-      }
+        statVariance: 2,
+      },
     });
   });
 
@@ -446,7 +464,7 @@ describe("npcArchetypeTemplates", () => {
         selectedSkillGroupIds: ["field_soldiering", "urban_watch"],
         skillSelections: [
           { skillId: "leadership", targetLevel: 12 },
-          { skillId: "shield_use", targetLevel: 12 }
+          { skillId: "shield_use", targetLevel: 12 },
         ],
         societyId: "glantri",
         stats: {
@@ -458,27 +476,27 @@ describe("npcArchetypeTemplates", () => {
           health: 10,
           int: 10,
           siz: 10,
-          str: 10
+          str: 10,
         },
         variability: {
           gearSubstitutionNotes: "",
           notes: "",
           skillVariance: 0,
-          statVariance: 0
-        }
+          statVariance: 0,
+        },
       },
-      equipmentTemplates: testEquipmentTemplates
+      equipmentTemplates: testEquipmentTemplates,
     });
     const template = {
       ...createEntity(snapshot),
-      description: "Reliable town guard."
+      description: "Reliable town guard.",
     };
 
     const npc = generateHumanoidNpcFromTemplate({
       content,
       equipmentTemplates: testEquipmentTemplates,
       seniority: "fully_trained",
-      template
+      template,
     });
 
     expect(npc).toMatchObject({
@@ -490,7 +508,7 @@ describe("npcArchetypeTemplates", () => {
       seniority: "fully_trained",
       societyName: "Glantri",
       sourceTemplateId: "template-1",
-      sourceTemplateName: "City Guard"
+      sourceTemplateName: "City Guard",
     });
     expect(npc.skills).toEqual([
       {
@@ -499,7 +517,7 @@ describe("npcArchetypeTemplates", () => {
         isCore: true,
         skillId: "leadership",
         skillName: "Leadership",
-        targetLevel: 13
+        targetLevel: 13,
       },
       {
         categoryId: "combat",
@@ -507,8 +525,8 @@ describe("npcArchetypeTemplates", () => {
         isCore: true,
         skillId: "shield_use",
         skillName: "Shield Use",
-        targetLevel: 13
-      }
+        targetLevel: 13,
+      },
     ]);
     expect(npc.stats.base).toEqual({
       ...createEmptyHumanoidNpcArchetypeDraft().stats,
@@ -519,7 +537,7 @@ describe("npcArchetypeTemplates", () => {
       health: 10,
       int: 10,
       siz: 10,
-      str: 10
+      str: 10,
     });
   });
 
@@ -527,10 +545,13 @@ describe("npcArchetypeTemplates", () => {
     const summary = parseGeneratedHumanoidNpcEntity(
       createEntity(
         buildGeneratedHumanoidNpcSnapshot({
+          actorId: "generated-npc-1",
           actorClass: "generated_npc",
           displayName: "Town watch 101",
           gearNames: ["Sword"],
+          gearTemplateIds: ["weapon-template-sword"],
           kind: "npc",
+          professionId: "guard",
           professionName: "Guard",
           roleLabel: "Town watch",
           seniority: "veteran",
@@ -541,19 +562,20 @@ describe("npcArchetypeTemplates", () => {
               isCore: true,
               skillId: "shield_use",
               skillName: "Shield Use",
-              targetLevel: 17
-            }
+              targetLevel: 17,
+            },
           ],
+          societyId: "glantri",
           societyName: "Glantri",
           sourceTemplateId: "template-1",
           sourceTemplateName: "City Guard",
           stats: {
             base: createEmptyHumanoidNpcArchetypeDraft().stats,
-            final: createEmptyHumanoidNpcArchetypeDraft().stats
+            final: createEmptyHumanoidNpcArchetypeDraft().stats,
           },
-          tags: ["urban", "guard"]
-        })
-      )
+          tags: ["urban", "guard"],
+        }),
+      ),
     );
 
     expect(summary).toMatchObject({
@@ -566,7 +588,7 @@ describe("npcArchetypeTemplates", () => {
       skillCount: 1,
       societyName: "Glantri",
       sourceTemplateName: "City Guard",
-      tags: ["urban", "guard"]
+      tags: ["urban", "guard"],
     });
   });
 });

@@ -3,10 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Campaign, ReusableEntity } from "@glantri/domain";
 
 import { CampaignService } from "./campaignService";
-import {
-  createCharacterRecord,
-  createScenarioRepositoryStub,
-} from "./scenarioService.testHelpers";
+import { createCharacterRecord, createScenarioRepositoryStub } from "./scenarioService.testHelpers";
 
 describe("CampaignService access listing", () => {
   it("returns player-accessible campaigns from the repository", async () => {
@@ -32,7 +29,9 @@ describe("CampaignService access listing", () => {
 
     const service = new CampaignService(repository);
 
-    await expect(service.listCampaignsByPlayerAccess("player-1")).resolves.toEqual(expectedCampaigns);
+    await expect(service.listCampaignsByPlayerAccess("player-1")).resolves.toEqual(
+      expectedCampaigns,
+    );
   });
 
   it("returns campaigns where a character is in the roster", async () => {
@@ -65,6 +64,46 @@ describe("CampaignService access listing", () => {
 });
 
 describe("CampaignService campaign roster", () => {
+  it("persists one concrete campaign NPC and its roster link as the same identity", async () => {
+    const { participants, repository, reusableEntities, rosterEntries } =
+      createScenarioRepositoryStub();
+    const service = new CampaignService(repository);
+
+    const result = await service.createCampaignNpc({
+      campaignId: "campaign-1",
+      description: "A reusable watch officer.",
+      gmUserId: "gm-1",
+      kind: "npc",
+      name: "  Captain Harl  ",
+      snapshot: {
+        actorClass: "generated_npc",
+        campaignId: "wrong-campaign",
+        generatedHumanoidNpc: { sourceTemplateId: "template-guard" },
+      },
+    });
+
+    expect(result.entity).toMatchObject({
+      gmUserId: "gm-1",
+      kind: "npc",
+      name: "Captain Harl",
+      snapshot: {
+        actorClass: "campaign_npc",
+        campaignId: "campaign-1",
+        generatedHumanoidNpc: { sourceTemplateId: "template-guard" },
+      },
+    });
+    expect(result.rosterEntry).toMatchObject({
+      campaignId: "campaign-1",
+      category: "npc",
+      labelSnapshot: "Captain Harl",
+      sourceId: result.entity.id,
+      sourceType: "reusableEntity",
+    });
+    expect(reusableEntities).toEqual([result.entity]);
+    expect(rosterEntries).toEqual([result.rosterEntry]);
+    expect(participants).toHaveLength(0);
+  });
+
   it("links characters, reusable entities, and templates without creating scenario participants", async () => {
     const { participants, repository, rosterEntries } = createScenarioRepositoryStub();
     const characters = new Map([
@@ -102,12 +141,9 @@ describe("CampaignService campaign roster", () => {
       ],
     ]);
     repository.getReusableEntityById = async (entityId) => reusableEntities.get(entityId) ?? null;
-    const service = new CampaignService(
-      repository,
-      {
-        getCharacterById: async (characterId: string) => characters.get(characterId) ?? null,
-      } as never,
-    );
+    const service = new CampaignService(repository, {
+      getCharacterById: async (characterId: string) => characters.get(characterId) ?? null,
+    } as never);
 
     await expect(
       service.addCampaignRosterEntry({
@@ -155,12 +191,9 @@ describe("CampaignService campaign roster", () => {
     const characters = new Map([
       ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })],
     ]);
-    const service = new CampaignService(
-      repository,
-      {
-        getCharacterById: async (characterId: string) => characters.get(characterId) ?? null,
-      } as never,
-    );
+    const service = new CampaignService(repository, {
+      getCharacterById: async (characterId: string) => characters.get(characterId) ?? null,
+    } as never);
 
     const first = await service.addCampaignRosterEntry({
       campaignId: "campaign-1",
@@ -203,12 +236,9 @@ describe("CampaignService campaign roster", () => {
     const characters = new Map([
       ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })],
     ]);
-    const service = new CampaignService(
-      repository,
-      {
-        getCharacterById: async (characterId: string) => characters.get(characterId) ?? null,
-      } as never,
-    );
+    const service = new CampaignService(repository, {
+      getCharacterById: async (characterId: string) => characters.get(characterId) ?? null,
+    } as never);
 
     const campaignOneEntry = await service.addCampaignRosterEntry({
       campaignId: "campaign-1",
@@ -232,8 +262,12 @@ describe("CampaignService campaign roster", () => {
     expect(campaignOneDuplicate.id).toBe(campaignOneEntry.id);
     expect(campaignTwoEntry.id).not.toBe(campaignOneEntry.id);
     expect(rosterEntries).toHaveLength(2);
-    await expect(service.listCampaignRosterEntries("campaign-1")).resolves.toEqual([campaignOneEntry]);
-    await expect(service.listCampaignRosterEntries("campaign-2")).resolves.toEqual([campaignTwoEntry]);
+    await expect(service.listCampaignRosterEntries("campaign-1")).resolves.toEqual([
+      campaignOneEntry,
+    ]);
+    await expect(service.listCampaignRosterEntries("campaign-2")).resolves.toEqual([
+      campaignTwoEntry,
+    ]);
   });
 
   it("removes roster membership by campaign source identity", async () => {
@@ -258,12 +292,9 @@ describe("CampaignService campaign roster", () => {
       ],
     ]);
     repository.getReusableEntityById = async (entityId) => reusableEntities.get(entityId) ?? null;
-    const service = new CampaignService(
-      repository,
-      {
-        getCharacterById: async (characterId: string) => characters.get(characterId) ?? null,
-      } as never,
-    );
+    const service = new CampaignService(repository, {
+      getCharacterById: async (characterId: string) => characters.get(characterId) ?? null,
+    } as never);
 
     await service.addCampaignRosterEntry({
       campaignId: "campaign-1",
@@ -346,12 +377,9 @@ describe("CampaignService campaign roster", () => {
       ],
     ]);
     repository.getReusableEntityById = async (entityId) => reusableEntities.get(entityId) ?? null;
-    const service = new CampaignService(
-      repository,
-      {
-        getCharacterById: async (characterId: string) => characters.get(characterId) ?? null,
-      } as never,
-    );
+    const service = new CampaignService(repository, {
+      getCharacterById: async (characterId: string) => characters.get(characterId) ?? null,
+    } as never);
 
     const characterEntry = await service.addCampaignRosterEntry({
       campaignId: "campaign-1",
