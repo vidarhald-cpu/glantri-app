@@ -1,7 +1,8 @@
 # Parry — GM Procedure
 
-Use this procedure for a participant who declares the primary **Parry** action and for the ordinary
-Parry check against an incoming attack.
+Use this procedure to review a participant's primary **Parry** declaration and to proxy or review an
+ordinary Parry check against an incoming attack. The defender owns the ordinary roll in Player
+Combat; the GM is not its exclusive operator.
 
 ## 1. Validate The Declaration
 
@@ -16,17 +17,18 @@ On commit, the app stores one round-limited DB/Parry percentage modifier equal t
 Dodge, rounded down. Review the generated row in declaration preview or modifier review. Recommit
 replaces the row; declaration undo removes it.
 
-## 2. Resolve An Incoming Attack
+## 2. Proxy Or Review An Incoming Parry
 
 P1 follows a Phase 1 attack and P2 follows a Phase 2 attack.
 
 1. If the attack missed, mark Parry not applicable; no damage resolution is required for that miss.
-2. After a hit or grazing hit, select the defender's available main-hand and/or off-hand Parry
-   sources.
-3. Roll the open-ended `1d20` Parry check.
+2. After a hit or grazing hit, confirm the defender-owned Current Action and its available main-hand
+   and/or off-hand Parry sources.
+3. Let the defender roll the open-ended `1d20` Parry check in Player Combat, or perform that Current
+   Action as a GM proxy.
 4. The app combines the Parry/P base with the calculated General/Fatigue, DB/Parry, stored
    attack-result, and declared-Parry adjustments.
-5. Read the final total: **21 or higher succeeds; 20 or lower fails**.
+5. Review the final total: **21 or higher succeeds; 20 or lower fails**.
 
 | Resolved value           | Rule                                                                  |
 | ------------------------ | --------------------------------------------------------------------- |
@@ -58,4 +60,5 @@ Do not treat these gaps as reconciled rules. Their source and implementation sta
 [Parry internal notes](../internal/parry-notes.md), and Combat conflicts remain tracked in
 [issue #211](https://github.com/vidarhald-cpu/glantri-app/issues/211).
 
-Player-facing declaration instructions are in [Parry — Player Rules](../player/parry.md).
+Player-facing declaration and incoming-roll instructions are in
+[Parry — Player Rules](../player/parry.md).

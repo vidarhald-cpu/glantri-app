@@ -33,8 +33,31 @@ Parry, the app combines this percentage with the other current modifiers and pre
 values and result.
 
 There is no standalone success chance at declaration: Parry adds a known modifier to a later
-incoming-attack check. Once that attack's permitted inputs are known, the GM procedure exposes the
-required total and success boundary.
+incoming-attack check.
+
+## Roll Parry Against An Incoming Attack
+
+An incoming Parry is a separate defender-owned Current Action. It can occur whether or not the
+defender declared the primary Parry action; that declaration changes the modifier, not who owns the
+roll or how it is resolved.
+
+1. After an incoming attack hits or grazes, open the Parry Current Action in Player Combat. A miss
+   makes Parry not applicable.
+2. Review the available Parry source and Parry input shown for the defender. The action cannot roll
+   without an available source.
+3. Roll Parry. Player Combat rolls the open-ended `1d20` and applies the current calculated modifier
+   adjustment.
+4. Read the final total and result: **21 or higher succeeds; 20 or lower fails**.
+
+| Player-safe result | What is shown                                                                 |
+| ------------------ | ----------------------------------------------------------------------------- |
+| Parry input        | The defender's available Parry source and combined Parry/P score              |
+| Modifier           | One calculated adjustment, without the opponent's individual modifier entries |
+| Roll               | The initial `d20`, any open-ended dice, and their roll total                  |
+| Result             | Final Parry total and “Parry successful” or “Parry failed”                    |
+
+The GM may perform the same Current Action as a proxy and may review the result. The defender remains
+the owner of the ordinary Parry roll.
 
 ## What The Declaration Does
 
@@ -44,4 +67,4 @@ required total and success boundary.
 - Parry creates no Phase 1 or Phase 2 attack opportunity and no separate “Parry maneuver” roll.
 - Existing movement declaration behavior is unchanged.
 
-The GM resolves an incoming attack using the [GM Parry procedure](../gm/parry.md).
+GM proxy and review steps are in the [GM Parry procedure](../gm/parry.md).
