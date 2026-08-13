@@ -178,6 +178,31 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(refetched!.name).toBe("After Update");
     });
 
+    it("rejects divergent finalization under an existing id and leaves the canonical row unchanged", async () => {
+      const repository = createPrismaCharacterRepository(prisma!);
+      const service = new CharacterService(repository);
+      const owner = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, owner.id, { name: "Canonical" });
+      const canonical = await service.getCharacterById(character.id);
+
+      await expect(
+        service.saveCharacter({
+          build: { ...canonical!.build, name: "Divergent retry" },
+          id: character.id,
+          name: "Divergent retry",
+          ownerId: owner.id,
+        }),
+      ).rejects.toMatchObject({ code: "character_already_exists" });
+
+      await expect(service.getCharacterById(character.id)).resolves.toMatchObject({
+        build: canonical!.build,
+        name: "Canonical",
+        ownerId: owner.id,
+        updatedAt: canonical!.updatedAt,
+      });
+      await expect(prisma!.character.count({ where: { id: character.id } })).resolves.toBe(1);
+    });
+
     it("rejects a stale second update and preserves the newer server build", async () => {
       const repository = createPrismaCharacterRepository(prisma!);
       const service = new CharacterService(repository);
@@ -266,6 +291,7 @@ if (!process.env.DATABASE_URL_TEST) {
       ).resolves.toMatchObject({
         characterId: null,
         snapshotJson: snapshot,
+        stateJson: { health: { currentHp: 8 } },
       });
     });
   });

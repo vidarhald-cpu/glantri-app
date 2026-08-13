@@ -14,6 +14,25 @@ vi.mock("../api/characterClient", () => ({
 }));
 
 vi.mock("../offline/repositories/localCharacterRepository", () => ({
+  buildServerBackedLocalCharacterRecord: (
+    serverRecord: {
+      build: unknown;
+      createdAt?: string;
+      id: string;
+      ownerId?: string;
+      updatedAt: string;
+    },
+    existing?: { createdAt: string; finalizedAt: string },
+  ) => ({
+    build: serverRecord.build,
+    createdAt: existing?.createdAt ?? serverRecord.createdAt,
+    creatorId: serverRecord.ownerId,
+    finalizedAt: existing?.finalizedAt ?? serverRecord.createdAt,
+    id: serverRecord.id,
+    serverUpdatedAt: serverRecord.updatedAt,
+    syncStatus: "synced",
+    updatedAt: serverRecord.updatedAt,
+  }),
   getServerCharacterRevision: (record: {
     serverUpdatedAt?: string;
     syncStatus: string;
@@ -76,6 +95,47 @@ describe("loadServerCharacterEditContext", () => {
     loadServerCharacterByIdMock.mockReset();
   });
 
+  it("caches the canonical record when no retained local record exists", async () => {
+    const content = { skills: [] };
+    const serverRecord = {
+      build: baseBuild,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      id: "character-1",
+      level: 1,
+      name: "Progressor",
+      ownerId: "owner-1",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    };
+    const canonicalRecord = {
+      build: serverRecord.build,
+      createdAt: serverRecord.createdAt,
+      creatorId: serverRecord.ownerId,
+      finalizedAt: serverRecord.createdAt,
+      id: serverRecord.id,
+      serverUpdatedAt: serverRecord.updatedAt,
+      syncStatus: "synced",
+      updatedAt: serverRecord.updatedAt,
+    };
+
+    loadCanonicalContentMock.mockResolvedValue(content);
+    loadServerCharacterByIdMock.mockResolvedValue(serverRecord);
+    getMock.mockResolvedValue(undefined);
+    saveMock.mockResolvedValue(canonicalRecord);
+
+    const { loadServerCharacterEditContext } = await import("./loadServerCharacterEditContext");
+    const result = await loadServerCharacterEditContext("character-1");
+
+    expect(saveMock).toHaveBeenCalledWith(canonicalRecord);
+    expect(result).toEqual({
+      canonicalRecord,
+      content,
+      expectedUpdatedAt: serverRecord.updatedAt,
+      hasRevisionConflict: false,
+      recoveryRecord: undefined,
+      serverRecord,
+    });
+  });
+
   it("resumes a local draft while retaining the canonical server revision", async () => {
     const content = { skills: [] };
     const serverRecord = {
@@ -121,11 +181,12 @@ describe("loadServerCharacterEditContext", () => {
     const result = await loadServerCharacterEditContext("character-1");
 
     expect(saveMock).not.toHaveBeenCalled();
-    expect(result.localRecord).toBe(localRecord);
-    expect(result.localRecord.build.progressionState.checks[0]).toMatchObject({
+    expect(result.recoveryRecord).toBe(localRecord);
+    expect(result.recoveryRecord?.build.progressionState.checks[0]).toMatchObject({
       status: "requested",
       targetId: "lore",
     });
+    expect(result.canonicalRecord.build).toBe(serverRecord.build);
     expect(result.serverRecord).toBe(serverRecord);
     expect(result.expectedUpdatedAt).toBe("2026-01-01T00:00:00.000Z");
     expect(result.hasRevisionConflict).toBe(false);
@@ -158,9 +219,10 @@ describe("loadServerCharacterEditContext", () => {
     const { loadServerCharacterEditContext } = await import("./loadServerCharacterEditContext");
     const result = await loadServerCharacterEditContext("character-1");
 
-    expect(result.localRecord).toBe(localRecord);
+    expect(result.recoveryRecord).toBe(localRecord);
+    expect(result.canonicalRecord.build).toBe(serverRecord.build);
     expect(result.serverRecord).toBe(serverRecord);
-    expect(result.expectedUpdatedAt).toBe("2026-01-01T00:00:00.000Z");
+    expect(result.expectedUpdatedAt).toBe("2026-01-03T00:00:00.000Z");
     expect(result.hasRevisionConflict).toBe(true);
     expect(saveMock).not.toHaveBeenCalled();
   });

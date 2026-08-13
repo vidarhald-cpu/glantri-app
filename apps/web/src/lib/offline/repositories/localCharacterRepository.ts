@@ -1,4 +1,4 @@
-import { characterBuildSchema, type CharacterBuild } from "@glantri/domain";
+import { characterBuildSchema, type CharacterBuild, type CharacterRecord } from "@glantri/domain";
 
 import { localDb, type LocalCharacterRecord } from "../glantriDexie";
 
@@ -35,6 +35,24 @@ export function requireServerCharacterRevision(record: LocalCharacterRecord): st
   }
 
   return revision;
+}
+
+export function buildServerBackedLocalCharacterRecord(
+  serverRecord: CharacterRecord,
+  existing?: LocalCharacterRecord,
+): LocalCharacterRecord {
+  return {
+    build: serverRecord.build,
+    createdAt: existing?.createdAt ?? serverRecord.createdAt,
+    creatorDisplayName: serverRecord.owner?.displayName ?? existing?.creatorDisplayName,
+    creatorEmail: serverRecord.owner?.email ?? existing?.creatorEmail,
+    creatorId: serverRecord.ownerId ?? serverRecord.owner?.id ?? existing?.creatorId,
+    finalizedAt: existing?.finalizedAt ?? serverRecord.createdAt,
+    id: serverRecord.id,
+    serverUpdatedAt: serverRecord.updatedAt,
+    syncStatus: "synced",
+    updatedAt: serverRecord.updatedAt,
+  };
 }
 
 export class LocalCharacterRepository {

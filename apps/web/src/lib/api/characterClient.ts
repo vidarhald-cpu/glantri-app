@@ -1,9 +1,32 @@
 import type { CharacterBuild, CharacterRecord } from "@glantri/domain";
 
-import { sendJson } from "./apiClient";
+import { ApiRequestError, sendJson } from "./apiClient";
 
 export type { CharacterRecord };
 export type ServerCharacterRecord = CharacterRecord;
+
+export function getCurrentCharacterFromMutationConflict(
+  error: unknown,
+): CharacterRecord | undefined {
+  if (!(error instanceof ApiRequestError) || error.status !== 409) {
+    return undefined;
+  }
+
+  const currentCharacter = (error.payload as { currentCharacter?: unknown } | undefined)
+    ?.currentCharacter;
+
+  if (
+    !currentCharacter ||
+    typeof currentCharacter !== "object" ||
+    !("build" in currentCharacter) ||
+    typeof (currentCharacter as { id?: unknown }).id !== "string" ||
+    typeof (currentCharacter as { updatedAt?: unknown }).updatedAt !== "string"
+  ) {
+    return undefined;
+  }
+
+  return currentCharacter as CharacterRecord;
+}
 
 export async function saveCharacterToServer(build: CharacterBuild): Promise<CharacterRecord> {
   const payload = await sendJson<{ character: CharacterRecord }>("/characters", {

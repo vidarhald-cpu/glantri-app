@@ -22,6 +22,7 @@ export {
 } from "./chargenClient";
 export {
   deleteServerCharacter,
+  getCurrentCharacterFromMutationConflict,
   loadMyServerCharacters,
   loadServerCharacterById,
   loadServerCharacters,

@@ -2,7 +2,11 @@ import type { AuthUser } from "@glantri/auth";
 
 import type { ServerCharacterRecord } from "../api/characterClient";
 import type { LocalCharacterRecord } from "../offline/glantriDexie";
-import { UNNAMED_CHARACTER_PLACEHOLDER } from "../offline/repositories/localCharacterRepository";
+import {
+  buildServerBackedLocalCharacterRecord,
+  UNNAMED_CHARACTER_PLACEHOLDER,
+} from "../offline/repositories/localCharacterRepository";
+import { canPresentRetainedLocalCharacter } from "./localCharacterAccess";
 
 export type CharacterBrowserTypeFilter = "all" | "pc" | "npc";
 export type CharacterBrowserSourceFilter = "all" | "server" | "local";
@@ -49,16 +53,12 @@ function parseSortableDate(value: string | undefined): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-function canOpenCharacter(record: LocalCharacterRecord, currentUser: AuthUser | null): boolean {
-  if (!currentUser) {
-    return false;
-  }
-
-  if (currentUser.roles.includes("game_master") || currentUser.roles.includes("admin")) {
-    return true;
-  }
-
-  return record.creatorId === currentUser.id;
+function canOpenCharacter(input: {
+  currentUser: AuthUser | null;
+  hasServerAccess: boolean;
+  record: LocalCharacterRecord;
+}): boolean {
+  return canPresentRetainedLocalCharacter(input);
 }
 
 function deriveCharacterType(record: LocalCharacterRecord): "npc" | "pc" {
@@ -114,8 +114,9 @@ function deriveOwnerDescriptor(
 function deriveAccessState(
   record: LocalCharacterRecord,
   currentUser: AuthUser | null,
+  hasServerAccess: boolean,
 ): CharacterBrowserAccessState {
-  return canOpenCharacter(record, currentUser) ? "openable" : "restricted";
+  return canOpenCharacter({ currentUser, hasServerAccess, record }) ? "openable" : "restricted";
 }
 
 function deriveAccessLabel(
@@ -131,22 +132,8 @@ function deriveAccessLabel(
     : "Local-only, not openable here";
 }
 
-function normalizeServerCharacterRecord(record: ServerCharacterRecord): LocalCharacterRecord {
-  return {
-    build: record.build,
-    createdAt: record.createdAt,
-    creatorDisplayName: record.owner?.displayName ?? undefined,
-    creatorEmail: record.owner?.email ?? undefined,
-    creatorId: record.ownerId ?? record.owner?.id ?? undefined,
-    finalizedAt: record.createdAt,
-    id: record.id,
-    serverUpdatedAt: record.updatedAt,
-    syncStatus: "synced",
-    updatedAt: record.updatedAt,
-  };
-}
-
 function mergeCharacterRecords(input: {
+  currentUser: AuthUser | null;
   localRecords: LocalCharacterRecord[];
   serverRecords: ServerCharacterRecord[];
 }): LocalCharacterRecord[] {
@@ -158,25 +145,23 @@ function mergeCharacterRecords(input: {
       continue;
     }
 
+    if (
+      !canPresentRetainedLocalCharacter({
+        currentUser: input.currentUser,
+        hasServerAccess: serverRecordIds.has(localRecord.id),
+        record: localRecord,
+      })
+    ) {
+      continue;
+    }
+
     mergedById.set(localRecord.id, localRecord);
   }
 
   for (const serverRecord of input.serverRecords) {
-    const normalizedServerRecord = normalizeServerCharacterRecord(serverRecord);
     const existing = mergedById.get(serverRecord.id);
 
-    mergedById.set(serverRecord.id, {
-      ...existing,
-      ...normalizedServerRecord,
-      build: normalizedServerRecord.build,
-      createdAt: existing?.createdAt ?? normalizedServerRecord.createdAt,
-      creatorDisplayName: normalizedServerRecord.creatorDisplayName ?? existing?.creatorDisplayName,
-      creatorEmail: normalizedServerRecord.creatorEmail ?? existing?.creatorEmail,
-      creatorId: normalizedServerRecord.creatorId ?? existing?.creatorId,
-      finalizedAt: existing?.finalizedAt ?? normalizedServerRecord.finalizedAt,
-      syncStatus: "synced",
-      updatedAt: normalizedServerRecord.updatedAt,
-    });
+    mergedById.set(serverRecord.id, buildServerBackedLocalCharacterRecord(serverRecord, existing));
   }
 
   return [...mergedById.values()];
@@ -188,6 +173,7 @@ export function buildCharacterBrowserEntries(input: {
   serverRecords: ServerCharacterRecord[];
 }): CharacterBrowserEntry[] {
   return mergeCharacterRecords({
+    currentUser: input.currentUser,
     localRecords: input.localRecords,
     serverRecords: input.serverRecords,
   })
@@ -197,7 +183,11 @@ export function buildCharacterBrowserEntries(input: {
         parseSortableDate(left.updatedAt || left.finalizedAt),
     )
     .map((record) => {
-      const accessState = deriveAccessState(record, input.currentUser);
+      const accessState = deriveAccessState(
+        record,
+        input.currentUser,
+        input.serverRecords.some((serverRecord) => serverRecord.id === record.id),
+      );
       const owner = deriveOwnerDescriptor(record, input.currentUser);
 
       return {

@@ -4,6 +4,7 @@ import { loadServerCharacterById, type ServerCharacterRecord } from "../api/char
 import { loadCanonicalContent } from "../content/loadCanonicalContent";
 import type { LocalCharacterRecord } from "../offline/glantriDexie";
 import {
+  buildServerBackedLocalCharacterRecord,
   getServerCharacterRevision,
   LocalCharacterRepository,
 } from "../offline/repositories/localCharacterRepository";
@@ -11,10 +12,11 @@ import {
 const localCharacterRepository = new LocalCharacterRepository();
 
 export interface ServerCharacterEditContext {
+  canonicalRecord: LocalCharacterRecord;
   content: CanonicalContent;
-  expectedUpdatedAt?: string;
+  expectedUpdatedAt: string;
   hasRevisionConflict: boolean;
-  localRecord: LocalCharacterRecord;
+  recoveryRecord?: LocalCharacterRecord;
   serverRecord: ServerCharacterRecord;
 }
 
@@ -34,27 +36,20 @@ export async function loadServerCharacterEditContext(
   const localServerRevision = existingLocalRecord
     ? getServerCharacterRevision(existingLocalRecord)
     : undefined;
-  const localRecord =
-    localHasPendingChanges && existingLocalRecord
-      ? existingLocalRecord
-      : await localCharacterRepository.save({
-          build: serverRecord.build,
-          creatorDisplayName: serverRecord.owner?.displayName ?? undefined,
-          creatorEmail: serverRecord.owner?.email ?? undefined,
-          creatorId: serverRecord.ownerId ?? undefined,
-          serverUpdatedAt: serverRecord.updatedAt,
-          syncStatus: "synced",
-          updatedAt: serverRecord.updatedAt,
-        });
-  const expectedUpdatedAt = localHasPendingChanges ? localServerRevision : serverRecord.updatedAt;
+  const canonicalRecord = buildServerBackedLocalCharacterRecord(serverRecord, existingLocalRecord);
+
+  if (!localHasPendingChanges) {
+    await localCharacterRepository.save(canonicalRecord);
+  }
 
   return {
+    canonicalRecord,
     content,
-    expectedUpdatedAt,
+    expectedUpdatedAt: serverRecord.updatedAt,
     hasRevisionConflict:
       localHasPendingChanges &&
       (localServerRevision === undefined || localServerRevision !== serverRecord.updatedAt),
-    localRecord,
+    recoveryRecord: localHasPendingChanges ? existingLocalRecord : undefined,
     serverRecord,
   };
 }

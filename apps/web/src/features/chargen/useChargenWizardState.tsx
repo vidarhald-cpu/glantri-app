@@ -94,6 +94,7 @@ import {
   type ProfessionBrowseCard,
   type SkillBrowseRow,
 } from "./chargenWizardHelpers";
+import { persistAuthenticatedFinalizedCharacter } from "./finalizeCharacterAuthority";
 
 const SESSION_ID = "chargen-vertical-slice";
 const CONTENT_CACHE_KEY = "canonical-content";
@@ -1530,38 +1531,24 @@ export function useChargenWizardState() {
     }
 
     const finalizedBuild = result.build;
+
+    if (!currentUser) {
+      setFeedback([
+        "Sign in before finalizing. A Character is complete only after the server confirms its canonical record.",
+      ]);
+      return;
+    }
+
     setIsFinalizing(true);
 
     try {
-      const existingRecord = await localCharacterRepository.get(finalizedBuild.id);
-
-      if (existingRecord?.syncStatus === "synced") {
-        await chargenSessionRepository.delete(SESSION_ID);
-        router.push(`/characters/${existingRecord.id}`);
-        return;
-      }
-
-      let finalizedRecord;
-
-      if (currentUser) {
-        const serverRecord = await saveCharacterToServer(finalizedBuild);
-
-        finalizedRecord = await localCharacterRepository.save({
-          build: serverRecord.build,
-          createdAt: serverRecord.createdAt,
-          creatorDisplayName: currentUser.displayName,
-          creatorEmail: currentUser.email,
-          creatorId: currentUser.id,
-          finalizedAt: serverRecord.createdAt,
-          serverUpdatedAt: serverRecord.updatedAt,
-          syncStatus: "synced",
-          updatedAt: serverRecord.updatedAt,
-        });
-      } else {
-        finalizedRecord = await localCharacterRepository.save({
-          build: finalizedBuild,
-        });
-      }
+      const finalizedRecord = await persistAuthenticatedFinalizedCharacter(
+        { build: finalizedBuild, currentUser },
+        {
+          saveCharacterToServer,
+          saveLocalCharacter: (input) => localCharacterRepository.save(input),
+        },
+      );
 
       await chargenSessionRepository.delete(SESSION_ID);
       router.push(`/characters/${finalizedRecord.id}`);

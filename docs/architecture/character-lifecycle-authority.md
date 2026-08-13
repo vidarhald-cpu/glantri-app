@@ -39,13 +39,15 @@ Rolled/Base -> Original -> Developed -> Current
 
 Unauthorized Character reads and mutations return `404` so they do not disclose another owner's record or revision.
 
+Browser-local records follow the same presentation boundary. An owner may recover their own retained record, an owning GM may see one only when the scoped server Character remains accessible, and an admin may see retained records. A GM role by itself never grants access to another account's browser-local Character. Account switching therefore cannot expose retained records that are outside the active actor's scope.
+
 ## Server mutation contract
 
 All finalized Character build writes go through `CharacterService` and the Character routes.
 
 ### Finalize/create
 
-`POST /characters` accepts a validated finalized build and binds it to the authenticated user. A retry with the same id, owner, and identical build returns the existing canonical record. The same id with a different owner or changed build returns `409 character_already_exists`; it never becomes an update.
+`POST /characters` accepts a validated finalized build and binds it to the authenticated user. Authenticated chargen reports success, writes a synced browser cache, and clears its session only after this request returns the canonical server record. An existing synced browser record never bypasses the request. A retry with the same id, owner, and identical build returns the existing canonical record. The same id with a different owner or changed build returns `409 character_already_exists`; it never becomes an update or a local success.
 
 ### Edit/synchronize
 
@@ -57,6 +59,8 @@ All finalized Character build writes go through `CharacterService` and the Chara
 - `expectedUpdatedAt`, copied from the canonical server record on which the draft was based.
 
 The database update compares both id and revision. A mismatch returns `409 stale_character` with the current canonical record after authorization. The stale draft remains local for recovery and does not overwrite the server. The caller must reload and deliberately reconcile before retrying.
+
+When a retained local draft and the canonical server revision differ, Character screens present the canonical server record as current and keep the retained draft as a separate recovery candidate. The actor may review the retained draft, return to the canonical version, or discard the retained draft. Review does not merge or save anything automatically; a later deliberate save uses the current canonical revision. Reloading repeats this bounded state instead of promoting the stale draft or hiding the canonical record.
 
 `updatedAt` is the server's opaque Character revision; clients compare it for equality and do not infer ordering or game meaning from it. Browser-local `updatedAt` is only the local save time. `serverUpdatedAt` records the canonical revision on which that cache or draft was based. For existing synced browser records created before `serverUpdatedAt`, their `updatedAt` is used once as the compatibility base revision.
 
@@ -73,10 +77,11 @@ A stale delete returns `409 stale_character` and changes nothing.
 3. **Finalized -> edited:** an owner, owning GM, or admin submits the exact base revision; one new canonical revision is returned and cached.
 4. **Offline edit -> synchronized:** the browser retains the base server revision while saving local changes. Synchronization succeeds only if that base is still current.
 5. **Concurrent edit conflict:** another actor saves first; the later stale draft receives `409`, remains recoverable locally, and cannot overwrite the newer Character.
-6. **Rostered:** Campaign membership refers to the canonical Character; it does not create another Character authority.
-7. **Snapshotted:** Scenario admission copies the Character into Scenario-owned snapshot/live state. Later Character edits have no effect unless the owning GM invokes the existing explicit equipment refresh.
-8. **Deleted:** the canonical Character and roster references are removed at the expected revision. Existing Scenario snapshots remain usable historical state with no live Character link.
-9. **Retired:** the current schema has no Character retirement state. Retirement is unsupported rather than silently represented as deletion, roster removal, or a browser-local flag; adding it requires a future explicit server lifecycle decision.
+6. **Conflict recovery:** the canonical server Character is shown as current while the retained draft can be reviewed, left for later, or discarded. No recovery choice automatically merges or overwrites either record.
+7. **Rostered:** Campaign membership refers to the canonical Character; it does not create another Character authority.
+8. **Snapshotted:** Scenario admission copies the Character into Scenario-owned snapshot/live state. Later Character edits have no effect unless the owning GM invokes the existing explicit equipment refresh.
+9. **Deleted:** the canonical Character and roster references are removed at the expected revision. Existing Scenario snapshots remain usable historical state with no live Character link.
+10. **Retired:** the current schema has no Character retirement state. Retirement is unsupported rather than silently represented as deletion, roster removal, or a browser-local flag; adding it requires a future explicit server lifecycle decision.
 
 ## Compatibility limits
 

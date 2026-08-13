@@ -27,6 +27,8 @@ export interface LocalCharacterDraft {
   build: CharacterBuild;
   characterId: string;
   id: string;
+  /** Opaque revision of the server Character on which this draft was based. */
+  serverUpdatedAt?: string;
   createdAt: string;
   syncStatus: "local" | "queued" | "synced";
   updatedAt: string;

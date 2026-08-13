@@ -12,7 +12,7 @@ export default async function Page({ params }: CharacterEditRouteProps) {
 
   return (
     <RequireRole
-      allowedRoles={["game_master"]}
+      allowedRoles={["game_master", "admin"]}
       message="This character edit page is limited to GM accounts."
       title="GM access required"
     >

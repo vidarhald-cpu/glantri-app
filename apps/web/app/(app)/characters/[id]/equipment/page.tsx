@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Fragment, use, useEffect, useMemo, useState } from "react";
 import {
   type CarryMode,
@@ -29,10 +30,14 @@ import {
   updateCharacterEquipmentMetadataOnServer,
   updateCharacterEquipmentQuantityOnServer,
 } from "@/lib/api/equipmentClient";
-import { updateServerCharacter } from "@/lib/api/localServiceClient";
+import {
+  getCurrentCharacterFromMutationConflict,
+  updateServerCharacter,
+} from "@/lib/api/localServiceClient";
 import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
 import type { LocalCharacterRecord } from "@/lib/offline/glantriDexie";
 import {
+  buildServerBackedLocalCharacterRecord,
   LocalCharacterRepository,
   requireServerCharacterRevision,
   UNNAMED_CHARACTER_PLACEHOLDER,
@@ -112,6 +117,7 @@ const localCharacterRepository = new LocalCharacterRepository();
 export default function CharacterEquipmentPage({ params }: CharacterEquipmentPageProps) {
   const { id } = use(params);
   const [characterRecord, setCharacterRecord] = useState<LocalCharacterRecord | null>(null);
+  const [recoveryRequired, setRecoveryRequired] = useState(false);
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
   const [characterSize, setCharacterSize] = useState<number | null>(null);
   const [characterName, setCharacterName] = useState(UNNAMED_CHARACTER_PLACEHOLDER);
@@ -191,11 +197,17 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
 
         setState(nextState);
         setCharacterRecord(characterContext.record ?? null);
+        setRecoveryRequired(Boolean(characterContext.recoveryRecord));
         setCharacterName(
           characterContext.record?.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER,
         );
         setInventoryNotes(characterContext.record?.build.inventoryNotes ?? "");
         setCharacterSize(getWorkbookCharacterSize(characterContext.record?.build));
+        if (characterContext.recoveryRecord) {
+          setInventoryNotesFeedback(
+            "The current server notes are shown. A local Character draft is retained for deliberate recovery on the Character Sheet.",
+          );
+        }
         setPageError(undefined);
       })
       .catch((error) => {
@@ -543,18 +555,37 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       return;
     }
 
+    if (recoveryRequired) {
+      setInventoryNotesError(
+        "Review or discard the retained draft on the Character Sheet before saving inventory notes.",
+      );
+      return;
+    }
+
     setSavingInventoryNotes(true);
     setInventoryNotesError(undefined);
     setInventoryNotesFeedback(undefined);
 
     try {
+      const expectedUpdatedAt = requireServerCharacterRevision(characterRecord);
+      const attemptedBuild = {
+        ...characterRecord.build,
+        inventoryNotes,
+      };
+      await localCharacterRepository.save({
+        build: attemptedBuild,
+        creatorDisplayName: characterRecord.creatorDisplayName,
+        creatorEmail: characterRecord.creatorEmail,
+        creatorId: characterRecord.creatorId,
+        createdAt: characterRecord.createdAt,
+        finalizedAt: characterRecord.finalizedAt,
+        serverUpdatedAt: expectedUpdatedAt,
+        syncStatus: "local",
+      });
       const savedServerRecord = await updateServerCharacter({
-        build: {
-          ...characterRecord.build,
-          inventoryNotes,
-        },
+        build: attemptedBuild,
         characterId: id,
-        expectedUpdatedAt: requireServerCharacterRevision(characterRecord),
+        expectedUpdatedAt,
       });
       const savedLocalRecord = await localCharacterRepository.save({
         build: savedServerRecord.build,
@@ -571,11 +602,31 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       setCharacterRecord(savedLocalRecord);
       setCharacterName(savedLocalRecord.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER);
       setInventoryNotes(savedLocalRecord.build.inventoryNotes ?? "");
+      setRecoveryRequired(false);
       setInventoryNotesFeedback("Inventory notes saved.");
     } catch (error) {
-      setInventoryNotesError(
-        error instanceof Error ? error.message : "Unable to save inventory notes.",
-      );
+      const currentCharacter = getCurrentCharacterFromMutationConflict(error);
+
+      if (currentCharacter) {
+        const canonicalRecord = buildServerBackedLocalCharacterRecord(
+          currentCharacter,
+          characterRecord,
+        );
+        setCharacterRecord(canonicalRecord);
+        setCharacterName(canonicalRecord.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER);
+        setInventoryNotes(canonicalRecord.build.inventoryNotes ?? "");
+        setRecoveryRequired(true);
+        setInventoryNotesError(
+          "The Character changed on the server. Current notes are shown and your exact attempted draft is retained on the Character Sheet.",
+        );
+      } else {
+        setRecoveryRequired(true);
+        setInventoryNotesError(
+          error instanceof Error
+            ? `${error.message} Your attempted notes remain in the retained local draft.`
+            : "Unable to save inventory notes. Your attempted notes remain in the retained local draft.",
+        );
+      }
     } finally {
       setSavingInventoryNotes(false);
     }
@@ -593,6 +644,28 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       <div style={{ display: "grid", gap: "0.35rem" }}>
         <h1 style={{ margin: 0 }}>Inventory by location - {characterName}</h1>
       </div>
+
+      {recoveryRequired ? (
+        <section
+          style={{
+            background: "#fff8e8",
+            border: "1px solid #d9b86c",
+            borderRadius: 12,
+            display: "grid",
+            gap: "0.75rem",
+            padding: "1rem",
+          }}
+        >
+          <strong>Local Character draft retained</strong>
+          <span>
+            Inventory uses the current server Character. Review or discard the retained draft before
+            changing Character-level inventory notes.
+          </span>
+          <div>
+            <Link href={`/characters/${id}`}>Review or discard retained draft</Link>
+          </div>
+        </section>
+      ) : null}
 
       {!loading && !pageError && state ? (
         <section
@@ -1381,7 +1454,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
           />
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "center" }}>
             <button
-              disabled={savingInventoryNotes || !characterRecord}
+              disabled={savingInventoryNotes || !characterRecord || recoveryRequired}
               onClick={() => void handleSaveInventoryNotes()}
               type="button"
             >

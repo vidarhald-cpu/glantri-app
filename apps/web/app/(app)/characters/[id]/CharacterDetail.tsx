@@ -6,7 +6,10 @@ import { useEffect, useMemo, useState } from "react";
 import { type CharacterBuild, type ProfessionDefinition } from "@glantri/domain";
 import { buildCharacterSheetSummary } from "@glantri/rules-engine";
 
-import { updateServerCharacter } from "@/lib/api/localServiceClient";
+import {
+  getCurrentCharacterFromMutationConflict,
+  updateServerCharacter,
+} from "@/lib/api/localServiceClient";
 import {
   setCharacterAge,
   setCharacterGender,
@@ -25,6 +28,7 @@ import {
 import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
 import type { LocalCharacterRecord } from "@/lib/offline/glantriDexie";
 import {
+  buildServerBackedLocalCharacterRecord,
   LocalCharacterRepository,
   requireServerCharacterRevision,
   UNNAMED_CHARACTER_PLACEHOLDER,
@@ -59,9 +63,12 @@ function getProfessionFamilyName(
 
 export default function CharacterDetail({ id }: CharacterDetailProps) {
   const [build, setBuild] = useState<CharacterBuild>();
+  const [canonicalBuild, setCanonicalBuild] = useState<CharacterBuild>();
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [record, setRecord] = useState<LocalCharacterRecord>();
+  const [recoveryRecord, setRecoveryRecord] = useState<LocalCharacterRecord>();
+  const [reviewingRecovery, setReviewingRecovery] = useState(false);
   const [savingIdentity, setSavingIdentity] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
   const [contentState, setContentState] = useState<
@@ -80,6 +87,16 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
         setContentState(result.content);
         setRecord(result.record);
         setBuild(result.record?.build);
+        setCanonicalBuild(result.record?.build);
+        setRecoveryRecord(result.recoveryRecord);
+        setReviewingRecovery(false);
+        if (result.recoveryRecord && result.record) {
+          setFeedback(
+            result.hasRevisionConflict
+              ? "The current server Character is shown. A stale local draft is retained for review or discard."
+              : "The current server Character is shown. An unsaved local draft is retained for review or discard.",
+          );
+        }
       })
       .finally(() => {
         if (!cancelled) {
@@ -173,26 +190,111 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       return;
     }
 
-    const savedServerRecord = await updateServerCharacter({
+    if (recoveryRecord && !reviewingRecovery) {
+      setFeedback("Review the retained draft or discard it before saving new server edits.");
+      return;
+    }
+
+    const expectedUpdatedAt = requireServerCharacterRevision(record);
+    const localBackupRecord = await localCharacterRepository.save({
       build: nextBuild,
-      characterId: id,
-      expectedUpdatedAt: requireServerCharacterRevision(record),
-    });
-    const savedLocalRecord = await localCharacterRepository.save({
-      build: savedServerRecord.build,
       creatorDisplayName: record.creatorDisplayName,
       creatorEmail: record.creatorEmail,
-      creatorId: savedServerRecord.ownerId ?? record.creatorId,
+      creatorId: record.creatorId,
       createdAt: record.createdAt,
       finalizedAt: record.finalizedAt,
-      serverUpdatedAt: savedServerRecord.updatedAt,
-      syncStatus: "synced",
-      updatedAt: savedServerRecord.updatedAt,
+      serverUpdatedAt: expectedUpdatedAt,
+      syncStatus: "local",
     });
+    setRecoveryRecord(localBackupRecord);
 
-    setRecord(savedLocalRecord);
-    setBuild(savedLocalRecord.build);
-    setFeedback(successMessage);
+    try {
+      const savedServerRecord = await updateServerCharacter({
+        build: nextBuild,
+        characterId: id,
+        expectedUpdatedAt,
+      });
+      const savedLocalRecord = await localCharacterRepository.save({
+        build: savedServerRecord.build,
+        creatorDisplayName: record.creatorDisplayName,
+        creatorEmail: record.creatorEmail,
+        creatorId: savedServerRecord.ownerId ?? record.creatorId,
+        createdAt: record.createdAt,
+        finalizedAt: record.finalizedAt,
+        serverUpdatedAt: savedServerRecord.updatedAt,
+        syncStatus: "synced",
+        updatedAt: savedServerRecord.updatedAt,
+      });
+
+      setRecord(savedLocalRecord);
+      setCanonicalBuild(savedLocalRecord.build);
+      setBuild(savedLocalRecord.build);
+      setRecoveryRecord(undefined);
+      setReviewingRecovery(false);
+      setFeedback(successMessage);
+    } catch (error) {
+      const currentCharacter = getCurrentCharacterFromMutationConflict(error);
+
+      if (currentCharacter) {
+        const canonicalRecord = buildServerBackedLocalCharacterRecord(currentCharacter, record);
+        setRecord(canonicalRecord);
+        setCanonicalBuild(canonicalRecord.build);
+        setBuild(canonicalRecord.build);
+        setReviewingRecovery(false);
+        setFeedback(
+          "The Character changed on the server. The current server version is shown and your exact attempted draft is retained for review.",
+        );
+        return;
+      }
+
+      throw error;
+    }
+  }
+
+  function handleReviewRecovery() {
+    if (!recoveryRecord) {
+      return;
+    }
+
+    setBuild(recoveryRecord.build);
+    setReviewingRecovery(true);
+    setFeedback(
+      "Retained draft loaded for review. Saving deliberately replaces the server Character only if its current revision still matches.",
+    );
+  }
+
+  function handleReturnToCanonical() {
+    if (!canonicalBuild) {
+      return;
+    }
+
+    setBuild(canonicalBuild);
+    setReviewingRecovery(false);
+    setFeedback("Current server Character restored. The retained draft is still available.");
+  }
+
+  async function handleDiscardRecovery() {
+    if (!record) {
+      return;
+    }
+
+    const savedRecord = await localCharacterRepository.save({
+      build: record.build,
+      creatorDisplayName: record.creatorDisplayName,
+      creatorEmail: record.creatorEmail,
+      creatorId: record.creatorId,
+      createdAt: record.createdAt,
+      finalizedAt: record.finalizedAt,
+      serverUpdatedAt: record.serverUpdatedAt,
+      syncStatus: "synced",
+      updatedAt: record.updatedAt,
+    });
+    setRecord(savedRecord);
+    setCanonicalBuild(savedRecord.build);
+    setBuild(savedRecord.build);
+    setRecoveryRecord(undefined);
+    setReviewingRecovery(false);
+    setFeedback("Retained draft discarded. The current server Character remains unchanged.");
   }
 
   async function handleSaveIdentity() {
@@ -262,6 +364,42 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       <div style={{ display: "grid", gap: "0.35rem" }}>
         <h1 style={{ margin: 0 }}>Character Sheet — {getCharacterName(build)}</h1>
       </div>
+
+      {recoveryRecord ? (
+        <section
+          style={{
+            background: "#fff8e8",
+            border: "1px solid #d9b86c",
+            borderRadius: 12,
+            display: "grid",
+            gap: "0.75rem",
+            padding: "1rem",
+          }}
+        >
+          <strong>
+            {reviewingRecovery ? "Reviewing retained local draft" : "Local draft retained"}
+          </strong>
+          <span>
+            {reviewingRecovery
+              ? "This draft is visible for deliberate review and has not replaced the current server Character."
+              : "The current server Character is visible. Choose how to handle the retained draft before saving."}
+          </span>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+            {reviewingRecovery ? (
+              <button onClick={handleReturnToCanonical} type="button">
+                Return to current server version
+              </button>
+            ) : (
+              <button onClick={handleReviewRecovery} type="button">
+                Review retained draft
+              </button>
+            )}
+            <button onClick={() => void handleDiscardRecovery()} type="button">
+              Discard draft and keep server version
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <section
         style={{
@@ -463,7 +601,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
               Personal information is edited and saved here on the Character Sheet.
             </div>
             <button
-              disabled={savingIdentity}
+              disabled={savingIdentity || Boolean(recoveryRecord && !reviewingRecovery)}
               onClick={() => void handleSaveIdentity()}
               type="button"
             >
@@ -667,7 +805,11 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
           <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
             Character notes stay separate from inventory notes.
           </div>
-          <button disabled={savingNotes} onClick={() => void handleSaveNotes()} type="button">
+          <button
+            disabled={savingNotes || Boolean(recoveryRecord && !reviewingRecovery)}
+            onClick={() => void handleSaveNotes()}
+            type="button"
+          >
             {savingNotes ? "Saving..." : "Save notes"}
           </button>
         </div>
