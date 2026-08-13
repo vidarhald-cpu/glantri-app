@@ -5,6 +5,24 @@ D1/D2 now uses that table to create GM-reviewable proposals after the attacker h
 critical die. The proposals are editable draft rows; they are not committed until the GM accepts them
 through the normal phase-damage commit.
 
+## Reproducing the Critical table
+
+The committed table data is generated from the approved Critical workbook snapshot under
+`docs/source/combat`. Exact workbook, sheet, range, and column coordinates remain in the provenance
+manifest so this Player/GM document does not expose internal source labels.
+
+Run `pnpm critical-effects:verify` to validate the workbook, regenerate the table in memory, and
+confirm that both the TypeScript data and provenance manifest are byte-stable. After an approved
+workbook-only update, run `pnpm critical-effects:generate`, inspect the resulting diff, then rerun the
+verification command. The generator refuses to overwrite differing Critical data by default; an
+unexpected data difference is a content/rule checkpoint, not an invitation to normalize it.
+
+`packages/domain/src/encounter/criticalEffectsTableManifest.json` records the workbook digest,
+generator version, timestamp policy, source columns and ranges, transformations, output digests, and
+full validation warnings with source cells. Fractional bleed rates, roll-once rates, death timers,
+and unresolved Special/stateful mappings remain authored source values. Generation does not infer
+bleed units, duration semantics, treatment behavior, or lifecycle rules.
+
 ## Critical result lookup
 
 Each critical result is addressed by three values:
