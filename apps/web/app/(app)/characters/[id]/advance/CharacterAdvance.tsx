@@ -10,19 +10,19 @@ import {
   type CharacterProgressionTargetRow,
   removeCharacterProgressionCheck,
   requestCharacterProgressionCheck,
-  resolveCharacterProgressionAttempts
+  resolveCharacterProgressionAttempts,
 } from "@glantri/rules-engine";
 
 import { updateServerCharacter } from "@/lib/api/localServiceClient";
 import { getPlayerFacingSkillBucket, groupRowsBySkillType } from "@/lib/chargen/chargenBrowse";
 import { buildCharacterSheetProfileStatRows } from "@/lib/characters/characterSheet";
 import { loadLocalCharacterAdvancementContext } from "@/lib/characters/loadLocalCharacterAdvancementContext";
-import type {
-  LocalCharacterDraft,
-  LocalCharacterRecord
-} from "@/lib/offline/glantriDexie";
+import type { LocalCharacterDraft, LocalCharacterRecord } from "@/lib/offline/glantriDexie";
 import { CharacterDraftRepository } from "@/lib/offline/repositories/characterDraftRepository";
-import { LocalCharacterRepository } from "@/lib/offline/repositories/localCharacterRepository";
+import {
+  LocalCharacterRepository,
+  requireServerCharacterRevision,
+} from "@/lib/offline/repositories/localCharacterRepository";
 
 interface CharacterAdvanceProps {
   id: string;
@@ -58,7 +58,11 @@ function formatHistoryDateTime(value: string): string {
     .padStart(2, "0")}`;
 }
 
-function formatProgressionRoll(input: { openEndedD10s: number[]; rollD20: number; rollTotal: number }): string {
+function formatProgressionRoll(input: {
+  openEndedD10s: number[];
+  rollD20: number;
+  rollTotal: number;
+}): string {
   if (input.openEndedD10s.length === 0) {
     return `roll ${input.rollD20}`;
   }
@@ -66,7 +70,11 @@ function formatProgressionRoll(input: { openEndedD10s: number[]; rollD20: number
   return `roll ${[input.rollD20, ...input.openEndedD10s].join("+")}=${input.rollTotal}`;
 }
 
-function formatValueChange(input: { afterValue: number; beforeValue: number; success: boolean }): string {
+function formatValueChange(input: {
+  afterValue: number;
+  beforeValue: number;
+  success: boolean;
+}): string {
   if (!input.success || input.beforeValue === input.afterValue) {
     return `value stayed ${input.beforeValue}`;
   }
@@ -130,7 +138,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
 
     return buildCharacterProgressionView({
       build: draft.build,
-      content
+      content,
     });
   }, [content, draft]);
   const availableProvisionalSkills = useMemo(() => {
@@ -140,9 +148,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
 
     const existingSkillIds = new Set(draft.build.progression.skills.map((skill) => skill.skillId));
     const existingProgressionRowSkillIds = new Set(
-      progressionView.rows
-        .filter((row) => row.targetType === "skill")
-        .map((row) => row.targetId)
+      progressionView.rows.filter((row) => row.targetType === "skill").map((row) => row.targetId),
     );
 
     return [...content.skills]
@@ -150,9 +156,11 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         (skill) =>
           !skill.specializationOfSkillId &&
           !existingSkillIds.has(skill.id) &&
-          !existingProgressionRowSkillIds.has(skill.id)
+          !existingProgressionRowSkillIds.has(skill.id),
       )
-      .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
+      .sort(
+        (left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name),
+      );
   }, [content, draft, progressionView]);
 
   async function persistDraft(nextBuild: CharacterBuild, message?: string) {
@@ -167,7 +175,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       characterId: draft.characterId,
       id: draft.id,
       syncStatus: draft.syncStatus,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     });
 
     setDraft(savedDraft);
@@ -187,7 +195,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       build: draft.build,
       content,
       targetId,
-      targetType
+      targetType,
     });
 
     if (result.error) {
@@ -207,20 +215,20 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       ? removeCharacterProgressionCheck({
           build: draft.build,
           targetId: row.targetId,
-          targetType: row.targetType
+          targetType: row.targetType,
         })
       : requestCharacterProgressionCheck({
           build: draft.build,
           content,
           targetId: row.targetId,
-          targetType: row.targetType
+          targetType: row.targetType,
         });
 
     await persistDraft(
       nextBuild,
       row.requested
         ? "Check request removed. Save progression to share it with the GM."
-        : "Check requested. Save progression to share it with the GM."
+        : "Check requested. Save progression to share it with the GM.",
     );
   }
 
@@ -234,11 +242,14 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       content,
       provisional: true,
       targetId: selectedProvisionalSkillId,
-      targetType: "skill"
+      targetType: "skill",
     });
 
     setSelectedProvisionalSkillId("");
-    await persistDraft(nextBuild, "Provisional skill check requested. Save progression to share it with the GM.");
+    await persistDraft(
+      nextBuild,
+      "Provisional skill check requested. Save progression to share it with the GM.",
+    );
   }
 
   async function handleResolveAttempts() {
@@ -248,20 +259,20 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
 
     const result = resolveCharacterProgressionAttempts({
       build: draft.build,
-      content
+      content,
     });
     const successes = result.history.filter((entry) => entry.success).length;
     const savedRecord = await localCharacterRepository.save({
       build: result.build,
       createdAt: record.createdAt,
       finalizedAt: record.finalizedAt,
-      syncStatus: "local"
+      syncStatus: "local",
     });
 
     setRecord(savedRecord);
     await persistDraft(
       result.build,
-      `Resolved ${result.history.length} progression attempt${result.history.length === 1 ? "" : "s"}; ${successes} succeeded. Progression saved locally.`
+      `Resolved ${result.history.length} progression attempt${result.history.length === 1 ? "" : "s"}; ${successes} succeeded. Progression saved locally.`,
     );
   }
 
@@ -279,7 +290,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         build: draft.build,
         createdAt: record.createdAt,
         finalizedAt: record.finalizedAt,
-        syncStatus: "local"
+        syncStatus: "local",
       });
 
       setRecord(savedRecord);
@@ -292,21 +303,23 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       build: draft.build,
       createdAt: record.createdAt,
       finalizedAt: record.finalizedAt,
-      syncStatus: "local"
+      syncStatus: "local",
     });
     setRecord(localBackupRecord);
 
     try {
       const serverRecord = await updateServerCharacter({
         build: localBackupRecord.build,
-        characterId: id
+        characterId: id,
+        expectedUpdatedAt: requireServerCharacterRevision(localBackupRecord),
       });
       const syncedRecord = await localCharacterRepository.save({
         build: serverRecord.build,
         createdAt: localBackupRecord.createdAt,
         finalizedAt: localBackupRecord.finalizedAt,
+        serverUpdatedAt: serverRecord.updatedAt,
         syncStatus: "synced",
-        updatedAt: serverRecord.updatedAt
+        updatedAt: serverRecord.updatedAt,
       });
 
       setRecord(syncedRecord);
@@ -315,7 +328,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       setFeedback(
         error instanceof Error
           ? `${error.message} Changes saved locally.`
-          : "Character could not be saved to the server. Changes saved locally."
+          : "Character could not be saved to the server. Changes saved locally.",
       );
     } finally {
       setSaving(false);
@@ -344,38 +357,45 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       skill: [],
       skillGroup: [],
       specialization: [],
-      stat: []
-    } as Record<ProgressionTargetType, typeof progressionView.rows>
+      stat: [],
+    } as Record<ProgressionTargetType, typeof progressionView.rows>,
   );
   const characterName = getCharacterName(draft.build);
   const profession = content.professions.find((item) => item.id === draft.build.professionId);
   const professionFamilyName = profession?.familyId
     ? content.professionFamilies.find((family) => family.id === profession.familyId)?.name
     : undefined;
-  const socialClassLabel = draft.build.socialClass ?? draft.build.profile.socialClassResult ?? "Not set";
+  const socialClassLabel =
+    draft.build.socialClass ?? draft.build.profile.socialClassResult ?? "Not set";
   const socialClassNumber = draft.build.profile.socialClassRoll;
   const socialClassSummary =
-    socialClassNumber !== undefined ? `${socialClassLabel} (${socialClassNumber})` : socialClassLabel;
+    socialClassNumber !== undefined
+      ? `${socialClassLabel} (${socialClassNumber})`
+      : socialClassLabel;
   const profileStatRows = buildCharacterSheetProfileStatRows(draft.build);
   const educationLevel = progressionView.draftView.education.theoreticalSkillCount;
-  const requestedCheckCount = progressionView.checks.filter((check) => check.status === "requested").length;
+  const requestedCheckCount = progressionView.checks.filter(
+    (check) => check.status === "requested",
+  ).length;
   const approvedCheckCount = progressionView.checks.filter(
-    (check) => (check.status ?? "approved") === "approved"
+    (check) => (check.status ?? "approved") === "approved",
   ).length;
   const availableProgressionPoints = progressionView.availablePoints;
   const groupedSkillRows = groupRowsBySkillType(
     rowsByType.skill.map((row) => {
       const skill = content.skills.find((item) => item.id === row.targetId);
-      const skillView = progressionView.draftView.skills.find((item) => item.skillId === row.targetId);
+      const skillView = progressionView.draftView.skills.find(
+        (item) => item.skillId === row.targetId,
+      );
 
       return {
         ...row,
         stats: skill ? formatSkillStats(skill.linkedStats) : "—",
         skillName: row.label,
         skillType: skill ? getPlayerFacingSkillBucket(skill) : "special-access",
-        totalSkillLevel: skillView?.totalSkill ?? row.currentValue
+        totalSkillLevel: skillView?.totalSkill ?? row.currentValue,
       };
-    })
+    }),
   );
 
   function formatApprovedState(row: CharacterProgressionTargetRow): string {
@@ -393,10 +413,10 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
   function canBuyProgression(row: CharacterProgressionTargetRow): boolean {
     return Boolean(
       row.approved &&
-        !row.pending &&
-        row.cost !== undefined &&
-        row.cost <= availableProgressionPoints &&
-        !row.disabledReason
+      !row.pending &&
+      row.cost !== undefined &&
+      row.cost <= availableProgressionPoints &&
+      !row.disabledReason,
     );
   }
 
@@ -429,12 +449,19 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           ) : null}
         </td>
         <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{row.currentValue}</td>
-        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{renderRequestCheckbox(row)}</td>
-        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{formatApprovedState(row)}</td>
+        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+          {renderRequestCheckbox(row)}
+        </td>
+        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+          {formatApprovedState(row)}
+        </td>
         <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{row.cost ?? "—"}</td>
         <td style={{ padding: "0.6rem 0", textAlign: "center" }}>
           {canBuy ? (
-            <button onClick={() => void handleBuyAttempt(row.targetType, row.targetId)} type="button">
+            <button
+              onClick={() => void handleBuyAttempt(row.targetType, row.targetId)}
+              type="button"
+            >
               Buy
             </button>
           ) : (
@@ -461,7 +488,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
             background: "#f6f5ef",
             border: "1px solid #d9ddd8",
             borderRadius: 12,
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           {feedback}
@@ -481,7 +508,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           padding: "0.75rem 1rem",
           position: "sticky",
           top: "3rem",
-          zIndex: 5
+          zIndex: 5,
         }}
       >
         <strong>Progression</strong>
@@ -499,7 +526,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         style={{
           display: "grid",
           gap: "1rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))"
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
         }}
       >
         <section
@@ -508,7 +535,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
             border: "1px solid #d9ddd8",
             borderRadius: 12,
             overflowX: "auto",
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           <h2 style={{ margin: "0 0 0.75rem 0" }}>Profile Stats</h2>
@@ -567,7 +594,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
             background: "#f6f5ef",
             border: "1px solid #d9ddd8",
             borderRadius: 12,
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           <h2 style={{ margin: "0 0 0.75rem 0" }}>Summary</h2>
@@ -577,7 +604,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
               columnGap: "1rem",
               display: "grid",
               gridTemplateColumns: "minmax(120px, auto) minmax(0, 1fr)",
-              rowGap: "0.55rem"
+              rowGap: "0.55rem",
             }}
           >
             <strong>Character name</strong>
@@ -597,15 +624,23 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
             <div>
               <div>{progressionView.sheetSummary.skillPoints.current}</div>
               <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                Original {progressionView.sheetSummary.skillPoints.original} + successful progression{" "}
-                {progressionView.sheetSummary.skillPoints.successfulProgressionGains}
+                Original {progressionView.sheetSummary.skillPoints.original} + successful
+                progression {progressionView.sheetSummary.skillPoints.successfulProgressionGains}
               </div>
             </div>
             <strong>Education</strong>
             <div>{educationLevel}</div>
           </div>
 
-          <div style={{ borderTop: "1px solid #e7e2d7", display: "grid", gap: "0.75rem", marginTop: "0.9rem", paddingTop: "0.9rem" }}>
+          <div
+            style={{
+              borderTop: "1px solid #e7e2d7",
+              display: "grid",
+              gap: "0.75rem",
+              marginTop: "0.9rem",
+              paddingTop: "0.9rem",
+            }}
+          >
             <h3 style={{ margin: 0 }}>Skill groups</h3>
             <div style={{ overflowX: "auto" }}>
               {rowsByType.skillGroup.length > 0 ? (
@@ -637,7 +672,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           borderRadius: 12,
           display: "grid",
           gap: "1rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <div>
@@ -650,7 +685,10 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         {groupedSkillRows.length > 0 ? (
           <div style={{ display: "grid", gap: "1rem" }}>
             {groupedSkillRows.map((group) => (
-              <section key={group.bucketId} style={{ border: "1px solid #e7e2d7", borderRadius: 10, overflowX: "auto" }}>
+              <section
+                key={group.bucketId}
+                style={{ border: "1px solid #e7e2d7", borderRadius: 10, overflowX: "auto" }}
+              >
                 <div
                   style={{
                     alignItems: "center",
@@ -659,7 +697,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
                     display: "flex",
                     gap: "0.5rem",
                     justifyContent: "space-between",
-                    padding: "0.75rem 1rem"
+                    padding: "0.75rem 1rem",
                   }}
                 >
                   <strong>{group.label}</strong>
@@ -673,7 +711,9 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
                       <th style={{ padding: "0.5rem 0.75rem 0.5rem 1rem" }}>Skill</th>
                       <th style={{ padding: "0.5rem 0.75rem" }}>Stats</th>
                       <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Total XP</th>
-                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Total skill level</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>
+                        Total skill level
+                      </th>
                       <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Requested</th>
                       <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Approved</th>
                       <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Cost</th>
@@ -685,25 +725,45 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
                       const canBuy = canBuyProgression(row);
 
                       return (
-                        <tr key={`${row.targetType}:${row.targetId}`} style={{ borderBottom: "1px solid #eee8dc" }}>
+                        <tr
+                          key={`${row.targetType}:${row.targetId}`}
+                          style={{ borderBottom: "1px solid #eee8dc" }}
+                        >
                           <td style={{ padding: "0.6rem 0.75rem 0.6rem 1rem" }}>
                             <div>{row.label}</div>
                             {row.provisional ? (
-                              <div style={{ color: "#8f5a00", fontSize: "0.82rem" }}>Provisional</div>
+                              <div style={{ color: "#8f5a00", fontSize: "0.82rem" }}>
+                                Provisional
+                              </div>
                             ) : null}
                             {row.disabledReason ? (
-                              <div style={{ color: "#8f3d2f", fontSize: "0.82rem" }}>{row.disabledReason}</div>
+                              <div style={{ color: "#8f3d2f", fontSize: "0.82rem" }}>
+                                {row.disabledReason}
+                              </div>
                             ) : null}
                           </td>
                           <td style={{ padding: "0.6rem 0.75rem" }}>{row.stats}</td>
-                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{row.currentValue}</td>
-                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{row.totalSkillLevel}</td>
-                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{renderRequestCheckbox(row)}</td>
-                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{formatApprovedState(row)}</td>
-                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{row.cost ?? "—"}</td>
+                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                            {row.currentValue}
+                          </td>
+                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                            {row.totalSkillLevel}
+                          </td>
+                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                            {renderRequestCheckbox(row)}
+                          </td>
+                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                            {formatApprovedState(row)}
+                          </td>
+                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                            {row.cost ?? "—"}
+                          </td>
                           <td style={{ padding: "0.6rem 1rem 0.6rem 0", textAlign: "center" }}>
                             {canBuy ? (
-                              <button onClick={() => void handleBuyAttempt(row.targetType, row.targetId)} type="button">
+                              <button
+                                onClick={() => void handleBuyAttempt(row.targetType, row.targetId)}
+                                type="button"
+                              >
                                 Buy
                               </button>
                             ) : (
@@ -728,7 +788,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
             display: "flex",
             gap: "0.5rem",
             flexWrap: "wrap",
-            paddingTop: "0.75rem"
+            paddingTop: "0.75rem",
           }}
         >
           <select
@@ -760,7 +820,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           borderRadius: 12,
           display: "grid",
           gap: "1rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <h2 style={{ margin: 0 }}>Specializations</h2>
@@ -781,28 +841,44 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
               {rowsByType.specialization.length > 0 ? (
                 rowsByType.specialization.map((row) => {
                   const specializationView = progressionView.draftView.specializations.find(
-                    (item) => item.specializationId === row.targetId
+                    (item) => item.specializationId === row.targetId,
                   );
                   const canBuy = canBuyProgression(row);
 
                   return (
-                    <tr key={`${row.targetType}:${row.targetId}`} style={{ borderBottom: "1px solid #eee8dc" }}>
+                    <tr
+                      key={`${row.targetType}:${row.targetId}`}
+                      style={{ borderBottom: "1px solid #eee8dc" }}
+                    >
                       <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
                         <div>{row.label}</div>
                         {row.disabledReason ? (
-                          <div style={{ color: "#8f3d2f", fontSize: "0.82rem" }}>{row.disabledReason}</div>
+                          <div style={{ color: "#8f3d2f", fontSize: "0.82rem" }}>
+                            {row.disabledReason}
+                          </div>
                         ) : null}
                       </td>
                       <td style={{ padding: "0.6rem 0.75rem" }}>
                         {specializationView?.parentSkillName ?? "—"}
                       </td>
-                      <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{row.currentValue}</td>
-                      <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{renderRequestCheckbox(row)}</td>
-                      <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{formatApprovedState(row)}</td>
-                      <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{row.cost ?? "—"}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                        {row.currentValue}
+                      </td>
+                      <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                        {renderRequestCheckbox(row)}
+                      </td>
+                      <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                        {formatApprovedState(row)}
+                      </td>
+                      <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                        {row.cost ?? "—"}
+                      </td>
                       <td style={{ padding: "0.6rem 0", textAlign: "center" }}>
                         {canBuy ? (
-                          <button onClick={() => void handleBuyAttempt(row.targetType, row.targetId)} type="button">
+                          <button
+                            onClick={() => void handleBuyAttempt(row.targetType, row.targetId)}
+                            type="button"
+                          >
                             Buy
                           </button>
                         ) : (
@@ -831,14 +907,17 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           borderRadius: 12,
           display: "grid",
           gap: "0.75rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <h2 style={{ margin: 0 }}>Pending attempts</h2>
         {progressionView.pendingAttempts.length > 0 ? (
           <>
             {progressionView.pendingAttempts.map((attempt) => (
-              <div key={attempt.id} style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}>
+              <div
+                key={attempt.id}
+                style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}
+              >
                 <strong>{attempt.targetLabel}</strong>
                 <div>Type: {formatTargetType(attempt.targetType)}</div>
                 <div>Cost paid: {attempt.cost}</div>
@@ -860,7 +939,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           borderRadius: 12,
           display: "grid",
           gap: "0.75rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <h2 style={{ margin: 0 }}>History</h2>
@@ -875,7 +954,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
                   borderTop: "1px solid #e7e2d7",
                   paddingTop: "0.6rem",
                   whiteSpace: "nowrap",
-                  overflowX: "auto"
+                  overflowX: "auto",
                 }}
               >
                 {formatHistoryDateTime(entry.resolvedAt)} · {entry.targetLabel} ·{" "}
@@ -883,13 +962,13 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
                 {formatProgressionRoll({
                   openEndedD10s: entry.openEndedD10s,
                   rollD20: entry.rollD20,
-                  rollTotal: entry.rollTotal
+                  rollTotal: entry.rollTotal,
                 })}{" "}
                 vs {entry.threshold} ·{" "}
                 {formatValueChange({
                   afterValue: entry.afterValue,
                   beforeValue: entry.beforeValue,
-                  success: entry.success
+                  success: entry.success,
                 })}{" "}
                 · cost {entry.cost}
               </div>

@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  canEditCharacterInApi,
-  loadAccessibleCharacterInApi
-} from "./characterEditAccess";
+import { canEditCharacterInApi, loadAccessibleCharacterInApi } from "./characterEditAccess";
 
 describe("characterEditAccess", () => {
   it("allows GM users to edit characters through the server path", () => {
@@ -29,13 +26,13 @@ describe("characterEditAccess", () => {
         characterService: {
           getCharacterById,
           getCharacterByIdInGmCampaigns,
-          getOwnedCharacter
+          getOwnedCharacter,
         },
         user: {
           id: "owner-1",
-          roles: ["player"]
-        }
-      })
+          roles: ["player"],
+        },
+      }),
     ).resolves.toEqual({ id: "character-1" });
 
     expect(getOwnedCharacter).toHaveBeenCalledWith("owner-1", "character-1");
@@ -54,13 +51,13 @@ describe("characterEditAccess", () => {
         characterService: {
           getCharacterById,
           getCharacterByIdInGmCampaigns,
-          getOwnedCharacter
+          getOwnedCharacter,
         },
         user: {
           id: "player-1",
-          roles: ["player"]
-        }
-      })
+          roles: ["player"],
+        },
+      }),
     ).resolves.toBeNull();
 
     expect(getOwnedCharacter).toHaveBeenCalledWith("player-1", "character-2");
@@ -79,18 +76,18 @@ describe("characterEditAccess", () => {
         characterService: {
           getCharacterById,
           getCharacterByIdInGmCampaigns,
-          getOwnedCharacter
+          getOwnedCharacter,
         },
         user: {
           id: "gm-1",
-          roles: ["game_master"]
-        }
-      })
+          roles: ["game_master"],
+        },
+      }),
     ).resolves.toEqual({ id: "character-2" });
 
     expect(getCharacterByIdInGmCampaigns).toHaveBeenCalledWith("gm-1", "character-2");
     expect(getCharacterById).not.toHaveBeenCalled();
-    expect(getOwnedCharacter).not.toHaveBeenCalled();
+    expect(getOwnedCharacter).toHaveBeenCalledWith("gm-1", "character-2");
   });
 
   it("blocks GM users from loading a character outside their campaigns", async () => {
@@ -104,18 +101,43 @@ describe("characterEditAccess", () => {
         characterService: {
           getCharacterById,
           getCharacterByIdInGmCampaigns,
-          getOwnedCharacter
+          getOwnedCharacter,
         },
         user: {
           id: "gm-1",
-          roles: ["game_master"]
-        }
-      })
+          roles: ["game_master"],
+        },
+      }),
     ).resolves.toBeNull();
 
     expect(getCharacterByIdInGmCampaigns).toHaveBeenCalledWith("gm-1", "character-99");
     expect(getCharacterById).not.toHaveBeenCalled();
-    expect(getOwnedCharacter).not.toHaveBeenCalled();
+    expect(getOwnedCharacter).toHaveBeenCalledWith("gm-1", "character-99");
+  });
+
+  it("lets a GM load their own character even when it is not rostered in their campaign", async () => {
+    const getCharacterById = vi.fn();
+    const getCharacterByIdInGmCampaigns = vi.fn();
+    const getOwnedCharacter = vi.fn().mockResolvedValue({ id: "character-owned-by-gm" });
+
+    await expect(
+      loadAccessibleCharacterInApi({
+        characterId: "character-owned-by-gm",
+        characterService: {
+          getCharacterById,
+          getCharacterByIdInGmCampaigns,
+          getOwnedCharacter,
+        },
+        user: {
+          id: "gm-1",
+          roles: ["game_master"],
+        },
+      }),
+    ).resolves.toEqual({ id: "character-owned-by-gm" });
+
+    expect(getOwnedCharacter).toHaveBeenCalledWith("gm-1", "character-owned-by-gm");
+    expect(getCharacterByIdInGmCampaigns).not.toHaveBeenCalled();
+    expect(getCharacterById).not.toHaveBeenCalled();
   });
 
   it("lets admin users load any character by id", async () => {
@@ -129,13 +151,13 @@ describe("characterEditAccess", () => {
         characterService: {
           getCharacterById,
           getCharacterByIdInGmCampaigns,
-          getOwnedCharacter
+          getOwnedCharacter,
         },
         user: {
           id: "admin-1",
-          roles: ["admin"]
-        }
-      })
+          roles: ["admin"],
+        },
+      }),
     ).resolves.toEqual({ id: "character-3" });
 
     expect(getCharacterById).toHaveBeenCalledWith("character-3");

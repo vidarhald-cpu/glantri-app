@@ -6,18 +6,23 @@ const loadCanonicalContentMock = vi.fn();
 const loadServerCharacterByIdMock = vi.fn();
 
 vi.mock("../content/loadCanonicalContent", () => ({
-  loadCanonicalContent: loadCanonicalContentMock
+  loadCanonicalContent: loadCanonicalContentMock,
 }));
 
 vi.mock("../api/characterClient", () => ({
-  loadServerCharacterById: loadServerCharacterByIdMock
+  loadServerCharacterById: loadServerCharacterByIdMock,
 }));
 
 vi.mock("../offline/repositories/localCharacterRepository", () => ({
+  getServerCharacterRevision: (record: {
+    serverUpdatedAt?: string;
+    syncStatus: string;
+    updatedAt: string;
+  }) => record.serverUpdatedAt ?? (record.syncStatus === "synced" ? record.updatedAt : undefined),
   LocalCharacterRepository: class LocalCharacterRepository {
     get = getMock;
     save = saveMock;
-  }
+  },
 }));
 
 const baseBuild = {
@@ -39,9 +44,9 @@ const baseBuild = {
       pow: 10,
       siz: 10,
       str: 10,
-      will: 10
+      will: 10,
     },
-    societyLevel: 0
+    societyLevel: 0,
   },
   progression: {
     chargenMode: "standard",
@@ -53,14 +58,14 @@ const baseBuild = {
     secondaryPoolTotal: 0,
     skillGroups: [],
     skills: [],
-    specializations: []
+    specializations: [],
   },
   progressionState: {
     availablePoints: 0,
     checks: [],
     history: [],
-    pendingAttempts: []
-  }
+    pendingAttempts: [],
+  },
 };
 
 describe("loadServerCharacterEditContext", () => {
@@ -71,7 +76,7 @@ describe("loadServerCharacterEditContext", () => {
     loadServerCharacterByIdMock.mockReset();
   });
 
-  it("uses the newer local character build so player-requested checks reach GM Edit", async () => {
+  it("resumes a local draft while retaining the canonical server revision", async () => {
     const content = { skills: [] };
     const serverRecord = {
       build: baseBuild,
@@ -79,7 +84,7 @@ describe("loadServerCharacterEditContext", () => {
       level: 1,
       name: "Progressor",
       ownerId: "owner-1",
-      updatedAt: "2026-01-01T00:00:00.000Z"
+      updatedAt: "2026-01-01T00:00:00.000Z",
     };
     const localRecord = {
       build: {
@@ -93,18 +98,19 @@ describe("loadServerCharacterEditContext", () => {
               status: "requested",
               targetId: "lore",
               targetLabel: "Lore",
-              targetType: "skill"
-            }
+              targetType: "skill",
+            },
           ],
           history: [],
-          pendingAttempts: []
-        }
+          pendingAttempts: [],
+        },
       },
       createdAt: "2026-01-01T00:00:00.000Z",
       finalizedAt: "2026-01-01T00:00:00.000Z",
       id: "character-1",
+      serverUpdatedAt: "2026-01-01T00:00:00.000Z",
       syncStatus: "local",
-      updatedAt: "2026-01-02T00:00:00.000Z"
+      updatedAt: "2026-01-02T00:00:00.000Z",
     };
 
     loadCanonicalContentMock.mockResolvedValue(content);
@@ -116,9 +122,46 @@ describe("loadServerCharacterEditContext", () => {
 
     expect(saveMock).not.toHaveBeenCalled();
     expect(result.localRecord).toBe(localRecord);
-    expect(result.serverRecord.build.progressionState.checks[0]).toMatchObject({
+    expect(result.localRecord.build.progressionState.checks[0]).toMatchObject({
       status: "requested",
-      targetId: "lore"
+      targetId: "lore",
     });
+    expect(result.serverRecord).toBe(serverRecord);
+    expect(result.expectedUpdatedAt).toBe("2026-01-01T00:00:00.000Z");
+    expect(result.hasRevisionConflict).toBe(false);
+  });
+
+  it("marks a local draft stale when the canonical server revision has advanced", async () => {
+    const content = { skills: [] };
+    const serverRecord = {
+      build: { ...baseBuild, name: "Server edit" },
+      id: "character-1",
+      level: 1,
+      name: "Server edit",
+      ownerId: "owner-1",
+      updatedAt: "2026-01-03T00:00:00.000Z",
+    };
+    const localRecord = {
+      build: { ...baseBuild, name: "Offline edit" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      finalizedAt: "2026-01-01T00:00:00.000Z",
+      id: "character-1",
+      serverUpdatedAt: "2026-01-01T00:00:00.000Z",
+      syncStatus: "local",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    };
+
+    loadCanonicalContentMock.mockResolvedValue(content);
+    loadServerCharacterByIdMock.mockResolvedValue(serverRecord);
+    getMock.mockResolvedValue(localRecord);
+
+    const { loadServerCharacterEditContext } = await import("./loadServerCharacterEditContext");
+    const result = await loadServerCharacterEditContext("character-1");
+
+    expect(result.localRecord).toBe(localRecord);
+    expect(result.serverRecord).toBe(serverRecord);
+    expect(result.expectedUpdatedAt).toBe("2026-01-01T00:00:00.000Z");
+    expect(result.hasRevisionConflict).toBe(true);
+    expect(saveMock).not.toHaveBeenCalled();
   });
 });

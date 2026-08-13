@@ -3,13 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import {
-  type CharacterBuild,
-  type ProfessionDefinition,
-} from "@glantri/domain";
-import {
-  buildCharacterSheetSummary,
-} from "@glantri/rules-engine";
+import { type CharacterBuild, type ProfessionDefinition } from "@glantri/domain";
+import { buildCharacterSheetSummary } from "@glantri/rules-engine";
 
 import { updateServerCharacter } from "@/lib/api/localServiceClient";
 import {
@@ -17,7 +12,7 @@ import {
   setCharacterGender,
   setCharacterName,
   setCharacterNotes,
-  setCharacterTitle
+  setCharacterTitle,
 } from "@/lib/characters/characterEdit";
 import {
   buildCharacterSheetProfileStatRows,
@@ -25,13 +20,14 @@ import {
   buildCharacterSheetSpecializationRows,
   characterSheetSkillsTableColumns,
   characterSheetSpecializationsTableColumns,
-  characterSheetStatsTableColumns
+  characterSheetStatsTableColumns,
 } from "@/lib/characters/characterSheet";
 import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
 import type { LocalCharacterRecord } from "@/lib/offline/glantriDexie";
 import {
   LocalCharacterRepository,
-  UNNAMED_CHARACTER_PLACEHOLDER
+  requireServerCharacterRevision,
+  UNNAMED_CHARACTER_PLACEHOLDER,
 } from "@/lib/offline/repositories/localCharacterRepository";
 
 interface CharacterDetailProps {
@@ -50,13 +46,15 @@ function getChargenRuleSetName(build: CharacterBuild): string {
 
 function getProfessionFamilyName(
   content: Awaited<ReturnType<typeof loadLocalCharacterContext>>["content"],
-  profession: ProfessionDefinition | undefined
+  profession: ProfessionDefinition | undefined,
 ): string | null {
   if (!profession?.familyId) {
     return null;
   }
 
-  return content.professionFamilies.find((family) => family.id === profession.familyId)?.name ?? null;
+  return (
+    content.professionFamilies.find((family) => family.id === profession.familyId)?.name ?? null
+  );
 }
 
 export default function CharacterDetail({ id }: CharacterDetailProps) {
@@ -109,7 +107,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
 
     return buildCharacterSheetSummary({
       build,
-      content: contentState
+      content: contentState,
     });
   }, [build, contentState]);
 
@@ -128,7 +126,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     return buildCharacterSheetSkillRows({
       build,
       content: contentState,
-      sheetSummary
+      sheetSummary,
     });
   }, [build, contentState, sheetSummary]);
   const specializationRows = useMemo(() => {
@@ -138,7 +136,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
 
     return buildCharacterSheetSpecializationRows({
       content: contentState,
-      sheetSummary
+      sheetSummary,
     });
   }, [contentState, sheetSummary]);
 
@@ -157,16 +155,16 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
 
         return {
           groupLevel: groupView.groupLevel,
-          name: group.name
+          name: group.name,
         };
       })
       .filter(
         (
-          group
+          group,
         ): group is {
           groupLevel: number;
           name: string;
-        } => group !== null
+        } => group !== null,
       );
   }, [contentState, sheetSummary]);
 
@@ -177,7 +175,8 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
 
     const savedServerRecord = await updateServerCharacter({
       build: nextBuild,
-      characterId: id
+      characterId: id,
+      expectedUpdatedAt: requireServerCharacterRevision(record),
     });
     const savedLocalRecord = await localCharacterRepository.save({
       build: savedServerRecord.build,
@@ -186,8 +185,9 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       creatorId: savedServerRecord.ownerId ?? record.creatorId,
       createdAt: record.createdAt,
       finalizedAt: record.finalizedAt,
+      serverUpdatedAt: savedServerRecord.updatedAt,
       syncStatus: "synced",
-      updatedAt: savedServerRecord.updatedAt
+      updatedAt: savedServerRecord.updatedAt,
     });
 
     setRecord(savedLocalRecord);
@@ -243,11 +243,12 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
   }
 
   const professionFamilyName = getProfessionFamilyName(contentState, profession);
-  const socialClassLabel =
-    build.socialClass ?? build.profile.socialClassResult ?? "Not set";
+  const socialClassLabel = build.socialClass ?? build.profile.socialClassResult ?? "Not set";
   const socialClassNumber = build.profile.socialClassRoll;
   const socialClassSummary =
-    socialClassNumber !== undefined ? `${socialClassLabel} (${socialClassNumber})` : socialClassLabel;
+    socialClassNumber !== undefined
+      ? `${socialClassLabel} (${socialClassNumber})`
+      : socialClassLabel;
   const originalSkillPoints = sheetSummary.skillPoints.original;
   const successfulProgressionGains = sheetSummary.skillPoints.successfulProgressionGains;
   const currentSkillPoints = sheetSummary.skillPoints.current;
@@ -266,7 +267,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
         style={{
           display: "grid",
           gap: "1rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))"
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
         }}
       >
         <section
@@ -275,7 +276,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
             border: "1px solid #d9ddd8",
             borderRadius: 12,
             overflowX: "auto",
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           <h2 style={{ margin: "0 0 0.75rem 0" }}>Profile Stats</h2>
@@ -287,7 +288,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                     key={column}
                     style={{
                       padding: index === 0 ? "0.5rem 0.75rem 0.5rem 0" : "0.5rem 0.75rem",
-                      textAlign: index === 0 ? "left" : "right"
+                      textAlign: index === 0 ? "left" : "right",
                     }}
                   >
                     {column}
@@ -299,9 +300,15 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
               {profileStatRows.map((row) => (
                 <tr key={row.stat} style={{ borderBottom: "1px solid #eee8dc" }}>
                   <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>{row.label}</td>
-                  <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.statsDieRollValue}</td>
-                  <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.originalValue}</td>
-                  <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.currentValue}</td>
+                  <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                    {row.statsDieRollValue}
+                  </td>
+                  <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                    {row.originalValue}
+                  </td>
+                  <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                    {row.currentValue}
+                  </td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.gmValue}</td>
                 </tr>
               ))}
@@ -327,7 +334,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
             background: "#f6f5ef",
             border: "1px solid #d9ddd8",
             borderRadius: 12,
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           <h2 style={{ margin: "0 0 0.75rem 0" }}>Summary</h2>
@@ -337,14 +344,16 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
               columnGap: "1rem",
               display: "grid",
               gridTemplateColumns: "minmax(120px, auto) minmax(0, 1fr)",
-              rowGap: "0.6rem"
+              rowGap: "0.6rem",
             }}
           >
             <strong>Character name</strong>
             <input
               id="character-sheet-name"
               onChange={(event) =>
-                setBuild((current) => (current ? setCharacterName(current, event.target.value) : current))
+                setBuild((current) =>
+                  current ? setCharacterName(current, event.target.value) : current,
+                )
               }
               style={{ fontSize: "1rem", padding: "0.55rem" }}
               type="text"
@@ -355,7 +364,9 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
             <input
               id="character-sheet-title"
               onChange={(event) =>
-                setBuild((current) => (current ? setCharacterTitle(current, event.target.value) : current))
+                setBuild((current) =>
+                  current ? setCharacterTitle(current, event.target.value) : current,
+                )
               }
               style={{ fontSize: "1rem", padding: "0.55rem" }}
               type="text"
@@ -366,7 +377,9 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
             <input
               id="character-sheet-age"
               onChange={(event) =>
-                setBuild((current) => (current ? setCharacterAge(current, event.target.value) : current))
+                setBuild((current) =>
+                  current ? setCharacterAge(current, event.target.value) : current,
+                )
               }
               style={{ fontSize: "1rem", padding: "0.55rem" }}
               type="text"
@@ -381,9 +394,9 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                   current
                     ? setCharacterGender(
                         current,
-                        event.target.value as "" | "male" | "female" | "other"
+                        event.target.value as "" | "male" | "female" | "other",
                       )
-                    : current
+                    : current,
                 )
               }
               style={{ fontSize: "1rem", padding: "0.55rem" }}
@@ -443,13 +456,17 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
               flexWrap: "wrap",
               gap: "0.75rem",
               justifyContent: "space-between",
-              marginTop: "1rem"
+              marginTop: "1rem",
             }}
           >
             <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
               Personal information is edited and saved here on the Character Sheet.
             </div>
-            <button disabled={savingIdentity} onClick={() => void handleSaveIdentity()} type="button">
+            <button
+              disabled={savingIdentity}
+              onClick={() => void handleSaveIdentity()}
+              type="button"
+            >
               {savingIdentity ? "Saving..." : "Save identity"}
             </button>
           </div>
@@ -463,7 +480,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
           borderRadius: 12,
           display: "grid",
           gap: "1rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <h2 style={{ margin: 0 }}>Skills</h2>
@@ -482,7 +499,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                     display: "flex",
                     gap: "0.5rem",
                     justifyContent: "space-between",
-                    padding: "0.75rem 1rem"
+                    padding: "0.75rem 1rem",
                   }}
                 >
                   <strong>{group.label}</strong>
@@ -499,7 +516,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                     gap: "0.75rem",
                     gridTemplateColumns:
                       "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(6, minmax(72px, 88px))",
-                    padding: "0.75rem 1rem"
+                    padding: "0.75rem 1rem",
                   }}
                 >
                   {characterSheetSkillsTableColumns.map((column) => (
@@ -512,13 +529,13 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                     key={skill.skillKey}
                     style={{
                       borderTop: "1px solid #f0eadf",
-                    display: "grid",
-                    gap: "0.75rem",
-                    gridTemplateColumns:
+                      display: "grid",
+                      gap: "0.75rem",
+                      gridTemplateColumns:
                         "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(6, minmax(72px, 88px))",
-                    padding: "0.75rem 1rem"
-                  }}
-                >
+                      padding: "0.75rem 1rem",
+                    }}
+                  >
                     <div>
                       <div>{skill.skillName}</div>
                       {skill.grantedSourceLabel ? (
@@ -551,7 +568,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
           borderRadius: 12,
           display: "grid",
           gap: "1rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <h2 style={{ margin: 0 }}>Specializations</h2>
@@ -565,8 +582,9 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                   display: "grid",
                   fontSize: "0.8rem",
                   gap: "0.75rem",
-                  gridTemplateColumns: "minmax(180px, 2fr) minmax(140px, 1.5fr) repeat(3, minmax(72px, 88px))",
-                  padding: "0.75rem 1rem"
+                  gridTemplateColumns:
+                    "minmax(180px, 2fr) minmax(140px, 1.5fr) repeat(3, minmax(72px, 88px))",
+                  padding: "0.75rem 1rem",
                 }}
               >
                 {characterSheetSpecializationsTableColumns.map((column) => (
@@ -581,8 +599,9 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                     borderTop: "1px solid #f0eadf",
                     display: "grid",
                     gap: "0.75rem",
-                    gridTemplateColumns: "minmax(180px, 2fr) minmax(140px, 1.5fr) repeat(3, minmax(72px, 88px))",
-                    padding: "0.75rem 1rem"
+                    gridTemplateColumns:
+                      "minmax(180px, 2fr) minmax(140px, 1.5fr) repeat(3, minmax(72px, 88px))",
+                    padding: "0.75rem 1rem",
                   }}
                 >
                   <div>
@@ -613,13 +632,15 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
           borderRadius: 12,
           display: "grid",
           gap: "0.75rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <h2 style={{ margin: 0 }}>Notes</h2>
         <textarea
           onChange={(event) =>
-            setBuild((current) => (current ? setCharacterNotes(current, event.target.value) : current))
+            setBuild((current) =>
+              current ? setCharacterNotes(current, event.target.value) : current,
+            )
           }
           placeholder="Player notes, reminders, and character details..."
           style={{
@@ -631,11 +652,18 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
             minHeight: 320,
             overflow: "auto",
             padding: "0.9rem",
-            resize: "vertical"
+            resize: "vertical",
           }}
           value={notes}
         />
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", justifyContent: "space-between" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.75rem",
+            justifyContent: "space-between",
+          }}
+        >
           <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
             Character notes stay separate from inventory notes.
           </div>
@@ -646,7 +674,9 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       </section>
 
       {feedback ? (
-        <div style={{ border: "1px solid #d9ddd8", borderRadius: 12, padding: "1rem" }}>{feedback}</div>
+        <div style={{ border: "1px solid #d9ddd8", borderRadius: 12, padding: "1rem" }}>
+          {feedback}
+        </div>
       ) : null}
     </section>
   );

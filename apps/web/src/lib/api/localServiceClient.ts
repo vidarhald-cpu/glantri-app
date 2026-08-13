@@ -21,6 +21,7 @@ export {
   type ChargenRuleSetStoreResponse,
 } from "./chargenClient";
 export {
+  deleteServerCharacter,
   loadMyServerCharacters,
   loadServerCharacterById,
   loadServerCharacters,

@@ -8,14 +8,14 @@ import {
   glantriCharacteristicOrder,
   type CharacterBuild,
   type GlantriCharacteristicKey,
-  type ProgressionTargetType
+  type ProgressionTargetType,
 } from "@glantri/domain";
 import {
   addCharacterProgressionCheck,
   approveCharacterProgressionCheck,
   buildCharacterProgressionView,
   grantCharacterProgressionPoints,
-  removeCharacterProgressionCheck
+  removeCharacterProgressionCheck,
 } from "@glantri/rules-engine";
 
 import { updateServerCharacter } from "@/lib/api/localServiceClient";
@@ -36,7 +36,7 @@ import {
   setCharacterOriginalStatValue,
   setCharacterSpecializationXp,
   setCharacterSkillGroupLevel,
-  setCharacterSkillXp
+  setCharacterSkillXp,
 } from "@/lib/characters/characterEdit";
 import { loadServerCharacterEditContext } from "@/lib/characters/loadServerCharacterEditContext";
 import type { LocalCharacterRecord } from "@/lib/offline/glantriDexie";
@@ -51,7 +51,7 @@ const numericInputStyle = {
   fontSize: "1rem",
   padding: "0.45rem",
   textAlign: "right" as const,
-  width: 80
+  width: 80,
 };
 const centeredCellStyle = { padding: "0.55rem 0.5rem", textAlign: "center" as const };
 
@@ -69,6 +69,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
   const [content, setContent] = useState<
     Awaited<ReturnType<typeof loadServerCharacterEditContext>>["content"] | undefined
   >();
+  const [expectedUpdatedAt, setExpectedUpdatedAt] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [record, setRecord] = useState<LocalCharacterRecord>();
@@ -90,7 +91,16 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
 
         setContent(result.content);
         setRecord(result.localRecord);
-        setBuild(result.serverRecord.build);
+        if (result.hasRevisionConflict) {
+          setExpectedUpdatedAt(result.serverRecord.updatedAt);
+          setBuild(result.serverRecord.build);
+          setFeedback(
+            "A newer server character was loaded. The older local draft remains available for recovery until you deliberately save new edits.",
+          );
+        } else {
+          setExpectedUpdatedAt(result.expectedUpdatedAt);
+          setBuild(result.localRecord.build);
+        }
       })
       .finally(() => {
         if (!cancelled) {
@@ -120,7 +130,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
       build,
       sheetSummary,
       glantriCharacteristicLabels,
-      glantriCharacteristicOrder
+      glantriCharacteristicOrder,
     );
   }, [build, sheetSummary]);
 
@@ -131,7 +141,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
 
     return buildCharacterEditSkillGroupRows({
       content,
-      sheetSummary
+      sheetSummary,
     });
   }, [content, sheetSummary]);
 
@@ -142,7 +152,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
 
     return buildAvailableCharacterEditSkillGroups({
       content,
-      sheetSummary
+      sheetSummary,
     });
   }, [content, sheetSummary]);
 
@@ -154,7 +164,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     return buildCharacterEditSkillRows({
       build,
       content,
-      sheetSummary
+      sheetSummary,
     });
   }, [build, content, sheetSummary]);
   const groupedSkillRows = useMemo(() => {
@@ -168,9 +178,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
 
         return {
           ...row,
-          skillType: skill ? getPlayerFacingSkillBucket(skill) : "special-access"
+          skillType: skill ? getPlayerFacingSkillBucket(skill) : "special-access",
         };
-      })
+      }),
     );
   }, [content, skillRows]);
   const specializationRows = useMemo(() => {
@@ -181,7 +191,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     return buildCharacterEditSpecializationRows({
       build,
       content,
-      sheetSummary
+      sheetSummary,
     });
   }, [build, content, sheetSummary]);
   const progressionView = useMemo(() => {
@@ -191,7 +201,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
 
     return buildCharacterProgressionView({
       build,
-      content
+      content,
     });
   }, [build, content]);
 
@@ -204,15 +214,18 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
 
     return [...content.skills]
       .filter((skill) => !existingSkillIds.has(skill.id))
-      .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
+      .sort(
+        (left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name),
+      );
   }, [build, content]);
   const provisionalProgressionRows = useMemo(
     () => progressionView?.rows.filter((row) => row.provisional) ?? [],
-    [progressionView]
+    [progressionView],
   );
 
   async function handleSave() {
-    if (!build || !record) {
+    if (!build || !record || !expectedUpdatedAt) {
+      setFeedback("Reload the server character before saving this local draft.");
       return;
     }
 
@@ -221,23 +234,26 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     try {
       const savedServerRecord = await updateServerCharacter({
         build,
-        characterId: id
+        characterId: id,
+        expectedUpdatedAt,
       });
       const savedLocalRecord = await localCharacterRepository.save({
         build: savedServerRecord.build,
         creatorId: savedServerRecord.ownerId ?? record.creatorId,
         createdAt: record.createdAt,
         finalizedAt: record.finalizedAt,
+        serverUpdatedAt: savedServerRecord.updatedAt,
         syncStatus: "synced",
-        updatedAt: savedServerRecord.updatedAt
+        updatedAt: savedServerRecord.updatedAt,
       });
 
       setRecord(savedLocalRecord);
       setBuild(savedServerRecord.build);
+      setExpectedUpdatedAt(savedServerRecord.updatedAt);
       setFeedback("Character edits saved to the server.");
     } catch (error) {
       setFeedback(
-        error instanceof Error ? error.message : "Unable to save character edits to the server."
+        error instanceof Error ? error.message : "Unable to save character edits to the server.",
       );
     } finally {
       setSaving(false);
@@ -246,19 +262,19 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
 
   function updateOriginalStat(stat: GlantriCharacteristicKey, value: string) {
     setBuild((current) =>
-      current ? setCharacterOriginalStatValue(current, stat, parseWholeNumber(value)) : current
+      current ? setCharacterOriginalStatValue(current, stat, parseWholeNumber(value)) : current,
     );
   }
 
   function updateCurrentStat(stat: GlantriCharacteristicKey, value: string) {
     setBuild((current) =>
-      current ? setCharacterCurrentStatValue(current, stat, parseWholeNumber(value)) : current
+      current ? setCharacterCurrentStatValue(current, stat, parseWholeNumber(value)) : current,
     );
   }
 
   function updateDistraction(value: string) {
     setBuild((current) =>
-      current ? setCharacterDistractionLevel(current, parseWholeNumber(value)) : current
+      current ? setCharacterDistractionLevel(current, parseWholeNumber(value)) : current,
     );
   }
 
@@ -269,9 +285,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             build: current,
             content,
             groupId,
-            level: parseWholeNumber(value)
+            level: parseWholeNumber(value),
           })
-        : current
+        : current,
     );
   }
 
@@ -301,9 +317,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             build: current,
             content,
             skill: definition,
-            xp: parseWholeNumber(value)
+            xp: parseWholeNumber(value),
           })
-        : current
+        : current,
     );
   }
 
@@ -334,7 +350,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
       return;
     }
 
-    setBuild((current) => current ? grantCharacterProgressionPoints({ amount, build: current }) : current);
+    setBuild((current) =>
+      current ? grantCharacterProgressionPoints({ amount, build: current }) : current,
+    );
     setPointsToGrant("0");
     setFeedback(`Granted ${amount} progression point${amount === 1 ? "" : "s"}.`);
   }
@@ -358,20 +376,22 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
         ? removeCharacterProgressionCheck({
             build: current,
             targetId: input.targetId,
-            targetType: input.targetType
+            targetType: input.targetType,
           })
         : approveCharacterProgressionCheck({
             build: current,
             content,
             provisional: input.provisional,
             targetId: input.targetId,
-            targetType: input.targetType
+            targetType: input.targetType,
           });
     });
   }
 
   function getProgressionRow(targetType: ProgressionTargetType, targetId: string) {
-    return progressionView?.rows.find((row) => row.targetType === targetType && row.targetId === targetId);
+    return progressionView?.rows.find(
+      (row) => row.targetType === targetType && row.targetId === targetId,
+    );
   }
 
   function renderProgressionCheckControls(input: {
@@ -396,7 +416,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
           fontSize: "0.82rem",
           gap: "0.25rem",
           justifyItems: "center",
-          textAlign: "center"
+          textAlign: "center",
         }}
       >
         <span>{row?.requested ? "Requested" : "—"}</span>
@@ -404,7 +424,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
           approved,
           provisional: input.provisional,
           targetId: input.targetId,
-          targetType: input.targetType
+          targetType: input.targetType,
         })}
       </div>
     );
@@ -429,8 +449,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     }
 
     const approved =
-      input.approved ??
-      Boolean(getProgressionRow(input.targetType, input.targetId)?.approved);
+      input.approved ?? Boolean(getProgressionRow(input.targetType, input.targetId)?.approved);
 
     return (
       <input
@@ -441,7 +460,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             approved,
             provisional: input.provisional,
             targetId: input.targetId,
-            targetType: input.targetType
+            targetType: input.targetType,
           })
         }
         type="checkbox"
@@ -461,9 +480,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             content,
             provisional: true,
             targetId: selectedProvisionalSkillId,
-            targetType: "skill"
+            targetType: "skill",
           })
-        : current
+        : current,
     );
     setSelectedProvisionalSkillId("");
   }
@@ -474,10 +493,10 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     }
 
     const definition = content.specializations.find(
-      (specialization) => specialization.id === specializationId
+      (specialization) => specialization.id === specializationId,
     );
     const currentRow = specializationRows.find(
-      (specialization) => specialization.specializationId === specializationId
+      (specialization) => specialization.specializationId === specializationId,
     );
 
     if (!definition || !currentRow) {
@@ -493,7 +512,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
         build: current,
         content,
         specialization: definition,
-        xp: currentRow.xp + delta
+        xp: currentRow.xp + delta,
       });
 
       if (result.error) {
@@ -504,7 +523,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
       setFeedback(
         delta > 0
           ? `Added 1 direct XP to ${definition.name}.`
-          : `Removed 1 direct XP from ${definition.name}.`
+          : `Removed 1 direct XP from ${definition.name}.`,
       );
       return result.build;
     });
@@ -530,15 +549,26 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
   const socialClassLabel = build.socialClass ?? build.profile.socialClassResult ?? "Not set";
   const socialClassNumber = build.profile.socialClassRoll;
   const socialClassSummary =
-    socialClassNumber !== undefined ? `${socialClassLabel} (${socialClassNumber})` : socialClassLabel;
+    socialClassNumber !== undefined
+      ? `${socialClassLabel} (${socialClassNumber})`
+      : socialClassLabel;
   const educationLevel = sheetSummary.draftView.education.theoreticalSkillCount;
-  const requestedCheckCount = progressionView?.checks.filter((check) => check.status === "requested").length ?? 0;
+  const requestedCheckCount =
+    progressionView?.checks.filter((check) => check.status === "requested").length ?? 0;
   const approvedCheckCount =
-    progressionView?.checks.filter((check) => (check.status ?? "approved") === "approved").length ?? 0;
+    progressionView?.checks.filter((check) => (check.status ?? "approved") === "approved").length ??
+    0;
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1180 }}>
-      <div style={{ display: "flex", gap: "0.75rem", justifyContent: "space-between", flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: "0.75rem",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+        }}
+      >
         <div>
           <h1 style={{ margin: 0 }}>Character Edit — {getCharacterName(record)}</h1>
           <p style={{ margin: "0.5rem 0 0 0" }}>
@@ -565,7 +595,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             padding: "0.75rem 1rem",
             position: "sticky",
             top: "3rem",
-            zIndex: 5
+            zIndex: 5,
           }}
         >
           <strong>GM edit</strong>
@@ -601,7 +631,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
         style={{
           display: "grid",
           gap: "1rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))"
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
         }}
       >
         <section
@@ -610,7 +640,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             border: "1px solid #d9ddd8",
             borderRadius: 12,
             order: 1,
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           <h2 style={{ margin: "0 0 0.75rem 0" }}>Summary</h2>
@@ -621,7 +651,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
               columnGap: "1rem",
               display: "grid",
               gridTemplateColumns: "minmax(120px, auto) minmax(0, 1fr)",
-              rowGap: "0.55rem"
+              rowGap: "0.55rem",
             }}
           >
             <strong>Name</strong>
@@ -653,7 +683,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 display: "grid",
                 gap: "0.75rem",
                 marginTop: "0.9rem",
-                paddingTop: "0.9rem"
+                paddingTop: "0.9rem",
               }}
             >
               {isGameMaster ? (
@@ -664,26 +694,45 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 </>
               ) : null}
 
-              <div style={{ borderTop: "1px solid #e7e2d7", display: "grid", gap: "0.75rem", paddingTop: "0.75rem" }}>
-                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem", justifyContent: "space-between" }}>
+              <div
+                style={{
+                  borderTop: "1px solid #e7e2d7",
+                  display: "grid",
+                  gap: "0.75rem",
+                  paddingTop: "0.75rem",
+                }}
+              >
+                <div
+                  style={{
+                    alignItems: "center",
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "0.5rem",
+                    justifyContent: "space-between",
+                  }}
+                >
                   <h3 style={{ margin: 0 }}>Skill groups</h3>
                   {isGameMaster ? (
                     <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                    <select
-                      onChange={(event) => setSelectedSkillGroupId(event.target.value)}
-                      style={{ fontSize: "1rem", padding: "0.45rem" }}
-                      value={selectedSkillGroupId}
-                    >
-                      <option value="">Add skill group...</option>
-                      {availableSkillGroups.map((group) => (
-                        <option key={group.groupId} value={group.groupId}>
-                          {group.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button disabled={!selectedSkillGroupId} onClick={handleAddSkillGroup} type="button">
-                      Add group
-                    </button>
+                      <select
+                        onChange={(event) => setSelectedSkillGroupId(event.target.value)}
+                        style={{ fontSize: "1rem", padding: "0.45rem" }}
+                        value={selectedSkillGroupId}
+                      >
+                        <option value="">Add skill group...</option>
+                        {availableSkillGroups.map((group) => (
+                          <option key={group.groupId} value={group.groupId}>
+                            {group.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        disabled={!selectedSkillGroupId}
+                        onClick={handleAddSkillGroup}
+                        type="button"
+                      >
+                        Add group
+                      </button>
                     </div>
                   ) : null}
                 </div>
@@ -695,7 +744,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                         <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>Level</th>
                         {isGameMaster ? (
                           <>
-                            <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>Requested</th>
+                            <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>
+                              Requested
+                            </th>
                             <th style={{ padding: "0.4rem 0", textAlign: "center" }}>Approved</th>
                           </>
                         ) : null}
@@ -708,7 +759,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                             <td style={{ padding: "0.55rem 0.5rem 0.55rem 0" }}>{group.name}</td>
                             <td style={{ padding: "0.55rem 0.5rem", textAlign: "center" }}>
                               <input
-                                onChange={(event) => updateSkillGroup(group.groupId, event.target.value)}
+                                onChange={(event) =>
+                                  updateSkillGroup(group.groupId, event.target.value)
+                                }
                                 style={numericInputStyle}
                                 type="number"
                                 value={group.level}
@@ -722,7 +775,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                                 <td style={{ padding: "0.55rem 0", textAlign: "center" }}>
                                   {renderApprovedCheck({
                                     targetId: group.groupId,
-                                    targetType: "skillGroup"
+                                    targetType: "skillGroup",
                                   })}
                                 </td>
                               </>
@@ -751,7 +804,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             borderRadius: 12,
             order: 0,
             overflowX: "auto",
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           <h2 style={{ margin: "0 0 0.75rem 0" }}>Profile Stats</h2>
@@ -765,7 +818,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 {isGameMaster ? (
                   <>
                     <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Requested</th>
-                    <th style={{ padding: "0.5rem 0 0.5rem 0.75rem", textAlign: "center" }}>Approved</th>
+                    <th style={{ padding: "0.5rem 0 0.5rem 0.75rem", textAlign: "center" }}>
+                      Approved
+                    </th>
                   </>
                 ) : null}
               </tr>
@@ -813,7 +868,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                           ? "—"
                           : renderApprovedCheck({
                               targetId: row.stat,
-                              targetType: "stat"
+                              targetType: "stat",
                             })}
                       </td>
                     </>
@@ -823,7 +878,6 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             </tbody>
           </table>
         </section>
-
       </section>
 
       <section
@@ -833,10 +887,17 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
           borderRadius: 12,
           display: "grid",
           gap: "1rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
-        <div style={{ display: "flex", gap: "0.75rem", justifyContent: "space-between", flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "0.75rem",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+          }}
+        >
           <h2 style={{ margin: 0 }}>Skills</h2>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <select
@@ -872,7 +933,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                     display: "flex",
                     gap: "0.5rem",
                     justifyContent: "space-between",
-                    padding: "0.75rem 1rem"
+                    padding: "0.75rem 1rem",
                   }}
                 >
                   <strong>{group.label}</strong>
@@ -893,8 +954,14 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                       <th style={{ padding: "0.5rem 0", textAlign: "center" }}>Remove</th>
                       {isGameMaster ? (
                         <>
-                          <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Requested</th>
-                          <th style={{ padding: "0.5rem 1rem 0.5rem 0.75rem", textAlign: "center" }}>Approved</th>
+                          <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>
+                            Requested
+                          </th>
+                          <th
+                            style={{ padding: "0.5rem 1rem 0.5rem 0.75rem", textAlign: "center" }}
+                          >
+                            Approved
+                          </th>
                         </>
                       ) : null}
                     </tr>
@@ -910,8 +977,12 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                             </div>
                           ) : null}
                         </td>
-                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{skill.stats}</td>
-                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{skill.groupXp}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                          {skill.stats}
+                        </td>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                          {skill.groupXp}
+                        </td>
                         <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
                           <input
                             onChange={(event) => updateSkill(skill.skillId, event.target.value)}
@@ -920,9 +991,15 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                             value={skill.xp}
                           />
                         </td>
-                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{skill.grantedXp}</td>
-                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{skill.totalXp}</td>
-                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{skill.total}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                          {skill.grantedXp}
+                        </td>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                          {skill.totalXp}
+                        </td>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                          {skill.total}
+                        </td>
                         <td style={{ padding: "0.6rem 0", textAlign: "center" }}>
                           <button
                             disabled={!skill.canRemoveDirectXp}
@@ -937,10 +1014,12 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                             <td style={centeredCellStyle}>
                               {renderRequestedStatus("skill", skill.skillId)}
                             </td>
-                            <td style={{ padding: "0.6rem 1rem 0.6rem 0.75rem", textAlign: "center" }}>
+                            <td
+                              style={{ padding: "0.6rem 1rem 0.6rem 0.75rem", textAlign: "center" }}
+                            >
                               {renderApprovedCheck({
                                 targetId: skill.skillId,
-                                targetType: "skill"
+                                targetType: "skill",
                               })}
                             </td>
                           </>
@@ -964,7 +1043,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
               display: "flex",
               flexWrap: "wrap",
               gap: "0.5rem",
-              paddingTop: "0.75rem"
+              paddingTop: "0.75rem",
             }}
           >
             <strong>Provisional skill check</strong>
@@ -980,14 +1059,26 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 </option>
               ))}
             </select>
-            <button disabled={!selectedProvisionalSkillId} onClick={handleAddProvisionalSkillCheck} type="button">
+            <button
+              disabled={!selectedProvisionalSkillId}
+              onClick={handleAddProvisionalSkillCheck}
+              type="button"
+            >
               Add check
             </button>
           </section>
         ) : null}
 
         {isGameMaster && provisionalProgressionRows.length > 0 ? (
-          <section style={{ border: "1px solid #e7e2d7", borderRadius: 10, display: "grid", gap: "0.5rem", padding: "1rem" }}>
+          <section
+            style={{
+              border: "1px solid #e7e2d7",
+              borderRadius: 10,
+              display: "grid",
+              gap: "0.5rem",
+              padding: "1rem",
+            }}
+          >
             <h3 style={{ margin: 0 }}>Provisional skill checks</h3>
             {provisionalProgressionRows.map((row) => (
               <div
@@ -998,7 +1089,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                   display: "flex",
                   gap: "1rem",
                   justifyContent: "space-between",
-                  paddingTop: "0.5rem"
+                  paddingTop: "0.5rem",
                 }}
               >
                 <div>
@@ -1008,7 +1099,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 {renderProgressionCheckControls({
                   provisional: true,
                   targetId: row.targetId,
-                  targetType: row.targetType
+                  targetType: row.targetType,
                 })}
               </div>
             ))}
@@ -1023,10 +1114,17 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
           borderRadius: 12,
           display: "grid",
           gap: "1rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
-        <div style={{ display: "flex", gap: "0.75rem", justifyContent: "space-between", flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "0.75rem",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+          }}
+        >
           <h2 style={{ margin: 0 }}>Specializations</h2>
         </div>
 
@@ -1043,7 +1141,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 {isGameMaster ? (
                   <>
                     <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Requested</th>
-                    <th style={{ padding: "0.5rem 0 0.5rem 0.75rem", textAlign: "center" }}>Approved</th>
+                    <th style={{ padding: "0.5rem 0 0.5rem 0.75rem", textAlign: "center" }}>
+                      Approved
+                    </th>
                   </>
                 ) : null}
               </tr>
@@ -1051,7 +1151,10 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             <tbody>
               {specializationRows.length > 0 ? (
                 specializationRows.map((specialization) => (
-                  <tr key={specialization.specializationId} style={{ borderBottom: "1px solid #eee8dc" }}>
+                  <tr
+                    key={specialization.specializationId}
+                    style={{ borderBottom: "1px solid #eee8dc" }}
+                  >
                     <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
                       <div>{specialization.specializationName}</div>
                       {specialization.grantedSourceLabel ? (
@@ -1069,16 +1172,22 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                         Current parent level {specialization.parentSkillXp}
                       </div>
                     </td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{specialization.xp}</td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{specialization.grantedXp}</td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{specialization.total}</td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                      {specialization.xp}
+                    </td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                      {specialization.grantedXp}
+                    </td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                      {specialization.total}
+                    </td>
                     <td style={{ padding: "0.6rem 0", textAlign: "center" }}>
                       <div
                         style={{
                           alignItems: "center",
                           display: "inline-flex",
                           gap: "0.4rem",
-                          justifyContent: "center"
+                          justifyContent: "center",
                         }}
                       >
                         <button
@@ -1105,7 +1214,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                         <td style={{ padding: "0.6rem 0 0.6rem 0.75rem", textAlign: "center" }}>
                           {renderApprovedCheck({
                             targetId: specialization.specializationId,
-                            targetType: "specialization"
+                            targetType: "specialization",
                           })}
                         </td>
                       </>
@@ -1124,7 +1233,14 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                     .filter((specialization) => specialization.blockingMessage)
                     .map((specialization) => (
                       <tr key={`${specialization.specializationId}-status`}>
-                        <td colSpan={isGameMaster ? 8 : 6} style={{ color: "#8f5a00", fontSize: "0.85rem", padding: "0 0 0.75rem 0" }}>
+                        <td
+                          colSpan={isGameMaster ? 8 : 6}
+                          style={{
+                            color: "#8f5a00",
+                            fontSize: "0.85rem",
+                            padding: "0 0 0.75rem 0",
+                          }}
+                        >
                           {specialization.specializationName}: {specialization.blockingMessage}
                         </td>
                       </tr>
@@ -1142,7 +1258,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
           borderRadius: 12,
           display: "grid",
           gap: "0.75rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <h2 style={{ margin: 0 }}>Notes</h2>
@@ -1155,7 +1271,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             minHeight: 320,
             overflow: "auto",
             padding: "0.9rem",
-            whiteSpace: "pre-wrap"
+            whiteSpace: "pre-wrap",
           }}
         >
           {build.profile.notes?.trim() || "No character notes recorded."}

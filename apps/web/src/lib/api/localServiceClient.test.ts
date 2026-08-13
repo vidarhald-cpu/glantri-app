@@ -219,6 +219,49 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("sends the canonical character revision with update and delete mutations", async () => {
+    const character = {
+      build: { id: "character-1", name: "Ada revised" },
+      createdAt: "2026-05-09T12:00:00.000Z",
+      id: "character-1",
+      level: 1,
+      name: "Ada revised",
+      updatedAt: "2026-05-09T13:00:00.000Z",
+    };
+    const expectedUpdatedAt = "2026-05-09T12:00:00.000Z";
+    const updateFetch = stubFetch({ character });
+    const client = await loadClient();
+    const build = character.build as unknown as Parameters<
+      LocalServiceClientModule["updateServerCharacter"]
+    >[0]["build"];
+
+    await expect(
+      client.updateServerCharacter({
+        build,
+        characterId: character.id,
+        expectedUpdatedAt,
+      }),
+    ).resolves.toEqual(character);
+    expectFetchCall(updateFetch, {
+      body: { build, expectedUpdatedAt },
+      method: "PUT",
+      url: "https://api.example.test/characters/character-1",
+    });
+
+    const deleteFetch = stubFetch(undefined, 204);
+    await expect(
+      client.deleteServerCharacter({
+        characterId: character.id,
+        expectedUpdatedAt: character.updatedAt,
+      }),
+    ).resolves.toBeUndefined();
+    expectFetchCall(deleteFetch, {
+      body: { expectedUpdatedAt: character.updatedAt },
+      method: "DELETE",
+      url: "https://api.example.test/characters/character-1",
+    });
+  });
+
   it("posts campaign creation under the campaign domain", async () => {
     const campaign = {
       createdAt: "2026-05-09T12:00:00.000Z",

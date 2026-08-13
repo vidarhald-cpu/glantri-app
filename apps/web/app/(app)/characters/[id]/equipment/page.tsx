@@ -32,8 +32,11 @@ import {
 import { updateServerCharacter } from "@/lib/api/localServiceClient";
 import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
 import type { LocalCharacterRecord } from "@/lib/offline/glantriDexie";
-import { LocalCharacterRepository } from "@/lib/offline/repositories/localCharacterRepository";
-import { UNNAMED_CHARACTER_PLACEHOLDER } from "@/lib/offline/repositories/localCharacterRepository";
+import {
+  LocalCharacterRepository,
+  requireServerCharacterRevision,
+  UNNAMED_CHARACTER_PLACEHOLDER,
+} from "@/lib/offline/repositories/localCharacterRepository";
 import { getWorkbookCharacterSize } from "@/features/equipment/armorSummary";
 import { formatEncumbranceDisplay } from "@/features/equipment/displayFormatting";
 import {
@@ -551,6 +554,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
           inventoryNotes,
         },
         characterId: id,
+        expectedUpdatedAt: requireServerCharacterRevision(characterRecord),
       });
       const savedLocalRecord = await localCharacterRepository.save({
         build: savedServerRecord.build,
@@ -559,6 +563,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         creatorId: savedServerRecord.ownerId ?? characterRecord.creatorId,
         createdAt: characterRecord.createdAt,
         finalizedAt: characterRecord.finalizedAt,
+        serverUpdatedAt: savedServerRecord.updatedAt,
         syncStatus: "synced",
         updatedAt: savedServerRecord.updatedAt,
       });

@@ -5,7 +5,7 @@ import type {
   CharacterBuild,
   CharacterProgression,
   EncounterSession,
-  RolledCharacterProfile
+  RolledCharacterProfile,
 } from "@glantri/domain";
 import type { SyncQueueItem } from "@glantri/shared";
 
@@ -47,6 +47,8 @@ export interface LocalCharacterRecord {
   createdAt: string;
   finalizedAt: string;
   id: string;
+  /** Opaque revision of the server record this cache/draft was based on. */
+  serverUpdatedAt?: string;
   syncStatus: "local" | "queued" | "synced";
   updatedAt: string;
 }
@@ -66,7 +68,7 @@ export class GlantriDexie extends Dexie {
       cachedContent: "key, updatedAt",
       characterDrafts: "id, syncStatus, updatedAt",
       chargenSessions: "id, updatedAt",
-      syncQueue: "id, status, updatedAt, entityId"
+      syncQueue: "id, status, updatedAt, entityId",
     });
 
     this.version(2).stores({
@@ -74,7 +76,7 @@ export class GlantriDexie extends Dexie {
       characterDrafts: "id, syncStatus, updatedAt",
       chargenSessions: "id, updatedAt",
       localCharacters: "id, syncStatus, finalizedAt, updatedAt",
-      syncQueue: "id, status, updatedAt, entityId"
+      syncQueue: "id, status, updatedAt, entityId",
     });
 
     this.version(3).stores({
@@ -82,7 +84,7 @@ export class GlantriDexie extends Dexie {
       characterDrafts: "id, characterId, syncStatus, updatedAt",
       chargenSessions: "id, updatedAt",
       localCharacters: "id, syncStatus, finalizedAt, updatedAt",
-      syncQueue: "id, status, updatedAt, entityId"
+      syncQueue: "id, status, updatedAt, entityId",
     });
 
     this.version(4).stores({
@@ -91,7 +93,7 @@ export class GlantriDexie extends Dexie {
       chargenSessions: "id, updatedAt",
       encounters: "id, status, updatedAt, title",
       localCharacters: "id, syncStatus, finalizedAt, updatedAt",
-      syncQueue: "id, status, updatedAt, entityId"
+      syncQueue: "id, status, updatedAt, entityId",
     });
 
     this.version(5).stores({
@@ -100,7 +102,7 @@ export class GlantriDexie extends Dexie {
       chargenSessions: "id, updatedAt",
       encounters: "id, status, updatedAt, title",
       localCharacters: "id, syncStatus, finalizedAt, updatedAt",
-      syncQueue: "id, status, updatedAt, entityId"
+      syncQueue: "id, status, updatedAt, entityId",
     });
   }
 }

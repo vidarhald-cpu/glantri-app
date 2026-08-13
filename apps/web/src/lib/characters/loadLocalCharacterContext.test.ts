@@ -6,18 +6,18 @@ const loadCanonicalContentMock = vi.fn();
 const loadServerCharacterByIdMock = vi.fn();
 
 vi.mock("../content/loadCanonicalContent", () => ({
-  loadCanonicalContent: loadCanonicalContentMock
+  loadCanonicalContent: loadCanonicalContentMock,
 }));
 
 vi.mock("../api/characterClient", () => ({
-  loadServerCharacterById: loadServerCharacterByIdMock
+  loadServerCharacterById: loadServerCharacterByIdMock,
 }));
 
 vi.mock("../offline/repositories/localCharacterRepository", () => ({
   LocalCharacterRepository: class LocalCharacterRepository {
     get = getMock;
     save = saveMock;
-  }
+  },
 }));
 
 describe("loadLocalCharacterContext", () => {
@@ -51,9 +51,9 @@ describe("loadLocalCharacterContext", () => {
             pow: 10,
             siz: 10,
             str: 10,
-            will: 10
+            will: 10,
           },
-          societyLevel: 0
+          societyLevel: 0,
         },
         progression: {
           chargenMode: "standard",
@@ -65,14 +65,14 @@ describe("loadLocalCharacterContext", () => {
           secondaryPoolTotal: 0,
           skillGroups: [],
           skills: [],
-          specializations: []
-        }
+          specializations: [],
+        },
       },
       createdAt: "2026-04-21T00:00:00.000Z",
       finalizedAt: "2026-04-21T00:00:00.000Z",
       id: "character-1",
       syncStatus: "synced",
-      updatedAt: "2026-04-21T00:00:00.000Z"
+      updatedAt: "2026-04-21T00:00:00.000Z",
     };
 
     loadCanonicalContentMock.mockResolvedValue(content);
@@ -83,7 +83,7 @@ describe("loadLocalCharacterContext", () => {
 
     expect(result).toEqual({
       content,
-      record: localRecord
+      record: localRecord,
     });
     expect(loadServerCharacterByIdMock).not.toHaveBeenCalled();
     expect(saveMock).not.toHaveBeenCalled();
@@ -112,9 +112,9 @@ describe("loadLocalCharacterContext", () => {
             pow: 10,
             siz: 10,
             str: 10,
-            will: 10
+            will: 10,
           },
-          societyLevel: 0
+          societyLevel: 0,
         },
         progression: {
           chargenMode: "standard",
@@ -126,8 +126,8 @@ describe("loadLocalCharacterContext", () => {
           secondaryPoolTotal: 0,
           skillGroups: [],
           skills: [],
-          specializations: []
-        }
+          specializations: [],
+        },
       },
       createdAt: "2026-04-21T00:00:00.000Z",
       id: "character-2",
@@ -136,10 +136,10 @@ describe("loadLocalCharacterContext", () => {
       owner: {
         displayName: "Player One",
         email: "player@example.com",
-        id: "owner-1"
+        id: "owner-1",
       },
       ownerId: "owner-1",
-      updatedAt: "2026-04-21T01:00:00.000Z"
+      updatedAt: "2026-04-21T01:00:00.000Z",
     };
     const savedRecord = {
       build: serverRecord.build,
@@ -150,7 +150,7 @@ describe("loadLocalCharacterContext", () => {
       finalizedAt: "2026-04-21T01:00:00.000Z",
       id: "character-2",
       syncStatus: "synced",
-      updatedAt: "2026-04-21T01:00:00.000Z"
+      updatedAt: "2026-04-21T01:00:00.000Z",
     };
 
     loadCanonicalContentMock.mockResolvedValue(content);
@@ -167,12 +167,13 @@ describe("loadLocalCharacterContext", () => {
       creatorDisplayName: "Player One",
       creatorEmail: "player@example.com",
       creatorId: "owner-1",
+      serverUpdatedAt: "2026-04-21T01:00:00.000Z",
       syncStatus: "synced",
-      updatedAt: "2026-04-21T01:00:00.000Z"
+      updatedAt: "2026-04-21T01:00:00.000Z",
     });
     expect(result).toEqual({
       content,
-      record: savedRecord
+      record: savedRecord,
     });
   });
 
@@ -199,9 +200,9 @@ describe("loadLocalCharacterContext", () => {
             pow: 10,
             siz: 10,
             str: 10,
-            will: 10
+            will: 10,
           },
-          societyLevel: 0
+          societyLevel: 0,
         },
         progression: {
           chargenMode: "standard",
@@ -213,14 +214,14 @@ describe("loadLocalCharacterContext", () => {
           secondaryPoolTotal: 0,
           skillGroups: [],
           skills: [{ skillId: "1-h edged", xp: 6 }],
-          specializations: []
-        }
+          specializations: [],
+        },
       },
       createdAt: "2026-04-21T00:00:00.000Z",
       finalizedAt: "2026-04-21T00:00:00.000Z",
       id: "character-3",
       syncStatus: "synced",
-      updatedAt: "2026-04-21T00:00:00.000Z"
+      updatedAt: "2026-04-21T00:00:00.000Z",
     };
     const currentServerRecord = {
       build: {
@@ -236,7 +237,7 @@ describe("loadLocalCharacterContext", () => {
       level: 1,
       name: "Current Server Character",
       ownerId: "owner-1",
-      updatedAt: "2026-04-21T02:00:00.000Z"
+      updatedAt: "2026-04-21T02:00:00.000Z",
     };
 
     loadCanonicalContentMock.mockResolvedValue(content);

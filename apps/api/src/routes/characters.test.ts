@@ -13,13 +13,13 @@ const mocks = vi.hoisted(() => {
     roles: ["game_master"],
   };
   const characterService = {
-    listCharacters: vi.fn(),
+    deleteExistingCharacter: vi.fn(),
     findById: vi.fn(),
+    listAccessibleCharacters: vi.fn(),
     saveCharacter: vi.fn(),
     saveExistingCharacter: vi.fn(),
   };
   return {
-    canEditCharacterInApi: vi.fn(),
     characterService,
     gmUser,
     loadAccessibleCharacterInApi: vi.fn(),
@@ -29,6 +29,20 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("@glantri/database", () => ({
+  CharacterMutationConflictError: class CharacterMutationConflictError extends Error {
+    code: "character_already_exists" | "stale_character";
+    currentCharacter?: unknown;
+    constructor(
+      code: "character_already_exists" | "stale_character",
+      message: string,
+      currentCharacter?: unknown,
+    ) {
+      super(message);
+      this.name = "CharacterMutationConflictError";
+      this.code = code;
+      this.currentCharacter = currentCharacter;
+    }
+  },
   CharacterService: vi.fn(() => mocks.characterService),
   CharacterValidationError: class CharacterValidationError extends Error {
     issues: string[];
@@ -49,7 +63,6 @@ vi.mock("../lib/sessionAuth", () => ({
 }));
 
 vi.mock("../lib/characterEditAccess", () => ({
-  canEditCharacterInApi: mocks.canEditCharacterInApi,
   loadAccessibleCharacterInApi: mocks.loadAccessibleCharacterInApi,
 }));
 
@@ -75,31 +88,37 @@ describe("characters route contract", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
-    mocks.canEditCharacterInApi.mockReturnValue(false);
   });
 
   it("lists characters owned by the authenticated player", async () => {
-    mocks.characterService.listCharacters.mockResolvedValue([stubCharacter]);
+    mocks.characterService.listAccessibleCharacters.mockResolvedValue([stubCharacter]);
 
     const app = await buildCharactersTestApp();
     const response = await app.inject({ method: "GET", url: "/" });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ characters: [stubCharacter] });
-    expect(mocks.characterService.listCharacters).toHaveBeenCalledWith("player-1");
+    expect(mocks.characterService.listAccessibleCharacters).toHaveBeenCalledWith({
+      isAdmin: false,
+      isGameMaster: false,
+      userId: "player-1",
+    });
   });
 
-  it("lists all characters for a GM", async () => {
+  it("lists only characters accessible to the authenticated GM", async () => {
     mocks.requireAuthenticatedUser.mockResolvedValue(mocks.gmUser);
-    mocks.canEditCharacterInApi.mockReturnValue(true);
-    mocks.characterService.listCharacters.mockResolvedValue([stubCharacter]);
+    mocks.characterService.listAccessibleCharacters.mockResolvedValue([stubCharacter]);
 
     const app = await buildCharactersTestApp();
     const response = await app.inject({ method: "GET", url: "/" });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ characters: [stubCharacter] });
-    expect(mocks.characterService.listCharacters).toHaveBeenCalledWith();
+    expect(mocks.characterService.listAccessibleCharacters).toHaveBeenCalledWith({
+      isAdmin: false,
+      isGameMaster: true,
+      userId: "gm-1",
+    });
   });
 
   it("returns 401 when not authenticated on character list", async () => {
@@ -109,7 +128,7 @@ describe("characters route contract", () => {
     const response = await app.inject({ method: "GET", url: "/" });
 
     expect(response.statusCode).toBe(200);
-    expect(mocks.characterService.listCharacters).not.toHaveBeenCalled();
+    expect(mocks.characterService.listAccessibleCharacters).not.toHaveBeenCalled();
   });
 
   it("returns a single character accessible to the user", async () => {
@@ -149,7 +168,7 @@ describe("characters route contract", () => {
   it("returns 400 with error and issues when CharacterValidationError is thrown", async () => {
     const { CharacterValidationError } = await import("@glantri/database");
     mocks.characterService.saveCharacter.mockRejectedValue(
-      new CharacterValidationError(["Name already taken."])
+      new CharacterValidationError(["Name already taken."]),
     );
 
     const app = await buildCharactersTestApp();
@@ -176,5 +195,97 @@ describe("characters route contract", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({ error: "Character id does not match build id." });
+  });
+
+  it("updates an accessible character only against the supplied server revision", async () => {
+    mocks.loadAccessibleCharacterInApi.mockResolvedValue(stubCharacter);
+    mocks.characterService.saveExistingCharacter.mockResolvedValue({
+      ...stubCharacter,
+      updatedAt: "2026-01-01T01:00:00.000Z",
+    });
+
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({
+      method: "PUT",
+      url: "/char-1",
+      payload: {
+        build: stubCharacter.build,
+        expectedUpdatedAt: stubCharacter.updatedAt,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.characterService.saveExistingCharacter).toHaveBeenCalledWith({
+      build: stubCharacter.build,
+      characterId: "char-1",
+      expectedUpdatedAt: stubCharacter.updatedAt,
+    });
+  });
+
+  it("requires an explicit server revision for updates", async () => {
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({
+      method: "PUT",
+      url: "/char-1",
+      payload: { build: stubCharacter.build },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "A valid expectedUpdatedAt character revision is required.",
+    });
+    expect(mocks.characterService.saveExistingCharacter).not.toHaveBeenCalled();
+  });
+
+  it("returns the current canonical record when a stale update conflicts", async () => {
+    const { CharacterMutationConflictError } = await import("@glantri/database");
+    const currentCharacter = {
+      ...stubCharacter,
+      name: "Newer server character",
+      updatedAt: "2026-01-01T02:00:00.000Z",
+    };
+    mocks.loadAccessibleCharacterInApi.mockResolvedValue(currentCharacter);
+    mocks.characterService.saveExistingCharacter.mockRejectedValue(
+      new CharacterMutationConflictError(
+        "stale_character",
+        "The character changed on the server. Reload it before saving this draft.",
+        currentCharacter as never,
+      ),
+    );
+
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({
+      method: "PUT",
+      url: "/char-1",
+      payload: {
+        build: stubCharacter.build,
+        expectedUpdatedAt: stubCharacter.updatedAt,
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      code: "stale_character",
+      currentCharacter,
+      error: "The character changed on the server. Reload it before saving this draft.",
+    });
+  });
+
+  it("deletes an accessible character only at the supplied server revision", async () => {
+    mocks.loadAccessibleCharacterInApi.mockResolvedValue(stubCharacter);
+    mocks.characterService.deleteExistingCharacter.mockResolvedValue(stubCharacter);
+
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/char-1",
+      payload: { expectedUpdatedAt: stubCharacter.updatedAt },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(mocks.characterService.deleteExistingCharacter).toHaveBeenCalledWith({
+      characterId: "char-1",
+      expectedUpdatedAt: stubCharacter.updatedAt,
+    });
   });
 });

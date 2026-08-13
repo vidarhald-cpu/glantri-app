@@ -21,13 +21,13 @@ export interface CurrentCharacterContext {
 export async function loadLocalCharacterContext(id: string): Promise<LocalCharacterContext> {
   const [content, localRecord] = await Promise.all([
     loadCanonicalContent(),
-    localCharacterRepository.get(id)
+    localCharacterRepository.get(id),
   ]);
 
   if (localRecord) {
     return {
       content,
-      record: localRecord
+      record: localRecord,
     };
   }
 
@@ -37,13 +37,14 @@ export async function loadLocalCharacterContext(id: string): Promise<LocalCharac
     creatorDisplayName: serverRecord.owner?.displayName ?? undefined,
     creatorEmail: serverRecord.owner?.email ?? undefined,
     creatorId: serverRecord.ownerId ?? undefined,
+    serverUpdatedAt: serverRecord.updatedAt,
     syncStatus: "synced",
-    updatedAt: serverRecord.updatedAt
+    updatedAt: serverRecord.updatedAt,
   });
 
   return {
     content,
-    record
+    record,
   };
 }
 
