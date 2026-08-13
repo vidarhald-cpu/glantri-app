@@ -4,6 +4,11 @@ Source document: `docs/source/combat/merged_3968_3980.pdf`
 
 Status: extraction and classification only. Do not implement directly from this document without a follow-up formula/table verification pass against the scanned source pages.
 
+Audience: internal source and implementation inventory. Table-facing mechanics belong in the
+[Player/GM rules index](./README.md). The representative Parry slice is separated into
+[Player rules](./player/parry.md), a [GM procedure](./gm/parry.md), and
+[internal notes](./internal/parry-notes.md).
+
 ## Extraction Notes
 
 - The source PDF is a 13-page scanned/image PDF. Local text extraction was not available, so this inventory was made from visual page review.
