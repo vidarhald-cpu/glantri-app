@@ -2,6 +2,7 @@ import type {
   Campaign,
   CampaignRosterEntry,
   CharacterBuild,
+  ReusableEntity,
   Scenario,
   ScenarioEventLog,
   ScenarioParticipant,
@@ -90,6 +91,7 @@ export function createScenarioRepositoryStub() {
   const participants: ScenarioParticipant[] = [];
   const eventLogs: ScenarioEventLog[] = [];
   const rosterEntries: CampaignRosterEntry[] = [];
+  const reusableEntities: ReusableEntity[] = [];
   const scenarioRelationships: ScenarioRelationship[] = [];
 
   const repository: ScenarioRepository = {
@@ -131,6 +133,34 @@ export function createScenarioRepositoryStub() {
     },
     createReusableEntity: async () => {
       throw new Error("Not implemented in test stub.");
+    },
+    createCampaignNpcWithRosterEntry: async (input) => {
+      const now = "2026-04-21T00:00:00.000Z";
+      const entity: ReusableEntity = {
+        createdAt: now,
+        description: input.description ?? undefined,
+        gmUserId: input.gmUserId,
+        id: `entity-${reusableEntities.length + 1}`,
+        kind: input.kind,
+        name: input.name,
+        notes: input.notes ?? undefined,
+        snapshot: input.snapshot,
+        updatedAt: now,
+      };
+      const rosterEntry: CampaignRosterEntry = {
+        campaignId: input.campaignId,
+        category: "npc",
+        createdAt: now,
+        createdByUserId: input.createdByUserId,
+        id: `roster-${rosterEntries.length + 1}`,
+        labelSnapshot: entity.name,
+        sourceId: entity.id,
+        sourceType: "reusableEntity",
+        updatedAt: now,
+      };
+      reusableEntities.push(entity);
+      rosterEntries.push(rosterEntry);
+      return { entity, rosterEntry };
     },
     updateReusableEntity: async () => {
       throw new Error("Not implemented in test stub.");
@@ -330,6 +360,7 @@ export function createScenarioRepositoryStub() {
     campaigns,
     eventLogs,
     participants,
+    reusableEntities,
     repository,
     rosterEntries,
     scenario,

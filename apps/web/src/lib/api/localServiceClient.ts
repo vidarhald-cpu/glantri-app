@@ -31,6 +31,7 @@ export {
 export {
   addCampaignRosterEntryOnServer,
   createCampaignAssetOnServer,
+  createCampaignNpcOnServer,
   createCampaignOnServer,
   createReusableEntityOnServer,
   createScenarioOnServer,

@@ -1,7 +1,4 @@
-import type {
-  ReusableEntity,
-  ScenarioParticipantRole,
-} from "@glantri/domain";
+import type { ReusableEntity, ScenarioParticipantRole } from "@glantri/domain";
 
 import type { ScenarioRepository } from "../repositories/scenarioRepository";
 import { CharacterService } from "./characterService";
@@ -87,6 +84,7 @@ export async function resolveEntityParticipantSource(
   repository: ScenarioRepository,
   input: {
     entityId?: string;
+    expectedGmUserId?: string;
     entityInput?: {
       description?: string;
       gmUserId: string;
@@ -99,7 +97,13 @@ export async function resolveEntityParticipantSource(
   },
 ): Promise<ReusableEntity | null> {
   if (input.entityId != null) {
-    return repository.getReusableEntityById(input.entityId);
+    const entity = await repository.getReusableEntityById(input.entityId);
+
+    if (entity && input.expectedGmUserId && entity.gmUserId !== input.expectedGmUserId) {
+      return null;
+    }
+
+    return entity;
   }
 
   if (!input.entityInput) {

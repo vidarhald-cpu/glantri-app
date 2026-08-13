@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createPrismaScenarioRepository } from "../repositories/scenarioRepository";
 import { createTestUser } from "../testing/factories";
@@ -16,17 +16,24 @@ if (!process.env.DATABASE_URL_TEST) {
       await resetTestDatabase(prisma!);
     });
 
+    afterAll(async () => {
+      await resetTestDatabase(prisma!);
+    });
+
     it("creates a scenario within a campaign and lists it", async () => {
       const gm = await createTestUser(prisma!, { roles: ["gm"] });
       const repo = createPrismaScenarioRepository(prisma!);
       const campaignService = new CampaignService(repo);
       const service = new ScenarioService(repo);
 
-      const campaign = await campaignService.createCampaign({ gmUserId: gm.id, name: "Frontier War" });
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Frontier War",
+      });
 
       const scenario = await service.createScenario({
         campaignId: campaign.id,
-        name: "First Battle"
+        name: "First Battle",
       });
 
       expect(scenario.id).toBeDefined();
@@ -45,12 +52,15 @@ if (!process.env.DATABASE_URL_TEST) {
       const campaignService = new CampaignService(repo);
       const service = new ScenarioService(repo);
 
-      const campaign = await campaignService.createCampaign({ gmUserId: gm.id, name: "The Long Road" });
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "The Long Road",
+      });
       const first = await service.createScenario({ campaignId: campaign.id, name: "Departure" });
       const second = await service.createScenario({
         campaignId: campaign.id,
         continuesFromScenarioId: first.id,
-        name: "Arrival"
+        name: "Arrival",
       });
 
       const relationships = await service.listScenarioRelationshipsByCampaign(campaign.id);

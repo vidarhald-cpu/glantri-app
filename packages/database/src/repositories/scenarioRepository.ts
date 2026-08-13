@@ -23,7 +23,7 @@ import {
   type ScenarioParticipantSnapshot,
   type ScenarioParticipantState,
   type ScenarioRelationship,
-  type ScenarioRelationshipType
+  type ScenarioRelationshipType,
 } from "@glantri/domain";
 import { Prisma, PrismaClient } from "@prisma/client";
 
@@ -53,7 +53,7 @@ function mapCampaign(record: {
     settings: record.settingsJson,
     slug: record.slug,
     status: record.status,
-    updatedAt: record.updatedAt.toISOString()
+    updatedAt: record.updatedAt.toISOString(),
   });
 }
 
@@ -75,11 +75,14 @@ function mapScenario(record: {
     description: record.description,
     id: record.id,
     kind: record.kind,
-    liveState: record.liveStateJson == null ? undefined : scenarioLiveStateSchema.parse(record.liveStateJson),
+    liveState:
+      record.liveStateJson == null
+        ? undefined
+        : scenarioLiveStateSchema.parse(record.liveStateJson),
     mapAssetId: record.mapAssetId ?? undefined,
     name: record.name,
     status: record.status,
-    updatedAt: record.updatedAt.toISOString()
+    updatedAt: record.updatedAt.toISOString(),
   });
 }
 
@@ -103,7 +106,7 @@ function mapReusableEntity(record: {
     name: record.name,
     notes: record.notes ?? undefined,
     snapshot: record.snapshotJson ?? undefined,
-    updatedAt: record.updatedAt.toISOString()
+    updatedAt: record.updatedAt.toISOString(),
   });
 }
 
@@ -155,7 +158,7 @@ function mapScenarioParticipant(record: {
     visibilityOverrides:
       record.visibilityOverridesJson == null
         ? undefined
-        : (record.visibilityOverridesJson as ScenarioParticipant["visibilityOverrides"])
+        : (record.visibilityOverridesJson as ScenarioParticipant["visibilityOverrides"]),
   });
 }
 
@@ -183,7 +186,7 @@ function mapCampaignAsset(record: {
     title: record.title,
     type: record.type,
     updatedAt: record.updatedAt.toISOString(),
-    visibility: record.visibility
+    visibility: record.visibility,
   });
 }
 
@@ -209,7 +212,7 @@ function mapScenarioEventLog(record: {
     phase: record.phase === 1 || record.phase === 2 ? record.phase : undefined,
     roundNumber: record.roundNumber ?? undefined,
     scenarioId: record.scenarioId,
-    summary: record.summary
+    summary: record.summary,
   });
 }
 
@@ -235,7 +238,7 @@ function mapCampaignRosterEntry(record: {
     notes: record.notes ?? undefined,
     sourceId: record.sourceId,
     sourceType: record.sourceType,
-    updatedAt: record.updatedAt.toISOString()
+    updatedAt: record.updatedAt.toISOString(),
   });
 }
 
@@ -257,7 +260,7 @@ function mapScenarioRelationship(record: {
     relationType: record.relationType,
     sortOrder: record.sortOrder ?? undefined,
     toScenarioId: record.toScenarioId,
-    updatedAt: record.updatedAt.toISOString()
+    updatedAt: record.updatedAt.toISOString(),
   });
 }
 
@@ -302,6 +305,16 @@ export interface ScenarioRepository {
     notes?: string | null;
     snapshot?: unknown;
   }): Promise<ReusableEntity>;
+  createCampaignNpcWithRosterEntry(input: {
+    campaignId: string;
+    createdByUserId: string;
+    description?: string | null;
+    gmUserId: string;
+    kind: ReusableEntity["kind"];
+    name: string;
+    notes?: string | null;
+    snapshot?: unknown;
+  }): Promise<{ entity: ReusableEntity; rosterEntry: CampaignRosterEntry }>;
   updateReusableEntity(input: {
     description?: string | null;
     entityId: string;
@@ -333,21 +346,18 @@ export interface ScenarioRepository {
   }): Promise<ScenarioParticipant>;
   getScenarioParticipantById(
     participantId: string,
-    scenarioId: string
+    scenarioId: string,
   ): Promise<ScenarioParticipant | null>;
   listScenarioParticipants(scenarioId: string): Promise<ScenarioParticipant[]>;
-  updateScenarioLiveState(
-    scenarioId: string,
-    liveState: ScenarioLiveState
-  ): Promise<Scenario>;
+  updateScenarioLiveState(scenarioId: string, liveState: ScenarioLiveState): Promise<Scenario>;
   updateScenarioParticipantState(
     participantId: string,
-    state: ScenarioParticipantState
+    state: ScenarioParticipantState,
   ): Promise<ScenarioParticipant>;
   updateScenarioParticipantSnapshotAndState(
     participantId: string,
     snapshot: ScenarioParticipantSnapshot,
-    state: ScenarioParticipantState
+    state: ScenarioParticipantState,
   ): Promise<ScenarioParticipant>;
   updateScenarioParticipantMetadata(input: {
     controlledByUserId?: string | null;
@@ -372,7 +382,7 @@ export interface ScenarioRepository {
   getCampaignAssetById(assetId: string): Promise<CampaignAsset | null>;
   updateCampaignAssetVisibility(
     assetId: string,
-    visibility: CampaignAsset["visibility"]
+    visibility: CampaignAsset["visibility"],
   ): Promise<CampaignAsset>;
   createCampaignRosterEntry(input: {
     campaignId: string;
@@ -423,15 +433,15 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
           name: input.name,
           settingsJson: asJson(input.settings),
           slug: input.slug,
-          status: input.status
-        }
+          status: input.status,
+        },
       });
 
       return mapCampaign(record);
     },
     async getCampaignById(campaignId) {
       const record = await prisma.campaign.findUnique({
-        where: { id: campaignId }
+        where: { id: campaignId },
       });
 
       return record ? mapCampaign(record) : null;
@@ -439,7 +449,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
     async listCampaignsByGameMaster(gmUserId) {
       const records = await prisma.campaign.findMany({
         orderBy: { updatedAt: "desc" },
-        where: { gmUserId }
+        where: { gmUserId },
       });
 
       return records.map(mapCampaign);
@@ -450,9 +460,9 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
         where: {
           settingsJson: {
             path: ["allowPlayerSelfJoin"],
-            equals: true
-          }
-        }
+            equals: true,
+          },
+        },
       });
 
       return records.map(mapCampaign);
@@ -508,15 +518,15 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
           kind: input.kind,
           mapAssetId: input.mapAssetId ?? null,
           name: input.name,
-          status: input.status
-        }
+          status: input.status,
+        },
       });
 
       return mapScenario(record);
     },
     async getScenarioById(scenarioId) {
       const record = await prisma.scenario.findUnique({
-        where: { id: scenarioId }
+        where: { id: scenarioId },
       });
 
       return record ? mapScenario(record) : null;
@@ -524,7 +534,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
     async listScenariosByCampaign(campaignId) {
       const records = await prisma.scenario.findMany({
         orderBy: { createdAt: "desc" },
-        where: { campaignId }
+        where: { campaignId },
       });
 
       return records.map(mapScenario);
@@ -561,9 +571,9 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
           kind: input.kind,
           mapAssetId: input.mapAssetId,
           name: input.name,
-          status: input.status
+          status: input.status,
         },
-        where: { id: input.scenarioId }
+        where: { id: input.scenarioId },
       });
 
       return mapScenario(record);
@@ -576,15 +586,46 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
           kind: input.kind,
           name: input.name,
           notes: input.notes ?? null,
-          snapshotJson: input.snapshot == null ? Prisma.JsonNull : asJson(input.snapshot)
-        }
+          snapshotJson: input.snapshot == null ? Prisma.JsonNull : asJson(input.snapshot),
+        },
       });
 
       return mapReusableEntity(record);
     },
+    async createCampaignNpcWithRosterEntry(input) {
+      const result = await prisma.$transaction(async (transaction) => {
+        const entity = await transaction.reusableEntity.create({
+          data: {
+            description: input.description ?? null,
+            gmUserId: input.gmUserId,
+            kind: input.kind,
+            name: input.name,
+            notes: input.notes ?? null,
+            snapshotJson: input.snapshot == null ? Prisma.JsonNull : asJson(input.snapshot),
+          },
+        });
+        const rosterEntry = await transaction.campaignRosterEntry.create({
+          data: {
+            campaignId: input.campaignId,
+            category: "npc",
+            createdByUserId: input.createdByUserId,
+            labelSnapshot: entity.name,
+            sourceId: entity.id,
+            sourceType: "reusableEntity",
+          },
+        });
+
+        return { entity, rosterEntry };
+      });
+
+      return {
+        entity: mapReusableEntity(result.entity),
+        rosterEntry: mapCampaignRosterEntry(result.rosterEntry),
+      };
+    },
     async getReusableEntityById(entityId) {
       const record = await prisma.reusableEntity.findUnique({
-        where: { id: entityId }
+        where: { id: entityId },
       });
 
       return record ? mapReusableEntity(record) : null;
@@ -596,9 +637,9 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
           kind: input.kind,
           name: input.name,
           notes: input.notes ?? null,
-          snapshotJson: input.snapshot == null ? Prisma.JsonNull : asJson(input.snapshot)
+          snapshotJson: input.snapshot == null ? Prisma.JsonNull : asJson(input.snapshot),
         },
-        where: { id: input.entityId }
+        where: { id: input.entityId },
       });
 
       return mapReusableEntity(record);
@@ -606,7 +647,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
     async listReusableEntitiesByGameMaster(gmUserId) {
       const records = await prisma.reusableEntity.findMany({
         orderBy: { updatedAt: "desc" },
-        where: { gmUserId }
+        where: { gmUserId },
       });
 
       return records.map(mapReusableEntity);
@@ -631,15 +672,15 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
           stateJson: asJson(input.state),
           tacticalGroupId: input.tacticalGroupId ?? null,
           visibilityOverridesJson:
-            input.visibilityOverrides == null ? Prisma.JsonNull : asJson(input.visibilityOverrides)
-        }
+            input.visibilityOverrides == null ? Prisma.JsonNull : asJson(input.visibilityOverrides),
+        },
       });
 
       return mapScenarioParticipant(record);
     },
     async getScenarioParticipantById(participantId, scenarioId) {
       const record = await prisma.scenarioParticipant.findFirst({
-        where: { id: participantId, scenarioId }
+        where: { id: participantId, scenarioId },
       });
 
       return record ? mapScenarioParticipant(record) : null;
@@ -647,7 +688,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
     async listScenarioParticipants(scenarioId) {
       const records = await prisma.scenarioParticipant.findMany({
         orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }],
-        where: { scenarioId }
+        where: { scenarioId },
       });
 
       return records.map(mapScenarioParticipant);
@@ -655,9 +696,9 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
     async updateScenarioLiveState(scenarioId, liveState) {
       const record = await prisma.scenario.update({
         data: {
-          liveStateJson: asJson(liveState)
+          liveStateJson: asJson(liveState),
         },
-        where: { id: scenarioId }
+        where: { id: scenarioId },
       });
 
       return mapScenario(record);
@@ -665,9 +706,9 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
     async updateScenarioParticipantState(participantId, state) {
       const record = await prisma.scenarioParticipant.update({
         data: {
-          stateJson: asJson(state)
+          stateJson: asJson(state),
         },
-        where: { id: participantId }
+        where: { id: participantId },
       });
 
       return mapScenarioParticipant(record);
@@ -676,9 +717,9 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
       const record = await prisma.scenarioParticipant.update({
         data: {
           snapshotJson: asJson(snapshot),
-          stateJson: asJson(state)
+          stateJson: asJson(state),
         },
-        where: { id: participantId }
+        where: { id: participantId },
       });
 
       return mapScenarioParticipant(record);
@@ -692,10 +733,9 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
           factionId: input.factionId === undefined ? undefined : input.factionId,
           isActive: input.isActive === undefined ? undefined : input.isActive,
           roleTag: input.roleTag === undefined ? undefined : input.roleTag,
-          tacticalGroupId:
-            input.tacticalGroupId === undefined ? undefined : input.tacticalGroupId
+          tacticalGroupId: input.tacticalGroupId === undefined ? undefined : input.tacticalGroupId,
         },
-        where: { id: input.participantId }
+        where: { id: input.participantId },
       });
 
       return mapScenarioParticipant(record);
@@ -710,8 +750,8 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
           storageUrl: input.storageUrl,
           title: input.title,
           type: input.type,
-          visibility: input.visibility
-        }
+          visibility: input.visibility,
+        },
       });
 
       return mapCampaignAsset(record);
@@ -719,14 +759,14 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
     async listCampaignAssets(campaignId) {
       const records = await prisma.campaignAsset.findMany({
         orderBy: { createdAt: "desc" },
-        where: { campaignId }
+        where: { campaignId },
       });
 
       return records.map(mapCampaignAsset);
     },
     async getCampaignAssetById(assetId) {
       const record = await prisma.campaignAsset.findUnique({
-        where: { id: assetId }
+        where: { id: assetId },
       });
 
       return record ? mapCampaignAsset(record) : null;
@@ -734,9 +774,9 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
     async updateCampaignAssetVisibility(assetId, visibility) {
       const record = await prisma.campaignAsset.update({
         data: {
-          visibility
+          visibility,
         },
-        where: { id: assetId }
+        where: { id: assetId },
       });
 
       return mapCampaignAsset(record);
@@ -747,9 +787,9 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
           campaignId_sourceType_sourceId: {
             campaignId: input.campaignId,
             sourceId: input.sourceId,
-            sourceType: input.sourceType
-          }
-        }
+            sourceType: input.sourceType,
+          },
+        },
       });
 
       if (existing) {
@@ -764,15 +804,15 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
           labelSnapshot: input.labelSnapshot ?? null,
           notes: input.notes ?? null,
           sourceId: input.sourceId,
-          sourceType: input.sourceType
-        }
+          sourceType: input.sourceType,
+        },
       });
 
       return mapCampaignRosterEntry(record);
     },
     async deleteCampaignRosterEntry(entryId) {
       await prisma.campaignRosterEntry.delete({
-        where: { id: entryId }
+        where: { id: entryId },
       });
     },
     async deleteCampaignRosterEntryBySource(input) {
@@ -780,15 +820,15 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
         where: {
           campaignId: input.campaignId,
           sourceId: input.sourceId,
-          sourceType: input.sourceType
-        }
+          sourceType: input.sourceType,
+        },
       });
 
       return result.count;
     },
     async getCampaignRosterEntryById(entryId) {
       const record = await prisma.campaignRosterEntry.findUnique({
-        where: { id: entryId }
+        where: { id: entryId },
       });
 
       return record ? mapCampaignRosterEntry(record) : null;
@@ -796,7 +836,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
     async listCampaignRosterEntries(campaignId) {
       const records = await prisma.campaignRosterEntry.findMany({
         orderBy: { createdAt: "desc" },
-        where: { campaignId }
+        where: { campaignId },
       });
 
       return records.map(mapCampaignRosterEntry);
@@ -808,8 +848,8 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
           fromScenarioId: input.fromScenarioId,
           relationType: input.relationType,
           sortOrder: input.sortOrder ?? null,
-          toScenarioId: input.toScenarioId
-        }
+          toScenarioId: input.toScenarioId,
+        },
       });
 
       return mapScenarioRelationship(record);
@@ -817,7 +857,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
     async listScenarioRelationshipsByCampaign(campaignId) {
       const records = await prisma.scenarioRelationship.findMany({
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-        where: { campaignId }
+        where: { campaignId },
       });
 
       return records.map(mapScenarioRelationship);
@@ -832,8 +872,8 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
           phase: input.phase ?? null,
           roundNumber: input.roundNumber ?? null,
           scenarioId: input.scenarioId,
-          summary: input.summary
-        }
+          summary: input.summary,
+        },
       });
 
       return mapScenarioEventLog(record);
@@ -841,10 +881,10 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
     async listScenarioEventLogs(scenarioId) {
       const records = await prisma.scenarioEventLog.findMany({
         orderBy: { createdAt: "desc" },
-        where: { scenarioId }
+        where: { scenarioId },
       });
 
       return records.map(mapScenarioEventLog);
-    }
+    },
   };
 }

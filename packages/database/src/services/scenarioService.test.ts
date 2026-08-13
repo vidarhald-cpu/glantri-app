@@ -3,10 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ReusableEntity } from "@glantri/domain";
 
 import { ScenarioService } from "./scenarioService";
-import {
-  createCharacterRecord,
-  createScenarioRepositoryStub,
-} from "./scenarioService.testHelpers";
+import { createCharacterRecord, createScenarioRepositoryStub } from "./scenarioService.testHelpers";
 
 describe("ScenarioService controller assignment", () => {
   it("explicitly refreshes committed equipment while preserving live participant state", async () => {
@@ -110,7 +107,10 @@ describe("ScenarioService controller assignment", () => {
     const { repository } = createScenarioRepositoryStub();
     const characters = new Map([
       ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })],
-      ["character-2", createCharacterRecord({ id: "character-2", name: "Bryn", ownerId: "user-2" })],
+      [
+        "character-2",
+        createCharacterRecord({ id: "character-2", name: "Bryn", ownerId: "user-2" }),
+      ],
     ]);
     const service = new ScenarioService(
       repository,
@@ -253,6 +253,65 @@ describe("ScenarioService controller assignment", () => {
     });
   });
 
+  it("reuses one concrete entity identity while creating versioned snapshots in later scenarios", async () => {
+    const { participants, repository } = createScenarioRepositoryStub();
+    const entity = {
+      createdAt: "2026-08-13T08:00:00.000Z",
+      gmUserId: "gm-1",
+      id: "entity-generated-npc-1",
+      kind: "npc" as const,
+      name: "Captain Harl",
+      snapshot: {
+        actorClass: "campaign_npc",
+        campaignId: "campaign-1",
+        equipmentState: {
+          activeLoadoutByCharacterId: {},
+          itemsById: {},
+          locationsById: {},
+          templatesById: {},
+        },
+        sheetSummary: { draftView: { skills: [] } },
+      },
+      updatedAt: "2026-08-13T08:05:00.000Z",
+    };
+    repository.getReusableEntityById = async (entityId) => (entityId === entity.id ? entity : null);
+    const service = new ScenarioService(repository);
+
+    const first = await service.addEntityParticipant({
+      controlledByUserId: "gm-1",
+      entityId: entity.id,
+      expectedGmUserId: "gm-1",
+      role: "npc",
+      scenarioId: "scenario-1",
+    });
+    const second = await service.addEntityParticipant({
+      controlledByUserId: "gm-1",
+      entityId: entity.id,
+      expectedGmUserId: "gm-1",
+      role: "npc",
+      scenarioId: "scenario-2",
+    });
+
+    expect(first.id).not.toBe(second.id);
+    expect(first.entityId).toBe(entity.id);
+    expect(second.entityId).toBe(entity.id);
+    expect(first.snapshot).not.toBe(second.snapshot);
+    expect(first.snapshot.sourceUpdatedAt).toBe(entity.updatedAt);
+    expect(second.snapshot.sourceUpdatedAt).toBe(entity.updatedAt);
+    expect(first.state.snapshotVersion).toBe(1);
+    expect(second.state.snapshotVersion).toBe(1);
+    expect(participants).toHaveLength(2);
+
+    await expect(
+      service.addEntityParticipant({
+        entityId: entity.id,
+        expectedGmUserId: "other-gm",
+        role: "npc",
+        scenarioId: "scenario-3",
+      }),
+    ).rejects.toThrow("Reusable entity not found.");
+  });
+
   it("enforces the active-control rule when participant metadata is reassigned", async () => {
     const { repository } = createScenarioRepositoryStub();
     const characters = new Map([
@@ -389,7 +448,9 @@ describe("ScenarioService scenario relationships", () => {
         toScenarioId: scenario.id,
       }),
     ]);
-    await expect(service.listScenarioRelationshipsByCampaign("campaign-1")).resolves.toHaveLength(1);
+    await expect(service.listScenarioRelationshipsByCampaign("campaign-1")).resolves.toHaveLength(
+      1,
+    );
   });
 
   it("rejects continuation links to scenarios outside the campaign", async () => {
