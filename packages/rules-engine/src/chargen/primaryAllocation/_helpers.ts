@@ -16,12 +16,12 @@ import type {
   SkillSpecialization,
   SocietyBandSkillAccess,
   SocietyDefinition,
-  SocietyLevelAccess
+  SocietyLevelAccess,
 } from "@glantri/domain";
 import {
   getCharacterSkillKey,
   normalizeCharacterSkillLanguageName,
-  getSkillGroupIds
+  getSkillGroupIds,
 } from "@glantri/domain";
 
 import { calculateEducation, type EducationBreakdown } from "../../education/calculateEducation";
@@ -58,7 +58,7 @@ export function createEmptyGroup(groupId: string): CharacterSkillGroup {
     groupId,
     primaryRanks: 0,
     secondaryRanks: 0,
-    ranks: 0
+    ranks: 0,
   };
 }
 
@@ -73,18 +73,20 @@ export function createEmptySkill(skill: SkillDefinition): CharacterSkill {
     ranks: 0,
     relationshipGrantedRanks: 0,
     secondaryRanks: 0,
-    skillId: skill.id
+    skillId: skill.id,
   };
 }
 
-export function createEmptySpecialization(specialization: SkillSpecialization): CharacterSpecialization {
+export function createEmptySpecialization(
+  specialization: SkillSpecialization,
+): CharacterSpecialization {
   return {
     level: 0,
     ranks: 0,
     relationshipGrantedRanks: 0,
     secondaryRanks: 0,
     skillId: specialization.skillId,
-    specializationId: specialization.id
+    specializationId: specialization.id,
   };
 }
 
@@ -99,7 +101,7 @@ export function normalizeGroup(group: CharacterSkillGroup): CharacterSkillGroup 
     gms: group.gms ?? 0,
     primaryRanks,
     ranks: grantedRanks + primaryRanks + secondaryRanks,
-    secondaryRanks
+    secondaryRanks,
   };
 }
 
@@ -121,12 +123,12 @@ export function normalizeSkill(skill: CharacterSkill): CharacterSkill {
     ranks: grantedRanks + primaryRanks + relationshipGrantedRanks + secondaryRanks,
     relationshipGrantedRanks,
     secondaryRanks,
-    sourceTag: skill.sourceTag
+    sourceTag: skill.sourceTag,
   };
 }
 
 export function normalizeSpecialization(
-  specialization: CharacterSpecialization
+  specialization: CharacterSpecialization,
 ): CharacterSpecialization {
   const relationshipGrantedRanks = specialization.relationshipGrantedRanks ?? 0;
   const secondaryRanks = specialization.secondaryRanks ?? 0;
@@ -137,7 +139,7 @@ export function normalizeSpecialization(
     ranks: relationshipGrantedRanks + secondaryRanks,
     relationshipGrantedRanks,
     secondaryRanks,
-    skillId: specialization.skillId
+    skillId: specialization.skillId,
   };
 }
 
@@ -152,11 +154,11 @@ export function recalculateProgression(progression: CharacterProgression): Chara
           {
             groupId: selection.groupId,
             selectedSkillIds: [...new Set(selection.selectedSkillIds ?? [])],
-            slotId: selection.slotId
-          }
-        ])
-      ).values()
-    ]
+            slotId: selection.slotId,
+          },
+        ]),
+      ).values(),
+    ],
   };
 
   return {
@@ -176,16 +178,18 @@ export function recalculateProgression(progression: CharacterProgression): Chara
     skills: progression.skills.map(normalizeSkill),
     specializations: progression.specializations
       .map(normalizeSpecialization)
-      .filter((specialization) => specialization.skillId !== LANGUAGE_SKILL_ID)
+      .filter((specialization) => specialization.skillId !== LANGUAGE_SKILL_ID),
   };
 }
 
 export function cleanupProgression(progression: CharacterProgression): CharacterProgression {
   progression.specializations = progression.specializations.filter(
-    (specialization) => specialization.ranks > 0
+    (specialization) => specialization.ranks > 0,
   );
   progression.skills = progression.skills.filter((skill) => skill.ranks > 0);
-  progression.skillGroups = progression.skillGroups.filter((group) => group.gms > 0 || group.ranks > 0);
+  progression.skillGroups = progression.skillGroups.filter(
+    (group) => group.gms > 0 || group.ranks > 0,
+  );
 
   return recalculateProgression(progression);
 }
@@ -193,25 +197,26 @@ export function cleanupProgression(progression: CharacterProgression): Character
 export function getSocietyAccess(
   content: CanonicalContentShape,
   societyLevel: number,
-  societyId?: string
+  societyId?: string,
 ): SocietyLevelAccess | undefined {
   return content.societyLevels.find(
     (item) =>
-      item.societyLevel === societyLevel && (societyId === undefined || item.societyId === societyId)
+      item.societyLevel === societyLevel &&
+      (societyId === undefined || item.societyId === societyId),
   );
 }
 
 export function getNextSocietyAccess(
   content: CanonicalContentShape,
   societyLevel: number,
-  societyId?: string
+  societyId?: string,
 ): SocietyLevelAccess | undefined {
   return getSocietyAccess(content, societyLevel + 1, societyId);
 }
 
 export function getProfessionById(
   content: CanonicalContentShape,
-  professionId: string | undefined
+  professionId: string | undefined,
 ): ProfessionDefinition | undefined {
   if (!professionId) {
     return undefined;
@@ -226,7 +231,7 @@ export function hasLiteracy(progression: CharacterProgression): boolean {
 
 export function getSkillById(
   content: CanonicalContentShape,
-  skillId: string
+  skillId: string,
 ): SkillDefinition | undefined {
   return content.skills.find((skill) => skill.id === skillId);
 }
@@ -237,21 +242,21 @@ export function getSkillDefinitionGroupIds(skill: SkillDefinition): string[] {
 
 export function getSkillGroupDefinition(
   content: CanonicalContentShape,
-  groupId: string
+  groupId: string,
 ): SkillGroupDefinition | undefined {
   return content.skillGroups.find((group) => group.id === groupId);
 }
 
 export function getSpecializationById(
   content: CanonicalContentShape,
-  specializationId: string
+  specializationId: string,
 ): SkillSpecialization | undefined {
   return content.specializations.find((specialization) => specialization.id === specializationId);
 }
 
 export function getPurchasedParentGroups(
   progression: CharacterProgression,
-  skillDefinition: SkillDefinition
+  skillDefinition: SkillDefinition,
 ): CharacterSkillGroup[] {
   const groupIds = new Set(getSkillDefinitionGroupIds(skillDefinition));
 
@@ -261,7 +266,7 @@ export function getPurchasedParentGroups(
 export function getBestPurchasedParentGroup(
   content: CanonicalContentShape,
   progression: CharacterProgression,
-  skillDefinition: SkillDefinition
+  skillDefinition: SkillDefinition,
 ): CharacterSkillGroup | undefined {
   const candidates = getPurchasedParentGroups(progression, skillDefinition).map((group) => {
     const definition = getSkillGroupDefinition(content, group.groupId);
@@ -272,31 +277,36 @@ export function getBestPurchasedParentGroup(
         groupId: group.groupId,
         groupLevel: calculateGroupLevel({
           gms: group.gms,
-          ranks: group.ranks
+          ranks: group.ranks,
         }),
         name: definition?.name ?? group.groupId,
-        sortOrder: definition?.sortOrder ?? Number.MAX_SAFE_INTEGER
-      }
+        sortOrder: definition?.sortOrder ?? Number.MAX_SAFE_INTEGER,
+      },
     };
   });
   const bestContribution = selectBestSkillGroupContribution(
-    candidates.map((candidate) => candidate.contribution)
+    candidates.map((candidate) => candidate.contribution),
   );
 
-  return candidates.find((candidate) => candidate.contribution.groupId === bestContribution?.groupId)?.group;
+  return candidates.find(
+    (candidate) => candidate.contribution.groupId === bestContribution?.groupId,
+  )?.group;
 }
 
 export function getLinkedStatAverage(
   profile: RolledCharacterProfile | undefined,
-  skill: SkillDefinition
+  skill: SkillDefinition,
+  linkedStats?: Partial<Record<GlantriCharacteristicKey, number>>,
 ): number {
-  const resolvedStats = getResolvedProfileStats(profile);
+  const resolvedStats = linkedStats ?? getResolvedProfileStats(profile);
 
   if (!resolvedStats) {
     return 0;
   }
 
-  const values = skill.linkedStats.map((stat) => resolvedStats[stat as GlantriCharacteristicKey] ?? 0);
+  const values = skill.linkedStats.map(
+    (stat) => resolvedStats[stat as GlantriCharacteristicKey] ?? 0,
+  );
   const total = values.reduce((sum, value) => sum + value, 0);
 
   return Math.floor(total / values.length);
@@ -304,7 +314,7 @@ export function getLinkedStatAverage(
 
 export function ensureGroupExists(
   progression: CharacterProgression,
-  groupId: string
+  groupId: string,
 ): CharacterSkillGroup {
   const existing = progression.skillGroups.find((group) => group.groupId === groupId);
 
@@ -320,15 +330,15 @@ export function ensureGroupExists(
 export function ensureSkillExists(
   progression: CharacterProgression,
   skill: SkillDefinition,
-  variant?: Pick<CharacterSkill, "languageName">
+  variant?: Pick<CharacterSkill, "languageName">,
 ): CharacterSkill {
   const existing = progression.skills.find(
     (item) =>
       getCharacterSkillKey(item) ===
       getCharacterSkillKey({
         languageName: variant?.languageName,
-        skillId: skill.id
-      })
+        skillId: skill.id,
+      }),
   );
 
   if (existing) {
@@ -343,10 +353,10 @@ export function ensureSkillExists(
 
 export function ensureSpecializationExists(
   progression: CharacterProgression,
-  specialization: SkillSpecialization
+  specialization: SkillSpecialization,
 ): CharacterSpecialization {
   const existing = progression.specializations.find(
-    (item) => item.specializationId === specialization.id
+    (item) => item.specializationId === specialization.id,
   );
 
   if (existing) {
@@ -360,14 +370,14 @@ export function ensureSpecializationExists(
 
 export function getProgressionSkillRows(
   progression: CharacterProgression,
-  skillId: string
+  skillId: string,
 ): CharacterSkill[] {
   return progression.skills.filter((skill) => skill.skillId === skillId);
 }
 
 export function getPreferredProgressionSkillRow(
   progression: CharacterProgression,
-  skillId: string
+  skillId: string,
 ): CharacterSkill | undefined {
   const rows = getProgressionSkillRows(progression, skillId);
 
@@ -389,8 +399,8 @@ export function getTargetedProgressionSkillRow(input: {
         getCharacterSkillKey(skill) ===
         getCharacterSkillKey({
           languageName: input.targetLanguageName,
-          skillId: input.skillId
-        })
+          skillId: input.skillId,
+        }),
     );
   }
 
@@ -414,7 +424,7 @@ export function buildEducationBreakdown(input: {
       input.societyLevel !== undefined
         ? getSocietyAccess(input.content, input.societyLevel, input.societyId)
         : undefined,
-    societyLevel: input.societyLevel
+    societyLevel: input.societyLevel,
   });
 }
 
@@ -427,19 +437,18 @@ export function getEvaluationMessages(input: {
 
 export function getBestGroupIdByDefinitionOrder(
   content: CanonicalContentShape,
-  groupIds: string[]
+  groupIds: string[],
 ): string | undefined {
-  const candidates = groupIds
-    .map((groupId) => {
-      const definition = getSkillGroupDefinition(content, groupId);
+  const candidates = groupIds.map((groupId) => {
+    const definition = getSkillGroupDefinition(content, groupId);
 
-      return {
-        groupId,
-        groupLevel: 0,
-        name: definition?.name ?? groupId,
-        sortOrder: definition?.sortOrder ?? Number.MAX_SAFE_INTEGER
-      };
-    });
+    return {
+      groupId,
+      groupLevel: 0,
+      name: definition?.name ?? groupId,
+      sortOrder: definition?.sortOrder ?? Number.MAX_SAFE_INTEGER,
+    };
+  });
 
   return selectBestSkillGroupContribution(candidates)?.groupId;
 }

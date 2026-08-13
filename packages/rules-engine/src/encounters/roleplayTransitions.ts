@@ -1,5 +1,6 @@
 import type {
   EncounterSession,
+  GlantriCharacteristicKey,
   OpenEndedD20Roll,
   RoleplayDifficulty,
   RoleplayOpenEndedD20Roll,
@@ -23,7 +24,9 @@ function makeId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function rollOpenEndedRoleplayD20(rng: () => number = Math.random): RoleplayOpenEndedD20Roll {
+export function rollOpenEndedRoleplayD20(
+  rng: () => number = Math.random,
+): RoleplayOpenEndedD20Roll {
   return rollOpenEndedD20(rng) satisfies OpenEndedD20Roll;
 }
 
@@ -120,7 +123,7 @@ export function selectAllRoleplayVisibilityForViewer(input: {
   const row = Object.fromEntries(
     input.participantIds
       .filter((participantId) => participantId !== input.viewerParticipantId)
-      .map((participantId) => [participantId, input.visible ?? true])
+      .map((participantId) => [participantId, input.visible ?? true]),
   );
 
   return withRoleplayState({
@@ -154,30 +157,32 @@ export function updateRoleplayParticipantDescription(input: {
   });
 }
 
-export function assignRoleplaySkillRoll(input: {
-  difficulty?: RoleplayDifficulty;
-  mode?: "difficulty" | "opposed";
-  opponentParticipantId?: string;
-  opponentParticipantName?: string;
-  opponentSkillId?: string;
-  opponentSkillLabel?: string;
-  opponentSkillValue?: number;
-  opponentSilent?: boolean;
-  opponentSupportSkillId?: string;
-  opponentSupportSkillLabel?: string;
-  participantId: string;
-  participantName?: string;
-  rollSetId?: string;
-  session: EncounterSession;
-  side?: "actor" | "opponent";
-  silent: boolean;
-  skillId: string;
-  skillLabel: string;
-  skillValue?: number;
-  supportSkillId?: string;
-  supportSkillLabel?: string;
-  supportSkillValue?: number;
-} & RoleplayRollModifiers): EncounterSession {
+export function assignRoleplaySkillRoll(
+  input: {
+    difficulty?: RoleplayDifficulty;
+    mode?: "difficulty" | "opposed";
+    opponentParticipantId?: string;
+    opponentParticipantName?: string;
+    opponentSkillId?: string;
+    opponentSkillLabel?: string;
+    opponentSkillValue?: number;
+    opponentSilent?: boolean;
+    opponentSupportSkillId?: string;
+    opponentSupportSkillLabel?: string;
+    participantId: string;
+    participantName?: string;
+    rollSetId?: string;
+    session: EncounterSession;
+    side?: "actor" | "opponent";
+    silent: boolean;
+    skillId: string;
+    skillLabel: string;
+    skillValue?: number;
+    supportSkillId?: string;
+    supportSkillLabel?: string;
+    supportSkillValue?: number;
+  } & RoleplayRollModifiers,
+): EncounterSession {
   const state = normalizeRoleplayState(input.session);
   const assignedAt = nowIso();
   const modifiers = normalizeRollModifiers(input);
@@ -269,54 +274,181 @@ export function assignRoleplaySkillRoll(input: {
   });
 }
 
-export function recordRoleplayGmSkillRoll(input: {
-  achievedSuccessLevel?: RoleplaySuccessLevel;
-  autoSuccess?: boolean;
-  calculationText: string;
-  dieResult?: number;
-  difficulty?: RoleplayDifficulty;
-  finalTotal?: number;
-  fumble?: boolean;
-  mode?: "difficulty" | "opposed";
-  openEndedD10s?: number[];
-  opposedMargin?: number;
-  opposedResult?: "win" | "loss" | "tie" | "pending";
-  opponentAchievedSuccessLevel?: RoleplaySuccessLevel;
-  opponentCalculationText?: string;
-  opponentDieResult?: number;
-  opponentFumble?: boolean;
-  opponentNumericSubtotal?: number;
-  opponentOpenEndedD10s?: number[];
-  opponentParticipantId?: string;
-  opponentParticipantName?: string;
-  opponentRoll?: RoleplayOpenEndedD20Roll;
-  opponentSilent?: boolean;
-  opponentSkillId?: string;
-  opponentSkillLabel?: string;
-  opponentSupportSkillId?: string;
-  opponentSupportSkillLabel?: string;
-  pendingRollId?: string;
+export function assignRoleplayStatCheck(input: {
+  difficulty: RoleplayDifficulty;
   participantId: string;
-  partial?: boolean;
-  roll: RoleplayOpenEndedD20Roll;
-  rollSetId?: string;
-  session: EncounterSession;
-  side?: "actor" | "opponent";
-  silent: boolean;
-  skillId: string;
-  skillLabel: string;
-  skillValue?: number;
-  numericSubtotal?: number;
   participantName?: string;
+  session: EncounterSession;
+  statId: GlantriCharacteristicKey;
+  statLabel: string;
+  statValue: number;
+}): EncounterSession {
+  const state = normalizeRoleplayState(input.session);
+  const assignedAt = nowIso();
+  const pendingRollId = makeId("roleplay-stat-check");
+
+  return withRoleplayState({
+    session: input.session,
+    state: {
+      ...state,
+      actionLog: [
+        {
+          autoSuccess: false,
+          createdAt: assignedAt,
+          difficulty: input.difficulty,
+          fumble: false,
+          id: makeId("roleplay-log"),
+          mode: "difficulty",
+          openEndedD10s: [],
+          opponentFumble: false,
+          opponentOpenEndedD10s: [],
+          opponentSilent: false,
+          partial: false,
+          pendingRollId,
+          participantId: input.participantId,
+          participantName: input.participantName,
+          silent: false,
+          statId: input.statId,
+          statLabel: input.statLabel,
+          statValue: input.statValue,
+          summary: `Assigned ${input.statLabel} Stat check${input.participantName ? ` to ${input.participantName}` : ""}.`,
+          supportOpenEndedD10s: [],
+          type: "stat_check_assigned",
+        },
+        ...state.actionLog,
+      ],
+      pendingStatChecks: [
+        {
+          assignedAt,
+          difficulty: input.difficulty,
+          id: pendingRollId,
+          participantId: input.participantId,
+          statId: input.statId,
+          statLabel: input.statLabel,
+          statValue: input.statValue,
+        },
+        ...state.pendingStatChecks,
+      ],
+    },
+  });
+}
+
+export function recordRoleplayStatCheckResult(input: {
+  achievedSuccessLevel?: RoleplaySuccessLevel;
+  autoSuccess: boolean;
+  calculationText: string;
+  difficulty: RoleplayDifficulty;
+  finalTotal?: number;
+  fumble: boolean;
+  numericSubtotal?: number;
+  participantId: string;
+  participantName?: string;
+  pendingRollId: string;
+  roll?: RoleplayOpenEndedD20Roll;
+  session: EncounterSession;
+  statId: GlantriCharacteristicKey;
+  statLabel: string;
+  statValue: number;
   success?: boolean;
-  supportCalculationText?: string;
-  supportNumericSubtotal?: number;
-  supportRoll?: RoleplayOpenEndedD20Roll;
-  supportSkillId?: string;
-  supportSkillLabel?: string;
-  supportSkillValue?: number;
-  summary?: string;
-} & RoleplayRollModifiers): EncounterSession {
+}): EncounterSession {
+  const state = normalizeRoleplayState(input.session);
+
+  return withRoleplayState({
+    session: input.session,
+    state: {
+      ...state,
+      actionLog: [
+        {
+          achievedSuccessLevelId: input.achievedSuccessLevel?.id,
+          achievedSuccessLevelLabel: input.achievedSuccessLevel?.label,
+          autoSuccess: input.autoSuccess,
+          calculationText: input.calculationText,
+          createdAt: nowIso(),
+          dieResult: input.roll?.dieResult,
+          difficulty: input.difficulty,
+          finalTotal: input.finalTotal ?? input.numericSubtotal,
+          fumble: input.fumble,
+          id: makeId("roleplay-log"),
+          mode: "difficulty",
+          numericSubtotal: input.numericSubtotal,
+          openEndedD10s: input.roll?.openEndedD10s ?? [],
+          opponentFumble: false,
+          opponentOpenEndedD10s: [],
+          opponentSilent: false,
+          partial: false,
+          pendingRollId: input.pendingRollId,
+          participantId: input.participantId,
+          participantName: input.participantName,
+          resultModifier: input.achievedSuccessLevel?.resultModifier,
+          roll: input.roll?.rollD20,
+          rollD20: input.roll?.rollD20,
+          silent: false,
+          statId: input.statId,
+          statLabel: input.statLabel,
+          statValue: input.statValue,
+          success: input.success,
+          summary: input.autoSuccess
+            ? `${input.participantName ?? "Participant"} accepted automatic success for ${input.statLabel}.`
+            : `${input.participantName ?? "Participant"} rolled ${input.statLabel} Stat check.`,
+          supportOpenEndedD10s: [],
+          type: "stat_check_result",
+        },
+        ...state.actionLog,
+      ],
+    },
+  });
+}
+
+export function recordRoleplayGmSkillRoll(
+  input: {
+    achievedSuccessLevel?: RoleplaySuccessLevel;
+    autoSuccess?: boolean;
+    calculationText: string;
+    dieResult?: number;
+    difficulty?: RoleplayDifficulty;
+    finalTotal?: number;
+    fumble?: boolean;
+    mode?: "difficulty" | "opposed";
+    openEndedD10s?: number[];
+    opposedMargin?: number;
+    opposedResult?: "win" | "loss" | "tie" | "pending";
+    opponentAchievedSuccessLevel?: RoleplaySuccessLevel;
+    opponentCalculationText?: string;
+    opponentDieResult?: number;
+    opponentFumble?: boolean;
+    opponentNumericSubtotal?: number;
+    opponentOpenEndedD10s?: number[];
+    opponentParticipantId?: string;
+    opponentParticipantName?: string;
+    opponentRoll?: RoleplayOpenEndedD20Roll;
+    opponentSilent?: boolean;
+    opponentSkillId?: string;
+    opponentSkillLabel?: string;
+    opponentSupportSkillId?: string;
+    opponentSupportSkillLabel?: string;
+    pendingRollId?: string;
+    participantId: string;
+    partial?: boolean;
+    roll: RoleplayOpenEndedD20Roll;
+    rollSetId?: string;
+    session: EncounterSession;
+    side?: "actor" | "opponent";
+    silent: boolean;
+    skillId: string;
+    skillLabel: string;
+    skillValue?: number;
+    numericSubtotal?: number;
+    participantName?: string;
+    success?: boolean;
+    supportCalculationText?: string;
+    supportNumericSubtotal?: number;
+    supportRoll?: RoleplayOpenEndedD20Roll;
+    supportSkillId?: string;
+    supportSkillLabel?: string;
+    supportSkillValue?: number;
+    summary?: string;
+  } & RoleplayRollModifiers,
+): EncounterSession {
   const state = normalizeRoleplayState(input.session);
   const modifiers = normalizeRollModifiers(input);
   const achievedSuccessLevel = input.achievedSuccessLevel;
@@ -372,13 +504,13 @@ export function recordRoleplayGmSkillRoll(input: {
           skillLabel: input.skillLabel,
           skillValue: input.skillValue,
           success: input.success,
-          summary: input.summary ?? (
-            mode === "opposed" && input.opponentSkillLabel
+          summary:
+            input.summary ??
+            (mode === "opposed" && input.opponentSkillLabel
               ? `GM rolled opposed ${input.skillLabel} vs ${input.opponentSkillLabel}.`
               : input.participantName
                 ? `GM rolled ${input.skillLabel} for ${input.participantName}.`
-                : `GM rolled ${input.skillLabel}.`
-          ),
+                : `GM rolled ${input.skillLabel}.`),
           supportCalculationText: input.supportCalculationText,
           supportDieResult: input.supportRoll?.dieResult,
           supportNumericSubtotal: input.supportNumericSubtotal,

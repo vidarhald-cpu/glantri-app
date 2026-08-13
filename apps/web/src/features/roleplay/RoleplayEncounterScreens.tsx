@@ -7,8 +7,10 @@ import type {
   Campaign,
   EncounterParticipant,
   EncounterSession,
+  GlantriCharacteristicKey,
   RoleplayActionLogEntry,
   RoleplayCalculationPreview,
+  RoleplayDifficulty,
   RoleplayOpenEndedD20Roll,
   RoleplayParticipantDescription,
   Scenario,
@@ -17,6 +19,8 @@ import type {
 import {
   buildRoleplayCalculationPreview as buildDomainRoleplayCalculationPreview,
   compareRoleplayOpposedRolls,
+  glantriCharacteristicLabels,
+  glantriCharacteristicOrder,
   normalizeRoleplayState,
   normalizeRoleplayOtherMod,
   orderRoleplayEncounterParticipants,
@@ -34,6 +38,7 @@ import {
   updateRoleplayParticipantDescription,
   updateRoleplayVisibility,
   resolveParticipantSkillRollProfile,
+  resolveParticipantStatRollProfile,
   resolveRoleplaySkillRollModifiers,
   type ParticipantSkillRollProfile,
   type ResolveParticipantSkillRollProfileInput,
@@ -96,6 +101,11 @@ interface GmRoleplayingEncounterScreenProps {
   content?: Awaited<ReturnType<typeof loadCanonicalContent>>;
   embedded?: boolean;
   encounter: EncounterSession;
+  onAssignStatCheck?: (input: {
+    difficulty: RoleplayDifficulty;
+    participantId: string;
+    statId: GlantriCharacteristicKey;
+  }) => Promise<EncounterSession>;
   onPersist: (nextEncounter: EncounterSession, message?: string) => Promise<EncounterSession>;
   scenario?: Scenario | null;
   scenarioId?: string;
@@ -585,6 +595,7 @@ export function GmRoleplayingEncounterScreen({
   content,
   embedded = false,
   encounter,
+  onAssignStatCheck,
   onPersist,
   scenario,
   scenarioId,
@@ -597,6 +608,10 @@ export function GmRoleplayingEncounterScreen({
     [encounter.participants],
   );
   const [gmMessageDraft, setGmMessageDraft] = useState(roleplayState.gmMessage);
+  const [statCheckDifficulty, setStatCheckDifficulty] = useState<RoleplayDifficulty>("medium");
+  const [statCheckParticipantId, setStatCheckParticipantId] = useState(roster[0]?.id ?? "");
+  const [statCheckStatId, setStatCheckStatId] = useState<GlantriCharacteristicKey>("dex");
+  const [statCheckFeedback, setStatCheckFeedback] = useState<string>();
   const [currentGmRollStackId, setCurrentGmRollStackId] = useState(
     () => findLatestNonOpposedRollStackId(roleplayState) ?? makeRoleplayRollSetId(),
   );
@@ -626,6 +641,12 @@ export function GmRoleplayingEncounterScreen({
       setGmMessageDraft(roleplayState.gmMessage);
     }
   }, [gmMessageDirty, roleplayState.gmMessage]);
+
+  useEffect(() => {
+    if (!roster.some((participant) => participant.id === statCheckParticipantId)) {
+      setStatCheckParticipantId(roster[0]?.id ?? "");
+    }
+  }, [roster, statCheckParticipantId]);
 
   useEffect(() => {
     setRollDrafts((currentDrafts) =>
@@ -1505,6 +1526,41 @@ export function GmRoleplayingEncounterScreen({
   const rankedRollResults = rankVisibleRollResults(
     dedupeRankedRoleplayEntries([...currentRankedRollResults, ...serverRankedRollResults]),
   );
+  const statCheckParticipant = roster.find(
+    (participant) => participant.id === statCheckParticipantId,
+  );
+  const statCheckScenarioParticipant = getScenarioParticipantForEncounterParticipant({
+    encounterParticipant: statCheckParticipant,
+    scenarioParticipants,
+  });
+  const selectedStatProfile = resolveParticipantStatRollProfile({
+    participantId: statCheckParticipant?.id,
+    participantName: statCheckParticipant?.label,
+    snapshot: statCheckScenarioParticipant?.snapshot,
+    statId: statCheckStatId,
+  });
+
+  async function handleAssignStatCheck() {
+    if (!onAssignStatCheck || !statCheckParticipant || selectedStatProfile.statValue == null) {
+      return;
+    }
+
+    setStatCheckFeedback(undefined);
+    try {
+      await onAssignStatCheck({
+        difficulty: statCheckDifficulty,
+        participantId: statCheckParticipant.id,
+        statId: statCheckStatId,
+      });
+      setStatCheckFeedback(
+        `Assigned ${selectedStatProfile.statLabel} ${selectedStatProfile.statValue} at ${roleplayDifficultyOptions.find((option) => option.id === statCheckDifficulty)?.label ?? statCheckDifficulty}.`,
+      );
+    } catch (error) {
+      setStatCheckFeedback(
+        error instanceof Error ? error.message : "Unable to assign the Stat check.",
+      );
+    }
+  }
   const showEncounterContext = surface !== "skill-rolls";
   const showSkillRollTools = surface !== "encounter";
   const rememberedTab = surface === "skill-rolls" ? "skill-rolls" : "encounter";
@@ -1558,6 +1614,129 @@ export function GmRoleplayingEncounterScreen({
 
       {showSkillRollTools ? (
         <>
+          {scenarioId && onAssignStatCheck ? (
+            <section aria-labelledby="stat-check-assignment-heading" style={panelStyle}>
+              <h2 id="stat-check-assignment-heading" style={{ margin: 0 }}>
+                Stat check assignment
+              </h2>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+                <label style={compactControlStyle}>
+                  <span>Participant</span>
+                  <select
+                    aria-label="Stat check participant"
+                    onChange={(event) => setStatCheckParticipantId(event.target.value)}
+                    style={compactInputStyle}
+                    value={statCheckParticipant?.id ?? ""}
+                  >
+                    {roster.map((participant) => (
+                      <option key={participant.id} value={participant.id}>
+                        {participant.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={compactControlStyle}>
+                  <span>Stat</span>
+                  <select
+                    aria-label="Stat check Stat"
+                    onChange={(event) =>
+                      setStatCheckStatId(event.target.value as GlantriCharacteristicKey)
+                    }
+                    style={compactInputStyle}
+                    value={statCheckStatId}
+                  >
+                    {glantriCharacteristicOrder.map((statId) => {
+                      const profile = resolveParticipantStatRollProfile({
+                        snapshot: statCheckScenarioParticipant?.snapshot,
+                        statId,
+                      });
+
+                      return (
+                        <option disabled={profile.statValue == null} key={statId} value={statId}>
+                          {glantriCharacteristicLabels[statId]}
+                          {profile.statValue == null ? " — unavailable" : ` (${profile.statValue})`}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+                <label style={compactControlStyle}>
+                  <span>Difficulty</span>
+                  <select
+                    aria-label="Stat check difficulty"
+                    onChange={(event) =>
+                      setStatCheckDifficulty(event.target.value as RoleplayDifficulty)
+                    }
+                    style={compactInputStyle}
+                    value={statCheckDifficulty}
+                  >
+                    {roleplayDifficultyOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  disabled={!statCheckParticipant || selectedStatProfile.statValue == null}
+                  onClick={() => void handleAssignStatCheck()}
+                  type="button"
+                >
+                  Assign Stat check
+                </button>
+              </div>
+              {selectedStatProfile.warning ? (
+                <div role="status">{selectedStatProfile.warning}</div>
+              ) : (
+                <div>
+                  {selectedStatProfile.statLabel} {selectedStatProfile.statValue} · open-ended d20 ·{" "}
+                  {roleplayDifficultyOptions.find((option) => option.id === statCheckDifficulty)
+                    ?.label ?? statCheckDifficulty}
+                </div>
+              )}
+              {statCheckFeedback ? <div role="status">{statCheckFeedback}</div> : null}
+              {roleplayState.pendingStatChecks.length > 0 ? (
+                <ul style={{ display: "grid", gap: "0.35rem", margin: 0, paddingLeft: "1.25rem" }}>
+                  {roleplayState.pendingStatChecks.map((check) => {
+                    const result = roleplayState.actionLog.find(
+                      (entry) =>
+                        entry.type === "stat_check_result" && entry.pendingRollId === check.id,
+                    );
+                    const participant = resolveEncounterParticipantByRollParticipantId({
+                      participantId: check.participantId,
+                      participants: roster,
+                    });
+                    const outcome = result
+                      ? result.autoSuccess
+                        ? "Automatic success accepted"
+                        : result.fumble
+                          ? "Fumble"
+                          : result.success
+                            ? "Successful"
+                            : "Not successful"
+                      : "Waiting for player";
+
+                    return (
+                      <li key={check.id}>
+                        {participant?.label ?? "Participant"} · {check.statLabel} {check.statValue}{" "}
+                        ·{" "}
+                        {roleplayDifficultyOptions.find((option) => option.id === check.difficulty)
+                          ?.label ?? check.difficulty}
+                        {result?.rollD20 == null ? "" : ` · d20 ${result.rollD20}`}
+                        {result?.numericSubtotal == null
+                          ? ""
+                          : ` · total ${result.numericSubtotal}`}
+                        {` · ${outcome}`}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <div>No Stat checks assigned.</div>
+              )}
+            </section>
+          ) : null}
+
           <section style={panelStyle}>
             <div
               style={{
@@ -1944,14 +2123,15 @@ export function PlayerRoleplayingEncounterScreen({
     }
 
     const roleplayState = normalizeRoleplayState(encounter as EncounterSession);
-    const pendingRoll = roleplayState.pendingSkillRolls.find((roll) => roll.id === rollId);
+    const pendingSkillRoll = roleplayState.pendingSkillRolls.find((roll) => roll.id === rollId);
+    const pendingStatCheck = roleplayState.pendingStatChecks.find((check) => check.id === rollId);
 
-    if (!pendingRoll || pendingRoll.silent) {
+    if ((!pendingSkillRoll && !pendingStatCheck) || pendingSkillRoll?.silent) {
       return;
     }
 
     const participant = resolveEncounterParticipantByRollParticipantId({
-      participantId: pendingRoll.participantId,
+      participantId: pendingStatCheck?.participantId ?? pendingSkillRoll!.participantId,
       participants: effectivePlayerEncounterParticipants,
     });
 
@@ -1959,47 +2139,65 @@ export function PlayerRoleplayingEncounterScreen({
       return;
     }
 
-    const roll = rollOpenEndedRoleplayD20();
-    const supportRoll = pendingRoll.supportSkillId ? rollOpenEndedRoleplayD20() : undefined;
+    const automaticStatPreview = pendingStatCheck
+      ? buildRoleplayCalculationPreview({
+          difficulty: pendingStatCheck.difficulty,
+          kind: "stat",
+          skillLabel: pendingStatCheck.statLabel,
+          skillValue: pendingStatCheck.statValue,
+        })
+      : undefined;
+    const acceptAutomaticSuccess = Boolean(automaticStatPreview?.autoSuccess);
+    const roll = acceptAutomaticSuccess ? undefined : rollOpenEndedRoleplayD20();
+    const supportRoll = pendingSkillRoll?.supportSkillId ? rollOpenEndedRoleplayD20() : undefined;
     const preview = buildRoleplayCalculationPreview({
-      difficulty: pendingRoll.mode === "difficulty" ? pendingRoll.difficulty : undefined,
-      otherMod: pendingRoll.otherMod,
+      difficulty: pendingStatCheck
+        ? pendingStatCheck.difficulty
+        : pendingSkillRoll?.mode === "difficulty"
+          ? pendingSkillRoll.difficulty
+          : undefined,
+      kind: pendingStatCheck ? "stat" : "skill",
+      otherMod: pendingSkillRoll?.otherMod,
       roll,
-      skillLabel: pendingRoll.skillLabel,
-      skillValue: pendingRoll.skillValue,
-      useDbMod: pendingRoll.useDbMod,
-      useGenMod: pendingRoll.useGenMod,
-      useObSkillMod: pendingRoll.useObSkillMod,
+      skillLabel: pendingStatCheck?.statLabel ?? pendingSkillRoll!.skillLabel,
+      skillValue: pendingStatCheck?.statValue ?? pendingSkillRoll?.skillValue,
+      useDbMod: pendingSkillRoll?.useDbMod,
+      useGenMod: pendingSkillRoll?.useGenMod,
+      useObSkillMod: pendingSkillRoll?.useObSkillMod,
     });
     const savedEncounter = await submitPlayerRoleplayRollOnServer({
+      acceptAutomaticSuccess,
       encounterId: encounter.id,
-      pendingRollId: pendingRoll.id,
+      expectedRevision: encounter.updatedAt,
+      pendingRollId: rollId,
       roll,
       supportRoll,
     });
 
     setEncounter(savedEncounter);
-    if (pendingRoll.mode !== "opposed") {
+    if (pendingSkillRoll && pendingSkillRoll.mode !== "opposed" && roll) {
       setLocalRankedResults((currentResults) =>
         mergePlayerVisibleResults(currentResults, [
           ...readModelRankedResults,
           {
-            id: `player-roll-${pendingRoll.id}-${roll.rollD20}-${roll.dieResult}`,
+            id: `player-roll-${pendingSkillRoll.id}-${roll.rollD20}-${roll.dieResult}`,
             participantId: participant.id,
             participantName:
-              playerView.assignedRolls.find((entry) => entry.id === pendingRoll.id)
+              playerView.assignedRolls.find((entry) => entry.id === pendingSkillRoll.id)
                 ?.participantName ?? participant.label,
-            pendingRollId: pendingRoll.id,
-            rollSetId: pendingRoll.rollSetId,
-            skillId: pendingRoll.skillId,
-            skillLabel: pendingRoll.skillLabel,
+            pendingRollId: pendingSkillRoll.id,
+            rollSetId: pendingSkillRoll.rollSetId,
+            skillId: pendingSkillRoll.skillId,
+            skillLabel: pendingSkillRoll.skillLabel,
             total: preview.numericSubtotal ?? preview.finalTotal ?? 0,
           },
         ]),
       );
     }
     setFeedback(
-      `Rolled ${pendingRoll.skillLabel}: total ${preview.numericSubtotal ?? "unresolved"}.`,
+      acceptAutomaticSuccess
+        ? `Accepted automatic success for ${pendingStatCheck?.statLabel ?? "Stat check"}.`
+        : `Rolled ${pendingStatCheck?.statLabel ?? pendingSkillRoll?.skillLabel ?? "check"}: total ${preview.numericSubtotal ?? "unresolved"}.`,
     );
   }
 
@@ -2167,6 +2365,86 @@ export function PlayerRoleplayingEncounterScreen({
             {visibleAssignedRolls.length > 0 ? (
               <div style={{ display: "grid", gap: "0.75rem" }}>
                 {visibleAssignedRolls.map((roll, index) => {
+                  if (roll.rollKind === "stat") {
+                    const resultRoll = buildPlayerRollResult(roll.result);
+                    const preview = buildRoleplayCalculationPreview({
+                      difficulty: roll.difficulty,
+                      kind: "stat",
+                      roll: resultRoll,
+                      skillLabel: roll.skillLabel,
+                      skillValue: roll.skillValue,
+                    });
+
+                    return (
+                      <div key={roll.id} style={rollBlockShellStyle}>
+                        <strong>Assigned Stat check · {roll.participantName}</strong>
+                        <section
+                          aria-label={`${roll.skillLabel} Stat check`}
+                          style={rollEditorStyle}
+                        >
+                          <div style={rollControlsStackStyle}>
+                            <section style={rollControlsStyle}>
+                              <div style={rollFieldRowStyle}>
+                                <label style={compactControlStyle}>
+                                  <span>Stat</span>
+                                  <input
+                                    aria-label="Assigned Stat"
+                                    readOnly
+                                    style={compactSkillInputStyle}
+                                    value={`${roll.skillLabel} (${roll.skillValue ?? 0})`}
+                                  />
+                                </label>
+                                <label style={compactControlStyle}>
+                                  <span>Difficulty</span>
+                                  <input
+                                    aria-label="Assigned Stat check difficulty"
+                                    readOnly
+                                    style={compactInputStyle}
+                                    value={roll.difficultyLabel}
+                                  />
+                                </label>
+                                <button
+                                  disabled={!canUsePlayerActions || Boolean(roll.result)}
+                                  onClick={() => void handlePlayerRoll(roll.id)}
+                                  type="button"
+                                >
+                                  {preview.autoSuccess
+                                    ? "Accept automatic success"
+                                    : "Roll Stat check"}
+                                </button>
+                              </div>
+                              {roll.result ? (
+                                <div role="status">
+                                  {preview.autoSuccess
+                                    ? "Automatic success accepted"
+                                    : preview.fumble
+                                      ? "Fumble"
+                                      : preview.success
+                                        ? "Successful"
+                                        : "Not successful"}
+                                  {preview.numericSubtotal == null
+                                    ? ""
+                                    : ` · total ${preview.numericSubtotal}`}
+                                  {preview.achievedSuccessLevel
+                                    ? ` · ${preview.achievedSuccessLevel.label}`
+                                    : ""}
+                                </div>
+                              ) : null}
+                            </section>
+                          </div>
+                          <RoleplayRollCalculationPanel
+                            actorDifficulty={roll.difficulty}
+                            actorLabel={`${roll.participantName} — ${roll.skillLabel} Stat`}
+                            actorMainPreview={preview}
+                            cleanPendingText
+                            opponentOpen={false}
+                            showPendingLabels={false}
+                          />
+                        </section>
+                      </div>
+                    );
+                  }
+
                   const contentSkill = content?.skills.find((skill) => skill.id === roll.skillId);
                   const assignedParticipant = resolveEncounterParticipantByRollParticipantId({
                     participantId: roll.participantId,
@@ -2361,7 +2639,7 @@ export function PlayerRoleplayingEncounterScreen({
               </div>
             ) : (
               <div style={{ display: "grid", gap: "0.75rem" }}>
-                <div>No skill rolls assigned.</div>
+                <div>No assigned checks or skill rolls.</div>
                 <div style={rollBlockShellStyle}>
                   <strong>Local roll 1</strong>
                   <section style={rollEditorStyle}>

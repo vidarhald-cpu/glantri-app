@@ -257,6 +257,7 @@ export interface CombatStatePersistenceRepository {
   updateEncounterPreservingSplitCombat(input: {
     campaignId?: string | null;
     encounterId: string;
+    expectedRevision?: string;
     scenarioId?: string | null;
     session: EncounterSession;
   }): Promise<EncounterSession>;
@@ -463,72 +464,150 @@ export function createPrismaCombatStatePersistenceRepository(
         id: input.encounterId,
         scenarioId: input.scenarioId ?? input.session.scenarioId,
       });
+      const expectedRevision = input.expectedRevision;
 
-      return client.$transaction(
-        async (transaction) => {
-          const existing = await transaction.encounter.findUniqueOrThrow({
-            select: splitEncounterRecordSelect,
-            where: { id: input.encounterId },
-          });
-          const storageMode = asStorageMode(existing.combatStorageMode);
+      const persist = () =>
+        client.$transaction(
+          async (transaction) => {
+            const existing = await transaction.encounter.findUniqueOrThrow({
+              select: splitEncounterRecordSelect,
+              where: { id: input.encounterId },
+            });
+            const storageMode = asStorageMode(existing.combatStorageMode);
 
-          if (storageMode === COMBAT_STORAGE_MODE_LEGACY) {
-            const record = await transaction.encounter.update({
-              data: {
+            if (expectedRevision && existing.updatedAt.toISOString() !== expectedRevision) {
+              throw new CombatPersistenceError(
+                "stale_revision",
+                "Encounter revision changed before roleplay state could be saved.",
+              );
+            }
+
+            if (storageMode === COMBAT_STORAGE_MODE_LEGACY) {
+              const data = {
                 campaignId: normalized.campaignId ?? null,
                 name: normalized.title,
                 scenarioId: normalized.scenarioId ?? null,
                 sessionJson: asJson(normalized),
                 status: normalized.status,
-              },
-              where: { id: input.encounterId },
-            });
-            return encounterSessionSchema.parse({
-              ...normalized,
-              createdAt: record.createdAt.toISOString(),
-              updatedAt: record.updatedAt.toISOString(),
-            });
-          }
+              };
+              const record = await (expectedRevision
+                ? (async () => {
+                    const result = await transaction.encounter.updateMany({
+                      data,
+                      where: {
+                        id: input.encounterId,
+                        updatedAt: new Date(expectedRevision),
+                      },
+                    });
+                    if (result.count !== 1) {
+                      throw new CombatPersistenceError(
+                        "stale_revision",
+                        "Encounter revision changed before roleplay state could be saved.",
+                      );
+                    }
+                    return transaction.encounter.findUniqueOrThrow({
+                      select: { createdAt: true, updatedAt: true },
+                      where: { id: input.encounterId },
+                    });
+                  })()
+                : transaction.encounter.update({
+                    data,
+                    where: { id: input.encounterId },
+                  }));
+              return encounterSessionSchema.parse({
+                ...normalized,
+                createdAt: record.createdAt.toISOString(),
+                updatedAt: record.updatedAt.toISOString(),
+              });
+            }
 
-          if (!existing.activeCombatState) {
-            throw new CombatPersistenceError(
-              "malformed_split_storage",
-              "Split combat storage is missing its active-state row.",
-            );
-          }
+            if (!existing.activeCombatState) {
+              throw new CombatPersistenceError(
+                "malformed_split_storage",
+                "Split combat storage is missing its active-state row.",
+              );
+            }
 
-          const parts = splitEncounterSessionForCombatPersistence(normalized);
-          const updated = await transaction.encounter.update({
-            data: {
+            const parts = splitEncounterSessionForCombatPersistence(normalized);
+            const data = {
               campaignId: normalized.campaignId ?? null,
               name: normalized.title,
               scenarioId: normalized.scenarioId ?? null,
               sessionJson: asJson(parts.sessionWithoutCombatState),
               status: normalized.status,
-            },
-            select: { updatedAt: true },
-            where: { id: input.encounterId },
-          });
-          await transaction.encounterActiveCombatState.update({
-            data: { revision: updated.updatedAt },
-            where: { encounterId: input.encounterId },
-          });
+            };
+            const updated = await (expectedRevision
+              ? (async () => {
+                  const result = await transaction.encounter.updateMany({
+                    data,
+                    where: {
+                      id: input.encounterId,
+                      updatedAt: new Date(expectedRevision),
+                    },
+                  });
+                  if (result.count !== 1) {
+                    throw new CombatPersistenceError(
+                      "stale_revision",
+                      "Encounter revision changed before roleplay state could be saved.",
+                    );
+                  }
+                  return transaction.encounter.findUniqueOrThrow({
+                    select: { updatedAt: true },
+                    where: { id: input.encounterId },
+                  });
+                })()
+              : transaction.encounter.update({
+                  data,
+                  select: { updatedAt: true },
+                  where: { id: input.encounterId },
+                }));
+            await transaction.encounterActiveCombatState.update({
+              data: { revision: updated.updatedAt },
+              where: { encounterId: input.encounterId },
+            });
 
-          return composeEncounterSessionFromSplitCombatPersistence({
-            activeCombatState: existing.activeCombatState.stateJson,
-            archivedRounds: existing.archivedCombatRounds.map((round) => round.roundJson),
-            metadata: {
-              ...metadataInput(existing),
-              campaignId: normalized.campaignId,
-              revision: updated.updatedAt.toISOString(),
-              scenarioId: normalized.scenarioId,
-              status: normalized.status,
-              title: normalized.title,
-            },
-            sessionWithoutCombatState: parts.sessionWithoutCombatState,
-          });
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+            return composeEncounterSessionFromSplitCombatPersistence({
+              activeCombatState: existing.activeCombatState.stateJson,
+              archivedRounds: existing.archivedCombatRounds.map((round) => round.roundJson),
+              metadata: {
+                ...metadataInput(existing),
+                campaignId: normalized.campaignId,
+                revision: updated.updatedAt.toISOString(),
+                scenarioId: normalized.scenarioId,
+                status: normalized.status,
+                title: normalized.title,
+              },
+              sessionWithoutCombatState: parts.sessionWithoutCombatState,
+            });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+
+      if (!expectedRevision) {
+        return persist();
+      }
+
+      for (let attempt = 1; attempt <= maxTransactionAttempts; attempt += 1) {
+        try {
+          return await persist();
+        } catch (error) {
+          if (!isRetryableCombatTransactionError(error)) {
+            throw error;
+          }
+          if (attempt === maxTransactionAttempts) {
+            throw new CombatPersistenceError(
+              "transaction_conflict",
+              "Encounter state changed while saving. Refresh and try again.",
+              error,
+            );
+          }
+          await retryDelay(attempt);
+        }
+      }
+
+      throw new CombatPersistenceError(
+        "transaction_conflict",
+        "Encounter state changed while saving. Refresh and try again.",
       );
     },
   };

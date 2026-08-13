@@ -13,6 +13,7 @@ import {
   CombatStateReadService,
   EncounterCombatWriteError,
   EncounterService,
+  EncounterWriteError,
   ScenarioService,
 } from "@glantri/database";
 import {
@@ -94,6 +95,7 @@ import {
   encounterParticipantMembershipModeSchema,
   encounterSessionSchema,
   encounterStatusSchema,
+  glantriCharacteristicKeySchema,
   ensureDistanceEdgesForParticipantPairs,
   ensureCombatRoundEndReviewPrepared,
   deriveCombatRoundAttackResultsCompatibility,
@@ -138,6 +140,7 @@ import {
   isCombatStepAutomationProjectionWithinScope,
   isUserAssignedToEncounterMembership,
   normalizeRoleplayState,
+  roleplayDifficultySchema,
   normalizeCombatArmorModifierClass,
   rollCombatRoundCombatExperience,
   recordCombatRoundCriticalRoll,
@@ -259,19 +262,23 @@ import type {
   CombatProgressionTask,
   EncounterParticipantReadSource,
   EncounterSession,
+  GlantriCharacteristicKey,
   MovementIntent,
+  RoleplayDifficulty,
   ScenarioCombatModifierEntry,
   ScenarioParticipantCombatContext,
   ScenarioParticipant,
   WeaponTemplate,
 } from "@glantri/domain";
 import {
+  assignRoleplayStatCheck,
   buildCharacterSheetSummary,
   buildCombatStateCharacterInputs,
   calculateWorkbookPercentageAdjustmentTrace,
   deriveParryPrimaryActionModifier,
   isCombatFeintResistanceSkill,
   recordRoleplayGmSkillRoll,
+  recordRoleplayStatCheckResult,
   resolveCombatParry,
   resolveCombatFeintSkillContest,
   resolveCombatFeintSkillProfile,
@@ -280,6 +287,7 @@ import {
   resolveHighestCombatFeintResistanceProfile,
   resolveRoleplaySkillRollModifiers,
   resolveParticipantSkillRollProfile,
+  resolveParticipantStatRollProfile,
   resolveCombatSkillContest,
   resolveCombatMovementBurden,
   getCombatMovementModifierApplicability,
@@ -652,7 +660,10 @@ function getScenarioParticipantRoundEndSheetFacts(participant: ScenarioParticipa
       : undefined,
     dodgeStatLabel: "Dexterity",
     dodgeStatValue: dodgeProfile?.avgStats,
-    healthStat: build.data.profile.rolledStats.health,
+    healthStat: buildCharacterSheetSummary({
+      build: build.data,
+      content: defaultCanonicalContent,
+    }).adjustedStats.health,
   };
 }
 
@@ -1153,8 +1164,10 @@ function parseRollFields(
 }
 
 function parsePlayerRollBody(body: unknown): {
+  acceptAutomaticSuccess: boolean;
+  expectedRevision?: string;
   pendingRollId: string;
-  roll: {
+  roll?: {
     dieResult: number;
     openEndedD10s: number[];
     rollD20: number;
@@ -1173,8 +1186,10 @@ function parsePlayerRollBody(body: unknown): {
     throw new Error("pendingRollId is required.");
   }
 
-  if (!rollValue || typeof rollValue !== "object") {
-    throw new Error("roll is required.");
+  const acceptAutomaticSuccess = value.acceptAutomaticSuccess === true;
+
+  if ((!rollValue || typeof rollValue !== "object") && !acceptAutomaticSuccess) {
+    throw new Error("roll is required unless accepting an automatic success.");
   }
 
   const supportRollValue = value.supportRoll;
@@ -1184,9 +1199,37 @@ function parsePlayerRollBody(body: unknown): {
       : undefined;
 
   return {
+    acceptAutomaticSuccess,
+    expectedRevision:
+      typeof value.expectedRevision === "string" && value.expectedRevision.length > 0
+        ? value.expectedRevision
+        : undefined,
     pendingRollId,
-    roll: parseRollFields(rollValue as Record<string, unknown>, "roll"),
+    roll: rollValue ? parseRollFields(rollValue as Record<string, unknown>, "roll") : undefined,
     supportRoll: supportRoll ? parseRollFields(supportRoll, "supportRoll") : undefined,
+  };
+}
+
+function parseRoleplayStatCheckAssignmentBody(body: unknown): {
+  difficulty: RoleplayDifficulty;
+  expectedRevision: string;
+  participantId: string;
+  statId: GlantriCharacteristicKey;
+} {
+  const value = parseBodyObject(body, "Stat check assignment payload");
+
+  if (typeof value.expectedRevision !== "string" || value.expectedRevision.length === 0) {
+    throw new Error("expectedRevision is required.");
+  }
+  if (typeof value.participantId !== "string" || value.participantId.length === 0) {
+    throw new Error("participantId is required.");
+  }
+
+  return {
+    difficulty: roleplayDifficultySchema.parse(value.difficulty),
+    expectedRevision: value.expectedRevision,
+    participantId: value.participantId,
+    statId: glantriCharacteristicKeySchema.parse(value.statId),
   };
 }
 
@@ -1307,6 +1350,17 @@ function sendCombatWriteError(reply: FastifyReply, error: unknown): unknown | un
   return reply.code(409).send({
     code: "stale_revision",
     error: "Combat state changed before this task could be completed.",
+  });
+}
+
+function sendRoleplayStatWriteError(reply: FastifyReply, error: unknown): unknown | undefined {
+  if (!(error instanceof EncounterWriteError)) {
+    return undefined;
+  }
+
+  return reply.code(409).send({
+    code: "stale_revision",
+    error: "This Stat check changed before the result was accepted. Refresh and review it.",
   });
 }
 
@@ -15585,6 +15639,121 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.post("/encounters/:encounterId/roleplay/stat-checks", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+
+      if (!encounter?.scenarioId || encounter.kind !== "roleplay") {
+        return reply.code(404).send({ error: "Roleplaying encounter not found." });
+      }
+
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        {
+          scenarioId: encounter.scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+
+      if (!access || access.mode !== "gm") {
+        return reply.code(404).send({ error: "Roleplaying encounter not found." });
+      }
+
+      const body = parseRoleplayStatCheckAssignmentBody(request.body);
+
+      if (body.expectedRevision !== encounter.updatedAt) {
+        return reply.code(409).send({
+          error:
+            "The encounter changed before this Stat check was assigned. Refresh and review it.",
+        });
+      }
+
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(
+        encounter.scenarioId,
+      );
+      const membership = resolveEncounterParticipantMembership({
+        encounter,
+        scenarioParticipants,
+      });
+      const participant = resolveEncounterParticipantByRollParticipantId({
+        participantId: body.participantId,
+        participants: membership.participants,
+      });
+      const scenarioParticipant = participant?.scenarioParticipantId
+        ? scenarioParticipants.find((entry) => entry.id === participant.scenarioParticipantId)
+        : undefined;
+
+      if (!participant || !scenarioParticipant?.isActive) {
+        return reply.code(400).send({
+          error: "Choose an active participant assigned to this encounter.",
+        });
+      }
+
+      const statProfile = resolveParticipantStatRollProfile({
+        participantId: participant.id,
+        participantName: participant.label,
+        snapshot: scenarioParticipant.snapshot,
+        statId: body.statId,
+      });
+
+      if (statProfile.statValue == null) {
+        return reply.code(400).send({
+          error: statProfile.warning ?? "The selected Stat is not available for this participant.",
+        });
+      }
+
+      const nextEncounter = assignRoleplayStatCheck({
+        difficulty: body.difficulty,
+        participantId: participant.id,
+        participantName: participant.label,
+        session: encounter,
+        statId: statProfile.statId,
+        statLabel: statProfile.statLabel,
+        statValue: statProfile.statValue,
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        expectedRevision: body.expectedRevision,
+        scenarioId: encounter.scenarioId,
+        session: {
+          ...nextEncounter,
+          updatedAt: new Date().toISOString(),
+        },
+      });
+
+      await scenarioService.recordScenarioEvent({
+        actorUserId: user.id,
+        eventType: "encounter_updated",
+        payload: {
+          encounterId,
+          participantId: participant.id,
+          statId: statProfile.statId,
+        },
+        scenarioId: encounter.scenarioId,
+        summary: `Assigned ${statProfile.statLabel} Stat check to ${participant.label}.`,
+      });
+
+      return { encounter: savedEncounter };
+    } catch (error) {
+      const conflictResponse = sendRoleplayStatWriteError(reply, error);
+      if (conflictResponse) {
+        return conflictResponse;
+      }
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to assign Stat check.",
+      });
+    }
+  });
+
   app.post("/encounters/:encounterId/player-roll", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
 
@@ -15629,27 +15798,45 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         scenarioParticipants,
       });
       const state = normalizeRoleplayState(encounter);
-      const pendingRoll = state.pendingSkillRolls.find((roll) => roll.id === body.pendingRollId);
+      const pendingSkillRoll = state.pendingSkillRolls.find(
+        (roll) => roll.id === body.pendingRollId,
+      );
+      const pendingStatCheck = state.pendingStatChecks.find(
+        (check) => check.id === body.pendingRollId,
+      );
 
-      if (!pendingRoll || pendingRoll.silent) {
+      if ((!pendingSkillRoll && !pendingStatCheck) || pendingSkillRoll?.silent) {
         return reply.code(403).send({
           error: "Roll is not available to this player.",
         });
       }
 
-      const pendingRollSide =
-        pendingRoll.side ?? (pendingRoll.mode === "opposed" ? "actor" : undefined);
-      const existingResult = state.actionLog.find(
-        (entry) =>
+      if (pendingStatCheck && body.expectedRevision !== encounter.updatedAt) {
+        return reply.code(409).send({
+          error: "This Stat check changed before the result was accepted. Refresh and review it.",
+        });
+      }
+
+      const pendingRollSide = pendingSkillRoll
+        ? (pendingSkillRoll.side ?? (pendingSkillRoll.mode === "opposed" ? "actor" : undefined))
+        : undefined;
+      const existingResult = state.actionLog.find((entry) => {
+        if (pendingStatCheck) {
+          return entry.type === "stat_check_result" && entry.pendingRollId === pendingStatCheck.id;
+        }
+
+        return (
+          pendingSkillRoll != null &&
           entry.type === "gm_skill_roll" &&
           !entry.silent &&
-          ((entry.pendingRollId && entry.pendingRollId === pendingRoll.id) ||
-            (pendingRoll.rollSetId &&
-              entry.rollSetId === pendingRoll.rollSetId &&
+          ((entry.pendingRollId && entry.pendingRollId === pendingSkillRoll.id) ||
+            (pendingSkillRoll.rollSetId &&
+              entry.rollSetId === pendingSkillRoll.rollSetId &&
               (pendingRollSide ? entry.side === pendingRollSide : true) &&
-              entry.participantId === pendingRoll.participantId &&
-              entry.skillId === pendingRoll.skillId)),
-      );
+              entry.participantId === pendingSkillRoll.participantId &&
+              entry.skillId === pendingSkillRoll.skillId))
+        );
+      });
 
       if (existingResult) {
         return reply.code(409).send({
@@ -15672,8 +15859,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      const assignedParticipantId =
+        pendingStatCheck?.participantId ?? pendingSkillRoll!.participantId;
       const participant = resolveEncounterParticipantByRollParticipantId({
-        participantId: pendingRoll.participantId,
+        participantId: assignedParticipantId,
         participants: membership.participants,
       });
       const scenarioParticipant = participant?.scenarioParticipantId
@@ -15691,78 +15880,125 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const modifierPipeline = resolveRoleplaySkillRollModifiers({
-        modifiers:
-          pendingRoll.otherMod === 0
-            ? []
-            : [
-                {
-                  bucket: "other",
-                  label: "Other",
-                  source: "manual",
-                  value: pendingRoll.otherMod,
-                },
-              ],
-        skillTotal: pendingRoll.skillValue ?? 0,
-      });
-      const preview = buildRoleplayCalculationPreview({
-        difficulty: pendingRoll.mode === "difficulty" ? pendingRoll.difficulty : undefined,
-        modifierPipeline,
-        otherMod: pendingRoll.otherMod,
-        roll: body.roll,
-        skillLabel: pendingRoll.skillLabel,
-        skillValue: pendingRoll.skillValue,
-        useDbMod: pendingRoll.useDbMod,
-        useGenMod: pendingRoll.useGenMod,
-        useObSkillMod: pendingRoll.useObSkillMod,
-      });
-      const supportPreview =
-        pendingRoll.supportSkillId && body.supportRoll
-          ? buildRoleplayCalculationPreview({
-              roll: body.supportRoll,
-              skillLabel: pendingRoll.supportSkillLabel ?? "Support",
-              skillValue: pendingRoll.supportSkillValue,
-            })
-          : undefined;
-      const nextEncounter = recordRoleplayGmSkillRoll({
-        achievedSuccessLevel: preview.achievedSuccessLevel,
-        autoSuccess: preview.autoSuccess,
-        calculationText: preview.calculationText,
-        dieResult: body.roll.dieResult,
-        difficulty: pendingRoll.mode === "difficulty" ? pendingRoll.difficulty : undefined,
-        finalTotal: preview.finalTotal,
-        fumble: preview.fumble,
-        mode: pendingRoll.mode,
-        numericSubtotal: preview.numericSubtotal,
-        openEndedD10s: body.roll.openEndedD10s,
-        otherMod: pendingRoll.otherMod,
-        participantId: participant.id,
-        participantName: participant.label,
-        partial: preview.partial,
-        pendingRollId: pendingRoll.id,
-        roll: body.roll,
-        rollSetId: pendingRoll.rollSetId,
-        session: encounter,
-        side: pendingRollSide,
-        silent: false,
-        skillId: pendingRoll.skillId,
-        skillLabel: pendingRoll.skillLabel,
-        skillValue: pendingRoll.skillValue,
-        success: preview.success,
-        summary: `${participant.label} rolled ${pendingRoll.skillLabel}.`,
-        supportCalculationText: supportPreview?.calculationText,
-        supportNumericSubtotal: supportPreview?.numericSubtotal,
-        supportRoll: body.supportRoll,
-        supportSkillId: pendingRoll.supportSkillId,
-        supportSkillLabel: pendingRoll.supportSkillLabel,
-        supportSkillValue: pendingRoll.supportSkillValue,
-        useDbMod: pendingRoll.useDbMod,
-        useGenMod: pendingRoll.useGenMod,
-        useObSkillMod: pendingRoll.useObSkillMod,
-      });
+      let nextEncounter: EncounterSession;
+
+      if (pendingStatCheck) {
+        const preview = buildRoleplayCalculationPreview({
+          difficulty: pendingStatCheck.difficulty,
+          kind: "stat",
+          roll: body.roll,
+          skillLabel: pendingStatCheck.statLabel,
+          skillValue: pendingStatCheck.statValue,
+        });
+
+        if (body.acceptAutomaticSuccess && !preview.autoSuccess) {
+          return reply.code(400).send({
+            error: "This Stat check requires a roll.",
+          });
+        }
+        if (!body.acceptAutomaticSuccess && !body.roll) {
+          return reply.code(400).send({ error: "Roll the Stat check before submitting it." });
+        }
+
+        nextEncounter = recordRoleplayStatCheckResult({
+          achievedSuccessLevel: preview.achievedSuccessLevel,
+          autoSuccess: preview.autoSuccess,
+          calculationText: preview.calculationText,
+          difficulty: pendingStatCheck.difficulty,
+          finalTotal: preview.finalTotal,
+          fumble: preview.fumble,
+          numericSubtotal: preview.numericSubtotal,
+          participantId: participant.id,
+          participantName: participant.label,
+          pendingRollId: pendingStatCheck.id,
+          roll: body.roll,
+          session: encounter,
+          statId: pendingStatCheck.statId,
+          statLabel: pendingStatCheck.statLabel,
+          statValue: pendingStatCheck.statValue,
+          success: preview.autoSuccess ? true : preview.success,
+        });
+      } else {
+        const pendingRoll = pendingSkillRoll!;
+
+        if (!body.roll) {
+          return reply.code(400).send({ error: "Roll is required." });
+        }
+
+        const modifierPipeline = resolveRoleplaySkillRollModifiers({
+          modifiers:
+            pendingRoll.otherMod === 0
+              ? []
+              : [
+                  {
+                    bucket: "other",
+                    label: "Other",
+                    source: "manual",
+                    value: pendingRoll.otherMod,
+                  },
+                ],
+          skillTotal: pendingRoll.skillValue ?? 0,
+        });
+        const preview = buildRoleplayCalculationPreview({
+          difficulty: pendingRoll.mode === "difficulty" ? pendingRoll.difficulty : undefined,
+          modifierPipeline,
+          otherMod: pendingRoll.otherMod,
+          roll: body.roll,
+          skillLabel: pendingRoll.skillLabel,
+          skillValue: pendingRoll.skillValue,
+          useDbMod: pendingRoll.useDbMod,
+          useGenMod: pendingRoll.useGenMod,
+          useObSkillMod: pendingRoll.useObSkillMod,
+        });
+        const supportPreview =
+          pendingRoll.supportSkillId && body.supportRoll
+            ? buildRoleplayCalculationPreview({
+                roll: body.supportRoll,
+                skillLabel: pendingRoll.supportSkillLabel ?? "Support",
+                skillValue: pendingRoll.supportSkillValue,
+              })
+            : undefined;
+        nextEncounter = recordRoleplayGmSkillRoll({
+          achievedSuccessLevel: preview.achievedSuccessLevel,
+          autoSuccess: preview.autoSuccess,
+          calculationText: preview.calculationText,
+          dieResult: body.roll.dieResult,
+          difficulty: pendingRoll.mode === "difficulty" ? pendingRoll.difficulty : undefined,
+          finalTotal: preview.finalTotal,
+          fumble: preview.fumble,
+          mode: pendingRoll.mode,
+          numericSubtotal: preview.numericSubtotal,
+          openEndedD10s: body.roll.openEndedD10s,
+          otherMod: pendingRoll.otherMod,
+          participantId: participant.id,
+          participantName: participant.label,
+          partial: preview.partial,
+          pendingRollId: pendingRoll.id,
+          roll: body.roll,
+          rollSetId: pendingRoll.rollSetId,
+          session: encounter,
+          side: pendingRollSide,
+          silent: false,
+          skillId: pendingRoll.skillId,
+          skillLabel: pendingRoll.skillLabel,
+          skillValue: pendingRoll.skillValue,
+          success: preview.success,
+          summary: `${participant.label} rolled ${pendingRoll.skillLabel}.`,
+          supportCalculationText: supportPreview?.calculationText,
+          supportNumericSubtotal: supportPreview?.numericSubtotal,
+          supportRoll: body.supportRoll,
+          supportSkillId: pendingRoll.supportSkillId,
+          supportSkillLabel: pendingRoll.supportSkillLabel,
+          supportSkillValue: pendingRoll.supportSkillValue,
+          useDbMod: pendingRoll.useDbMod,
+          useGenMod: pendingRoll.useGenMod,
+          useObSkillMod: pendingRoll.useObSkillMod,
+        });
+      }
       const savedEncounter = await encounterService.updateEncounter({
         campaignId: encounter.campaignId,
         encounterId,
+        expectedRevision: pendingStatCheck ? body.expectedRevision : undefined,
         scenarioId: encounter.scenarioId,
         session: {
           ...nextEncounter,
@@ -15770,8 +16006,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
-      return { encounter: savedEncounter };
+      return {
+        encounter: gmAuthorizedOperation
+          ? savedEncounter
+          : buildPlayerSafeEncounterForUser({
+              encounter: savedEncounter,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+      };
     } catch (error) {
+      const conflictResponse = sendRoleplayStatWriteError(reply, error);
+      if (conflictResponse) {
+        return conflictResponse;
+      }
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to submit player roll.",
       });

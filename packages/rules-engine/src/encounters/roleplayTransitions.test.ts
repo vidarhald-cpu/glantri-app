@@ -14,7 +14,9 @@ import {
 } from "@glantri/domain";
 import {
   assignRoleplaySkillRoll,
+  assignRoleplayStatCheck,
   recordRoleplayGmSkillRoll,
+  recordRoleplayStatCheckResult,
   resetRoleplayRankedRollStack,
   rollOpenEndedRoleplayD20,
   selectAllRoleplayVisibilityForViewer,
@@ -41,7 +43,9 @@ function createSession(overrides: Partial<EncounterSession> = {}): EncounterSess
   };
 }
 
-function participant(input: Partial<EncounterParticipant> & Pick<EncounterParticipant, "id" | "label">): EncounterParticipant {
+function participant(
+  input: Partial<EncounterParticipant> & Pick<EncounterParticipant, "id" | "label">,
+): EncounterParticipant {
   return {
     declaration: {
       actionType: "none",
@@ -66,6 +70,7 @@ describe("roleplay encounter state", () => {
       gmMessage: "",
       participantDescriptions: {},
       pendingSkillRolls: [],
+      pendingStatChecks: [],
       visibility: {},
     });
   });
@@ -90,7 +95,7 @@ describe("roleplay encounter state", () => {
           ],
           visibility: {},
         } as never,
-      })
+      }),
     );
 
     expect(state.pendingSkillRolls[0]?.difficulty).toBeUndefined();
@@ -146,7 +151,9 @@ describe("roleplay encounter state", () => {
       participantId: "viewer-1",
       session: withRow,
     });
-    expect(normalizeRoleplayState(withDescription).participantDescriptions["viewer-1"]).toMatchObject({
+    expect(
+      normalizeRoleplayState(withDescription).participantDescriptions["viewer-1"],
+    ).toMatchObject({
       name: "Quiet Scholar",
       shortDescription: "Ink-stained sleeves.",
     });
@@ -218,7 +225,8 @@ describe("roleplay encounter state", () => {
 
     expect(normalizeRoleplayState(rolled).actionLog[0]).toMatchObject({
       achievedSuccessLevelLabel: "Medium -",
-      calculationText: "Perception 12 + Raw modifiers -2 => -2 + roll 12 = 22 → Medium -, modifier +0 → NOT SUCCESSFUL vs Hard",
+      calculationText:
+        "Perception 12 + Raw modifiers -2 => -2 + roll 12 = 22 → Medium -, modifier +0 → NOT SUCCESSFUL vs Hard",
       numericSubtotal: 22,
       otherMod: -2,
       roll: 12,
@@ -227,6 +235,68 @@ describe("roleplay encounter state", () => {
       success: false,
       type: "gm_skill_roll",
       useGenMod: true,
+    });
+  });
+
+  it("stores Stat checks and results as Stat records in the shared roleplay state", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.2);
+    const assigned = assignRoleplayStatCheck({
+      difficulty: "medium",
+      participantId: "participant-1",
+      participantName: "Alya",
+      session: createSession(),
+      statId: "dex",
+      statLabel: "Dex",
+      statValue: 14,
+    });
+    const check = normalizeRoleplayState(assigned).pendingStatChecks[0]!;
+
+    expect(check).toMatchObject({
+      difficulty: "medium",
+      participantId: "participant-1",
+      statId: "dex",
+      statLabel: "Dex",
+      statValue: 14,
+    });
+    expect(normalizeRoleplayState(assigned).actionLog[0]).toMatchObject({
+      pendingRollId: check.id,
+      statId: "dex",
+      type: "stat_check_assigned",
+    });
+
+    const roll = { dieResult: 9, openEndedD10s: [], rollD20: 9 };
+    const preview = buildRoleplayCalculationPreview({
+      difficulty: "medium",
+      kind: "stat",
+      roll,
+      skillLabel: "Dex",
+      skillValue: 14,
+    });
+    const resolved = recordRoleplayStatCheckResult({
+      achievedSuccessLevel: preview.achievedSuccessLevel,
+      autoSuccess: preview.autoSuccess,
+      calculationText: preview.calculationText,
+      difficulty: "medium",
+      fumble: preview.fumble,
+      numericSubtotal: preview.numericSubtotal,
+      participantId: "participant-1",
+      participantName: "Alya",
+      pendingRollId: check.id,
+      roll,
+      session: assigned,
+      statId: "dex",
+      statLabel: "Dex",
+      statValue: 14,
+      success: preview.success,
+    });
+
+    expect(normalizeRoleplayState(resolved).actionLog[0]).toMatchObject({
+      achievedSuccessLevelLabel: "Medium",
+      numericSubtotal: 23,
+      pendingRollId: check.id,
+      statId: "dex",
+      success: true,
+      type: "stat_check_result",
     });
   });
 
@@ -362,7 +432,7 @@ describe("roleplay encounter state", () => {
         actorPreview: actor,
         opponentLabel: "The Gladiator",
         opponentPreview: opponent,
-      })
+      }),
     ).toEqual({
       margin: 6,
       result: "win",
@@ -383,7 +453,7 @@ describe("roleplay encounter state", () => {
           skillLabel: "High base",
           skillValue: 18,
         }),
-      })
+      }),
     ).toMatchObject({
       margin: 1,
       result: "win",
@@ -404,7 +474,7 @@ describe("roleplay encounter state", () => {
           skillLabel: "High base",
           skillValue: 20,
         }),
-      }).result
+      }).result,
     ).toBe("win");
 
     expect(
@@ -421,7 +491,7 @@ describe("roleplay encounter state", () => {
           skillLabel: "Perception",
           skillValue: 10,
         }),
-      }).result
+      }).result,
     ).toBe("tie");
 
     expect(
@@ -438,7 +508,7 @@ describe("roleplay encounter state", () => {
           skillLabel: "Perception",
           skillValue: 10,
         }),
-      }).result
+      }).result,
     ).toBe("loss");
 
     expect(
@@ -455,7 +525,7 @@ describe("roleplay encounter state", () => {
           skillLabel: "Perception",
           skillValue: 40,
         }),
-      }).summary
+      }).summary,
     ).toBe("Both sides fumbled; tied result.");
   });
 
@@ -569,10 +639,11 @@ describe("roleplay encounter state", () => {
         difficulty: "medium",
         skillLabel: "Perception",
         skillValue: 31,
-      })
+      }),
     ).toMatchObject({
       autoSuccess: true,
-      calculationText: "Perception 31 + 1d20 = pending vs Medium · Automatic success — no roll needed",
+      calculationText:
+        "Perception 31 + 1d20 = pending vs Medium · Automatic success — no roll needed",
       formulaText: "Perception 31 + [ ] 0 + 1d20 = pending",
       numericSubtotal: undefined,
     });
@@ -590,11 +661,12 @@ describe("roleplay encounter state", () => {
         roll: { dieResult: 14, openEndedD10s: [], rollD20: 14 },
         skillLabel: "Perception",
         skillValue: 20,
-      })
+      }),
     ).toMatchObject({
       achievedSuccessLevel: expect.objectContaining({ id: "medium", resultModifier: 0 }),
       compactCalculationText: "Perception 20 + [ -2 ] -4 + 14 = 30 · Medium · SUCCESS vs Medium",
-      calculationText: "Perception 20 + Raw modifiers -2 => -4 + roll 14 = 30 → Medium, modifier +0 → SUCCESS vs Medium",
+      calculationText:
+        "Perception 20 + Raw modifiers -2 => -4 + roll 14 = 30 → Medium, modifier +0 → SUCCESS vs Medium",
       formulaText: "Perception 20 + [ -2 ] -4 + 14 = 30",
       numericModifierParts: [-2],
       numericModifierSum: -2,
@@ -613,7 +685,7 @@ describe("roleplay encounter state", () => {
         skillValue: 10,
         useDbMod: true,
         useGenMod: true,
-      })
+      }),
     ).toMatchObject({
       compactCalculationText: "Stealth 10 + [ ] 0 + 7 = 17 · Easy · NOT SUCCESSFUL vs Hard",
       calculationText: "Stealth 10 + roll 7 = 17 → Easy, modifier +0 → NOT SUCCESSFUL vs Hard",
@@ -630,7 +702,7 @@ describe("roleplay encounter state", () => {
         roll: { dieResult: -6, openEndedD10s: [6], rollD20: 1 },
         skillLabel: "Dodge",
         skillValue: 0,
-      })
+      }),
     ).toMatchObject({
       compactCalculationText: "Dodge 0 + [ ] 0 - 6 = -6 · FUMBLE",
       formulaText: "Dodge 0 + [ ] 0 - 6 = -6",
@@ -643,7 +715,7 @@ describe("roleplay encounter state", () => {
         roll: { dieResult: -6, openEndedD10s: [6], rollD20: 1 },
         skillLabel: "Dodge",
         skillValue: 0,
-      })
+      }),
     ).toMatchObject({
       resultText: "FUMBLE · NOT SUCCESSFUL vs Medium",
       success: false,
@@ -676,10 +748,9 @@ describe("roleplay encounter state", () => {
       skillLabel: "Stealth",
     });
 
-    expect(rankRoleplayGmRollResults(normalizeRoleplayState(second)).map((entry) => entry.skillLabel)).toEqual([
-      "Stealth",
-      "Bow",
-    ]);
+    expect(
+      rankRoleplayGmRollResults(normalizeRoleplayState(second)).map((entry) => entry.skillLabel),
+    ).toEqual(["Stealth", "Bow"]);
   });
 
   it("excludes opposed side results from ranked GM roll results", () => {
@@ -709,9 +780,9 @@ describe("roleplay encounter state", () => {
       skillLabel: "Bow",
     });
 
-    expect(rankRoleplayGmRollResults(normalizeRoleplayState(normal)).map((entry) => entry.skillLabel)).toEqual([
-      "Bow",
-    ]);
+    expect(
+      rankRoleplayGmRollResults(normalizeRoleplayState(normal)).map((entry) => entry.skillLabel),
+    ).toEqual(["Bow"]);
   });
 
   it("updates the current ranked roll stack id without deleting action log history", () => {
@@ -783,7 +854,9 @@ describe("roleplay encounter state", () => {
       skillLabel: "Stealth",
     });
 
-    expect(normalizeRoleplayState(rolled).currentRankedRollStackId).toBe("current-non-opposed-stack");
+    expect(normalizeRoleplayState(rolled).currentRankedRollStackId).toBe(
+      "current-non-opposed-stack",
+    );
   });
 
   it.each([
@@ -859,7 +932,8 @@ describe("roleplay encounter state", () => {
 
     expect(preview).toMatchObject({
       achievedSuccessLevel: expect.objectContaining({ id: "fumble" }),
-      calculationText: "Perception 40 + roll 1-6 = 35 → FUMBLE — automatic fail → NOT SUCCESSFUL vs Medium",
+      calculationText:
+        "Perception 40 + roll 1-6 = 35 → FUMBLE — automatic fail → NOT SUCCESSFUL vs Medium",
       fumble: true,
       resultText: "FUMBLE · NOT SUCCESSFUL vs Medium",
       success: false,
@@ -872,23 +946,38 @@ describe("roleplay encounter state", () => {
         difficulty: "medium",
         skillLabel: "Perception",
         skillValue: 31,
-      }).autoSuccess
+      }).autoSuccess,
     ).toBe(true);
     expect(
       buildRoleplayCalculationPreview({
         difficulty: "medium",
         skillLabel: "Perception",
         skillValue: 30,
-      }).autoSuccess
+      }).autoSuccess,
     ).toBe(false);
   });
 
   it("orders roleplay roster participants by PC, NPC, temporary/ad-hoc, then name", () => {
     const rows = orderRoleplayEncounterParticipants([
       participant({ id: "scenario-wolf", label: "Wolf", participantType: "ad-hoc" }),
-      participant({ id: "scenario-b", label: "Berta", participantType: "scenario", scenarioParticipantId: "npc-2" }),
-      participant({ characterId: "char-1", id: "char-1", label: "Alya", participantType: "character" }),
-      participant({ id: "scenario-a", label: "Acolyte", participantType: "scenario", scenarioParticipantId: "npc-1" }),
+      participant({
+        id: "scenario-b",
+        label: "Berta",
+        participantType: "scenario",
+        scenarioParticipantId: "npc-2",
+      }),
+      participant({
+        characterId: "char-1",
+        id: "char-1",
+        label: "Alya",
+        participantType: "character",
+      }),
+      participant({
+        id: "scenario-a",
+        label: "Acolyte",
+        participantType: "scenario",
+        scenarioParticipantId: "npc-1",
+      }),
     ]);
 
     expect(rows.map((row) => row.label)).toEqual(["Alya", "Acolyte", "Berta", "Wolf"]);

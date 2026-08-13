@@ -16,18 +16,19 @@ import type {
   SkillDefinition,
   SkillGroupDefinition,
   SkillSpecialization,
-  SocietyLevelAccess
+  SocietyLevelAccess,
 } from "@glantri/domain";
 import {
+  deriveCharacterStatLayers,
   getSkillGroupIds,
   glantriCharacteristicKeySchema,
   glantriCharacteristicLabels,
-  glantriCharacteristicOrder
+  glantriCharacteristicOrder,
 } from "@glantri/domain";
 
 import {
   buildCharacterSheetSummary,
-  type CharacterSheetSummary
+  type CharacterSheetSummary,
 } from "../sheets/buildCharacterSheetSummary";
 import {
   getActiveGroupSkillPurchaseCost,
@@ -35,7 +36,7 @@ import {
   getSecondaryPurchaseCostForSkill,
   getSecondaryPurchaseCostForSpecialization,
   normalizeChargenProgression,
-  type ChargenDraftView
+  type ChargenDraftView,
 } from "../chargen/primaryAllocation";
 import { applyRelationshipMinimumGrants } from "../skills/deriveSkillRelationships";
 
@@ -87,12 +88,12 @@ function createEmptyProgressionState(): CharacterProgressionState {
     availablePoints: 0,
     checks: [],
     history: [],
-    pendingAttempts: []
+    pendingAttempts: [],
   };
 }
 
 export function getCharacterProgressionState(
-  build: Pick<CharacterBuild, "progressionState">
+  build: Pick<CharacterBuild, "progressionState">,
 ): CharacterProgressionState {
   return build.progressionState ?? createEmptyProgressionState();
 }
@@ -112,21 +113,21 @@ function nowIso(): string {
 
 function getSkillById(
   content: CanonicalContentShape,
-  skillId: string
+  skillId: string,
 ): SkillDefinition | undefined {
   return content.skills.find((skill) => skill.id === skillId);
 }
 
 function getGroupById(
   content: CanonicalContentShape,
-  groupId: string
+  groupId: string,
 ): SkillGroupDefinition | undefined {
   return content.skillGroups.find((group) => group.id === groupId);
 }
 
 function getSpecializationById(
   content: CanonicalContentShape,
-  specializationId: string
+  specializationId: string,
 ): SkillSpecialization | undefined {
   return content.specializations.find((specialization) => specialization.id === specializationId);
 }
@@ -154,55 +155,51 @@ function isValidProgressionTarget(input: {
 function findCheck(
   state: CharacterProgressionState,
   targetType: ProgressionTargetType,
-  targetId: string
+  targetId: string,
 ): CharacterProgressionCheck | undefined {
   return state.checks.find(
-    (check) => check.targetType === targetType && check.targetId === targetId
+    (check) => check.targetType === targetType && check.targetId === targetId,
   );
 }
 
 function findApprovedCheck(
   state: CharacterProgressionState,
   targetType: ProgressionTargetType,
-  targetId: string
+  targetId: string,
 ): CharacterProgressionCheck | undefined {
   return state.checks.find(
     (check) =>
       check.targetType === targetType &&
       check.targetId === targetId &&
-      (check.status ?? "approved") === "approved"
+      (check.status ?? "approved") === "approved",
   );
 }
 
 function findRequestedCheck(
   state: CharacterProgressionState,
   targetType: ProgressionTargetType,
-  targetId: string
+  targetId: string,
 ): CharacterProgressionCheck | undefined {
   return state.checks.find(
     (check) =>
       check.targetType === targetType &&
       check.targetId === targetId &&
-      (check.status ?? "approved") === "requested"
+      (check.status ?? "approved") === "requested",
   );
 }
 
 function hasPendingAttempt(
   state: CharacterProgressionState,
   targetType: ProgressionTargetType,
-  targetId: string
+  targetId: string,
 ): boolean {
   return state.pendingAttempts.some(
-    (attempt) => attempt.targetType === targetType && attempt.targetId === targetId
+    (attempt) => attempt.targetType === targetType && attempt.targetId === targetId,
   );
 }
 
-function getStatValue(
-  build: CharacterBuild,
-  stat: GlantriCharacteristicKey
-): number {
-  return (build.profile.resolvedStats?.[stat] ?? build.profile.rolledStats[stat] ?? 0) +
-    (build.statModifiers?.[stat] ?? 0);
+function getStatValue(build: CharacterBuild, stat: GlantriCharacteristicKey): number {
+  return deriveCharacterStatLayers(build).current[stat];
 }
 
 function getTargetLabel(input: {
@@ -234,19 +231,25 @@ function getTargetCurrentValue(input: {
   targetType: ProgressionTargetType;
 }): number {
   if (input.targetType === "skill") {
-    return input.sheetSummary.draftView.skills.find((skill) => skill.skillId === input.targetId)
-      ?.effectiveSkillNumber ?? 0;
+    return (
+      input.sheetSummary.draftView.skills.find((skill) => skill.skillId === input.targetId)
+        ?.effectiveSkillNumber ?? 0
+    );
   }
 
   if (input.targetType === "skillGroup") {
-    return input.sheetSummary.draftView.groups.find((group) => group.groupId === input.targetId)
-      ?.groupLevel ?? 0;
+    return (
+      input.sheetSummary.draftView.groups.find((group) => group.groupId === input.targetId)
+        ?.groupLevel ?? 0
+    );
   }
 
   if (input.targetType === "specialization") {
-    return input.sheetSummary.draftView.specializations.find(
-      (specialization) => specialization.specializationId === input.targetId
-    )?.effectiveSpecializationNumber ?? 0;
+    return (
+      input.sheetSummary.draftView.specializations.find(
+        (specialization) => specialization.specializationId === input.targetId,
+      )?.effectiveSpecializationNumber ?? 0
+    );
   }
 
   return getStatValue(input.build, input.targetId as GlantriCharacteristicKey);
@@ -268,7 +271,7 @@ function getProgressionAttemptCost(input: {
     return getActiveGroupSkillPurchaseCost({
       content: input.content,
       groupId: input.targetId,
-      progression
+      progression,
     });
   }
 
@@ -283,7 +286,7 @@ function getProgressionAttemptCost(input: {
       cost:
         skill.category === "secondary"
           ? getSecondaryPurchaseCostForSkill(progression, skill)
-          : getPrimaryPurchaseCostForSkill(progression, skill)
+          : getPrimaryPurchaseCostForSkill(progression, skill),
     };
   }
 
@@ -294,7 +297,7 @@ function getProgressionAttemptCost(input: {
   }
 
   return {
-    cost: getSecondaryPurchaseCostForSpecialization(progression, specialization)
+    cost: getSecondaryPurchaseCostForSpecialization(progression, specialization),
   };
 }
 
@@ -310,13 +313,13 @@ function createEmptySkill(skill: SkillDefinition): CharacterSkill {
     ranks: 0,
     relationshipGrantedRanks: 0,
     secondaryRanks: 0,
-    skillId: skill.id
+    skillId: skill.id,
   };
 }
 
 function ensureSkillExists(
   progression: CharacterProgression,
-  skill: SkillDefinition
+  skill: SkillDefinition,
 ): CharacterSkill {
   const existing = progression.skills.find((entry) => entry.skillId === skill.id);
 
@@ -331,7 +334,7 @@ function ensureSkillExists(
 
 function ensureGroupExists(
   progression: CharacterProgression,
-  groupId: string
+  groupId: string,
 ): CharacterSkillGroup {
   const existing = progression.skillGroups.find((group) => group.groupId === groupId);
 
@@ -345,7 +348,7 @@ function ensureGroupExists(
     groupId,
     primaryRanks: 0,
     ranks: 0,
-    secondaryRanks: 0
+    secondaryRanks: 0,
   };
   progression.skillGroups.push(created);
   return created;
@@ -353,10 +356,10 @@ function ensureGroupExists(
 
 function ensureSpecializationExists(
   progression: CharacterProgression,
-  specialization: SkillSpecialization
+  specialization: SkillSpecialization,
 ): CharacterSpecialization {
   const existing = progression.specializations.find(
-    (entry) => entry.specializationId === specialization.id
+    (entry) => entry.specializationId === specialization.id,
   );
 
   if (existing) {
@@ -369,7 +372,7 @@ function ensureSpecializationExists(
     relationshipGrantedRanks: 0,
     secondaryRanks: 0,
     skillId: specialization.skillId,
-    specializationId: specialization.id
+    specializationId: specialization.id,
   };
   progression.specializations.push(created);
   return created;
@@ -424,13 +427,15 @@ function applySuccessfulIncrease(input: {
   build.progression = normalizeChargenProgression(
     applyRelationshipMinimumGrants({
       content: input.content,
-      progression
-    })
+      progression,
+    }),
   );
   return build;
 }
 
-export function rollOpenEndedProgressionD20(rng: () => number = Math.random): OpenEndedProgressionRoll {
+export function rollOpenEndedProgressionD20(
+  rng: () => number = Math.random,
+): OpenEndedProgressionRoll {
   const rollDie = (sides: number) => Math.floor(rng() * sides) + 1;
   const rollD20 = rollDie(20);
   const openEndedD10s: number[] = [];
@@ -449,7 +454,7 @@ export function rollOpenEndedProgressionD20(rng: () => number = Math.random): Op
   return {
     openEndedD10s,
     rollD20,
-    rollTotal
+    rollTotal,
   };
 }
 
@@ -462,7 +467,7 @@ export function grantCharacterProgressionPoints(input: {
 
   build.progressionState = {
     ...state,
-    availablePoints: Math.max(0, state.availablePoints + Math.trunc(input.amount))
+    availablePoints: Math.max(0, state.availablePoints + Math.trunc(input.amount)),
   };
   return build;
 }
@@ -497,9 +502,9 @@ export function addCharacterProgressionCheck(input: {
         status: "approved",
         targetId: input.targetId,
         targetLabel: getTargetLabel(input),
-        targetType: input.targetType
-      }
-    ]
+        targetType: input.targetType,
+      },
+    ],
   };
   return build;
 }
@@ -534,9 +539,9 @@ export function requestCharacterProgressionCheck(input: {
         status: "requested",
         targetId: input.targetId,
         targetLabel: getTargetLabel(input),
-        targetType: input.targetType
-      }
-    ]
+        targetType: input.targetType,
+      },
+    ],
   };
   return build;
 }
@@ -569,10 +574,10 @@ export function approveCharacterProgressionCheck(input: {
             ...check,
             checkedBy: input.checkedBy ?? check.checkedBy,
             provisional: input.provisional ?? check.provisional,
-            status: "approved"
+            status: "approved",
           }
-        : check
-    )
+        : check,
+    ),
   };
   return build;
 }
@@ -588,8 +593,8 @@ export function removeCharacterProgressionCheck(input: {
   build.progressionState = {
     ...state,
     checks: state.checks.filter(
-      (check) => check.targetType !== input.targetType || check.targetId !== input.targetId
-    )
+      (check) => check.targetType !== input.targetType || check.targetId !== input.targetId,
+    ),
   };
   return build;
 }
@@ -610,7 +615,10 @@ export function buyCharacterProgressionAttempt(input: {
   const check = findApprovedCheck(state, input.targetType, input.targetId);
 
   if (!check) {
-    return { build, error: "This target needs a GM-approved check before buying a progression attempt." };
+    return {
+      build,
+      error: "This target needs a GM-approved check before buying a progression attempt.",
+    };
   }
 
   if (hasPendingAttempt(state, input.targetType, input.targetId)) {
@@ -635,13 +643,13 @@ export function buyCharacterProgressionAttempt(input: {
     purchasedBy: input.purchasedBy,
     targetId: input.targetId,
     targetLabel: check.targetLabel,
-    targetType: input.targetType
+    targetType: input.targetType,
   };
 
   build.progressionState = {
     ...state,
     availablePoints: state.availablePoints - costResult.cost,
-    pendingAttempts: [...state.pendingAttempts, attempt]
+    pendingAttempts: [...state.pendingAttempts, attempt],
   };
   return { attempt, build };
 }
@@ -661,14 +669,14 @@ export function resolveCharacterProgressionAttempts(input: {
   for (const attempt of startingState.pendingAttempts) {
     const sheetSummary = buildCharacterSheetSummary({
       build,
-      content: input.content
+      content: input.content,
     });
     const beforeValue = getTargetCurrentValue({
       build,
       content: input.content,
       sheetSummary,
       targetId: attempt.targetId,
-      targetType: attempt.targetType
+      targetType: attempt.targetType,
     });
     const roll = rollOpenEndedProgressionD20(input.rng);
     const success = attempt.targetType !== "stat" && roll.rollTotal >= beforeValue;
@@ -677,12 +685,12 @@ export function resolveCharacterProgressionAttempts(input: {
           build,
           content: input.content,
           targetId: attempt.targetId,
-          targetType: attempt.targetType
+          targetType: attempt.targetType,
         })
       : build;
     const nextSheetSummary = buildCharacterSheetSummary({
       build: nextBuild,
-      content: input.content
+      content: input.content,
     });
     const afterValue = success
       ? getTargetCurrentValue({
@@ -690,7 +698,7 @@ export function resolveCharacterProgressionAttempts(input: {
           content: input.content,
           sheetSummary: nextSheetSummary,
           targetId: attempt.targetId,
-          targetType: attempt.targetType
+          targetType: attempt.targetType,
         })
       : beforeValue;
     const historyEntry: CharacterProgressionHistoryEntry = {
@@ -706,7 +714,7 @@ export function resolveCharacterProgressionAttempts(input: {
       targetId: attempt.targetId,
       targetLabel: attempt.targetLabel,
       targetType: attempt.targetType,
-      threshold: beforeValue
+      threshold: beforeValue,
     };
 
     resolvedHistory.push(historyEntry);
@@ -718,12 +726,12 @@ export function resolveCharacterProgressionAttempts(input: {
     ...getCharacterProgressionState(build),
     checks,
     history: [...startingState.history, ...resolvedHistory],
-    pendingAttempts: []
+    pendingAttempts: [],
   };
 
   return {
     build,
-    history: resolvedHistory
+    history: resolvedHistory,
   };
 }
 
@@ -745,7 +753,7 @@ export function buildCharacterProgressionView(input: {
       | "pending"
       | "requested"
       | "requestedCheckId"
-    >
+    >,
   ) => {
     const check = findCheck(state, row.targetType, row.targetId);
     const approvedCheck = findApprovedCheck(state, row.targetType, row.targetId);
@@ -759,7 +767,7 @@ export function buildCharacterProgressionView(input: {
       checkId: check?.id,
       pending,
       requested: Boolean(requestedCheck),
-      requestedCheckId: requestedCheck?.id
+      requestedCheckId: requestedCheck?.id,
     });
   };
 
@@ -768,7 +776,7 @@ export function buildCharacterProgressionView(input: {
       build: input.build,
       content: input.content,
       targetId: stat,
-      targetType: "stat"
+      targetType: "stat",
     });
     addRow({
       cost: costResult.cost,
@@ -777,7 +785,7 @@ export function buildCharacterProgressionView(input: {
       label: glantriCharacteristicLabels[stat],
       provisional: false,
       targetId: stat,
-      targetType: "stat"
+      targetType: "stat",
     });
   }
 
@@ -786,7 +794,7 @@ export function buildCharacterProgressionView(input: {
       build: input.build,
       content: input.content,
       targetId: group.groupId,
-      targetType: "skillGroup"
+      targetType: "skillGroup",
     });
     addRow({
       cost: costResult.cost,
@@ -795,7 +803,7 @@ export function buildCharacterProgressionView(input: {
       label: group.name,
       provisional: false,
       targetId: group.groupId,
-      targetType: "skillGroup"
+      targetType: "skillGroup",
     });
   }
 
@@ -804,7 +812,7 @@ export function buildCharacterProgressionView(input: {
       build: input.build,
       content: input.content,
       targetId: skill.skillId,
-      targetType: "skill"
+      targetType: "skill",
     });
     addRow({
       cost: costResult.cost,
@@ -813,7 +821,7 @@ export function buildCharacterProgressionView(input: {
       label: skill.name,
       provisional: false,
       targetId: skill.skillId,
-      targetType: "skill"
+      targetType: "skill",
     });
   }
 
@@ -822,7 +830,7 @@ export function buildCharacterProgressionView(input: {
       build: input.build,
       content: input.content,
       targetId: specialization.specializationId,
-      targetType: "specialization"
+      targetType: "specialization",
     });
     addRow({
       cost: costResult.cost,
@@ -831,7 +839,7 @@ export function buildCharacterProgressionView(input: {
       label: specialization.name,
       provisional: false,
       targetId: specialization.specializationId,
-      targetType: "specialization"
+      targetType: "specialization",
     });
   }
 
@@ -846,7 +854,7 @@ export function buildCharacterProgressionView(input: {
       build: input.build,
       content: input.content,
       targetId: check.targetId,
-      targetType: check.targetType
+      targetType: check.targetType,
     });
     rowsByKey.set(key, {
       approved: (check.status ?? "approved") === "approved",
@@ -865,7 +873,7 @@ export function buildCharacterProgressionView(input: {
       requested: (check.status ?? "approved") === "requested",
       requestedCheckId: (check.status ?? "approved") === "requested" ? check.id : undefined,
       targetId: check.targetId,
-      targetType: check.targetType
+      targetType: check.targetType,
     });
   }
 
@@ -875,10 +883,11 @@ export function buildCharacterProgressionView(input: {
     draftView: sheetSummary.draftView,
     history: state.history,
     pendingAttempts: state.pendingAttempts,
-    rows: [...rowsByKey.values()].sort((left, right) =>
-      left.targetType.localeCompare(right.targetType) || left.label.localeCompare(right.label)
+    rows: [...rowsByKey.values()].sort(
+      (left, right) =>
+        left.targetType.localeCompare(right.targetType) || left.label.localeCompare(right.label),
     ),
-    sheetSummary
+    sheetSummary,
   };
 }
 
@@ -907,23 +916,21 @@ export function reviewCharacterAdvancement(input: {
     errors: [],
     view: {
       advancementPointsAvailable: progressionView.availablePoints,
-      advancementPointsSpent: input.build.progressionState?.history.reduce(
-        (total, entry) => total + entry.cost,
-        0
-      ) ?? 0,
+      advancementPointsSpent:
+        input.build.progressionState?.history.reduce((total, entry) => total + entry.cost, 0) ?? 0,
       advancementPointsTotal:
         progressionView.availablePoints +
         (input.build.progressionState?.history.reduce((total, entry) => total + entry.cost, 0) ??
           0) +
         (input.build.progressionState?.pendingAttempts.reduce(
           (total, entry) => total + entry.cost,
-          0
+          0,
         ) ?? 0),
       draftView: progressionView.draftView,
       seniority: progressionView.sheetSummary.seniority,
-      totalSkillPointsInvested: progressionView.sheetSummary.totalSkillPointsInvested
+      totalSkillPointsInvested: progressionView.sheetSummary.totalSkillPointsInvested,
     },
-    warnings: []
+    warnings: [],
   };
 }
 
@@ -946,15 +953,18 @@ export function spendAdvancementPoint(input: {
     build: input.build,
     content: input.content,
     targetId: input.targetId,
-    targetType: mappedTargetType
+    targetType: mappedTargetType,
   });
   const state = getCharacterProgressionState(result.build);
 
   return {
-    advancementPointsSpent: state.pendingAttempts.reduce((total, attempt) => total + attempt.cost, 0),
+    advancementPointsSpent: state.pendingAttempts.reduce(
+      (total, attempt) => total + attempt.cost,
+      0,
+    ),
     build: result.build,
     error: result.error,
     spentCost: result.attempt?.cost,
-    warnings: []
+    warnings: [],
   };
 }

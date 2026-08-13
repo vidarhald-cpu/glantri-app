@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { encounterSessionSchema, scenarioParticipantStateSchema } from "@glantri/domain";
 
 import { CombatPersistenceError } from "../repositories/combatStatePersistenceRepository";
-import { EncounterCombatWriteError, EncounterService } from "./encounterService";
+import {
+  EncounterCombatWriteError,
+  EncounterService,
+  EncounterWriteError,
+} from "./encounterService";
 import { createScenarioRepositoryStub } from "./scenarioService.testHelpers";
 
 describe("EncounterService participant effect modifier refresh", () => {
@@ -189,6 +193,44 @@ describe("EncounterService combat persistence errors", () => {
         .catch((caughtError: unknown) => caughtError);
 
       expect(error).toBeInstanceOf(EncounterCombatWriteError);
+      expect(error).toMatchObject({ code });
+    },
+  );
+});
+
+describe("EncounterService roleplay persistence errors", () => {
+  it.each(["stale_revision", "transaction_conflict"] as const)(
+    "maps %s to the safe general Encounter write boundary",
+    async (code) => {
+      const repository = {
+        updateEncounter: vi
+          .fn()
+          .mockRejectedValue(
+            new CombatPersistenceError(code, "Internal repository detail must stay private."),
+          ),
+      };
+      const service = new EncounterService(repository as never, {} as never);
+      const session = encounterSessionSchema.parse({
+        actionLog: [],
+        createdAt: "2026-08-13T09:00:00.000Z",
+        currentRound: 1,
+        id: "encounter-1",
+        kind: "roleplay",
+        participants: [],
+        status: "active",
+        title: "Courtyard",
+        updatedAt: "2026-08-13T10:00:00.000Z",
+      });
+
+      const error = await service
+        .updateEncounter({
+          encounterId: session.id,
+          expectedRevision: session.updatedAt,
+          session,
+        })
+        .catch((caughtError: unknown) => caughtError);
+
+      expect(error).toBeInstanceOf(EncounterWriteError);
       expect(error).toMatchObject({ code });
     },
   );

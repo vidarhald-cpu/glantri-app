@@ -250,6 +250,7 @@ function makeEmptyParticipantEncounter(): EncounterSession {
       gmMessage: "The doors open.",
       participantDescriptions: {},
       pendingSkillRolls: [],
+      pendingStatChecks: [],
       visibility: {},
     },
     scenarioId: "scenario-1",
@@ -370,6 +371,81 @@ describe("playerGeneralEncounter", () => {
       skillValue: 16,
     });
     expect(JSON.stringify(view.assignedRolls)).not.toContain("silent-roll");
+  });
+
+  it("shows the controlled participant's assigned Stat check without exposing another player's check", () => {
+    const baseEncounter = makeEncounter();
+    const encounter = {
+      ...baseEncounter,
+      roleplayState: {
+        ...baseEncounter.roleplayState!,
+        actionLog: [
+          makeRoleplayActionLogEntry({
+            createdAt: "2026-01-01T00:08:00.000Z",
+            id: "own-stat-result",
+            numericSubtotal: 23,
+            participantId: "scenario-pc-1",
+            pendingRollId: "own-stat-check",
+            statId: "dex",
+            statLabel: "Dex",
+            statValue: 14,
+            success: true,
+            summary: "Player hero rolled Dex Stat check.",
+            type: "stat_check_result",
+          }),
+          ...(baseEncounter.roleplayState?.actionLog ?? []),
+        ],
+        pendingStatChecks: [
+          {
+            assignedAt: "2026-01-01T00:07:00.000Z",
+            difficulty: "medium" as const,
+            id: "own-stat-check",
+            participantId: "scenario-pc-1",
+            statId: "dex" as const,
+            statLabel: "Dex",
+            statValue: 14,
+          },
+          {
+            assignedAt: "2026-01-01T00:09:00.000Z",
+            difficulty: "hard" as const,
+            id: "other-stat-check",
+            participantId: "scenario-npc-visible",
+            statId: "will" as const,
+            statLabel: "Will",
+            statValue: 19,
+          },
+        ],
+      },
+    } as EncounterSession;
+    const view = buildPlayerGeneralEncounterView({
+      currentUserId: "player-1",
+      encounter,
+      scenarioParticipants: [
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-2",
+          id: "npc-visible",
+          name: "Other hero",
+        }),
+      ],
+    });
+
+    expect(view.assignedRolls).toEqual([
+      expect.objectContaining({
+        difficultyLabel: "Medium",
+        id: "own-stat-check",
+        result: expect.objectContaining({ total: 23 }),
+        rollKind: "stat",
+        skillLabel: "Dex",
+        skillValue: 14,
+        statId: "dex",
+      }),
+    ]);
+    expect(JSON.stringify(view)).not.toContain("other-stat-check");
   });
 
   it("can build the same player-safe view for a GM-selected scenario participant", () => {
@@ -820,6 +896,7 @@ describe("playerGeneralEncounter", () => {
       gmMessage: "",
       participantDescriptions: {},
       pendingSkillRolls: [],
+      pendingStatChecks: [],
       visibility: {},
     };
 
@@ -991,6 +1068,7 @@ describe("playerGeneralEncounter", () => {
         }),
         ...(encounter.roleplayState?.pendingSkillRolls ?? []),
       ],
+      pendingStatChecks: encounter.roleplayState?.pendingStatChecks ?? [],
     };
 
     const view = buildPlayerGeneralEncounterView({

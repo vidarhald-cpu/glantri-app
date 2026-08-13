@@ -40,6 +40,7 @@ describe("roleplay domain pure functions", () => {
       gmMessage: "",
       participantDescriptions: {},
       pendingSkillRolls: [],
+      pendingStatChecks: [],
       visibility: {},
     });
   });
@@ -64,7 +65,7 @@ describe("roleplay domain pure functions", () => {
           ],
           visibility: {},
         } as never,
-      })
+      }),
     );
 
     expect(state.pendingSkillRolls[0]?.difficulty).toBeUndefined();
@@ -88,10 +89,20 @@ describe("roleplay domain pure functions", () => {
 
   it("normalizes roll modifiers with defaults", () => {
     const result = normalizeRollModifiers(undefined);
-    expect(result).toEqual({ otherMod: 0, useDbMod: false, useGenMod: false, useObSkillMod: false });
+    expect(result).toEqual({
+      otherMod: 0,
+      useDbMod: false,
+      useGenMod: false,
+      useObSkillMod: false,
+    });
 
     const withValues = normalizeRollModifiers({ otherMod: -3, useDbMod: true });
-    expect(withValues).toEqual({ otherMod: -3, useDbMod: true, useGenMod: false, useObSkillMod: false });
+    expect(withValues).toEqual({
+      otherMod: -3,
+      useDbMod: true,
+      useGenMod: false,
+      useObSkillMod: false,
+    });
   });
 
   it("normalizes other mods", () => {
@@ -150,10 +161,11 @@ describe("roleplay domain pure functions", () => {
         difficulty: "medium",
         skillLabel: "Perception",
         skillValue: 31,
-      })
+      }),
     ).toMatchObject({
       autoSuccess: true,
-      calculationText: "Perception 31 + 1d20 = pending vs Medium · Automatic success — no roll needed",
+      calculationText:
+        "Perception 31 + 1d20 = pending vs Medium · Automatic success — no roll needed",
       numericSubtotal: undefined,
     });
 
@@ -164,7 +176,7 @@ describe("roleplay domain pure functions", () => {
         skillLabel: "Perception",
         skillValue: 12,
         otherMod: -2,
-      })
+      }),
     ).toMatchObject({
       numericSubtotal: 22,
       success: false,
@@ -186,7 +198,7 @@ describe("roleplay domain pure functions", () => {
           skillLabel: "Perception",
           skillValue: 12,
         }),
-      })
+      }),
     ).toEqual({ margin: 8, result: "win", summary: "A wins by 8." });
 
     expect(
@@ -203,7 +215,7 @@ describe("roleplay domain pure functions", () => {
           skillLabel: "Perception",
           skillValue: 14,
         }),
-      })
+      }),
     ).toEqual({ margin: 16, result: "loss", summary: "B wins by 16." });
 
     expect(
@@ -220,7 +232,7 @@ describe("roleplay domain pure functions", () => {
           skillLabel: "Perception",
           skillValue: 12,
         }),
-      }).result
+      }).result,
     ).toBe("tie");
 
     expect(
@@ -237,7 +249,7 @@ describe("roleplay domain pure functions", () => {
           skillLabel: "Perception",
           skillValue: 40,
         }),
-      }).summary
+      }).summary,
     ).toBe("Both sides fumbled; tied result.");
 
     expect(
@@ -254,7 +266,7 @@ describe("roleplay domain pure functions", () => {
           skillLabel: "Perception",
           skillValue: 10,
         }),
-      }).result
+      }).result,
     ).toBe("loss");
   });
 
@@ -262,26 +274,65 @@ describe("roleplay domain pure functions", () => {
     expect(
       rankRoleplayGmRollResults({
         actionLog: [
-          { type: "gm_skill_roll", mode: "difficulty", numericSubtotal: 28, skillLabel: "A", createdAt: "2026-01-01T00:01:00Z", fumble: false } as never,
-          { type: "gm_skill_roll", mode: "difficulty", numericSubtotal: 28, skillLabel: "B", createdAt: "2026-01-01T00:02:00Z", fumble: false } as never,
-          { type: "gm_skill_roll", mode: "difficulty", numericSubtotal: 15, skillLabel: "C", createdAt: "2026-01-01T00:03:00Z", fumble: false } as never,
-          { type: "gm_skill_roll", mode: "difficulty", numericSubtotal: 10, skillLabel: "D", createdAt: "2026-01-01T00:04:00Z", fumble: true } as never,
+          {
+            type: "gm_skill_roll",
+            mode: "difficulty",
+            numericSubtotal: 28,
+            skillLabel: "A",
+            createdAt: "2026-01-01T00:01:00Z",
+            fumble: false,
+          } as never,
+          {
+            type: "gm_skill_roll",
+            mode: "difficulty",
+            numericSubtotal: 28,
+            skillLabel: "B",
+            createdAt: "2026-01-01T00:02:00Z",
+            fumble: false,
+          } as never,
+          {
+            type: "gm_skill_roll",
+            mode: "difficulty",
+            numericSubtotal: 15,
+            skillLabel: "C",
+            createdAt: "2026-01-01T00:03:00Z",
+            fumble: false,
+          } as never,
+          {
+            type: "gm_skill_roll",
+            mode: "difficulty",
+            numericSubtotal: 10,
+            skillLabel: "D",
+            createdAt: "2026-01-01T00:04:00Z",
+            fumble: true,
+          } as never,
         ],
         currentRankedRollStackId: undefined,
         gmMessage: "",
         participantDescriptions: {},
         pendingSkillRolls: [],
+        pendingStatChecks: [],
         visibility: {},
-      }).map((e) => e.skillLabel)
+      }).map((e) => e.skillLabel),
     ).toEqual(["B", "A", "C", "D"]);
   });
 
   it("orders roleplay roster participants by PC, NPC, temporary/ad-hoc, then name", () => {
     const rows = orderRoleplayEncounterParticipants([
       { id: "scenario-wolf", label: "Wolf", participantType: "ad-hoc" } as never,
-      { id: "scenario-b", label: "Berta", participantType: "scenario", scenarioParticipantId: "npc-2" } as never,
+      {
+        id: "scenario-b",
+        label: "Berta",
+        participantType: "scenario",
+        scenarioParticipantId: "npc-2",
+      } as never,
       { characterId: "char-1", id: "char-1", label: "Alya", participantType: "character" } as never,
-      { id: "scenario-a", label: "Acolyte", participantType: "scenario", scenarioParticipantId: "npc-1" } as never,
+      {
+        id: "scenario-a",
+        label: "Acolyte",
+        participantType: "scenario",
+        scenarioParticipantId: "npc-1",
+      } as never,
     ]);
 
     expect(rows.map((row) => row.label)).toEqual(["Alya", "Acolyte", "Berta", "Wolf"]);

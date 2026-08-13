@@ -1,14 +1,11 @@
 import type {
   GlantriCharacteristicBlock,
   GlantriCharacteristicKey,
-  RolledCharacterProfile
+  RolledCharacterProfile,
 } from "@glantri/domain";
 
-import { glantriCharacteristicOrder } from "@glantri/domain";
-import {
-  getDexteritySizeModifier,
-  getGlantriStatModifier
-} from "../stats/characteristicGms";
+import { CHARACTER_STAT_LAYER_VERSION } from "@glantri/domain";
+import { getDexteritySizeModifier, getGlantriStatModifier } from "../stats/characteristicGms";
 import { STANDARD_CHARGEN_METHOD_POLICY, type ChargenMethodPolicy } from "./policy";
 
 export interface ChargenStatAdjustmentState {
@@ -27,17 +24,17 @@ function cloneStats(stats: GlantriCharacteristicBlock): GlantriCharacteristicBlo
 }
 
 export function createChargenStatAdjustmentState(
-  stats: GlantriCharacteristicBlock
+  stats: GlantriCharacteristicBlock,
 ): ChargenStatAdjustmentState {
   return {
     buildsUsed: 0,
     exchangesUsed: 0,
-    stats: cloneStats(stats)
+    stats: cloneStats(stats),
   };
 }
 
 export function resolveGlantriCharacterStats(
-  stats: GlantriCharacteristicBlock
+  stats: GlantriCharacteristicBlock,
 ): GlantriCharacteristicBlock {
   return {
     cha: stats.cha + getGlantriStatModifier(stats.com),
@@ -50,12 +47,12 @@ export function resolveGlantriCharacterStats(
     pow: stats.pow,
     siz: stats.siz,
     str: stats.str + getGlantriStatModifier(stats.siz),
-    will: stats.will
+    will: stats.will,
   };
 }
 
 export function getResolvedProfileStats(
-  profile: RolledCharacterProfile | undefined
+  profile: RolledCharacterProfile | undefined,
 ): GlantriCharacteristicBlock | undefined {
   if (!profile) {
     return undefined;
@@ -75,14 +72,14 @@ export function applyChargenStatExchange(input: {
   if (input.firstStat === input.secondStat) {
     return {
       error: "Choose two different stats to exchange.",
-      state: input.state
+      state: input.state,
     };
   }
 
   if (input.state.exchangesUsed >= policy.maxExchanges) {
     return {
       error: `You can exchange stats at most ${policy.maxExchanges} times.`,
-      state: input.state
+      state: input.state,
     };
   }
 
@@ -95,8 +92,8 @@ export function applyChargenStatExchange(input: {
     state: {
       buildsUsed: input.state.buildsUsed,
       exchangesUsed: input.state.exchangesUsed + 1,
-      stats
-    }
+      stats,
+    },
   };
 }
 
@@ -111,14 +108,14 @@ export function applyChargenStatBuild(input: {
   if (input.decreaseStat === input.increaseStat) {
     return {
       error: "Choose different stats when building.",
-      state: input.state
+      state: input.state,
     };
   }
 
   if (input.state.buildsUsed >= policy.maxBuilds) {
     return {
       error: `You can build stats at most ${policy.maxBuilds} times.`,
-      state: input.state
+      state: input.state,
     };
   }
 
@@ -128,14 +125,14 @@ export function applyChargenStatBuild(input: {
   if (currentDecrease - 2 < 1) {
     return {
       error: `${input.decreaseStat.toUpperCase()} cannot be reduced below 1.`,
-      state: input.state
+      state: input.state,
     };
   }
 
   if (currentIncrease + 1 > 25) {
     return {
       error: `${input.increaseStat.toUpperCase()} cannot be increased above 25.`,
-      state: input.state
+      state: input.state,
     };
   }
 
@@ -147,8 +144,8 @@ export function applyChargenStatBuild(input: {
     state: {
       buildsUsed: input.state.buildsUsed + 1,
       exchangesUsed: input.state.exchangesUsed,
-      stats
-    }
+      stats,
+    },
   };
 }
 
@@ -159,8 +156,6 @@ export function buildResolvedProfile(input: {
   return {
     ...input.profile,
     resolvedStats: resolveGlantriCharacterStats(input.adjustedStats),
-    rolledStats: Object.fromEntries(
-      glantriCharacteristicOrder.map((key) => [key, input.adjustedStats[key]])
-    ) as GlantriCharacteristicBlock
+    statLayerVersion: CHARACTER_STAT_LAYER_VERSION,
   };
 }

@@ -6,7 +6,7 @@ import {
   buildCharacterSheetSummary,
   buyCharacterProgressionAttempt,
   grantCharacterProgressionPoints,
-  resolveCharacterProgressionAttempts
+  resolveCharacterProgressionAttempts,
 } from "@glantri/rules-engine";
 
 import {
@@ -15,7 +15,7 @@ import {
   buildCharacterSheetSpecializationRows,
   characterSheetSkillsTableColumns,
   characterSheetSpecializationsTableColumns,
-  characterSheetStatsTableColumns
+  characterSheetStatsTableColumns,
 } from "./characterSheet";
 
 const skills: SkillDefinition[] = [
@@ -33,7 +33,7 @@ const skills: SkillDefinition[] = [
     name: "Medicine",
     requiresLiteracy: "no",
     societyLevel: 1,
-    sortOrder: 1
+    sortOrder: 1,
   },
   {
     allowsSpecializations: false,
@@ -48,7 +48,7 @@ const skills: SkillDefinition[] = [
     name: "First aid",
     requiresLiteracy: "no",
     societyLevel: 1,
-    sortOrder: 2
+    sortOrder: 2,
   },
   {
     allowsSpecializations: false,
@@ -64,7 +64,7 @@ const skills: SkillDefinition[] = [
     name: "Bow",
     requiresLiteracy: "no",
     societyLevel: 1,
-    sortOrder: 3
+    sortOrder: 3,
   },
   {
     allowsSpecializations: false,
@@ -80,7 +80,7 @@ const skills: SkillDefinition[] = [
     name: "Crossbow",
     requiresLiteracy: "no",
     societyLevel: 1,
-    sortOrder: 4
+    sortOrder: 4,
   },
   {
     allowsSpecializations: false,
@@ -96,7 +96,7 @@ const skills: SkillDefinition[] = [
     requiresLiteracy: "no",
     specializationOfSkillId: "bow",
     societyLevel: 1,
-    sortOrder: 5
+    sortOrder: 5,
   },
   {
     allowsSpecializations: false,
@@ -111,7 +111,7 @@ const skills: SkillDefinition[] = [
     name: "1-h edged",
     requiresLiteracy: "no",
     societyLevel: 1,
-    sortOrder: 6
+    sortOrder: 6,
   },
   {
     allowsSpecializations: false,
@@ -126,8 +126,8 @@ const skills: SkillDefinition[] = [
     name: "Philosophy",
     requiresLiteracy: "required",
     societyLevel: 1,
-    sortOrder: 7
-  }
+    sortOrder: 7,
+  },
 ];
 
 const longbowSpecialization = {
@@ -141,8 +141,8 @@ const longbowSpecialization = {
     parentExcessOffset: 5,
     parentSkillId: "bow",
     reverseFactor: 1,
-    threshold: 6
-  }
+    threshold: 6,
+  },
 };
 
 const fencingSpecialization = {
@@ -156,8 +156,8 @@ const fencingSpecialization = {
     parentExcessOffset: 5,
     parentSkillId: "one_handed_edged",
     reverseFactor: 1,
-    threshold: 6
-  }
+    threshold: 6,
+  },
 };
 
 const skillGroups: SkillGroupDefinition[] = [
@@ -165,20 +165,20 @@ const skillGroups: SkillGroupDefinition[] = [
     description: "Medicine",
     id: "medicine_group",
     name: "Medicine",
-    sortOrder: 1
+    sortOrder: 1,
   },
   {
     description: "Combat",
     id: "combat_group",
     name: "Combat",
-    sortOrder: 2
+    sortOrder: 2,
   },
   {
     description: "Philosophy",
     id: "philosophy_group",
     name: "Philosophy",
-    sortOrder: 3
-  }
+    sortOrder: 3,
+  },
 ];
 
 const baseBuild: CharacterBuild = {
@@ -201,9 +201,9 @@ const baseBuild: CharacterBuild = {
       pow: 15,
       siz: 10,
       str: 11,
-      will: 10
+      will: 10,
     },
-    societyLevel: 0
+    societyLevel: 0,
   },
   progression: {
     chargenMode: "standard",
@@ -216,15 +216,15 @@ const baseBuild: CharacterBuild = {
     secondaryPoolTotal: 0,
     skillGroups: [],
     skills: [],
-    specializations: []
+    specializations: [],
   },
   progressionState: {
     availablePoints: 0,
     checks: [],
     history: [],
-    pendingAttempts: []
+    pendingAttempts: [],
   },
-  statModifiers: {}
+  statModifiers: {},
 };
 
 const content = {
@@ -234,17 +234,18 @@ const content = {
   skillGroups,
   skills,
   societyLevels: [],
-  specializations: [longbowSpecialization, fencingSpecialization]
+  specializations: [longbowSpecialization, fencingSpecialization],
 };
 
 describe("buildCharacterSheetSkillRows", () => {
   it("defines player-facing Character Sheet table labels", () => {
     expect(characterSheetStatsTableColumns).toEqual([
       "Stat",
-      "Stats die roll",
+      "Rolled / base",
       "Original",
+      "Developed",
       "Current",
-      "GM"
+      "GM",
     ]);
     expect(characterSheetSkillsTableColumns).toEqual([
       "Skill",
@@ -254,14 +255,14 @@ describe("buildCharacterSheetSkillRows", () => {
       "Skill XP",
       "Derived XP",
       "Total XP",
-      "Total skill level"
+      "Total skill level",
     ]);
     expect(characterSheetSpecializationsTableColumns).toEqual([
       "Specialization",
       "Parent skill",
       "Specialization XP",
       "Derived XP",
-      "Total"
+      "Total",
     ]);
   });
 
@@ -272,22 +273,101 @@ describe("buildCharacterSheetSkillRows", () => {
         ...baseBuild.profile,
         resolvedStats: {
           ...baseBuild.profile.rolledStats,
-          str: 12
-        }
+          str: 12,
+        },
+        statLayerVersion: 1,
       },
-      statModifiers: {
-        str: 3
-      }
+      currentStatModifiers: { str: 1 },
+      developedStatModifiers: { str: 1 },
+      statModifiers: {},
     };
     const rows = buildCharacterSheetProfileStatRows(build);
     const strengthRow = rows.find((row) => row.stat === "str");
 
     expect(strengthRow).toMatchObject({
-      currentValue: 12,
-      gmValue: 0,
+      currentValue: 14,
+      developedValue: 13,
       originalValue: 12,
-      statsDieRollValue: 11
+      statsDieRollValue: 11,
     });
+  });
+
+  it("uses Current stats for linked-stat skill totals without changing skill XP", () => {
+    const build: CharacterBuild = {
+      ...baseBuild,
+      currentStatModifiers: { int: 4 },
+      progression: {
+        ...baseBuild.progression,
+        skills: [
+          {
+            category: "ordinary",
+            grantedRanks: 0,
+            groupId: "philosophy_group",
+            level: 2,
+            primaryRanks: 2,
+            ranks: 2,
+            secondaryRanks: 0,
+            skillId: "philosophy",
+          },
+        ],
+      },
+    };
+    const sheetSummary = buildCharacterSheetSummary({ build, content });
+    const row = buildCharacterSheetSkillRows({ build, content, sheetSummary })
+      .flatMap((group) => group.rows)
+      .find((candidate) => candidate.skillId === "philosophy");
+
+    expect(row).toMatchObject({
+      avgStats: 15,
+      skillXp: 2,
+      totalSkillLevel: 17,
+      totalXp: 2,
+    });
+  });
+
+  it("uses the same Current-linked skill total for equipped weapons and Combat", () => {
+    const build: CharacterBuild = {
+      ...baseBuild,
+      currentStatModifiers: { dex: 4 },
+      equipment: {
+        items: [
+          {
+            armorValue: 0,
+            equipped: true,
+            id: "weapon-1",
+            itemType: "weapon",
+            name: "Sword",
+            shieldBonus: 0,
+            slot: "main-hand",
+            weaponBonus: 0,
+            weaponSkillId: "one_handed_edged",
+          },
+        ],
+      },
+      progression: {
+        ...baseBuild.progression,
+        skills: [
+          {
+            category: "ordinary",
+            grantedRanks: 0,
+            groupId: "combat_group",
+            level: 2,
+            primaryRanks: 2,
+            ranks: 2,
+            secondaryRanks: 0,
+            skillId: "one_handed_edged",
+          },
+        ],
+      },
+    };
+    const sheetSummary = buildCharacterSheetSummary({ build, content });
+    const currentSkill = sheetSummary.draftView.skills.find(
+      (candidate) => candidate.skillId === "one_handed_edged",
+    );
+
+    expect(currentSkill?.totalSkill).toBe(16);
+    expect(sheetSummary.equipment.equippedWeapons[0]?.skillTotal).toBe(currentSkill?.totalSkill);
+    expect(sheetSummary.combat.weaponSkills[0]?.totalSkill).toBe(currentSkill?.totalSkill);
   });
 
   it("shows derived-only skills on the sheet with a compact source label", () => {
@@ -304,26 +384,28 @@ describe("buildCharacterSheetSkillRows", () => {
             primaryRanks: 10,
             ranks: 10,
             secondaryRanks: 0,
-            skillId: "medicine"
-          }
-        ]
-      }
+            skillId: "medicine",
+          },
+        ],
+      },
     };
     const sheetSummary = buildCharacterSheetSummary({
       build,
-      content
+      content,
     });
     const groupedRows = buildCharacterSheetSkillRows({
       build,
       content,
-      sheetSummary
+      sheetSummary,
     });
-    const firstAidRow = groupedRows.flatMap((group) => group.rows).find((row) => row.skillId === "first_aid");
+    const firstAidRow = groupedRows
+      .flatMap((group) => group.rows)
+      .find((row) => row.skillId === "first_aid");
 
     expect(firstAidRow).toMatchObject({
       grantedSourceLabel: "Granted from Medicine",
       grantedXp: 10,
-      totalXp: 10
+      totalXp: 10,
     });
   });
 
@@ -341,25 +423,25 @@ describe("buildCharacterSheetSkillRows", () => {
             primaryRanks: 10,
             ranks: 10,
             secondaryRanks: 0,
-            skillId: "bow"
-          }
-        ]
-      }
+            skillId: "bow",
+          },
+        ],
+      },
     };
     const sheetSummary = buildCharacterSheetSummary({
       build,
-      content
+      content,
     });
     const rows = buildCharacterSheetSkillRows({
       build,
       content,
-      sheetSummary
+      sheetSummary,
     }).flatMap((group) => group.rows);
 
     expect(rows.find((row) => row.skillId === "crossbow")).toMatchObject({
       grantedSourceLabel: "Granted from Bow",
       grantedXp: 5,
-      totalXp: 5
+      totalXp: 5,
     });
   });
 
@@ -377,18 +459,18 @@ describe("buildCharacterSheetSkillRows", () => {
             primaryRanks: 10,
             ranks: 10,
             secondaryRanks: 0,
-            skillId: "bow"
-          }
-        ]
-      }
+            skillId: "bow",
+          },
+        ],
+      },
     };
     const sheetSummary = buildCharacterSheetSummary({
       build,
-      content
+      content,
     });
     const rows = buildCharacterSheetSpecializationRows({
       content,
-      sheetSummary
+      sheetSummary,
     });
 
     expect(rows).toContainEqual(
@@ -397,8 +479,8 @@ describe("buildCharacterSheetSkillRows", () => {
         grantedXp: 5,
         specializationName: "Longbow",
         total: 5,
-        xp: 0
-      })
+        xp: 0,
+      }),
     );
   });
 
@@ -416,8 +498,8 @@ describe("buildCharacterSheetSkillRows", () => {
             primaryRanks: 8,
             ranks: 8,
             secondaryRanks: 0,
-            skillId: "one_handed_edged"
-          }
+            skillId: "one_handed_edged",
+          },
         ],
         specializations: [
           {
@@ -426,18 +508,18 @@ describe("buildCharacterSheetSkillRows", () => {
             relationshipGrantedRanks: 3,
             secondaryRanks: 2,
             skillId: "one_handed_edged",
-            specializationId: "fencing"
-          }
-        ]
-      }
+            specializationId: "fencing",
+          },
+        ],
+      },
     };
     const sheetSummary = buildCharacterSheetSummary({
       build,
-      content
+      content,
     });
     const rows = buildCharacterSheetSpecializationRows({
       content,
-      sheetSummary
+      sheetSummary,
     });
 
     expect(rows).toContainEqual(
@@ -446,8 +528,8 @@ describe("buildCharacterSheetSkillRows", () => {
         grantedXp: 3,
         specializationName: "Fencing",
         total: 5,
-        xp: 2
-      })
+        xp: 2,
+      }),
     );
   });
 
@@ -464,21 +546,21 @@ describe("buildCharacterSheetSkillRows", () => {
             status: "approved",
             targetId: "philosophy",
             targetLabel: "Philosophy",
-            targetType: "skill"
-          }
+            targetType: "skill",
+          },
         ],
         history: [],
-        pendingAttempts: []
-      }
+        pendingAttempts: [],
+      },
     };
     const sheetSummary = buildCharacterSheetSummary({
       build,
-      content
+      content,
     });
     const rows = buildCharacterSheetSkillRows({
       build,
       content,
-      sheetSummary
+      sheetSummary,
     }).flatMap((group) => group.rows);
 
     expect(rows.find((row) => row.skillId === "philosophy")).toBeUndefined();
@@ -490,38 +572,38 @@ describe("buildCharacterSheetSkillRows", () => {
       content,
       provisional: true,
       targetId: "philosophy",
-      targetType: "skill"
+      targetType: "skill",
     });
     const purchased = buyCharacterProgressionAttempt({
       build: checked,
       content,
       targetId: "philosophy",
-      targetType: "skill"
+      targetType: "skill",
     });
     const resolved = resolveCharacterProgressionAttempts({
       build: purchased.build,
       content,
-      rng: () => 0
+      rng: () => 0,
     });
     const sheetSummary = buildCharacterSheetSummary({
       build: resolved.build,
-      content
+      content,
     });
     const rows = buildCharacterSheetSkillRows({
       build: resolved.build,
       content,
-      sheetSummary
+      sheetSummary,
     }).flatMap((group) => group.rows);
 
     expect(rows.find((row) => row.skillId === "philosophy")).toMatchObject({
       skillName: "Philosophy",
       skillXp: 1,
-      totalXp: 1
+      totalXp: 1,
     });
     expect(sheetSummary.skillPoints).toEqual({
       current: 2,
       original: 0,
-      successfulProgressionGains: 2
+      successfulProgressionGains: 2,
     });
   });
 });

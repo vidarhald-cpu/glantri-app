@@ -5,7 +5,7 @@ import {
   type EncounterSessionSummary,
   type ScenarioParticipantState,
 } from "@glantri/domain";
-import { Prisma } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { prisma } from "../client";
 import { createPrismaCombatStatePersistenceRepository } from "./combatStatePersistenceRepository";
@@ -75,6 +75,7 @@ export interface EncounterRepository {
   updateEncounter(input: {
     campaignId?: string | null;
     encounterId: string;
+    expectedRevision?: string;
     scenarioId?: string | null;
     session: EncounterSession;
   }): Promise<EncounterSession>;
@@ -93,9 +94,11 @@ export interface EncounterRepository {
   }): Promise<EncounterSession>;
 }
 
-export function createPrismaEncounterRepository(): EncounterRepository {
-  const combatReadRepository = createPrismaCombatStateReadRepository();
-  const combatPersistenceRepository = createPrismaCombatStatePersistenceRepository();
+export function createPrismaEncounterRepository(
+  client: PrismaClient = prisma,
+): EncounterRepository {
+  const combatReadRepository = createPrismaCombatStateReadRepository(client);
+  const combatPersistenceRepository = createPrismaCombatStatePersistenceRepository(client);
 
   return {
     async createEncounter(input) {
@@ -104,7 +107,7 @@ export function createPrismaEncounterRepository(): EncounterRepository {
         campaignId: input.campaignId ?? input.session.campaignId,
         scenarioId: input.scenarioId,
       });
-      const record = await prisma.encounter.create({
+      const record = await client.encounter.create({
         data: {
           campaignId: normalized.campaignId ?? null,
           createdByUserId: input.createdByUserId ?? null,
@@ -122,7 +125,7 @@ export function createPrismaEncounterRepository(): EncounterRepository {
       return (await combatReadRepository.getFullEncounterById(encounterId))?.encounter ?? null;
     },
     async getEncounterSummaryById(encounterId) {
-      const record = await prisma.encounter.findUnique({
+      const record = await client.encounter.findUnique({
         select: {
           campaignId: true,
           createdAt: true,
@@ -138,7 +141,7 @@ export function createPrismaEncounterRepository(): EncounterRepository {
       return record ? mapEncounterSummary(record) : null;
     },
     async listEncountersByScenario(scenarioId) {
-      const records = await prisma.encounter.findMany({
+      const records = await client.encounter.findMany({
         orderBy: { updatedAt: "desc" },
         select: { id: true },
         where: { scenarioId },
@@ -150,7 +153,7 @@ export function createPrismaEncounterRepository(): EncounterRepository {
       return encounters.flatMap((view) => (view ? [view.encounter] : []));
     },
     async listEncounterSummariesByScenario(scenarioId) {
-      const records = await prisma.encounter.findMany({
+      const records = await client.encounter.findMany({
         orderBy: { updatedAt: "desc" },
         select: {
           campaignId: true,

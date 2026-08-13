@@ -1,19 +1,19 @@
 import {
   getCharacterSkillKey,
   getSkillGroupIds,
+  deriveCharacterStatLayers,
   type CharacterBuild,
   type GlantriCharacteristicBlock,
   type GlantriCharacteristicKey,
   glantriCharacteristicLabels,
   glantriCharacteristicOrder,
   type SkillDefinition,
-  type SkillSpecialization
+  type SkillSpecialization,
 } from "@glantri/domain";
 import {
   getCharacteristicGm,
-  getResolvedProfileStats,
   selectBestSkillGroupContribution,
-  type CharacterSheetSummary
+  type CharacterSheetSummary,
 } from "@glantri/rules-engine";
 
 import { getPlayerFacingSkillBucket, groupRowsBySkillType } from "../chargen/chargenBrowse";
@@ -56,10 +56,11 @@ export interface CharacterSheetSpecializationRow {
 
 export const characterSheetStatsTableColumns = [
   "Stat",
-  "Stats die roll",
+  "Rolled / base",
   "Original",
+  "Developed",
   "Current",
-  "GM"
+  "GM",
 ] as const;
 
 export const characterSheetSkillsTableColumns = [
@@ -70,7 +71,7 @@ export const characterSheetSkillsTableColumns = [
   "Skill XP",
   "Derived XP",
   "Total XP",
-  "Total skill level"
+  "Total skill level",
 ] as const;
 
 export const characterSheetSpecializationsTableColumns = [
@@ -78,16 +79,17 @@ export const characterSheetSpecializationsTableColumns = [
   "Parent skill",
   "Specialization XP",
   "Derived XP",
-  "Total"
+  "Total",
 ] as const;
 
 export interface CharacterSheetProfileStatRow {
   currentValue: number;
+  developedValue: number;
   gmValue: number;
   label: string;
   originalValue: number;
   stat: GlantriCharacteristicKey;
-  statsDieRollValue: number;
+  statsDieRollValue: number | null;
 }
 
 function sortSkills(skills: SkillDefinition[]): SkillDefinition[] {
@@ -99,38 +101,40 @@ function formatSkillStats(skill: SkillDefinition): string {
 }
 
 function getSkillLinkedStatAverage(
-  profile: CharacterBuild["profile"],
-  skill: SkillDefinition
+  currentStats: Record<string, number>,
+  skill: SkillDefinition,
 ): number {
   const total = skill.linkedStats.reduce(
-    (sum, stat) => sum + (profile.rolledStats[stat as GlantriCharacteristicKey] ?? 0),
-    0
+    (sum, stat) => sum + (currentStats[stat as GlantriCharacteristicKey] ?? 0),
+    0,
   );
 
   return Math.floor(total / skill.linkedStats.length);
 }
 
 export function buildCharacterSheetProfileStatRows(
-  build: Pick<CharacterBuild, "profile">
+  build: CharacterBuild,
 ): CharacterSheetProfileStatRow[] {
-  const resolvedStats = getResolvedProfileStats(build.profile) ?? build.profile.rolledStats;
+  const statLayers = deriveCharacterStatLayers(build);
 
   return glantriCharacteristicOrder.map((stat) => {
-    const statsDieRollValue = build.profile.rolledStats[stat];
-    const originalValue = resolvedStats[stat] ?? statsDieRollValue;
-    const currentValue = originalValue;
+    const statsDieRollValue = statLayers.rolledOrBase?.[stat] ?? null;
+    const originalValue = statLayers.original[stat];
+    const developedValue = statLayers.developed[stat];
+    const currentValue = statLayers.current[stat];
     const currentStatsForGm = {
-      ...resolvedStats,
-      [stat]: currentValue
+      ...statLayers.current,
+      [stat]: currentValue,
     } as GlantriCharacteristicBlock;
 
     return {
       currentValue,
+      developedValue,
       gmValue: getCharacteristicGm(stat, currentStatsForGm),
       label: glantriCharacteristicLabels[stat],
       originalValue,
       stat,
-      statsDieRollValue
+      statsDieRollValue,
     };
   });
 }
@@ -144,70 +148,82 @@ export function buildCharacterSheetSkillRows(input: {
   label: string;
   rows: CharacterSheetSkillRow[];
 }> {
-  const rows = sortSkills(input.content.skills)
-    .flatMap((skill) => {
-      if (skill.specializationOfSkillId) {
-        return [];
-      }
+  const rows = sortSkills(input.content.skills).flatMap((skill) => {
+    if (skill.specializationOfSkillId) {
+      return [];
+    }
 
-      const matchingViews = input.sheetSummary.draftView.skills.filter((item) => item.skillId === skill.id);
-      const bestContributingGroup = selectBestSkillGroupContribution(
-        getSkillGroupIds(skill)
-          .map((groupId) => {
-            const groupView = input.sheetSummary.draftView.groups.find((group) => group.groupId === groupId);
-            const groupDefinition = input.content.skillGroups.find((group) => group.id === groupId);
+    const matchingViews = input.sheetSummary.draftView.skills.filter(
+      (item) => item.skillId === skill.id,
+    );
+    const bestContributingGroup = selectBestSkillGroupContribution(
+      getSkillGroupIds(skill)
+        .map((groupId) => {
+          const groupView = input.sheetSummary.draftView.groups.find(
+            (group) => group.groupId === groupId,
+          );
+          const groupDefinition = input.content.skillGroups.find((group) => group.id === groupId);
 
-            if (!groupView || groupView.groupLevel <= 0) {
-              return null;
-            }
-
-            return {
-              groupId,
-              groupLevel: groupView.groupLevel,
-              name: groupDefinition?.name ?? groupId,
-              sortOrder: groupDefinition?.sortOrder ?? Number.MAX_SAFE_INTEGER
-            };
-          })
-          .filter((group): group is NonNullable<typeof group> => group !== null)
-      );
-
-      return matchingViews
-        .map((skillView) => {
-          const skillGroupXp = bestContributingGroup?.groupLevel ?? skillView.groupLevel ?? 0;
-          const skillXp = skillView.specificSkillLevel ?? 0;
-          const grantedXp = skillView.relationshipGrantedSkillLevel ?? 0;
-          const totalXp = skillView.effectiveSkillNumber ?? skillGroupXp + skillXp + grantedXp;
-
-          if (totalXp <= 0) {
+          if (!groupView || groupView.groupLevel <= 0) {
             return null;
           }
 
           return {
-            avgStats:
-              skillView.linkedStatAverage ?? getSkillLinkedStatAverage(input.build.profile, skill),
-            grantedSourceLabel: formatDerivedSkillSourceLabel({
-              sourceSkillName: skillView.relationshipSourceSkillName,
-              sourceType: skillView.relationshipSourceType
-            }),
-            grantedXp,
-            skillGroupXp,
-            skillId: skill.id,
-            skillKey: getCharacterSkillKey({
-              languageName: skillView.languageName,
-              skillId: skill.id
-            }),
-            skillName: skillView.languageName ? `${skill.name} (${skillView.languageName})` : skill.name,
-            skillType: getPlayerFacingSkillBucket(skill),
-            skillXp,
-            stats: formatSkillStats(skill),
-            totalSkillLevel:
-              skillView.totalSkill ??
-              getSkillLinkedStatAverage(input.build.profile, skill) + totalXp,
-            totalXp
-          } satisfies CharacterSheetSkillRow;
+            groupId,
+            groupLevel: groupView.groupLevel,
+            name: groupDefinition?.name ?? groupId,
+            sortOrder: groupDefinition?.sortOrder ?? Number.MAX_SAFE_INTEGER,
+          };
         })
-        .filter((row): row is CharacterSheetSkillRow => row !== null);
-    });
+        .filter((group): group is NonNullable<typeof group> => group !== null),
+    );
+
+    return matchingViews
+      .map((skillView) => {
+        const skillGroupXp = bestContributingGroup?.groupLevel ?? skillView.groupLevel ?? 0;
+        const skillXp = skillView.specificSkillLevel ?? 0;
+        const grantedXp = skillView.relationshipGrantedSkillLevel ?? 0;
+        const totalXp = skillView.effectiveSkillNumber ?? skillGroupXp + skillXp + grantedXp;
+
+        if (totalXp <= 0) {
+          return null;
+        }
+
+        return {
+          avgStats:
+            skillView.linkedStatAverage ??
+            getSkillLinkedStatAverage(
+              input.sheetSummary.statLayers?.current ?? input.sheetSummary.adjustedStats,
+              skill,
+            ),
+          grantedSourceLabel: formatDerivedSkillSourceLabel({
+            sourceSkillName: skillView.relationshipSourceSkillName,
+            sourceType: skillView.relationshipSourceType,
+          }),
+          grantedXp,
+          skillGroupXp,
+          skillId: skill.id,
+          skillKey: getCharacterSkillKey({
+            languageName: skillView.languageName,
+            skillId: skill.id,
+          }),
+          skillName: skillView.languageName
+            ? `${skill.name} (${skillView.languageName})`
+            : skill.name,
+          skillType: getPlayerFacingSkillBucket(skill),
+          skillXp,
+          stats: formatSkillStats(skill),
+          totalSkillLevel:
+            skillView.totalSkill ??
+            getSkillLinkedStatAverage(
+              input.sheetSummary.statLayers?.current ?? input.sheetSummary.adjustedStats,
+              skill,
+            ) + totalXp,
+          totalXp,
+        } satisfies CharacterSheetSkillRow;
+      })
+      .filter((row): row is CharacterSheetSkillRow => row !== null);
+  });
 
   return groupRowsBySkillType(rows);
 }
@@ -219,7 +235,7 @@ export function buildCharacterSheetSpecializationRows(input: {
   return input.sheetSummary.draftView.specializations
     .map((specializationView) => {
       const definition = input.content.specializations.find(
-        (specialization) => specialization.id === specializationView.specializationId
+        (specialization) => specialization.id === specializationView.specializationId,
       );
 
       if (!definition) {
@@ -229,14 +245,14 @@ export function buildCharacterSheetSpecializationRows(input: {
       return {
         grantedSourceLabel: formatDerivedSkillSourceLabel({
           sourceSkillName: specializationView.relationshipGrantedSourceSkillName,
-          sourceType: specializationView.relationshipGrantedSourceType
+          sourceType: specializationView.relationshipGrantedSourceType,
         }),
         grantedXp: specializationView.relationshipGrantedSpecializationLevel ?? 0,
         parentSkillName: specializationView.parentSkillName,
         specializationId: definition.id,
         specializationName: definition.name,
         total: specializationView.effectiveSpecializationNumber,
-        xp: specializationView.secondaryRanks
+        xp: specializationView.secondaryRanks,
       } satisfies CharacterSheetSpecializationRow;
     })
     .filter((row): row is CharacterSheetSpecializationRow => row !== null)

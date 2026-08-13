@@ -113,7 +113,7 @@ describe("rules documentation registry", () => {
 
     expect(model.selectedDocument.title).toBe("Character Sheet Calculations");
     expect(model.selectedDocument.markdown).toContain("# Character Sheet Calculations");
-    expect(model.selectedDocument.markdown).toContain("Stats die roll");
+    expect(model.selectedDocument.markdown).toContain("Rolled / base");
     expect(model.selectedDocument.markdown).toContain("Group XP");
     expect(model.selectedDocument.markdown).toContain("Skill XP");
     expect(model.selectedDocument.markdown).toContain(

@@ -91,6 +91,8 @@ function characterPayload(id: string, name: string) {
   return {
     build: {
       equipment: { items: [] },
+      currentStatModifiers: {},
+      developedStatModifiers: { str: 1 },
       id,
       name,
       profile: {
@@ -108,10 +110,24 @@ function characterPayload(id: string, name: string) {
           lck: 10,
           pow: 10,
           siz: 10,
-          str: 10,
+          str: 12,
+          will: 10,
+        },
+        resolvedStats: {
+          cha: 10,
+          com: 10,
+          con: 10,
+          dex: 10,
+          health: 10,
+          int: 10,
+          lck: 10,
+          pow: 10,
+          siz: 10,
+          str: 13,
           will: 10,
         },
         societyLevel: 0,
+        statLayerVersion: 1,
       },
       progression: {
         chargenMode: "standard",
