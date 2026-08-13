@@ -2,11 +2,16 @@ import { expect, test } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
+const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
+
 interface SmokeTestState {
   campaignId: string;
   characterId: string;
   delegatedCampaignId: string;
   delegatedCampaignName: string;
+  delegatedEncounterDescription: string;
+  delegatedEncounterId: string;
+  delegatedEncounterName: string;
   delegatedScenarioDescription: string;
   delegatedScenarioId: string;
   delegatedScenarioName: string;
@@ -131,5 +136,79 @@ test.describe("player Campaign Home privacy", () => {
     );
     await expect(page.getByText(testState.delegatedScenarioName)).toHaveCount(0);
     await expect(page.getByText(testState.delegatedScenarioDescription)).toHaveCount(0);
+  });
+
+  test("fails closed on delegated Scenario and Encounter direct routes", async ({ page }) => {
+    const testState = loadTestState();
+    await page.setViewportSize({ height: 844, width: 390 });
+    const endpoints = [
+      `/scenarios/${testState.delegatedScenarioId}`,
+      `/scenarios/${testState.delegatedScenarioId}/player-projection`,
+      `/scenarios/${testState.delegatedScenarioId}/encounters`,
+      `/encounters/${testState.delegatedEncounterId}`,
+    ];
+
+    for (const endpoint of endpoints) {
+      const response = await page.request.get(`${API_URL}${endpoint}`);
+      expect(response.status()).toBe(404);
+      const body = await response.text();
+      expect(body).not.toContain(testState.delegatedScenarioName);
+      expect(body).not.toContain(testState.delegatedScenarioDescription);
+      expect(body).not.toContain(testState.delegatedEncounterName);
+      expect(body).not.toContain(testState.delegatedEncounterDescription);
+    }
+
+    await page.goto(
+      `/campaigns/${testState.delegatedCampaignId}/scenarios/${testState.delegatedScenarioId}/player`,
+    );
+    await expect(page.getByText(testState.delegatedCampaignName, { exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
+    const pageText = await page.locator("body").innerText();
+    expect(pageText).not.toContain(testState.delegatedScenarioName);
+    expect(pageText).not.toContain(testState.delegatedScenarioDescription);
+    expect(pageText).not.toContain(testState.delegatedEncounterName);
+    expect(pageText).not.toContain(testState.delegatedEncounterDescription);
+  });
+});
+
+test.describe("delegated Scenario controller access", () => {
+  test.use({ storageState: "e2e/.auth/non-holder.json" });
+
+  test("retains direct Scenario and Encounter access", async ({ page }) => {
+    const testState = loadTestState();
+    const responses = await Promise.all([
+      page.request.get(`${API_URL}/scenarios/${testState.delegatedScenarioId}`),
+      page.request.get(`${API_URL}/scenarios/${testState.delegatedScenarioId}/player-projection`),
+      page.request.get(`${API_URL}/scenarios/${testState.delegatedScenarioId}/encounters`),
+      page.request.get(`${API_URL}/encounters/${testState.delegatedEncounterId}`),
+    ]);
+
+    for (const response of responses) {
+      expect(response.status()).toBe(200);
+    }
+    expect(await responses[0]!.text()).toContain(testState.delegatedScenarioName);
+    expect(await responses[1]!.text()).toContain(testState.delegatedScenarioName);
+    expect(await responses[2]!.text()).toContain(testState.delegatedEncounterName);
+    expect(await responses[3]!.text()).toContain(testState.delegatedEncounterName);
+  });
+});
+
+test.describe("delegated Scenario GM access", () => {
+  test.use({ storageState: "e2e/.auth/gm.json" });
+
+  test("retains direct private Scenario and Encounter access", async ({ page }) => {
+    const testState = loadTestState();
+    const scenarioResponse = await page.request.get(
+      `${API_URL}/scenarios/${testState.delegatedScenarioId}`,
+    );
+    const encounterResponse = await page.request.get(
+      `${API_URL}/encounters/${testState.delegatedEncounterId}`,
+    );
+
+    expect(scenarioResponse.status()).toBe(200);
+    expect(encounterResponse.status()).toBe(200);
+    expect(await scenarioResponse.text()).toContain(testState.delegatedScenarioName);
+    expect(await encounterResponse.text()).toContain(testState.delegatedEncounterName);
   });
 });

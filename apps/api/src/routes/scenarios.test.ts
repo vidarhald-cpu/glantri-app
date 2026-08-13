@@ -4666,6 +4666,46 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.listEncountersByScenario).toHaveBeenCalledWith("scenario-1");
   });
 
+  it.each([
+    ["Scenario", "/scenarios/scenario-1", "Scenario not found."],
+    ["Scenario projection", "/scenarios/scenario-1/player-projection", "Scenario not found."],
+    ["Scenario encounters", "/scenarios/scenario-1/encounters", "Scenario not found."],
+    ["Encounter", "/encounters/encounter-1", "Encounter not found."],
+  ])("fails closed for delegated-owner %s direct reads", async (_label, url, error) => {
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      description: "Private to delegated controller",
+      id: "scenario-1",
+      name: "Delegated Private Scenario",
+      status: "live",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(false);
+    mocks.encounterService.getEncounterById.mockResolvedValue({
+      createdAt: "2026-08-13T12:00:00.000Z",
+      description: "Controller-only moment",
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Delegated Private Encounter",
+      updatedAt: "2026-08-13T12:00:00.000Z",
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({ method: "GET", url });
+
+    await app.close();
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error });
+    expect(response.body).not.toContain("Delegated Private Scenario");
+    expect(response.body).not.toContain("Private to delegated controller");
+    expect(response.body).not.toContain("Delegated Private Encounter");
+    expect(response.body).not.toContain("Controller-only moment");
+  });
+
   it("returns a bounded metadata-only encounter summary list for the GM workspace", async () => {
     const summaries = Array.from({ length: 50 }, (_, index) => ({
       campaignId: "campaign-1",

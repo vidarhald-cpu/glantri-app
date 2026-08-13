@@ -113,6 +113,15 @@ if (!process.env.DATABASE_URL_TEST) {
       await expect(
         service.listScenariosByCampaignPlayerControl(campaign.id, delegatedController.id),
       ).resolves.toEqual([expect.objectContaining({ id: scenario.id })]);
+      await expect(
+        service.userHasPlayerScenarioAccess({ scenarioId: scenario.id, userId: owner.id }),
+      ).resolves.toBe(false);
+      await expect(
+        service.userHasPlayerScenarioAccess({
+          scenarioId: scenario.id,
+          userId: delegatedController.id,
+        }),
+      ).resolves.toBe(true);
     });
   });
 }

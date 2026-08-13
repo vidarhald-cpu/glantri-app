@@ -66,7 +66,7 @@ export async function userHasPlayerScenarioAccess(
       return true;
     }
 
-    if (!participant.characterId) {
+    if (participant.controlledByUserId != null || !participant.characterId) {
       continue;
     }
 

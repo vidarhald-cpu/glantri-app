@@ -274,7 +274,7 @@ export default async function globalSetup() {
     gmCookie,
   );
   const delegatedScenarioId = delegatedScenarioData.scenario.id;
-  await apiPost(
+  const { data: delegatedParticipantData } = await apiPost<{ participant: { id: string } }>(
     `/scenarios/${delegatedScenarioId}/participants/character`,
     {
       characterId: SMOKE_CHARACTER_ID,
@@ -282,6 +282,45 @@ export default async function globalSetup() {
     },
     gmCookie,
   );
+  const delegatedEncounterName = "Delegated Private Encounter";
+  const delegatedEncounterDescription = "Controller-only moment";
+  const delegatedEncounterSeed = Date.now();
+  const delegatedEncounterTimestamp = new Date().toISOString();
+  const { data: delegatedEncounterData } = await apiPost<{ encounter: { id: string } }>(
+    `/scenarios/${delegatedScenarioId}/encounters`,
+    {
+      session: {
+        campaignId: delegatedCampaignId,
+        createdAt: delegatedEncounterTimestamp,
+        description: delegatedEncounterDescription,
+        id: `delegated-encounter-${delegatedEncounterSeed}`,
+        kind: "roleplay",
+        participantMembershipMode: "explicit",
+        participants: [
+          {
+            characterId: SMOKE_CHARACTER_ID,
+            id: `delegated-encounter-participant-${delegatedEncounterSeed}`,
+            label: "Smoke Character",
+            participantType: "scenario",
+            scenarioParticipantId: delegatedParticipantData.participant.id,
+          },
+        ],
+        roleplayState: {
+          actionLog: [],
+          gmMessage: delegatedEncounterDescription,
+          participantDescriptions: {},
+          pendingSkillRolls: [],
+          visibility: {},
+        },
+        scenarioId: delegatedScenarioId,
+        status: "active",
+        title: delegatedEncounterName,
+        updatedAt: delegatedEncounterTimestamp,
+      },
+    },
+    gmCookie,
+  );
+  const delegatedEncounterId = delegatedEncounterData.encounter.id;
 
   // --- Save browser auth state ---
   const domain = new URL(process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000").hostname;
@@ -311,6 +350,9 @@ export default async function globalSetup() {
       characterId: SMOKE_CHARACTER_ID,
       delegatedCampaignId,
       delegatedCampaignName,
+      delegatedEncounterDescription,
+      delegatedEncounterId,
+      delegatedEncounterName,
       delegatedScenarioDescription,
       delegatedScenarioId,
       delegatedScenarioName,
