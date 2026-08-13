@@ -161,7 +161,7 @@ test.describe("player Campaign Home privacy", () => {
     await page.goto(
       `/campaigns/${testState.delegatedCampaignId}/scenarios/${testState.delegatedScenarioId}/player`,
     );
-    await expect(page.getByText(testState.delegatedCampaignName, { exact: true })).toBeVisible({
+    await expect(page.getByText("No encounter is currently available.")).toBeVisible({
       timeout: 10_000,
     });
     const pageText = await page.locator("body").innerText();
