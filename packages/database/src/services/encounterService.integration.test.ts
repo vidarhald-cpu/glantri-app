@@ -8,6 +8,7 @@ import {
 import { assignRoleplayStatCheck, recordRoleplayStatCheckResult } from "@glantri/rules-engine";
 
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
+import { createPrismaEncounterRepository } from "../repositories/encounterRepository";
 import { EncounterWriteError, EncounterService } from "./encounterService";
 
 const prisma = getTestPrismaClient();
@@ -87,7 +88,7 @@ if (!process.env.DATABASE_URL_TEST) {
     });
 
     it("accepts exactly one concurrent Stat result and returns the durable winner", async () => {
-      const service = new EncounterService();
+      const service = new EncounterService(createPrismaEncounterRepository(prisma!));
       const created = await service.createEncounter({
         scenarioId: "scenario-roleplay-concurrency",
         session: buildPendingStatCheck(),
