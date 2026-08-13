@@ -438,7 +438,7 @@ export function resolveParticipantStatRollProfile(
   const build = input.build ?? snapshot?.build;
   const sheetSummary = input.sheetSummary ?? snapshot?.sheetSummary;
   const fullStats = readProfileStats(build);
-  const snapshotStats = readSnapshotStats(input.snapshot ?? input.build);
+  const snapshotStats = readSnapshotStats(build) ?? readSnapshotStats(input.snapshot);
   const sheetStats = readSheetStats(sheetSummary);
   const stats = fullStats ?? snapshotStats ?? sheetStats;
   const statValue = stats?.[statId];

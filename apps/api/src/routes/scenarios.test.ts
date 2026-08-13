@@ -19,6 +19,7 @@ import {
   commitCombatRoundEndParticipantReview,
   commitCombatRoundPhaseDamage,
   commitCombatRoundPhaseInitiativeResolution,
+  createParticipantSnapshotFromEntity,
   ensureCombatRoundPhaseResolutionResultsForPhase,
   fingerprintCombatModifierResolution,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
@@ -5872,7 +5873,7 @@ describe("scenarios route contract", () => {
     });
   });
 
-  it("assigns a canonical Stat check from the GM roleplay workflow and rejects stale assignment", async () => {
+  it("assigns a canonical Stat check from a real persisted entity snapshot and rejects stale assignment", async () => {
     const encounter = encounterSessionSchema.parse({
       actionLog: [],
       createdAt: "2026-01-01T00:00:00.000Z",
@@ -5904,27 +5905,21 @@ describe("scenarios route contract", () => {
       joinSource: "gm_added",
       role: "player_character",
       scenarioId: "scenario-1",
-      snapshot: {
-        build: {
-          profile: {
-            resolvedStats: {
-              cha: 8,
-              com: 9,
-              con: 10,
-              dex: 17,
-              health: 11,
-              int: 12,
-              lck: 13,
-              pow: 14,
-              siz: 15,
-              str: 16,
-              will: 18,
+      snapshot: createParticipantSnapshotFromEntity({
+        entity: {
+          kind: "npc",
+          name: "Player hero",
+          snapshot: {
+            generatedHumanoidNpc: {
+              stats: {
+                base: { dex: 12, pow: 22 },
+                final: { dex: 14, pow: 26 },
+              },
             },
           },
         },
-        displayName: "Player hero",
-      },
-      sourceType: "character",
+      }).snapshot,
+      sourceType: "entity",
       state: {
         combat: { combatContext: { modifierBuckets: emptyModifierBuckets() } },
         conditions: [],
@@ -5981,7 +5976,7 @@ describe("scenarios route contract", () => {
       participantId: "encounter-player-1",
       statId: "dex",
       statLabel: "Dex",
-      statValue: 17,
+      statValue: 14,
     });
     expect(assigned.json().encounter.roleplayState.actionLog[0]).toMatchObject({
       statId: "dex",

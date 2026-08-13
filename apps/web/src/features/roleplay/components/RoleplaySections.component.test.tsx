@@ -2,11 +2,12 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type {
-  EncounterParticipant,
-  EncounterSession,
-  RoleplayState,
-  ScenarioParticipant,
+import {
+  createParticipantSnapshotFromEntity,
+  type EncounterParticipant,
+  type EncounterSession,
+  type RoleplayState,
+  type ScenarioParticipant,
 } from "@glantri/domain";
 
 import { GmRoleplayingEncounterScreen } from "../RoleplayEncounterScreens";
@@ -74,7 +75,20 @@ const scenarioParticipantWithStats = {
   id: "scenario-participant-1",
   isActive: true,
   role: "player_character",
-  snapshot: { stats: { dex: 14, int: 11 } },
+  snapshot: createParticipantSnapshotFromEntity({
+    entity: {
+      kind: "npc",
+      name: "Ari",
+      snapshot: {
+        generatedHumanoidNpc: {
+          stats: {
+            base: { dex: 12, pow: 22 },
+            final: { dex: 14, pow: 26 },
+          },
+        },
+      },
+    },
+  }).snapshot,
 } as unknown as ScenarioParticipant;
 
 describe("GM Stat check assignment controls", () => {
@@ -100,6 +114,7 @@ describe("GM Stat check assignment controls", () => {
     expect(screen.getByLabelText("Stat check participant")).toHaveValue(participant.id);
     expect(screen.getByLabelText("Stat check Stat")).toHaveValue("dex");
     expect(screen.getByText(/Dex 14 · open-ended d20 · Medium/)).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Pow (26)" })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Assign Stat check" }));
 

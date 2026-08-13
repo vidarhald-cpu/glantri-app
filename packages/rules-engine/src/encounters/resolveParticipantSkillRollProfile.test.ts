@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { CharacterBuild, SkillDefinition, SkillGroupDefinition } from "@glantri/domain";
+import {
+  createParticipantSnapshotFromEntity,
+  type CharacterBuild,
+  type SkillDefinition,
+  type SkillGroupDefinition,
+} from "@glantri/domain";
 
 import {
   resolveParticipantSkillRollProfile,
@@ -599,17 +604,38 @@ describe("resolveParticipantStatRollProfile", () => {
     });
   });
 
-  it("reads a generated actor's persisted final Stat snapshot", () => {
-    expect(
-      resolveParticipantStatRollProfile({
+  it("reads a generated actor's real persisted entity participant Stat shape", () => {
+    const persisted = createParticipantSnapshotFromEntity({
+      entity: {
+        kind: "npc",
+        name: "Ari",
         snapshot: {
           generatedHumanoidNpc: {
-            stats: { base: { int: 11 }, final: { int: 14 } },
+            stats: {
+              base: { dex: 12, pow: 22 },
+              final: { dex: 14, pow: 26 },
+            },
           },
         },
-        statId: "int",
+      },
+    }).snapshot;
+
+    expect(persisted).toMatchObject({
+      build: {
+        generatedHumanoidNpc: {
+          stats: { final: { dex: 14, pow: 26 } },
+        },
+      },
+    });
+    expect(
+      resolveParticipantStatRollProfile({
+        snapshot: persisted,
+        statId: "dex",
       }),
-    ).toMatchObject({ sourceQuality: "snapshot", statLabel: "Int", statValue: 14 });
+    ).toMatchObject({ sourceQuality: "snapshot", statLabel: "Dex", statValue: 14 });
+    expect(resolveParticipantStatRollProfile({ snapshot: persisted, statId: "pow" })).toMatchObject(
+      { sourceQuality: "snapshot", statLabel: "Pow", statValue: 26 },
+    );
   });
 
   it("reports a missing canonical Stat instead of inventing a value", () => {
