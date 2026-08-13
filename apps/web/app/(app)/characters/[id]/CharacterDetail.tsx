@@ -247,6 +247,8 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
         return;
       }
 
+      setBuild(canonicalBuild ?? record.build);
+      setReviewingRecovery(false);
       throw error;
     }
   }
@@ -308,7 +310,11 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     try {
       await persistBuild(build, "Identity details saved.");
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Unable to save identity details.");
+      setFeedback(
+        error instanceof Error
+          ? `${error.message} The current server Character is shown and your attempted draft is retained for review.`
+          : "Unable to save identity details. The current server Character is shown and your attempted draft is retained for review.",
+      );
     } finally {
       setSavingIdentity(false);
     }
@@ -325,7 +331,11 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     try {
       await persistBuild(build, "Character notes saved.");
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Unable to save character notes.");
+      setFeedback(
+        error instanceof Error
+          ? `${error.message} The current server Character is shown and your attempted draft is retained for review.`
+          : "Unable to save character notes. The current server Character is shown and your attempted draft is retained for review.",
+      );
     } finally {
       setSavingNotes(false);
     }

@@ -620,11 +620,12 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
           "The Character changed on the server. Current notes are shown and your exact attempted draft is retained on the Character Sheet.",
         );
       } else {
+        setInventoryNotes(characterRecord.build.inventoryNotes ?? "");
         setRecoveryRequired(true);
         setInventoryNotesError(
           error instanceof Error
-            ? `${error.message} Your attempted notes remain in the retained local draft.`
-            : "Unable to save inventory notes. Your attempted notes remain in the retained local draft.",
+            ? `${error.message} Current server notes are shown and your attempted notes remain in the retained local draft.`
+            : "Unable to save inventory notes. Current server notes are shown and your attempted notes remain in the retained local draft.",
         );
       }
     } finally {

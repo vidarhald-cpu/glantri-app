@@ -296,10 +296,12 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
           "The Character changed on the server. The current server version is shown and your exact attempted draft is retained for review.",
         );
       } else {
+        setBuild(canonicalBuild ?? record.build);
+        setReviewingRecovery(false);
         setFeedback(
           error instanceof Error
-            ? `${error.message} Your attempted draft remains saved locally.`
-            : "Unable to save character edits to the server. Your attempted draft remains saved locally.",
+            ? `${error.message} The current server Character is shown and your attempted draft remains saved locally for review.`
+            : "Unable to save character edits to the server. The current server Character is shown and your attempted draft remains saved locally for review.",
         );
       }
     } finally {
