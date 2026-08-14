@@ -1,3 +1,5 @@
+export * from "./criticalInjuryEvaluator";
+export * from "./criticalInjuryPresentation";
 export * from "./manageEncounterSession";
 export * from "./resolveEncounterAttack";
 export * from "./resolveEncounterCritical";
