@@ -7,3 +7,4 @@ export * from "./resolveEncounterDamage";
 export * from "./resolveParticipantSkillRollProfile";
 export * from "./resolveRoleplaySkillRollModifiers";
 export * from "./roleplayTransitions";
+export * from "./resolveGenericCombatActionRoll";

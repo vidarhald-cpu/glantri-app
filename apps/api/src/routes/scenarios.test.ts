@@ -3674,6 +3674,102 @@ describe("scenarios route contract", () => {
     );
   });
 
+  it("persists generic Combat actions idempotently and rejects hidden participant references", async () => {
+    const encounterParticipants = [
+      makeEncounterCombatParticipant({
+        id: "encounter-participant-1",
+        label: "The Gladiator",
+        order: 0,
+        scenarioParticipantId: "participant-1",
+      }),
+      makeEncounterCombatParticipant({
+        id: "encounter-participant-2",
+        label: "Visible guard",
+        order: 1,
+        scenarioParticipantId: "participant-2",
+      }),
+      makeEncounterCombatParticipant({
+        id: "encounter-participant-hidden",
+        label: "Hidden spy",
+        order: 2,
+        scenarioParticipantId: "participant-hidden",
+      }),
+    ];
+    const encounter = makeCombatEncounter({
+      participants: encounterParticipants,
+      roleplayState: {
+        visibility: {
+          "encounter-participant-1": { "encounter-participant-2": true },
+        },
+      },
+    }) as EncounterSession;
+    const participants = [
+      makeCombatScenarioParticipant({ id: "participant-1" }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "participant-2",
+        snapshot: { displayName: "Visible guard" },
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "participant-hidden",
+        snapshot: { displayName: "Hidden spy" },
+      }),
+    ] as unknown as ScenarioParticipant[];
+    setupCombatDeclarationRoute({ encounter, participants, user: mocks.playerUser });
+    setupMutableCombatRouteState({ encounter, participants, user: mocks.playerUser });
+    const app = await buildScenarioTestApp();
+    const requestBody = {
+      actionId: "generic-action-1",
+      duration: { kind: "round" },
+      expectedRevision: encounter.updatedAt,
+      intent: "Bar the gate.",
+      operation: "declare",
+      participantId: "encounter-participant-1",
+    };
+
+    const declared = await app.inject({
+      method: "POST",
+      payload: requestBody,
+      url: "/encounters/encounter-1/combat-round/generic-actions",
+    });
+    const retried = await app.inject({
+      method: "POST",
+      payload: requestBody,
+      url: "/encounters/encounter-1/combat-round/generic-actions",
+    });
+    const hiddenReference = await app.inject({
+      method: "POST",
+      payload: {
+        ...requestBody,
+        actionId: "generic-action-hidden-ref",
+        expectedRevision: retried.json().encounter.updatedAt,
+        referenceKind: "participant",
+        referenceParticipantId: "encounter-participant-hidden",
+      },
+      url: "/encounters/encounter-1/combat-round/generic-actions",
+    });
+    await app.close();
+
+    expect(declared.statusCode).toBe(200);
+    expect(declared.json().encounter.combatRoundState.genericActions).toMatchObject([
+      {
+        id: "generic-action-1",
+        intent: "Bar the gate.",
+        status: "declared",
+      },
+    ]);
+    expect(retried.statusCode).toBe(200);
+    expect(retried.json().encounter.combatRoundState.genericActions).toHaveLength(1);
+    expect(mocks.encounterService.updateCombatEncounter).toHaveBeenCalledTimes(1);
+    expect(hiddenReference.statusCode).toBe(400);
+    expect(hiddenReference.json()).toEqual({
+      error: "Choose an active visible Combat participant.",
+    });
+    expect(JSON.stringify(hiddenReference.json())).not.toContain("Hidden spy");
+    expect(JSON.stringify(hiddenReference.json())).not.toContain("encounter-participant-hidden");
+  });
+
   it("lists campaigns for the authenticated game master", async () => {
     const campaign = {
       createdAt: "2026-05-09T12:00:00.000Z",

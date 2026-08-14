@@ -120,6 +120,7 @@ export {
   updateEncounterParticipantsOnServer,
   updateEncounterOnServer,
   updateEncounterStatusOnServer,
+  updateGenericCombatActionOnServer,
 } from "./encounterClient";
 export {
   addCharacterEquipmentItemOnServer,
