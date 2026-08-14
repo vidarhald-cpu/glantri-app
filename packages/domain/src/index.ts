@@ -58,6 +58,7 @@ export * from "./encounter/criticalEffectMapping";
 export * from "./encounter/criticalEffectProposal";
 export * from "./encounter/criticalEffectsTable";
 export * from "./encounter/criticalInjuryDomain";
+export * from "./encounter/criticalInjuryFixtures";
 export * from "./encounter/hitLocation";
 export * from "./encounter/toHitTable";
 export * from "./encounter/session";
