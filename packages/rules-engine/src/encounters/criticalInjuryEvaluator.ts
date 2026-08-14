@@ -254,6 +254,10 @@ function advancePhysiologyExposure(
   };
 }
 
+function ordinaryPhysiologyCalibrationComplete(evaluation: CriticalPhysiologyEvaluation): boolean {
+  return evaluation.process.processClass !== "catastrophic" && evaluation.adverseTransitions >= 4;
+}
+
 export function changeCriticalCareState(input: {
   at: string;
   careState: CriticalCareState;
@@ -290,11 +294,9 @@ export function getCriticalPhysiologyCheckpoint(input: {
 }): { evaluation: CriticalPhysiologyEvaluation; request?: CriticalStatCheckRequest } {
   const evaluation = advancePhysiologyExposure(input.evaluation, input.at);
   const cadence = cadenceForProcess(evaluation.process);
-  const ordinaryCalibrationComplete =
-    evaluation.process.processClass !== "catastrophic" && evaluation.adverseTransitions >= 4;
   if (
     evaluation.terminal ||
-    ordinaryCalibrationComplete ||
+    ordinaryPhysiologyCalibrationComplete(evaluation) ||
     evaluation.exposureMilliseconds < cadence
   ) {
     return { evaluation };
@@ -384,7 +386,7 @@ export function getNextCriticalPhysiologyCheckpointAt(input: {
   evaluation: CriticalPhysiologyEvaluation;
 }): string | undefined {
   const evaluation = advancePhysiologyExposure(input.evaluation, input.at);
-  if (evaluation.terminal) return undefined;
+  if (evaluation.terminal || ordinaryPhysiologyCalibrationComplete(evaluation)) return undefined;
   const rate = exposureRate(evaluation.careState);
   if (rate === 0) return undefined;
   const remaining = cadenceForProcess(evaluation.process) - evaluation.exposureMilliseconds;

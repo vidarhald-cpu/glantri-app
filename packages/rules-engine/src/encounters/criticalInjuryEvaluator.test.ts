@@ -216,6 +216,40 @@ describe("ordinary serious and serious internal physiology", () => {
       stat: "health",
     });
   });
+
+  it.each([
+    ["ordinary serious", processB, 300_000],
+    ["serious internal", processC, 600_000],
+  ])(
+    "stops due and upcoming checkpoints at the %s four-transition calibration limit",
+    (_label, getProcess, cadence) => {
+      let evaluation = createCriticalPhysiologyEvaluation({
+        process: getProcess(),
+        startedAt: START,
+        terminalPolicy: { kind: "content_defined_terminal" },
+      });
+      for (let checkpoint = 1; checkpoint <= 4; checkpoint += 1) {
+        evaluation = resolveDuePhysiology({
+          at: at(cadence * checkpoint),
+          currentHealth: 12,
+          evaluation,
+          roll: roll(7),
+        }).evaluation;
+      }
+
+      expect(evaluation).toMatchObject({
+        adverseTransitions: 4,
+        condition: "calibration_limit",
+        terminal: undefined,
+      });
+      expect(
+        getCriticalPhysiologyCheckpoint({ at: at(cadence * 5), evaluation }).request,
+      ).toBeUndefined();
+      expect(
+        getNextCriticalPhysiologyCheckpointAt({ at: at(cadence * 4), evaluation }),
+      ).toBeUndefined();
+    },
+  );
 });
 
 describe("care quality and accumulated exposure", () => {
