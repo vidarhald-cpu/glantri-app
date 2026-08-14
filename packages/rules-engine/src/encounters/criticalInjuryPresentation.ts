@@ -2,8 +2,10 @@ import type { CriticalInjuryCase } from "@glantri/domain";
 
 import {
   getCriticalPhysiologyCheckpoint,
+  getCriticalShockCheckpoint,
   getCriticalStatCheckSuccessProbability,
   getEffectiveCriticalFunctionBand,
+  getNextCriticalPhysiologyCheckpointAt,
   type CriticalCareState,
   type CriticalFunctionBand,
   type CriticalPhysiologyEvaluation,
@@ -63,6 +65,19 @@ function safeStatCheck(
   };
 }
 
+interface PlayerVisibleCheckpoint {
+  readonly dueAt: string;
+  readonly request?: CriticalStatCheckRequest;
+}
+
+function selectNextVisibleCheckpoint(
+  checkpoints: readonly (PlayerVisibleCheckpoint | undefined)[],
+): PlayerVisibleCheckpoint | undefined {
+  return checkpoints
+    .filter((checkpoint): checkpoint is PlayerVisibleCheckpoint => checkpoint != null)
+    .sort((left, right) => Date.parse(left.dueAt) - Date.parse(right.dueAt))[0];
+}
+
 /** GM/system projection retains canonical evaluator truth. */
 export function projectCriticalPhysiologyForGm(
   evaluation: CriticalPhysiologyEvaluation,
@@ -97,18 +112,25 @@ export function projectCriticalInjuryForPlayer(input: {
     input.physiology && input.revealPhysiologyCheckpoint
       ? getCriticalPhysiologyCheckpoint({ at: input.at, evaluation: input.physiology }).request
       : undefined;
-  const shockCheckpoint =
-    Date.parse(input.at) >= Date.parse(input.shock.nextCheckpointAt)
-      ? {
-          checkpointId: "player-safe-shock-checkpoint",
-          difficulty: 20,
-          dueAt: input.shock.nextCheckpointAt,
-          kind: "stat_check" as const,
-          numberToHit: "Difficulty 20",
-          stat: "constitution" as const,
-        }
+  const physiologyCheckpointAt =
+    input.physiology && input.revealPhysiologyCheckpoint
+      ? getNextCriticalPhysiologyCheckpointAt({ at: input.at, evaluation: input.physiology })
       : undefined;
-  const request = shockCheckpoint ?? physiologyCheckpoint;
+  const shockCheckpoint = getCriticalShockCheckpoint({ at: input.at, evaluation: input.shock });
+  const nextCheckpoint = selectNextVisibleCheckpoint([
+    input.shock.shockBand === "functioning"
+      ? undefined
+      : {
+          dueAt: input.shock.nextCheckpointAt,
+          request: shockCheckpoint,
+        },
+    physiologyCheckpointAt
+      ? {
+          dueAt: physiologyCheckpointAt,
+          request: physiologyCheckpoint,
+        }
+      : undefined,
+  ]);
 
   return {
     allowedActions: input.allowedActionsByBand[band],
@@ -120,8 +142,8 @@ export function projectCriticalInjuryForPlayer(input: {
     injury: input.injuryCase.injuries
       .filter((injury) => injury.visibility === "observable")
       .map((injury) => injury.label),
-    nextMeaningfulCheckpoint: request?.dueAt,
-    statCheck: safeStatCheck(request),
+    nextMeaningfulCheckpoint: nextCheckpoint?.dueAt,
+    statCheck: safeStatCheck(nextCheckpoint?.request),
   };
 }
 

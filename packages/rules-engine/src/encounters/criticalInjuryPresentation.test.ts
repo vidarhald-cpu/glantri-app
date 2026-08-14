@@ -69,7 +69,7 @@ describe("Critical information and risk presentation", () => {
       condition: "Impaired",
       immediateEffects: ["Action impaired"],
       injury: ["Penetrating chest injury"],
-      nextMeaningfulCheckpoint: undefined,
+      nextMeaningfulCheckpoint: at(1_800_000),
       statCheck: undefined,
     });
     expect(JSON.stringify(hiddenProcessSupplied)).not.toMatch(
@@ -104,6 +104,18 @@ describe("Critical information and risk presentation", () => {
       roll: { dieResult: 8, openEndedD10s: [], rollD20: 8 },
     }).evaluation;
 
+    const upcoming = projectCriticalInjuryForPlayer({
+      allowedActionsByBand: ALLOWED_ACTIONS,
+      at: at(500_000),
+      careState: "not_controlled",
+      injuryCase: criticalInjuryFixtureC,
+      physiology,
+      revealPhysiologyCheckpoint: true,
+      shock: classifiedShock,
+    });
+    expect(upcoming.nextMeaningfulCheckpoint).toBe(at(600_000));
+    expect(upcoming.statCheck).toBeUndefined();
+
     const projection = projectCriticalInjuryForPlayer({
       allowedActionsByBand: ALLOWED_ACTIONS,
       at: at(600_000),
@@ -121,6 +133,53 @@ describe("Critical information and risk presentation", () => {
       stat: "Health",
     });
     expect(JSON.stringify(projection)).not.toContain("DC");
+  });
+
+  it("removes cleared shock scheduling while structural floors still govern presentation", () => {
+    const base = createCriticalShockEvaluation({
+      functionRecord: criticalInjuryFixtureB.functionStates[0]!,
+      impactAt: START,
+      mandatoryTraumaBand: "no_action",
+      structuralFloor: "restricted",
+    });
+    const classificationRequest = getCriticalShockCheckpoint({
+      at: at(30_000),
+      evaluation: base,
+    })!;
+    const restricted = resolveCriticalShockCheckpoint({
+      at: at(30_000),
+      currentConstitution: 12,
+      evaluation: base,
+      request: classificationRequest,
+      roll: { dieResult: 8, openEndedD10s: [], rollD20: 8 },
+    }).evaluation;
+    const recoveryRequest = getCriticalShockCheckpoint({
+      at: at(630_000),
+      evaluation: restricted,
+    })!;
+    const cleared = resolveCriticalShockCheckpoint({
+      at: at(630_000),
+      currentConstitution: 12,
+      evaluation: restricted,
+      request: recoveryRequest,
+      roll: { dieResult: 8, openEndedD10s: [], rollD20: 8 },
+    }).evaluation;
+
+    const projection = projectCriticalInjuryForPlayer({
+      allowedActionsByBand: ALLOWED_ACTIONS,
+      at: at(1_230_000),
+      careState: "not_controlled",
+      injuryCase: criticalInjuryFixtureB,
+      shock: cleared,
+    });
+
+    expect(cleared.shockBand).toBe("functioning");
+    expect(projection).toMatchObject({
+      allowedActions: ["Move carefully", "Speak"],
+      condition: "Impaired",
+      nextMeaningfulCheckpoint: undefined,
+      statCheck: undefined,
+    });
   });
 
   it("uses the small condition vocabulary and explicit allowed actions", () => {

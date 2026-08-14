@@ -458,6 +458,9 @@ export function getCriticalShockCheckpoint(input: {
   at: string;
   evaluation: CriticalShockEvaluation;
 }): CriticalStatCheckRequest | undefined {
+  if (input.evaluation.shockBand === "functioning") {
+    return undefined;
+  }
   if (
     parseTime(input.at, "Shock evaluation") <
     parseTime(input.evaluation.nextCheckpointAt, "Shock checkpoint")

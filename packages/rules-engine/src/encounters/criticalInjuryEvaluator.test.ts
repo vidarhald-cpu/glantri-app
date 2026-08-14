@@ -496,6 +496,7 @@ describe("serious shock function evaluator", () => {
     expect(cleared.shockBand).toBe("functioning");
     expect(getEffectiveCriticalFunctionBand(cleared)).toBe("restricted");
     expect(cleared.functionRecord).toBe(criticalInjuryFixtureB.functionStates[0]);
+    expect(getCriticalShockCheckpoint({ at: at(1_830_000), evaluation: cleared })).toBeUndefined();
   });
 
   it("caches the shock result for its declared checkpoint", () => {
