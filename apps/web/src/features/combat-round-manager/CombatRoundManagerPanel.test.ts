@@ -106,12 +106,15 @@ describe("CombatRoundManagerPanel", () => {
   it("keeps the GM combat composition in tracker, workspace, log, ancillary order", () => {
     const source = readPanelSource();
     const tracker = source.indexOf("<CombatTracker");
+    const genericActions = source.indexOf("<GenericCombatActionPanel", tracker);
     const inspector = source.indexOf('aria-label="Combat round inspector"');
     const workspace = source.indexOf("<div style={playerCombatTopPanelRowStyle}", inspector);
     const combatLog = source.indexOf("<CombatLog", inspector);
     const distanceMatrix = source.indexOf('aria-label="Distance matrix"');
 
     expect(tracker).toBeGreaterThan(-1);
+    expect(genericActions).toBeGreaterThan(tracker);
+    expect(inspector).toBeGreaterThan(genericActions);
     expect(inspector).toBeGreaterThan(tracker);
     expect(workspace).toBeGreaterThan(inspector);
     expect(combatLog).toBeGreaterThan(workspace);

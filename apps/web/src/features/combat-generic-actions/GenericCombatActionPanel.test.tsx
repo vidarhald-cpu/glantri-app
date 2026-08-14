@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { EncounterSession, ScenarioParticipant } from "@glantri/domain";
@@ -97,5 +97,156 @@ describe("GenericCombatActionPanel", () => {
     expect(
       vi.mocked(updateGenericCombatActionOnServer).mock.calls[0]?.[0].rollKind,
     ).toBeUndefined();
+  });
+
+  it("defensively omits hidden round participants from the player reference selector", () => {
+    const playerSafeEncounter = {
+      ...encounter,
+      combatRoundState: {
+        ...encounter.combatRoundState,
+        participants: [
+          { label: "Aster", participantId: "encounter-aster" },
+          { label: "Hidden watcher", participantId: "encounter-hidden" },
+        ],
+      },
+    } as unknown as EncounterSession;
+    render(
+      <GenericCombatActionPanel
+        encounter={playerSafeEncounter}
+        isGm={false}
+        onEncounterUpdated={vi.fn()}
+        participantId="encounter-aster"
+        scenarioParticipants={[scenarioParticipant]}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Reference"), {
+      target: { value: "participant" },
+    });
+    const selector = screen.getByLabelText("Referenced participant");
+    expect(within(selector).getByRole("option", { name: "Aster" })).toBeInTheDocument();
+    expect(within(selector).queryByRole("option", { name: "Hidden watcher" })).toBeNull();
+    expect(
+      Array.from((selector as HTMLSelectElement).options).map((option) => option.value),
+    ).not.toContain("encounter-hidden");
+  });
+
+  it("lets the GM adjust roll basis, Difficulty, and typed reference without claiming Current task", async () => {
+    const gmEncounter = {
+      ...encounter,
+      combatRoundState: {
+        genericActions: [
+          {
+            createdAt: "2026-08-14T08:00:00.000Z",
+            duration: { kind: "round" },
+            id: "action-completed",
+            intent: "Check the courtyard.",
+            lastUpdatedAt: "2026-08-14T08:10:00.000Z",
+            ownerParticipantId: "encounter-aster",
+            progress: { completedRounds: 1, totalRounds: 1 },
+            resolution: {
+              resolvedAt: "2026-08-14T08:10:00.000Z",
+              text: "The courtyard is clear.",
+              visibleToParticipantIds: ["encounter-aster"],
+            },
+            status: "completed",
+          },
+          {
+            awarenessContext: { kind: "survey" },
+            createdAt: "2026-08-14T09:00:00.000Z",
+            duration: { kind: "round" },
+            id: "action-review",
+            intent: "Survey the balcony.",
+            lastUpdatedAt: "2026-08-14T09:00:00.000Z",
+            ownerParticipantId: "encounter-aster",
+            preset: "look_around",
+            progress: { completedRounds: 0, totalRounds: 1 },
+            rollRequest: {
+              basis: {
+                avgStats: 14,
+                baseValue: 21,
+                derivedXp: 0,
+                groupXp: 0,
+                kind: "skill",
+                skillId: "perception",
+                skillLabel: "Perception",
+                skillXp: 0,
+                unknownSkillPenalty: 0,
+              },
+              difficulty: 26,
+            },
+            status: "declared",
+          },
+        ],
+        participants: [
+          { label: "Aster", participantId: "encounter-aster" },
+          { label: "Gate guard", participantId: "encounter-guard" },
+        ],
+      },
+      participants: [
+        ...encounter.participants,
+        {
+          characterId: "character-guard",
+          id: "encounter-guard",
+          scenarioParticipantId: "scenario-guard",
+        },
+      ],
+    } as unknown as EncounterSession;
+    render(
+      <GenericCombatActionPanel
+        encounter={gmEncounter}
+        isGm
+        onEncounterUpdated={vi.fn()}
+        participantId="encounter-aster"
+        scenarioParticipants={[scenarioParticipant]}
+        skills={[
+          { id: "perception", name: "Perception" },
+          { id: "stealth", name: "Stealth" },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Current task")).toBeNull();
+    expect(screen.getByLabelText("Action and task history")).toHaveValue("action-review");
+    expect(screen.getByRole("group", { name: "Open actions and tasks" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Completed and closed history" })).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("Reviewed roll")).getByRole("option", { name: "No roll" }),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("Reviewed roll")).getByRole("option", { name: "Skill" }),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("Reviewed roll")).getByRole("option", { name: "Current Stat" }),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("Reviewed reference")).getByRole("option", { name: "Item" }),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Reviewed roll"), { target: { value: "stat" } });
+    fireEvent.change(screen.getByLabelText("Reviewed Current Stat"), {
+      target: { value: "dex" },
+    });
+    fireEvent.change(screen.getByLabelText("Reviewed Difficulty"), { target: { value: "31" } });
+    fireEvent.change(screen.getByLabelText("Reviewed reference"), {
+      target: { value: "environment" },
+    });
+    fireEvent.change(screen.getByLabelText("Reviewed environment"), {
+      target: { value: "The gatehouse roofline" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Review action" }));
+
+    await waitFor(() => expect(updateGenericCombatActionOnServer).toHaveBeenCalledTimes(1));
+    expect(updateGenericCombatActionOnServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionId: "action-review",
+        difficulty: 31,
+        environmentDescription: "The gatehouse roofline",
+        operation: "review",
+        referenceKind: "environment",
+        rollKind: "stat",
+        statId: "dex",
+      }),
+    );
   });
 });

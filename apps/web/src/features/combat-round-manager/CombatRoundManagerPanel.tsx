@@ -10772,24 +10772,6 @@ export default function CombatRoundManagerPanel({
           </div>
         ) : null}
 
-        <GenericCombatActionPanel
-          encounter={{
-            ...encounter,
-            combatRoundState: roundState,
-            updatedAt: roundView.encounterRevision ?? encounter.updatedAt,
-          }}
-          isGm
-          onEncounterUpdated={(nextEncounter) => {
-            const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
-            if (acceptCanonicalEncounterState(nextEncounter, nextRoundState)) {
-              onEncounterUpdated?.(nextEncounter);
-            }
-          }}
-          participantId={inspector.participant?.participantId}
-          scenarioParticipants={effectiveScenarioParticipants}
-          skills={content?.skills}
-        />
-
         {inspectorEquipmentDiagnostic && selectedScenarioParticipant ? (
           <div
             role="alert"
@@ -10814,6 +10796,23 @@ export default function CombatRoundManagerPanel({
             timelineCellRefs.current[cellKey] = node;
           }}
           tableRef={tableContainerRef}
+        />
+        <GenericCombatActionPanel
+          encounter={{
+            ...encounter,
+            combatRoundState: roundState,
+            updatedAt: roundView.encounterRevision ?? encounter.updatedAt,
+          }}
+          isGm
+          onEncounterUpdated={(nextEncounter) => {
+            const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+            if (acceptCanonicalEncounterState(nextEncounter, nextRoundState)) {
+              onEncounterUpdated?.(nextEncounter);
+            }
+          }}
+          participantId={inspector.participant?.participantId}
+          scenarioParticipants={effectiveScenarioParticipants}
+          skills={content?.skills}
         />
         <section
           aria-label="Combat round inspector"

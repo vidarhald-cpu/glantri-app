@@ -1619,10 +1619,10 @@ export async function updateGenericCombatActionOnServer(input: {
   operation: "declare" | "review" | "activate" | "roll" | "resolve" | "interrupt" | "cancel";
   participantId?: string;
   preset?: "look_around";
-  referenceKind?: "participant" | "item" | "environment";
+  referenceKind?: "none" | "participant" | "item" | "environment";
   referenceParticipantId?: string;
   resultText?: string;
-  rollKind?: "skill" | "stat";
+  rollKind?: "none" | "skill" | "stat";
   skillId?: string;
   statId?: GlantriCharacteristicKey;
   visibleToParticipantIds?: string[];

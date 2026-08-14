@@ -20,11 +20,17 @@ const panelStyle = {
   boxSizing: "border-box",
   display: "grid",
   gap: "0.75rem",
-  maxWidth: "calc(100vw - 2rem)",
+  maxWidth: "calc(100vw - 3rem)",
   minWidth: 0,
   overflowWrap: "anywhere",
   padding: "1rem",
   width: "100%",
+} as const;
+
+const controlStyle = {
+  boxSizing: "border-box",
+  maxWidth: "100%",
+  minWidth: 0,
 } as const;
 
 const STAT_OPTIONS: Array<{ id: GlantriCharacteristicKey; label: string }> = [
@@ -61,6 +67,14 @@ function statusLabel(status: CombatGenericAction["status"]): string {
     interrupted: "Interrupted",
     reviewed: "Reviewed",
   }[status];
+}
+
+function isFinishedAction(action: CombatGenericAction): boolean {
+  return (
+    action.status === "completed" ||
+    action.status === "interrupted" ||
+    action.status === "cancelled"
+  );
 }
 
 function itemOptions(participant?: ScenarioParticipant): Array<{ id: string; label: string }> {
@@ -115,32 +129,65 @@ export function GenericCombatActionPanel({
   const [referenceParticipantId, setReferenceParticipantId] = useState("");
   const [itemId, setItemId] = useState("");
   const [environmentDescription, setEnvironmentDescription] = useState("");
-  const [selectedActionId, setSelectedActionId] = useState(actions[0]?.id ?? "");
+  const [selectedActionId, setSelectedActionId] = useState(
+    actions.find((action) => !isFinishedAction(action))?.id ?? actions.at(-1)?.id ?? "",
+  );
   const [reviewDurationKind, setReviewDurationKind] =
     useState<CombatGenericActionDuration["kind"]>("round");
   const [reviewDurationPhase, setReviewDurationPhase] = useState<"phase1" | "phase2">("phase1");
   const [reviewRounds, setReviewRounds] = useState(2);
+  const [reviewRollKind, setReviewRollKind] = useState<"none" | "skill" | "stat">("none");
+  const [reviewSkillId, setReviewSkillId] = useState("perception");
+  const [reviewStatId, setReviewStatId] = useState<GlantriCharacteristicKey>("con");
   const [reviewDifficulty, setReviewDifficulty] = useState(26);
+  const [reviewReferenceKind, setReviewReferenceKind] = useState<
+    "none" | "participant" | "item" | "environment"
+  >("none");
+  const [reviewReferenceParticipantId, setReviewReferenceParticipantId] = useState("");
+  const [reviewItemId, setReviewItemId] = useState("");
+  const [reviewEnvironmentDescription, setReviewEnvironmentDescription] = useState("");
   const [resultText, setResultText] = useState("");
   const [resultAudience, setResultAudience] = useState<string[]>(
     participantId ? [participantId] : [],
   );
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string>();
-  const selectedAction = actions.find((action) => action.id === selectedActionId) ?? actions[0];
-  const ownerScenarioParticipant = scenarioParticipants.find((candidate) =>
-    encounter.participants.some(
-      (member) =>
-        member.id === participantId &&
-        (member.scenarioParticipantId === candidate.id ||
-          member.characterId === candidate.characterId),
-    ),
+  const openActions = actions.filter((action) => !isFinishedAction(action));
+  const finishedActions = actions.filter(isFinishedAction);
+  const suggestedAction = openActions[0] ?? finishedActions.at(-1);
+  const selectedAction =
+    actions.find((action) => action.id === selectedActionId) ?? suggestedAction;
+  const findScenarioParticipant = (encounterParticipantId?: string) =>
+    scenarioParticipants.find((candidate) =>
+      encounter.participants.some(
+        (member) =>
+          member.id === encounterParticipantId &&
+          (member.scenarioParticipantId === candidate.id ||
+            member.characterId === candidate.characterId),
+      ),
+    );
+  const ownerScenarioParticipant = findScenarioParticipant(participantId);
+  const reviewOwnerScenarioParticipant = findScenarioParticipant(
+    selectedAction?.ownerParticipantId,
   );
   const canonicalItems = useMemo(
     () => itemOptions(ownerScenarioParticipant),
     [ownerScenarioParticipant],
   );
-  const participantOptions = encounter.combatRoundState?.participants ?? [];
+  const reviewCanonicalItems = useMemo(
+    () => itemOptions(reviewOwnerScenarioParticipant),
+    [reviewOwnerScenarioParticipant],
+  );
+  const visibleEncounterParticipantIds = new Set(
+    encounter.participants.flatMap((member) =>
+      [member.id, member.scenarioParticipantId, member.characterId].filter(
+        (id): id is string => typeof id === "string" && id.length > 0,
+      ),
+    ),
+  );
+  const participantOptions = (encounter.combatRoundState?.participants ?? []).filter(
+    (entry) => isGm || visibleEncounterParticipantIds.has(entry.participantId),
+  );
 
   useEffect(() => {
     if (!selectedAction) return;
@@ -150,7 +197,30 @@ export function GenericCombatActionPanel({
       selectedAction.duration.kind === "phase" ? selectedAction.duration.phase : "phase1",
     );
     setReviewRounds(selectedAction.duration.kind === "rounds" ? selectedAction.duration.rounds : 2);
+    setReviewRollKind(selectedAction.rollRequest?.basis.kind ?? "none");
+    setReviewSkillId(
+      selectedAction.rollRequest?.basis.kind === "skill"
+        ? selectedAction.rollRequest.basis.skillId
+        : "perception",
+    );
+    setReviewStatId(
+      selectedAction.rollRequest?.basis.kind === "stat"
+        ? selectedAction.rollRequest.basis.statId
+        : "con",
+    );
     setReviewDifficulty(selectedAction.rollRequest?.difficulty ?? 26);
+    setReviewReferenceKind(selectedAction.reference?.kind ?? "none");
+    setReviewReferenceParticipantId(
+      selectedAction.reference?.kind === "participant"
+        ? selectedAction.reference.participantId
+        : "",
+    );
+    setReviewItemId(
+      selectedAction.reference?.kind === "item" ? selectedAction.reference.itemId : "",
+    );
+    setReviewEnvironmentDescription(
+      selectedAction.reference?.kind === "environment" ? selectedAction.reference.description : "",
+    );
     setResultAudience([selectedAction.ownerParticipantId]);
   }, [selectedAction]);
 
@@ -219,7 +289,8 @@ export function GenericCombatActionPanel({
     if (!selectedAction) return;
     await mutate({
       actionId: selectedAction.id,
-      difficulty: operation === "review" ? reviewDifficulty : undefined,
+      difficulty:
+        operation === "review" && reviewRollKind !== "none" ? reviewDifficulty : undefined,
       duration:
         operation === "review"
           ? buildDuration(reviewDurationKind, reviewRounds, reviewDurationPhase)
@@ -228,16 +299,20 @@ export function GenericCombatActionPanel({
       expectedRevision: encounter.updatedAt,
       operation,
       preset: selectedAction.preset,
+      environmentDescription:
+        operation === "review" && reviewReferenceKind === "environment"
+          ? reviewEnvironmentDescription
+          : undefined,
+      itemId: operation === "review" && reviewReferenceKind === "item" ? reviewItemId : undefined,
+      referenceKind: operation === "review" ? reviewReferenceKind : undefined,
+      referenceParticipantId:
+        operation === "review" && reviewReferenceKind === "participant"
+          ? reviewReferenceParticipantId
+          : undefined,
       resultText: operation === "resolve" ? resultText : undefined,
-      rollKind: operation === "review" ? selectedAction.rollRequest?.basis.kind : undefined,
-      skillId:
-        operation === "review" && selectedAction.rollRequest?.basis.kind === "skill"
-          ? selectedAction.rollRequest.basis.skillId
-          : undefined,
-      statId:
-        operation === "review" && selectedAction.rollRequest?.basis.kind === "stat"
-          ? selectedAction.rollRequest.basis.statId
-          : undefined,
+      rollKind: operation === "review" ? reviewRollKind : undefined,
+      skillId: operation === "review" && reviewRollKind === "skill" ? reviewSkillId : undefined,
+      statId: operation === "review" && reviewRollKind === "stat" ? reviewStatId : undefined,
       visibleToParticipantIds: operation === "resolve" ? resultAudience : undefined,
     });
   }
@@ -433,34 +508,36 @@ export function GenericCombatActionPanel({
       ) : null}
 
       {actions.length > 0 ? (
-        <div style={{ display: "grid", gap: "0.75rem" }}>
-          <label>
-            <span>Current task </span>
+        <div style={{ display: "grid", gap: "0.75rem", minWidth: 0 }}>
+          <label style={{ display: "grid", minWidth: 0 }}>
+            <span>Action and task history </span>
             <select
+              style={controlStyle}
               value={selectedAction?.id ?? ""}
-              onChange={(event) => {
-                const action = actions.find((candidate) => candidate.id === event.target.value);
-                setSelectedActionId(event.target.value);
-                if (action) {
-                  setReviewDurationKind(action.duration.kind);
-                  setReviewDurationPhase(
-                    action.duration.kind === "phase" ? action.duration.phase : "phase1",
-                  );
-                  setReviewRounds(action.duration.kind === "rounds" ? action.duration.rounds : 2);
-                  setReviewDifficulty(action.rollRequest?.difficulty ?? 26);
-                  setResultAudience([action.ownerParticipantId]);
-                }
-              }}
+              onChange={(event) => setSelectedActionId(event.target.value)}
             >
-              {actions.map((action) => (
-                <option key={action.id} value={action.id}>
-                  {action.intent}
-                </option>
-              ))}
+              {openActions.length > 0 ? (
+                <optgroup label="Open actions and tasks">
+                  {openActions.map((action) => (
+                    <option key={action.id} value={action.id}>
+                      {statusLabel(action.status)} — {action.intent}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {finishedActions.length > 0 ? (
+                <optgroup label="Completed and closed history">
+                  {finishedActions.map((action) => (
+                    <option key={action.id} value={action.id}>
+                      {statusLabel(action.status)} — {action.intent}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
             </select>
           </label>
           {selectedAction ? (
-            <article style={{ display: "grid", gap: "0.4rem" }}>
+            <article style={{ display: "grid", gap: "0.4rem", minWidth: 0 }}>
               <strong>
                 {selectedAction.preset === "look_around" ? "Look around" : selectedAction.intent}
               </strong>
@@ -504,56 +581,177 @@ export function GenericCombatActionPanel({
                 </div>
               ) : null}
               {isGm && selectedAction.status === "declared" ? (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                  <select
-                    aria-label="Reviewed duration"
-                    value={reviewDurationKind}
-                    onChange={(event) =>
-                      setReviewDurationKind(
-                        event.target.value as CombatGenericActionDuration["kind"],
-                      )
-                    }
-                  >
-                    <option value="phase">One phase</option>
-                    <option value="round">One round</option>
-                    <option value="rounds">Several rounds</option>
-                    <option value="gm_decided">GM decides</option>
-                  </select>
-                  {reviewDurationKind === "phase" ? (
+                <fieldset style={{ display: "grid", gap: "0.5rem", minWidth: 0 }}>
+                  <legend>GM review adjustments</legend>
+                  <label>
+                    <span>Reviewed duration </span>
                     <select
-                      aria-label="Reviewed phase"
+                      value={reviewDurationKind}
                       onChange={(event) =>
-                        setReviewDurationPhase(event.target.value as "phase1" | "phase2")
+                        setReviewDurationKind(
+                          event.target.value as CombatGenericActionDuration["kind"],
+                        )
                       }
-                      value={reviewDurationPhase}
                     >
-                      <option value="phase1">Phase 1</option>
-                      <option value="phase2">Phase 2</option>
+                      <option value="phase">One phase</option>
+                      <option value="round">One round</option>
+                      <option value="rounds">Several rounds</option>
+                      <option value="gm_decided">GM decides</option>
                     </select>
+                  </label>
+                  {reviewDurationKind === "phase" ? (
+                    <label>
+                      <span>Reviewed phase </span>
+                      <select
+                        onChange={(event) =>
+                          setReviewDurationPhase(event.target.value as "phase1" | "phase2")
+                        }
+                        value={reviewDurationPhase}
+                      >
+                        <option value="phase1">Phase 1</option>
+                        <option value="phase2">Phase 2</option>
+                      </select>
+                    </label>
                   ) : null}
                   {reviewDurationKind === "rounds" ? (
-                    <input
-                      aria-label="Reviewed rounds"
-                      min={2}
-                      onChange={(event) => setReviewRounds(Number(event.target.value))}
-                      type="number"
-                      value={reviewRounds}
-                    />
+                    <label>
+                      <span>Reviewed rounds </span>
+                      <input
+                        min={2}
+                        onChange={(event) => setReviewRounds(Number(event.target.value))}
+                        type="number"
+                        value={reviewRounds}
+                      />
+                    </label>
                   ) : null}
-                  {selectedAction.rollRequest ? (
-                    <input
-                      aria-label="Reviewed Difficulty"
-                      min={1}
-                      max={200}
-                      onChange={(event) => setReviewDifficulty(Number(event.target.value))}
-                      type="number"
-                      value={reviewDifficulty}
-                    />
+                  <label>
+                    <span>Reviewed roll </span>
+                    <select
+                      onChange={(event) =>
+                        setReviewRollKind(event.target.value as typeof reviewRollKind)
+                      }
+                      value={reviewRollKind}
+                    >
+                      <option value="none">No roll</option>
+                      <option value="skill">Skill</option>
+                      <option value="stat">Current Stat</option>
+                    </select>
+                  </label>
+                  {reviewRollKind === "skill" ? (
+                    <label>
+                      <span>Reviewed Skill </span>
+                      <select
+                        onChange={(event) => setReviewSkillId(event.target.value)}
+                        value={reviewSkillId}
+                      >
+                        {skills.map((skill) => (
+                          <option key={skill.id} value={skill.id}>
+                            {skill.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   ) : null}
-                  <button disabled={busy} onClick={() => void operate("review")} type="button">
+                  {reviewRollKind === "stat" ? (
+                    <label>
+                      <span>Reviewed Current Stat </span>
+                      <select
+                        onChange={(event) =>
+                          setReviewStatId(event.target.value as GlantriCharacteristicKey)
+                        }
+                        value={reviewStatId}
+                      >
+                        {STAT_OPTIONS.map((stat) => (
+                          <option key={stat.id} value={stat.id}>
+                            {stat.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  {reviewRollKind !== "none" ? (
+                    <label>
+                      <span>Reviewed Difficulty </span>
+                      <input
+                        min={1}
+                        max={200}
+                        onChange={(event) => setReviewDifficulty(Number(event.target.value))}
+                        type="number"
+                        value={reviewDifficulty}
+                      />
+                    </label>
+                  ) : null}
+                  <label>
+                    <span>Reviewed reference </span>
+                    <select
+                      onChange={(event) =>
+                        setReviewReferenceKind(event.target.value as typeof reviewReferenceKind)
+                      }
+                      value={reviewReferenceKind}
+                    >
+                      <option value="none">None</option>
+                      <option value="participant">Participant</option>
+                      <option value="item">Item</option>
+                      <option value="environment">Environment</option>
+                    </select>
+                  </label>
+                  {reviewReferenceKind === "participant" ? (
+                    <label>
+                      <span>Reviewed participant </span>
+                      <select
+                        onChange={(event) => setReviewReferenceParticipantId(event.target.value)}
+                        value={reviewReferenceParticipantId}
+                      >
+                        <option value="">Choose participant</option>
+                        {participantOptions.map((entry) => (
+                          <option key={entry.participantId} value={entry.participantId}>
+                            {entry.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  {reviewReferenceKind === "item" ? (
+                    <label>
+                      <span>Reviewed Item </span>
+                      <select
+                        onChange={(event) => setReviewItemId(event.target.value)}
+                        value={reviewItemId}
+                      >
+                        <option value="">Choose Item</option>
+                        {reviewCanonicalItems.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  {reviewReferenceKind === "environment" ? (
+                    <label>
+                      <span>Reviewed environment </span>
+                      <input
+                        maxLength={500}
+                        onChange={(event) => setReviewEnvironmentDescription(event.target.value)}
+                        value={reviewEnvironmentDescription}
+                      />
+                    </label>
+                  ) : null}
+                  <button
+                    disabled={
+                      busy ||
+                      (reviewRollKind === "skill" && !reviewSkillId) ||
+                      (reviewReferenceKind === "participant" && !reviewReferenceParticipantId) ||
+                      (reviewReferenceKind === "item" && !reviewItemId) ||
+                      (reviewReferenceKind === "environment" &&
+                        !reviewEnvironmentDescription.trim())
+                    }
+                    onClick={() => void operate("review")}
+                    type="button"
+                  >
                     Review action
                   </button>
-                </div>
+                </fieldset>
               ) : null}
               {isGm && selectedAction.status === "reviewed" ? (
                 <button disabled={busy} onClick={() => void operate("activate")} type="button">

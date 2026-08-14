@@ -16,12 +16,14 @@ describe("ScenarioPlayerCombatPageContent", () => {
   it("keeps Player and GM Player combat in tracker, workspace, log, ancillary order", () => {
     const source = readSource();
     const tracker = source.indexOf("<CombatTracker");
+    const genericActions = source.indexOf("<GenericCombatActionPanel", tracker);
     const historicalWorkspace = source.indexOf("<PlayerCombatHistoryInspector", tracker);
     const activeWorkspace = source.indexOf("<div style={playerCombatTopPanelRowStyle}", tracker);
     const combatLog = source.indexOf("<CombatLog", tracker);
     const ancillaryTools = source.indexOf("<EquipmentLoadoutModule", combatLog);
 
     expect(tracker).toBeGreaterThan(-1);
+    expect(genericActions).toBeGreaterThan(tracker);
     expect(historicalWorkspace).toBeGreaterThan(tracker);
     expect(activeWorkspace).toBeGreaterThan(tracker);
     expect(combatLog).toBeGreaterThan(historicalWorkspace);

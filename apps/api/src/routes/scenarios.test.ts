@@ -20,6 +20,7 @@ import {
   commitCombatRoundPhaseDamage,
   commitCombatRoundPhaseInitiativeResolution,
   createParticipantSnapshotFromEntity,
+  declareCombatGenericAction,
   ensureCombatRoundPhaseResolutionResultsForPhase,
   fingerprintCombatModifierResolution,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
@@ -3759,6 +3760,15 @@ describe("scenarios route contract", () => {
         status: "declared",
       },
     ]);
+    expect(
+      declared
+        .json()
+        .encounter.combatRoundState.participants.map(
+          (participant: { participantId: string }) => participant.participantId,
+        ),
+    ).toEqual(["encounter-participant-1", "encounter-participant-2"]);
+    expect(JSON.stringify(declared.json().encounter)).not.toContain("Hidden spy");
+    expect(JSON.stringify(declared.json().encounter)).not.toContain("encounter-participant-hidden");
     expect(retried.statusCode).toBe(200);
     expect(retried.json().encounter.combatRoundState.genericActions).toHaveLength(1);
     expect(mocks.encounterService.updateCombatEncounter).toHaveBeenCalledTimes(1);
@@ -3768,6 +3778,137 @@ describe("scenarios route contract", () => {
     });
     expect(JSON.stringify(hiddenReference.json())).not.toContain("Hidden spy");
     expect(JSON.stringify(hiddenReference.json())).not.toContain("encounter-participant-hidden");
+  });
+
+  it("lets the GM authoritatively review generic action rolls and typed references", async () => {
+    const baseEncounter = makeCombatEncounter() as EncounterSession;
+    const roundState = initializeCombatRoundState({ encounter: baseEncounter });
+    const genericActions = declareCombatGenericAction({
+      action: {
+        createdAt: "2026-08-14T18:00:00.000Z",
+        duration: { kind: "round" },
+        id: "generic-review-1",
+        intent: "Survey the gatehouse.",
+        ownerParticipantId: "encounter-participant-1",
+        preset: "look_around",
+        rollRequest: {
+          basis: {
+            avgStats: 14,
+            baseValue: 21,
+            derivedXp: 0,
+            groupXp: 0,
+            kind: "skill",
+            skillId: "perception",
+            skillLabel: "Perception",
+            skillXp: 0,
+            unknownSkillPenalty: 0,
+          },
+          difficulty: 26,
+        },
+      },
+      actions: [],
+    });
+    const encounter = {
+      ...baseEncounter,
+      combatRoundState: { ...roundState, genericActions },
+    } as EncounterSession;
+    const participant = makeCombatScenarioParticipant({
+      snapshot: createParticipantSnapshotFromEntity({
+        entity: {
+          kind: "npc",
+          name: "The Gladiator",
+          snapshot: {
+            generatedHumanoidNpc: {
+              stats: { base: { dex: 12 }, final: { dex: 14 } },
+            },
+          },
+        },
+      }).snapshot,
+    });
+    setupCombatDeclarationRoute({ encounter, participants: [participant], user: mocks.adminUser });
+    setupMutableCombatRouteState({
+      encounter,
+      participants: [participant],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const statReview = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "generic-review-1",
+        difficulty: 31,
+        duration: { kind: "rounds", rounds: 3 },
+        environmentDescription: "The gatehouse roofline",
+        expectedRevision: encounter.updatedAt,
+        operation: "review",
+        referenceKind: "environment",
+        rollKind: "stat",
+        statId: "dex",
+      },
+      url: "/encounters/encounter-1/combat-round/generic-actions",
+    });
+    const noRollReview = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "generic-review-1",
+        duration: { kind: "gm_decided" },
+        expectedRevision: statReview.json().encounter.updatedAt,
+        operation: "review",
+        referenceKind: "none",
+        rollKind: "none",
+      },
+      url: "/encounters/encounter-1/combat-round/generic-actions",
+    });
+    const skillReview = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "generic-review-1",
+        difficulty: 22,
+        duration: { kind: "phase", phase: "phase2" },
+        expectedRevision: noRollReview.json().encounter.updatedAt,
+        operation: "review",
+        referenceKind: "participant",
+        referenceParticipantId: "encounter-participant-1",
+        rollKind: "skill",
+        skillId: "perception",
+      },
+      url: "/encounters/encounter-1/combat-round/generic-actions",
+    });
+    await app.close();
+
+    expect(statReview.statusCode, JSON.stringify(statReview.json())).toBe(200);
+    expect(statReview.json().encounter.combatRoundState.genericActions[0]).toMatchObject({
+      duration: { kind: "rounds", rounds: 3 },
+      reference: { description: "The gatehouse roofline", kind: "environment" },
+      rollRequest: { basis: { baseValue: 14, kind: "stat", statId: "dex" }, difficulty: 31 },
+      status: "reviewed",
+    });
+    expect(noRollReview.statusCode, JSON.stringify(noRollReview.json())).toBe(200);
+    expect(noRollReview.json().encounter.combatRoundState.genericActions[0]).toMatchObject({
+      duration: { kind: "gm_decided" },
+      status: "reviewed",
+    });
+    expect(
+      noRollReview.json().encounter.combatRoundState.genericActions[0].rollRequest,
+    ).toBeUndefined();
+    expect(
+      noRollReview.json().encounter.combatRoundState.genericActions[0].reference,
+    ).toBeUndefined();
+    expect(skillReview.statusCode, JSON.stringify(skillReview.json())).toBe(200);
+    expect(skillReview.json().encounter.combatRoundState.genericActions[0]).toMatchObject({
+      duration: { kind: "phase", phase: "phase2" },
+      reference: {
+        kind: "participant",
+        label: "The Gladiator",
+        participantId: "encounter-participant-1",
+      },
+      rollRequest: {
+        basis: { kind: "skill", skillId: "perception" },
+        difficulty: 22,
+      },
+      status: "reviewed",
+    });
   });
 
   it("lists campaigns for the authenticated game master", async () => {

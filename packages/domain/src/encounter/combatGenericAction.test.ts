@@ -85,6 +85,33 @@ describe("generic Combat actions", () => {
     });
   });
 
+  it("keeps Survey context while accepting an authoritative GM roll adjustment", () => {
+    const actions = declared({ preset: "look_around", rollRequest: skillRoll });
+    const reviewed = reviewCombatGenericAction({
+      actionId: "action-1",
+      actions,
+      duration: { kind: "gm_decided" },
+      reviewedAt: at,
+      rollRequest: {
+        basis: {
+          baseValue: 14,
+          kind: "stat",
+          statId: "dex",
+          statLabel: "Dex",
+        },
+        difficulty: 31,
+      },
+    });
+
+    expect(reviewed[0]).toMatchObject({
+      awarenessContext: { kind: "survey" },
+      duration: { kind: "gm_decided" },
+      preset: "look_around",
+      rollRequest: { basis: { kind: "stat", statId: "dex" }, difficulty: 31 },
+      status: "reviewed",
+    });
+  });
+
   it("supports a simple no-roll action and explicit GM completion", () => {
     const actions = active();
     const finished = finishCombatGenericAction({

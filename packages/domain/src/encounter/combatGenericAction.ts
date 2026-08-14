@@ -173,12 +173,6 @@ export function reviewCombatGenericAction(input: {
   if (current.status !== "declared" && current.status !== "reviewed") {
     throw new RangeError("Only a declared Combat action can be reviewed.");
   }
-  if (
-    current.preset === "look_around" &&
-    (input.rollRequest?.basis.kind !== "skill" || input.rollRequest.basis.skillId !== "perception")
-  ) {
-    throw new RangeError("Look around must retain its Perception roll.");
-  }
   const next = combatGenericActionSchema.parse({
     ...current,
     duration: input.duration,

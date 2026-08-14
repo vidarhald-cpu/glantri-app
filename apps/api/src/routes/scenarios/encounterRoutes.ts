@@ -1264,10 +1264,10 @@ interface GenericCombatActionBody {
   operation: GenericCombatActionOperation;
   participantId?: string;
   preset?: "look_around";
-  referenceKind?: "participant" | "item" | "environment";
+  referenceKind?: "none" | "participant" | "item" | "environment";
   referenceParticipantId?: string;
   resultText?: string;
-  rollKind?: "skill" | "stat";
+  rollKind?: "none" | "skill" | "stat";
   skillId?: string;
   statId?: GlantriCharacteristicKey;
   visibleToParticipantIds: string[];
@@ -1296,12 +1296,14 @@ function parseGenericCombatActionBody(body: unknown): GenericCombatActionBody {
     throw new Error("expectedRevision is required.");
   }
   const rollKind =
-    value.rollKind === "skill" || value.rollKind === "stat" ? value.rollKind : undefined;
+    value.rollKind === "none" || value.rollKind === "skill" || value.rollKind === "stat"
+      ? value.rollKind
+      : undefined;
   const difficulty =
     value.difficulty === undefined
       ? undefined
       : parseIntegerInRange(value.difficulty, "Difficulty", 1, 200);
-  if (rollKind && difficulty === undefined) {
+  if (rollKind && rollKind !== "none" && difficulty === undefined) {
     throw new Error("A numeric Difficulty is required for a Combat action roll.");
   }
   const visibleToParticipantIds = Array.isArray(value.visibleToParticipantIds)
@@ -1310,6 +1312,7 @@ function parseGenericCombatActionBody(body: unknown): GenericCombatActionBody {
       )
     : [];
   const referenceKind =
+    value.referenceKind === "none" ||
     value.referenceKind === "participant" ||
     value.referenceKind === "item" ||
     value.referenceKind === "environment"
@@ -5902,35 +5905,37 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
         visibleParticipantIds,
       }),
     ),
-    participants: roundState.participants.map((participant) =>
-      controlledEncounterParticipantIds.has(participant.participantId)
-        ? participant
-        : {
-            ...participant,
-            declaration:
-              roundState.currentStep === "select_actions"
-                ? undefined
-                : participant.declaration
-                  ? {
-                      ...participant.declaration,
-                      additionalActionNotes: undefined,
-                      movementIntent: undefined,
-                      secondaryActions:
-                        participant.declaration.secondaryActionId === "observe_opponent"
-                          ? undefined
-                          : participant.declaration.secondaryActions,
-                      secondaryActionContext:
-                        participant.declaration.secondaryActionId === "observe_opponent"
-                          ? undefined
-                          : participant.declaration.secondaryActionContext,
-                      secondaryActionId:
-                        participant.declaration.secondaryActionId === "observe_opponent"
-                          ? undefined
-                          : participant.declaration.secondaryActionId,
-                    }
-                  : undefined,
-          },
-    ),
+    participants: roundState.participants
+      .filter((participant) => visibleParticipantIds.has(participant.participantId))
+      .map((participant) =>
+        controlledEncounterParticipantIds.has(participant.participantId)
+          ? participant
+          : {
+              ...participant,
+              declaration:
+                roundState.currentStep === "select_actions"
+                  ? undefined
+                  : participant.declaration
+                    ? {
+                        ...participant.declaration,
+                        additionalActionNotes: undefined,
+                        movementIntent: undefined,
+                        secondaryActions:
+                          participant.declaration.secondaryActionId === "observe_opponent"
+                            ? undefined
+                            : participant.declaration.secondaryActions,
+                        secondaryActionContext:
+                          participant.declaration.secondaryActionId === "observe_opponent"
+                            ? undefined
+                            : participant.declaration.secondaryActionContext,
+                        secondaryActionId:
+                          participant.declaration.secondaryActionId === "observe_opponent"
+                            ? undefined
+                            : participant.declaration.secondaryActionId,
+                      }
+                    : undefined,
+            },
+      ),
     roundEndReview: safeRoundEndReview,
     rounds: [],
     stepSnapshots: [],
@@ -6089,16 +6094,17 @@ function preservePlayerCombatModifierBuckets(input: {
 
 function resolveGenericCombatActionRollRequest(input: {
   body: GenericCombatActionBody;
+  forceLookAroundPreset?: boolean;
   scenarioParticipant: ScenarioParticipant;
 }): CombatGenericActionRollRequest | undefined {
-  const rollKind = input.body.preset === "look_around" ? "skill" : input.body.rollKind;
+  const rollKind = input.forceLookAroundPreset ? "skill" : input.body.rollKind;
   const difficulty = input.body.difficulty;
-  if (!rollKind) return undefined;
+  if (!rollKind || rollKind === "none") return undefined;
   if (difficulty === undefined) {
     throw new RangeError("A numeric Difficulty is required for a Combat action roll.");
   }
   if (rollKind === "skill") {
-    const skillId = input.body.preset === "look_around" ? "perception" : input.body.skillId;
+    const skillId = input.forceLookAroundPreset ? "perception" : input.body.skillId;
     const skill = defaultCanonicalContent.skills.find((candidate) => candidate.id === skillId);
     if (!skill) throw new RangeError("Choose an existing Skill for this Combat action.");
     const profile = resolveParticipantSkillRollProfile({
@@ -6150,7 +6156,7 @@ function resolveGenericCombatActionReference(input: {
   roundState: CombatRoundState;
   visibleParticipantIds?: ReadonlySet<string>;
 }): CombatGenericActionReference | undefined {
-  if (!input.body.referenceKind) return undefined;
+  if (!input.body.referenceKind || input.body.referenceKind === "none") return undefined;
   if (input.body.referenceKind === "environment") {
     if (!input.body.environmentDescription) {
       throw new RangeError("Describe the environment reference.");
@@ -6327,6 +6333,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const duration = body.duration ?? { kind: "round" as const };
         const rollRequest = resolveGenericCombatActionRollRequest({
           body,
+          forceLookAroundPreset: body.preset === "look_around",
           scenarioParticipant: ownerScenarioParticipant,
         });
         const reference = resolveGenericCombatActionReference({
@@ -6355,22 +6362,23 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         if (!isGm) return reply.code(403).send({ error: "Only the GM can review Combat actions." });
         const duration = body.duration ?? existingAction!.duration;
         const rollRequest =
-          body.rollKind || body.preset
+          body.rollKind !== undefined
             ? resolveGenericCombatActionRollRequest({
-                body: { ...body, preset: existingAction!.preset },
+                body,
                 scenarioParticipant: ownerScenarioParticipant,
               })
             : existingAction!.rollRequest;
-        const reference = body.referenceKind
-          ? resolveGenericCombatActionReference({
-              body,
-              encounter,
-              ownerEncounterParticipantId: ownerEncounterParticipant.id,
-              ownerScenarioParticipant,
-              roundState,
-              visibleParticipantIds,
-            })
-          : existingAction!.reference;
+        const reference =
+          body.referenceKind !== undefined
+            ? resolveGenericCombatActionReference({
+                body,
+                encounter,
+                ownerEncounterParticipantId: ownerEncounterParticipant.id,
+                ownerScenarioParticipant,
+                roundState,
+                visibleParticipantIds,
+              })
+            : existingAction!.reference;
         genericActions = reviewCombatGenericAction({
           actionId: body.actionId,
           actions: genericActions,
