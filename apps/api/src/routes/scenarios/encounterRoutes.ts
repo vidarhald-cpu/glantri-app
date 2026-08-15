@@ -214,7 +214,7 @@ import {
   setCombatRoundPairDistance,
   setCombatRoundSelection,
   skipCombatRoundCurrentPhaseAction,
-  validateCombatDeclarationActionAvailability,
+  validateCombatDeclarationCompatibility,
   validateCombatDeclarationTargets,
   validateCombatNpcDeclarationProposal,
   upsertCombatRoundStepSnapshots,
@@ -3958,13 +3958,10 @@ function resolveApiCombatNpcDeclarationProposal(input: {
       (phase1Identity !== phase2Identity || resolvedWeapons.phase2?.repeatEligible),
     );
   }
-  const actionAvailability = validateCombatDeclarationActionAvailability({
-    actionId: proposal.sourceDeclaration.actionId,
-    kind: "primary",
-  });
-  const secondaryAvailability = validateCombatDeclarationActionAvailability({
-    actionId: proposal.sourceDeclaration.secondaryActionId,
-    kind: "secondary",
+  const declarationCompatibility = validateCombatDeclarationCompatibility({
+    movementKind: proposal.sourceDeclaration.movementIntent?.mode,
+    primaryAction: proposal.sourceDeclaration.actionId,
+    secondaryAction: proposal.sourceDeclaration.secondaryActionId,
   });
   const encounterParticipant = membership.participants.find(
     (candidate) => candidate.id === participantId,
@@ -3997,10 +3994,7 @@ function resolveApiCombatNpcDeclarationProposal(input: {
           ?.declaration,
       ),
       declarationStillLegal:
-        actionAvailability.valid &&
-        secondaryAvailability.valid &&
-        doubleAttackValid &&
-        participantRuleValid,
+        declarationCompatibility.valid && doubleAttackValid && participantRuleValid,
       feintValid:
         proposal.sourceDeclaration.actionId !== "feint_attack" ||
         Boolean(feintTarget && defenderFeintProfile && feintAttackerSkill),
@@ -7239,19 +7233,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const primaryAvailability = validateCombatDeclarationActionAvailability({
-        actionId: body.actionId,
-        kind: "primary",
+      const declarationCompatibility = validateCombatDeclarationCompatibility({
+        movementKind: body.movementIntent?.mode,
+        primaryAction: body.actionId,
+        secondaryAction: body.secondaryActionId,
       });
-      if (!primaryAvailability.valid) {
-        return reply.code(400).send({ error: primaryAvailability.message });
-      }
-      const secondaryAvailability = validateCombatDeclarationActionAvailability({
-        actionId: body.secondaryActionId,
-        kind: "secondary",
-      });
-      if (!secondaryAvailability.valid) {
-        return reply.code(400).send({ error: secondaryAvailability.message });
+      if (!declarationCompatibility.valid) {
+        return reply.code(400).send({ error: declarationCompatibility.message });
       }
 
       const gmAuthorizedOperation = access.mode === "gm";

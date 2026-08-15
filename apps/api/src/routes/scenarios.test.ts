@@ -7355,6 +7355,66 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["player", mocks.playerUser],
+    ["GM proxy", mocks.adminUser],
+  ] as const)(
+    "rejects a forged incompatible primary-secondary pair for %s through the shared authority",
+    async (_viewer, user) => {
+      setupCombatDeclarationRoute({ user });
+      const app = await buildScenarioTestApp();
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          actionId: "attack_parry",
+          combatContext: { modifierBuckets: emptyModifierBuckets() },
+          scenarioParticipantId: "participant-1",
+          secondaryActionContext: {
+            action: "observe_opponent",
+            targetParticipantId: "encounter-target-1",
+          },
+          secondaryActionId: "observe_opponent",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      await app.close();
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({
+        error: "observe_opponent is not compatible with the selected primary action.",
+      });
+      expect(response.body).not.toContain("encounter-target-1");
+      expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+      expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects a forged secondary-only declaration before it can persist", async () => {
+    setupCombatDeclarationRoute();
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        scenarioParticipantId: "participant-1",
+        secondaryActionContext: {
+          action: "observe_opponent",
+          targetParticipantId: "encounter-target-1",
+        },
+        secondaryActionId: "observe_opponent",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "observe_opponent requires a compatible primary action.",
+    });
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
   it("keeps final DE and M1 mutation revisions authoritative through reads and immediate advances", async () => {
     const encounterParticipants = makeTwoCombatEncounterParticipants();
     const baseEncounter = makeCombatEncounter({

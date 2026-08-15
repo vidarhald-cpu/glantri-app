@@ -9,10 +9,7 @@ import {
 } from "../combatRoundManager";
 import { buildCombatActionProcessPlans } from "../combatActionProcesses";
 import type { CombatParticipationProjection } from "../combatParticipation";
-import {
-  getCombatDeclarationCapabilityStatus,
-  validateCombatDeclarationActionAvailability,
-} from "../combatDeclarationCompatibility";
+import { validateCombatDeclarationCompatibility } from "../combatDeclarationCompatibility";
 import {
   boundaryForCursorStep,
   boundaryForStep,
@@ -128,29 +125,12 @@ export function buildCombatProgressionProjection(
       : normalized.participants
           .map((participant) => {
             const actionId = participant.declaration?.actionId;
-            const primaryStatus = getCombatDeclarationCapabilityStatus({
-              actionId,
-              kind: "primary",
-            });
-            const primaryAvailability =
-              primaryStatus === "partial_internal_only"
-                ? { valid: true as const }
-                : validateCombatDeclarationActionAvailability({ actionId, kind: "primary" });
             const secondaryActionId = participant.declaration?.secondaryActionId;
-            const secondaryStatus = getCombatDeclarationCapabilityStatus({
-              actionId: secondaryActionId,
-              kind: "secondary",
+            const availability = validateCombatDeclarationCompatibility({
+              movementKind: participant.declaration?.movementIntent?.mode,
+              primaryAction: actionId,
+              secondaryAction: secondaryActionId,
             });
-            const secondaryAvailability =
-              secondaryStatus === "partial_internal_only"
-                ? { valid: true as const }
-                : validateCombatDeclarationActionAvailability({
-                    actionId: secondaryActionId,
-                    kind: "secondary",
-                  });
-            const availability = primaryAvailability.valid
-              ? secondaryAvailability
-              : primaryAvailability;
             return availability.valid ? undefined : { availability, participant };
           })
           .find((entry) => entry !== undefined);

@@ -181,6 +181,22 @@ describe("canonical NPC declaration proposals", () => {
     });
   });
 
+  it("never replays a stale incompatible primary-secondary pair", () => {
+    const proposal = proposalFor(
+      priorRoundState({
+        actionId: "attack_parry",
+        declaration: {
+          secondaryActionContext: { action: "observe_opponent", targetParticipantId: "target" },
+        },
+        secondaryActionId: "observe_opponent",
+      }),
+    );
+    expect(proposal?.validation).toEqual({
+      reasons: ["unsupported_declaration"],
+      status: "unsupported",
+    });
+  });
+
   it("preserves Feint method, target, and weapon source", () => {
     const proposal = proposalFor(
       priorRoundState({

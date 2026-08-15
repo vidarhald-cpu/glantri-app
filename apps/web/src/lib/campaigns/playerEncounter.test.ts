@@ -11,10 +11,13 @@ import {
   getPlayerEncounterActionLabel,
   getPlayerEncounterAccessibleParticipants,
   getPlayerEncounterCombatModifierTotals,
+  getPlayerEncounterDeclarationCompatibilityMessage,
   getPlayerEncounterMovementLabel,
   getPlayerEncounterOpponentParticipants,
   getPlayerEncounterParryCoverageDirection,
   getPlayerEncounterParryDirectionLabel,
+  getPlayerEncounterPrimaryActionOptions,
+  getPlayerEncounterSecondaryActionOptions,
   isPlayerEncounterAttackAction,
   isPlayerEncounterActionId,
   isPlayerEncounterDefenseAction,
@@ -95,6 +98,42 @@ describe("playerEncounter", () => {
     expect(PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS.map((option) => option.value)).toEqual([
       "observe_opponent",
     ]);
+  });
+
+  it("adapts canonical compatibility in both selector directions", () => {
+    expect(getPlayerEncounterSecondaryActionOptions("").map((option) => option.value)).toEqual([
+      "observe_opponent",
+    ]);
+    expect(
+      getPlayerEncounterSecondaryActionOptions("attack_parry").map((option) => option.value),
+    ).toEqual([]);
+    expect(getPlayerEncounterSecondaryActionOptions("parry").map((option) => option.value)).toEqual(
+      ["observe_opponent"],
+    );
+    expect(
+      getPlayerEncounterPrimaryActionOptions("observe_opponent").map((option) => option.value),
+    ).toEqual(["parry"]);
+  });
+
+  it("presents incomplete, incompatible, and stale unsupported selections precisely", () => {
+    expect(
+      getPlayerEncounterDeclarationCompatibilityMessage({
+        secondaryActionId: "observe_opponent",
+      }),
+    ).toBe("Choose a compatible primary action for Observe Opponent.");
+    expect(
+      getPlayerEncounterDeclarationCompatibilityMessage({
+        actionId: "attack_parry",
+        secondaryActionId: "observe_opponent",
+      }),
+    ).toBe(
+      "Single attack cannot be combined with Observe Opponent. Choose a compatible primary action or remove the secondary action.",
+    );
+    expect(
+      getPlayerEncounterDeclarationCompatibilityMessage({
+        actionId: "break_off_engagement",
+      }),
+    ).toBe("Break Off Engagement is unavailable and cannot be declared.");
   });
 
   it("keeps unsupported legacy action identities and labels readable", () => {
