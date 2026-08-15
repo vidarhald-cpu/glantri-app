@@ -249,4 +249,233 @@ describe("GenericCombatActionPanel", () => {
       }),
     );
   });
+
+  it("scopes an unsaved GM result to the selected action and exact recipient set", async () => {
+    const gmEncounter = {
+      ...encounter,
+      combatRoundState: {
+        genericActions: [
+          {
+            createdAt: "2026-08-14T08:00:00.000Z",
+            duration: { kind: "round" },
+            id: "action-no-roll",
+            intent: "Bar the door.",
+            lastUpdatedAt: "2026-08-14T08:00:00.000Z",
+            ownerParticipantId: "encounter-aster",
+            progress: { completedRounds: 0, totalRounds: 1 },
+            status: "active",
+          },
+          {
+            createdAt: "2026-08-14T08:05:00.000Z",
+            duration: { kind: "rounds", rounds: 3 },
+            id: "action-three-rounds",
+            intent: "Reinforce the gate.",
+            lastUpdatedAt: "2026-08-14T08:05:00.000Z",
+            ownerParticipantId: "encounter-guard",
+            progress: { completedRounds: 1, totalRounds: 3 },
+            status: "active",
+          },
+          {
+            createdAt: "2026-08-14T07:00:00.000Z",
+            duration: { kind: "round" },
+            id: "action-completed",
+            intent: "Check the courtyard.",
+            lastUpdatedAt: "2026-08-14T07:10:00.000Z",
+            ownerParticipantId: "encounter-aster",
+            progress: { completedRounds: 1, totalRounds: 1 },
+            resolution: {
+              resolvedAt: "2026-08-14T07:10:00.000Z",
+              text: "The courtyard is clear.",
+              visibleToParticipantIds: ["encounter-aster"],
+            },
+            status: "completed",
+          },
+        ],
+        participants: [
+          { label: "Aster", participantId: "encounter-aster" },
+          { label: "Gate guard", participantId: "encounter-guard" },
+        ],
+      },
+      participants: [
+        ...encounter.participants,
+        {
+          characterId: "character-guard",
+          id: "encounter-guard",
+          scenarioParticipantId: "scenario-guard",
+        },
+      ],
+    } as unknown as EncounterSession;
+    const props = {
+      encounter: gmEncounter,
+      isGm: true,
+      onEncounterUpdated: vi.fn(),
+      participantId: "encounter-aster",
+      scenarioParticipants: [scenarioParticipant],
+    };
+    const { unmount } = render(<GenericCombatActionPanel {...props} />);
+    const selector = screen.getByLabelText("Action and task history");
+    const resolveButton = screen.getByRole("button", { name: "Resolve action" });
+
+    await waitFor(() => expect(resolveButton).toBeDisabled());
+    fireEvent.change(screen.getByLabelText("Player-safe result"), {
+      target: { value: "This belongs only to the door action." },
+    });
+    expect(resolveButton).toBeEnabled();
+
+    fireEvent.change(selector, { target: { value: "action-three-rounds" } });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Player-safe result")).toHaveValue("");
+      expect(screen.getByRole("button", { name: "Resolve action" })).toBeDisabled();
+      expect(screen.getByRole("checkbox", { name: "Gate guard" })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "Aster" })).not.toBeChecked();
+    });
+
+    fireEvent.change(screen.getByLabelText("Player-safe result"), {
+      target: { value: "The gate braces hold." },
+    });
+    expect(screen.getByRole("button", { name: "Resolve action" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Aster" }));
+    expect(screen.getByLabelText("Player-safe result")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Resolve action" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Player-safe result"), {
+      target: { value: "Both defenders notice the gate settling." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Resolve action" }));
+    await waitFor(() => expect(updateGenericCombatActionOnServer).toHaveBeenCalledTimes(1));
+    expect(updateGenericCombatActionOnServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionId: "action-three-rounds",
+        operation: "resolve",
+        resultText: "Both defenders notice the gate settling.",
+        visibleToParticipantIds: ["encounter-guard", "encounter-aster"],
+      }),
+    );
+
+    fireEvent.change(selector, { target: { value: "action-completed" } });
+    await waitFor(() => expect(screen.queryByLabelText("Player-safe result")).toBeNull());
+    expect(screen.getByText("The courtyard is clear.")).toBeInTheDocument();
+    fireEvent.change(selector, { target: { value: "action-no-roll" } });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Player-safe result")).toHaveValue("");
+      expect(screen.getByRole("button", { name: "Resolve action" })).toBeDisabled();
+    });
+
+    unmount();
+    render(<GenericCombatActionPanel {...props} />);
+    await waitFor(() => {
+      expect(screen.getByLabelText("Action and task history")).toHaveValue("action-no-roll");
+      expect(screen.getByLabelText("Player-safe result")).toHaveValue("");
+      expect(screen.getByRole("button", { name: "Resolve action" })).toBeDisabled();
+    });
+    fireEvent.change(screen.getByLabelText("Action and task history"), {
+      target: { value: "action-completed" },
+    });
+    await waitFor(() => expect(screen.getByText("The courtyard is clear.")).toBeInTheDocument());
+  });
+
+  it("reloads canonical GM review fields whenever the selected action changes", async () => {
+    const gmEncounter = {
+      ...encounter,
+      combatRoundState: {
+        genericActions: [
+          {
+            createdAt: "2026-08-14T09:00:00.000Z",
+            duration: { kind: "rounds", rounds: 3 },
+            id: "review-survey",
+            intent: "Survey the balcony.",
+            lastUpdatedAt: "2026-08-14T09:00:00.000Z",
+            ownerParticipantId: "encounter-aster",
+            progress: { completedRounds: 0, totalRounds: 3 },
+            reference: { description: "North balcony", kind: "environment" },
+            rollRequest: {
+              basis: {
+                avgStats: 14,
+                baseValue: 21,
+                derivedXp: 0,
+                groupXp: 0,
+                kind: "skill",
+                skillId: "perception",
+                skillLabel: "Perception",
+                skillXp: 0,
+                unknownSkillPenalty: 0,
+              },
+              difficulty: 26,
+            },
+            status: "declared",
+          },
+          {
+            createdAt: "2026-08-14T09:05:00.000Z",
+            duration: { kind: "phase", phase: "phase2" },
+            id: "review-no-roll",
+            intent: "Signal the guard.",
+            lastUpdatedAt: "2026-08-14T09:05:00.000Z",
+            ownerParticipantId: "encounter-aster",
+            progress: { completedRounds: 0 },
+            reference: {
+              kind: "participant",
+              label: "Gate guard",
+              participantId: "encounter-guard",
+            },
+            status: "declared",
+          },
+        ],
+        participants: [
+          { label: "Aster", participantId: "encounter-aster" },
+          { label: "Gate guard", participantId: "encounter-guard" },
+        ],
+      },
+      participants: [
+        ...encounter.participants,
+        {
+          characterId: "character-guard",
+          id: "encounter-guard",
+          scenarioParticipantId: "scenario-guard",
+        },
+      ],
+    } as unknown as EncounterSession;
+    render(
+      <GenericCombatActionPanel
+        encounter={gmEncounter}
+        isGm
+        onEncounterUpdated={vi.fn()}
+        participantId="encounter-aster"
+        scenarioParticipants={[scenarioParticipant]}
+        skills={[{ id: "perception", name: "Perception" }]}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText("Reviewed roll")).toHaveValue("skill"));
+    fireEvent.change(screen.getByLabelText("Reviewed roll"), { target: { value: "stat" } });
+    fireEvent.change(screen.getByLabelText("Reviewed reference"), {
+      target: { value: "environment" },
+    });
+    fireEvent.change(screen.getByLabelText("Reviewed environment"), {
+      target: { value: "Unsaved stale reference" },
+    });
+
+    fireEvent.change(screen.getByLabelText("Action and task history"), {
+      target: { value: "review-no-roll" },
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Reviewed duration")).toHaveValue("phase");
+      expect(screen.getByLabelText("Reviewed phase")).toHaveValue("phase2");
+      expect(screen.getByLabelText("Reviewed roll")).toHaveValue("none");
+      expect(screen.getByLabelText("Reviewed reference")).toHaveValue("participant");
+      expect(screen.getByLabelText("Reviewed participant")).toHaveValue("encounter-guard");
+    });
+
+    fireEvent.change(screen.getByLabelText("Action and task history"), {
+      target: { value: "review-survey" },
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Reviewed duration")).toHaveValue("rounds");
+      expect(screen.getByLabelText("Reviewed rounds")).toHaveValue(3);
+      expect(screen.getByLabelText("Reviewed roll")).toHaveValue("skill");
+      expect(screen.getByLabelText("Reviewed Skill")).toHaveValue("perception");
+      expect(screen.getByLabelText("Reviewed Difficulty")).toHaveValue(26);
+      expect(screen.getByLabelText("Reviewed reference")).toHaveValue("environment");
+      expect(screen.getByLabelText("Reviewed environment")).toHaveValue("North balcony");
+    });
+  });
 });

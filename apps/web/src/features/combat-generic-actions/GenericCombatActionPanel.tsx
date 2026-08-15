@@ -146,7 +146,12 @@ export function GenericCombatActionPanel({
   const [reviewReferenceParticipantId, setReviewReferenceParticipantId] = useState("");
   const [reviewItemId, setReviewItemId] = useState("");
   const [reviewEnvironmentDescription, setReviewEnvironmentDescription] = useState("");
-  const [resultText, setResultText] = useState("");
+  const [draftActionId, setDraftActionId] = useState("");
+  const [resultDraft, setResultDraft] = useState<{
+    actionId: string;
+    audienceKey: string;
+    text: string;
+  }>();
   const [resultAudience, setResultAudience] = useState<string[]>(
     participantId ? [participantId] : [],
   );
@@ -157,6 +162,14 @@ export function GenericCombatActionPanel({
   const suggestedAction = openActions[0] ?? finishedActions.at(-1);
   const selectedAction =
     actions.find((action) => action.id === selectedActionId) ?? suggestedAction;
+  const resultAudienceKey = [...resultAudience].sort().join("|");
+  const currentResultText =
+    selectedAction &&
+    resultDraft?.actionId === selectedAction.id &&
+    resultDraft.audienceKey === resultAudienceKey
+      ? resultDraft.text
+      : "";
+  const actionDraftIsCurrent = draftActionId === selectedAction?.id;
   const findScenarioParticipant = (encounterParticipantId?: string) =>
     scenarioParticipants.find((candidate) =>
       encounter.participants.some(
@@ -221,6 +234,8 @@ export function GenericCombatActionPanel({
     setReviewEnvironmentDescription(
       selectedAction.reference?.kind === "environment" ? selectedAction.reference.description : "",
     );
+    setDraftActionId(selectedAction.id);
+    setResultDraft(undefined);
     setResultAudience([selectedAction.ownerParticipantId]);
   }, [selectedAction]);
 
@@ -287,7 +302,11 @@ export function GenericCombatActionPanel({
     operation: "review" | "activate" | "roll" | "resolve" | "interrupt" | "cancel",
   ) {
     if (!selectedAction) return;
-    await mutate({
+    if (operation === "review" && !actionDraftIsCurrent) return;
+    if (operation === "resolve" && (!currentResultText.trim() || resultAudience.length === 0)) {
+      return;
+    }
+    const next = await mutate({
       actionId: selectedAction.id,
       difficulty:
         operation === "review" && reviewRollKind !== "none" ? reviewDifficulty : undefined,
@@ -309,12 +328,15 @@ export function GenericCombatActionPanel({
         operation === "review" && reviewReferenceKind === "participant"
           ? reviewReferenceParticipantId
           : undefined,
-      resultText: operation === "resolve" ? resultText : undefined,
+      resultText: operation === "resolve" ? currentResultText : undefined,
       rollKind: operation === "review" ? reviewRollKind : undefined,
       skillId: operation === "review" && reviewRollKind === "skill" ? reviewSkillId : undefined,
       statId: operation === "review" && reviewRollKind === "stat" ? reviewStatId : undefined,
       visibleToParticipantIds: operation === "resolve" ? resultAudience : undefined,
     });
+    if (next && operation === "resolve") {
+      setResultDraft(undefined);
+    }
   }
 
   return (
@@ -514,7 +536,12 @@ export function GenericCombatActionPanel({
             <select
               style={controlStyle}
               value={selectedAction?.id ?? ""}
-              onChange={(event) => setSelectedActionId(event.target.value)}
+              onChange={(event) => {
+                setDraftActionId("");
+                setResultAudience([]);
+                setResultDraft(undefined);
+                setSelectedActionId(event.target.value);
+              }}
             >
               {openActions.length > 0 ? (
                 <optgroup label="Open actions and tasks">
@@ -740,6 +767,7 @@ export function GenericCombatActionPanel({
                   <button
                     disabled={
                       busy ||
+                      !actionDraftIsCurrent ||
                       (reviewRollKind === "skill" && !reviewSkillId) ||
                       (reviewReferenceKind === "participant" && !reviewReferenceParticipantId) ||
                       (reviewReferenceKind === "item" && !reviewItemId) ||
@@ -774,9 +802,15 @@ export function GenericCombatActionPanel({
                     <span>Player-safe result</span>
                     <textarea
                       maxLength={4000}
-                      onChange={(event) => setResultText(event.target.value)}
+                      onChange={(event) =>
+                        setResultDraft({
+                          actionId: selectedAction.id,
+                          audienceKey: resultAudienceKey,
+                          text: event.target.value,
+                        })
+                      }
                       rows={3}
-                      value={resultText}
+                      value={currentResultText}
                     />
                   </label>
                   <fieldset>
@@ -785,13 +819,14 @@ export function GenericCombatActionPanel({
                       <label key={entry.participantId} style={{ marginRight: "0.75rem" }}>
                         <input
                           checked={resultAudience.includes(entry.participantId)}
-                          onChange={(event) =>
+                          onChange={(event) => {
+                            setResultDraft(undefined);
                             setResultAudience((current) =>
                               event.target.checked
                                 ? [...new Set([...current, entry.participantId])]
                                 : current.filter((id) => id !== entry.participantId),
-                            )
-                          }
+                            );
+                          }}
                           type="checkbox"
                         />{" "}
                         {entry.label}
@@ -800,7 +835,12 @@ export function GenericCombatActionPanel({
                   </fieldset>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                     <button
-                      disabled={busy || !resultText.trim()}
+                      disabled={
+                        busy ||
+                        !actionDraftIsCurrent ||
+                        resultAudience.length === 0 ||
+                        !currentResultText.trim()
+                      }
                       onClick={() => void operate("resolve")}
                       type="button"
                     >
