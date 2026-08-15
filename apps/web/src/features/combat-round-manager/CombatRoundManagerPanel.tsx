@@ -278,6 +278,7 @@ import {
   type PlayerEncounterMovementId,
 } from "@/lib/campaigns/playerEncounter";
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
+import { GenericCombatActionPanel } from "@/features/combat-generic-actions/GenericCombatActionPanel";
 import {
   getCombatRoundManagerInspectionSelection,
   getCurrentCombatRoundTaskSelection,
@@ -10795,6 +10796,23 @@ export default function CombatRoundManagerPanel({
             timelineCellRefs.current[cellKey] = node;
           }}
           tableRef={tableContainerRef}
+        />
+        <GenericCombatActionPanel
+          encounter={{
+            ...encounter,
+            combatRoundState: roundState,
+            updatedAt: roundView.encounterRevision ?? encounter.updatedAt,
+          }}
+          isGm
+          onEncounterUpdated={(nextEncounter) => {
+            const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+            if (acceptCanonicalEncounterState(nextEncounter, nextRoundState)) {
+              onEncounterUpdated?.(nextEncounter);
+            }
+          }}
+          participantId={inspector.participant?.participantId}
+          scenarioParticipants={effectiveScenarioParticipants}
+          skills={content?.skills}
         />
         <section
           aria-label="Combat round inspector"

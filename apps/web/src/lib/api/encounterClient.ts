@@ -8,6 +8,7 @@ import {
   type EncounterSessionSummary,
   CombatAttackSourceRef,
   CombatHistoryProjection,
+  CombatGenericActionDuration,
   CombatProgressionBoundaryKind,
   CombatParryPurpose,
   CombatRoundAttackRollResult,
@@ -1603,5 +1604,35 @@ export async function assignRoleplayStatCheckOnServer(input: {
     },
   );
 
+  return payload.encounter;
+}
+
+export async function updateGenericCombatActionOnServer(input: {
+  actionId: string;
+  difficulty?: number;
+  duration?: CombatGenericActionDuration;
+  encounterId: string;
+  environmentDescription?: string;
+  expectedRevision: string;
+  intent?: string;
+  itemId?: string;
+  operation: "declare" | "review" | "activate" | "roll" | "resolve" | "interrupt" | "cancel";
+  participantId?: string;
+  preset?: "look_around";
+  referenceKind?: "none" | "participant" | "item" | "environment";
+  referenceParticipantId?: string;
+  resultText?: string;
+  rollKind?: "none" | "skill" | "stat";
+  skillId?: string;
+  statId?: GlantriCharacteristicKey;
+  visibleToParticipantIds?: string[];
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/generic-actions`,
+    {
+      body: JSON.stringify(input),
+      method: "POST",
+    },
+  );
   return payload.encounter;
 }

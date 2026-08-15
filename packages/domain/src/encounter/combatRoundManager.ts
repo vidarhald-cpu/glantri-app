@@ -154,6 +154,11 @@ import {
   type CombatObservationRoundUndoFact,
 } from "./combatObservation";
 import {
+  advanceCombatGenericActionsToRound,
+  combatGenericActionSchema,
+  type CombatGenericAction,
+} from "./combatGenericAction";
+import {
   appendCanonicalCombatStepEventForCommand,
   getCombatStepEventPhaseStep,
   removeCanonicalCombatStepEventsForCommand,
@@ -2449,6 +2454,7 @@ export interface CompletedCombatRound {
   encounterId?: string;
   events: CombatStepEvent[];
   feintProposals: CombatFeintProposal[];
+  genericActions: CombatGenericAction[];
   observationAttempts: CombatObservationAttempt[];
   observationRelationships: CombatObservationRelationship[];
   offensiveParryContests: z.infer<typeof offensiveParryContestSchema>[];
@@ -2480,6 +2486,7 @@ export const completedCombatRoundSchema: z.ZodType<CompletedCombatRound, z.ZodTy
       encounterId: idSchema.optional(),
       events: combatStepEventArraySchema.default([]),
       feintProposals: z.array(combatFeintProposalSchema).default([]),
+      genericActions: z.array(combatGenericActionSchema).default([]),
       offensiveParryContests: z.array(offensiveParryContestSchema).default([]),
       observationAttempts: z.array(combatObservationAttemptSchema).default([]),
       observationRelationships: z.array(combatObservationRelationshipSchema).default([]),
@@ -2509,6 +2516,7 @@ export interface CombatRoundState {
   encounterId?: string;
   events: CombatStepEvent[];
   feintProposals: CombatFeintProposal[];
+  genericActions: CombatGenericAction[];
   gmBacktrackHold?: z.infer<typeof combatRoundGmBacktrackHoldSchema>;
   offensiveParryContests: z.infer<typeof offensiveParryContestSchema>[];
   observationAttempts: CombatObservationAttempt[];
@@ -2540,6 +2548,7 @@ const activeCombatRoundStateShape = {
   encounterId: idSchema.optional(),
   events: combatStepEventArraySchema.default([]),
   feintProposals: z.array(combatFeintProposalSchema).default([]),
+  genericActions: z.array(combatGenericActionSchema).default([]),
   gmBacktrackHold: combatRoundGmBacktrackHoldSchema.optional(),
   offensiveParryContests: z.array(offensiveParryContestSchema).default([]),
   observationAttempts: z.array(combatObservationAttemptSchema).default([]),
@@ -17336,6 +17345,7 @@ function buildCompletedCombatRound(input: {
     encounterId: normalized.encounterId,
     events: normalized.events,
     feintProposals: normalized.feintProposals,
+    genericActions: normalized.genericActions,
     offensiveParryContests: normalized.offensiveParryContests,
     observationAttempts: normalized.observationAttempts,
     observationRelationships: normalized.observationRelationships,
@@ -17786,6 +17796,9 @@ export function initializeCombatRoundState(input: {
         participantIds.has(proposal.attackerParticipantId) &&
         participantIds.has(proposal.defenderParticipantId),
     ),
+    genericActions: (existing?.genericActions ?? []).filter((action) =>
+      participantIds.has(action.ownerParticipantId),
+    ),
     continuedContacts: (existing?.continuedContacts ?? []).filter(
       (contact) =>
         participantIds.has(contact.controllerParticipantId) &&
@@ -18138,6 +18151,14 @@ export function advanceCombatRoundStep(
       events: [],
       adjustDistanceProposals: [],
       feintProposals: [],
+      genericActions: advanceCombatGenericActionsToRound({
+        actions: completedRoundState.genericActions,
+        advancedAt:
+          advanceCommand?.createdAt ??
+          completedRoundState.genericActions.at(-1)?.lastUpdatedAt ??
+          "1970-01-01T00:00:00.000Z",
+        nextRoundNumber,
+      }),
       offensiveParryContests: [],
       observationAttempts: [],
       observationRelationships: completedRoundState.observationRelationships,

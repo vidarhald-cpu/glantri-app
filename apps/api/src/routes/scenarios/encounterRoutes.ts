@@ -37,6 +37,10 @@ import {
   transitionCanonicalCombatModifierEffect,
   buildPlayerSafeCombatObservationAttempts,
   buildPlayerSafeCombatObservationRelationships,
+  activateCombatGenericAction,
+  combatGenericActionDurationSchema,
+  declareCombatGenericAction,
+  finishCombatGenericAction,
   buildCombatRoundAttackRollResult,
   buildCanonicalCombatModifierReviewFromDraft,
   buildCombatProgressionProjection,
@@ -47,6 +51,7 @@ import {
   holdCombatRoundForGmBacktrack,
   projectActiveCombatParticipation,
   projectCombatNpcDeclarationProposal,
+  projectCombatGenericActionsForPlayer,
   runCombatDeterministicTransitionSuffix,
   runCombatStepAutomation,
   buildCombatRoundDeclaredAttackOpportunities,
@@ -144,6 +149,7 @@ import {
   normalizeCombatArmorModifierClass,
   rollCombatRoundCombatExperience,
   recordCombatRoundCriticalRoll,
+  recordCombatGenericActionRoll,
   recordCombatRoundDamageResult,
   recordCombatRoundDeclaration,
   respondCombatRoundAdjustDistance,
@@ -173,6 +179,7 @@ import {
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantForViewer,
   resolveEncounterParticipantMembership,
+  reviewCombatGenericAction,
   resolveCombatDodgeModifiers,
   resolveCanonicalCombatAttackModifierFacts,
   resolveCanonicalCombatParryModifierFacts,
@@ -221,6 +228,9 @@ import {
   type CombatStepAutomationRunIdentity,
   type CombatStepAutomationStopReason,
   type CombatRoundEndDistanceCalculationReadiness,
+  type CombatGenericActionDuration,
+  type CombatGenericActionReference,
+  type CombatGenericActionRollRequest,
   type CombatNpcDeclarationProposal,
   type CombatNpcDeclarationSourceStatus,
   type ParticipantCombatExperienceSkillTotalLookup,
@@ -292,6 +302,7 @@ import {
   resolveCombatMovementBurden,
   getCombatMovementModifierApplicability,
   resolveCombatObservationSkillProfile,
+  resolveGenericCombatActionRoll,
 } from "@glantri/rules-engine";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
@@ -1230,6 +1241,103 @@ function parseRoleplayStatCheckAssignmentBody(body: unknown): {
     expectedRevision: value.expectedRevision,
     participantId: value.participantId,
     statId: glantriCharacteristicKeySchema.parse(value.statId),
+  };
+}
+
+type GenericCombatActionOperation =
+  | "declare"
+  | "review"
+  | "activate"
+  | "roll"
+  | "resolve"
+  | "interrupt"
+  | "cancel";
+
+interface GenericCombatActionBody {
+  actionId: string;
+  difficulty?: number;
+  duration?: CombatGenericActionDuration;
+  environmentDescription?: string;
+  expectedRevision: string;
+  intent?: string;
+  itemId?: string;
+  operation: GenericCombatActionOperation;
+  participantId?: string;
+  preset?: "look_around";
+  referenceKind?: "none" | "participant" | "item" | "environment";
+  referenceParticipantId?: string;
+  resultText?: string;
+  rollKind?: "none" | "skill" | "stat";
+  skillId?: string;
+  statId?: GlantriCharacteristicKey;
+  visibleToParticipantIds: string[];
+}
+
+function parseGenericCombatActionBody(body: unknown): GenericCombatActionBody {
+  const value = parseBodyObject(body, "Generic Combat action payload");
+  const operation = value.operation;
+  const actionId = value.actionId;
+  const expectedRevision = value.expectedRevision;
+  if (
+    operation !== "declare" &&
+    operation !== "review" &&
+    operation !== "activate" &&
+    operation !== "roll" &&
+    operation !== "resolve" &&
+    operation !== "interrupt" &&
+    operation !== "cancel"
+  ) {
+    throw new Error("Choose a valid Combat action operation.");
+  }
+  if (typeof actionId !== "string" || actionId.trim().length === 0) {
+    throw new Error("actionId is required.");
+  }
+  if (typeof expectedRevision !== "string" || expectedRevision.length === 0) {
+    throw new Error("expectedRevision is required.");
+  }
+  const rollKind =
+    value.rollKind === "none" || value.rollKind === "skill" || value.rollKind === "stat"
+      ? value.rollKind
+      : undefined;
+  const difficulty =
+    value.difficulty === undefined
+      ? undefined
+      : parseIntegerInRange(value.difficulty, "Difficulty", 1, 200);
+  if (rollKind && rollKind !== "none" && difficulty === undefined) {
+    throw new Error("A numeric Difficulty is required for a Combat action roll.");
+  }
+  const visibleToParticipantIds = Array.isArray(value.visibleToParticipantIds)
+    ? value.visibleToParticipantIds.filter(
+        (entry): entry is string => typeof entry === "string" && entry.length > 0,
+      )
+    : [];
+  const referenceKind =
+    value.referenceKind === "none" ||
+    value.referenceKind === "participant" ||
+    value.referenceKind === "item" ||
+    value.referenceKind === "environment"
+      ? value.referenceKind
+      : undefined;
+
+  return {
+    actionId: actionId.trim(),
+    difficulty,
+    duration: value.duration ? combatGenericActionDurationSchema.parse(value.duration) : undefined,
+    environmentDescription: parseOptionalDeclarationString(value.environmentDescription),
+    expectedRevision,
+    intent: parseOptionalDeclarationString(value.intent),
+    itemId: parseOptionalDeclarationString(value.itemId),
+    operation,
+    participantId: parseOptionalDeclarationString(value.participantId),
+    preset: value.preset === "look_around" ? "look_around" : undefined,
+    referenceKind,
+    referenceParticipantId: parseOptionalDeclarationString(value.referenceParticipantId),
+    resultText: parseOptionalDeclarationString(value.resultText),
+    rollKind,
+    skillId: parseOptionalDeclarationString(value.skillId),
+    statId:
+      value.statId === undefined ? undefined : glantriCharacteristicKeySchema.parse(value.statId),
+    visibleToParticipantIds: [...new Set(visibleToParticipantIds)],
   };
 }
 
@@ -5640,6 +5748,21 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
 
   const { controlledEncounterParticipantIds, visibleParticipantIds } =
     buildPlayerSafeCombatScopeForUser(input);
+  const safeCurrentCursor =
+    !roundState.currentCursor?.participantId ||
+    visibleParticipantIds.has(roundState.currentCursor.participantId)
+      ? roundState.currentCursor
+      : undefined;
+  const safePhaseResolutionCursor =
+    roundState.phaseResolutionCursor &&
+    visibleParticipantIds.has(roundState.phaseResolutionCursor.participantId)
+      ? roundState.phaseResolutionCursor
+      : undefined;
+  const safePhaseResolutionStatuses = Object.fromEntries(
+    Object.entries(roundState.phaseResolutionStatuses).filter(([participantId]) =>
+      visibleParticipantIds.has(participantId),
+    ),
+  );
   const safeDistanceEdges = Object.fromEntries(
     Object.entries(roundState.distanceState?.edges ?? {}).filter(
       ([, edge]) =>
@@ -5671,6 +5794,11 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
                 ? contest.controllerRoll
                 : undefined,
             })),
+        participantReviews: Object.fromEntries(
+          Object.entries(roundState.roundEndReview.participantReviews).filter(([participantId]) =>
+            visibleParticipantIds.has(participantId),
+          ),
+        ),
         proposedDistances: roundState.roundEndReview.proposedDistances
           .map((proposal) =>
             buildPlayerSafeDistanceControlProposalForUser({
@@ -5685,6 +5813,10 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
 
   const safeState: CombatRoundState = {
     ...roundState,
+    activeParticipantId:
+      roundState.activeParticipantId && visibleParticipantIds.has(roundState.activeParticipantId)
+        ? roundState.activeParticipantId
+        : undefined,
     commands: roundState.commands
       .map((command) =>
         buildPlayerSafeCombatRoundCommandForUser({
@@ -5757,6 +5889,11 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
           tableResult: committed ? proposal.tableResult : undefined,
         });
       }),
+    genericActions: projectCombatGenericActionsForPlayer({
+      actions: roundState.genericActions,
+      controlledParticipantIds: controlledEncounterParticipantIds,
+      visibleParticipantIds,
+    }),
     offensiveParryContests: roundState.offensiveParryContests
       .filter((contest) =>
         isPlayerVisibleCombatRoundResultPair({
@@ -5792,37 +5929,47 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
         visibleParticipantIds,
       }),
     ),
-    participants: roundState.participants.map((participant) =>
-      controlledEncounterParticipantIds.has(participant.participantId)
-        ? participant
-        : {
-            ...participant,
-            declaration:
-              roundState.currentStep === "select_actions"
-                ? undefined
-                : participant.declaration
-                  ? {
-                      ...participant.declaration,
-                      additionalActionNotes: undefined,
-                      movementIntent: undefined,
-                      secondaryActions:
-                        participant.declaration.secondaryActionId === "observe_opponent"
-                          ? undefined
-                          : participant.declaration.secondaryActions,
-                      secondaryActionContext:
-                        participant.declaration.secondaryActionId === "observe_opponent"
-                          ? undefined
-                          : participant.declaration.secondaryActionContext,
-                      secondaryActionId:
-                        participant.declaration.secondaryActionId === "observe_opponent"
-                          ? undefined
-                          : participant.declaration.secondaryActionId,
-                    }
-                  : undefined,
-          },
-    ),
+    currentCursor: safeCurrentCursor,
+    participants: roundState.participants
+      .filter((participant) => visibleParticipantIds.has(participant.participantId))
+      .map((participant) =>
+        controlledEncounterParticipantIds.has(participant.participantId)
+          ? participant
+          : {
+              ...participant,
+              declaration:
+                roundState.currentStep === "select_actions"
+                  ? undefined
+                  : participant.declaration
+                    ? {
+                        ...participant.declaration,
+                        additionalActionNotes: undefined,
+                        movementIntent: undefined,
+                        secondaryActions:
+                          participant.declaration.secondaryActionId === "observe_opponent"
+                            ? undefined
+                            : participant.declaration.secondaryActions,
+                        secondaryActionContext:
+                          participant.declaration.secondaryActionId === "observe_opponent"
+                            ? undefined
+                            : participant.declaration.secondaryActionContext,
+                        secondaryActionId:
+                          participant.declaration.secondaryActionId === "observe_opponent"
+                            ? undefined
+                            : participant.declaration.secondaryActionId,
+                      }
+                    : undefined,
+            },
+      ),
+    phaseResolutionCursor: safePhaseResolutionCursor,
+    phaseResolutionStatuses: safePhaseResolutionStatuses,
     roundEndReview: safeRoundEndReview,
     rounds: [],
+    selectedParticipantId:
+      roundState.selectedParticipantId &&
+      visibleParticipantIds.has(roundState.selectedParticipantId)
+        ? roundState.selectedParticipantId
+        : undefined,
     stepSnapshots: [],
     unbalancedConditions: roundState.unbalancedConditions.filter(
       (condition) =>
@@ -5977,7 +6124,392 @@ function preservePlayerCombatModifierBuckets(input: {
   };
 }
 
+function resolveGenericCombatActionRollRequest(input: {
+  body: GenericCombatActionBody;
+  forceLookAroundPreset?: boolean;
+  scenarioParticipant: ScenarioParticipant;
+}): CombatGenericActionRollRequest | undefined {
+  const rollKind = input.forceLookAroundPreset ? "skill" : input.body.rollKind;
+  const difficulty = input.body.difficulty;
+  if (!rollKind || rollKind === "none") return undefined;
+  if (difficulty === undefined) {
+    throw new RangeError("A numeric Difficulty is required for a Combat action roll.");
+  }
+  if (rollKind === "skill") {
+    const skillId = input.forceLookAroundPreset ? "perception" : input.body.skillId;
+    const skill = defaultCanonicalContent.skills.find((candidate) => candidate.id === skillId);
+    if (!skill) throw new RangeError("Choose an existing Skill for this Combat action.");
+    const profile = resolveParticipantSkillRollProfile({
+      ...getScenarioParticipantFeintSkillInput(input.scenarioParticipant),
+      skill,
+    });
+    return {
+      basis: {
+        avgStats: profile.avgStats,
+        baseValue: profile.rollBaseValue + profile.unknownSkillPenalty,
+        derivedXp: profile.derivedXP,
+        groupXp: profile.groupXP,
+        kind: "skill",
+        skillId: profile.skillId,
+        skillLabel: profile.skillName,
+        skillXp: profile.skillXP,
+        unknownSkillPenalty: profile.unknownSkillPenalty,
+      },
+      difficulty,
+    };
+  }
+
+  if (!input.body.statId) throw new RangeError("Choose an existing Stat for this Combat action.");
+  const profile = resolveParticipantStatRollProfile({
+    participantId: input.scenarioParticipant.id,
+    participantName: input.scenarioParticipant.snapshot.displayName,
+    snapshot: input.scenarioParticipant.snapshot,
+    statId: input.body.statId,
+  });
+  if (profile.statValue == null) {
+    throw new RangeError(profile.warning ?? "The selected Current Stat is unavailable.");
+  }
+  return {
+    basis: {
+      baseValue: profile.statValue,
+      kind: "stat",
+      statId: profile.statId,
+      statLabel: profile.statLabel,
+    },
+    difficulty,
+  };
+}
+
+function resolveGenericCombatActionReference(input: {
+  body: GenericCombatActionBody;
+  encounter: EncounterSession;
+  ownerEncounterParticipantId: string;
+  ownerScenarioParticipant: ScenarioParticipant;
+  roundState: CombatRoundState;
+  visibleParticipantIds?: ReadonlySet<string>;
+}): CombatGenericActionReference | undefined {
+  if (!input.body.referenceKind || input.body.referenceKind === "none") return undefined;
+  if (input.body.referenceKind === "environment") {
+    if (!input.body.environmentDescription) {
+      throw new RangeError("Describe the environment reference.");
+    }
+    return { description: input.body.environmentDescription, kind: "environment" };
+  }
+  if (input.body.referenceKind === "participant") {
+    const participant = input.roundState.participants.find(
+      (candidate) => candidate.participantId === input.body.referenceParticipantId,
+    );
+    if (
+      !participant ||
+      (input.visibleParticipantIds && !input.visibleParticipantIds.has(participant.participantId))
+    ) {
+      throw new RangeError("Choose an active visible Combat participant.");
+    }
+    return {
+      kind: "participant",
+      label: participant.label,
+      participantId: participant.participantId,
+    };
+  }
+
+  if (!input.body.itemId) throw new RangeError("Choose a canonical Item.");
+  const equipmentState = getSnapshotEquipmentState(input.ownerScenarioParticipant);
+  const itemsById = isRecord(equipmentState?.itemsById)
+    ? (equipmentState.itemsById as Record<string, unknown>)
+    : undefined;
+  const item = itemsById?.[input.body.itemId];
+  if (!isRecord(item)) throw new RangeError("The selected Item is no longer available.");
+  const templateId = typeof item.templateId === "string" ? item.templateId : undefined;
+  const template = templateId ? getEquipmentTemplatesById(equipmentState)?.[templateId] : undefined;
+  const label =
+    (typeof item.name === "string" && item.name.trim()) ||
+    (isRecord(template) && typeof template.name === "string" && template.name.trim()) ||
+    (templateId ? equipmentTemplatesById[templateId]?.name : undefined) ||
+    "Item";
+  return {
+    itemId: input.body.itemId,
+    kind: "item",
+    label,
+    ownerParticipantId: input.ownerEncounterParticipantId,
+  };
+}
+
 export const encounterRoutes: FastifyPluginAsync = async (app) => {
+  app.post("/encounters/:encounterId/combat-round/generic-actions", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+      if (!encounter?.scenarioId || encounter.kind !== "combat") {
+        return reply.code(404).send({ error: "Combat encounter not found." });
+      }
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        {
+          scenarioId: encounter.scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+      if (!access) return reply.code(404).send({ error: "Combat encounter not found." });
+
+      const body = parseGenericCombatActionBody(request.body);
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(
+        encounter.scenarioId,
+      );
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
+      const existingAction = roundState.genericActions.find(
+        (action) => action.id === body.actionId,
+      );
+      const isGm = access.mode === "gm";
+      const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
+      const existingOwnerEncounterParticipant = existingAction
+        ? resolveEncounterParticipantByRollParticipantId({
+            participantId: existingAction.ownerParticipantId,
+            participants: membership.participants,
+          })
+        : undefined;
+      const existingOwnerScenarioParticipant = existingOwnerEncounterParticipant
+        ? findScenarioParticipantForEncounterParticipant({
+            encounterParticipant: existingOwnerEncounterParticipant,
+            scenarioParticipants,
+          })
+        : undefined;
+      const canAccessExistingAction =
+        isGm || existingOwnerScenarioParticipant?.controlledByUserId === user.id;
+
+      if (!isGm && body.operation !== "declare" && !canAccessExistingAction) {
+        return reply.code(404).send({ error: "Combat action not found." });
+      }
+
+      // A retried declaration with the same client-generated identity returns the cached canonical
+      // action even if the encounter revision advanced after the first successful write.
+      if (body.operation === "declare" && existingAction) {
+        if (!canAccessExistingAction) {
+          return reply.code(404).send({ error: "Combat action not found." });
+        }
+        return {
+          encounter:
+            access.mode === "gm"
+              ? encounter
+              : buildPlayerSafeEncounterForUser({
+                  encounter,
+                  scenarioParticipants,
+                  userId: user.id,
+                }),
+        };
+      }
+      // A repeated roll request returns the first server-owned roll, including after a refresh,
+      // instead of advancing the revision or consuming another random roll.
+      if (body.operation === "roll" && existingAction?.rollResult) {
+        return {
+          encounter:
+            access.mode === "gm"
+              ? encounter
+              : buildPlayerSafeEncounterForUser({
+                  encounter,
+                  scenarioParticipants,
+                  userId: user.id,
+                }),
+        };
+      }
+      if (body.expectedRevision !== encounter.updatedAt) {
+        return reply.code(409).send({
+          error: "The Combat action changed. Refresh and review the latest state.",
+        });
+      }
+
+      const ownerParticipantId =
+        body.operation === "declare" ? body.participantId : existingAction?.ownerParticipantId;
+      const ownerEncounterParticipant = ownerParticipantId
+        ? resolveEncounterParticipantByRollParticipantId({
+            participantId: ownerParticipantId,
+            participants: membership.participants,
+          })
+        : undefined;
+      const ownerScenarioParticipant = ownerEncounterParticipant
+        ? findScenarioParticipantForEncounterParticipant({
+            encounterParticipant: ownerEncounterParticipant,
+            scenarioParticipants,
+          })
+        : undefined;
+      if (!ownerEncounterParticipant || !ownerScenarioParticipant?.isActive) {
+        return reply.code(400).send({ error: "Choose an active participant in this Combat." });
+      }
+      const ownsParticipant = ownerScenarioParticipant.controlledByUserId === user.id;
+      if (!isGm && !ownsParticipant) {
+        return reply
+          .code(403)
+          .send({ error: "This Combat action is not assigned to this player." });
+      }
+      if (!isGm && body.operation !== "declare" && body.operation !== "roll") {
+        return reply.code(403).send({ error: "Only the GM can review or resolve Combat actions." });
+      }
+      const visibleParticipantIds = isGm
+        ? undefined
+        : buildPlayerSafeCombatScopeForUser({
+            encounter,
+            scenarioParticipants,
+            userId: user.id,
+          }).visibleParticipantIds;
+
+      const now = new Date().toISOString();
+      let genericActions = roundState.genericActions;
+      if (body.operation === "declare") {
+        if (!body.intent) return reply.code(400).send({ error: "Describe what you intend to do." });
+        const duration = body.duration ?? { kind: "round" as const };
+        const rollRequest = resolveGenericCombatActionRollRequest({
+          body,
+          forceLookAroundPreset: body.preset === "look_around",
+          scenarioParticipant: ownerScenarioParticipant,
+        });
+        const reference = resolveGenericCombatActionReference({
+          body,
+          encounter,
+          ownerEncounterParticipantId: ownerEncounterParticipant.id,
+          ownerScenarioParticipant,
+          roundState,
+          visibleParticipantIds,
+        });
+        genericActions = declareCombatGenericAction({
+          action: {
+            createdAt: now,
+            createdByUserId: user.id,
+            duration,
+            id: body.actionId,
+            intent: body.intent,
+            ownerParticipantId: ownerEncounterParticipant.id,
+            preset: body.preset,
+            reference,
+            rollRequest,
+          },
+          actions: genericActions,
+        });
+      } else if (body.operation === "review") {
+        if (!isGm) return reply.code(403).send({ error: "Only the GM can review Combat actions." });
+        const duration = body.duration ?? existingAction!.duration;
+        const rollRequest =
+          body.rollKind !== undefined
+            ? resolveGenericCombatActionRollRequest({
+                body,
+                scenarioParticipant: ownerScenarioParticipant,
+              })
+            : existingAction!.rollRequest;
+        const reference =
+          body.referenceKind !== undefined
+            ? resolveGenericCombatActionReference({
+                body,
+                encounter,
+                ownerEncounterParticipantId: ownerEncounterParticipant.id,
+                ownerScenarioParticipant,
+                roundState,
+                visibleParticipantIds,
+              })
+            : existingAction!.reference;
+        genericActions = reviewCombatGenericAction({
+          actionId: body.actionId,
+          actions: genericActions,
+          duration,
+          reference,
+          reviewedAt: now,
+          rollRequest,
+        });
+      } else if (body.operation === "activate") {
+        genericActions = activateCombatGenericAction({
+          actionId: body.actionId,
+          activatedAt: now,
+          actions: genericActions,
+          roundNumber: roundState.roundNumber,
+        });
+      } else if (body.operation === "roll") {
+        if (!existingAction?.rollRequest) {
+          return reply.code(400).send({ error: "This Combat action has no roll to make." });
+        }
+        genericActions = recordCombatGenericActionRoll({
+          actionId: body.actionId,
+          actions: genericActions,
+          result: resolveGenericCombatActionRoll({
+            request: existingAction.rollRequest,
+            rolledAt: now,
+            rolledByUserId: user.id,
+          }),
+        });
+      } else {
+        if (!isGm)
+          return reply.code(403).send({ error: "Only the GM can resolve Combat actions." });
+        const terminalStatus =
+          body.operation === "resolve"
+            ? "completed"
+            : body.operation === "interrupt"
+              ? "interrupted"
+              : "cancelled";
+        const validAudience = new Set(
+          roundState.participants.map((participant) => participant.participantId),
+        );
+        if (body.visibleToParticipantIds.some((id) => !validAudience.has(id))) {
+          return reply
+            .code(400)
+            .send({ error: "Choose active participants for the result audience." });
+        }
+        genericActions = finishCombatGenericAction({
+          actionId: body.actionId,
+          actions: genericActions,
+          at: now,
+          resolution:
+            terminalStatus === "completed" && body.resultText
+              ? {
+                  resolvedAt: now,
+                  resolvedByUserId: user.id,
+                  text: body.resultText,
+                  visibleToParticipantIds: body.visibleToParticipantIds,
+                }
+              : undefined,
+          status: terminalStatus,
+        });
+      }
+
+      const nextEncounter = await encounterService.updateCombatEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        expectedRevision: encounter.updatedAt,
+        scenarioId: encounter.scenarioId,
+        session: {
+          ...encounter,
+          combatRoundState: { ...roundState, genericActions },
+          updatedAt: now,
+        },
+      });
+      await scenarioService.recordScenarioEvent({
+        actorUserId: user.id,
+        eventType: "encounter_updated",
+        payload: { actionId: body.actionId, encounterId, operation: body.operation },
+        scenarioId: encounter.scenarioId,
+        summary: `Combat action ${body.operation}.`,
+      });
+      return {
+        encounter:
+          access.mode === "gm"
+            ? nextEncounter
+            : buildPlayerSafeEncounterForUser({
+                encounter: nextEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+      };
+    } catch (error) {
+      const persistenceErrorResponse = sendCombatWriteError(reply, error);
+      if (persistenceErrorResponse !== undefined) return persistenceErrorResponse;
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to update the Combat action.",
+      });
+    }
+  });
+
   app.addHook("preSerialization", async (request, _reply, payload) => {
     const response = measureCombatPerformanceStage("response_construction", () =>
       buildRequestedCombatMutationResponse({

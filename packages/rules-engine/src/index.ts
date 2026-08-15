@@ -36,6 +36,7 @@ export * from "./encounters/criticalInjuryEvaluator";
 export * from "./encounters/criticalInjuryPresentation";
 export * from "./encounters/resolveParticipantSkillRollProfile";
 export * from "./encounters/resolveRoleplaySkillRollModifiers";
+export * from "./encounters/resolveGenericCombatActionRoll";
 export * from "./encounters/resolveEncounterAttack";
 export * from "./encounters/resolveEncounterCritical";
 export * from "./encounters/resolveEncounterDamage";
