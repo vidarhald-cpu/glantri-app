@@ -3,7 +3,10 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { EncounterSession, ScenarioParticipant } from "@glantri/domain";
+import type {
+  ScenarioEncounterManagementProjection,
+  ScenarioParticipant
+} from "@glantri/domain";
 
 import { ScenarioEncounterAssignmentSection } from "./ScenarioEncounterAssignmentSection";
 import { ScenarioEncountersSection } from "./ScenarioEncountersSection";
@@ -12,13 +15,14 @@ const encounter = {
   createdAt: "2026-07-10T10:00:00.000Z",
   id: "encounter-1",
   kind: "combat",
+  participantCount: 0,
   participantMembershipMode: "explicit",
-  participants: [],
+  participantMemberships: [],
   scenarioId: "scenario-1",
   status: "active",
   title: "Courtyard",
   updatedAt: "2026-07-10T10:00:00.000Z",
-} as unknown as EncounterSession;
+} satisfies ScenarioEncounterManagementProjection;
 
 const participant = {
   characterId: "character-1",
@@ -47,7 +51,7 @@ function renderAssignmentSection(input: {
   };
   onBulkEncounterAssignment?: (member: boolean) => void;
   onEncounterParticipantToggle?: (
-    nextEncounter: EncounterSession,
+    nextEncounter: ScenarioEncounterManagementProjection,
     nextParticipant: ScenarioParticipant,
     member: boolean
   ) => void;

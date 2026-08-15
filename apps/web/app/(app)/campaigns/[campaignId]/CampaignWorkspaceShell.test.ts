@@ -124,6 +124,17 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).not.toContain("loadScenarioEncounters");
   });
 
+  it("does not eagerly load a full encounter on Campaign, Items, or Scenario tabs", () => {
+    const source = readSource();
+
+    expect(source).toContain("const shouldLoadActiveEncounter =");
+    expect(source).toContain('["character", "combat", "player-combat", "player-skill-rolls"]');
+    expect(source).toContain(
+      "const encounterId = shouldLoadActiveEncounter ? activeEncounterId : undefined",
+    );
+    expect(source).toContain("setError(undefined)");
+  });
+
   it("routes Player combat through its own GM inspection tab", () => {
     const source = readSource();
 

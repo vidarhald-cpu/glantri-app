@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 
-import type { EncounterKind, EncounterSession, EncounterStatus } from "@glantri/domain";
+import type {
+  EncounterKind,
+  EncounterStatus,
+  ScenarioEncounterManagementProjection
+} from "@glantri/domain";
 
 import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 
@@ -17,11 +21,13 @@ interface ScenarioEncountersSectionProps {
   onKindChange: (value: EncounterKind) => void;
   onTimelineLabelChange: (value: string) => void;
   onTitleChange: (value: string) => void;
-  onUpdateEncounterStatus: (encounter: EncounterSession, status: EncounterStatus) => void;
-  orderedEncounters: EncounterSession[];
+  onUpdateEncounterStatus: (
+    encounter: ScenarioEncounterManagementProjection,
+    status: EncounterStatus
+  ) => void;
+  orderedEncounters: ScenarioEncounterManagementProjection[];
   scenarioId: string;
 }
-
 export function ScenarioEncountersSection({
   campaignId,
   encounterDescription,
@@ -121,7 +127,7 @@ export function ScenarioEncountersSection({
                     {encounter.timelineLabel ?? encounter.createdAt}
                   </td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
-                    {encounter.participants.length}
+                    {encounter.participantCount}
                   </td>
                   <td style={{ padding: "0.6rem 0.75rem" }}>
                     <div style={{ display: "grid", gap: "0.35rem" }}>

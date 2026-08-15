@@ -13,6 +13,7 @@ import type {
   ReusableEntity,
   Scenario,
   ScenarioEventLog,
+  ScenarioEncounterManagementProjection,
   ScenarioParticipant,
 } from "@glantri/domain";
 import { createEncounterSession } from "@glantri/rules-engine";
@@ -24,8 +25,9 @@ import {
   loadAuthUsers,
   loadCampaignEntities,
   loadCampaignRoster,
+  loadEncounterById,
   loadServerCharacters,
-  loadScenarioEncounters,
+  loadScenarioEncounterManagementProjections,
   loadTemplates,
   loadScenarioById,
   loadScenarioEventLogs,
@@ -70,7 +72,6 @@ interface ScenarioDetailPageContentProps {
   onWorkspaceEncountersChanged?: () => void;
   scenarioId: string;
 }
-
 export default function ScenarioDetailPageContent({
   campaignId,
   embedded = false,
@@ -78,7 +79,7 @@ export default function ScenarioDetailPageContent({
   scenarioId
 }: ScenarioDetailPageContentProps) {
   const [assignableUsers, setAssignableUsers] = useState<AuthUser[]>([]);
-  const [encounters, setEncounters] = useState<EncounterSession[]>([]);
+  const [encounters, setEncounters] = useState<ScenarioEncounterManagementProjection[]>([]);
   const [entities, setEntities] = useState<ReusableEntity[]>([]);
   const [error, setError] = useState<string>();
   const [eventLogs, setEventLogs] = useState<ScenarioEventLog[]>([]);
@@ -471,12 +472,12 @@ export default function ScenarioDetailPageContent({
   }
 
   function isParticipantInEncounter(
-    encounter: EncounterSession,
+    encounter: ScenarioEncounterManagementProjection,
     participant: ScenarioParticipant
   ): boolean {
     const participantId = `scenario-${participant.id}`;
 
-    return encounter.participants.some(
+    return encounter.participantMemberships.some(
       (entry) => entry.scenarioParticipantId === participant.id || entry.id === participantId
     );
   }
@@ -493,17 +494,6 @@ export default function ScenarioDetailPageContent({
     });
 
     setFeedback(input.feedbackMessage);
-    setEncounters((current) =>
-      current.map((entry) =>
-        entry.id === input.encounter.id
-          ? {
-              ...input.encounter,
-              participantMembershipMode: "explicit",
-              participants: input.participants,
-            }
-          : entry
-      )
-    );
     await refreshScenario();
     onWorkspaceEncountersChanged?.();
   }
@@ -525,7 +515,7 @@ export default function ScenarioDetailPageContent({
       loadCampaignEntities(campaignId),
       loadTemplates(),
       loadScenarioEventLogs(scenarioId),
-      loadScenarioEncounters(scenarioId),
+      loadScenarioEncounterManagementProjections(scenarioId),
       loadAuthUsers(),
       loadServerCharacters(),
       loadCampaignRoster(campaignId),
@@ -547,6 +537,7 @@ export default function ScenarioDetailPageContent({
     setScenarioName(nextScenario.name);
     setScenarioDescription(nextScenario.description);
     setScenarioStatus(nextScenario.status);
+    setError(undefined);
   }
 
   async function handleCreateEncounter() {
@@ -714,7 +705,7 @@ export default function ScenarioDetailPageContent({
   }
 
   async function handleUpdateEncounterStatus(
-    encounter: EncounterSession,
+    encounter: ScenarioEncounterManagementProjection,
     status: EncounterStatus
   ) {
     try {
@@ -734,7 +725,7 @@ export default function ScenarioDetailPageContent({
   }
 
   async function handleEncounterParticipantToggle(
-    encounter: EncounterSession,
+    encounter: ScenarioEncounterManagementProjection,
     participant: ScenarioParticipant,
     member: boolean
   ) {
@@ -742,18 +733,22 @@ export default function ScenarioDetailPageContent({
       setError(undefined);
       setFeedback(undefined);
 
+      const fullEncounter = await loadEncounterById(encounter.id);
       const participantId = `scenario-${participant.id}`;
-      const existing = isParticipantInEncounter(encounter, participant);
+      const existing = fullEncounter.participants.some(
+        (entry) =>
+          entry.scenarioParticipantId === participant.id || entry.id === participantId
+      );
       const nextParticipants = member
         ? existing
-          ? encounter.participants
-          : [...encounter.participants, buildEncounterParticipant(encounter, participant)]
-        : encounter.participants.filter(
+          ? fullEncounter.participants
+          : [...fullEncounter.participants, buildEncounterParticipant(fullEncounter, participant)]
+        : fullEncounter.participants.filter(
             (entry) => entry.scenarioParticipantId !== participant.id && entry.id !== participantId
           );
 
       await saveEncounterParticipants({
-        encounter,
+        encounter: fullEncounter,
         feedbackMessage: `Updated participants for ${encounter.title}.`,
         participants: nextParticipants
       });
@@ -778,6 +773,7 @@ export default function ScenarioDetailPageContent({
       setError(undefined);
       setFeedback(undefined);
 
+      const fullEncounter = await loadEncounterById(encounter.id);
       const selectedIds = new Set(selectedParticipants.map((participant) => participant.id));
       const nextParticipants = member
         ? selectedParticipants.reduce<EncounterParticipant[]>((current, participant) => {
@@ -795,14 +791,14 @@ export default function ScenarioDetailPageContent({
               ...current,
               buildEncounterParticipant(
                 {
-                  ...encounter,
+                  ...fullEncounter,
                   participants: current
                 },
                 participant
               )
             ];
-          }, encounter.participants)
-        : encounter.participants.filter((entry) => {
+          }, fullEncounter.participants)
+        : fullEncounter.participants.filter((entry) => {
             const scenarioParticipantId =
               entry.scenarioParticipantId ??
               (entry.id.startsWith("scenario-") ? entry.id.slice("scenario-".length) : undefined);
@@ -811,7 +807,7 @@ export default function ScenarioDetailPageContent({
           });
 
       await saveEncounterParticipants({
-        encounter,
+        encounter: fullEncounter,
         feedbackMessage: `${member ? "Assigned" : "Withdrew"} ${selectedParticipants.length} participant${
           selectedParticipants.length === 1 ? "" : "s"
         } ${member ? "to" : "from"} ${encounter.title}.`,

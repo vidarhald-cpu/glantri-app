@@ -122,6 +122,22 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(assignmentSource).toContain("Toggle ${participant.snapshot.displayName} assignment details");
     expect(assignmentSource).toContain("aria-expanded={expanded}");
     expect(source).toContain("Encounter-specific details");
+    expect(source).toContain("ScenarioEncounterManagementProjection");
+    expect(source).toContain("participantMemberships");
+    expect(source).toContain("participantCount");
+    expect(source).toContain("await loadEncounterById(encounter.id)");
+    expect(source).toContain("fullEncounter.participants");
+    expect(source).toContain("loadScenarioEncounterManagementProjections");
+    expect(source).not.toContain("loadScenarioEncounters");
+  });
+
+  it("clears a stale load error after a successful refresh", () => {
+    const source = readScenarioDetailSource();
+    const refreshStart = source.indexOf("async function refreshScenario()");
+    const refreshEnd = source.indexOf("async function handleCreateEncounter()", refreshStart);
+    const refreshSource = source.slice(refreshStart, refreshEnd);
+
+    expect(refreshSource).toContain("setError(undefined)");
   });
 
   it("separates templates as sources for temporary actors", () => {

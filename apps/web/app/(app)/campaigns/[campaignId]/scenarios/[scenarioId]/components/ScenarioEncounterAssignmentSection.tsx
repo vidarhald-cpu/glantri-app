@@ -2,7 +2,7 @@
 
 import { Fragment, type Dispatch, type SetStateAction } from "react";
 
-import type { EncounterSession, ScenarioParticipant } from "@glantri/domain";
+import type { ScenarioEncounterManagementProjection, ScenarioParticipant } from "@glantri/domain";
 
 import { getConcreteParticipantMetadata } from "./scenarioScreenHelpers";
 import type {
@@ -20,12 +20,15 @@ interface ScenarioEncounterAssignmentSectionProps {
     participantId: string;
   };
   formatUserLabel: (userId: string | undefined) => string;
-  isParticipantInEncounter: (encounter: EncounterSession, participant: ScenarioParticipant) => boolean;
-  nonArchivedEncounters: EncounterSession[];
+  isParticipantInEncounter: (
+    encounter: ScenarioEncounterManagementProjection,
+    participant: ScenarioParticipant
+  ) => boolean;
+  nonArchivedEncounters: ScenarioEncounterManagementProjection[];
   onBulkEncounterAssignment: (member: boolean) => void;
   onBulkEncounterIdChange: (value: string) => void;
   onEncounterParticipantToggle: (
-    encounter: EncounterSession,
+    encounter: ScenarioEncounterManagementProjection,
     participant: ScenarioParticipant,
     member: boolean
   ) => void;
@@ -51,7 +54,6 @@ interface ScenarioEncounterAssignmentSectionProps {
   setExpandedAssignmentParticipantIds: Dispatch<SetStateAction<string[]>>;
   setSelectedAssignmentParticipantIds: Dispatch<SetStateAction<string[]>>;
 }
-
 export function ScenarioEncounterAssignmentSection({
   assignmentParticipants,
   concreteParticipants,

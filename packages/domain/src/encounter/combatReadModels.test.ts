@@ -7,6 +7,7 @@ import {
   buildCombatHistorySourceViewFromPersistedSession,
   buildCombatHistorySourceViewFromState,
   buildEncounterMetadataView,
+  buildScenarioEncounterManagementProjectionFromPersistedSession,
   composeEncounterSessionFromSplitCombatPersistence,
   combatHistorySourceViewSchema,
   combatRoundStateSchema,
@@ -86,6 +87,39 @@ describe("combat read models", () => {
         combatRoundState: {},
       }),
     ).toThrow();
+  });
+
+  it("builds a strict scenario-management projection without combat or roleplay history", () => {
+    const view = buildScenarioEncounterManagementProjectionFromPersistedSession({
+      metadata,
+      sessionJson: {
+        ...sessionJson(),
+        description: "Hold the courtyard.",
+        kind: "combat",
+        timelineLabel: "Dawn",
+      },
+    });
+
+    expect(view).toEqual({
+      campaignId: "campaign-1",
+      createdAt: metadata.createdAt,
+      description: "Hold the courtyard.",
+      id: "encounter-1",
+      kind: "combat",
+      participantCount: 2,
+      participantMemberships: [
+        { id: "aria", scenarioParticipantId: "scenario-aria" },
+        { id: "borin", scenarioParticipantId: "scenario-borin" },
+      ],
+      scenarioId: "scenario-1",
+      status: "active",
+      timelineLabel: "Dawn",
+      title: "Courtyard",
+      updatedAt: metadata.revision,
+    });
+    expect(view).not.toHaveProperty("combatRoundState");
+    expect(view).not.toHaveProperty("roleplayState");
+    expect(view).not.toHaveProperty("participants");
   });
 
   it("keeps active state separate from archived rounds", () => {

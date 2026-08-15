@@ -7,6 +7,7 @@ import {
   buildCombatHistorySourceViewFromPersistedSession,
   composeEncounterSessionFromSplitCombatPersistence,
   buildEncounterAccessMetadataViewFromPersistedSession,
+  buildScenarioEncounterManagementProjectionFromPersistedSession,
   buildEncounterMetadataView,
   buildFullEncounterReadView,
   encounterSessionSchema,
@@ -16,9 +17,10 @@ import {
   type EncounterAccessMetadataView,
   type EncounterMetadataView,
   type FullEncounterReadView,
+  type ScenarioEncounterManagementProjection,
 } from "@glantri/domain";
 
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { prisma } from "../client";
 import {
@@ -116,6 +118,9 @@ export interface CombatStateReadRepository {
   getEncounterMetadataById(encounterId: string): Promise<EncounterMetadataView | null>;
   getFullEncounterById(encounterId: string): Promise<FullEncounterReadView | null>;
   listEncounterAccessMetadataByScenario(scenarioId: string): Promise<EncounterAccessMetadataView[]>;
+  listScenarioEncounterManagementProjections(
+    scenarioId: string,
+  ): Promise<ScenarioEncounterManagementProjection[]>;
 }
 
 export function createPrismaCombatStateReadRepository(
@@ -297,6 +302,52 @@ export function createPrismaCombatStateReadRepository(
 
       return records.map((record) =>
         buildEncounterAccessMetadataViewFromPersistedSession({
+          metadata: metadataInput(record),
+          sessionJson: record.sessionJson,
+        }),
+      );
+    },
+    async listScenarioEncounterManagementProjections(scenarioId) {
+      const records = await client.$queryRaw<
+        Array<EncounterMetadataRecord & { sessionJson: Prisma.JsonValue }>
+      >(Prisma.sql`
+        SELECT
+          e."campaignId",
+          e."createdAt",
+          e.id,
+          e.name,
+          e."scenarioId",
+          e.status,
+          e."updatedAt",
+          jsonb_strip_nulls(jsonb_build_object(
+            'description', e."sessionJson" -> 'description',
+            'kind', COALESCE(e."sessionJson" -> 'kind', '"combat"'::jsonb),
+            'participantMembershipMode', e."sessionJson" -> 'participantMembershipMode',
+            'participants', COALESCE(
+              (
+                SELECT jsonb_agg(
+                  jsonb_strip_nulls(
+                    jsonb_build_object(
+                      'id', participant.value -> 'id',
+                      'scenarioParticipantId', participant.value -> 'scenarioParticipantId'
+                    )
+                  )
+                )
+                FROM jsonb_array_elements(
+                  COALESCE(e."sessionJson" -> 'participants', '[]'::jsonb)
+                ) AS participant(value)
+              ),
+              '[]'::jsonb
+            ),
+            'timelineLabel', e."sessionJson" -> 'timelineLabel'
+          )) AS "sessionJson"
+        FROM "Encounter" AS e
+        WHERE e."scenarioId" = ${scenarioId}
+        ORDER BY e."updatedAt" DESC
+      `);
+
+      return records.map((record) =>
+        buildScenarioEncounterManagementProjectionFromPersistedSession({
           metadata: metadataInput(record),
           sessionJson: record.sessionJson,
         }),
