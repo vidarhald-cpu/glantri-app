@@ -624,10 +624,19 @@ describe("combat round manager selection", () => {
 
   it("does not guess a current task when the cursor is missing or stale", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
+    const playerSafeState = {
+      ...existing,
+      activeParticipantId: undefined,
+      currentCursor: undefined,
+      phaseResolutionCursor: undefined,
+      selectedParticipantId: undefined,
+    };
 
-    expect(getCurrentCombatRoundTaskSelection({ ...existing, currentCursor: undefined })).toBe(
-      undefined,
-    );
+    expect(getCurrentCombatRoundTaskSelection(playerSafeState)).toBe(undefined);
+    expect(getCombatRoundManagerInspectionSelection({ state: playerSafeState })).toEqual({
+      participantId: "top",
+      step: "select_actions",
+    });
     expect(
       getCurrentCombatRoundTaskSelection({
         ...existing,

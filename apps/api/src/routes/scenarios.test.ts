@@ -3704,6 +3704,36 @@ describe("scenarios route contract", () => {
         },
       },
     }) as EncounterSession;
+    const unsafeRoundState = initializeCombatRoundState({ encounter });
+    encounter.combatRoundState = combatRoundStateSchema.parse({
+      ...unsafeRoundState,
+      activeParticipantId: "encounter-participant-hidden",
+      currentCursor: {
+        participantId: "encounter-participant-hidden",
+        roundNumber: 1,
+        step: "DE",
+      },
+      phaseResolutionCursor: {
+        participantId: "encounter-participant-hidden",
+        phase: "phase1",
+        substep: "attack",
+      },
+      phaseResolutionStatuses: {
+        "encounter-participant-1": { phase1: { substep: "pending" } },
+        "encounter-participant-hidden": { phase1: { substep: "attack" } },
+      },
+      roundEndReview: {
+        participantReviews: {
+          "encounter-participant-1": { participantId: "encounter-participant-1" },
+          "encounter-participant-hidden": {
+            participantId: "encounter-participant-hidden",
+            warnings: ["Hidden spy"],
+          },
+        },
+        roundNumber: 1,
+      },
+      selectedParticipantId: "encounter-participant-hidden",
+    });
     const participants = [
       makeCombatScenarioParticipant({ id: "participant-1" }),
       makeCombatScenarioParticipant({
@@ -3767,6 +3797,28 @@ describe("scenarios route contract", () => {
           (participant: { participantId: string }) => participant.participantId,
         ),
     ).toEqual(["encounter-participant-1", "encounter-participant-2"]);
+    expect(declared.json().encounter.combatRoundState).toMatchObject({
+      phaseResolutionStatuses: {
+        "encounter-participant-1": { phase1: { substep: "pending" } },
+      },
+      roundEndReview: {
+        participantReviews: {
+          "encounter-participant-1": expect.objectContaining({
+            participantId: "encounter-participant-1",
+          }),
+        },
+      },
+    });
+    expect(declared.json().encounter.combatRoundState).not.toHaveProperty("activeParticipantId");
+    expect(declared.json().encounter.combatRoundState).not.toHaveProperty("currentCursor");
+    expect(declared.json().encounter.combatRoundState).not.toHaveProperty("phaseResolutionCursor");
+    expect(declared.json().encounter.combatRoundState).not.toHaveProperty("selectedParticipantId");
+    expect(Object.keys(declared.json().encounter.combatRoundState.phaseResolutionStatuses)).toEqual(
+      ["encounter-participant-1"],
+    );
+    expect(
+      Object.keys(declared.json().encounter.combatRoundState.roundEndReview.participantReviews),
+    ).toEqual(["encounter-participant-1"]);
     expect(JSON.stringify(declared.json().encounter)).not.toContain("Hidden spy");
     expect(JSON.stringify(declared.json().encounter)).not.toContain("encounter-participant-hidden");
     expect(retried.statusCode).toBe(200);
@@ -3778,6 +3830,78 @@ describe("scenarios route contract", () => {
     });
     expect(JSON.stringify(hiddenReference.json())).not.toContain("Hidden spy");
     expect(JSON.stringify(hiddenReference.json())).not.toContain("encounter-participant-hidden");
+  });
+
+  it("preserves visible Combat cursor and selection identities in the player projection", async () => {
+    const encounterParticipants = [
+      makeEncounterCombatParticipant({
+        id: "encounter-participant-1",
+        label: "The Gladiator",
+        order: 0,
+        scenarioParticipantId: "participant-1",
+      }),
+      makeEncounterCombatParticipant({
+        id: "encounter-participant-2",
+        label: "Visible guard",
+        order: 1,
+        scenarioParticipantId: "participant-2",
+      }),
+    ];
+    const encounter = makeCombatEncounter({
+      participants: encounterParticipants,
+      roleplayState: {
+        visibility: {
+          "encounter-participant-1": { "encounter-participant-2": true },
+        },
+      },
+    }) as EncounterSession;
+    const roundState = initializeCombatRoundState({ encounter });
+    encounter.combatRoundState = combatRoundStateSchema.parse({
+      ...roundState,
+      activeParticipantId: "encounter-participant-2",
+      currentCursor: {
+        participantId: "encounter-participant-2",
+        roundNumber: 1,
+        step: "DE",
+      },
+      phaseResolutionStatuses: {
+        "encounter-participant-2": { phase1: { substep: "attack" } },
+      },
+      selectedParticipantId: "encounter-participant-2",
+    });
+    setupCombatDeclarationRoute({
+      encounter,
+      participants: [
+        makeCombatScenarioParticipant({ id: "participant-1" }),
+        makeCombatScenarioParticipant({
+          controlledByUserId: "other-player",
+          id: "participant-2",
+          snapshot: { displayName: "Visible guard" },
+        }),
+      ],
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().encounter.combatRoundState).toMatchObject({
+      activeParticipantId: "encounter-participant-2",
+      currentCursor: {
+        participantId: "encounter-participant-2",
+        roundNumber: 1,
+        step: "DE",
+      },
+      phaseResolutionStatuses: {
+        "encounter-participant-2": { phase1: { substep: "attack" } },
+      },
+      selectedParticipantId: "encounter-participant-2",
+    });
   });
 
   it("lets the GM authoritatively review generic action rolls and typed references", async () => {

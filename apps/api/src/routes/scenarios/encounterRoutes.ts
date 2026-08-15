@@ -5748,6 +5748,21 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
 
   const { controlledEncounterParticipantIds, visibleParticipantIds } =
     buildPlayerSafeCombatScopeForUser(input);
+  const safeCurrentCursor =
+    !roundState.currentCursor?.participantId ||
+    visibleParticipantIds.has(roundState.currentCursor.participantId)
+      ? roundState.currentCursor
+      : undefined;
+  const safePhaseResolutionCursor =
+    roundState.phaseResolutionCursor &&
+    visibleParticipantIds.has(roundState.phaseResolutionCursor.participantId)
+      ? roundState.phaseResolutionCursor
+      : undefined;
+  const safePhaseResolutionStatuses = Object.fromEntries(
+    Object.entries(roundState.phaseResolutionStatuses).filter(([participantId]) =>
+      visibleParticipantIds.has(participantId),
+    ),
+  );
   const safeDistanceEdges = Object.fromEntries(
     Object.entries(roundState.distanceState?.edges ?? {}).filter(
       ([, edge]) =>
@@ -5779,6 +5794,11 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
                 ? contest.controllerRoll
                 : undefined,
             })),
+        participantReviews: Object.fromEntries(
+          Object.entries(roundState.roundEndReview.participantReviews).filter(([participantId]) =>
+            visibleParticipantIds.has(participantId),
+          ),
+        ),
         proposedDistances: roundState.roundEndReview.proposedDistances
           .map((proposal) =>
             buildPlayerSafeDistanceControlProposalForUser({
@@ -5793,6 +5813,10 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
 
   const safeState: CombatRoundState = {
     ...roundState,
+    activeParticipantId:
+      roundState.activeParticipantId && visibleParticipantIds.has(roundState.activeParticipantId)
+        ? roundState.activeParticipantId
+        : undefined,
     commands: roundState.commands
       .map((command) =>
         buildPlayerSafeCombatRoundCommandForUser({
@@ -5905,6 +5929,7 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
         visibleParticipantIds,
       }),
     ),
+    currentCursor: safeCurrentCursor,
     participants: roundState.participants
       .filter((participant) => visibleParticipantIds.has(participant.participantId))
       .map((participant) =>
@@ -5936,8 +5961,15 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
                     : undefined,
             },
       ),
+    phaseResolutionCursor: safePhaseResolutionCursor,
+    phaseResolutionStatuses: safePhaseResolutionStatuses,
     roundEndReview: safeRoundEndReview,
     rounds: [],
+    selectedParticipantId:
+      roundState.selectedParticipantId &&
+      visibleParticipantIds.has(roundState.selectedParticipantId)
+        ? roundState.selectedParticipantId
+        : undefined,
     stepSnapshots: [],
     unbalancedConditions: roundState.unbalancedConditions.filter(
       (condition) =>
