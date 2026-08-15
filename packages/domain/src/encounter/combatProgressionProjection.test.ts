@@ -331,39 +331,42 @@ describe("CombatProgressionProjection", () => {
     });
   });
 
-  it("stops a stale incompatible primary-secondary pair before canonical execution", () => {
-    const projection = buildCombatProgressionProjection(
-      state({
-        currentStep: "phase_1_actions",
-        cursorParticipantId: "hero",
-        cursorStep: "A1",
-        participantOverrides: [
-          {
-            declaration: {
-              actionId: "attack_parry",
-              roundNumber: 2,
-              secondaryActionContext: {
-                action: "observe_opponent",
-                targetParticipantId: "guard",
+  it.each(["attack_parry", "move_only"])(
+    "stops a stale incompatible %s primary-secondary pair before canonical execution",
+    (actionId) => {
+      const projection = buildCombatProgressionProjection(
+        state({
+          currentStep: "phase_1_actions",
+          cursorParticipantId: "hero",
+          cursorStep: "A1",
+          participantOverrides: [
+            {
+              declaration: {
+                actionId,
+                roundNumber: 2,
+                secondaryActionContext: {
+                  action: "observe_opponent",
+                  targetParticipantId: "guard",
+                },
+                secondaryActionId: "observe_opponent",
+                submittedBy: "player",
               },
-              secondaryActionId: "observe_opponent",
-              submittedBy: "player",
+              stepStatuses: { select_actions: "submitted" },
             },
-            stepStatuses: { select_actions: "submitted" },
-          },
-        ],
-      }),
-    );
+          ],
+        }),
+      );
 
-    expect(projection.boundary.processes).toEqual([]);
-    expect(projection.blockers).toEqual([
-      expect.objectContaining({
-        message: "observe_opponent is not compatible with the selected primary action.",
-        owner: expect.objectContaining({ participantId: "hero" }),
-        type: "invalid_source",
-      }),
-    ]);
-  });
+      expect(projection.boundary.processes).toEqual([]);
+      expect(projection.blockers).toEqual([
+        expect.objectContaining({
+          message: "observe_opponent is not compatible with the selected primary action.",
+          owner: expect.objectContaining({ participantId: "hero" }),
+          type: "invalid_source",
+        }),
+      ]);
+    },
+  );
 
   it.each([
     ["phase1", "A1", "phase_1_actions", "phase1_resolution", "phase2_modifier_review", "M2"],

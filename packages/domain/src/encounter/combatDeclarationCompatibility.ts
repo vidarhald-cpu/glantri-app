@@ -127,13 +127,13 @@ export type CombatDeclarationMovementKind = "hold_position" | "set_distance_pref
 export interface CombatDeclarationCompatibilityRule {
   allowedMovementKinds: readonly CombatDeclarationMovementKind[];
   compatibleSecondaryActions: readonly CombatDeclarationSecondaryCompatibility[];
-  primaryAction: CombatPrimaryActionId;
+  primaryAction: CombatPrimaryActionId | "move_only";
 }
 
 export type CombatDeclarationRequiredContext = "secondary_target_participant";
 
 export interface CombatDeclarationSecondaryCompatibility {
-  actionId: CombatSecondaryActionId;
+  actionId: CombatSecondaryActionId | "open";
   requiredContexts: readonly CombatDeclarationRequiredContext[];
 }
 
@@ -156,19 +156,30 @@ export interface CombatDeclarationCompatibilityProjection {
 const CURRENT_MOVEMENT_KINDS = ["hold_position", "set_distance_preferences"] as const;
 
 export const COMBAT_DECLARATION_COMPATIBILITY_RULES: readonly CombatDeclarationCompatibilityRule[] =
-  COMBAT_PRIMARY_ACTION_IDS.map((primaryAction) => ({
-    allowedMovementKinds: CURRENT_MOVEMENT_KINDS,
-    compatibleSecondaryActions:
-      primaryAction === "parry"
-        ? ([
-            {
-              actionId: "observe_opponent",
-              requiredContexts: ["secondary_target_participant"],
-            },
-          ] as const)
-        : [],
-    primaryAction,
-  }));
+  [
+    ...COMBAT_PRIMARY_ACTION_IDS.map((primaryAction) => ({
+      allowedMovementKinds: CURRENT_MOVEMENT_KINDS,
+      compatibleSecondaryActions: [
+        ...(isCombatDeclarationActionAvailable({ actionId: primaryAction, kind: "primary" })
+          ? ([{ actionId: "open", requiredContexts: [] }] as const)
+          : []),
+        ...(primaryAction === "parry"
+          ? ([
+              {
+                actionId: "observe_opponent",
+                requiredContexts: ["secondary_target_participant"],
+              },
+            ] as const)
+          : []),
+      ],
+      primaryAction,
+    })),
+    {
+      allowedMovementKinds: CURRENT_MOVEMENT_KINDS,
+      compatibleSecondaryActions: [],
+      primaryAction: "move_only",
+    },
+  ];
 
 export function getCombatDeclarationCompatibilityRule(
   primaryAction?: string,
@@ -293,7 +304,6 @@ export function validateCombatDeclarationCompatibility(input: {
       : { valid: true };
   }
   const rule = getCombatDeclarationCompatibilityRule(input.primaryAction);
-  if (primaryStatus === "partial_internal_only") return { valid: true };
   if (!rule) {
     return {
       message: `Combat action is not yet available: ${input.primaryAction}.`,
@@ -302,7 +312,6 @@ export function validateCombatDeclarationCompatibility(input: {
   }
   if (
     input.secondaryAction &&
-    secondaryStatus !== "partial_internal_only" &&
     !rule.compatibleSecondaryActions.some(
       (secondary) => secondary.actionId === input.secondaryAction,
     )

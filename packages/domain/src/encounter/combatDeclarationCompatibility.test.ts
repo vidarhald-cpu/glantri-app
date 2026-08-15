@@ -18,6 +18,10 @@ describe("combat declaration compatibility", () => {
       allowedMovementKinds: ["hold_position", "set_distance_preferences"],
       compatibleSecondaryActions: [
         {
+          actionId: "open",
+          requiredContexts: [],
+        },
+        {
           actionId: "observe_opponent",
           requiredContexts: ["secondary_target_participant"],
         },
@@ -145,12 +149,48 @@ describe("combat declaration compatibility", () => {
     expect(getCombatDeclarationCapabilityStatus({ actionId: "move_only", kind: "primary" })).toBe(
       "partial_internal_only",
     );
-    expect(validateCombatDeclarationCompatibility({ primaryAction: "move_only" })).toEqual({
-      valid: true,
-    });
+    expect(
+      validateCombatDeclarationCompatibility({
+        movementKind: "hold_position",
+        primaryAction: "move_only",
+      }),
+    ).toEqual({ valid: true });
+    expect(
+      validateCombatDeclarationCompatibility({
+        primaryAction: "attack_parry",
+        secondaryAction: "open",
+      }),
+    ).toEqual({ valid: true });
     expect(getCombatDeclarationCapabilityStatus({ actionId: "open", kind: "secondary" })).toBe(
       "partial_internal_only",
     );
+  });
+
+  it("fails closed for unapproved internal-only primary-secondary pairs", () => {
+    for (const secondaryAction of ["observe_opponent", "open"]) {
+      const input = { primaryAction: "move_only", secondaryAction };
+
+      expect(validateCombatDeclarationCompatibility(input)).toEqual({
+        message: `${secondaryAction} is not compatible with the selected primary action.`,
+        valid: false,
+      });
+      expect(projectCombatDeclarationCompatibility(input)).toEqual(
+        expect.objectContaining({
+          status: "incompatible",
+          valid: false,
+        }),
+      );
+    }
+
+    expect(
+      validateCombatDeclarationCompatibility({
+        movementKind: "teleport",
+        primaryAction: "move_only",
+      }),
+    ).toEqual({
+      message: "The selected movement is not compatible with the selected primary action.",
+      valid: false,
+    });
   });
 
   it("rejects unavailable, legacy-only, and unknown executable declarations precisely", () => {

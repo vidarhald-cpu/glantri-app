@@ -7389,6 +7389,41 @@ describe("scenarios route contract", () => {
     },
   );
 
+  it.each([
+    ["player", mocks.playerUser],
+    ["GM proxy", mocks.adminUser],
+  ] as const)(
+    "rejects a forged internal-only primary-secondary pair for %s without mutation",
+    async (_viewer, user) => {
+      setupCombatDeclarationRoute({ user });
+      const app = await buildScenarioTestApp();
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          actionId: "move_only",
+          combatContext: { modifierBuckets: emptyModifierBuckets() },
+          scenarioParticipantId: "participant-1",
+          secondaryActionContext: {
+            action: "observe_opponent",
+            targetParticipantId: "encounter-target-1",
+          },
+          secondaryActionId: "observe_opponent",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      await app.close();
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({
+        error: "observe_opponent is not compatible with the selected primary action.",
+      });
+      expect(response.body).not.toContain("encounter-target-1");
+      expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+      expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+      expect(mocks.scenarioService.recordScenarioEvent).not.toHaveBeenCalled();
+    },
+  );
+
   it("rejects a forged secondary-only declaration before it can persist", async () => {
     setupCombatDeclarationRoute();
     const app = await buildScenarioTestApp();
