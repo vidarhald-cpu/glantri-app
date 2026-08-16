@@ -331,6 +331,43 @@ describe("CombatProgressionProjection", () => {
     });
   });
 
+  it.each(["attack_parry", "move_only"])(
+    "stops a stale incompatible %s primary-secondary pair before canonical execution",
+    (actionId) => {
+      const projection = buildCombatProgressionProjection(
+        state({
+          currentStep: "phase_1_actions",
+          cursorParticipantId: "hero",
+          cursorStep: "A1",
+          participantOverrides: [
+            {
+              declaration: {
+                actionId,
+                roundNumber: 2,
+                secondaryActionContext: {
+                  action: "observe_opponent",
+                  targetParticipantId: "guard",
+                },
+                secondaryActionId: "observe_opponent",
+                submittedBy: "player",
+              },
+              stepStatuses: { select_actions: "submitted" },
+            },
+          ],
+        }),
+      );
+
+      expect(projection.boundary.processes).toEqual([]);
+      expect(projection.blockers).toEqual([
+        expect.objectContaining({
+          message: "observe_opponent is not compatible with the selected primary action.",
+          owner: expect.objectContaining({ participantId: "hero" }),
+          type: "invalid_source",
+        }),
+      ]);
+    },
+  );
+
   it.each([
     ["phase1", "A1", "phase_1_actions", "phase1_resolution", "phase2_modifier_review", "M2"],
     ["phase2", "A2", "phase_2_actions", "phase2_resolution", "round_end", "SU"],
@@ -633,9 +670,10 @@ describe("CombatProgressionProjection", () => {
       state: "active",
     });
     expect(taskKinds(committed)).toContain("commit_initiative");
-    expect(
-      committed.boundary.processes[0]?.stages[2]?.tasks[0]?.trackerFacet,
-    ).toEqual({ owner: undefined, step: "i1" });
+    expect(committed.boundary.processes[0]?.stages[2]?.tasks[0]?.trackerFacet).toEqual({
+      owner: undefined,
+      step: "i1",
+    });
   });
 
   it.each([

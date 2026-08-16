@@ -3,6 +3,7 @@ import {
   COMBAT_SECONDARY_ACTION_IDS,
   getCombatDeclarationActionLabel,
   isCombatDeclarationActionAvailable,
+  projectCombatDeclarationCompatibility,
   type ScenarioCombatModifierEntry,
   type ScenarioParticipantCombatContext,
   type ScenarioParticipantIncomingAttackSide,
@@ -113,6 +114,63 @@ export const PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS =
   ALL_PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS.filter((option) =>
     isCombatDeclarationActionAvailable({ actionId: option.value, kind: "secondary" }),
   );
+
+export function getPlayerEncounterPrimaryActionOptions(
+  secondaryActionId?: PlayerEncounterActionId | "",
+): readonly PlayerEncounterOption<PlayerEncounterActionId>[] {
+  const compatibleActionIds = new Set(
+    projectCombatDeclarationCompatibility({ secondaryAction: secondaryActionId || undefined })
+      .compatiblePrimaryActions,
+  );
+  return PLAYER_ENCOUNTER_ACTION_OPTIONS.filter((option) =>
+    compatibleActionIds.has(option.value as (typeof COMBAT_PRIMARY_ACTION_IDS)[number]),
+  );
+}
+
+export function getPlayerEncounterSecondaryActionOptions(
+  actionId?: PlayerEncounterActionId | "",
+): readonly PlayerEncounterOption<PlayerEncounterActionId>[] {
+  const compatibleActionIds = new Set(
+    projectCombatDeclarationCompatibility({ primaryAction: actionId || undefined })
+      .compatibleSecondaryActions,
+  );
+  return PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS.filter((option) =>
+    compatibleActionIds.has(option.value as (typeof COMBAT_SECONDARY_ACTION_IDS)[number]),
+  );
+}
+
+export function getPlayerEncounterDeclarationCompatibilityMessage(input: {
+  actionId?: PlayerEncounterActionId | "";
+  secondaryActionId?: PlayerEncounterActionId | "";
+}): string | undefined {
+  const actionId = input.actionId || undefined;
+  const secondaryActionId = input.secondaryActionId || undefined;
+  const projection = projectCombatDeclarationCompatibility({
+    primaryAction: actionId,
+    secondaryAction: secondaryActionId,
+  });
+  if (projection.valid) return undefined;
+
+  if (projection.status === "unsupported") {
+    const unsupportedAction = [
+      actionId ? { actionId, kind: "primary" as const } : undefined,
+      secondaryActionId ? { actionId: secondaryActionId, kind: "secondary" as const } : undefined,
+    ].find((selection) => selection && !isCombatDeclarationActionAvailable(selection));
+    return unsupportedAction
+      ? `${getPlayerEncounterActionLabel(unsupportedAction.actionId)} is unavailable and cannot be declared.`
+      : "This action selection is unavailable and cannot be declared.";
+  }
+
+  if (secondaryActionId && !actionId) {
+    return `Choose a compatible primary action for ${getPlayerEncounterActionLabel(secondaryActionId)}.`;
+  }
+
+  if (actionId && secondaryActionId) {
+    return `${getPlayerEncounterActionLabel(actionId)} cannot be combined with ${getPlayerEncounterActionLabel(secondaryActionId)}. Choose a compatible primary action or remove the secondary action.`;
+  }
+
+  return projection.message;
+}
 
 export function isPlayerEncounterActionId(value: unknown): value is PlayerEncounterActionId {
   if (typeof value !== "string") {

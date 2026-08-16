@@ -11,7 +11,7 @@ import {
   getCombatDeclarationAttackPhases,
   validateCombatDeclarationTargets,
 } from "./combatDeclarationValidation";
-import { validateCombatDeclarationActionAvailability } from "./combatDeclarationCompatibility";
+import { validateCombatDeclarationCompatibility } from "./combatDeclarationCompatibility";
 
 export const CANONICAL_COMBAT_NPC_DECLARATION_PROPOSAL_SCHEMA_VERSION = 1 as const;
 
@@ -160,15 +160,12 @@ function structuralValidation(input: {
   if (!declaration.actionId || declaration.actionId === "other") {
     return { reasons: ["declaration_review_required"], status: "requires_review" };
   }
-  const primary = validateCombatDeclarationActionAvailability({
-    actionId: declaration.actionId,
-    kind: "primary",
+  const compatibility = validateCombatDeclarationCompatibility({
+    movementKind: declaration.movementIntent?.mode,
+    primaryAction: declaration.actionId,
+    secondaryAction: declaration.secondaryActionId,
   });
-  const secondary = validateCombatDeclarationActionAvailability({
-    actionId: declaration.secondaryActionId,
-    kind: "secondary",
-  });
-  if (!primary.valid || !secondary.valid) {
+  if (!compatibility.valid) {
     return { reasons: ["unsupported_declaration"], status: "unsupported" };
   }
   const targetValidation = validateCombatDeclarationTargets({

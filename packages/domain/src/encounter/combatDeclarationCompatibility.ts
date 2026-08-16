@@ -126,20 +126,60 @@ export type CombatDeclarationMovementKind = "hold_position" | "set_distance_pref
 
 export interface CombatDeclarationCompatibilityRule {
   allowedMovementKinds: readonly CombatDeclarationMovementKind[];
-  allowedSecondaryActions: readonly CombatSecondaryActionId[];
-  primaryAction: CombatPrimaryActionId;
-  requiredContexts: readonly "secondary_target_participant"[];
+  compatibleSecondaryActions: readonly CombatDeclarationSecondaryCompatibility[];
+  primaryAction: CombatPrimaryActionId | "move_only";
+}
+
+export type CombatDeclarationRequiredContext = "secondary_target_participant";
+
+export interface CombatDeclarationSecondaryCompatibility {
+  actionId: CombatSecondaryActionId | "open";
+  requiredContexts: readonly CombatDeclarationRequiredContext[];
+}
+
+export type CombatDeclarationSelectionStatus =
+  | "compatible"
+  | "incompatible"
+  | "incomplete"
+  | "unsupported";
+
+export interface CombatDeclarationCompatibilityProjection {
+  allowedMovementKinds: readonly CombatDeclarationMovementKind[];
+  compatiblePrimaryActions: readonly CombatPrimaryActionId[];
+  compatibleSecondaryActions: readonly CombatSecondaryActionId[];
+  message?: string;
+  requiredContexts: readonly CombatDeclarationRequiredContext[];
+  status: CombatDeclarationSelectionStatus;
+  valid: boolean;
 }
 
 const CURRENT_MOVEMENT_KINDS = ["hold_position", "set_distance_preferences"] as const;
 
 export const COMBAT_DECLARATION_COMPATIBILITY_RULES: readonly CombatDeclarationCompatibilityRule[] =
-  COMBAT_PRIMARY_ACTION_IDS.map((primaryAction) => ({
-    allowedMovementKinds: CURRENT_MOVEMENT_KINDS,
-    allowedSecondaryActions: primaryAction === "parry" ? (["observe_opponent"] as const) : [],
-    primaryAction,
-    requiredContexts: [],
-  }));
+  [
+    ...COMBAT_PRIMARY_ACTION_IDS.map((primaryAction) => ({
+      allowedMovementKinds: CURRENT_MOVEMENT_KINDS,
+      compatibleSecondaryActions: [
+        ...(isCombatDeclarationActionAvailable({ actionId: primaryAction, kind: "primary" })
+          ? ([{ actionId: "open", requiredContexts: [] }] as const)
+          : []),
+        ...(primaryAction === "parry"
+          ? ([
+              {
+                actionId: "observe_opponent",
+                requiredContexts: ["secondary_target_participant"],
+              },
+            ] as const)
+          : []),
+      ],
+      primaryAction,
+    })),
+    {
+      allowedMovementKinds: CURRENT_MOVEMENT_KINDS,
+      compatibleSecondaryActions: [],
+      primaryAction: "move_only",
+    },
+  ];
 
 export function getCombatDeclarationCompatibilityRule(
   primaryAction?: string,
@@ -152,12 +192,66 @@ export function getCombatDeclarationCompatibilityRule(
 export function getCombatDeclarationRequiredContexts(input: {
   primaryAction?: string;
   secondaryAction?: string;
-}): readonly "secondary_target_participant"[] {
-  const rule = getCombatDeclarationCompatibilityRule(input.primaryAction);
+}): readonly CombatDeclarationRequiredContext[] {
+  const rules = input.primaryAction
+    ? [getCombatDeclarationCompatibilityRule(input.primaryAction)].filter(
+        (rule): rule is CombatDeclarationCompatibilityRule => Boolean(rule),
+      )
+    : COMBAT_DECLARATION_COMPATIBILITY_RULES;
 
-  return rule && input.secondaryAction === "observe_opponent"
-    ? ["secondary_target_participant"]
-    : [];
+  return [
+    ...new Set(
+      rules.flatMap(
+        (rule) =>
+          rule.compatibleSecondaryActions.find(
+            (secondary) => secondary.actionId === input.secondaryAction,
+          )?.requiredContexts ?? [],
+      ),
+    ),
+  ];
+}
+
+function getAvailableCombatPrimaryActionIds(): CombatPrimaryActionId[] {
+  return COMBAT_PRIMARY_ACTION_IDS.filter((actionId) =>
+    isCombatDeclarationActionAvailable({ actionId, kind: "primary" }),
+  );
+}
+
+function getAvailableCombatSecondaryActionIds(): CombatSecondaryActionId[] {
+  return COMBAT_SECONDARY_ACTION_IDS.filter((actionId) =>
+    isCombatDeclarationActionAvailable({ actionId, kind: "secondary" }),
+  );
+}
+
+export function getCompatibleCombatPrimaryActionIds(
+  secondaryAction?: string,
+): readonly CombatPrimaryActionId[] {
+  const availablePrimaryActions = getAvailableCombatPrimaryActionIds();
+  if (!secondaryAction) return availablePrimaryActions;
+  if (!isCombatDeclarationActionAvailable({ actionId: secondaryAction, kind: "secondary" })) {
+    return [];
+  }
+
+  return availablePrimaryActions.filter((primaryAction) =>
+    getCombatDeclarationCompatibilityRule(primaryAction)?.compatibleSecondaryActions.some(
+      (secondary) => secondary.actionId === secondaryAction,
+    ),
+  );
+}
+
+export function getCompatibleCombatSecondaryActionIds(
+  primaryAction?: string,
+): readonly CombatSecondaryActionId[] {
+  const availableSecondaryActions = getAvailableCombatSecondaryActionIds();
+  if (!primaryAction) return availableSecondaryActions;
+  if (!isCombatDeclarationActionAvailable({ actionId: primaryAction, kind: "primary" })) {
+    return [];
+  }
+
+  const rule = getCombatDeclarationCompatibilityRule(primaryAction);
+  return availableSecondaryActions.filter((secondaryAction) =>
+    rule?.compatibleSecondaryActions.some((secondary) => secondary.actionId === secondaryAction),
+  );
 }
 
 export function validateCombatDeclarationCompatibility(input: {
@@ -165,18 +259,23 @@ export function validateCombatDeclarationCompatibility(input: {
   primaryAction?: string;
   secondaryAction?: string;
 }): { message?: string; valid: boolean } {
-  if (!input.primaryAction) return { valid: true };
   if (input.primaryAction === "observe_opponent") {
     return {
       message: "Observe Opponent is a secondary action.",
       valid: false,
     };
   }
-  const primaryStatus = getCombatDeclarationCapabilityStatus({
-    actionId: input.primaryAction,
-    kind: "primary",
-  });
-  if (primaryStatus !== "available" && primaryStatus !== "partial_internal_only") {
+  const primaryStatus = input.primaryAction
+    ? getCombatDeclarationCapabilityStatus({
+        actionId: input.primaryAction,
+        kind: "primary",
+      })
+    : undefined;
+  if (
+    input.primaryAction &&
+    primaryStatus !== "available" &&
+    primaryStatus !== "partial_internal_only"
+  ) {
     return validateCombatDeclarationActionAvailability({
       actionId: input.primaryAction,
       kind: "primary",
@@ -196,8 +295,15 @@ export function validateCombatDeclarationCompatibility(input: {
       kind: "secondary",
     });
   }
+  if (!input.primaryAction) {
+    return input.secondaryAction
+      ? {
+          message: `${input.secondaryAction} requires a compatible primary action.`,
+          valid: false,
+        }
+      : { valid: true };
+  }
   const rule = getCombatDeclarationCompatibilityRule(input.primaryAction);
-  if (primaryStatus === "partial_internal_only") return { valid: true };
   if (!rule) {
     return {
       message: `Combat action is not yet available: ${input.primaryAction}.`,
@@ -206,8 +312,9 @@ export function validateCombatDeclarationCompatibility(input: {
   }
   if (
     input.secondaryAction &&
-    secondaryStatus !== "partial_internal_only" &&
-    !rule.allowedSecondaryActions.includes(input.secondaryAction as CombatSecondaryActionId)
+    !rule.compatibleSecondaryActions.some(
+      (secondary) => secondary.actionId === input.secondaryAction,
+    )
   ) {
     return {
       message: `${input.secondaryAction} is not compatible with the selected primary action.`,
@@ -224,4 +331,44 @@ export function validateCombatDeclarationCompatibility(input: {
     };
   }
   return { valid: true };
+}
+
+export function projectCombatDeclarationCompatibility(input: {
+  movementKind?: string;
+  primaryAction?: string;
+  secondaryAction?: string;
+}): CombatDeclarationCompatibilityProjection {
+  const validation = validateCombatDeclarationCompatibility(input);
+  const primaryStatus = getCombatDeclarationCapabilityStatus({
+    actionId: input.primaryAction,
+    kind: "primary",
+  });
+  const secondaryStatus = getCombatDeclarationCapabilityStatus({
+    actionId: input.secondaryAction,
+    kind: "secondary",
+  });
+  const unsupported =
+    (Boolean(input.primaryAction) &&
+      primaryStatus !== "available" &&
+      primaryStatus !== "partial_internal_only") ||
+    (Boolean(input.secondaryAction) &&
+      secondaryStatus !== "available" &&
+      secondaryStatus !== "partial_internal_only");
+  const rule = getCombatDeclarationCompatibilityRule(input.primaryAction);
+
+  return {
+    allowedMovementKinds: rule?.allowedMovementKinds ?? CURRENT_MOVEMENT_KINDS,
+    compatiblePrimaryActions: getCompatibleCombatPrimaryActionIds(input.secondaryAction),
+    compatibleSecondaryActions: getCompatibleCombatSecondaryActionIds(input.primaryAction),
+    message: validation.message,
+    requiredContexts: getCombatDeclarationRequiredContexts(input),
+    status: validation.valid
+      ? "compatible"
+      : unsupported
+        ? "unsupported"
+        : input.secondaryAction && !input.primaryAction
+          ? "incomplete"
+          : "incompatible",
+    valid: validation.valid,
+  };
 }

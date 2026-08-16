@@ -94,6 +94,20 @@ function feintRoll(participantId: string, side: "attacker" | "defender") {
 }
 
 describe("combat action process adapters", () => {
+  it("creates no executable plan for a stale incompatible primary-secondary pair", () => {
+    const stale = stateFor("attack_parry");
+    stale.participants[0]!.declaration = {
+      ...stale.participants[0]!.declaration!,
+      secondaryActionContext: {
+        action: "observe_opponent",
+        targetParticipantId: "guard",
+      },
+      secondaryActionId: "observe_opponent",
+    };
+
+    expect(buildCombatActionProcessPlans(stale)).toEqual([]);
+  });
+
   it("builds a pure, immutable, deterministic Single Attack plan with stable shared stages", () => {
     const state = stateFor("attack_parry");
     const before = structuredClone(state);

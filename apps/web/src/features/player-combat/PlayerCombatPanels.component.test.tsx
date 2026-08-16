@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -36,7 +37,47 @@ describe("PlayerCombatActionSelectorPanel", () => {
       Array.from(
         (screen.getByRole("combobox", { name: "Secondary action" }) as HTMLSelectElement).options,
       ).map((option) => option.text),
-    ).toEqual(["Open"]);
+    ).toEqual(["Open", "Observe opponent"]);
+  });
+
+  it("supports secondary-first selection and then constrains compatible primaries", () => {
+    function CompatibilityHarness() {
+      const [actionId, setActionId] = useState<"" | "parry">("");
+      const [secondaryActionId, setSecondaryActionId] = useState<"" | "observe_opponent">("");
+      return (
+        <PlayerCombatActionSelectorPanel
+          actionId={actionId}
+          additionalActionNotes=""
+          movementId="hold"
+          onActionChange={(value) => setActionId(value as "" | "parry")}
+          onAdditionalActionNotesChange={vi.fn()}
+          onMovementChange={vi.fn()}
+          onSecondaryActionChange={(value) =>
+            setSecondaryActionId(value as "" | "observe_opponent")
+          }
+          secondaryActionId={secondaryActionId}
+        />
+      );
+    }
+
+    render(<CompatibilityHarness />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Secondary action" }), {
+      target: { value: "observe_opponent" },
+    });
+
+    const primary = screen.getByRole("combobox", { name: "Action" }) as HTMLSelectElement;
+    expect(Array.from(primary.options).map((option) => option.value)).toEqual(["", "parry"]);
+    expect(
+      screen.getByText("Choose a compatible primary action for Observe Opponent."),
+    ).toBeInTheDocument();
+
+    fireEvent.change(primary, { target: { value: "parry" } });
+    expect(
+      screen.queryByText("Choose a compatible primary action for Observe Opponent."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Secondary action" })).toHaveValue(
+      "observe_opponent",
+    );
   });
 
   it("offers Observe Opponent as an explicit Parry secondary action", () => {
@@ -130,6 +171,48 @@ describe("PlayerCombatActionSelectorPanel", () => {
 
     expect(screen.getByRole("option", { name: "Counterattack · Unavailable" })).toBeDisabled();
     expect(screen.getByRole("combobox", { name: "Action" })).toHaveValue("counterattack");
+  });
+
+  it("presents a stale incompatible pair and requires explicit reconciliation", () => {
+    const onSecondaryActionChange = vi.fn();
+    render(
+      <PlayerCombatActionSelectorPanel
+        actionId="attack_parry"
+        additionalActionNotes=""
+        movementId="hold"
+        onActionChange={vi.fn()}
+        onAdditionalActionNotesChange={vi.fn()}
+        onMovementChange={vi.fn()}
+        onSecondaryActionChange={onSecondaryActionChange}
+        secondaryActionId="observe_opponent"
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Single attack cannot be combined with Observe Opponent. Choose a compatible primary action or remove the secondary action.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      Array.from(
+        (screen.getByRole("combobox", { name: "Action" }) as HTMLSelectElement).options,
+      ).map((option) => option.value),
+    ).toEqual(["", "attack_parry", "parry"]);
+    expect(
+      screen.getByRole("option", {
+        name: "Single attack · Not compatible with Observe Opponent",
+      }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("option", {
+        name: "Observe Opponent · Not compatible with Single attack",
+      }),
+    ).toBeDisabled();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Secondary action" }), {
+      target: { value: "" },
+    });
+    expect(onSecondaryActionChange).toHaveBeenCalledWith("");
   });
 
   it("renders the shared canonical Offensive Parry opponent selector for the Phase 1 panel", () => {

@@ -4,7 +4,6 @@ import React, { useState, type ReactNode } from "react";
 
 import {
   HIT_LOCATIONS,
-  getCombatDeclarationCompatibilityRule,
   isCombatDeclarationActionAvailable,
   type CombatEffectsState,
   type CombatDistance,
@@ -35,11 +34,13 @@ import {
 import {
   createEmptyPlayerEncounterCombatContext,
   PLAYER_ENCOUNTER_ACTION_OPTIONS,
-  PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS,
   PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS,
   getPlayerEncounterActionLabel,
+  getPlayerEncounterDeclarationCompatibilityMessage,
   getPlayerEncounterParryCoverageDirection,
   getPlayerEncounterParryDirectionLabel,
+  getPlayerEncounterPrimaryActionOptions,
+  getPlayerEncounterSecondaryActionOptions,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
   type PlayerEncounterOpponentOption,
@@ -1520,14 +1521,18 @@ export function PlayerCombatActionSelectorPanel({
   secondaryActionId,
   sourceLabel,
 }: PlayerCombatActionSelectorPanelProps) {
-  const allowedSecondaryActions =
-    getCombatDeclarationCompatibilityRule(actionId)?.allowedSecondaryActions;
-  const secondaryActionOptions = allowedSecondaryActions
-    ? PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS.filter((option) =>
-        (allowedSecondaryActions as readonly string[]).includes(option.value),
-      )
-    : [];
-  const selectedActionIsListed = actionOptions.some((option) => option.value === actionId);
+  const compatiblePrimaryActionIds = new Set(
+    getPlayerEncounterPrimaryActionOptions(secondaryActionId).map((option) => option.value),
+  );
+  const primaryActionOptions = actionOptions.filter((option) =>
+    compatiblePrimaryActionIds.has(option.value),
+  );
+  const secondaryActionOptions = getPlayerEncounterSecondaryActionOptions(actionId);
+  const compatibilityMessage = getPlayerEncounterDeclarationCompatibilityMessage({
+    actionId,
+    secondaryActionId,
+  });
+  const selectedActionIsListed = primaryActionOptions.some((option) => option.value === actionId);
   const selectedSecondaryActionIsListed = secondaryActionOptions.some(
     (option) => option.value === secondaryActionId,
   );
@@ -1583,11 +1588,21 @@ export function PlayerCombatActionSelectorPanel({
           Action declared.
         </div>
       ) : null}
+      {compatibilityMessage ? (
+        <div
+          aria-live="polite"
+          role="status"
+          style={{ color: "#7a321f", fontSize: "0.86rem", fontWeight: 600 }}
+        >
+          {compatibilityMessage}
+        </div>
+      ) : null}
       <label style={compactFieldLabelStyle}>
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Action</span>
         <select
           disabled={controlsDisabled}
           onChange={(event) => onActionChange(event.target.value as PlayerEncounterActionId | "")}
+          style={{ maxWidth: "100%", width: "100%" }}
           value={actionId}
         >
           <option value="">Choose action</option>
@@ -1597,9 +1612,13 @@ export function PlayerCombatActionSelectorPanel({
               {isCombatDeclarationActionAvailable({ actionId, kind: "primary" })
                 ? ""
                 : " · Unavailable"}
+              {isCombatDeclarationActionAvailable({ actionId, kind: "primary" }) &&
+              secondaryActionId
+                ? ` · Not compatible with ${getPlayerEncounterActionLabel(secondaryActionId)}`
+                : ""}
             </option>
           ) : null}
-          {actionOptions.map((option) => (
+          {primaryActionOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
@@ -1613,6 +1632,7 @@ export function PlayerCombatActionSelectorPanel({
           onChange={(event) =>
             onSecondaryActionChange(event.target.value as PlayerEncounterActionId | "")
           }
+          style={{ maxWidth: "100%", width: "100%" }}
           value={secondaryActionId}
         >
           <option value="">{actionId === "parry" ? "None" : "Open"}</option>
@@ -1625,12 +1645,15 @@ export function PlayerCombatActionSelectorPanel({
               })
                 ? ""
                 : " · Unavailable"}
+              {isCombatDeclarationActionAvailable({
+                actionId: secondaryActionId,
+                kind: "secondary",
+              }) && actionId
+                ? ` · Not compatible with ${getPlayerEncounterActionLabel(actionId)}`
+                : ""}
             </option>
           ) : null}
-          {(actionId === "parry"
-            ? secondaryActionOptions.filter((option) => option.value === "observe_opponent")
-            : secondaryActionOptions
-          ).map((option) => (
+          {secondaryActionOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.value === "observe_opponent" ? "Observe opponent" : option.label}
             </option>

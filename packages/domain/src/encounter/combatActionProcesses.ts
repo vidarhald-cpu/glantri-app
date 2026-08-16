@@ -14,6 +14,7 @@ import {
   type CombatRoundState,
 } from "./combatRoundManager";
 import { buildCombatAdjustDistanceProposalId } from "./combatAdjustDistance";
+import { validateCombatDeclarationCompatibility } from "./combatDeclarationCompatibility";
 import { buildCombatFeintProposalId } from "./combatFeint";
 
 export const COMBAT_ACTION_PROCESS_ACTION_KINDS = [
@@ -1137,6 +1138,12 @@ export function buildCombatActionProcessPlans(
   const attackOpportunities = normalized.participants.flatMap((participant) => {
     const declaration = participant.declaration;
     if (!declaration) return [];
+    const compatibility = validateCombatDeclarationCompatibility({
+      movementKind: declaration.movementIntent?.mode,
+      primaryAction: declaration.actionId,
+      secondaryAction: declaration.secondaryActionId,
+    });
+    if (!compatibility.valid) return [];
     const opportunities =
       (declaration.attackOpportunities?.length ?? 0) > 0
         ? (declaration.attackOpportunities ?? [])
@@ -1157,7 +1164,14 @@ export function buildCombatActionProcessPlans(
   );
   return deepFreeze(
     normalized.participants.flatMap((participant) => {
-      const actionId = participant.declaration?.actionId;
+      const declaration = participant.declaration;
+      const compatibility = validateCombatDeclarationCompatibility({
+        movementKind: declaration?.movementIntent?.mode,
+        primaryAction: declaration?.actionId,
+        secondaryAction: declaration?.secondaryActionId,
+      });
+      if (!compatibility.valid) return [];
+      const actionId = declaration?.actionId;
       const adapter = actionId ? adapterByActionId.get(actionId) : undefined;
       return adapter
         ? [

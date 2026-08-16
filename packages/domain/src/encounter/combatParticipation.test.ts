@@ -319,6 +319,39 @@ describe("canonical combat participation", () => {
     });
   });
 
+  it("blocks a stale incompatible primary-secondary pair rather than executing either action", () => {
+    const staleDeclaration = declaration("attack_parry", "guard");
+    const projection = project(
+      activeState({
+        participants: [
+          participant("hero", {
+            ...staleDeclaration,
+            secondaryActionContext: {
+              action: "observe_opponent",
+              targetParticipantId: "guard",
+            },
+            secondaryActionId: "observe_opponent",
+          }),
+          participant("guard"),
+        ],
+      }),
+    );
+    expect(fact(projection, { family: "declaration", participantId: "hero" })).toMatchObject({
+      completeness: "unsupported",
+      reason: "stale_or_invalid_source",
+      status: "blocked",
+    });
+    const staleActionFacts = projection.facts.filter(
+      (entry) =>
+        entry.identity.participantId === "hero" &&
+        (entry.identity.processFamily === "phase_action" ||
+          entry.identity.processFamily === "observation"),
+    );
+    expect(staleActionFacts.length).toBeGreaterThan(0);
+    expect(staleActionFacts.every((entry) => entry.workClass === "no_work")).toBe(true);
+    expect(staleActionFacts.some((entry) => entry.status === "required")).toBe(false);
+  });
+
   it("classifies empty, proposed, and blocked modifier reviews as GM checkpoints", () => {
     const state = activeState();
     const empty = project(state);

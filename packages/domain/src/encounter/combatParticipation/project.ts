@@ -5,10 +5,7 @@ import {
   type CombatActionProcessTaskDescriptor,
   type CombatManeuverTaskDescriptor,
 } from "../combatActionProcesses";
-import {
-  getCombatDeclarationCapabilityStatus,
-  validateCombatDeclarationActionAvailability,
-} from "../combatDeclarationCompatibility";
+import { validateCombatDeclarationCompatibility } from "../combatDeclarationCompatibility";
 import {
   canonicalCombatModifierReviewInputSchema,
   getCanonicalCombatModifierReviewState,
@@ -341,10 +338,11 @@ function projectDeclarations(context: ProjectionContext): void {
   for (const participant of context.state.participants) {
     const source = sourceByParticipant.get(participant.participantId);
     const actionId = participant.declaration?.actionId;
-    const capability = getCombatDeclarationCapabilityStatus({ actionId, kind: "primary" });
-    const availability = actionId
-      ? validateCombatDeclarationActionAvailability({ actionId, kind: "primary" })
-      : undefined;
+    const compatibility = validateCombatDeclarationCompatibility({
+      movementKind: participant.declaration?.movementIntent?.mode,
+      primaryAction: actionId,
+      secondaryAction: participant.declaration?.secondaryActionId,
+    });
     const declarationStatus = participant.stepStatuses.select_actions;
     const resolved =
       declarationStatus === "submitted" ||
@@ -354,8 +352,7 @@ function projectDeclarations(context: ProjectionContext): void {
     const forcedNoAction = Boolean(
       source?.completeness === "complete" && source.forcedNoAction && source.legalChoiceCount === 0,
     );
-    const unsupported =
-      capability === "unavailable" || (availability !== undefined && !availability.valid);
+    const unsupported = !compatibility.valid;
     const decision = participantDecision(context, participant.participantId, "declaration");
     addFact(context, {
       completeness: unsupported
