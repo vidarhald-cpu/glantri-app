@@ -2116,6 +2116,7 @@ function normalizeCombatDeclarationMovementIntent(input: {
     string,
     MovementIntent["distancePreferences"][number]
   >();
+  const playerUnavailableTargetMessage = "Distance preference target is unavailable.";
 
   for (const preference of input.movementIntent.distancePreferences) {
     const targetRoundParticipant = findCombatRoundParticipantByAlias({
@@ -2124,7 +2125,11 @@ function normalizeCombatDeclarationMovementIntent(input: {
     });
 
     if (!targetRoundParticipant) {
-      throw new Error("Distance preference target is not part of this combat round.");
+      throw new Error(
+        input.gmAuthorizedOperation
+          ? "Distance preference target is not part of this combat round."
+          : playerUnavailableTargetMessage,
+      );
     }
 
     if (targetRoundParticipant.participantId === input.encounterParticipant.id) {
@@ -2136,7 +2141,11 @@ function normalizeCombatDeclarationMovementIntent(input: {
     );
 
     if (!targetEncounterParticipant) {
-      throw new Error("Distance preference target is not assigned to this encounter.");
+      throw new Error(
+        input.gmAuthorizedOperation
+          ? "Distance preference target is not assigned to this encounter."
+          : playerUnavailableTargetMessage,
+      );
     }
 
     if (
@@ -2148,7 +2157,7 @@ function normalizeCombatDeclarationMovementIntent(input: {
         visibility: input.encounter.roleplayState?.visibility,
       })
     ) {
-      throw new Error("Distance preference target is not visible to this player.");
+      throw new Error(playerUnavailableTargetMessage);
     }
 
     const currentDistance = getDistanceEdgeBetweenParticipantAliases({

@@ -8225,7 +8225,7 @@ describe("scenarios route contract", () => {
     ).toBe(2);
   });
 
-  it("rejects a hidden relative-movement target without revealing identity or mutating state", async () => {
+  it("makes hidden and nonexistent relative-movement targets indistinguishable without mutation", async () => {
     const encounterParticipants = [
       makeEncounterCombatParticipant({
         id: "encounter-participant-1",
@@ -8268,39 +8268,53 @@ describe("scenarios route contract", () => {
         }),
       ],
     });
+    const genericActionsBefore = structuredClone(encounter.combatRoundState?.genericActions ?? []);
     const app = await buildScenarioTestApp();
-
-    const response = await app.inject({
-      method: "POST",
-      payload: {
-        actionId: "move_only",
-        combatContext: { modifierBuckets: emptyModifierBuckets() },
-        movementIntent: {
-          distancePreferences: [
-            {
-              desiredDistance: 1,
-              source: "player_declared",
-              targetParticipantId: "encounter-participant-hidden",
+    const responses = [];
+    for (const targetParticipantId of [
+      "encounter-participant-hidden",
+      "participant-does-not-exist",
+    ]) {
+      responses.push(
+        await app.inject({
+          method: "POST",
+          payload: {
+            actionId: "move_only",
+            combatContext: { modifierBuckets: emptyModifierBuckets() },
+            movementIntent: {
+              distancePreferences: [
+                {
+                  desiredDistance: 1,
+                  source: "player_declared",
+                  targetParticipantId,
+                },
+              ],
+              mode: "set_distance_preferences",
             },
-          ],
-          mode: "set_distance_preferences",
-        },
-        scenarioParticipantId: "participant-1",
-      },
-      url: "/encounters/encounter-1/combat-declaration",
-    });
+            scenarioParticipantId: "participant-1",
+          },
+          url: "/encounters/encounter-1/combat-declaration",
+        }),
+      );
+    }
     await app.close();
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({
-      error: "Distance preference target is not visible to this player.",
-    });
-    expect(response.body).not.toContain("Hidden spy");
-    expect(response.body).not.toContain("encounter-participant-hidden");
+    expect(responses).toHaveLength(2);
+    for (const response of responses) {
+      expect(response.statusCode).toBe(400);
+      expect(response.body).toBe('{"error":"Distance preference target is unavailable."}');
+      expect(response.body).not.toContain("Hidden spy");
+      expect(response.body).not.toContain("encounter-participant-hidden");
+      expect(response.body).not.toContain("participant-does-not-exist");
+    }
+    expect(responses[0]?.statusCode).toBe(responses[1]?.statusCode);
+    expect(responses[0]?.body).toBe(responses[1]?.body);
     expect(mocks.encounterService.commitCombatParticipantStateMutation).not.toHaveBeenCalled();
+    expect(mocks.encounterService.commitCombatParticipantStateMutations).not.toHaveBeenCalled();
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
     expect(mocks.scenarioService.recordScenarioEvent).not.toHaveBeenCalled();
+    expect(encounter.combatRoundState?.genericActions ?? []).toEqual(genericActionsBefore);
   });
 
   it("generates a declaration-time distance Skill/OB row for an out-of-range attack", async () => {
