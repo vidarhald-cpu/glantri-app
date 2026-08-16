@@ -2092,6 +2092,24 @@ function normalizeCombatDeclarationMovementIntent(input: {
     });
   }
 
+  if (input.movementIntent.mode === "move_in_environment") {
+    const environmentalMovement = input.movementIntent.environmentalMovement;
+    if (!environmentalMovement) {
+      throw new Error("Describe where this movement is going.");
+    }
+    return movementIntentSchema.parse({
+      distancePreferences: [],
+      environmentalMovement: {
+        ...environmentalMovement,
+        actionId: `${buildCombatRoundDeclarationId({
+          participantId: input.encounterParticipant.id,
+          roundNumber: input.roundState.roundNumber,
+        })}:environmental-movement`,
+      },
+      mode: "move_in_environment",
+    });
+  }
+
   const source = input.gmAuthorizedOperation ? "gm_proxy" : "player_declared";
   const hasVisibilityRows = Object.keys(input.encounter.roleplayState?.visibility ?? {}).length > 0;
   const preferencesByTargetParticipantId = new Map<
@@ -2131,6 +2149,22 @@ function normalizeCombatDeclarationMovementIntent(input: {
       })
     ) {
       throw new Error("Distance preference target is not visible to this player.");
+    }
+
+    const currentDistance = getDistanceEdgeBetweenParticipantAliases({
+      participantA: input.encounterParticipant,
+      participantB: targetEncounterParticipant,
+      state: input.roundState.distanceState,
+    })?.distance;
+    const operationMatchesDistance =
+      !preference.operation ||
+      (currentDistance !== undefined &&
+        ((preference.operation === "maintain" && preference.desiredDistance === currentDistance) ||
+          (preference.operation === "close" && preference.desiredDistance < currentDistance) ||
+          ((preference.operation === "open" || preference.operation === "retreat") &&
+            preference.desiredDistance > currentDistance)));
+    if (!operationMatchesDistance) {
+      throw new Error("Relative movement no longer matches the current participant distance.");
     }
 
     preferencesByTargetParticipantId.set(
@@ -8087,6 +8121,34 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         state: roundState,
         submittedBy: gmAuthorizedOperation ? "gm" : "player",
       });
+      const environmentalMovement = submittedMovementIntent?.environmentalMovement;
+      const declarationStateWithMovementAction = environmentalMovement
+        ? {
+            ...declaredRoundState,
+            genericActions: declareCombatGenericAction({
+              action: {
+                createdAt: submittedAt,
+                createdByUserId: user.id,
+                duration: environmentalMovement.duration,
+                id: environmentalMovement.actionId!,
+                intent: `${
+                  environmentalMovement.pace === "run"
+                    ? "Run"
+                    : environmentalMovement.pace === "walk"
+                      ? "Walk"
+                      : "Reposition"
+                } to ${environmentalMovement.destination.description}.`,
+                ownerParticipantId: encounterParticipant.id,
+                preset: "environmental_movement" as const,
+                reference: {
+                  description: environmentalMovement.destination.description,
+                  kind: "environment" as const,
+                },
+              },
+              actions: declaredRoundState.genericActions,
+            }),
+          }
+        : declaredRoundState;
       const nextRoundState =
         gmAuthorizedOperation &&
         roundState.currentStep !== "initiative_phase_1" &&
@@ -8101,11 +8163,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                     }
                   : undefined,
               participantId: encounterParticipant.id,
-              state: declaredRoundState,
+              state: declarationStateWithMovementAction,
               step: roundState.currentStep,
               submittedBy: "gm",
             })
-          : declaredRoundState;
+          : declarationStateWithMovementAction;
       const saved = await encounterService.commitCombatParticipantStateMutation({
         campaignId: access.campaignId,
         encounterId,

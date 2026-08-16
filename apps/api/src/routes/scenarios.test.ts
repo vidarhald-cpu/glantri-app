@@ -7473,6 +7473,48 @@ describe("scenarios route contract", () => {
     },
   );
 
+  it.each([
+    ["player", mocks.playerUser],
+    ["GM proxy", mocks.adminUser],
+  ] as const)(
+    "rejects forged generic movement on a distance-owning maneuver for %s with zero mutation",
+    async (_viewer, user) => {
+      setupCombatDeclarationRoute({ user });
+      const app = await buildScenarioTestApp();
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          actionId: "adjust_range_attack",
+          combatContext: { modifierBuckets: emptyModifierBuckets() },
+          movementIntent: {
+            distancePreferences: [
+              {
+                desiredDistance: 1,
+                operation: "close",
+                source: "player_declared",
+                targetParticipantId: "hidden-opponent",
+              },
+            ],
+            mode: "set_distance_preferences",
+          },
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      await app.close();
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({
+        error: "The selected movement is not compatible with the selected primary action.",
+      });
+      expect(response.body).not.toContain("hidden-opponent");
+      expect(mocks.encounterService.commitCombatParticipantStateMutation).not.toHaveBeenCalled();
+      expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+      expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+      expect(mocks.scenarioService.recordScenarioEvent).not.toHaveBeenCalled();
+    },
+  );
+
   it("rejects a forged secondary-only declaration before it can persist", async () => {
     setupCombatDeclarationRoute();
     const app = await buildScenarioTestApp();
@@ -8018,6 +8060,247 @@ describe("scenarios route contract", () => {
       ],
       mode: "set_distance_preferences",
     });
+  });
+
+  it.each([
+    ["close", 1],
+    ["open", 3],
+  ] as const)(
+    "lets Move only declare visible participant-relative %s through pair-distance intent",
+    async (operation, desiredDistance) => {
+      const encounterParticipants = makeTwoCombatEncounterParticipants();
+      const baseEncounter = makeCombatEncounterWithResolvedCombatExperience({
+        participants: encounterParticipants,
+      }) as EncounterSession;
+      const baseRoundState = initializeCombatRoundState({ encounter: baseEncounter });
+      const roundState = {
+        ...baseRoundState,
+        distanceState: setDistanceBetween({
+          distance: 2,
+          participantAId: "encounter-participant-1",
+          participantBId: "encounter-participant-2",
+          source: "gm_set",
+          state: baseRoundState.distanceState,
+        }),
+      };
+      setupCombatDeclarationRoute({
+        encounter: { combatRoundState: roundState, participants: encounterParticipants },
+        participants: [
+          makeCombatScenarioParticipant({ id: "participant-1" }),
+          makeCombatScenarioParticipant({
+            controlledByUserId: "other-player",
+            id: "participant-2",
+          }),
+        ],
+      });
+      const app = await buildScenarioTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          actionId: "move_only",
+          combatContext: { modifierBuckets: emptyModifierBuckets() },
+          movementIntent: {
+            distancePreferences: [
+              {
+                desiredDistance,
+                operation,
+                source: "player_declared",
+                targetParticipantId: "participant-2",
+              },
+            ],
+            mode: "set_distance_preferences",
+          },
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      await app.close();
+
+      expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+      const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+      expect(updatedEncounter.combatRoundState.participants[0].declaration).toMatchObject({
+        actionId: "move_only",
+        movementIntent: {
+          distancePreferences: [
+            {
+              desiredDistance,
+              operation,
+              source: "player_declared",
+              targetParticipantId: "participant-2",
+            },
+          ],
+          mode: "set_distance_preferences",
+        },
+      });
+      expect(
+        getDistanceBetween(
+          updatedEncounter.combatRoundState.distanceState,
+          "encounter-participant-1",
+          "encounter-participant-2",
+        ),
+      ).toBe(2);
+    },
+  );
+
+  it("creates a reviewed-action seam for environmental movement without changing pair distance", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const baseEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const baseRoundState = initializeCombatRoundState({ encounter: baseEncounter });
+    const roundState = {
+      ...baseRoundState,
+      distanceState: setDistanceBetween({
+        distance: 2,
+        participantAId: "encounter-participant-1",
+        participantBId: "encounter-participant-2",
+        source: "gm_set",
+        state: baseRoundState.distanceState,
+      }),
+    };
+    setupCombatDeclarationRoute({
+      encounter: { combatRoundState: roundState, participants: encounterParticipants },
+      participants: [
+        makeCombatScenarioParticipant({ id: "participant-1" }),
+        makeCombatScenarioParticipant({
+          controlledByUserId: "other-player",
+          id: "participant-2",
+        }),
+      ],
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "move_only",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        movementIntent: {
+          environmentalMovement: {
+            destination: { description: "doorway", kind: "description" },
+            duration: { kind: "rounds", rounds: 3 },
+            pace: "walk",
+          },
+          mode: "move_in_environment",
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.participants[0].declaration).toMatchObject({
+      actionId: "move_only",
+      movementIntent: {
+        distancePreferences: [],
+        environmentalMovement: {
+          actionId:
+            "round:1:participant:encounter-participant-1:declaration:environmental-movement",
+          destination: { description: "doorway", kind: "description" },
+          duration: { kind: "rounds", rounds: 3 },
+          pace: "walk",
+        },
+        mode: "move_in_environment",
+      },
+    });
+    expect(updatedEncounter.combatRoundState.genericActions).toMatchObject([
+      {
+        duration: { kind: "rounds", rounds: 3 },
+        intent: "Walk to doorway.",
+        ownerParticipantId: "encounter-participant-1",
+        preset: "environmental_movement",
+        reference: { description: "doorway", kind: "environment" },
+        status: "declared",
+      },
+    ]);
+    expect(
+      getDistanceBetween(
+        updatedEncounter.combatRoundState.distanceState,
+        "encounter-participant-1",
+        "encounter-participant-2",
+      ),
+    ).toBe(2);
+  });
+
+  it("rejects a hidden relative-movement target without revealing identity or mutating state", async () => {
+    const encounterParticipants = [
+      makeEncounterCombatParticipant({
+        id: "encounter-participant-1",
+        label: "The Gladiator",
+        order: 0,
+        scenarioParticipantId: "participant-1",
+      }),
+      makeEncounterCombatParticipant({
+        id: "encounter-participant-visible",
+        label: "Visible guard",
+        order: 1,
+        scenarioParticipantId: "participant-visible",
+      }),
+      makeEncounterCombatParticipant({
+        id: "encounter-participant-hidden",
+        label: "Hidden spy",
+        order: 2,
+        scenarioParticipantId: "participant-hidden",
+      }),
+    ];
+    const encounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: encounterParticipants,
+      roleplayState: {
+        visibility: {
+          "encounter-participant-1": { "encounter-participant-visible": true },
+        },
+      },
+    }) as EncounterSession;
+    setupCombatDeclarationRoute({
+      encounter,
+      participants: [
+        makeCombatScenarioParticipant({ id: "participant-1" }),
+        makeCombatScenarioParticipant({
+          controlledByUserId: "other-player",
+          id: "participant-visible",
+        }),
+        makeCombatScenarioParticipant({
+          controlledByUserId: "other-player",
+          id: "participant-hidden",
+        }),
+      ],
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "move_only",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        movementIntent: {
+          distancePreferences: [
+            {
+              desiredDistance: 1,
+              source: "player_declared",
+              targetParticipantId: "encounter-participant-hidden",
+            },
+          ],
+          mode: "set_distance_preferences",
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "Distance preference target is not visible to this player.",
+    });
+    expect(response.body).not.toContain("Hidden spy");
+    expect(response.body).not.toContain("encounter-participant-hidden");
+    expect(mocks.encounterService.commitCombatParticipantStateMutation).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    expect(mocks.scenarioService.recordScenarioEvent).not.toHaveBeenCalled();
   });
 
   it("generates a declaration-time distance Skill/OB row for an out-of-range attack", async () => {

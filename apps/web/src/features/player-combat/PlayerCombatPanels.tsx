@@ -5,6 +5,7 @@ import React, { useState, type ReactNode } from "react";
 import {
   HIT_LOCATIONS,
   isCombatDeclarationActionAvailable,
+  projectCombatDeclarationCompatibility,
   type CombatEffectsState,
   type CombatDistance,
   type CombatRoundInitiativeResult,
@@ -206,6 +207,7 @@ interface PlayerCombatOpponentSelectorProps {
 }
 
 export interface PlayerCombatDistancePreferenceOption {
+  currentDistance?: CombatDistance;
   defaultDistance?: CombatDistance;
   displayName: string;
   id: string;
@@ -306,7 +308,7 @@ export const playerCombatPanelsGridStyle = {
 export const playerCombatPanelRowStyle = {
   display: "grid",
   gap: "0.75rem",
-  gridTemplateColumns: "minmax(12rem, 0.7fr) minmax(14rem, 1fr) minmax(14rem, 1fr)",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 14rem), 1fr))",
 } as const;
 
 export const playerCombatTopPanelRowStyle = {
@@ -1528,10 +1530,6 @@ export function PlayerCombatActionSelectorPanel({
     compatiblePrimaryActionIds.has(option.value),
   );
   const secondaryActionOptions = getPlayerEncounterSecondaryActionOptions(actionId);
-  const compatibilityMessage = getPlayerEncounterDeclarationCompatibilityMessage({
-    actionId,
-    secondaryActionId,
-  });
   const selectedActionIsListed = primaryActionOptions.some((option) => option.value === actionId);
   const selectedSecondaryActionIsListed = secondaryActionOptions.some(
     (option) => option.value === secondaryActionId,
@@ -1542,30 +1540,57 @@ export function PlayerCombatActionSelectorPanel({
       distancePreferences: [],
       mode: movementId && movementId !== "hold" ? "set_distance_preferences" : "hold_position",
     } satisfies MovementIntent);
+  const compatibilityProjection = projectCombatDeclarationCompatibility({
+    movementKind: effectiveMovementIntent.mode,
+    primaryAction: actionId || undefined,
+    secondaryAction: secondaryActionId || undefined,
+  });
+  const allowedMovementKinds = new Set(compatibilityProjection.allowedMovementKinds);
+  const compatibilityMessage = getPlayerEncounterDeclarationCompatibilityMessage({
+    actionId,
+    movementKind: effectiveMovementIntent.mode,
+    secondaryActionId,
+  });
   const updateMovementMode = (mode: MovementIntent["mode"]) => {
     onMovementChange(mode === "hold_position" ? "hold" : "step");
     onMovementIntentChange?.({
-      distancePreferences:
-        mode === "set_distance_preferences"
-          ? distancePreferenceOptions
-              .filter((option) => option.defaultDistance !== undefined)
-              .map((option) => ({
-                desiredDistance: option.defaultDistance as CombatDistance,
-                source: "player_declared" as const,
-                targetParticipantId: option.id,
-              }))
-          : [],
+      distancePreferences: [],
+      environmentalMovement:
+        mode === "move_in_environment"
+          ? {
+              destination: { description: "", kind: "description" },
+              duration: { kind: "round" },
+              pace: "walk",
+            }
+          : undefined,
       mode,
     });
   };
-  const updateDistancePreference = (targetParticipantId: string, desiredDistance: string) => {
+  const updateDistancePreference = (
+    targetParticipantId: string,
+    operation: "" | "maintain" | "close" | "open" | "retreat",
+  ) => {
     const nextPreferences = effectiveMovementIntent.distancePreferences.filter(
       (preference) => preference.targetParticipantId !== targetParticipantId,
     );
+    const currentDistance = distancePreferenceOptions.find(
+      (option) => option.id === targetParticipantId,
+    )?.currentDistance;
+    const desiredDistance =
+      currentDistance === undefined || operation === ""
+        ? undefined
+        : operation === "maintain"
+          ? currentDistance
+          : operation === "close"
+            ? Math.max(0, currentDistance - 1)
+            : operation === "open"
+              ? Math.min(8, currentDistance + 1)
+              : Math.min(8, currentDistance + 2);
 
-    if (desiredDistance !== "") {
+    if (desiredDistance !== undefined) {
       nextPreferences.push({
-        desiredDistance: Number(desiredDistance) as CombatDistance,
+        desiredDistance: desiredDistance as CombatDistance,
+        operation: operation || undefined,
         source: "player_declared",
         targetParticipantId,
       });
@@ -1574,6 +1599,20 @@ export function PlayerCombatActionSelectorPanel({
     onMovementIntentChange?.({
       distancePreferences: nextPreferences,
       mode: "set_distance_preferences",
+    });
+  };
+  const updateEnvironmentalMovement = (
+    patch: Partial<NonNullable<MovementIntent["environmentalMovement"]>>,
+  ) => {
+    const current = effectiveMovementIntent.environmentalMovement ?? {
+      destination: { description: "", kind: "description" as const },
+      duration: { kind: "round" as const },
+      pace: "walk" as const,
+    };
+    onMovementIntentChange?.({
+      distancePreferences: [],
+      environmentalMovement: { ...current, ...patch },
+      mode: "move_in_environment",
     });
   };
 
@@ -1661,75 +1700,210 @@ export function PlayerCombatActionSelectorPanel({
         </select>
       </label>
 
-      <label style={compactFieldLabelStyle}>
-        <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Movement</span>
-        <select
-          disabled={controlsDisabled}
-          onChange={(event) => updateMovementMode(event.target.value as MovementIntent["mode"])}
-          value={effectiveMovementIntent.mode}
-        >
-          <option value="hold_position">Maintain distance to opponent</option>
-          <option value="set_distance_preferences">Set preferred distance</option>
-        </select>
-      </label>
+      <fieldset
+        style={{
+          border: "1px solid #d9ddd8",
+          borderRadius: 8,
+          display: "grid",
+          gap: "0.65rem",
+          margin: 0,
+          minWidth: 0,
+          padding: "0.75rem",
+        }}
+      >
+        <legend style={{ fontSize: "0.88rem", fontWeight: 700, padding: "0 0.25rem" }}>
+          Movement
+        </legend>
+        <label style={compactFieldLabelStyle}>
+          <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Movement intent</span>
+          <select
+            aria-label="Movement"
+            disabled={controlsDisabled}
+            onChange={(event) => updateMovementMode(event.target.value as MovementIntent["mode"])}
+            value={effectiveMovementIntent.mode}
+          >
+            {!allowedMovementKinds.has(effectiveMovementIntent.mode) ? (
+              <option disabled value={effectiveMovementIntent.mode}>
+                Selected movement · Not compatible
+              </option>
+            ) : null}
+            {allowedMovementKinds.has("hold_position") ? (
+              <option value="hold_position">Hold position</option>
+            ) : null}
+            {allowedMovementKinds.has("set_distance_preferences") ? (
+              <option value="set_distance_preferences">Change distance to participant</option>
+            ) : null}
+            {allowedMovementKinds.has("move_in_environment") ? (
+              <option value="move_in_environment">Move in environment</option>
+            ) : null}
+          </select>
+        </label>
 
-      {effectiveMovementIntent.mode === "set_distance_preferences" ? (
-        <section style={compactDistancePreferenceGridStyle}>
-          {distancePreferenceOptions.length === 0 ? (
-            <div style={{ color: "#5e5a50", fontSize: "0.84rem" }}>
-              No visible opponents available.
+        {effectiveMovementIntent.mode === "set_distance_preferences" ? (
+          <section
+            aria-label="Change distance to participant"
+            style={compactDistancePreferenceGridStyle}
+          >
+            <h3 style={{ fontSize: "0.84rem", margin: 0 }}>Change distance to participant</h3>
+            {distancePreferenceOptions.length === 0 ? (
+              <div style={{ color: "#5e5a50", fontSize: "0.84rem" }}>
+                No visible opponents available.
+              </div>
+            ) : (
+              distancePreferenceOptions.map((option) => {
+                const preference = effectiveMovementIntent.distancePreferences.find(
+                  (entry) => entry.targetParticipantId === option.id,
+                );
+                const selectedOperation =
+                  preference?.operation ??
+                  (preference && option.currentDistance !== undefined
+                    ? preference.desiredDistance === option.currentDistance
+                      ? "maintain"
+                      : preference.desiredDistance < option.currentDistance
+                        ? "close"
+                        : "open"
+                    : "");
+
+                return (
+                  <label key={option.id} style={compactDistancePreferenceRowStyle}>
+                    <span
+                      style={{
+                        fontSize: "0.84rem",
+                        minWidth: 0,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={option.displayName}
+                    >
+                      {option.displayName}
+                    </span>
+                    <select
+                      disabled={controlsDisabled}
+                      onChange={(event) =>
+                        updateDistancePreference(
+                          option.id,
+                          event.target.value as "" | "maintain" | "close" | "open" | "retreat",
+                        )
+                      }
+                      value={selectedOperation}
+                    >
+                      <option value="">No preference</option>
+                      {option.currentDistance === undefined ? (
+                        <option disabled value="unavailable">
+                          Current distance unavailable
+                        </option>
+                      ) : (
+                        <>
+                          <option value="maintain">
+                            Maintain · Distance {option.currentDistance}
+                          </option>
+                          {option.currentDistance > 0 ? (
+                            <option value="close">
+                              Close · Distance {option.currentDistance - 1}
+                            </option>
+                          ) : null}
+                          {option.currentDistance < 8 ? (
+                            <option value="open">
+                              Open · Distance {option.currentDistance + 1}
+                            </option>
+                          ) : null}
+                          {option.currentDistance < 7 ? (
+                            <option value="retreat">
+                              Retreat · Distance {option.currentDistance + 2}
+                            </option>
+                          ) : null}
+                        </>
+                      )}
+                    </select>
+                  </label>
+                );
+              })
+            )}
+          </section>
+        ) : null}
+
+        {effectiveMovementIntent.mode === "move_in_environment" ? (
+          <section aria-label="Move in environment" style={{ display: "grid", gap: "0.55rem" }}>
+            <h3 style={{ fontSize: "0.84rem", margin: 0 }}>Move in environment</h3>
+            <label style={compactFieldLabelStyle}>
+              <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>How</span>
+              <select
+                disabled={controlsDisabled}
+                onChange={(event) =>
+                  updateEnvironmentalMovement({
+                    pace: event.target.value as "walk" | "run" | "reposition",
+                  })
+                }
+                value={effectiveMovementIntent.environmentalMovement?.pace ?? "walk"}
+              >
+                <option value="walk">Walk</option>
+                <option value="run">Run</option>
+                <option value="reposition">Reposition</option>
+              </select>
+            </label>
+            <label style={compactWideFieldLabelStyle}>
+              <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Destination</span>
+              <input
+                disabled={controlsDisabled}
+                maxLength={500}
+                onChange={(event) =>
+                  updateEnvironmentalMovement({
+                    destination: { description: event.target.value, kind: "description" },
+                  })
+                }
+                placeholder="Doorway, courtyard, wounded ally…"
+                type="text"
+                value={effectiveMovementIntent.environmentalMovement?.destination.description ?? ""}
+              />
+            </label>
+            <label style={compactFieldLabelStyle}>
+              <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Expected time</span>
+              <select
+                disabled={controlsDisabled}
+                onChange={(event) =>
+                  updateEnvironmentalMovement({
+                    duration:
+                      event.target.value === "rounds"
+                        ? { kind: "rounds", rounds: 2 }
+                        : event.target.value === "gm_decided"
+                          ? { kind: "gm_decided" }
+                          : { kind: "round" },
+                  })
+                }
+                value={effectiveMovementIntent.environmentalMovement?.duration.kind ?? "round"}
+              >
+                <option value="round">One round</option>
+                <option value="rounds">Multiple rounds</option>
+                <option value="gm_decided">GM decides</option>
+              </select>
+            </label>
+            {effectiveMovementIntent.environmentalMovement?.duration.kind === "rounds" ? (
+              <label style={compactFieldLabelStyle}>
+                <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Rounds</span>
+                <input
+                  disabled={controlsDisabled}
+                  max={100}
+                  min={2}
+                  onChange={(event) =>
+                    updateEnvironmentalMovement({
+                      duration: {
+                        kind: "rounds",
+                        rounds: Math.max(2, Math.min(100, Number(event.target.value) || 2)),
+                      },
+                    })
+                  }
+                  type="number"
+                  value={effectiveMovementIntent.environmentalMovement.duration.rounds}
+                />
+              </label>
+            ) : null}
+            <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+              The GM reviews timing and any roll. This does not change distance to an opponent.
             </div>
-          ) : (
-            distancePreferenceOptions.map((option) => {
-              const preference = effectiveMovementIntent.distancePreferences.find(
-                (entry) => entry.targetParticipantId === option.id,
-              );
-
-              return (
-                <label key={option.id} style={compactDistancePreferenceRowStyle}>
-                  <span
-                    style={{
-                      fontSize: "0.84rem",
-                      minWidth: 0,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                    title={option.displayName}
-                  >
-                    {option.displayName}
-                  </span>
-                  <select
-                    disabled={controlsDisabled}
-                    onChange={(event) => updateDistancePreference(option.id, event.target.value)}
-                    value={
-                      preference?.desiredDistance !== undefined
-                        ? String(preference.desiredDistance)
-                        : ""
-                    }
-                  >
-                    <option value="">No preference</option>
-                    <optgroup label="Melee zones">
-                      {[0, 1, 2, 3, 4].map((distance) => (
-                        <option key={distance} value={distance}>
-                          Distance {distance}
-                        </option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Extended">
-                      {[5, 6, 7, 8].map((distance) => (
-                        <option key={distance} value={distance}>
-                          Distance {distance}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
-                </label>
-              );
-            })
-          )}
-        </section>
-      ) : null}
+          </section>
+        ) : null}
+      </fieldset>
 
       <label style={compactWideFieldLabelStyle}>
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Description</span>

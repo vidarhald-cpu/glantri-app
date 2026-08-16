@@ -317,7 +317,7 @@ export function GenericCombatActionPanel({
       encounterId: encounter.id,
       expectedRevision: encounter.updatedAt,
       operation,
-      preset: selectedAction.preset,
+      preset: selectedAction.preset === "look_around" ? "look_around" : undefined,
       environmentDescription:
         operation === "review" && reviewReferenceKind === "environment"
           ? reviewEnvironmentDescription
@@ -566,9 +566,16 @@ export function GenericCombatActionPanel({
           {selectedAction ? (
             <article style={{ display: "grid", gap: "0.4rem", minWidth: 0 }}>
               <strong>
-                {selectedAction.preset === "look_around" ? "Look around" : selectedAction.intent}
+                {selectedAction.preset === "look_around"
+                  ? "Look around"
+                  : selectedAction.preset === "environmental_movement"
+                    ? "Environmental movement"
+                    : selectedAction.intent}
               </strong>
-              {selectedAction.preset === "look_around" ? <div>{selectedAction.intent}</div> : null}
+              {selectedAction.preset === "look_around" ||
+              selectedAction.preset === "environmental_movement" ? (
+                <div>{selectedAction.intent}</div>
+              ) : null}
               <div>
                 {statusLabel(selectedAction.status)} · {durationLabel(selectedAction.duration)}
               </div>

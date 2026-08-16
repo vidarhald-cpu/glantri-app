@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   activateCombatGenericAction,
   advanceCombatGenericActionsToRound,
+  combatGenericActionSchema,
   declareCombatGenericAction,
   finishCombatGenericAction,
   projectCombatGenericActionsForPlayer,
@@ -31,7 +32,7 @@ function declared(
   input: {
     duration?: CombatGenericAction["duration"];
     id?: string;
-    preset?: "look_around";
+    preset?: CombatGenericAction["preset"];
     rollRequest?: CombatGenericActionRollRequest;
   } = {},
 ): CombatGenericAction[] {
@@ -43,6 +44,10 @@ function declared(
       intent: "Look carefully around the ruined gate.",
       ownerParticipantId: "hero",
       preset: input.preset,
+      reference:
+        input.preset === "environmental_movement"
+          ? { description: "doorway", kind: "environment" }
+          : undefined,
       rollRequest: input.rollRequest,
     },
     actions: [],
@@ -53,7 +58,7 @@ function active(
   input: {
     duration?: CombatGenericAction["duration"];
     id?: string;
-    preset?: "look_around";
+    preset?: CombatGenericAction["preset"];
     rollRequest?: CombatGenericActionRollRequest;
   } = {},
 ): CombatGenericAction[] {
@@ -62,6 +67,10 @@ function active(
     actionId: input.id ?? "action-1",
     actions,
     duration: input.duration ?? { kind: "round" },
+    reference:
+      input.preset === "environmental_movement"
+        ? { description: "doorway", kind: "environment" }
+        : undefined,
     reviewedAt: at,
     rollRequest: input.rollRequest,
   });
@@ -152,6 +161,34 @@ describe("generic Combat actions", () => {
       status: "interrupted",
     });
     expect(interrupted[0]?.status).toBe("interrupted");
+  });
+
+  it("reloads multi-round environmental movement without duplicate progress or a reroll", () => {
+    const actions = active({
+      duration: { kind: "rounds", rounds: 3 },
+      preset: "environmental_movement",
+    });
+    const reloaded = actions.map((action) =>
+      combatGenericActionSchema.parse(JSON.parse(JSON.stringify(action))),
+    );
+    const round4 = advanceCombatGenericActionsToRound({
+      actions: reloaded,
+      advancedAt: at,
+      nextRoundNumber: 4,
+    });
+    const duplicate = advanceCombatGenericActionsToRound({
+      actions: round4,
+      advancedAt: "2026-08-14T18:01:00.000Z",
+      nextRoundNumber: 4,
+    });
+
+    expect(duplicate[0]).toMatchObject({
+      preset: "environmental_movement",
+      progress: { completedRounds: 1, lastProgressedRoundNumber: 4, totalRounds: 3 },
+      reference: { description: "doorway", kind: "environment" },
+      status: "active",
+    });
+    expect(duplicate[0]?.rollResult).toBeUndefined();
   });
 
   it("caches one server-resolved roll and retains its canonical Skill basis", () => {

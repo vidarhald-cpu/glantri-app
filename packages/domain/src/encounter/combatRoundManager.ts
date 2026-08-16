@@ -107,7 +107,10 @@ import {
   getCombatDeclarationAttackPhases,
   validateCombatDeclarationTargets,
 } from "./combatDeclarationValidation";
-import { isCombatDeclarationActionAvailable } from "./combatDeclarationCompatibility";
+import {
+  isCombatDeclarationActionAvailable,
+  validateCombatDeclarationCompatibility,
+} from "./combatDeclarationCompatibility";
 import { movementIntentSchema, type DistancePreferenceIntent } from "./combatMovementIntent";
 import {
   combatEffectEventSchema,
@@ -13244,9 +13247,16 @@ function buildCombatRoundEndDistanceProposals(input: {
   }
 
   for (const participant of normalized.participants) {
-    const movementIntent = participant.declaration?.movementIntent;
+    const declaration = participant.declaration;
+    const movementIntent = declaration?.movementIntent;
+    const compatibility = validateCombatDeclarationCompatibility({
+      movementKind: movementIntent?.mode,
+      primaryAction: declaration?.actionId,
+      secondaryAction: declaration?.secondaryActionId,
+    });
 
     if (
+      !compatibility.valid ||
       !movementIntent ||
       movementIntent.mode !== "set_distance_preferences" ||
       movementIntent.distancePreferences.length === 0

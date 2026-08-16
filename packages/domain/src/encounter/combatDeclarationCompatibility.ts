@@ -77,7 +77,7 @@ export const COMBAT_DECLARATION_CAPABILITIES: readonly CombatDeclarationCapabili
   {
     actionId: "move_only",
     kind: "primary",
-    status: "partial_internal_only",
+    status: "available",
   },
   {
     actionId: "open",
@@ -122,12 +122,16 @@ export function validateCombatDeclarationActionAvailability(input: {
   };
 }
 
-export type CombatDeclarationMovementKind = "hold_position" | "set_distance_preferences";
+export type CombatDeclarationMovementKind =
+  | "hold_position"
+  | "set_distance_preferences"
+  | "move_in_environment";
+export type CombatDeclarationPrimaryActionId = CombatPrimaryActionId | "move_only";
 
 export interface CombatDeclarationCompatibilityRule {
   allowedMovementKinds: readonly CombatDeclarationMovementKind[];
   compatibleSecondaryActions: readonly CombatDeclarationSecondaryCompatibility[];
-  primaryAction: CombatPrimaryActionId | "move_only";
+  primaryAction: CombatDeclarationPrimaryActionId;
 }
 
 export type CombatDeclarationRequiredContext = "secondary_target_participant";
@@ -145,7 +149,7 @@ export type CombatDeclarationSelectionStatus =
 
 export interface CombatDeclarationCompatibilityProjection {
   allowedMovementKinds: readonly CombatDeclarationMovementKind[];
-  compatiblePrimaryActions: readonly CombatPrimaryActionId[];
+  compatiblePrimaryActions: readonly CombatDeclarationPrimaryActionId[];
   compatibleSecondaryActions: readonly CombatSecondaryActionId[];
   message?: string;
   requiredContexts: readonly CombatDeclarationRequiredContext[];
@@ -153,12 +157,23 @@ export interface CombatDeclarationCompatibilityProjection {
   valid: boolean;
 }
 
-const CURRENT_MOVEMENT_KINDS = ["hold_position", "set_distance_preferences"] as const;
+const CURRENT_MOVEMENT_KINDS = [
+  "hold_position",
+  "set_distance_preferences",
+  "move_in_environment",
+] as const;
+const MOVEMENT_OWNING_PRIMARY_ACTION_IDS = new Set<string>([
+  "adjust_range_attack",
+  "offensive_parry",
+  "parry",
+]);
 
 export const COMBAT_DECLARATION_COMPATIBILITY_RULES: readonly CombatDeclarationCompatibilityRule[] =
   [
     ...COMBAT_PRIMARY_ACTION_IDS.map((primaryAction) => ({
-      allowedMovementKinds: CURRENT_MOVEMENT_KINDS,
+      allowedMovementKinds: MOVEMENT_OWNING_PRIMARY_ACTION_IDS.has(primaryAction)
+        ? (["hold_position"] as const)
+        : CURRENT_MOVEMENT_KINDS,
       compatibleSecondaryActions: [
         ...(isCombatDeclarationActionAvailable({ actionId: primaryAction, kind: "primary" })
           ? ([{ actionId: "open", requiredContexts: [] }] as const)
@@ -211,10 +226,15 @@ export function getCombatDeclarationRequiredContexts(input: {
   ];
 }
 
-function getAvailableCombatPrimaryActionIds(): CombatPrimaryActionId[] {
-  return COMBAT_PRIMARY_ACTION_IDS.filter((actionId) =>
-    isCombatDeclarationActionAvailable({ actionId, kind: "primary" }),
-  );
+function getAvailableCombatPrimaryActionIds(): CombatDeclarationPrimaryActionId[] {
+  return [
+    ...COMBAT_PRIMARY_ACTION_IDS.filter((actionId) =>
+      isCombatDeclarationActionAvailable({ actionId, kind: "primary" }),
+    ),
+    ...(isCombatDeclarationActionAvailable({ actionId: "move_only", kind: "primary" })
+      ? (["move_only"] as const)
+      : []),
+  ];
 }
 
 function getAvailableCombatSecondaryActionIds(): CombatSecondaryActionId[] {
@@ -225,7 +245,7 @@ function getAvailableCombatSecondaryActionIds(): CombatSecondaryActionId[] {
 
 export function getCompatibleCombatPrimaryActionIds(
   secondaryAction?: string,
-): readonly CombatPrimaryActionId[] {
+): readonly CombatDeclarationPrimaryActionId[] {
   const availablePrimaryActions = getAvailableCombatPrimaryActionIds();
   if (!secondaryAction) return availablePrimaryActions;
   if (!isCombatDeclarationActionAvailable({ actionId: secondaryAction, kind: "secondary" })) {
@@ -355,10 +375,23 @@ export function projectCombatDeclarationCompatibility(input: {
       secondaryStatus !== "available" &&
       secondaryStatus !== "partial_internal_only");
   const rule = getCombatDeclarationCompatibilityRule(input.primaryAction);
+  const compatiblePrimaryActions = getCompatibleCombatPrimaryActionIds(
+    input.secondaryAction,
+  ).filter((primaryAction) => {
+    const primaryRule = getCombatDeclarationCompatibilityRule(primaryAction);
+    return (
+      !input.movementKind ||
+      Boolean(
+        primaryRule?.allowedMovementKinds.includes(
+          input.movementKind as CombatDeclarationMovementKind,
+        ),
+      )
+    );
+  });
 
   return {
     allowedMovementKinds: rule?.allowedMovementKinds ?? CURRENT_MOVEMENT_KINDS,
-    compatiblePrimaryActions: getCompatibleCombatPrimaryActionIds(input.secondaryAction),
+    compatiblePrimaryActions,
     compatibleSecondaryActions: getCompatibleCombatSecondaryActionIds(input.primaryAction),
     message: validation.message,
     requiredContexts: getCombatDeclarationRequiredContexts(input),
