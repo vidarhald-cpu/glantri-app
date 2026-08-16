@@ -21,6 +21,7 @@ function declaration() {
         itemRevision: "2026-08-16T09:59:00.000Z",
         operation: "draw" as const,
         stateAtDeclaration: "stowed" as const,
+        visibleToParticipantIds: ["participant-1"],
       },
       ownerParticipantId: "participant-1",
       preset: "item_interaction" as const,
@@ -75,5 +76,40 @@ describe("canonical Combat Item interaction lifecycle", () => {
         visibleParticipantIds: new Set(["participant-1"]),
       })[0]?.itemInteraction,
     ).toMatchObject({ itemId: "item-1", operation: "draw" });
+  });
+
+  it("omits a GM-declared hidden Item action from every player projection", () => {
+    const hidden = declareCombatGenericAction({
+      ...declaration(),
+      action: {
+        ...declaration().action,
+        itemInteraction: {
+          ...declaration().action.itemInteraction,
+          visibleToParticipantIds: [],
+        },
+      },
+    }).map((action) => ({
+      ...action,
+      resolution: {
+        resolvedAt: createdAt,
+        text: "A secret Item was used.",
+        visibleToParticipantIds: ["participant-2"],
+      },
+      status: "completed" as const,
+    }));
+
+    for (const controlledParticipantIds of [
+      new Set(["participant-1"]),
+      new Set(["participant-2"]),
+    ]) {
+      expect(
+        projectCombatGenericActionsForPlayer({
+          actions: hidden,
+          controlledParticipantIds,
+          visibleParticipantIds: new Set(["participant-1", "participant-2"]),
+        }),
+      ).toEqual([]);
+    }
+    expect(JSON.stringify(hidden)).toContain("item-1");
   });
 });

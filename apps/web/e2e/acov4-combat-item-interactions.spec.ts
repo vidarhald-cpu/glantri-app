@@ -151,6 +151,25 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     );
     expect(item).toBeTruthy();
 
+    const initialOptionsResponse = await playerContext.request.get(
+      `${API_URL}/encounters/${encounterId}/combat-round/item-interactions/options`,
+    );
+    expect(initialOptionsResponse.ok()).toBe(true);
+    const initialOptions = (await initialOptionsResponse.json()) as {
+      options: {
+        actors: Array<{ label: string; participantId: string }>;
+        recipients: Array<{ label: string; participantId: string }>;
+      };
+    };
+    const sourceEncounterParticipantId = initialOptions.options.actors.find(
+      (candidate) => candidate.label === "Smoke Character",
+    )?.participantId;
+    const recipientEncounterParticipantId = initialOptions.options.recipients.find(
+      (candidate) => candidate.label === "Smoke Non-holder Character",
+    )?.participantId;
+    expect(sourceEncounterParticipantId).toBeTruthy();
+    expect(recipientEncounterParticipantId).toBeTruthy();
+
     await playerPage.setViewportSize({ height: 844, width: 390 });
     await playerPage.goto(`/campaigns/${campaignId}/scenarios/${scenarioId}/player/combat`);
     await expect(playerPage.getByRole("heading", { name: "Items in this Combat" })).toBeVisible();
@@ -158,9 +177,9 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     await expect(playerPage.getByText("Held · On person", { exact: true })).toBeVisible();
     await playerPage
       .getByLabel(`Pass ${itemName} to`)
-      .selectOption(recipientParticipant.participant.id);
+      .selectOption({ label: "Smoke Non-holder Character" });
     await playerPage.getByRole("button", { name: `${itemName}: Pass / give` }).click();
-    await expect(playerPage.getByRole("status")).toContainText("declared for GM review");
+    await expect(playerPage.getByText("Waiting for GM review · GM decides")).toBeVisible();
 
     const declaredPass = await getEncounter(gmPage.request, encounterId);
     const passAction = declaredPass.encounter.combatRoundState?.genericActions?.find(
@@ -168,18 +187,24 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     );
     expect(passAction).toBeTruthy();
     await playerPage.reload();
-    await expect(playerPage.getByText(new RegExp(`Pass / give ${itemName}`))).toBeVisible();
+    await expect(
+      playerPage.getByLabel("Action and task history").locator("option:checked"),
+    ).toContainText(`Pass / give ${itemName}`);
 
     await gmCompleteItemAction({
       actionId: passAction!.id,
       encounterId,
       gmRequest: gmPage.request,
-      participantIds: [sourceParticipant.participant.id, recipientParticipant.participant.id],
+      participantIds: [sourceEncounterParticipantId!, recipientEncounterParticipantId!],
       resultText: `${itemName} changes hands.`,
     });
     await gmPage.setViewportSize({ height: 900, width: 1280 });
-    await gmPage.goto(`/campaigns/${campaignId}/scenarios/${scenarioId}/encounters/${encounterId}`);
-    await expect(gmPage.getByText(`${itemName} changes hands.`, { exact: true })).toBeVisible();
+    await gmPage.goto(
+      `/campaigns/${campaignId}?tab=combat&scenarioId=${scenarioId}&encounterId=${encounterId}`,
+    );
+    await expect(gmPage.getByText("Result:", { exact: true }).locator("..")).toContainText(
+      `${itemName} changes hands.`,
+    );
 
     let optionsResponse = await recipientContext.request.get(
       `${API_URL}/encounters/${encounterId}/combat-round/item-interactions/options`,
@@ -192,7 +217,7 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
       };
     };
     const recipientActor = options.options.actors.find(
-      (candidate) => candidate.participantId === recipientParticipant.participant.id,
+      (candidate) => candidate.participantId === recipientEncounterParticipantId,
     );
     expect(recipientActor?.items.map((candidate) => candidate.id)).toEqual([item!.id]);
 
@@ -209,14 +234,14 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
         itemId: item!.id,
         itemOperation: "drop",
         operation: "declare",
-        participantId: recipientParticipant.participant.id,
+        participantId: recipientEncounterParticipantId,
       },
     );
     await gmCompleteItemAction({
       actionId: dropActionId,
       encounterId,
       gmRequest: gmPage.request,
-      participantIds: [sourceParticipant.participant.id, recipientParticipant.participant.id],
+      participantIds: [sourceEncounterParticipantId!, recipientEncounterParticipantId!],
       resultText: `${itemName} is present and unheld.`,
     });
 
@@ -237,14 +262,14 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
         itemId: item!.id,
         itemOperation: "pickup",
         operation: "declare",
-        participantId: sourceParticipant.participant.id,
+        participantId: sourceEncounterParticipantId,
       },
     );
     await gmCompleteItemAction({
       actionId: pickupActionId,
       encounterId,
       gmRequest: gmPage.request,
-      participantIds: [sourceParticipant.participant.id, recipientParticipant.participant.id],
+      participantIds: [sourceEncounterParticipantId!, recipientEncounterParticipantId!],
       resultText: `${itemName} is picked up again.`,
     });
 
@@ -257,9 +282,9 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
       Object.values(canonical.state.itemsById).filter((candidate) => candidate.id === item!.id),
     ).toEqual([expect.objectContaining({ holderCharacterId: characterId, id: item!.id })]);
     await playerPage.reload();
-    await expect(
-      playerPage.getByText(`${itemName} is picked up again.`, { exact: true }),
-    ).toBeVisible();
+    await expect(playerPage.getByText("Result:", { exact: true }).locator("..")).toContainText(
+      `${itemName} is picked up again.`,
+    );
 
     await playerContext.close();
     await recipientContext.close();

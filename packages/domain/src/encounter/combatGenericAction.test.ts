@@ -79,6 +79,7 @@ function active(
     activatedAt: at,
     actions: reviewed,
     roundNumber: 3,
+    step: "select_actions",
   });
 }
 
@@ -122,7 +123,7 @@ describe("generic Combat actions", () => {
   });
 
   it("supports a simple no-roll action and explicit GM completion", () => {
-    const actions = active();
+    const actions = active({ duration: { kind: "gm_decided" } });
     const finished = finishCombatGenericAction({
       actionId: "action-1",
       actions,
@@ -132,6 +133,8 @@ describe("generic Combat actions", () => {
         text: "The gate is forced open.",
         visibleToParticipantIds: ["hero"],
       },
+      roundNumber: 4,
+      step: "select_actions",
       status: "completed",
     });
     expect(finished[0]).toMatchObject({
@@ -161,6 +164,67 @@ describe("generic Combat actions", () => {
       status: "interrupted",
     });
     expect(interrupted[0]?.status).toBe("interrupted");
+  });
+
+  it("rejects completion until fixed round and phase timing has crossed its canonical boundary", () => {
+    const oneRound = active({ duration: { kind: "round" } });
+    const resolution = {
+      resolvedAt: at,
+      text: "The task completes.",
+      visibleToParticipantIds: ["hero"],
+    };
+    expect(() =>
+      finishCombatGenericAction({
+        actionId: "action-1",
+        actions: oneRound,
+        at,
+        resolution,
+        roundNumber: 3,
+        status: "completed",
+        step: "round_summary",
+      }),
+    ).toThrow("before its reviewed timing completes");
+
+    const progressed = advanceCombatGenericActionsToRound({
+      actions: oneRound,
+      advancedAt: at,
+      nextRoundNumber: 4,
+    });
+    expect(
+      finishCombatGenericAction({
+        actionId: "action-1",
+        actions: progressed,
+        at,
+        resolution,
+        roundNumber: 4,
+        status: "completed",
+        step: "select_actions",
+      })[0]?.status,
+    ).toBe("completed");
+
+    const phase = active({ duration: { kind: "phase", phase: "phase1" } });
+    expect(() =>
+      finishCombatGenericAction({
+        actionId: "action-1",
+        actions: phase,
+        at,
+        resolution,
+        roundNumber: 3,
+        status: "completed",
+        step: "phase_1_actions",
+      }),
+    ).toThrow("before its reviewed timing completes");
+    expect(
+      finishCombatGenericAction({
+        actionId: "action-1",
+        actions: phase,
+        at,
+        resolution,
+        roundNumber: 3,
+        status: "completed",
+        step: "phase_1_damage",
+      })[0]?.status,
+    ).toBe("completed");
   });
 
   it("reloads multi-round environmental movement without duplicate progress or a reroll", () => {
@@ -236,13 +300,15 @@ describe("generic Combat actions", () => {
   it("omits hidden references and GM-only results from unauthorized player projections", () => {
     const actions = finishCombatGenericAction({
       actionId: "action-1",
-      actions: active(),
+      actions: active({ duration: { kind: "gm_decided" } }),
       at,
       resolution: {
         resolvedAt: at,
         text: "A hidden watcher is behind the wall.",
         visibleToParticipantIds: [],
       },
+      roundNumber: 4,
+      step: "select_actions",
       status: "completed",
     }).map((action) => ({
       ...action,
@@ -284,7 +350,7 @@ describe("generic Combat actions", () => {
       actionId: "action-1",
       actions: recordCombatGenericActionRoll({
         actionId: "action-1",
-        actions: active({ rollRequest: skillRoll }),
+        actions: active({ duration: { kind: "gm_decided" }, rollRequest: skillRoll }),
         result: {
           achievedLevelId: "medium",
           achievedLevelLabel: "Medium",
@@ -305,6 +371,8 @@ describe("generic Combat actions", () => {
         text: "You notice fresh tracks.",
         visibleToParticipantIds: ["hero", "hidden-recipient"],
       },
+      roundNumber: 4,
+      step: "select_actions",
       status: "completed",
     });
 

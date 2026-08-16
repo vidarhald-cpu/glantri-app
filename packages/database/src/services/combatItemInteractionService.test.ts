@@ -62,6 +62,7 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
     const service = new CombatItemInteractionService(
       repository([
         record({ holderCharacterId: "character-1", id: "owned-dagger" }),
+        record({ hidden: true, holderCharacterId: "character-1", id: "hidden-owned-dagger" }),
         record({ holderCharacterId: "character-2", id: "other-dagger" }),
         record({
           availableInEncounter: false,
@@ -96,12 +97,17 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
     expect(options.actors[0]?.items.map((item) => item.id)).toEqual(["owned-dagger"]);
     expect(options.presentItems.map((item) => item.id)).toEqual(["visible-dagger"]);
     expect(JSON.stringify(options)).not.toContain("hidden-dagger");
+    expect(JSON.stringify(options)).not.toContain("hidden-owned-dagger");
     expect(JSON.stringify(options)).not.toContain("other-dagger");
     expect(JSON.stringify(options)).not.toContain("stored-elsewhere");
   });
 
   it("gives the GM precise unsupported actor state without inventing NPC Item holders", async () => {
-    const service = new CombatItemInteractionService(repository([]));
+    const service = new CombatItemInteractionService(
+      repository([
+        record({ hidden: true, holderCharacterId: "character-1", id: "hidden-owned-dagger" }),
+      ]),
+    );
     const options = await service.getOptions({
       campaignId: "campaign-1",
       encounterId: "encounter-1",
@@ -115,6 +121,7 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
         unsupportedReason: "Canonical Item interactions currently require a Character participant.",
       },
     );
+    expect(options.actors[0]?.items.map((item) => item.id)).toContain("hidden-owned-dagger");
   });
 
   it("makes hidden, nonexistent, wrong-owner, and forged-revision declarations fail identically", async () => {

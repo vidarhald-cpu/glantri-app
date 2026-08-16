@@ -278,9 +278,10 @@ export class StaleEquipmentTransferError extends Error {
 }
 
 export function createPrismaCharacterEquipmentRepository(
-  client?: PrismaClient,
+  client?: PrismaClient | Prisma.TransactionClient,
 ): CharacterEquipmentRepository {
-  const prisma = client ?? defaultPrisma;
+  const prisma = (client ?? defaultPrisma) as PrismaClient;
+  const transactionClient = client && !("$transaction" in client) ? client : undefined;
   return {
     async createCharacterStorageLocation(location) {
       const created = await prisma.characterStorageLocation.create({
@@ -563,7 +564,7 @@ export function createPrismaCharacterEquipmentRepository(
       });
     },
     async applyCombatItemInteraction(input) {
-      return prisma.$transaction(async (transaction) => {
+      const apply = async (transaction: Prisma.TransactionClient) => {
         await transaction.$queryRaw(
           Prisma.sql`SELECT "id" FROM "CharacterEquipmentItem" WHERE "id" = ${input.itemId} FOR UPDATE`,
         );
@@ -831,7 +832,8 @@ export function createPrismaCharacterEquipmentRepository(
           where: { id: current.id },
         });
         return { alreadyApplied: false, item: mapCanonicalEquipmentItem(updated) };
-      });
+      };
+      return transactionClient ? apply(transactionClient) : prisma.$transaction(apply);
     },
     async updateCharacterEquipmentItem(item) {
       const result = await prisma.characterEquipmentItem.updateMany({

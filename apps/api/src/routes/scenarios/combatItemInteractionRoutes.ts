@@ -17,6 +17,7 @@ import {
 import {
   CampaignService,
   CombatItemInteractionService,
+  CombatPersistenceError,
   CombatItemRevisionError,
   CombatItemUnavailableError,
   EncounterCombatWriteError,
@@ -285,8 +286,15 @@ export function createCombatItemInteractionRoutes(
           error: "The canonical Item action changed. Refresh and review the latest state.",
         });
       }
+      if (body.operation === "resolve" && existingAction?.status === "completed") {
+        return { encounter };
+      }
+      if (body.operation === "resolve" && existingAction?.status !== "active") {
+        return reply.code(400).send({ error: "Only an active Item action can be resolved." });
+      }
 
       let genericActions = roundState.genericActions;
+      let atomicallyCommittedEncounter: EncounterSession | undefined;
       const now = new Date().toISOString();
       try {
         if (body.operation === "declare") {
@@ -355,6 +363,7 @@ export function createCombatItemInteractionRoutes(
             activatedAt: now,
             actions: genericActions,
             roundNumber: roundState.roundNumber,
+            step: roundState.currentStep,
           });
         } else {
           const terminalStatus =
@@ -371,27 +380,6 @@ export function createCombatItemInteractionRoutes(
             if (body.visibleToParticipantIds.some((id) => !audience.has(id))) {
               return reply.code(400).send({ error: "Choose active participants for the result." });
             }
-            const owner = currentContext.participants.find(
-              (participant) => participant.participantId === existingAction!.ownerParticipantId,
-            );
-            const recipient = existingAction!.itemInteraction?.recipientParticipantId
-              ? currentContext.participants.find(
-                  (participant) =>
-                    participant.participantId ===
-                    existingAction!.itemInteraction?.recipientParticipantId,
-                )
-              : undefined;
-            if (!owner?.characterId || !existingAction!.itemInteraction) {
-              throw new CombatItemUnavailableError();
-            }
-            await services().itemService.apply({
-              actionId: existingAction!.id,
-              campaignId: currentContext.access.campaignId,
-              encounterId: currentContext.encounterId,
-              interaction: existingAction!.itemInteraction,
-              ownerCharacterId: owner.characterId,
-              recipientCharacterId: recipient?.characterId,
-            });
           }
           genericActions = finishCombatGenericAction({
             actionId: body.actionId,
@@ -406,32 +394,72 @@ export function createCombatItemInteractionRoutes(
                     visibleToParticipantIds: body.visibleToParticipantIds,
                   }
                 : undefined,
+            roundNumber: roundState.roundNumber,
             status: terminalStatus,
+            step: roundState.currentStep,
           });
+          if (body.operation === "resolve") {
+            const owner = currentContext.participants.find(
+              (participant) => participant.participantId === existingAction!.ownerParticipantId,
+            );
+            const recipient = existingAction!.itemInteraction?.recipientParticipantId
+              ? currentContext.participants.find(
+                  (participant) =>
+                    participant.participantId ===
+                    existingAction!.itemInteraction?.recipientParticipantId,
+                )
+              : undefined;
+            if (!owner?.characterId || !existingAction!.itemInteraction) {
+              throw new CombatItemUnavailableError();
+            }
+            atomicallyCommittedEncounter = (
+              await services().itemService.commitResolution({
+                actionId: existingAction!.id,
+                actorUserId: currentContext.user.id,
+                campaignId: currentContext.access.campaignId,
+                encounterId: currentContext.encounterId,
+                encounterSession: {
+                  ...encounter,
+                  combatRoundState: { ...roundState, genericActions },
+                  updatedAt: now,
+                },
+                expectedEncounterRevision: encounter.updatedAt,
+                interaction: existingAction!.itemInteraction,
+                ownerCharacterId: owner.characterId,
+                recipientCharacterId: recipient?.characterId,
+                roundNumber: roundState.roundNumber,
+                scenarioId: encounter.scenarioId!,
+              })
+            ).encounter;
+          }
         }
 
-        const nextEncounter = await services().encounterService.updateCombatEncounter({
-          campaignId: currentContext.access.campaignId,
-          encounterId: currentContext.encounterId,
-          expectedRevision: encounter.updatedAt,
-          scenarioId: encounter.scenarioId!,
-          session: {
-            ...encounter,
-            combatRoundState: { ...roundState, genericActions },
-            updatedAt: now,
-          },
-        });
-        await services().scenarioService.recordScenarioEvent({
-          actorUserId: currentContext.user.id,
-          eventType: "encounter_updated",
-          payload: {
-            actionId: body.actionId,
+        const nextEncounter =
+          atomicallyCommittedEncounter ??
+          (await services().encounterService.updateCombatEncounter({
+            campaignId: currentContext.access.campaignId,
             encounterId: currentContext.encounterId,
-            operation: body.operation,
-          },
-          scenarioId: encounter.scenarioId!,
-          summary: `Canonical Combat Item action ${body.operation}.`,
-        });
+            expectedRevision: encounter.updatedAt,
+            scenarioId: encounter.scenarioId!,
+            session: {
+              ...encounter,
+              combatRoundState: { ...roundState, genericActions },
+              updatedAt: now,
+            },
+          }));
+        if (!atomicallyCommittedEncounter) {
+          await services().scenarioService.recordScenarioEvent({
+            actorUserId: currentContext.user.id,
+            eventType: "encounter_updated",
+            payload: {
+              actionId: body.actionId,
+              encounterId: currentContext.encounterId,
+              operation: body.operation,
+            },
+            scenarioId: encounter.scenarioId!,
+            summary: `Canonical Combat Item action ${body.operation}.`,
+          });
+        }
         return {
           encounter: isGm
             ? nextEncounter
@@ -447,6 +475,8 @@ export function createCombatItemInteractionRoutes(
         }
         if (
           error instanceof CombatItemRevisionError ||
+          (error instanceof CombatPersistenceError &&
+            (error.code === "stale_revision" || error.code === "transaction_conflict")) ||
           (error instanceof EncounterCombatWriteError && error.code === "stale_revision")
         ) {
           return reply.code(409).send({

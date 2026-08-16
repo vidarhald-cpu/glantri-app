@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { glantriCharacteristicKeySchema } from "../character/profiles";
+import { COMBAT_ROUND_STEPS, type CombatRoundStep } from "./combatRoundStep";
 
 const idSchema = z.string().min(1);
 
@@ -109,6 +110,7 @@ export const combatItemInteractionSchema = z.object({
   operation: combatItemInteractionOperationSchema,
   recipientParticipantId: idSchema.optional(),
   stateAtDeclaration: combatItemInteractionStateSchema,
+  visibleToParticipantIds: z.array(idSchema).default([]),
 });
 export type CombatItemInteraction = z.infer<typeof combatItemInteractionSchema>;
 
@@ -127,6 +129,7 @@ export const combatGenericActionSchema = z.object({
     completedRounds: z.number().int().nonnegative().default(0),
     lastProgressedRoundNumber: z.number().int().positive().optional(),
     startedRoundNumber: z.number().int().positive().optional(),
+    startedStep: z.enum(COMBAT_ROUND_STEPS).optional(),
     totalRounds: z.number().int().positive().optional(),
   }),
   reference: combatGenericActionReferenceSchema.optional(),
@@ -238,6 +241,7 @@ export function activateCombatGenericAction(input: {
   activatedAt: string;
   actions: readonly CombatGenericAction[];
   roundNumber: number;
+  step: CombatRoundStep;
 }): CombatGenericAction[] {
   const current = requireAction(input.actions, input.actionId);
   if (current.status === "active") return [...input.actions];
@@ -247,7 +251,11 @@ export function activateCombatGenericAction(input: {
   const next = combatGenericActionSchema.parse({
     ...current,
     lastUpdatedAt: input.activatedAt,
-    progress: { ...current.progress, startedRoundNumber: input.roundNumber },
+    progress: {
+      ...current.progress,
+      startedRoundNumber: input.roundNumber,
+      startedStep: input.step,
+    },
     status: "active",
   });
   return replaceAction(input.actions, next);
@@ -272,12 +280,44 @@ export function recordCombatGenericActionRoll(input: {
   return replaceAction(input.actions, next);
 }
 
+export function canCompleteCombatGenericAction(input: {
+  action: CombatGenericAction;
+  roundNumber: number;
+  step: CombatRoundStep;
+}): boolean {
+  const action = combatGenericActionSchema.parse(input.action);
+  if (action.status !== "active") return false;
+  if (action.duration.kind === "gm_decided") return true;
+  if (action.duration.kind === "round" || action.duration.kind === "rounds") {
+    return (
+      action.progress.totalRounds !== undefined &&
+      action.progress.completedRounds >= action.progress.totalRounds
+    );
+  }
+
+  const startedRoundNumber = action.progress.startedRoundNumber;
+  const startedStep = action.progress.startedStep;
+  if (startedRoundNumber === undefined || startedStep === undefined) return false;
+  const targetStep = action.duration.phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
+  const targetIndex = COMBAT_ROUND_STEPS.indexOf(targetStep);
+  const currentIndex = COMBAT_ROUND_STEPS.indexOf(input.step);
+  const startedIndex = COMBAT_ROUND_STEPS.indexOf(startedStep);
+  if (input.roundNumber < startedRoundNumber) return false;
+  if (input.roundNumber === startedRoundNumber) {
+    return startedIndex < targetIndex && currentIndex > targetIndex;
+  }
+  if (startedIndex < targetIndex) return true;
+  return currentIndex > targetIndex;
+}
+
 export function finishCombatGenericAction(input: {
   actionId: string;
   actions: readonly CombatGenericAction[];
   at: string;
   status: "completed" | "interrupted" | "cancelled";
   resolution?: CombatGenericActionResolution;
+  roundNumber?: number;
+  step?: CombatRoundStep;
 }): CombatGenericAction[] {
   const current = requireAction(input.actions, input.actionId);
   if (["completed", "interrupted", "cancelled"].includes(current.status)) {
@@ -288,6 +328,18 @@ export function finishCombatGenericAction(input: {
   }
   if (input.status === "completed" && !input.resolution) {
     throw new RangeError("Enter the GM-controlled result before completing this Combat action.");
+  }
+  if (
+    input.status === "completed" &&
+    (input.roundNumber === undefined ||
+      input.step === undefined ||
+      !canCompleteCombatGenericAction({
+        action: current,
+        roundNumber: input.roundNumber,
+        step: input.step,
+      }))
+  ) {
+    throw new RangeError("This Combat action cannot resolve before its reviewed timing completes.");
   }
   const next = combatGenericActionSchema.parse({
     ...current,
@@ -344,6 +396,12 @@ export function projectCombatGenericActionsForPlayer(input: {
       input.controlledParticipantIds.has(id),
     );
     const ownerIsVisible = input.visibleParticipantIds.has(action.ownerParticipantId);
+    const maySeeItemInteraction =
+      action.preset !== "item_interaction" ||
+      action.itemInteraction?.visibleToParticipantIds.some((id) =>
+        input.controlledParticipantIds.has(id),
+      );
+    if (!maySeeItemInteraction) return [];
     if (!ownsAction && (!receivesResult || !ownerIsVisible)) return [];
 
     const reference =
@@ -355,10 +413,19 @@ export function projectCombatGenericActionsForPlayer(input: {
           ? undefined
           : action.reference;
     const maySeeResolution = Boolean(receivesResult);
+    const itemInteraction = action.itemInteraction
+      ? {
+          ...action.itemInteraction,
+          visibleToParticipantIds: action.itemInteraction.visibleToParticipantIds.filter((id) =>
+            input.controlledParticipantIds.has(id),
+          ),
+        }
+      : undefined;
     return [
       combatGenericActionSchema.parse({
         ...action,
         createdByUserId: undefined,
+        itemInteraction,
         reference,
         resolution:
           maySeeResolution && action.resolution

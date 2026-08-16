@@ -4,8 +4,11 @@ import type {
   CombatItemInteraction,
   CombatItemInteractionOperation,
   CombatItemInteractionState,
+  EncounterSession,
 } from "@glantri/domain";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
+import { prisma as defaultPrisma } from "../client";
 import {
   CombatItemUnavailableError,
   createPrismaCharacterEquipmentRepository,
@@ -13,6 +16,13 @@ import {
   type CharacterEquipmentRepository,
   type CombatItemInteractionRecord,
 } from "../repositories/characterEquipmentRepository";
+import {
+  CombatPersistenceError,
+  createPrismaCombatStatePersistenceRepository,
+  isRetryableCombatTransactionError,
+} from "../repositories/combatStatePersistenceRepository";
+
+export { CombatPersistenceError } from "../repositories/combatStatePersistenceRepository";
 
 export {
   CombatItemRevisionError,
@@ -30,6 +40,7 @@ export interface CombatItemInteractionOption {
   id: string;
   label: string;
   operations: CombatItemInteractionOperation[];
+  playerVisible: boolean;
   revision: string;
   state: CombatItemInteractionState;
 }
@@ -47,6 +58,22 @@ export interface CombatItemInteractionOptions {
   presentItems: CombatItemInteractionOption[];
   recipients: Array<{ label: string; participantId: string }>;
 }
+
+export interface CommitCombatItemInteractionResolutionInput {
+  actionId: string;
+  actorUserId: string;
+  campaignId: string;
+  encounterId: string;
+  encounterSession: EncounterSession;
+  expectedEncounterRevision: string;
+  interaction: CombatItemInteraction;
+  ownerCharacterId: string;
+  recipientCharacterId?: string;
+  roundNumber: number;
+  scenarioId: string;
+}
+
+type CombatItemInteractionTransactionBoundary = "item" | "encounter" | "event";
 
 function itemLabel(record: CombatItemInteractionRecord): string {
   return (
@@ -99,6 +126,7 @@ function toOption(record: CombatItemInteractionRecord): CombatItemInteractionOpt
     id: record.item.id,
     label: itemLabel(record),
     operations: supportedOperations(record, state),
+    playerVisible: !record.hidden,
     revision: record.item.revision,
     state,
   };
@@ -107,6 +135,10 @@ function toOption(record: CombatItemInteractionRecord): CombatItemInteractionOpt
 export class CombatItemInteractionService {
   constructor(
     private readonly repository: CharacterEquipmentRepository = createPrismaCharacterEquipmentRepository(),
+    private readonly client: PrismaClient = defaultPrisma,
+    private readonly transactionBoundaryHook?: (
+      boundary: CombatItemInteractionTransactionBoundary,
+    ) => Promise<void> | void,
   ) {}
 
   async getOptions(input: {
@@ -137,6 +169,7 @@ export class CombatItemInteractionService {
           .filter(
             (record) =>
               record.availableInEncounter &&
+              (input.viewer.kind === "gm" || !record.hidden) &&
               record.item.holderCharacterId === participant.characterId,
           )
           .map(toOption),
@@ -212,6 +245,14 @@ export class CombatItemInteractionService {
         operation: input.operation,
         recipientParticipantId: recipient?.participantId,
         stateAtDeclaration: item.state,
+        visibleToParticipantIds: item.playerVisible
+          ? [
+              ...new Set([
+                input.ownerParticipantId,
+                ...(recipient ? [recipient.participantId] : []),
+              ]),
+            ]
+          : [],
       },
       reference: {
         itemId: item.id,
@@ -240,5 +281,86 @@ export class CombatItemInteractionService {
       ownerCharacterId: input.ownerCharacterId,
       recipientCharacterId: input.recipientCharacterId,
     });
+  }
+
+  async commitResolution(
+    input: CommitCombatItemInteractionResolutionInput,
+  ): Promise<{ encounter: EncounterSession; item: ApplyCombatItemInteractionResult }> {
+    const completedAction = input.encounterSession.combatRoundState?.genericActions.find(
+      (action) => action.id === input.actionId,
+    );
+    if (
+      completedAction?.status !== "completed" ||
+      completedAction.itemInteraction?.itemId !== input.interaction.itemId ||
+      completedAction.itemInteraction.itemRevision !== input.interaction.itemRevision ||
+      completedAction.itemInteraction.operation !== input.interaction.operation ||
+      completedAction.itemInteraction.recipientParticipantId !==
+        input.interaction.recipientParticipantId
+    ) {
+      throw new CombatItemUnavailableError();
+    }
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await this.client.$transaction(
+          async (transaction) => {
+            const item = await createPrismaCharacterEquipmentRepository(
+              transaction,
+            ).applyCombatItemInteraction({
+              actionId: input.actionId,
+              campaignId: input.campaignId,
+              encounterId: input.encounterId,
+              expectedItemRevision: input.interaction.itemRevision,
+              itemId: input.interaction.itemId,
+              operation: input.interaction.operation,
+              ownerCharacterId: input.ownerCharacterId,
+              recipientCharacterId: input.recipientCharacterId,
+            });
+            await this.transactionBoundaryHook?.("item");
+
+            const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
+              maxTransactionAttempts: 1,
+            }).updateCombatEncounter({
+              campaignId: input.campaignId,
+              encounterId: input.encounterId,
+              expectedRevision: input.expectedEncounterRevision,
+              scenarioId: input.scenarioId,
+              session: input.encounterSession,
+            });
+            await this.transactionBoundaryHook?.("encounter");
+
+            await transaction.scenarioEventLog.create({
+              data: {
+                actorUserId: input.actorUserId,
+                eventType: "encounter_updated",
+                payloadJson: {
+                  actionId: input.actionId,
+                  encounterId: input.encounterId,
+                  operation: "resolve",
+                },
+                roundNumber: input.roundNumber,
+                scenarioId: input.scenarioId,
+                summary: "Canonical Combat Item action resolve.",
+              },
+            });
+            await this.transactionBoundaryHook?.("event");
+            return { encounter, item };
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        if (!isRetryableCombatTransactionError(error)) throw error;
+        if (attempt === 3) {
+          throw new CombatPersistenceError(
+            "transaction_conflict",
+            "Combat state changed while saving. Refresh and try again.",
+            error,
+          );
+        }
+      }
+    }
+    throw new CombatPersistenceError(
+      "transaction_conflict",
+      "Combat state changed while saving. Refresh and try again.",
+    );
   }
 }

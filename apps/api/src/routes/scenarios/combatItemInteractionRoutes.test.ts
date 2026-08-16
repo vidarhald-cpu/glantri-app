@@ -69,6 +69,7 @@ function itemAction(status: CombatGenericAction["status"] = "active"): CombatGen
       operation: "pass",
       recipientParticipantId: "participant-2",
       stateAtDeclaration: "held",
+      visibleToParticipantIds: ["participant-1", "participant-2"],
     },
     lastUpdatedAt: "2026-08-16T09:31:00.000Z",
     ownerParticipantId: "participant-1",
@@ -95,6 +96,10 @@ function services(currentEncounter = encounterWithActions()): CombatItemInteract
     } as unknown as CombatItemInteractionRouteServices["encounterService"],
     itemService: {
       apply: vi.fn(async () => ({ alreadyApplied: false })),
+      commitResolution: vi.fn(async (input) => ({
+        encounter: input.encounterSession,
+        item: { alreadyApplied: false },
+      })),
       getOptions: vi.fn(async () => ({ actors: [], presentItems: [], recipients: [] })),
       resolveDeclaration: vi.fn(async () => ({
         interaction: {
@@ -103,6 +108,7 @@ function services(currentEncounter = encounterWithActions()): CombatItemInteract
           itemRevision: "2026-08-16T09:29:00.000Z",
           operation: "drop",
           stateAtDeclaration: "held",
+          visibleToParticipantIds: ["participant-1"],
         },
         reference: {
           itemId: "item-1",
@@ -222,6 +228,7 @@ describe("canonical Combat Item interaction routes", () => {
         itemRevision: "2026-08-16T09:29:00.000Z",
         operation: "use",
         stateAtDeclaration: "held",
+        visibleToParticipantIds: ["participant-1"],
       },
       reference: {
         itemId: "item-1",
@@ -309,15 +316,17 @@ describe("canonical Combat Item interaction routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(routeServices.itemService.apply).toHaveBeenCalledWith(
+    expect(routeServices.itemService.commitResolution).toHaveBeenCalledWith(
       expect.objectContaining({
         actionId: "action-1",
         ownerCharacterId: "character-1",
         recipientCharacterId: "character-2",
       }),
     );
-    const saved = vi.mocked(routeServices.encounterService.updateCombatEncounter).mock.calls[0]?.[0]
-      .session.combatRoundState?.genericActions[0];
+    expect(routeServices.encounterService.updateCombatEncounter).not.toHaveBeenCalled();
+    expect(routeServices.scenarioService.recordScenarioEvent).not.toHaveBeenCalled();
+    const saved = vi.mocked(routeServices.itemService.commitResolution).mock.calls[0]?.[0]
+      .encounterSession.combatRoundState?.genericActions[0];
     expect(saved).toMatchObject({
       resolution: { text: "Bram receives the same Silver dagger." },
       status: "completed",
@@ -325,10 +334,68 @@ describe("canonical Combat Item interaction routes", () => {
     await app.close();
   });
 
+  it("rejects an early fixed-duration resolve before any canonical Item or Encounter mutation", async () => {
+    auth.requireAuthenticatedUser.mockResolvedValue(gm);
+    const earlyAction: CombatGenericAction = {
+      ...itemAction(),
+      duration: { kind: "rounds", rounds: 3 },
+      progress: {
+        completedRounds: 0,
+        startedRoundNumber: 1,
+        startedStep: "select_actions",
+        totalRounds: 3,
+      },
+    };
+    const routeServices = services(encounterWithActions([earlyAction]));
+    const app = await appWith(routeServices);
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "action-1",
+        expectedRevision: revision,
+        operation: "resolve",
+        resultText: "Too early",
+        visibleToParticipantIds: ["participant-1"],
+      },
+      url: "/encounters/encounter-1/combat-round/item-interactions",
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body).toContain("before its reviewed timing completes");
+    expect(routeServices.itemService.commitResolution).not.toHaveBeenCalled();
+    expect(routeServices.encounterService.updateCombatEncounter).not.toHaveBeenCalled();
+    expect(routeServices.scenarioService.recordScenarioEvent).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("never applies an Item mutation after the action was interrupted", async () => {
+    auth.requireAuthenticatedUser.mockResolvedValue(gm);
+    const routeServices = services(encounterWithActions([itemAction("interrupted")]));
+    const app = await appWith(routeServices);
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "action-1",
+        expectedRevision: revision,
+        operation: "resolve",
+        resultText: "Forged late completion",
+        visibleToParticipantIds: ["participant-1"],
+      },
+      url: "/encounters/encounter-1/combat-round/item-interactions",
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(routeServices.itemService.commitResolution).not.toHaveBeenCalled();
+    expect(routeServices.encounterService.updateCombatEncounter).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it("rejects a stale canonical Item revision without persisting a false completion", async () => {
     auth.requireAuthenticatedUser.mockResolvedValue(gm);
     const routeServices = services(encounterWithActions([itemAction()]));
-    vi.mocked(routeServices.itemService.apply).mockRejectedValue(new CombatItemRevisionError());
+    vi.mocked(routeServices.itemService.commitResolution).mockRejectedValue(
+      new CombatItemRevisionError(),
+    );
     const app = await appWith(routeServices);
     const response = await app.inject({
       method: "POST",

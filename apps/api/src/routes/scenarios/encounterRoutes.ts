@@ -6462,6 +6462,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           activatedAt: now,
           actions: genericActions,
           roundNumber: roundState.roundNumber,
+          step: roundState.currentStep,
         });
       } else if (body.operation === "roll") {
         if (!existingAction?.rollRequest) {
@@ -6506,7 +6507,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   visibleToParticipantIds: body.visibleToParticipantIds,
                 }
               : undefined,
+          roundNumber: roundState.roundNumber,
           status: terminalStatus,
+          step: roundState.currentStep,
         });
       }
 

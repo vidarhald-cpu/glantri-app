@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { canCompleteCombatGenericAction } from "@glantri/domain";
 import type {
   CombatGenericAction,
   CombatGenericActionDuration,
@@ -174,6 +175,15 @@ export function GenericCombatActionPanel({
       ? resultDraft.text
       : "";
   const actionDraftIsCurrent = draftActionId === selectedAction?.id;
+  const actionTimingIsComplete = Boolean(
+    selectedAction &&
+    encounter.combatRoundState &&
+    canCompleteCombatGenericAction({
+      action: selectedAction,
+      roundNumber: encounter.combatRoundState.roundNumber,
+      step: encounter.combatRoundState.currentStep,
+    }),
+  );
   const findScenarioParticipant = (encounterParticipantId?: string) =>
     scenarioParticipants.find((candidate) =>
       encounter.participants.some(
@@ -897,6 +907,7 @@ export function GenericCombatActionPanel({
                     <button
                       disabled={
                         busy ||
+                        !actionTimingIsComplete ||
                         !actionDraftIsCurrent ||
                         resultAudience.length === 0 ||
                         !currentResultText.trim()
