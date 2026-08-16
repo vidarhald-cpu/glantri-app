@@ -3973,12 +3973,30 @@ export default function ScenarioPlayerCombatPageContent({
           })
         : undefined;
 
-    return targetOptions.map((option) => ({
-      defaultDistance: option.id === primaryTargetId ? defaultDistance : undefined,
-      displayName: option.displayName,
-      id: option.id,
-    }));
+    return targetOptions.map((option) => {
+      const targetRoundParticipant = combatRoundState?.participants.find(
+        (participant) =>
+          participant.participantId === option.id ||
+          participant.scenarioParticipantId === option.id ||
+          participant.characterId === option.id,
+      );
+      const currentDistance =
+        combatRoundState && selectedRoundParticipant && targetRoundParticipant
+          ? getDistanceEdgeBetweenParticipantAliases({
+              participantA: selectedRoundParticipant,
+              participantB: targetRoundParticipant,
+              state: combatRoundState.distanceState,
+            })?.distance
+          : undefined;
+      return {
+        currentDistance,
+        defaultDistance: option.id === primaryTargetId ? defaultDistance : undefined,
+        displayName: option.displayName,
+        id: option.id,
+      };
+    });
   }, [
+    combatRoundState,
     combatContextDraft.targetParticipantId,
     controlledEquipmentState,
     phaseCombatContextDrafts.phase1.targetParticipantId,
@@ -3986,6 +4004,7 @@ export default function ScenarioPlayerCombatPageContent({
     phaseCombatLoadoutSummaries,
     selectedActionId,
     selectedParticipant,
+    selectedRoundParticipant,
     targetOptions,
   ]);
   const initiativeCalculation = useMemo(
@@ -4552,7 +4571,7 @@ export default function ScenarioPlayerCombatPageContent({
     Boolean(displayedParticipant?.characterId);
 
   return (
-    <section style={{ display: "grid", gap: "1rem", maxWidth: 1200 }}>
+    <section style={{ display: "grid", gap: "1rem", maxWidth: 1200, minWidth: 0, width: "100%" }}>
       <RememberedCampaignWorkspaceEffect
         campaignId={campaignId}
         encounterId={encounterId}

@@ -69,12 +69,14 @@ describe("PlayerCombatPanels", () => {
   it("renders structured distance preference movement controls instead of placeholder-only options", () => {
     const source = readSource();
 
-    expect(source).toContain("Maintain distance to opponent");
-    expect(source).toContain("Set preferred distance");
+    expect(source).toContain("Change distance to participant");
+    expect(source).toContain("Move in environment");
     expect(source).toContain("distancePreferenceOptions");
     expect(source).toContain("No preference");
-    expect(source).toContain("Melee zones");
-    expect(source).toContain("Extended");
+    expect(source).toContain("Maintain · Distance");
+    expect(source).toContain("Close · Distance");
+    expect(source).toContain("Open · Distance");
+    expect(source).toContain("Retreat · Distance");
     expect(source).toContain("onMovementIntentChange");
     expect(source).not.toContain("PLAYER_ENCOUNTER_MOVEMENT_OPTIONS.map");
   });
@@ -717,7 +719,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("phaseCard.stats");
     expect(source).toContain("playerCombatTopPanelRowStyle");
     expect(source).toContain(
-      'gridTemplateColumns: "minmax(12rem, 0.7fr) minmax(14rem, 1fr) minmax(14rem, 1fr)"',
+      'gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 14rem), 1fr))"',
     );
     expect(source).toContain("gridTemplateColumns: playerCombatPanelRowStyle.gridTemplateColumns");
     expect(source).toContain("PlayerCombatAttackStatsTable");
@@ -856,7 +858,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).not.toContain("result?.phaseLabel");
     expect(source).not.toContain("No result recorded.");
     expect(source).not.toContain("Description: {detailText}");
-    expect(source).not.toContain("Movement:");
+    expect(source).not.toContain("<span>Movement:</span>");
     expect(source).toContain("Mod");
     expect(source).toContain("Dur");
     expect(source).toContain("Details");

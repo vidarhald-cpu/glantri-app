@@ -26,6 +26,7 @@ export type PlayerEncounterActionId =
   | "parry_disarm"
   | "disarm"
   | "break_off_engagement"
+  | "move_only"
   | "other";
 
 export type PlayerEncounterMovementId =
@@ -87,6 +88,7 @@ const ALL_PLAYER_ENCOUNTER_ACTION_OPTIONS: PlayerEncounterOption<PlayerEncounter
   { label: "Parry - Disarm", value: "parry_disarm" },
   { label: "Disarm", value: "disarm" },
   { label: "Break Off Engagement", value: "break_off_engagement" },
+  { label: "Move only", value: "move_only" },
   { label: "Other", value: "other" },
 ];
 
@@ -123,7 +125,9 @@ export function getPlayerEncounterPrimaryActionOptions(
       .compatiblePrimaryActions,
   );
   return PLAYER_ENCOUNTER_ACTION_OPTIONS.filter((option) =>
-    compatibleActionIds.has(option.value as (typeof COMBAT_PRIMARY_ACTION_IDS)[number]),
+    compatibleActionIds.has(
+      option.value as "move_only" | (typeof COMBAT_PRIMARY_ACTION_IDS)[number],
+    ),
   );
 }
 
@@ -141,11 +145,13 @@ export function getPlayerEncounterSecondaryActionOptions(
 
 export function getPlayerEncounterDeclarationCompatibilityMessage(input: {
   actionId?: PlayerEncounterActionId | "";
+  movementKind?: string;
   secondaryActionId?: PlayerEncounterActionId | "";
 }): string | undefined {
   const actionId = input.actionId || undefined;
   const secondaryActionId = input.secondaryActionId || undefined;
   const projection = projectCombatDeclarationCompatibility({
+    movementKind: input.movementKind,
     primaryAction: actionId,
     secondaryAction: secondaryActionId,
   });
@@ -169,6 +175,10 @@ export function getPlayerEncounterDeclarationCompatibilityMessage(input: {
     return `${getPlayerEncounterActionLabel(actionId)} cannot be combined with ${getPlayerEncounterActionLabel(secondaryActionId)}. Choose a compatible primary action or remove the secondary action.`;
   }
 
+  if (actionId && input.movementKind) {
+    return `${getPlayerEncounterActionLabel(actionId)} cannot be combined with that movement. Choose another movement intent.`;
+  }
+
   return projection.message;
 }
 
@@ -179,7 +189,8 @@ export function isPlayerEncounterActionId(value: unknown): value is PlayerEncoun
 
   return (
     (COMBAT_PRIMARY_ACTION_IDS as readonly string[]).includes(value) ||
-    (COMBAT_SECONDARY_ACTION_IDS as readonly string[]).includes(value)
+    (COMBAT_SECONDARY_ACTION_IDS as readonly string[]).includes(value) ||
+    value === "move_only"
   );
 }
 

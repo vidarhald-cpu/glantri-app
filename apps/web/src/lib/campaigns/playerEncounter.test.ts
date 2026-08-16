@@ -94,6 +94,7 @@ describe("playerEncounter", () => {
       "adjust_range_attack",
       "offensive_parry",
       "parry",
+      "move_only",
     ]);
     expect(PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS.map((option) => option.value)).toEqual([
       "observe_opponent",

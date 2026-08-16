@@ -13523,6 +13523,142 @@ describe("combat round manager", () => {
     });
   });
 
+  it("does not double-resolve a stale Adjust Distance-Attack through generic movement", () => {
+    const baseState = initializeCombatRoundState({ encounter: encounter() });
+    const distanceState = setDistanceBetween({
+      distance: 2,
+      participantAId: "gladiator",
+      participantBId: "guard",
+      source: "gm_set",
+      state: baseState.distanceState,
+    });
+    const forged = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "adjust_range_attack",
+        movementIntent: {
+          distancePreferences: [
+            {
+              desiredDistance: 1,
+              operation: "close",
+              source: "player_declared",
+              targetParticipantId: "guard",
+            },
+          ],
+          mode: "set_distance_preferences",
+        },
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: { ...baseState, distanceState },
+      submittedBy: "player",
+    });
+    const reviewed = prepareCombatRoundEndReview({
+      state: {
+        ...forged,
+        currentCursor: { participantId: "gladiator", roundNumber: 3, step: "SU" },
+        currentStep: "round_summary",
+        selectedParticipantId: "gladiator",
+        selectedStep: "round_summary",
+      },
+    });
+
+    expect(reviewed.roundEndReview?.proposedDistances).toEqual([]);
+    expect(getDistanceBetween(reviewed.distanceState, "gladiator", "guard")).toBe(2);
+  });
+
+  it("routes Move only relative close through canonical round-end distance control", () => {
+    const baseState = initializeCombatRoundState({ encounter: encounter() });
+    const distanceState = setDistanceBetween({
+      distance: 2,
+      participantAId: "gladiator",
+      participantBId: "guard",
+      source: "gm_set",
+      state: baseState.distanceState,
+    });
+    const declared = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "move_only",
+        movementIntent: {
+          distancePreferences: [
+            {
+              desiredDistance: 1,
+              operation: "close",
+              source: "player_declared",
+              targetParticipantId: "guard",
+            },
+          ],
+          mode: "set_distance_preferences",
+        },
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: { ...baseState, distanceState },
+      submittedBy: "player",
+    });
+    const reviewed = prepareCombatRoundEndReview({
+      state: {
+        ...declared,
+        currentCursor: { participantId: "gladiator", roundNumber: 3, step: "SU" },
+        currentStep: "round_summary",
+        selectedParticipantId: "gladiator",
+        selectedStep: "round_summary",
+      },
+    });
+
+    expect(reviewed.roundEndReview?.proposedDistances).toMatchObject([
+      {
+        currentDistance: 2,
+        pairKey: makeDistancePairKey("gladiator", "guard"),
+        participantA: { desiredDistance: 1, participantId: "gladiator" },
+        requiresContest: true,
+        status: "pending_rolls",
+      },
+    ]);
+    expect(getDistanceBetween(reviewed.distanceState, "gladiator", "guard")).toBe(2);
+  });
+
+  it("keeps environmental movement out of participant pair distance state", () => {
+    const baseState = initializeCombatRoundState({ encounter: encounter() });
+    const distanceState = setDistanceBetween({
+      distance: 2,
+      participantAId: "gladiator",
+      participantBId: "guard",
+      source: "gm_set",
+      state: baseState.distanceState,
+    });
+    const moved = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "move_only",
+        movementIntent: {
+          distancePreferences: [],
+          environmentalMovement: {
+            actionId: "round:3:participant:gladiator:declaration:environmental-movement",
+            destination: { description: "doorway", kind: "description" },
+            duration: { kind: "rounds", rounds: 3 },
+            pace: "walk",
+          },
+          mode: "move_in_environment",
+        },
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: { ...baseState, distanceState },
+      submittedBy: "player",
+    });
+    const reviewed = prepareCombatRoundEndReview({
+      state: {
+        ...moved,
+        currentCursor: { participantId: "gladiator", roundNumber: 3, step: "SU" },
+        currentStep: "round_summary",
+        selectedParticipantId: "gladiator",
+        selectedStep: "round_summary",
+      },
+    });
+
+    expect(reviewed.roundEndReview?.proposedDistances).toEqual([]);
+    expect(getDistanceBetween(reviewed.distanceState, "gladiator", "guard")).toBe(2);
+  });
+
   it("rejects distance preferences outside 0-8", () => {
     expect(() =>
       recordCombatRoundDeclaration({

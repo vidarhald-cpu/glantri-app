@@ -93,7 +93,7 @@ export const combatGenericActionSchema = z.object({
   intent: z.string().trim().min(1).max(2000),
   lastUpdatedAt: z.string().datetime(),
   ownerParticipantId: idSchema,
-  preset: z.enum(["look_around"]).optional(),
+  preset: z.enum(["look_around", "environmental_movement"]).optional(),
   progress: z.object({
     completedRounds: z.number().int().nonnegative().default(0),
     lastProgressedRoundNumber: z.number().int().positive().optional(),
@@ -148,6 +148,13 @@ export function declareCombatGenericAction(input: {
     }
   }
 
+  if (
+    input.action.preset === "environmental_movement" &&
+    input.action.reference?.kind !== "environment"
+  ) {
+    throw new RangeError("Environmental movement requires an environmental destination.");
+  }
+
   const action = combatGenericActionSchema.parse({
     ...input.action,
     awarenessContext: input.action.preset === "look_around" ? { kind: "survey" } : undefined,
@@ -172,6 +179,9 @@ export function reviewCombatGenericAction(input: {
   const current = requireAction(input.actions, input.actionId);
   if (current.status !== "declared" && current.status !== "reviewed") {
     throw new RangeError("Only a declared Combat action can be reviewed.");
+  }
+  if (current.preset === "environmental_movement" && input.reference?.kind !== "environment") {
+    throw new RangeError("Environmental movement must retain its environmental destination.");
   }
   const next = combatGenericActionSchema.parse({
     ...current,

@@ -13,9 +13,9 @@ import {
 } from "./combatDeclarationCompatibility";
 
 describe("combat declaration compatibility", () => {
-  it("allows Parry with Open or Observe Opponent and current movement", () => {
+  it("keeps Parry plus Observe Opponent valid without generic distance movement", () => {
     expect(getCombatDeclarationCompatibilityRule("parry")).toMatchObject({
-      allowedMovementKinds: ["hold_position", "set_distance_preferences"],
+      allowedMovementKinds: ["hold_position"],
       compatibleSecondaryActions: [
         {
           actionId: "open",
@@ -36,7 +36,7 @@ describe("combat declaration compatibility", () => {
     ).toEqual({ valid: true });
     expect(
       validateCombatDeclarationCompatibility({
-        movementKind: "set_distance_preferences",
+        movementKind: "hold_position",
         primaryAction: "parry",
         secondaryAction: "observe_opponent",
       }),
@@ -147,7 +147,7 @@ describe("combat declaration compatibility", () => {
       }),
     ).toBe("available");
     expect(getCombatDeclarationCapabilityStatus({ actionId: "move_only", kind: "primary" })).toBe(
-      "partial_internal_only",
+      "available",
     );
     expect(
       validateCombatDeclarationCompatibility({
@@ -164,6 +164,30 @@ describe("combat declaration compatibility", () => {
     expect(getCombatDeclarationCapabilityStatus({ actionId: "open", kind: "secondary" })).toBe(
       "partial_internal_only",
     );
+  });
+
+  it("keeps movement-owning maneuvers out of generic relative and environmental resolution", () => {
+    for (const primaryAction of ["adjust_range_attack", "offensive_parry", "parry"]) {
+      for (const movementKind of ["set_distance_preferences", "move_in_environment"]) {
+        expect(validateCombatDeclarationCompatibility({ movementKind, primaryAction })).toEqual({
+          message: "The selected movement is not compatible with the selected primary action.",
+          valid: false,
+        });
+      }
+    }
+
+    expect(
+      validateCombatDeclarationCompatibility({
+        movementKind: "set_distance_preferences",
+        primaryAction: "move_only",
+      }),
+    ).toEqual({ valid: true });
+    expect(
+      validateCombatDeclarationCompatibility({
+        movementKind: "move_in_environment",
+        primaryAction: "move_only",
+      }),
+    ).toEqual({ valid: true });
   });
 
   it("fails closed for unapproved internal-only primary-secondary pairs", () => {

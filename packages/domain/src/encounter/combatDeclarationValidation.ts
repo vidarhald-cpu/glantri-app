@@ -87,6 +87,7 @@ export const COMBAT_DECLARATION_ACTION_LABELS: Record<string, string> = {
   disarm: "Disarm",
   double_attack: "Double Attack",
   feint_attack: "Feint - Attack",
+  move_only: "Move only",
   observe_opponent: "Observe Opponent",
   offensive_parry: "Offensive Parry",
   other: "Other",
