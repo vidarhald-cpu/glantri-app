@@ -9,6 +9,8 @@ import { updateGenericCombatActionOnServer } from "@/lib/api/localServiceClient"
 import { GenericCombatActionPanel } from "./GenericCombatActionPanel";
 
 vi.mock("@/lib/api/localServiceClient", () => ({
+  loadCombatItemInteractionOptions: vi.fn(() => new Promise(() => undefined)),
+  updateCombatItemInteractionOnServer: vi.fn(),
   updateGenericCombatActionOnServer: vi.fn(),
 }));
 
@@ -262,7 +264,7 @@ describe("GenericCombatActionPanel", () => {
             intent: "Bar the door.",
             lastUpdatedAt: "2026-08-14T08:00:00.000Z",
             ownerParticipantId: "encounter-aster",
-            progress: { completedRounds: 0, totalRounds: 1 },
+            progress: { completedRounds: 1, totalRounds: 1 },
             status: "active",
           },
           {
@@ -272,7 +274,7 @@ describe("GenericCombatActionPanel", () => {
             intent: "Reinforce the gate.",
             lastUpdatedAt: "2026-08-14T08:05:00.000Z",
             ownerParticipantId: "encounter-guard",
-            progress: { completedRounds: 1, totalRounds: 3 },
+            progress: { completedRounds: 3, totalRounds: 3 },
             status: "active",
           },
           {
@@ -477,5 +479,56 @@ describe("GenericCombatActionPanel", () => {
       expect(screen.getByLabelText("Reviewed reference")).toHaveValue("environment");
       expect(screen.getByLabelText("Reviewed environment")).toHaveValue("North balcony");
     });
+  });
+
+  it("keeps fixed-duration resolution disabled until canonical progress is complete", async () => {
+    const action = {
+      createdAt: "2026-08-14T09:00:00.000Z",
+      duration: { kind: "rounds" as const, rounds: 3 },
+      id: "fixed-action",
+      intent: "Raise the gate.",
+      lastUpdatedAt: "2026-08-14T09:00:00.000Z",
+      ownerParticipantId: "encounter-aster",
+      progress: {
+        completedRounds: 1,
+        startedRoundNumber: 1,
+        startedStep: "select_actions" as const,
+        totalRounds: 3,
+      },
+      status: "active" as const,
+    };
+    const buildEncounter = (completedRounds: number) =>
+      ({
+        ...encounter,
+        combatRoundState: {
+          currentStep: "select_actions",
+          genericActions: [{ ...action, progress: { ...action.progress, completedRounds } }],
+          participants: [{ label: "Aster", participantId: "encounter-aster" }],
+          roundNumber: 2,
+        },
+      }) as unknown as EncounterSession;
+    const props = {
+      isGm: true,
+      onEncounterUpdated: vi.fn(),
+      participantId: "encounter-aster",
+      scenarioParticipants: [scenarioParticipant],
+    };
+    const { rerender } = render(
+      <GenericCombatActionPanel encounter={buildEncounter(1)} {...props} />,
+    );
+    fireEvent.change(screen.getByLabelText("Player-safe result"), {
+      target: { value: "The gate rises." },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Resolve action" })).toBeDisabled(),
+    );
+
+    rerender(<GenericCombatActionPanel encounter={buildEncounter(3)} {...props} />);
+    fireEvent.change(screen.getByLabelText("Player-safe result"), {
+      target: { value: "The gate rises." },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Resolve action" })).toBeEnabled(),
+    );
   });
 });

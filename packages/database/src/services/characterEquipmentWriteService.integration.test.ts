@@ -568,5 +568,245 @@ if (!process.env.DATABASE_URL_TEST) {
         id: item.id,
       });
     });
+
+    it("draws and stows one canonical Campaign Item with revision-safe repository writes", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const player = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, player.id);
+      const campaign = await createTestCampaign(prisma!, gm.id);
+      await prisma!.campaignRosterEntry.create({
+        data: {
+          campaignId: campaign.id,
+          category: "pc",
+          sourceId: character.id,
+          sourceType: "character",
+        },
+      });
+      const repo = createPrismaCharacterEquipmentRepository(prisma!);
+      const service = new CharacterEquipmentWriteService(repo);
+      await service.ensureCharacterEquipmentInitialized(character.id);
+      const item = await service.createCampaignEquipmentItem({
+        campaignId: campaign.id,
+        holderCharacterId: character.id,
+        itemFacts: {
+          activeMechanics: [],
+          descriptiveTraits: [],
+          templateOverrides: [],
+          unsupportedCapabilities: [],
+          version: 1,
+        },
+        templateId: "weapon-template-dagger",
+      });
+
+      const drawn = await repo.applyCombatItemInteraction({
+        actionId: "action-draw",
+        campaignId: campaign.id,
+        encounterId: "encounter-1",
+        expectedItemRevision: item.revision!,
+        itemId: item.id,
+        operation: "draw",
+        ownerCharacterId: character.id,
+      });
+      expect(drawn).toMatchObject({
+        alreadyApplied: false,
+        item: {
+          holderCharacterId: character.id,
+          id: item.id,
+          isEquipped: true,
+          storageAssignment: { carryMode: "equipped" },
+        },
+      });
+      expect((await repo.getCharacterLoadouts(character.id))[0]).toMatchObject({
+        activePrimaryWeaponItemId: item.id,
+      });
+      await expect(
+        repo.applyCombatItemInteraction({
+          actionId: "action-draw",
+          campaignId: campaign.id,
+          encounterId: "encounter-1",
+          expectedItemRevision: item.revision!,
+          itemId: item.id,
+          operation: "draw",
+          ownerCharacterId: character.id,
+        }),
+      ).rejects.toThrow("Item changed");
+      expect(await repo.getCanonicalEquipmentItemById(item.id)).toEqual(drawn.item);
+
+      const stowed = await repo.applyCombatItemInteraction({
+        actionId: "action-stow",
+        campaignId: campaign.id,
+        encounterId: "encounter-1",
+        expectedItemRevision: drawn.item.revision!,
+        itemId: item.id,
+        operation: "stow",
+        ownerCharacterId: character.id,
+      });
+      expect(stowed.item).toMatchObject({
+        holderCharacterId: character.id,
+        id: item.id,
+        isEquipped: false,
+      });
+      expect((await repo.getCharacterLoadouts(character.id))[0]).toMatchObject({
+        activePrimaryWeaponItemId: null,
+      });
+      expect(await prisma!.characterEquipmentItem.count({ where: { id: item.id } })).toBe(1);
+    });
+
+    it("drops, picks up, and passes the exact Item while cleaning source loadouts", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const firstUser = await createTestUser(prisma!);
+      const secondUser = await createTestUser(prisma!);
+      const first = await createTestCharacter(prisma!, firstUser.id);
+      const second = await createTestCharacter(prisma!, secondUser.id);
+      const campaign = await createTestCampaign(prisma!, gm.id);
+      await prisma!.campaignRosterEntry.createMany({
+        data: [first, second].map((character) => ({
+          campaignId: campaign.id,
+          category: "pc" as const,
+          sourceId: character.id,
+          sourceType: "character" as const,
+        })),
+      });
+      const repo = createPrismaCharacterEquipmentRepository(prisma!);
+      const service = new CharacterEquipmentWriteService(repo);
+      await service.ensureCharacterEquipmentInitialized(first.id);
+      await service.ensureCharacterEquipmentInitialized(second.id);
+      const item = await service.createCampaignEquipmentItem({
+        campaignId: campaign.id,
+        displayName: "Bridge dagger",
+        holderCharacterId: first.id,
+        itemFacts: {
+          activeMechanics: [],
+          descriptiveTraits: [],
+          templateOverrides: [],
+          unsupportedCapabilities: [],
+          version: 1,
+        },
+        templateId: "weapon-template-dagger",
+      });
+      const drawn = await repo.applyCombatItemInteraction({
+        actionId: "action-draw",
+        campaignId: campaign.id,
+        encounterId: "encounter-1",
+        expectedItemRevision: item.revision!,
+        itemId: item.id,
+        operation: "draw",
+        ownerCharacterId: first.id,
+      });
+      const dropped = await repo.applyCombatItemInteraction({
+        actionId: "action-drop",
+        campaignId: campaign.id,
+        encounterId: "encounter-1",
+        expectedItemRevision: drawn.item.revision!,
+        itemId: item.id,
+        operation: "drop",
+        ownerCharacterId: first.id,
+      });
+      expect(dropped.item).toMatchObject({
+        holderCharacterId: null,
+        id: item.id,
+        storageAssignment: null,
+      });
+      expect((await repo.getCharacterLoadouts(first.id))[0]?.activePrimaryWeaponItemId).toBeNull();
+      expect(await repo.getCombatItemInteractionRecords(campaign.id)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            availableInEncounter: true,
+            item: expect.objectContaining({ id: item.id }),
+            presentEncounterId: "encounter-1",
+          }),
+        ]),
+      );
+
+      const pickedUp = await repo.applyCombatItemInteraction({
+        actionId: "action-pickup",
+        campaignId: campaign.id,
+        encounterId: "encounter-1",
+        expectedItemRevision: dropped.item.revision!,
+        itemId: item.id,
+        operation: "pickup",
+        ownerCharacterId: second.id,
+      });
+      expect(pickedUp.item).toMatchObject({
+        holderCharacterId: second.id,
+        id: item.id,
+        storageAssignment: { carryMode: "on_person" },
+      });
+
+      const passed = await repo.applyCombatItemInteraction({
+        actionId: "action-pass",
+        campaignId: campaign.id,
+        encounterId: "encounter-1",
+        expectedItemRevision: pickedUp.item.revision!,
+        itemId: item.id,
+        operation: "pass",
+        ownerCharacterId: second.id,
+        recipientCharacterId: first.id,
+      });
+      expect(passed.item).toMatchObject({ holderCharacterId: first.id, id: item.id });
+      expect(await prisma!.characterEquipmentItem.count({ where: { id: item.id } })).toBe(1);
+    });
+
+    it("rolls back forged revisions and invalid recipients with zero Item or loadout mutation", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const player = await createTestUser(prisma!);
+      const outsiderUser = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, player.id);
+      const outsider = await createTestCharacter(prisma!, outsiderUser.id);
+      const campaign = await createTestCampaign(prisma!, gm.id);
+      await prisma!.campaignRosterEntry.create({
+        data: {
+          campaignId: campaign.id,
+          category: "pc",
+          sourceId: character.id,
+          sourceType: "character",
+        },
+      });
+      const repo = createPrismaCharacterEquipmentRepository(prisma!);
+      const service = new CharacterEquipmentWriteService(repo);
+      await service.ensureCharacterEquipmentInitialized(character.id);
+      const item = await service.createCampaignEquipmentItem({
+        campaignId: campaign.id,
+        holderCharacterId: character.id,
+        itemFacts: {
+          activeMechanics: [],
+          descriptiveTraits: [],
+          templateOverrides: [],
+          unsupportedCapabilities: [],
+          version: 1,
+        },
+        templateId: "weapon-template-dagger",
+      });
+      const beforeItem = await repo.getCanonicalEquipmentItemById(item.id);
+      const beforeLoadouts = await repo.getCharacterLoadouts(character.id);
+
+      await expect(
+        repo.applyCombatItemInteraction({
+          actionId: "action-forged-revision",
+          campaignId: campaign.id,
+          encounterId: "encounter-1",
+          expectedItemRevision: "2026-08-16T00:00:00.000Z",
+          itemId: item.id,
+          operation: "drop",
+          ownerCharacterId: character.id,
+        }),
+      ).rejects.toThrow("Item changed");
+      await expect(
+        repo.applyCombatItemInteraction({
+          actionId: "action-forged-recipient",
+          campaignId: campaign.id,
+          encounterId: "encounter-1",
+          expectedItemRevision: item.revision!,
+          itemId: item.id,
+          operation: "pass",
+          ownerCharacterId: character.id,
+          recipientCharacterId: outsider.id,
+        }),
+      ).rejects.toThrow("no longer available");
+
+      expect(await repo.getCanonicalEquipmentItemById(item.id)).toEqual(beforeItem);
+      expect(await repo.getCharacterLoadouts(character.id)).toEqual(beforeLoadouts);
+      expect(await prisma!.characterEquipmentItem.count({ where: { id: item.id } })).toBe(1);
+    });
   });
 }

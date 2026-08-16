@@ -116,7 +116,7 @@ const splitEncounterRecordSelect = {
   updatedAt: true,
 } as const;
 
-type TransactionClient = Prisma.TransactionClient;
+export type TransactionClient = Prisma.TransactionClient;
 
 function splitCurrentCombatMutation(input: {
   campaignId?: string | null;
@@ -264,12 +264,14 @@ export interface CombatStatePersistenceRepository {
 }
 
 export function createPrismaCombatStatePersistenceRepository(
-  client: PrismaClient = prisma,
+  client: PrismaClient | TransactionClient = prisma,
   options: {
     maxTransactionAttempts?: number;
     retryDelay?: (attempt: number) => Promise<void>;
   } = {},
 ): CombatStatePersistenceRepository {
+  const rootClient = client as PrismaClient;
+  const transactionClient = "$transaction" in client ? undefined : client;
   const maxTransactionAttempts = Math.max(
     1,
     options.maxTransactionAttempts ?? DEFAULT_COMBAT_TRANSACTION_ATTEMPTS,
@@ -280,107 +282,87 @@ export function createPrismaCombatStatePersistenceRepository(
     async updateCombatEncounter(input) {
       for (let attempt = 1; attempt <= maxTransactionAttempts; attempt += 1) {
         try {
-          return await client.$transaction(
-            async (transaction) => {
-              const existing = await transaction.encounter.findUniqueOrThrow({
-                select: {
-                  combatArchiveCount: true,
-                  combatStorageMode: true,
-                  updatedAt: true,
-                },
-                where: { id: input.encounterId },
-              });
-              const storageMode = asStorageMode(existing.combatStorageMode);
+          const persist = async (transaction: TransactionClient) => {
+            const existing = await transaction.encounter.findUniqueOrThrow({
+              select: {
+                combatArchiveCount: true,
+                combatStorageMode: true,
+                updatedAt: true,
+              },
+              where: { id: input.encounterId },
+            });
+            const storageMode = asStorageMode(existing.combatStorageMode);
 
-              if (existing.updatedAt.toISOString() !== input.expectedRevision) {
-                throw new CombatPersistenceError(
-                  "stale_revision",
-                  "Encounter revision changed before combat state could be saved.",
-                );
-              }
+            if (existing.updatedAt.toISOString() !== input.expectedRevision) {
+              throw new CombatPersistenceError(
+                "stale_revision",
+                "Encounter revision changed before combat state could be saved.",
+              );
+            }
 
-              const legacyNormalized =
-                storageMode === COMBAT_STORAGE_MODE_LEGACY
-                  ? encounterSessionSchema.parse({
-                      ...input.session,
-                      campaignId: input.campaignId ?? input.session.campaignId,
-                      id: input.encounterId,
-                      scenarioId: input.scenarioId ?? input.session.scenarioId,
-                    })
-                  : undefined;
-              const parts = legacyNormalized
-                ? splitEncounterSessionForCombatPersistence(legacyNormalized)
-                : splitCurrentCombatMutation(input);
-              const normalized = legacyNormalized ?? parts.sessionWithoutCombatState;
-              const priorArchiveCount =
-                storageMode === COMBAT_STORAGE_MODE_LEGACY ? 0 : existing.combatArchiveCount;
-              const nextArchiveCount = parts.archivedRounds.length;
-              const archiveDelta = nextArchiveCount - priorArchiveCount;
+            const legacyNormalized =
+              storageMode === COMBAT_STORAGE_MODE_LEGACY
+                ? encounterSessionSchema.parse({
+                    ...input.session,
+                    campaignId: input.campaignId ?? input.session.campaignId,
+                    id: input.encounterId,
+                    scenarioId: input.scenarioId ?? input.session.scenarioId,
+                  })
+                : undefined;
+            const parts = legacyNormalized
+              ? splitEncounterSessionForCombatPersistence(legacyNormalized)
+              : splitCurrentCombatMutation(input);
+            const normalized = legacyNormalized ?? parts.sessionWithoutCombatState;
+            const priorArchiveCount =
+              storageMode === COMBAT_STORAGE_MODE_LEGACY ? 0 : existing.combatArchiveCount;
+            const nextArchiveCount = parts.archivedRounds.length;
+            const archiveDelta = nextArchiveCount - priorArchiveCount;
 
-              if (
-                (storageMode === COMBAT_STORAGE_MODE_SPLIT_V1 &&
-                  ![-1, 0, 1].includes(archiveDelta)) ||
-                (storageMode === COMBAT_STORAGE_MODE_LEGACY && archiveDelta < 0)
-              ) {
-                throw new CombatPersistenceError(
-                  "archive_delta_invalid",
-                  "Combat persistence may append or remove only the exact boundary archive.",
-                );
-              }
+            if (
+              (storageMode === COMBAT_STORAGE_MODE_SPLIT_V1 &&
+                ![-1, 0, 1].includes(archiveDelta)) ||
+              (storageMode === COMBAT_STORAGE_MODE_LEGACY && archiveDelta < 0)
+            ) {
+              throw new CombatPersistenceError(
+                "archive_delta_invalid",
+                "Combat persistence may append or remove only the exact boundary archive.",
+              );
+            }
 
-              const updatedAt = await updateMetadataWithExpectedRevision({
-                archiveCount: nextArchiveCount,
+            const updatedAt = await updateMetadataWithExpectedRevision({
+              archiveCount: nextArchiveCount,
+              encounterId: input.encounterId,
+              expectedRevision: input.expectedRevision,
+              normalized,
+              sessionWithoutCombatState: parts.sessionWithoutCombatState,
+              transaction,
+            });
+
+            if (!parts.activeCombatState) {
+              throw new CombatPersistenceError(
+                "malformed_split_storage",
+                "Combat persistence requires one active combat state.",
+              );
+            }
+
+            await transaction.encounterActiveCombatState.upsert({
+              create: {
                 encounterId: input.encounterId,
-                expectedRevision: input.expectedRevision,
-                normalized,
-                sessionWithoutCombatState: parts.sessionWithoutCombatState,
-                transaction,
-              });
+                revision: updatedAt,
+                schemaVersion: 1,
+                stateJson: asJson(parts.activeCombatState),
+              },
+              update: {
+                revision: updatedAt,
+                schemaVersion: 1,
+                stateJson: asJson(parts.activeCombatState),
+              },
+              where: { encounterId: input.encounterId },
+            });
 
-              if (!parts.activeCombatState) {
-                throw new CombatPersistenceError(
-                  "malformed_split_storage",
-                  "Combat persistence requires one active combat state.",
-                );
-              }
-
-              await transaction.encounterActiveCombatState.upsert({
-                create: {
-                  encounterId: input.encounterId,
-                  revision: updatedAt,
-                  schemaVersion: 1,
-                  stateJson: asJson(parts.activeCombatState),
-                },
-                update: {
-                  revision: updatedAt,
-                  schemaVersion: 1,
-                  stateJson: asJson(parts.activeCombatState),
-                },
-                where: { encounterId: input.encounterId },
-              });
-
-              if (storageMode === COMBAT_STORAGE_MODE_LEGACY) {
-                for (const rawRound of parts.archivedRounds) {
-                  const round = completedCombatRoundSchema.parse(rawRound);
-                  await transaction.encounterArchivedCombatRound.create({
-                    data: {
-                      encounterId: input.encounterId,
-                      roundJson: asJson(round),
-                      roundNumber: round.roundNumber,
-                      schemaVersion: 1,
-                      sourceRevision: updatedAt,
-                    },
-                  });
-                }
-              } else if (archiveDelta === 1) {
-                const rawRound = parts.archivedRounds.at(-1);
-                const round = rawRound ? completedCombatRoundSchema.parse(rawRound) : undefined;
-                if (!round || round.roundNumber !== nextArchiveCount) {
-                  throw new CombatPersistenceError(
-                    "archive_delta_invalid",
-                    "The appended archived round must be the next canonical round.",
-                  );
-                }
+            if (storageMode === COMBAT_STORAGE_MODE_LEGACY) {
+              for (const rawRound of parts.archivedRounds) {
+                const round = completedCombatRoundSchema.parse(rawRound);
                 await transaction.encounterArchivedCombatRound.create({
                   data: {
                     encounterId: input.encounterId,
@@ -390,52 +372,74 @@ export function createPrismaCombatStatePersistenceRepository(
                     sourceRevision: updatedAt,
                   },
                 });
-              } else if (archiveDelta === -1) {
-                const removed = await transaction.encounterArchivedCombatRound.deleteMany({
-                  where: {
-                    encounterId: input.encounterId,
-                    roundNumber: priorArchiveCount,
-                  },
-                });
-                if (removed.count !== 1) {
-                  throw new CombatPersistenceError(
-                    "malformed_split_storage",
-                    "The archived round required by boundary undo was not present.",
-                  );
-                }
               }
-
-              for (const participantStateUpdate of input.participantStateUpdates ?? []) {
-                const participantState = scenarioParticipantStateSchema.parse(
-                  participantStateUpdate.state,
+            } else if (archiveDelta === 1) {
+              const rawRound = parts.archivedRounds.at(-1);
+              const round = rawRound ? completedCombatRoundSchema.parse(rawRound) : undefined;
+              if (!round || round.roundNumber !== nextArchiveCount) {
+                throw new CombatPersistenceError(
+                  "archive_delta_invalid",
+                  "The appended archived round must be the next canonical round.",
                 );
-                const participantUpdate = await transaction.scenarioParticipant.updateMany({
-                  data: { stateJson: asJson(participantState) },
-                  where: {
-                    id: participantStateUpdate.participantId,
-                    scenarioId: participantStateUpdate.scenarioId,
-                    updatedAt: new Date(participantStateUpdate.expectedRevision),
-                  },
-                });
-                if (participantUpdate.count !== 1) {
-                  throw new CombatPersistenceError(
-                    "stale_revision",
-                    "Participant modifier state changed before combat review could be saved.",
-                  );
-                }
               }
-
-              return {
-                ...parts.sessionWithoutCombatState,
-                combatRoundState: {
-                  ...parts.activeCombatState,
-                  rounds: parts.archivedRounds,
+              await transaction.encounterArchivedCombatRound.create({
+                data: {
+                  encounterId: input.encounterId,
+                  roundJson: asJson(round),
+                  roundNumber: round.roundNumber,
+                  schemaVersion: 1,
+                  sourceRevision: updatedAt,
                 },
-                updatedAt: updatedAt.toISOString(),
-              } as EncounterSession;
-            },
-            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-          );
+              });
+            } else if (archiveDelta === -1) {
+              const removed = await transaction.encounterArchivedCombatRound.deleteMany({
+                where: {
+                  encounterId: input.encounterId,
+                  roundNumber: priorArchiveCount,
+                },
+              });
+              if (removed.count !== 1) {
+                throw new CombatPersistenceError(
+                  "malformed_split_storage",
+                  "The archived round required by boundary undo was not present.",
+                );
+              }
+            }
+
+            for (const participantStateUpdate of input.participantStateUpdates ?? []) {
+              const participantState = scenarioParticipantStateSchema.parse(
+                participantStateUpdate.state,
+              );
+              const participantUpdate = await transaction.scenarioParticipant.updateMany({
+                data: { stateJson: asJson(participantState) },
+                where: {
+                  id: participantStateUpdate.participantId,
+                  scenarioId: participantStateUpdate.scenarioId,
+                  updatedAt: new Date(participantStateUpdate.expectedRevision),
+                },
+              });
+              if (participantUpdate.count !== 1) {
+                throw new CombatPersistenceError(
+                  "stale_revision",
+                  "Participant modifier state changed before combat review could be saved.",
+                );
+              }
+            }
+
+            return {
+              ...parts.sessionWithoutCombatState,
+              combatRoundState: {
+                ...parts.activeCombatState,
+                rounds: parts.archivedRounds,
+              },
+              updatedAt: updatedAt.toISOString(),
+            } as EncounterSession;
+          };
+          return await (!transactionClient
+            ? rootClient.$transaction(persist, {
+                isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+              })
+            : persist(transactionClient));
         } catch (error) {
           if (!isRetryableCombatTransactionError(error)) {
             throw error;
@@ -467,7 +471,7 @@ export function createPrismaCombatStatePersistenceRepository(
       const expectedRevision = input.expectedRevision;
 
       const persist = () =>
-        client.$transaction(
+        rootClient.$transaction(
           async (transaction) => {
             const existing = await transaction.encounter.findUniqueOrThrow({
               select: splitEncounterRecordSelect,

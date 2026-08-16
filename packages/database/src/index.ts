@@ -7,5 +7,6 @@ export * from "./services/characterEquipmentReadModelService";
 export * from "./services/characterEquipmentWriteService";
 export * from "./services/contentService";
 export * from "./services/combatStateReadService";
+export * from "./services/combatItemInteractionService";
 export * from "./services/encounterService";
 export * from "./services/scenarioService";
