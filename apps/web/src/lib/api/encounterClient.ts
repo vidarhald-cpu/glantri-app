@@ -9,6 +9,7 @@ import {
   CombatAttackSourceRef,
   CombatHistoryProjection,
   CombatGenericActionDuration,
+  CombatItemInteractionOperation,
   CombatProgressionBoundaryKind,
   CombatParryPurpose,
   CombatRoundAttackRollResult,
@@ -1636,6 +1637,59 @@ export async function updateGenericCombatActionOnServer(input: {
       body: JSON.stringify(input),
       method: "POST",
     },
+  );
+  return payload.encounter;
+}
+
+export interface CombatItemInteractionOption {
+  category: string;
+  id: string;
+  label: string;
+  operations: CombatItemInteractionOperation[];
+  revision: string;
+  state: "held" | "equipped" | "stowed" | "present_unheld";
+}
+
+export interface CombatItemInteractionOptions {
+  actors: Array<{
+    characterId?: string;
+    items: CombatItemInteractionOption[];
+    label: string;
+    participantId: string;
+    unsupportedReason?: string;
+  }>;
+  presentItems: CombatItemInteractionOption[];
+  recipients: Array<{ label: string; participantId: string }>;
+}
+
+export async function loadCombatItemInteractionOptions(
+  encounterId: string,
+): Promise<CombatItemInteractionOptions> {
+  const payload = await sendJson<{ options: CombatItemInteractionOptions }>(
+    `/encounters/${encounterId}/combat-round/item-interactions/options`,
+    { cache: "no-store", method: "GET" },
+  );
+  return payload.options;
+}
+
+export async function updateCombatItemInteractionOnServer(input: {
+  actionId: string;
+  duration?: CombatGenericActionDuration;
+  encounterId: string;
+  expectedItemRevision?: string;
+  expectedRevision: string;
+  intentDetail?: string;
+  itemId?: string;
+  itemOperation?: CombatItemInteractionOperation;
+  operation: "declare" | "review" | "activate" | "resolve" | "interrupt" | "cancel";
+  participantId?: string;
+  recipientParticipantId?: string;
+  resultText?: string;
+  visibleToParticipantIds?: string[];
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/item-interactions`,
+    { body: JSON.stringify(input), method: "POST" },
   );
   return payload.encounter;
 }

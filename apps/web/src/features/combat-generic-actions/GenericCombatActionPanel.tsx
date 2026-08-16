@@ -11,7 +11,11 @@ import type {
   SkillDefinition,
 } from "@glantri/domain";
 
-import { updateGenericCombatActionOnServer } from "@/lib/api/localServiceClient";
+import {
+  updateCombatItemInteractionOnServer,
+  updateGenericCombatActionOnServer,
+} from "@/lib/api/localServiceClient";
+import { CombatItemInteractionPanel } from "./CombatItemInteractionPanel";
 
 const panelStyle = {
   background: "#f6f5ef",
@@ -266,6 +270,22 @@ export function GenericCombatActionPanel({
     }
   }
 
+  async function mutateItem(input: Parameters<typeof updateCombatItemInteractionOnServer>[0]) {
+    setBusy(true);
+    setFeedback(undefined);
+    try {
+      const next = await updateCombatItemInteractionOnServer(input);
+      onEncounterUpdated(next);
+      setFeedback("Canonical Item action updated.");
+      return next;
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Unable to update the Item action.");
+      return undefined;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function declareAction() {
     if (!participantId) return;
     const chosenRollKind = preset === "look_around" ? "skill" : rollKind;
@@ -306,7 +326,7 @@ export function GenericCombatActionPanel({
     if (operation === "resolve" && (!currentResultText.trim() || resultAudience.length === 0)) {
       return;
     }
-    const next = await mutate({
+    const mutation = {
       actionId: selectedAction.id,
       difficulty:
         operation === "review" && reviewRollKind !== "none" ? reviewDifficulty : undefined,
@@ -333,7 +353,19 @@ export function GenericCombatActionPanel({
       skillId: operation === "review" && reviewRollKind === "skill" ? reviewSkillId : undefined,
       statId: operation === "review" && reviewRollKind === "stat" ? reviewStatId : undefined,
       visibleToParticipantIds: operation === "resolve" ? resultAudience : undefined,
-    });
+    } satisfies Parameters<typeof updateGenericCombatActionOnServer>[0];
+    const next =
+      selectedAction.preset === "item_interaction"
+        ? await mutateItem({
+            actionId: selectedAction.id,
+            duration: operation === "review" ? mutation.duration : undefined,
+            encounterId: encounter.id,
+            expectedRevision: encounter.updatedAt,
+            operation: operation === "roll" ? "activate" : operation,
+            resultText: mutation.resultText,
+            visibleToParticipantIds: mutation.visibleToParticipantIds,
+          })
+        : await mutate(mutation);
     if (next && operation === "resolve") {
       setResultDraft(undefined);
     }
@@ -348,6 +380,13 @@ export function GenericCombatActionPanel({
         Describe a deliberate action. A roll measures the attempt; only the GM decides what it
         reveals or changes.
       </div>
+
+      <CombatItemInteractionPanel
+        encounter={encounter}
+        isGm={isGm}
+        onEncounterUpdated={onEncounterUpdated}
+        participantId={participantId}
+      />
 
       {!isGm || participantId ? (
         <div style={{ display: "grid", gap: "0.65rem" }}>
@@ -570,7 +609,9 @@ export function GenericCombatActionPanel({
                   ? "Look around"
                   : selectedAction.preset === "environmental_movement"
                     ? "Environmental movement"
-                    : selectedAction.intent}
+                    : selectedAction.preset === "item_interaction"
+                      ? `${selectedAction.itemInteraction?.itemLabel ?? "Item"} — ${selectedAction.intent}`
+                      : selectedAction.intent}
               </strong>
               {selectedAction.preset === "look_around" ||
               selectedAction.preset === "environmental_movement" ? (
@@ -658,119 +699,131 @@ export function GenericCombatActionPanel({
                       />
                     </label>
                   ) : null}
-                  <label>
-                    <span>Reviewed roll </span>
-                    <select
-                      onChange={(event) =>
-                        setReviewRollKind(event.target.value as typeof reviewRollKind)
-                      }
-                      value={reviewRollKind}
-                    >
-                      <option value="none">No roll</option>
-                      <option value="skill">Skill</option>
-                      <option value="stat">Current Stat</option>
-                    </select>
-                  </label>
-                  {reviewRollKind === "skill" ? (
-                    <label>
-                      <span>Reviewed Skill </span>
-                      <select
-                        onChange={(event) => setReviewSkillId(event.target.value)}
-                        value={reviewSkillId}
-                      >
-                        {skills.map((skill) => (
-                          <option key={skill.id} value={skill.id}>
-                            {skill.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                  {reviewRollKind === "stat" ? (
-                    <label>
-                      <span>Reviewed Current Stat </span>
-                      <select
-                        onChange={(event) =>
-                          setReviewStatId(event.target.value as GlantriCharacteristicKey)
-                        }
-                        value={reviewStatId}
-                      >
-                        {STAT_OPTIONS.map((stat) => (
-                          <option key={stat.id} value={stat.id}>
-                            {stat.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                  {reviewRollKind !== "none" ? (
-                    <label>
-                      <span>Reviewed Difficulty </span>
-                      <input
-                        min={1}
-                        max={200}
-                        onChange={(event) => setReviewDifficulty(Number(event.target.value))}
-                        type="number"
-                        value={reviewDifficulty}
-                      />
-                    </label>
-                  ) : null}
-                  <label>
-                    <span>Reviewed reference </span>
-                    <select
-                      onChange={(event) =>
-                        setReviewReferenceKind(event.target.value as typeof reviewReferenceKind)
-                      }
-                      value={reviewReferenceKind}
-                    >
-                      <option value="none">None</option>
-                      <option value="participant">Participant</option>
-                      <option value="item">Item</option>
-                      <option value="environment">Environment</option>
-                    </select>
-                  </label>
-                  {reviewReferenceKind === "participant" ? (
-                    <label>
-                      <span>Reviewed participant </span>
-                      <select
-                        onChange={(event) => setReviewReferenceParticipantId(event.target.value)}
-                        value={reviewReferenceParticipantId}
-                      >
-                        <option value="">Choose participant</option>
-                        {participantOptions.map((entry) => (
-                          <option key={entry.participantId} value={entry.participantId}>
-                            {entry.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                  {reviewReferenceKind === "item" ? (
-                    <label>
-                      <span>Reviewed Item </span>
-                      <select
-                        onChange={(event) => setReviewItemId(event.target.value)}
-                        value={reviewItemId}
-                      >
-                        <option value="">Choose Item</option>
-                        {reviewCanonicalItems.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                  {reviewReferenceKind === "environment" ? (
-                    <label>
-                      <span>Reviewed environment </span>
-                      <input
-                        maxLength={500}
-                        onChange={(event) => setReviewEnvironmentDescription(event.target.value)}
-                        value={reviewEnvironmentDescription}
-                      />
-                    </label>
-                  ) : null}
+                  {selectedAction.preset === "item_interaction" ? (
+                    <div>
+                      Item and intended operation are locked to the player's canonical declaration.
+                    </div>
+                  ) : (
+                    <>
+                      <label>
+                        <span>Reviewed roll </span>
+                        <select
+                          onChange={(event) =>
+                            setReviewRollKind(event.target.value as typeof reviewRollKind)
+                          }
+                          value={reviewRollKind}
+                        >
+                          <option value="none">No roll</option>
+                          <option value="skill">Skill</option>
+                          <option value="stat">Current Stat</option>
+                        </select>
+                      </label>
+                      {reviewRollKind === "skill" ? (
+                        <label>
+                          <span>Reviewed Skill </span>
+                          <select
+                            onChange={(event) => setReviewSkillId(event.target.value)}
+                            value={reviewSkillId}
+                          >
+                            {skills.map((skill) => (
+                              <option key={skill.id} value={skill.id}>
+                                {skill.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      {reviewRollKind === "stat" ? (
+                        <label>
+                          <span>Reviewed Current Stat </span>
+                          <select
+                            onChange={(event) =>
+                              setReviewStatId(event.target.value as GlantriCharacteristicKey)
+                            }
+                            value={reviewStatId}
+                          >
+                            {STAT_OPTIONS.map((stat) => (
+                              <option key={stat.id} value={stat.id}>
+                                {stat.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      {reviewRollKind !== "none" ? (
+                        <label>
+                          <span>Reviewed Difficulty </span>
+                          <input
+                            min={1}
+                            max={200}
+                            onChange={(event) => setReviewDifficulty(Number(event.target.value))}
+                            type="number"
+                            value={reviewDifficulty}
+                          />
+                        </label>
+                      ) : null}
+                      <label>
+                        <span>Reviewed reference </span>
+                        <select
+                          onChange={(event) =>
+                            setReviewReferenceKind(event.target.value as typeof reviewReferenceKind)
+                          }
+                          value={reviewReferenceKind}
+                        >
+                          <option value="none">None</option>
+                          <option value="participant">Participant</option>
+                          <option value="item">Item</option>
+                          <option value="environment">Environment</option>
+                        </select>
+                      </label>
+                      {reviewReferenceKind === "participant" ? (
+                        <label>
+                          <span>Reviewed participant </span>
+                          <select
+                            onChange={(event) =>
+                              setReviewReferenceParticipantId(event.target.value)
+                            }
+                            value={reviewReferenceParticipantId}
+                          >
+                            <option value="">Choose participant</option>
+                            {participantOptions.map((entry) => (
+                              <option key={entry.participantId} value={entry.participantId}>
+                                {entry.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      {reviewReferenceKind === "item" ? (
+                        <label>
+                          <span>Reviewed Item </span>
+                          <select
+                            onChange={(event) => setReviewItemId(event.target.value)}
+                            value={reviewItemId}
+                          >
+                            <option value="">Choose Item</option>
+                            {reviewCanonicalItems.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      {reviewReferenceKind === "environment" ? (
+                        <label>
+                          <span>Reviewed environment </span>
+                          <input
+                            maxLength={500}
+                            onChange={(event) =>
+                              setReviewEnvironmentDescription(event.target.value)
+                            }
+                            value={reviewEnvironmentDescription}
+                          />
+                        </label>
+                      ) : null}
+                    </>
+                  )}
                   <button
                     disabled={
                       busy ||

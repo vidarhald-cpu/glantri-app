@@ -9,6 +9,8 @@ import { updateGenericCombatActionOnServer } from "@/lib/api/localServiceClient"
 import { GenericCombatActionPanel } from "./GenericCombatActionPanel";
 
 vi.mock("@/lib/api/localServiceClient", () => ({
+  loadCombatItemInteractionOptions: vi.fn(() => new Promise(() => undefined)),
+  updateCombatItemInteractionOnServer: vi.fn(),
   updateGenericCombatActionOnServer: vi.fn(),
 }));
 

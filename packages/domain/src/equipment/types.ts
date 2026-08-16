@@ -409,6 +409,8 @@ export interface EquipmentItem<
   isStackable: boolean;
   material: MaterialType;
   quality: QualityType;
+  /** Canonical optimistic-concurrency revision; supplied by persistent Item authority. */
+  revision?: string;
   storageAssignment: TStorageAssignment;
   previousStorageAssignment?: ItemStorageAssignment | null;
   conditionState: ItemConditionState;

@@ -91,6 +91,7 @@ export {
   loadEncounterById,
   loadEncounterRevision,
   loadCombatHistory,
+  loadCombatItemInteractionOptions,
   loadScenarioEncounterSummaries,
   loadScenarioEncounterManagementProjections,
   prepareCombatRoundEndReviewOnServer,
@@ -121,6 +122,9 @@ export {
   updateEncounterOnServer,
   updateEncounterStatusOnServer,
   updateGenericCombatActionOnServer,
+  updateCombatItemInteractionOnServer,
+  type CombatItemInteractionOption,
+  type CombatItemInteractionOptions,
 } from "./encounterClient";
 export {
   addCharacterEquipmentItemOnServer,

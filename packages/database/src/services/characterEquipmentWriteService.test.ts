@@ -59,6 +59,12 @@ function createRepositoryStub(input?: {
     async transferCampaignEquipmentItem(input) {
       throw new Error(`Unexpected campaign item transfer: ${input.itemId}`);
     },
+    async applyCombatItemInteraction(input) {
+      throw new Error(`Unexpected Combat Item interaction: ${input.itemId}`);
+    },
+    async getCombatItemInteractionRecords() {
+      return [];
+    },
     async updateCharacterEquipmentItem(item) {
       items.set(item.id, cloneItem(item));
       return cloneItem(item);

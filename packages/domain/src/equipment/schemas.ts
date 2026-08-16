@@ -482,6 +482,7 @@ const CanonicalEquipmentItemObjectSchema = z
     previousStorageAssignment: ItemStorageAssignmentSchema.nullable().optional(),
     quality: QualityTypeSchema,
     quantity: z.number().positive(),
+    revision: z.string().datetime().optional(),
     specialProperties: z.null().optional(),
     specificityType: SpecificityTypeSchema,
     statusTags: z.array(z.string()).nullable().optional(),

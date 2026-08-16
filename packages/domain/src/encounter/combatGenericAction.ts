@@ -84,6 +84,34 @@ export const combatGenericActionResolutionSchema = z.object({
 });
 export type CombatGenericActionResolution = z.infer<typeof combatGenericActionResolutionSchema>;
 
+export const combatItemInteractionOperationSchema = z.enum([
+  "draw",
+  "stow",
+  "drop",
+  "pickup",
+  "pass",
+  "use",
+]);
+export type CombatItemInteractionOperation = z.infer<typeof combatItemInteractionOperationSchema>;
+
+export const combatItemInteractionStateSchema = z.enum([
+  "held",
+  "equipped",
+  "stowed",
+  "present_unheld",
+]);
+export type CombatItemInteractionState = z.infer<typeof combatItemInteractionStateSchema>;
+
+export const combatItemInteractionSchema = z.object({
+  itemId: idSchema,
+  itemLabel: z.string().min(1),
+  itemRevision: z.string().datetime(),
+  operation: combatItemInteractionOperationSchema,
+  recipientParticipantId: idSchema.optional(),
+  stateAtDeclaration: combatItemInteractionStateSchema,
+});
+export type CombatItemInteraction = z.infer<typeof combatItemInteractionSchema>;
+
 export const combatGenericActionSchema = z.object({
   awarenessContext: z.object({ kind: z.literal("survey") }).optional(),
   createdAt: z.string().datetime(),
@@ -91,9 +119,10 @@ export const combatGenericActionSchema = z.object({
   duration: combatGenericActionDurationSchema,
   id: idSchema,
   intent: z.string().trim().min(1).max(2000),
+  itemInteraction: combatItemInteractionSchema.optional(),
   lastUpdatedAt: z.string().datetime(),
   ownerParticipantId: idSchema,
-  preset: z.enum(["look_around", "environmental_movement"]).optional(),
+  preset: z.enum(["look_around", "environmental_movement", "item_interaction"]).optional(),
   progress: z.object({
     completedRounds: z.number().int().nonnegative().default(0),
     lastProgressedRoundNumber: z.number().int().positive().optional(),
@@ -154,6 +183,9 @@ export function declareCombatGenericAction(input: {
   ) {
     throw new RangeError("Environmental movement requires an environmental destination.");
   }
+  if ((input.action.preset === "item_interaction") !== Boolean(input.action.itemInteraction)) {
+    throw new RangeError("Canonical Item actions require one canonical Item interaction.");
+  }
 
   const action = combatGenericActionSchema.parse({
     ...input.action,
@@ -182,6 +214,9 @@ export function reviewCombatGenericAction(input: {
   }
   if (current.preset === "environmental_movement" && input.reference?.kind !== "environment") {
     throw new RangeError("Environmental movement must retain its environmental destination.");
+  }
+  if (current.preset === "item_interaction" && input.reference?.kind !== "item") {
+    throw new RangeError("Canonical Item actions must retain their declared Item.");
   }
   const next = combatGenericActionSchema.parse({
     ...current,

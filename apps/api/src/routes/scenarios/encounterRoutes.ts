@@ -6022,7 +6022,7 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
   });
 }
 
-function buildPlayerSafeEncounterForUser(input: {
+export function buildPlayerSafeEncounterForUser(input: {
   encounter: EncounterSession;
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
