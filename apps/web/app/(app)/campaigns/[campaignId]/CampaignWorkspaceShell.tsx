@@ -269,13 +269,20 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
     (summary) => summary.id === workspaceState.activeEncounterId,
   );
   const activeEncounterId = activeEncounterSummary?.id;
+  const shouldLoadActiveEncounter =
+    canAccessGmEncounter &&
+    (
+      ["character", "combat", "player-combat", "player-skill-rolls"] as CampaignWorkspaceTabId[]
+    ).includes(workspaceState.activeTab);
   const selectedActiveEncounter =
-    activeEncounter?.id === activeEncounterId ? activeEncounter : undefined;
-  activeEncounterIdRef.current = activeEncounterId;
+    shouldLoadActiveEncounter && activeEncounter?.id === activeEncounterId
+      ? activeEncounter
+      : undefined;
+  activeEncounterIdRef.current = shouldLoadActiveEncounter ? activeEncounterId : undefined;
   activeEncounterRef.current = activeEncounter;
 
   useEffect(() => {
-    const encounterId = activeEncounterId;
+    const encounterId = shouldLoadActiveEncounter ? activeEncounterId : undefined;
     const summaryRevision = activeEncounterSummary?.updatedAt;
 
     if (!encounterId || !summaryRevision) {
@@ -302,6 +309,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         }
 
         acceptActiveEncounter(candidate);
+        setError(undefined);
       })
       .catch((caughtError) => {
         if (
@@ -327,6 +335,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
     activeEncounter?.updatedAt,
     activeEncounterId,
     activeEncounterSummary?.updatedAt,
+    shouldLoadActiveEncounter,
   ]);
 
   useEffect(() => {

@@ -92,7 +92,7 @@ export {
   loadEncounterRevision,
   loadCombatHistory,
   loadScenarioEncounterSummaries,
-  loadScenarioEncounters,
+  loadScenarioEncounterManagementProjections,
   prepareCombatRoundEndReviewOnServer,
   rollCombatAttackOnServer,
   rollCombatCriticalOnServer,

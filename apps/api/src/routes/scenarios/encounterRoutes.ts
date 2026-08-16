@@ -6547,9 +6547,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const encounters = await encounterService.listEncountersByScenario(scenarioId);
-
       if (access.mode === "player") {
+        const encounters = await encounterService.listEncountersByScenario(scenarioId);
         const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
 
         return {
@@ -6563,7 +6562,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         };
       }
 
-      return { encounters };
+      return {
+        encounters:
+          await combatStateReadService.listScenarioEncounterManagementProjections(scenarioId),
+      };
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to list encounters.",

@@ -11,6 +11,7 @@ import {
 import {
   encounterParticipantMembershipModeSchema,
   encounterParticipantSchema,
+  encounterKindSchema,
   encounterSessionSchema,
   encounterStatusSchema,
   encounterSessionRevisionSchema,
@@ -26,6 +27,31 @@ import {
 const idSchema = z.string().min(1);
 const revisionSchema = z.string().min(1);
 const participantVisibilitySchema = z.record(idSchema, z.record(idSchema, z.boolean()));
+
+export const scenarioEncounterManagementMembershipSchema = z
+  .object({
+    id: idSchema,
+    scenarioParticipantId: idSchema.optional(),
+  })
+  .strict();
+
+export const scenarioEncounterManagementProjectionSchema = z
+  .object({
+    campaignId: idSchema.optional(),
+    createdAt: z.string().min(1),
+    description: z.string().optional(),
+    id: idSchema,
+    kind: encounterKindSchema,
+    participantCount: z.number().int().nonnegative(),
+    participantMembershipMode: encounterParticipantMembershipModeSchema.optional(),
+    participantMemberships: z.array(scenarioEncounterManagementMembershipSchema),
+    scenarioId: idSchema.optional(),
+    status: encounterStatusSchema,
+    timelineLabel: z.string().optional(),
+    title: z.string().min(1),
+    updatedAt: z.string().min(1),
+  })
+  .strict();
 
 export interface ArchivedCombatRoundsView {
   archivedRounds: CompletedCombatRound[];
@@ -223,6 +249,9 @@ export const fullEncounterReadViewSchema = z
 
 export type EncounterMetadataView = z.infer<typeof encounterMetadataViewSchema>;
 export type EncounterAccessMetadataView = z.infer<typeof encounterAccessMetadataViewSchema>;
+export type ScenarioEncounterManagementProjection = z.infer<
+  typeof scenarioEncounterManagementProjectionSchema
+>;
 export type ActiveCombatStateView = z.infer<typeof activeCombatStateViewSchema>;
 export type FullEncounterReadView = z.infer<typeof fullEncounterReadViewSchema>;
 
@@ -265,6 +294,25 @@ const persistedCombatReadSessionSchema = z
       })
       .passthrough()
       .optional(),
+  })
+  .passthrough();
+
+const persistedScenarioEncounterManagementSchema = z
+  .object({
+    description: z.string().optional(),
+    kind: encounterKindSchema.default("combat"),
+    participantMembershipMode: encounterParticipantMembershipModeSchema.optional(),
+    participants: z
+      .array(
+        z
+          .object({
+            id: idSchema,
+            scenarioParticipantId: idSchema.optional(),
+          })
+          .passthrough(),
+      )
+      .default([]),
+    timelineLabel: z.string().optional(),
   })
   .passthrough();
 
@@ -464,6 +512,34 @@ export function buildEncounterAccessMetadataViewFromPersistedSession(input: {
     participantMembershipMode: session.participantMembershipMode,
     participants: session.participants,
     viewVersion: 1,
+  });
+}
+
+export function buildScenarioEncounterManagementProjectionFromPersistedSession(input: {
+  metadata: PersistedEncounterReadMetadataInput;
+  sessionJson: unknown;
+}): ScenarioEncounterManagementProjection {
+  const metadata = parseMetadata(input.metadata);
+  const session = persistedScenarioEncounterManagementSchema.parse(input.sessionJson ?? {});
+  const participantMemberships = session.participants.map((participant) => ({
+    id: participant.id,
+    scenarioParticipantId: participant.scenarioParticipantId,
+  }));
+
+  return scenarioEncounterManagementProjectionSchema.parse({
+    campaignId: metadata.campaignId,
+    createdAt: metadata.createdAt,
+    description: session.description,
+    id: metadata.encounterId,
+    kind: session.kind,
+    participantCount: participantMemberships.length,
+    participantMembershipMode: session.participantMembershipMode,
+    participantMemberships,
+    scenarioId: metadata.scenarioId,
+    status: metadata.status,
+    timelineLabel: session.timelineLabel,
+    title: metadata.title,
+    updatedAt: metadata.updatedAt,
   });
 }
 

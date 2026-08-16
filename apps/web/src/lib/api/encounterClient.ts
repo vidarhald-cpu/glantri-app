@@ -36,6 +36,8 @@ import {
   ScenarioParticipant,
   ScenarioParticipantCombatContext,
   ScenarioParticipantSecondaryActionContext,
+  ScenarioEncounterManagementProjection,
+  scenarioEncounterManagementProjectionSchema,
 } from "@glantri/domain";
 
 import { sendJson } from "./apiClient";
@@ -99,15 +101,16 @@ async function sendCombatMutationJson<TResponse extends object>(
   } as TResponse;
 }
 
-export async function loadScenarioEncounters(scenarioId: string): Promise<EncounterSession[]> {
-  const payload = await sendJson<{ encounters: EncounterSession[] }>(
-    `/scenarios/${scenarioId}/encounters`,
-    {
-      method: "GET",
-    },
-  );
+export async function loadScenarioEncounterManagementProjections(
+  scenarioId: string,
+): Promise<ScenarioEncounterManagementProjection[]> {
+  const payload = await sendJson<{ encounters: unknown[] }>(`/scenarios/${scenarioId}/encounters`, {
+    method: "GET",
+  });
 
-  return payload.encounters;
+  return payload.encounters.map((encounter) =>
+    scenarioEncounterManagementProjectionSchema.parse(encounter),
+  );
 }
 
 export async function loadScenarioEncounterSummaries(

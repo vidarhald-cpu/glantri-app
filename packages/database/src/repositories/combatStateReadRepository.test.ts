@@ -4,6 +4,7 @@ import { combatRoundStateSchema, encounterSessionSchema } from "@glantri/domain"
 
 const mocks = vi.hoisted(() => ({
   prisma: {
+    $queryRaw: vi.fn(),
     encounter: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
@@ -177,6 +178,47 @@ describe("combatStateReadRepository", () => {
       }),
     ]);
     expect(mocks.prisma.encounter.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists bounded scenario-management data with JSON projection in the database", async () => {
+    mocks.prisma.$queryRaw.mockResolvedValue([
+      {
+        campaignId: "campaign-1",
+        createdAt: new Date(encounter.createdAt),
+        id: encounter.id,
+        name: encounter.title,
+        scenarioId: "scenario-1",
+        sessionJson: {
+          description: "Hold the courtyard.",
+          kind: "combat",
+          participants: [{ id: "aria", scenarioParticipantId: "scenario-aria" }],
+          timelineLabel: "Dawn",
+        },
+        status: encounter.status,
+        updatedAt: new Date(encounter.updatedAt),
+      },
+    ]);
+    const repository = createPrismaCombatStateReadRepository();
+
+    await expect(
+      repository.listScenarioEncounterManagementProjections("scenario-1"),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        description: "Hold the courtyard.",
+        id: encounter.id,
+        participantCount: 1,
+        participantMemberships: [{ id: "aria", scenarioParticipantId: "scenario-aria" }],
+      }),
+    ]);
+
+    expect(mocks.prisma.encounter.findMany).not.toHaveBeenCalled();
+    const query = mocks.prisma.$queryRaw.mock.calls[0]?.[0];
+    const sqlText = query.strings.join(" ");
+    expect(sqlText).toContain("jsonb_build_object");
+    expect(sqlText).toContain("participantMembershipMode");
+    expect(sqlText).not.toContain("combatRoundState");
+    expect(sqlText).not.toContain("roleplayState");
+    expect(sqlText).not.toContain("archivedCombatRounds");
   });
 
   it("reads split active state without selecting archived round payloads", async () => {
