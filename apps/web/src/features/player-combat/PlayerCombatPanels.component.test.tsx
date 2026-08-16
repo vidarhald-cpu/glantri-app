@@ -118,6 +118,79 @@ describe("PlayerCombatActionSelectorPanel", () => {
     ).toBeNull();
   });
 
+  it("groups visible participant-relative movement without leaking hidden opponents", () => {
+    const onMovementIntentChange = vi.fn();
+    render(
+      <PlayerCombatActionSelectorPanel
+        actionId="move_only"
+        additionalActionNotes=""
+        distancePreferenceOptions={[
+          { currentDistance: 2, displayName: "Visible guard", id: "visible-guard" },
+        ]}
+        movementId="step"
+        movementIntent={{ distancePreferences: [], mode: "set_distance_preferences" }}
+        onActionChange={vi.fn()}
+        onAdditionalActionNotesChange={vi.fn()}
+        onMovementChange={vi.fn()}
+        onMovementIntentChange={onMovementIntentChange}
+        onSecondaryActionChange={vi.fn()}
+        secondaryActionId=""
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Change distance to participant" })).toBeTruthy();
+    expect(screen.getByText("Visible guard")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("Hidden spy");
+    expect(document.body.textContent).not.toContain("opponents available");
+    fireEvent.change(screen.getByRole("combobox", { name: "Visible guard" }), {
+      target: { value: "close" },
+    });
+    expect(onMovementIntentChange).toHaveBeenLastCalledWith({
+      distancePreferences: [
+        {
+          desiredDistance: 1,
+          operation: "close",
+          source: "player_declared",
+          targetParticipantId: "visible-guard",
+        },
+      ],
+      mode: "set_distance_preferences",
+    });
+  });
+
+  it("presents environmental movement separately with timing and no participant distance", () => {
+    render(
+      <PlayerCombatActionSelectorPanel
+        actionId="move_only"
+        additionalActionNotes=""
+        movementId="step"
+        movementIntent={{
+          distancePreferences: [],
+          environmentalMovement: {
+            destination: { description: "doorway", kind: "description" },
+            duration: { kind: "rounds", rounds: 3 },
+            pace: "run",
+          },
+          mode: "move_in_environment",
+        }}
+        onActionChange={vi.fn()}
+        onAdditionalActionNotesChange={vi.fn()}
+        onMovementChange={vi.fn()}
+        onMovementIntentChange={vi.fn()}
+        onSecondaryActionChange={vi.fn()}
+        secondaryActionId=""
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Move in environment" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Destination" })).toHaveValue("doorway");
+    expect(screen.getByRole("combobox", { name: "How" })).toHaveValue("run");
+    expect(screen.getByRole("spinbutton", { name: "Rounds" })).toHaveValue(3);
+    expect(
+      screen.getByText("This does not change distance to an opponent.", { exact: false }),
+    ).toBeInTheDocument();
+  });
+
   it("keeps Offensive Parry opponent selection out of the general action selector", () => {
     render(
       <PlayerCombatActionSelectorPanel

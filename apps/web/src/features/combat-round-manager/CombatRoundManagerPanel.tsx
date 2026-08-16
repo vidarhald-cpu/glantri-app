@@ -68,6 +68,7 @@ import {
   ensureDistanceEdgesForParticipantPairs,
   formatOpenEndedD20RollBreakdown,
   getCombatDistanceParticipantAliases,
+  getDistanceEdgeBetweenParticipantAliases,
   getCombatRoundAttackResultById,
   getParticipantCombatExperienceSkillTotalLookup,
   getCombatRoundCombatExperienceDifficulty,
@@ -93,6 +94,7 @@ import {
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
   getHitLocationFullLabel,
+  getMovementIntentLabel,
   getFinalCriticalRollIndexStatus,
   HIT_LOCATIONS,
   hasScenarioParticipantCombatDeclarationForEncounterRound,
@@ -5898,11 +5900,27 @@ export default function CombatRoundManagerPanel({
           })
         : undefined;
 
-    return inspectorTargetOptions.map((option) => ({
-      defaultDistance: option.id === primaryTargetId ? defaultDistance : undefined,
-      displayName: option.displayName,
-      id: option.id,
-    }));
+    return inspectorTargetOptions.map((option) => {
+      const targetRoundParticipant = selectedTimelineRoundState.participants.find(
+        (participant) =>
+          participant.participantId === option.id ||
+          participant.scenarioParticipantId === option.id ||
+          participant.characterId === option.id,
+      );
+      return {
+        currentDistance:
+          inspector.participant && targetRoundParticipant
+            ? getDistanceEdgeBetweenParticipantAliases({
+                participantA: inspector.participant,
+                participantB: targetRoundParticipant,
+                state: selectedTimelineRoundState.distanceState,
+              })?.distance
+            : undefined,
+        defaultDistance: option.id === primaryTargetId ? defaultDistance : undefined,
+        displayName: option.displayName,
+        id: option.id,
+      };
+    });
   }, [
     inspectorDisplayDraft.combatContext.targetParticipantId,
     inspectorDisplayDraft.actionId,
@@ -5911,7 +5929,9 @@ export default function CombatRoundManagerPanel({
     inspectorEquipmentState,
     inspectorPhaseLoadoutSummaries,
     inspectorTargetOptions,
+    inspector.participant,
     selectedScenarioParticipant,
+    selectedTimelineRoundState,
   ]);
   const inspectorDisplayDistancePreferenceOptions = inspectorPanelSnapshot?.declarationSummary
     ? (inspectorPanelSnapshot.declarationSummary.movementPreferenceTargets ?? []).map((target) => ({
@@ -7974,7 +7994,9 @@ export default function CombatRoundManagerPanel({
                 }
               : undefined,
           movementId: draft.movementId || undefined,
-          movementLabel: getPlayerEncounterMovementLabel(draft.movementId),
+          movementLabel:
+            getMovementIntentLabel(draft.movementIntent) ??
+            getPlayerEncounterMovementLabel(draft.movementId),
           movementIntent: draft.movementIntent,
           movementPreferenceTargets: draft.movementIntent.distancePreferences.flatMap(
             (preference) => {
@@ -10892,6 +10914,7 @@ export default function CombatRoundManagerPanel({
                         )}
                         movementLabel={
                           inspectorHistoricalDeclarationSummary?.movementLabel ??
+                          getMovementIntentLabel(inspectorDisplayDraft.movementIntent) ??
                           (inspectorDisplayDraft.movementId
                             ? getPlayerEncounterMovementLabel(inspectorDisplayDraft.movementId)
                             : undefined)

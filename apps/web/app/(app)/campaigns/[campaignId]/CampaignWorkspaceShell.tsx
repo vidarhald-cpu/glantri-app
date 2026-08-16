@@ -669,7 +669,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       ) : null}
 
       {accessMode !== "none" && workspaceState.activeTab === "campaign" ? (
-        <section style={{ display: "grid", gap: "1rem" }}>
+        <section style={{ display: "grid", gap: "1rem", minWidth: 0 }}>
           {canAccessGmEncounter ? (
             <CampaignDetailPageContent
               campaignId={campaignId}
