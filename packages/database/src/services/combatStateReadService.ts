@@ -5,6 +5,7 @@ import type {
   EncounterAccessMetadataView,
   EncounterMetadataView,
   FullEncounterReadView,
+  ScenarioEncounterManagementProjection,
 } from "@glantri/domain";
 
 import {
@@ -49,5 +50,11 @@ export class CombatStateReadService {
     scenarioId: string,
   ): Promise<EncounterAccessMetadataView[]> {
     return this.repository.listEncounterAccessMetadataByScenario(scenarioId);
+  }
+
+  listScenarioEncounterManagementProjections(
+    scenarioId: string,
+  ): Promise<ScenarioEncounterManagementProjection[]> {
+    return this.repository.listScenarioEncounterManagementProjections(scenarioId);
   }
 }

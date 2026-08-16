@@ -3,7 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { EncounterSession, ScenarioParticipant } from "@glantri/domain";
+import type { ScenarioEncounterManagementProjection, ScenarioParticipant } from "@glantri/domain";
 
 import { ScenarioEncounterAssignmentSection } from "./ScenarioEncounterAssignmentSection";
 import { ScenarioEncountersSection } from "./ScenarioEncountersSection";
@@ -12,13 +12,14 @@ const encounter = {
   createdAt: "2026-07-10T10:00:00.000Z",
   id: "encounter-1",
   kind: "combat",
+  participantCount: 0,
   participantMembershipMode: "explicit",
-  participants: [],
+  participantMemberships: [],
   scenarioId: "scenario-1",
   status: "active",
   title: "Courtyard",
   updatedAt: "2026-07-10T10:00:00.000Z",
-} as unknown as EncounterSession;
+} satisfies ScenarioEncounterManagementProjection;
 
 const participant = {
   characterId: "character-1",
@@ -38,25 +39,31 @@ const participant = {
   updatedAt: "2026-07-10T10:00:00.000Z",
 } as unknown as ScenarioParticipant;
 
-function renderAssignmentSection(input: {
-  assignmentParticipants?: ScenarioParticipant[];
-  equipmentRefreshResult?: {
-    kind: "error" | "success";
-    message: string;
-    participantId: string;
-  };
-  onBulkEncounterAssignment?: (member: boolean) => void;
-  onEncounterParticipantToggle?: (
-    nextEncounter: EncounterSession,
-    nextParticipant: ScenarioParticipant,
-    member: boolean
-  ) => void;
-  onRefreshParticipantEquipment?: (participant: ScenarioParticipant) => void;
-  refreshingEquipmentParticipantId?: string;
-} = {}) {
+function renderAssignmentSection(
+  input: {
+    assignmentParticipants?: ScenarioParticipant[];
+    equipmentRefreshResult?: {
+      kind: "error" | "success";
+      message: string;
+      participantId: string;
+    };
+    onBulkEncounterAssignment?: (member: boolean) => void;
+    onEncounterParticipantToggle?: (
+      nextEncounter: ScenarioEncounterManagementProjection,
+      nextParticipant: ScenarioParticipant,
+      member: boolean,
+    ) => void;
+    onRefreshParticipantEquipment?: (participant: ScenarioParticipant) => void;
+    refreshingEquipmentParticipantId?: string;
+  } = {},
+) {
   function AssignmentHarness() {
-    const [selectedAssignmentParticipantIds, setSelectedAssignmentParticipantIds] = useState<string[]>([]);
-    const [expandedAssignmentParticipantIds, setExpandedAssignmentParticipantIds] = useState<string[]>([]);
+    const [selectedAssignmentParticipantIds, setSelectedAssignmentParticipantIds] = useState<
+      string[]
+    >([]);
+    const [expandedAssignmentParticipantIds, setExpandedAssignmentParticipantIds] = useState<
+      string[]
+    >([]);
     const [selectedBulkEncounterId, setSelectedBulkEncounterId] = useState(encounter.id);
 
     return (
@@ -175,7 +182,9 @@ describe("scenario encounter controls", () => {
     const refreshButton = screen.getByRole("button", { name: "Refresh equipment" });
     expect(refreshButton).toHaveAttribute(
       "title",
-      expect.stringContaining("Health, effects, combat state, and other participant state are preserved"),
+      expect.stringContaining(
+        "Health, effects, combat state, and other participant state are preserved",
+      ),
     );
     await user.click(refreshButton);
 

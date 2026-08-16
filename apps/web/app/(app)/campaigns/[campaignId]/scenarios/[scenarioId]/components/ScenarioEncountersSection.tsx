@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 
-import type { EncounterKind, EncounterSession, EncounterStatus } from "@glantri/domain";
+import type {
+  EncounterKind,
+  EncounterStatus,
+  ScenarioEncounterManagementProjection,
+} from "@glantri/domain";
 
 import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 
@@ -17,11 +21,13 @@ interface ScenarioEncountersSectionProps {
   onKindChange: (value: EncounterKind) => void;
   onTimelineLabelChange: (value: string) => void;
   onTitleChange: (value: string) => void;
-  onUpdateEncounterStatus: (encounter: EncounterSession, status: EncounterStatus) => void;
-  orderedEncounters: EncounterSession[];
+  onUpdateEncounterStatus: (
+    encounter: ScenarioEncounterManagementProjection,
+    status: EncounterStatus,
+  ) => void;
+  orderedEncounters: ScenarioEncounterManagementProjection[];
   scenarioId: string;
 }
-
 export function ScenarioEncountersSection({
   campaignId,
   encounterDescription,
@@ -35,7 +41,7 @@ export function ScenarioEncountersSection({
   onTitleChange,
   onUpdateEncounterStatus,
   orderedEncounters,
-  scenarioId
+  scenarioId,
 }: ScenarioEncountersSectionProps) {
   return (
     <section
@@ -44,7 +50,7 @@ export function ScenarioEncountersSection({
         borderRadius: 12,
         display: "grid",
         gap: "0.75rem",
-        padding: "1rem"
+        padding: "1rem",
       }}
     >
       <h2 style={{ margin: 0 }}>Encounters</h2>
@@ -81,7 +87,11 @@ export function ScenarioEncountersSection({
           type="text"
           value={encounterDescription}
         />
-        <button disabled={encounterTitle.trim().length === 0} onClick={onCreateEncounter} type="button">
+        <button
+          disabled={encounterTitle.trim().length === 0}
+          onClick={onCreateEncounter}
+          type="button"
+        >
           Create encounter
         </button>
       </div>
@@ -121,7 +131,7 @@ export function ScenarioEncountersSection({
                     {encounter.timelineLabel ?? encounter.createdAt}
                   </td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
-                    {encounter.participants.length}
+                    {encounter.participantCount}
                   </td>
                   <td style={{ padding: "0.6rem 0.75rem" }}>
                     <div style={{ display: "grid", gap: "0.35rem" }}>

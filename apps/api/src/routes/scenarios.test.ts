@@ -94,6 +94,7 @@ const mocks = vi.hoisted(() => {
     getCombatHistorySourceById: vi.fn(),
     getEncounterMetadataById: vi.fn(),
     listEncounterAccessMetadataByScenario: vi.fn(),
+    listScenarioEncounterManagementProjections: vi.fn(),
   };
   const updateEncounter = vi.fn();
   const encounterService = {
@@ -5036,6 +5037,54 @@ describe("scenarios route contract", () => {
       userId: "player-1",
     });
     expect(mocks.encounterService.listEncountersByScenario).toHaveBeenCalledWith("scenario-1");
+  });
+
+  it("returns the bounded scenario encounter-management projection for the GM", async () => {
+    const projection = {
+      campaignId: "campaign-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      description: "Hold the courtyard.",
+      id: "encounter-1",
+      kind: "combat",
+      participantCount: 1,
+      participantMembershipMode: "explicit",
+      participantMemberships: [{ id: "encounter-player", scenarioParticipantId: "participant-1" }],
+      scenarioId: "scenario-1",
+      status: "active",
+      timelineLabel: "Dawn",
+      title: "Courtyard",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    };
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.adminUser);
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.combatStateReadService.listScenarioEncounterManagementProjections.mockResolvedValue([
+      projection,
+    ]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/encounters",
+    });
+
+    await app.close();
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ encounters: [projection] });
+    expect(response.body).not.toContain("combatRoundState");
+    expect(response.body).not.toContain("roleplayState");
+    expect(response.body).not.toContain("commands");
+    expect(response.body).not.toContain("snapshots");
+    expect(
+      mocks.combatStateReadService.listScenarioEncounterManagementProjections,
+    ).toHaveBeenCalledWith("scenario-1");
+    expect(mocks.encounterService.listEncountersByScenario).not.toHaveBeenCalled();
   });
 
   it.each([
