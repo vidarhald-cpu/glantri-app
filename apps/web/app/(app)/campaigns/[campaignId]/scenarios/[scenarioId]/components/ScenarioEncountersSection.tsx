@@ -5,7 +5,7 @@ import Link from "next/link";
 import type {
   EncounterKind,
   EncounterStatus,
-  ScenarioEncounterManagementProjection
+  ScenarioEncounterManagementProjection,
 } from "@glantri/domain";
 
 import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
@@ -23,7 +23,7 @@ interface ScenarioEncountersSectionProps {
   onTitleChange: (value: string) => void;
   onUpdateEncounterStatus: (
     encounter: ScenarioEncounterManagementProjection,
-    status: EncounterStatus
+    status: EncounterStatus,
   ) => void;
   orderedEncounters: ScenarioEncounterManagementProjection[];
   scenarioId: string;
@@ -41,7 +41,7 @@ export function ScenarioEncountersSection({
   onTitleChange,
   onUpdateEncounterStatus,
   orderedEncounters,
-  scenarioId
+  scenarioId,
 }: ScenarioEncountersSectionProps) {
   return (
     <section
@@ -50,7 +50,7 @@ export function ScenarioEncountersSection({
         borderRadius: 12,
         display: "grid",
         gap: "0.75rem",
-        padding: "1rem"
+        padding: "1rem",
       }}
     >
       <h2 style={{ margin: 0 }}>Encounters</h2>
@@ -87,7 +87,11 @@ export function ScenarioEncountersSection({
           type="text"
           value={encounterDescription}
         />
-        <button disabled={encounterTitle.trim().length === 0} onClick={onCreateEncounter} type="button">
+        <button
+          disabled={encounterTitle.trim().length === 0}
+          onClick={onCreateEncounter}
+          type="button"
+        >
           Create encounter
         </button>
       </div>

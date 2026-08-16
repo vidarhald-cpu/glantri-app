@@ -3,10 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const sourcePath = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "ScenarioDetailPageContent.tsx"
-);
+const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "ScenarioDetailPageContent.tsx");
 const componentsPath = join(dirname(fileURLToPath(import.meta.url)), "components");
 
 const componentFiles = [
@@ -17,7 +14,7 @@ const componentFiles = [
   "ScenarioTemplateSourcesSection.tsx",
   "ScenarioEventLogSection.tsx",
   "scenarioScreenHelpers.ts",
-  "scenarioScreenTypes.ts"
+  "scenarioScreenTypes.ts",
 ];
 
 function readScenarioDetailSource(): string {
@@ -31,7 +28,7 @@ function readComponentSource(fileName: string): string {
 function readScenarioDetailSources(): string {
   return [
     readScenarioDetailSource(),
-    ...componentFiles.map((fileName) => readComponentSource(fileName))
+    ...componentFiles.map((fileName) => readComponentSource(fileName)),
   ].join("\n");
 }
 
@@ -43,7 +40,7 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).toContain("handleRefreshParticipantEquipment");
     expect(source).toContain("Refresh equipment");
     expect(source).toContain("Refreshing…");
-    expect(source).toContain("participant.sourceType === \"character\"");
+    expect(source).toContain('participant.sourceType === "character"');
     expect(source).toContain("await refreshScenario()");
     expect(source).toContain("scenario equipment was refreshed");
   });
@@ -70,7 +67,7 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).not.toContain("<textarea");
     expect(source).not.toContain("setScenarioKind");
     expect(source).not.toContain("value={scenarioKind}");
-    expect(source).not.toContain("{scenario.description || \"No description yet.\"}");
+    expect(source).not.toContain('{scenario.description || "No description yet."}');
     expect(source).not.toContain("<h2 style={{ margin: 0 }}>Live state</h2>");
     expect(source).not.toContain("handleUpdateLiveState");
   });
@@ -79,17 +76,17 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     const source = readScenarioDetailSources();
     const encountersSource = readComponentSource("ScenarioEncountersSection.tsx");
 
-    expect(source).toContain("<option value=\"combat\">Combat</option>");
-    expect(source).toContain("<option value=\"roleplay\">Roleplaying</option>");
+    expect(source).toContain('<option value="combat">Combat</option>');
+    expect(source).toContain('<option value="roleplay">Roleplaying</option>');
     expect(source).toContain("Timeline</th>");
     expect(source).toContain("Participants</th>");
     expect(source).toContain("handleUpdateEncounterStatus");
     expect(source).toContain("updateEncounterStatusOnServer");
     expect(source).toContain("updateEncounterParticipantsOnServer");
     expect(source).not.toContain("updateEncounterOnServer");
-    expect(source).toContain("\"active\"");
-    expect(source).toContain("\"paused\"");
-    expect(source).toContain("\"archived\"");
+    expect(source).toContain('"active"');
+    expect(source).toContain('"paused"');
+    expect(source).toContain('"archived"');
     expect(source).not.toContain("participants.map((participant) => (");
     expect(encountersSource).toMatch(
       /onUpdateEncounterStatus\(encounter, "paused"\)[\s\S]*?type="button"/,
@@ -119,7 +116,9 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(assignmentSource).not.toContain(">Controller</th>");
     expect(assignmentSource).not.toContain(">Status</th>");
     expect(assignmentSource).not.toContain(">Details</th>");
-    expect(assignmentSource).toContain("Toggle ${participant.snapshot.displayName} assignment details");
+    expect(assignmentSource).toContain(
+      "Toggle ${participant.snapshot.displayName} assignment details",
+    );
     expect(assignmentSource).toContain("aria-expanded={expanded}");
     expect(source).toContain("Encounter-specific details");
     expect(source).toContain("ScenarioEncounterManagementProjection");
@@ -151,7 +150,7 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).toContain("templateSources[0]");
     expect(source).toContain("setParticipants((current) =>");
     expect(source).toContain("Temporary actor");
-    expect(source).toContain(".filter((entry) => entry.category !== \"template\")");
+    expect(source).toContain('.filter((entry) => entry.category !== "template")');
   });
 
   it("renders filters on Encounter Assignment", () => {

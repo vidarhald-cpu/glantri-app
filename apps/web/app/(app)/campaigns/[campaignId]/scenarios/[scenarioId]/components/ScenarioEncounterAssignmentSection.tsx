@@ -7,7 +7,7 @@ import type { ScenarioEncounterManagementProjection, ScenarioParticipant } from 
 import { getConcreteParticipantMetadata } from "./scenarioScreenHelpers";
 import type {
   ScenarioParticipantTypeFilter,
-  ScenarioParticipantTypeFilterOption
+  ScenarioParticipantTypeFilterOption,
 } from "./scenarioScreenTypes";
 
 interface ScenarioEncounterAssignmentSectionProps {
@@ -22,7 +22,7 @@ interface ScenarioEncounterAssignmentSectionProps {
   formatUserLabel: (userId: string | undefined) => string;
   isParticipantInEncounter: (
     encounter: ScenarioEncounterManagementProjection,
-    participant: ScenarioParticipant
+    participant: ScenarioParticipant,
   ) => boolean;
   nonArchivedEncounters: ScenarioEncounterManagementProjection[];
   onBulkEncounterAssignment: (member: boolean) => void;
@@ -30,7 +30,7 @@ interface ScenarioEncounterAssignmentSectionProps {
   onEncounterParticipantToggle: (
     encounter: ScenarioEncounterManagementProjection,
     participant: ScenarioParticipant,
-    member: boolean
+    member: boolean,
   ) => void;
   onParticipantActiveToggle: (participant: ScenarioParticipant, isActive: boolean) => void;
   onRefreshParticipantEquipment: (participant: ScenarioParticipant) => void;
@@ -85,7 +85,7 @@ export function ScenarioEncounterAssignmentSection({
   selectedAssignmentParticipantIds,
   selectedBulkEncounterId,
   setExpandedAssignmentParticipantIds,
-  setSelectedAssignmentParticipantIds
+  setSelectedAssignmentParticipantIds,
 }: ScenarioEncounterAssignmentSectionProps) {
   return (
     <section
@@ -94,7 +94,7 @@ export function ScenarioEncounterAssignmentSection({
         borderRadius: 12,
         display: "grid",
         gap: "0.75rem",
-        padding: "1rem"
+        padding: "1rem",
       }}
     >
       <h2 style={{ margin: 0 }}>Encounter Assignment</h2>
@@ -105,7 +105,9 @@ export function ScenarioEncounterAssignmentSection({
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
         <select
           aria-label="Encounter assignment type filter"
-          onChange={(event) => onParticipantTypeFilterChange(event.target.value as ScenarioParticipantTypeFilter)}
+          onChange={(event) =>
+            onParticipantTypeFilterChange(event.target.value as ScenarioParticipantTypeFilter)
+          }
           value={participantTypeFilter}
         >
           {participantTypeFilterOptions.map((option) => (
@@ -200,7 +202,7 @@ export function ScenarioEncounterAssignmentSection({
               style={{
                 borderCollapse: "collapse",
                 minWidth: 620 + nonArchivedEncounters.length * 120,
-                width: "100%"
+                width: "100%",
               }}
             >
               <thead>
@@ -211,15 +213,29 @@ export function ScenarioEncounterAssignmentSection({
                       padding: "0.5rem 0.75rem 0.5rem 0",
                       position: "sticky",
                       textAlign: "center",
-                      top: 0
+                      top: 0,
                     }}
                   >
                     Select
                   </th>
-                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>
+                  <th
+                    style={{
+                      background: "#fff",
+                      padding: "0.5rem 0.75rem",
+                      position: "sticky",
+                      top: 0,
+                    }}
+                  >
                     Name
                   </th>
-                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>
+                  <th
+                    style={{
+                      background: "#fff",
+                      padding: "0.5rem 0.75rem",
+                      position: "sticky",
+                      top: 0,
+                    }}
+                  >
                     Type
                   </th>
                   {nonArchivedEncounters.map((encounter) => (
@@ -230,11 +246,13 @@ export function ScenarioEncounterAssignmentSection({
                         padding: "0.5rem 0.75rem",
                         position: "sticky",
                         textAlign: "center",
-                        top: 0
+                        top: 0,
                       }}
                       title={encounter.title}
                     >
-                      {encounter.title.length > 16 ? `${encounter.title.slice(0, 15)}...` : encounter.title}
+                      {encounter.title.length > 16
+                        ? `${encounter.title.slice(0, 15)}...`
+                        : encounter.title}
                     </th>
                   ))}
                 </tr>
@@ -244,7 +262,7 @@ export function ScenarioEncounterAssignmentSection({
                   const participantMetadata = getConcreteParticipantMetadata(participant);
                   const expanded = expandedAssignmentParticipantIds.includes(participant.id);
                   const joinedEncounters = nonArchivedEncounters.filter((encounter) =>
-                    isParticipantInEncounter(encounter, participant)
+                    isParticipantInEncounter(encounter, participant),
                   );
 
                   return (
@@ -258,7 +276,7 @@ export function ScenarioEncounterAssignmentSection({
                               setSelectedAssignmentParticipantIds((current) =>
                                 event.target.checked
                                   ? [...new Set([...current, participant.id])]
-                                  : current.filter((id) => id !== participant.id)
+                                  : current.filter((id) => id !== participant.id),
                               )
                             }
                             type="checkbox"
@@ -272,7 +290,7 @@ export function ScenarioEncounterAssignmentSection({
                               setExpandedAssignmentParticipantIds((current) =>
                                 current.includes(participant.id)
                                   ? current.filter((id) => id !== participant.id)
-                                  : [...current, participant.id]
+                                  : [...current, participant.id],
                               )
                             }
                             style={{
@@ -284,16 +302,21 @@ export function ScenarioEncounterAssignmentSection({
                               fontWeight: 700,
                               padding: 0,
                               textAlign: "left",
-                              textDecoration: "underline"
+                              textDecoration: "underline",
                             }}
                             type="button"
                           >
                             {participant.snapshot.displayName}
                           </button>
                         </td>
-                        <td style={{ padding: "0.6rem 0.75rem" }}>{participantMetadata.typeLabel}</td>
+                        <td style={{ padding: "0.6rem 0.75rem" }}>
+                          {participantMetadata.typeLabel}
+                        </td>
                         {nonArchivedEncounters.map((encounter) => (
-                          <td key={encounter.id} style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                          <td
+                            key={encounter.id}
+                            style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}
+                          >
                             <input
                               aria-label={`Toggle ${participant.snapshot.displayName} in ${encounter.title}`}
                               checked={isParticipantInEncounter(encounter, participant)}
@@ -301,7 +324,7 @@ export function ScenarioEncounterAssignmentSection({
                                 onEncounterParticipantToggle(
                                   encounter,
                                   participant,
-                                  event.target.checked
+                                  event.target.checked,
                                 )
                               }
                               type="checkbox"
@@ -322,10 +345,12 @@ export function ScenarioEncounterAssignmentSection({
                                   alignItems: "center",
                                   display: "flex",
                                   flexWrap: "wrap",
-                                  gap: "0.75rem"
+                                  gap: "0.75rem",
                                 }}
                               >
-                                <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
+                                <label
+                                  style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}
+                                >
                                   <input
                                     aria-label={`Toggle ${participant.snapshot.displayName} active scenario status`}
                                     checked={participant.isActive}
@@ -336,9 +361,12 @@ export function ScenarioEncounterAssignmentSection({
                                   />
                                   Active
                                 </label>
-                                <span>Controller: {formatUserLabel(participant.controlledByUserId)}</span>
+                                <span>
+                                  Controller: {formatUserLabel(participant.controlledByUserId)}
+                                </span>
                                 <span>Status: {participant.isActive ? "Active" : "Inactive"}</span>
-                                {participant.sourceType === "character" && participant.characterId ? (
+                                {participant.sourceType === "character" &&
+                                participant.characterId ? (
                                   <button
                                     disabled={refreshingEquipmentParticipantId === participant.id}
                                     onClick={() => onRefreshParticipantEquipment(participant)}
@@ -353,10 +381,14 @@ export function ScenarioEncounterAssignmentSection({
                               </div>
                               {equipmentRefreshResult?.participantId === participant.id ? (
                                 <div
-                                  role={equipmentRefreshResult.kind === "error" ? "alert" : "status"}
+                                  role={
+                                    equipmentRefreshResult.kind === "error" ? "alert" : "status"
+                                  }
                                   style={{
                                     color:
-                                      equipmentRefreshResult.kind === "error" ? "#8b3a1a" : "#184f3d",
+                                      equipmentRefreshResult.kind === "error"
+                                        ? "#8b3a1a"
+                                        : "#184f3d",
                                   }}
                                 >
                                   {equipmentRefreshResult.message}
@@ -365,21 +397,22 @@ export function ScenarioEncounterAssignmentSection({
                               {joinedEncounters.length > 0 ? (
                                 joinedEncounters.map((encounter) => (
                                   <div key={encounter.id}>
-                                    <strong>{encounter.title}:</strong>{" "}
-                                    appearance, disguise, clothing/equipment notes, encounter role,
-                                    visibility notes, and GM-only notes will live on this encounter
-                                    participant entry.
+                                    <strong>{encounter.title}:</strong> appearance, disguise,
+                                    clothing/equipment notes, encounter role, visibility notes, and
+                                    GM-only notes will live on this encounter participant entry.
                                   </div>
                                 ))
                               ) : (
                                 <div>
                                   This participant is not assigned to a non-archived encounter yet.
-                                  Assign them to an encounter before recording encounter-specific details.
+                                  Assign them to an encounter before recording encounter-specific
+                                  details.
                                 </div>
                               )}
                               <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                                Editing these fields is deferred; this placeholder is intentionally here
-                                in Encounter Assignment, not a separate Scenario Participants roster.
+                                Editing these fields is deferred; this placeholder is intentionally
+                                here in Encounter Assignment, not a separate Scenario Participants
+                                roster.
                               </div>
                             </div>
                           </td>
@@ -398,7 +431,9 @@ export function ScenarioEncounterAssignmentSection({
           </div>
         </>
       ) : concreteParticipants.length === 0 ? (
-        <div>Add a campaign roster member or create a temporary actor before assigning encounters.</div>
+        <div>
+          Add a campaign roster member or create a temporary actor before assigning encounters.
+        </div>
       ) : (
         <div>No concrete participants match the current encounter assignment filters.</div>
       )}
