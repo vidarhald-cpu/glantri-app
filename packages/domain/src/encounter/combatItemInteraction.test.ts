@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   declareCombatGenericAction,
+  projectCombatItemInteractionRecipients,
   projectCombatGenericActionsForPlayer,
   reviewCombatGenericAction,
 } from "./combatGenericAction";
@@ -37,6 +38,23 @@ function declaration() {
 }
 
 describe("canonical Combat Item interaction lifecycle", () => {
+  it("projects pass recipients through the fail-closed participant visibility set", () => {
+    const participants = [
+      { label: "Aster", participantId: "participant-1" },
+      { label: "Hidden Bram", participantId: "participant-2" },
+    ];
+
+    expect(
+      projectCombatItemInteractionRecipients({
+        participants,
+        viewer: { kind: "player", visibleParticipantIds: new Set(["participant-1"]) },
+      }),
+    ).toEqual([{ label: "Aster", participantId: "participant-1" }]);
+    expect(
+      projectCombatItemInteractionRecipients({ participants, viewer: { kind: "gm" } }),
+    ).toEqual(participants);
+  });
+
   it("persists the exact Item identity, revision, operation, and GM-decided timing", () => {
     const actions = declareCombatGenericAction(declaration());
 

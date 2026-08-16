@@ -111,4 +111,42 @@ describe("CombatItemInteractionPanel", () => {
     expect(screen.getByRole("button", { name: "Dropped dagger: Pick up" })).toBeEnabled();
     expect(container.textContent).not.toContain("hidden-technical-id");
   });
+
+  it("renders only server-authorized pass recipients without hidden names, IDs, or counts", async () => {
+    vi.mocked(loadCombatItemInteractionOptions).mockResolvedValueOnce({
+      actors: [
+        {
+          characterId: "character-1",
+          items: [
+            {
+              category: "weapon",
+              id: "item-dagger",
+              label: "Silver dagger",
+              operations: ["pass"],
+              revision: "2026-08-16T09:59:00.000Z",
+              state: "held",
+            },
+          ],
+          label: "Aster",
+          participantId: "participant-1",
+        },
+      ],
+      presentItems: [],
+      recipients: [{ label: "Aster", participantId: "participant-1" }],
+    });
+    const { container } = render(
+      <CombatItemInteractionPanel
+        encounter={encounter}
+        isGm={false}
+        onEncounterUpdated={vi.fn()}
+        participantId="participant-1"
+      />,
+    );
+
+    const recipientSelect = await screen.findByLabelText("Pass Silver dagger to");
+    expect(recipientSelect).toHaveTextContent("Choose participant");
+    expect(recipientSelect.querySelectorAll("option")).toHaveLength(1);
+    expect(container.textContent).not.toContain("Hidden Bram");
+    expect(container.textContent).not.toContain("participant-2");
+  });
 });

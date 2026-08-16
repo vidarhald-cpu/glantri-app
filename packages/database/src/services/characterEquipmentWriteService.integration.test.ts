@@ -569,7 +569,7 @@ if (!process.env.DATABASE_URL_TEST) {
       });
     });
 
-    it("draws and stows one canonical Campaign Item with revision-safe idempotency", async () => {
+    it("draws and stows one canonical Campaign Item with revision-safe repository writes", async () => {
       const gm = await createTestUser(prisma!, { roles: ["game_master"] });
       const player = await createTestUser(prisma!);
       const character = await createTestCharacter(prisma!, player.id);
@@ -619,17 +619,18 @@ if (!process.env.DATABASE_URL_TEST) {
       expect((await repo.getCharacterLoadouts(character.id))[0]).toMatchObject({
         activePrimaryWeaponItemId: item.id,
       });
-      const retried = await repo.applyCombatItemInteraction({
-        actionId: "action-draw",
-        campaignId: campaign.id,
-        encounterId: "encounter-1",
-        expectedItemRevision: item.revision!,
-        itemId: item.id,
-        operation: "draw",
-        ownerCharacterId: character.id,
-      });
-      expect(retried).toMatchObject({ alreadyApplied: true, item: { id: item.id } });
-      expect(retried.item.revision).toBe(drawn.item.revision);
+      await expect(
+        repo.applyCombatItemInteraction({
+          actionId: "action-draw",
+          campaignId: campaign.id,
+          encounterId: "encounter-1",
+          expectedItemRevision: item.revision!,
+          itemId: item.id,
+          operation: "draw",
+          ownerCharacterId: character.id,
+        }),
+      ).rejects.toThrow("Item changed");
+      expect(await repo.getCanonicalEquipmentItemById(item.id)).toEqual(drawn.item);
 
       const stowed = await repo.applyCombatItemInteraction({
         actionId: "action-stow",

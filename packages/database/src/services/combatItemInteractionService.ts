@@ -1,10 +1,12 @@
 import { equipmentTemplatesById } from "@glantri/content";
-import type {
-  CombatGenericActionReference,
-  CombatItemInteraction,
-  CombatItemInteractionOperation,
-  CombatItemInteractionState,
-  EncounterSession,
+import {
+  projectCombatItemInteractionRecipients,
+  type CombatGenericAction,
+  type CombatGenericActionReference,
+  type CombatItemInteraction,
+  type CombatItemInteractionOperation,
+  type CombatItemInteractionState,
+  type EncounterSession,
 } from "@glantri/domain";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
@@ -21,6 +23,7 @@ import {
   createPrismaCombatStatePersistenceRepository,
   isRetryableCombatTransactionError,
 } from "../repositories/combatStatePersistenceRepository";
+import { createPrismaCombatStateReadRepository } from "../repositories/combatStateReadRepository";
 
 export { CombatPersistenceError } from "../repositories/combatStatePersistenceRepository";
 
@@ -59,6 +62,14 @@ export interface CombatItemInteractionOptions {
   recipients: Array<{ label: string; participantId: string }>;
 }
 
+export type CombatItemInteractionViewer =
+  | { kind: "gm" }
+  | {
+      controlledParticipantIds: ReadonlySet<string>;
+      kind: "player";
+      visibleParticipantIds: ReadonlySet<string>;
+    };
+
 export interface CommitCombatItemInteractionResolutionInput {
   actionId: string;
   actorUserId: string;
@@ -74,6 +85,84 @@ export interface CommitCombatItemInteractionResolutionInput {
 }
 
 type CombatItemInteractionTransactionBoundary = "item" | "encounter" | "event";
+
+interface CombatItemResolutionActionContext {
+  action: CombatGenericAction;
+  participants: ReadonlyArray<{ characterId?: string; participantId: string }>;
+}
+
+function findResolutionActionContext(
+  encounter: EncounterSession,
+  actionId: string,
+): CombatItemResolutionActionContext | undefined {
+  const state = encounter.combatRoundState;
+  if (!state) return undefined;
+  for (const round of [state, ...state.rounds]) {
+    const action = round.genericActions.find((candidate) => candidate.id === actionId);
+    if (action) return { action, participants: round.participants };
+  }
+  return undefined;
+}
+
+function sameItemInteraction(
+  action: CombatGenericAction,
+  interaction: CombatItemInteraction,
+): boolean {
+  return (
+    action.preset === "item_interaction" &&
+    action.itemInteraction?.itemId === interaction.itemId &&
+    action.itemInteraction.itemRevision === interaction.itemRevision &&
+    action.itemInteraction.operation === interaction.operation &&
+    action.itemInteraction.recipientParticipantId === interaction.recipientParticipantId
+  );
+}
+
+function hasExactParticipantSemantics(input: {
+  context: CombatItemResolutionActionContext;
+  ownerCharacterId: string;
+  recipientCharacterId?: string;
+}): boolean {
+  const owner = input.context.participants.find(
+    (participant) => participant.participantId === input.context.action.ownerParticipantId,
+  );
+  const recipientParticipantId = input.context.action.itemInteraction?.recipientParticipantId;
+  const recipient = recipientParticipantId
+    ? input.context.participants.find(
+        (participant) => participant.participantId === recipientParticipantId,
+      )
+    : undefined;
+  return (
+    owner?.characterId === input.ownerCharacterId &&
+    (recipientParticipantId
+      ? recipient?.characterId === input.recipientCharacterId
+      : input.recipientCharacterId === undefined)
+  );
+}
+
+function resolutionEventPayload(input: CommitCombatItemInteractionResolutionInput) {
+  const context = findResolutionActionContext(input.encounterSession, input.actionId);
+  return {
+    actionId: input.actionId,
+    encounterId: input.encounterId,
+    itemId: input.interaction.itemId,
+    itemRevision: input.interaction.itemRevision,
+    operation: input.interaction.operation,
+    ownerCharacterId: input.ownerCharacterId,
+    ownerParticipantId: context?.action.ownerParticipantId,
+    recipientCharacterId: input.recipientCharacterId ?? null,
+    recipientParticipantId: input.interaction.recipientParticipantId ?? null,
+    resolutionKind: "canonical_combat_item",
+  };
+}
+
+function payloadMatchesResolution(
+  value: unknown,
+  expected: ReturnType<typeof resolutionEventPayload>,
+): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const payload = value as Record<string, unknown>;
+  return Object.entries(expected).every(([key, expectedValue]) => payload[key] === expectedValue);
+}
 
 function itemLabel(record: CombatItemInteractionRecord): string {
   return (
@@ -145,7 +234,7 @@ export class CombatItemInteractionService {
     campaignId: string;
     encounterId: string;
     participants: readonly CombatItemParticipantContext[];
-    viewer: { controlledParticipantIds?: ReadonlySet<string>; kind: "gm" | "player" };
+    viewer: CombatItemInteractionViewer;
   }): Promise<CombatItemInteractionOptions> {
     const records = await this.repository.getCombatItemInteractionRecords(input.campaignId);
     const visibleActors = input.participants.filter(
@@ -189,12 +278,19 @@ export class CombatItemInteractionService {
     return {
       actors,
       presentItems,
-      recipients: input.participants
-        .filter((participant) => Boolean(participant.characterId))
-        .map((participant) => ({
-          label: participant.label,
-          participantId: participant.participantId,
-        })),
+      recipients: projectCombatItemInteractionRecipients({
+        participants: input.participants.filter((participant) => Boolean(participant.characterId)),
+        viewer:
+          input.viewer.kind === "gm"
+            ? { kind: "gm" }
+            : {
+                kind: "player",
+                visibleParticipantIds: input.viewer.visibleParticipantIds,
+              },
+      }).map((participant) => ({
+        label: participant.label,
+        participantId: participant.participantId,
+      })),
     };
   }
 
@@ -207,7 +303,7 @@ export class CombatItemInteractionService {
     ownerParticipantId: string;
     participants: readonly CombatItemParticipantContext[];
     recipientParticipantId?: string;
-    viewer: { controlledParticipantIds?: ReadonlySet<string>; kind: "gm" | "player" };
+    viewer: CombatItemInteractionViewer;
   }): Promise<{
     interaction: CombatItemInteraction;
     reference: CombatGenericActionReference;
@@ -286,16 +382,20 @@ export class CombatItemInteractionService {
   async commitResolution(
     input: CommitCombatItemInteractionResolutionInput,
   ): Promise<{ encounter: EncounterSession; item: ApplyCombatItemInteractionResult }> {
-    const completedAction = input.encounterSession.combatRoundState?.genericActions.find(
-      (action) => action.id === input.actionId,
-    );
+    const completedContext = findResolutionActionContext(input.encounterSession, input.actionId);
+    const completedAction = completedContext?.action;
     if (
+      input.encounterSession.id !== input.encounterId ||
+      input.encounterSession.campaignId !== input.campaignId ||
+      input.encounterSession.scenarioId !== input.scenarioId ||
       completedAction?.status !== "completed" ||
-      completedAction.itemInteraction?.itemId !== input.interaction.itemId ||
-      completedAction.itemInteraction.itemRevision !== input.interaction.itemRevision ||
-      completedAction.itemInteraction.operation !== input.interaction.operation ||
-      completedAction.itemInteraction.recipientParticipantId !==
-        input.interaction.recipientParticipantId
+      !sameItemInteraction(completedAction, input.interaction) ||
+      !completedContext ||
+      !hasExactParticipantSemantics({
+        context: completedContext,
+        ownerCharacterId: input.ownerCharacterId,
+        recipientCharacterId: input.recipientCharacterId,
+      })
     ) {
       throw new CombatItemUnavailableError();
     }
@@ -303,6 +403,79 @@ export class CombatItemInteractionService {
       try {
         return await this.client.$transaction(
           async (transaction) => {
+            await transaction.$queryRaw(
+              Prisma.sql`SELECT "id" FROM "Encounter" WHERE "id" = ${input.encounterId} FOR UPDATE`,
+            );
+            const persistedEncounter = (
+              await createPrismaCombatStateReadRepository(transaction).getFullEncounterById(
+                input.encounterId,
+              )
+            )?.encounter;
+            const persistedContext = persistedEncounter
+              ? findResolutionActionContext(persistedEncounter, input.actionId)
+              : undefined;
+            if (
+              !persistedEncounter ||
+              persistedEncounter.campaignId !== input.campaignId ||
+              persistedEncounter.scenarioId !== input.scenarioId ||
+              !persistedContext ||
+              !sameItemInteraction(persistedContext.action, input.interaction) ||
+              persistedContext.action.ownerParticipantId !== completedAction.ownerParticipantId ||
+              !hasExactParticipantSemantics({
+                context: persistedContext,
+                ownerCharacterId: input.ownerCharacterId,
+                recipientCharacterId: input.recipientCharacterId,
+              })
+            ) {
+              throw new CombatItemUnavailableError();
+            }
+
+            const expectedEventPayload = resolutionEventPayload(input);
+            const priorEvents = await transaction.scenarioEventLog.findMany({
+              where: {
+                AND: [
+                  { payloadJson: { path: ["encounterId"], equals: input.encounterId } },
+                  { payloadJson: { path: ["actionId"], equals: input.actionId } },
+                  {
+                    payloadJson: {
+                      path: ["resolutionKind"],
+                      equals: "canonical_combat_item",
+                    },
+                  },
+                ],
+                eventType: "encounter_updated",
+                scenarioId: input.scenarioId,
+              },
+            });
+            const exactPriorEvent = priorEvents.find((event) =>
+              payloadMatchesResolution(event.payloadJson, expectedEventPayload),
+            );
+            if (persistedContext.action.status === "completed") {
+              if (!exactPriorEvent || priorEvents.length !== 1) {
+                throw new CombatItemUnavailableError();
+              }
+              const currentItem = await createPrismaCharacterEquipmentRepository(
+                transaction,
+              ).getCanonicalEquipmentItemById(input.interaction.itemId);
+              if (!currentItem || currentItem.campaignContextId !== input.campaignId) {
+                throw new CombatItemUnavailableError();
+              }
+              return {
+                encounter: persistedEncounter,
+                item: { alreadyApplied: true, item: currentItem },
+              };
+            }
+            if (
+              persistedContext.action.status !== "active" ||
+              persistedEncounter.updatedAt !== input.expectedEncounterRevision ||
+              priorEvents.length > 0
+            ) {
+              throw new CombatPersistenceError(
+                "stale_revision",
+                "Encounter revision changed before combat state could be saved.",
+              );
+            }
+
             const item = await createPrismaCharacterEquipmentRepository(
               transaction,
             ).applyCombatItemInteraction({
@@ -332,11 +505,7 @@ export class CombatItemInteractionService {
               data: {
                 actorUserId: input.actorUserId,
                 eventType: "encounter_updated",
-                payloadJson: {
-                  actionId: input.actionId,
-                  encounterId: input.encounterId,
-                  operation: "resolve",
-                },
+                payloadJson: expectedEventPayload,
                 roundNumber: input.roundNumber,
                 scenarioId: input.scenarioId,
                 summary: "Canonical Combat Item action resolve.",

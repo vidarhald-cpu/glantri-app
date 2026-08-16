@@ -114,6 +114,19 @@ export const combatItemInteractionSchema = z.object({
 });
 export type CombatItemInteraction = z.infer<typeof combatItemInteractionSchema>;
 
+export function projectCombatItemInteractionRecipients<
+  TParticipant extends { participantId: string },
+>(input: {
+  participants: readonly TParticipant[];
+  viewer: { kind: "gm" } | { kind: "player"; visibleParticipantIds: ReadonlySet<string> };
+}): TParticipant[] {
+  const viewer = input.viewer;
+  if (viewer.kind === "gm") return [...input.participants];
+  return input.participants.filter((participant) =>
+    viewer.visibleParticipantIds.has(participant.participantId),
+  );
+}
+
 export const combatGenericActionSchema = z.object({
   awarenessContext: z.object({ kind: z.literal("survey") }).optional(),
   createdAt: z.string().datetime(),

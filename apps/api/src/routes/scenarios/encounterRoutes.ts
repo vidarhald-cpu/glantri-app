@@ -5385,7 +5385,7 @@ function hasCombatDistanceVisibility(input: {
   });
 }
 
-function buildPlayerSafeCombatScopeForUser(input: {
+export function buildPlayerSafeCombatScopeForUser(input: {
   encounter: EncounterParticipantReadSource & {
     participantVisibility?: NonNullable<EncounterSession["roleplayState"]>["visibility"];
     roleplayState?: Pick<NonNullable<EncounterSession["roleplayState"]>, "visibility">;

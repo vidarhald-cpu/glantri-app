@@ -90,6 +90,7 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
       viewer: {
         controlledParticipantIds: new Set(["participant-1"]),
         kind: "player",
+        visibleParticipantIds: new Set(["participant-1"]),
       },
     });
 
@@ -100,6 +101,9 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
     expect(JSON.stringify(options)).not.toContain("hidden-owned-dagger");
     expect(JSON.stringify(options)).not.toContain("other-dagger");
     expect(JSON.stringify(options)).not.toContain("stored-elsewhere");
+    expect(options.recipients).toEqual([{ label: "Aster", participantId: "participant-1" }]);
+    expect(JSON.stringify(options)).not.toContain("Bram");
+    expect(JSON.stringify(options)).not.toContain("participant-2");
   });
 
   it("gives the GM precise unsupported actor state without inventing NPC Item holders", async () => {
@@ -122,6 +126,10 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
       },
     );
     expect(options.actors[0]?.items.map((item) => item.id)).toContain("hidden-owned-dagger");
+    expect(options.recipients).toEqual([
+      { label: "Aster", participantId: "participant-1" },
+      { label: "Bram", participantId: "participant-2" },
+    ]);
   });
 
   it("makes hidden, nonexistent, wrong-owner, and forged-revision declarations fail identically", async () => {
@@ -148,11 +156,37 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
         viewer: {
           controlledParticipantIds: new Set(["participant-1"]),
           kind: "player",
+          visibleParticipantIds: new Set(["participant-1"]),
         },
       });
 
     for (const itemId of ["hidden-dagger", "missing-dagger", "other-dagger"]) {
       await expect(attempt(itemId)).rejects.toEqual(new CombatItemUnavailableError());
     }
+  });
+
+  it("makes hidden and nonexistent pass recipients fail identically", async () => {
+    const service = new CombatItemInteractionService(
+      repository([record({ holderCharacterId: "character-1", id: "owned-dagger" })]),
+    );
+    const attempt = (recipientParticipantId: string) =>
+      service.resolveDeclaration({
+        campaignId: "campaign-1",
+        encounterId: "encounter-1",
+        expectedItemRevision: "2026-08-16T10:00:00.000Z",
+        itemId: "owned-dagger",
+        operation: "pass",
+        ownerParticipantId: "participant-1",
+        participants,
+        recipientParticipantId,
+        viewer: {
+          controlledParticipantIds: new Set(["participant-1"]),
+          kind: "player",
+          visibleParticipantIds: new Set(["participant-1"]),
+        },
+      });
+
+    await expect(attempt("participant-2")).rejects.toEqual(new CombatItemUnavailableError());
+    await expect(attempt("participant-missing")).rejects.toEqual(new CombatItemUnavailableError());
   });
 });

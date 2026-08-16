@@ -1,10 +1,15 @@
 import Fastify from "fastify";
 import {
+  CanonicalEquipmentItemSchema,
   encounterSessionSchema,
   initializeCombatRoundState,
   type CombatGenericAction,
 } from "@glantri/domain";
-import { CombatItemRevisionError, CombatItemUnavailableError } from "@glantri/database";
+import {
+  CombatItemInteractionService,
+  CombatItemRevisionError,
+  CombatItemUnavailableError,
+} from "@glantri/database";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const auth = vi.hoisted(() => ({ requireAuthenticatedUser: vi.fn() }));
@@ -85,6 +90,65 @@ function itemAction(status: CombatGenericAction["status"] = "active"): CombatGen
   };
 }
 
+function encounterWithHiddenRecipient() {
+  const encounter = encounterWithActions();
+  const base = encounterSessionSchema.parse({
+    ...encounter,
+    combatRoundState: undefined,
+    participants: [
+      ...encounter.participants,
+      {
+        characterId: "character-3",
+        id: "participant-inactive",
+        label: "Inactive Cora",
+        participantType: "character",
+        scenarioParticipantId: "scenario-participant-3",
+      },
+      {
+        adHocName: "Unauthorized stranger",
+        id: "participant-unauthorized",
+        label: "Unauthorized stranger",
+        participantType: "ad-hoc",
+      },
+    ],
+    roleplayState: {
+      visibility: {
+        "participant-1": { "participant-1": true },
+      },
+    },
+  });
+  return encounterSessionSchema.parse({
+    ...base,
+    combatRoundState: initializeCombatRoundState({ encounter: base }),
+  });
+}
+
+function realItemService() {
+  const item = CanonicalEquipmentItemSchema.parse({
+    campaignContextId: "campaign-1",
+    category: "weapon",
+    characterId: "character-1",
+    conditionState: "intact",
+    displayName: "Silver dagger",
+    holderCharacterId: "character-1",
+    id: "item-1",
+    isEquipped: false,
+    isStackable: false,
+    material: "steel",
+    quality: "standard",
+    quantity: 1,
+    revision: "2026-08-16T09:29:00.000Z",
+    specificityType: "specific",
+    storageAssignment: { carryMode: "on_person", locationId: "character-1:loc-person" },
+    templateId: "weapon-template-dagger",
+  });
+  return new CombatItemInteractionService({
+    getCombatItemInteractionRecords: vi.fn(async () => [
+      { availableInEncounter: true, hidden: false, item },
+    ]),
+  } as never);
+}
+
 function services(currentEncounter = encounterWithActions()): CombatItemInteractionRouteServices {
   return {
     campaignService: {
@@ -126,6 +190,8 @@ function services(currentEncounter = encounterWithActions()): CombatItemInteract
           controlledByUserId: player.id,
           id: "scenario-participant-1",
           isActive: true,
+          role: "player_character",
+          scenarioId: "scenario-1",
           snapshot: { displayName: "Aster" },
         },
         {
@@ -133,7 +199,18 @@ function services(currentEncounter = encounterWithActions()): CombatItemInteract
           controlledByUserId: "player-2",
           id: "scenario-participant-2",
           isActive: true,
+          role: "player_character",
+          scenarioId: "scenario-1",
           snapshot: { displayName: "Bram" },
+        },
+        {
+          characterId: "character-3",
+          controlledByUserId: "player-3",
+          id: "scenario-participant-3",
+          isActive: false,
+          role: "player_character",
+          scenarioId: "scenario-1",
+          snapshot: { displayName: "Inactive Cora" },
         },
       ]),
       recordScenarioEvent: vi.fn(),
@@ -177,6 +254,60 @@ describe("canonical Combat Item interaction routes", () => {
     expect(viewer.kind === "player" && viewer.controlledParticipantIds?.has("participant-2")).toBe(
       false,
     );
+    await app.close();
+  });
+
+  it("omits hidden pass recipients and rejects hidden/nonexistent recipient forgeries identically", async () => {
+    const routeServices = services(encounterWithHiddenRecipient());
+    routeServices.itemService = realItemService();
+    const app = await appWith(routeServices);
+    const optionsResponse = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1/combat-round/item-interactions/options",
+    });
+
+    expect(optionsResponse.statusCode).toBe(200);
+    expect(optionsResponse.body).toContain("Aster");
+    expect(optionsResponse.body).not.toContain("Bram");
+    expect(optionsResponse.body).not.toContain("participant-2");
+    expect(optionsResponse.body).not.toContain("Inactive Cora");
+    expect(optionsResponse.body).not.toContain("participant-inactive");
+    expect(optionsResponse.body).not.toContain("Unauthorized stranger");
+    expect(optionsResponse.body).not.toContain("participant-unauthorized");
+    expect(optionsResponse.json().options.recipients).toEqual([
+      { label: "Aster", participantId: "participant-1" },
+    ]);
+
+    const attempt = (recipientParticipantId: string) =>
+      app.inject({
+        method: "POST",
+        payload: {
+          actionId: `action-pass-${recipientParticipantId}`,
+          expectedItemRevision: "2026-08-16T09:29:00.000Z",
+          expectedRevision: revision,
+          itemId: "item-1",
+          itemOperation: "pass",
+          operation: "declare",
+          participantId: "participant-1",
+          recipientParticipantId,
+        },
+        url: "/encounters/encounter-1/combat-round/item-interactions",
+      });
+    const responses = await Promise.all(
+      [
+        "participant-2",
+        "participant-missing",
+        "participant-inactive",
+        "participant-out-of-context",
+        "participant-unauthorized",
+      ].map(attempt),
+    );
+
+    expect(responses.map((response) => response.statusCode)).toEqual([404, 404, 404, 404, 404]);
+    expect(new Set(responses.map((response) => response.body))).toHaveLength(1);
+    expect(responses[0]?.body).not.toContain("participant-2");
+    expect(routeServices.encounterService.updateCombatEncounter).not.toHaveBeenCalled();
+    expect(routeServices.scenarioService.recordScenarioEvent).not.toHaveBeenCalled();
     await app.close();
   });
 

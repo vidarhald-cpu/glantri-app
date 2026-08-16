@@ -27,6 +27,7 @@ import {
   COMBAT_STORAGE_MODE_LEGACY,
   COMBAT_STORAGE_MODE_SPLIT_V1,
   CombatPersistenceError,
+  type TransactionClient,
 } from "./combatStatePersistenceRepository";
 
 interface EncounterMetadataRecord {
@@ -124,11 +125,12 @@ export interface CombatStateReadRepository {
 }
 
 export function createPrismaCombatStateReadRepository(
-  client: PrismaClient = prisma,
+  client: PrismaClient | TransactionClient = prisma,
 ): CombatStateReadRepository {
+  const database = client as PrismaClient;
   return {
     async getActiveCombatStateById(encounterId) {
-      const record = await client.encounter.findUnique({
+      const record = await database.encounter.findUnique({
         select: {
           ...encounterSessionJsonSelect,
           activeCombatState: {
@@ -167,7 +169,7 @@ export function createPrismaCombatStateReadRepository(
       });
     },
     async getArchivedCombatRoundsById(encounterId) {
-      const record = await client.encounter.findUnique({
+      const record = await database.encounter.findUnique({
         select: {
           ...encounterSessionJsonSelect,
           archivedCombatRounds: {
@@ -206,7 +208,7 @@ export function createPrismaCombatStateReadRepository(
       });
     },
     async getCombatHistorySourceById(encounterId) {
-      const record = await client.encounter.findUnique({
+      const record = await database.encounter.findUnique({
         select: {
           ...encounterSessionJsonSelect,
           activeCombatState: {
@@ -250,7 +252,7 @@ export function createPrismaCombatStateReadRepository(
       });
     },
     async getEncounterMetadataById(encounterId) {
-      const record = await client.encounter.findUnique({
+      const record = await database.encounter.findUnique({
         select: encounterMetadataSelect,
         where: { id: encounterId },
       });
@@ -258,7 +260,7 @@ export function createPrismaCombatStateReadRepository(
       return record ? buildEncounterMetadataView(metadataInput(record)) : null;
     },
     async getFullEncounterById(encounterId) {
-      const record = await client.encounter.findUnique({
+      const record = await database.encounter.findUnique({
         include: {
           activeCombatState: true,
           archivedCombatRounds: { orderBy: { roundNumber: "asc" } },
@@ -294,7 +296,7 @@ export function createPrismaCombatStateReadRepository(
       );
     },
     async listEncounterAccessMetadataByScenario(scenarioId) {
-      const records = await client.encounter.findMany({
+      const records = await database.encounter.findMany({
         orderBy: { updatedAt: "desc" },
         select: encounterSessionJsonSelect,
         where: { scenarioId },
@@ -308,7 +310,7 @@ export function createPrismaCombatStateReadRepository(
       );
     },
     async listScenarioEncounterManagementProjections(scenarioId) {
-      const records = await client.$queryRaw<
+      const records = await database.$queryRaw<
         Array<EncounterMetadataRecord & { sessionJson: Prisma.JsonValue }>
       >(Prisma.sql`
         SELECT

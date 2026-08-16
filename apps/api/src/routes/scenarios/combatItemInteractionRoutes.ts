@@ -27,7 +27,10 @@ import {
 
 import { requireAuthenticatedUser } from "../../lib/sessionAuth";
 import { resolveScenarioWorkspaceAccess } from "./access";
-import { buildPlayerSafeEncounterForUser } from "./encounterRoutes";
+import {
+  buildPlayerSafeCombatScopeForUser,
+  buildPlayerSafeEncounterForUser,
+} from "./encounterRoutes";
 
 type ItemActionLifecycleOperation =
   | "declare"
@@ -213,6 +216,14 @@ export function createCombatItemInteractionRoutes(
           .filter((participant) => participant.controlledByUserId === user.id)
           .map((participant) => participant.participantId),
       );
+      const visibleParticipantIds =
+        access.mode === "gm"
+          ? new Set(participants.map((participant) => participant.participantId))
+          : buildPlayerSafeCombatScopeForUser({
+              encounter,
+              scenarioParticipants,
+              userId: user.id,
+            }).visibleParticipantIds;
       return {
         access,
         controlledParticipantIds,
@@ -221,6 +232,7 @@ export function createCombatItemInteractionRoutes(
         participants,
         scenarioParticipants,
         user,
+        visibleParticipantIds,
       };
     }
 
@@ -239,6 +251,7 @@ export function createCombatItemInteractionRoutes(
               : {
                   controlledParticipantIds: currentContext.controlledParticipantIds,
                   kind: "player",
+                  visibleParticipantIds: currentContext.visibleParticipantIds,
                 },
         });
         return { options };
@@ -323,6 +336,7 @@ export function createCombatItemInteractionRoutes(
               : {
                   controlledParticipantIds: currentContext.controlledParticipantIds,
                   kind: "player",
+                  visibleParticipantIds: currentContext.visibleParticipantIds,
                 },
           });
           const recipientLabel = body.recipientParticipantId

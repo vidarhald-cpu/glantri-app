@@ -22,7 +22,9 @@ if (!process.env.DATABASE_URL_TEST) {
     async function fixture(suffix: string) {
       const gm = await createTestUser(prisma!, { roles: ["game_master"] });
       const player = await createTestUser(prisma!);
+      const recipientUser = await createTestUser(prisma!);
       const character = await createTestCharacter(prisma!, player.id);
+      const recipient = await createTestCharacter(prisma!, recipientUser.id);
       const campaign = await createTestCampaign(prisma!, gm.id);
       const scenario = await prisma!.scenario.create({
         data: {
@@ -33,18 +35,19 @@ if (!process.env.DATABASE_URL_TEST) {
           status: "live",
         },
       });
-      await prisma!.campaignRosterEntry.create({
-        data: {
+      await prisma!.campaignRosterEntry.createMany({
+        data: [character, recipient].map((entry) => ({
           campaignId: campaign.id,
           category: "pc",
-          sourceId: character.id,
+          sourceId: entry.id,
           sourceType: "character",
-        },
+        })),
       });
 
       const itemRepository = createPrismaCharacterEquipmentRepository(prisma!);
       const equipmentService = new CharacterEquipmentWriteService(itemRepository);
       await equipmentService.ensureCharacterEquipmentInitialized(character.id);
+      await equipmentService.ensureCharacterEquipmentInitialized(recipient.id);
       const item = await equipmentService.createCampaignEquipmentItem({
         campaignId: campaign.id,
         displayName: `Atomic dagger ${suffix}`,
@@ -71,6 +74,12 @@ if (!process.env.DATABASE_URL_TEST) {
             characterId: character.id,
             id: `participant-${suffix}`,
             label: character.name,
+            participantType: "character",
+          },
+          {
+            characterId: recipient.id,
+            id: `participant-recipient-${suffix}`,
+            label: recipient.name,
             participantType: "character",
           },
         ],
@@ -164,6 +173,7 @@ if (!process.env.DATABASE_URL_TEST) {
         item,
         itemRepository,
         persisted,
+        recipient,
         scenario,
       };
     }
@@ -234,6 +244,245 @@ if (!process.env.DATABASE_URL_TEST) {
           await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
         ).toBe(1);
       }
+    });
+
+    it("scopes idempotency to the exact Encounter fingerprint and rejects forged mismatches", async () => {
+      const current = await fixture("collision");
+      const service = new CombatItemInteractionService(current.itemRepository, prisma!);
+      const firstInput = {
+        actionId: current.actionId,
+        actorUserId: current.gm.id,
+        campaignId: current.campaign.id,
+        encounterId: current.encounterId,
+        encounterSession: current.completedSession,
+        expectedEncounterRevision: current.persisted.updatedAt,
+        interaction: current.completedSession.combatRoundState!.genericActions[0]!.itemInteraction!,
+        ownerCharacterId: current.character.id,
+        roundNumber: 1,
+        scenarioId: current.scenario.id,
+      };
+      const first = await service.commitResolution(firstInput);
+      expect(first.item.item).toMatchObject({ holderCharacterId: null, id: current.item.id });
+
+      const pickedUp = await current.itemRepository.applyCombatItemInteraction({
+        actionId: "collision-pickup",
+        campaignId: current.campaign.id,
+        encounterId: current.encounterId,
+        expectedItemRevision: first.item.item.revision!,
+        itemId: current.item.id,
+        operation: "pickup",
+        ownerCharacterId: current.character.id,
+      });
+      expect(pickedUp.item).toMatchObject({
+        holderCharacterId: current.character.id,
+        id: current.item.id,
+      });
+
+      const secondEncounterId = "atomic-encounter-collision-second";
+      const secondBase = encounterSessionSchema.parse({
+        campaignId: current.campaign.id,
+        createdAt: "2026-08-16T11:00:00.000Z",
+        currentRound: 1,
+        id: secondEncounterId,
+        kind: "combat",
+        participants: [
+          {
+            characterId: current.character.id,
+            id: "participant-collision-second",
+            label: current.character.name,
+            participantType: "character",
+          },
+          {
+            characterId: current.recipient.id,
+            id: "participant-recipient-collision-second",
+            label: current.recipient.name,
+            participantType: "character",
+          },
+        ],
+        scenarioId: current.scenario.id,
+        status: "active",
+        title: "Atomic collision second encounter",
+        updatedAt: "2026-08-16T11:00:00.000Z",
+      });
+      const secondRound = initializeCombatRoundState({ encounter: secondBase });
+      const secondActive = encounterSessionSchema.parse({
+        ...secondBase,
+        combatRoundState: {
+          ...secondRound,
+          genericActions: [
+            {
+              createdAt: "2026-08-16T11:01:00.000Z",
+              duration: { kind: "gm_decided" },
+              id: current.actionId,
+              intent: "Drop the exact dagger again",
+              itemInteraction: {
+                itemId: current.item.id,
+                itemLabel: "Atomic dagger collision",
+                itemRevision: pickedUp.item.revision!,
+                operation: "drop",
+                stateAtDeclaration: "held",
+                visibleToParticipantIds: ["participant-collision-second"],
+              },
+              lastUpdatedAt: "2026-08-16T11:02:00.000Z",
+              ownerParticipantId: "participant-collision-second",
+              preset: "item_interaction",
+              progress: {
+                completedRounds: 0,
+                startedRoundNumber: 1,
+                startedStep: "select_actions",
+              },
+              reference: {
+                itemId: current.item.id,
+                kind: "item",
+                label: "Atomic dagger collision",
+                ownerParticipantId: "participant-collision-second",
+              },
+              status: "active",
+            },
+          ],
+        },
+      });
+      const secondCreated = await prisma!.encounter.create({
+        data: {
+          campaignId: current.campaign.id,
+          id: secondEncounterId,
+          name: secondActive.title,
+          scenarioId: current.scenario.id,
+          sessionJson: secondActive as never,
+          status: secondActive.status,
+        },
+      });
+      const secondPersisted = await createPrismaCombatStatePersistenceRepository(
+        prisma!,
+      ).updateCombatEncounter({
+        campaignId: current.campaign.id,
+        encounterId: secondEncounterId,
+        expectedRevision: secondCreated.updatedAt.toISOString(),
+        scenarioId: current.scenario.id,
+        session: secondActive,
+      });
+      const secondCompleted = encounterSessionSchema.parse({
+        ...secondPersisted,
+        combatRoundState: {
+          ...secondPersisted.combatRoundState!,
+          genericActions: secondPersisted.combatRoundState!.genericActions.map((action) => ({
+            ...action,
+            lastUpdatedAt: "2026-08-16T11:03:00.000Z",
+            resolution: {
+              resolvedAt: "2026-08-16T11:03:00.000Z",
+              text: "The exact dagger is present and unheld in the second Encounter.",
+              visibleToParticipantIds: ["participant-collision-second"],
+            },
+            status: "completed",
+          })),
+        },
+      });
+      const secondInput = {
+        actionId: current.actionId,
+        actorUserId: current.gm.id,
+        campaignId: current.campaign.id,
+        encounterId: secondEncounterId,
+        encounterSession: secondCompleted,
+        expectedEncounterRevision: secondPersisted.updatedAt,
+        interaction: secondCompleted.combatRoundState!.genericActions[0]!.itemInteraction!,
+        ownerCharacterId: current.character.id,
+        roundNumber: 1,
+        scenarioId: current.scenario.id,
+      };
+      const beforeItem = await current.itemRepository.getCanonicalEquipmentItemById(
+        current.item.id,
+      );
+      const beforeEncounter = await prisma!.encounter.findUniqueOrThrow({
+        include: { activeCombatState: true },
+        where: { id: secondEncounterId },
+      });
+      const beforeEvents = await prisma!.scenarioEventLog.count({
+        where: { scenarioId: current.scenario.id },
+      });
+      const forge = (changes: {
+        operation?: "use";
+        ownerCharacterId?: string;
+        recipientCharacterId?: string;
+        recipientParticipantId?: string;
+        revision?: string;
+      }) => {
+        const forgedSession = encounterSessionSchema.parse({
+          ...secondCompleted,
+          combatRoundState: {
+            ...secondCompleted.combatRoundState!,
+            genericActions: secondCompleted.combatRoundState!.genericActions.map((action) => ({
+              ...action,
+              itemInteraction: {
+                ...action.itemInteraction!,
+                itemRevision: changes.revision ?? action.itemInteraction!.itemRevision,
+                operation: changes.operation ?? action.itemInteraction!.operation,
+                recipientParticipantId: changes.recipientParticipantId,
+              },
+            })),
+          },
+        });
+        return service.commitResolution({
+          ...secondInput,
+          encounterSession: forgedSession,
+          interaction: forgedSession.combatRoundState!.genericActions[0]!.itemInteraction!,
+          ownerCharacterId: changes.ownerCharacterId ?? secondInput.ownerCharacterId,
+          recipientCharacterId: changes.recipientCharacterId,
+        });
+      };
+
+      for (const changes of [
+        { operation: "use" as const },
+        { revision: "2026-08-16T00:00:00.000Z" },
+        {
+          recipientCharacterId: current.recipient.id,
+          recipientParticipantId: "participant-recipient-collision-second",
+        },
+        { ownerCharacterId: current.recipient.id },
+      ]) {
+        await expect(forge(changes)).rejects.toThrow();
+      }
+      expect(await current.itemRepository.getCanonicalEquipmentItemById(current.item.id)).toEqual(
+        beforeItem,
+      );
+      const afterForgedEncounter = await prisma!.encounter.findUniqueOrThrow({
+        include: { activeCombatState: true },
+        where: { id: secondEncounterId },
+      });
+      expect(afterForgedEncounter.updatedAt).toEqual(beforeEncounter.updatedAt);
+      expect(afterForgedEncounter.activeCombatState?.stateJson).toEqual(
+        beforeEncounter.activeCombatState?.stateJson,
+      );
+      expect(
+        await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
+      ).toBe(beforeEvents);
+
+      const second = await service.commitResolution(secondInput);
+      expect(second.item).toMatchObject({
+        alreadyApplied: false,
+        item: { holderCharacterId: null, id: current.item.id },
+      });
+      expect(second.item.item.revision).not.toBe(pickedUp.item.revision);
+      expect(await prisma!.characterEquipmentItem.count({ where: { id: current.item.id } })).toBe(
+        1,
+      );
+      expect(
+        await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
+      ).toBe(2);
+
+      const exactRetry = await service.commitResolution(secondInput);
+      expect(exactRetry.item).toMatchObject({
+        alreadyApplied: true,
+        item: { holderCharacterId: null, id: current.item.id },
+      });
+      expect(exactRetry.item.item.revision).toBe(second.item.item.revision);
+      expect(exactRetry.encounter.updatedAt).toBe(second.encounter.updatedAt);
+      expect(
+        await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
+      ).toBe(2);
+      const stored = await prisma!.characterEquipmentItem.findUniqueOrThrow({
+        where: { id: current.item.id },
+      });
+      expect(JSON.stringify(stored.statusTagsJson)).not.toContain("combat-item:applied");
     });
   });
 }

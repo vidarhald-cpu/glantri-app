@@ -576,10 +576,6 @@ export function createPrismaCharacterEquipmentRepository(
         }
 
         const storedTags = parseStoredStatusTags(current.statusTagsJson);
-        const appliedTag = `${COMBAT_ITEM_APPLIED_PREFIX}${input.actionId}`;
-        if (storedTags.includes(appliedTag)) {
-          return { alreadyApplied: true, item: mapCanonicalEquipmentItem(current) };
-        }
         if (current.updatedAt.toISOString() !== input.expectedItemRevision) {
           throw new CombatItemRevisionError();
         }
@@ -668,7 +664,9 @@ export function createPrismaCharacterEquipmentRepository(
         let isEquipped = current.isEquipped;
         let previousLocationId = current.previousLocationId;
         let previousCarryMode = current.previousCarryMode;
-        let nextTags = storedTags.filter((tag) => tag !== presentTag);
+        let nextTags = storedTags.filter(
+          (tag) => tag !== presentTag && !tag.startsWith(COMBAT_ITEM_APPLIED_PREFIX),
+        );
 
         if (input.operation === "draw") {
           if (current.holderCharacterId !== input.ownerCharacterId || !current.locationId) {
@@ -817,7 +815,6 @@ export function createPrismaCharacterEquipmentRepository(
           }
         }
 
-        nextTags = [...new Set([...nextTags, appliedTag])];
         const updated = await transaction.characterEquipmentItem.update({
           data: {
             carryMode,
