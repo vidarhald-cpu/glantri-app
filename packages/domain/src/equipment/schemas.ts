@@ -60,6 +60,10 @@ export const WeaponAttackModeProvenanceSchema = z.enum(["imported", "manual", "d
 
 export const WeaponAttackModeTypeSchema = z.enum(["melee", "missile", "thrown"]);
 
+export const WeaponDisarmCapabilitySchema = z.enum(["none", "trap"]);
+
+export const WeaponDisarmGripClassSchema = z.enum(["one_handed", "two_handed"]);
+
 export const EquipmentSpecialPropertiesSchema = z.object({
   magicEffects: z.array(z.string()).optional(),
   damageEffects: z.array(z.string()).optional(),
@@ -82,6 +86,29 @@ export const WeaponInitiativeOverrideFactSchema = z.object({
   value: z.number().int(),
   visibility: ItemFactVisibilitySchema.default("gm_only"),
 });
+
+export const WeaponDisarmCapabilityOverrideFactSchema = z.object({
+  id: z.string().trim().min(1),
+  kind: z.literal("weapon_disarm_capability_override"),
+  scope: z.literal("all_attack_modes").default("all_attack_modes"),
+  value: WeaponDisarmCapabilitySchema,
+  visibility: ItemFactVisibilitySchema.default("gm_only"),
+});
+
+export const WeaponDisarmControlOverrideFactSchema = z.object({
+  id: z.string().trim().min(1),
+  kind: z.literal("weapon_disarm_control_override"),
+  scope: z.literal("all_attack_modes").default("all_attack_modes"),
+  unit: z.literal("control_rating").default("control_rating"),
+  value: z.number().int().min(1).max(6),
+  visibility: ItemFactVisibilitySchema.default("gm_only"),
+});
+
+export const EquipmentTemplateOverrideFactSchema = z.discriminatedUnion("kind", [
+  WeaponInitiativeOverrideFactSchema,
+  WeaponDisarmCapabilityOverrideFactSchema,
+  WeaponDisarmControlOverrideFactSchema,
+]);
 
 export const FinalAttackObDeltaFactSchema = z.object({
   calculationStage: z.literal("final_attack_ob").default("final_attack_ob"),
@@ -124,7 +151,7 @@ export const EquipmentItemFactsV1Schema = z
   .object({
     activeMechanics: z.array(FinalAttackObDeltaFactSchema).default([]),
     descriptiveTraits: z.array(DescriptiveItemTraitSchema).default([]),
-    templateOverrides: z.array(WeaponInitiativeOverrideFactSchema).default([]),
+    templateOverrides: z.array(EquipmentTemplateOverrideFactSchema).default([]),
     unsupportedCapabilities: z.array(UnsupportedItemCapabilitySchema).default([]),
     version: z.literal(1),
   })
@@ -143,10 +170,11 @@ export const EquipmentItemFactsV1Schema = z
       });
     }
 
-    if (facts.templateOverrides.length > 1) {
+    const overrideKinds = facts.templateOverrides.map((fact) => fact.kind);
+    if (new Set(overrideKinds).size !== overrideKinds.length) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "weapon_initiative_override does not stack.",
+        message: "Equipment template overrides do not stack by kind.",
         path: ["templateOverrides"],
       });
     }
@@ -367,6 +395,9 @@ export const WeaponTemplateSchema = EquipmentTemplateSchema.extend({
   manualEnrichment: WeaponTemplateManualEnrichmentSchema.nullable().optional(),
   formulaNormalization: WeaponTemplateFormulaNormalizationSchema.nullable().optional(),
   durabilityProfile: WeaponDurabilityProfileSchema.nullable().optional(),
+  disarmCapability: WeaponDisarmCapabilitySchema.nullable().optional(),
+  disarmGripClass: WeaponDisarmGripClassSchema.nullable().optional(),
+  disarmControlOverride: z.number().int().min(1).max(6).nullable().optional(),
 });
 
 export const ShieldTemplateSchema = EquipmentTemplateSchema.extend({

@@ -111,6 +111,31 @@ describe("themistogenes weapon enrichments", () => {
     expect(broadSword?.attackModes?.[0]?.allowsRepeatedRoundAttack).not.toBe(true);
   });
 
+  it("authors only the accepted default Disarm capability and one-handed polearm overrides", () => {
+    const capable = [
+      "weapon-template-main-gauche",
+      "weapon-template-swordbreaker",
+      "weapon-template-rapier",
+      "weapon-template-fencing-sword",
+    ];
+    for (const id of capable) expect(enrichedById[id]?.disarmCapability).toBe("trap");
+    for (const id of [
+      "weapon-template-broad-sword",
+      "weapon-template-sabre",
+      "weapon-template-dagger",
+      "weapon-template-maul",
+      "weapon-template-1-h-spear",
+    ]) {
+      expect(enrichedById[id]?.disarmCapability).toBe("none");
+    }
+    expect(enrichedById["weapon-template-1-h-javelin"]?.disarmGripClass).toBe("one_handed");
+    expect(enrichedById["weapon-template-1-h-spear"]?.disarmGripClass).toBe("one_handed");
+    expect(enrichedById["weapon-template-maul"]?.disarmGripClass).toBeNull();
+    expect(enrichedById["weapon-template-rapier"]?.attackModes?.[0]).toMatchObject({
+      allowsRepeatedRoundAttack: true,
+    });
+  });
+
   it("preserves Lance primary Charge attack explicitly while keeping Second crit. on that primary mode", () => {
     const lance = enrichedById["weapon-template-lance"];
 

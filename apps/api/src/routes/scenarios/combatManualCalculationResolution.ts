@@ -283,3 +283,60 @@ export function resolveCanonicalParryBase(input: {
     usedOffHand,
   };
 }
+
+/** Resolves a special Parry from one exact, currently wielded weapon Item. */
+export function resolveCanonicalWeaponParryBase(input: {
+  expectedItemRevision: string;
+  expectedTemplateId: string;
+  participant: ScenarioParticipant;
+  weaponItemId: string;
+}): CanonicalParryBase {
+  const context = resolveCanonicalParticipantCalculationContext(input.participant);
+  if (context.completeness !== "complete") return context;
+  const item = context.itemsById.get(input.weaponItemId);
+  const isPrimary = context.loadout?.activePrimaryWeaponItemId === input.weaponItemId;
+  const isSecondary = context.loadout?.activeSecondaryWeaponItemId === input.weaponItemId;
+  const template = context.templatesById.get(input.expectedTemplateId);
+  if (
+    !item ||
+    (!isPrimary && !isSecondary) ||
+    item.templateId !== input.expectedTemplateId ||
+    item.revision !== input.expectedItemRevision ||
+    item.conditionState !== "intact" ||
+    item.storageAssignment?.carryMode !== "equipped" ||
+    template?.category !== "weapon"
+  ) {
+    return incomplete({
+      missingFacts: ["parry_source_identity"],
+      participantId: input.participant.id,
+      sourceSnapshotId: context.sourceSnapshotId,
+    });
+  }
+  const score = parryScore(
+    getWorkbookWeaponRowParry({
+      armorTemplate: context.armorTemplate,
+      characterInputs: context.characterInputs,
+      template,
+    }),
+  );
+  if (score === undefined) {
+    return incomplete({
+      missingFacts: ["parry_base"],
+      participantId: input.participant.id,
+      sourceSnapshotId: context.sourceSnapshotId,
+    });
+  }
+  return {
+    authority: "canonical_scenario_state",
+    combinedParryScore: score,
+    completeness: "complete",
+    equipmentLoadoutRevision: context.equipmentLoadoutRevision,
+    mainHandParryScore: isPrimary ? score : undefined,
+    offHandParryScore: isSecondary ? score : undefined,
+    participantId: input.participant.id,
+    parrySourceLabel: template.name,
+    sourceSnapshotId: context.sourceSnapshotId,
+    usedMainHand: isPrimary,
+    usedOffHand: isSecondary,
+  };
+}

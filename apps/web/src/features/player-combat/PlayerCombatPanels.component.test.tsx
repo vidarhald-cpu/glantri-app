@@ -226,7 +226,8 @@ describe("PlayerCombatActionSelectorPanel", () => {
     expect(Array.from(primary.options).map((option) => option.value)).not.toContain(
       "counterattack",
     );
-    expect(Array.from(primary.options).map((option) => option.value)).not.toContain("disarm");
+    expect(Array.from(primary.options).map((option) => option.value)).toContain("disarm");
+    expect(Array.from(primary.options).map((option) => option.value)).toContain("parry_disarm");
 
     rerender(
       <PlayerCombatActionSelectorPanel

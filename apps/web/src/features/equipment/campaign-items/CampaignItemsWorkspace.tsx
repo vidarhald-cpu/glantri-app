@@ -28,6 +28,7 @@ const panelStyle = {
 
 const emptyFacts = (): CampaignItemFactDraft => ({
   descriptiveTraits: [],
+  templateOverrides: [],
   unsupportedCapabilities: [],
 });
 
@@ -48,9 +49,18 @@ function itemToDraft(item: CanonicalEquipmentItem): Draft {
       finalAttackObDelta: item.itemFacts.activeMechanics[0]
         ? { ...item.itemFacts.activeMechanics[0] }
         : null,
-      initiativeOverride: item.itemFacts.templateOverrides[0]
-        ? { ...item.itemFacts.templateOverrides[0] }
+      initiativeOverride: item.itemFacts.templateOverrides.find(
+        (override) => override.kind === "weapon_initiative_override",
+      )
+        ? {
+            ...item.itemFacts.templateOverrides.find(
+              (override) => override.kind === "weapon_initiative_override",
+            )!,
+          }
         : null,
+      templateOverrides: item.itemFacts.templateOverrides
+        .filter((override) => override.kind !== "weapon_initiative_override")
+        .map((override) => ({ ...override })),
       unsupportedCapabilities: item.itemFacts.unsupportedCapabilities.map((fact) => ({ ...fact })),
     },
     holderCharacterId: item.holderCharacterId ?? "",

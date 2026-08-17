@@ -22,7 +22,7 @@ export function buildCombatParryModifierRequest(input: {
   encounterId: string;
   encounterRevision?: string;
   opportunityId: string;
-  parryPurpose: "ordinary_defense" | "offensive_parry";
+  parryPurpose: "ordinary_defense" | "offensive_parry" | "parry_disarm";
   parrySourceId: string;
   processId: string;
   stageId: string;

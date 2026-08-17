@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   commitParticipantReview: vi.fn(),
   runStepWorkflow: vi.fn(),
   loadEncounter: vi.fn(),
+  loadItemOptions: vi.fn().mockResolvedValue(undefined),
   loadParticipants: vi.fn(),
   rollAttack: vi.fn(),
   rollFeint: vi.fn(),
@@ -49,6 +50,7 @@ vi.mock("@/lib/api/encounterClient", async (importOriginal) => {
     runGmCombatStepWorkflowOnServer: mocks.runStepWorkflow,
     commitRoundEndParticipantReviewOnServer: mocks.commitParticipantReview,
     loadEncounterById: mocks.loadEncounter,
+    loadCombatItemInteractionOptions: mocks.loadItemOptions,
     rollCombatAttackOnServer: mocks.rollAttack,
     rollCombatFeintOnServer: mocks.rollFeint,
     rollCombatObservationOnServer: mocks.rollObservation,
@@ -1816,6 +1818,13 @@ describe("CombatRoundManagerPanel GM attack proxy", () => {
     );
     mocks.loadEncounter.mockResolvedValue(refreshedEncounter);
     mocks.loadParticipants.mockResolvedValue(participants);
+    let rejectItemOptions: ((reason?: unknown) => void) | undefined;
+    mocks.loadItemOptions.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectItemOptions = reject;
+        }),
+    );
 
     render(
       <CombatRoundManagerPanel
@@ -1831,11 +1840,17 @@ describe("CombatRoundManagerPanel GM attack proxy", () => {
     await waitFor(() => expect(mocks.loadEncounter).toHaveBeenCalledTimes(1));
     expect(mocks.loadParticipants).toHaveBeenCalledTimes(1);
     expect(mocks.rollAttack).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mocks.loadItemOptions).toHaveBeenCalled());
+    await act(async () => {
+      rejectItemOptions?.(new Error("Optional Disarm options unavailable."));
+      await Promise.resolve();
+    });
     expect(
       screen.getByText(
         "Combat changed in another view. The current action was refreshed; review it before retrying.",
       ),
     ).toBeInTheDocument();
+    expect(screen.queryByText("Optional Disarm options unavailable.")).not.toBeInTheDocument();
   });
 });
 

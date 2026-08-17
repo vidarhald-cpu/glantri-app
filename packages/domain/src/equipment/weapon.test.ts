@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { WeaponTemplateSchema } from "./schemas";
-import { resolvePreferredAttackMode } from "./weapon";
+import {
+  deriveWeaponDisarmControlRating,
+  resolvePreferredAttackMode,
+  resolveWeaponDisarmMismatch,
+  resolveWeaponDisarmProfile,
+} from "./weapon";
 import type { WeaponTemplate } from "./types";
 
 function weapon(attackModes: WeaponTemplate["attackModes"]): WeaponTemplate {
@@ -127,5 +132,100 @@ describe("resolvePreferredAttackMode", () => {
     expect(
       resolvePreferredAttackMode({ requireRepeatedRoundAttack: true, weapon: legacy }).mode,
     ).toBeUndefined();
+  });
+});
+
+describe("Disarm weapon-control profile", () => {
+  it("clamps Encumbrance tiers, adds two-hand control, and protects gap boundaries", () => {
+    expect(
+      deriveWeaponDisarmControlRating({ baseEncumbrance: 0, gripClass: "one_handed" }),
+    ).toEqual({
+      controlRating: 1,
+      encumbranceTier: 1,
+    });
+    expect(
+      deriveWeaponDisarmControlRating({ baseEncumbrance: 15, gripClass: "two_handed" }),
+    ).toEqual({
+      controlRating: 6,
+      encumbranceTier: 5,
+    });
+    expect(
+      deriveWeaponDisarmControlRating({ baseEncumbrance: 99, gripClass: "one_handed" }),
+    ).toEqual({
+      controlRating: 5,
+      encumbranceTier: 5,
+    });
+    expect(resolveWeaponDisarmMismatch({ actingControlRating: 1, targetControlRating: 4 })).toEqual(
+      {
+        feasible: true,
+        gap: 3,
+        modifier: -9,
+      },
+    );
+    expect(resolveWeaponDisarmMismatch({ actingControlRating: 1, targetControlRating: 5 })).toEqual(
+      {
+        feasible: false,
+        gap: 4,
+        modifier: -12,
+      },
+    );
+    expect(resolveWeaponDisarmMismatch({ actingControlRating: 5, targetControlRating: 1 })).toEqual(
+      {
+        feasible: true,
+        gap: 0,
+        modifier: 0,
+      },
+    );
+  });
+
+  it("uses typed Item add/remove and control overrides without weapon-name inference", () => {
+    const template = weapon([]);
+    const added = resolveWeaponDisarmProfile({
+      itemFacts: {
+        activeMechanics: [],
+        descriptiveTraits: [],
+        templateOverrides: [
+          {
+            id: "capability",
+            kind: "weapon_disarm_capability_override",
+            scope: "all_attack_modes",
+            value: "trap",
+            visibility: "revealed",
+          },
+          {
+            id: "control",
+            kind: "weapon_disarm_control_override",
+            scope: "all_attack_modes",
+            unit: "control_rating",
+            value: 4,
+            visibility: "revealed",
+          },
+        ],
+        unsupportedCapabilities: [],
+        version: 1,
+      },
+      template,
+    });
+    expect(added).toMatchObject({ capability: "trap", controlRating: 4 });
+
+    const removed = resolveWeaponDisarmProfile({
+      itemFacts: {
+        activeMechanics: [],
+        descriptiveTraits: [],
+        templateOverrides: [
+          {
+            id: "damaged-trap",
+            kind: "weapon_disarm_capability_override",
+            scope: "all_attack_modes",
+            value: "none",
+            visibility: "revealed",
+          },
+        ],
+        unsupportedCapabilities: [],
+        version: 1,
+      },
+      template: { ...template, disarmCapability: "trap" },
+    });
+    expect(removed.capability).toBe("none");
   });
 });

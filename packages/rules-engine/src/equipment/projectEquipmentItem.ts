@@ -72,7 +72,9 @@ export function projectEquipmentItem(
   }
 
   const facts = EquipmentItemFactsV1Schema.parse(item.itemFacts);
-  const initiativeOverride = facts.templateOverrides[0];
+  const initiativeOverride = facts.templateOverrides.find(
+    (override) => override.kind === "weapon_initiative_override",
+  );
 
   if (initiativeOverride && (item.category !== "weapon" || template.category !== "weapon")) {
     throw new Error("weapon_initiative_override requires a weapon item and template.");

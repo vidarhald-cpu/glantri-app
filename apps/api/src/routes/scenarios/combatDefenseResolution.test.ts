@@ -15,6 +15,7 @@ import { resolveCanonicalScenarioParticipantDefense } from "./combatDefenseResol
 import {
   resolveCanonicalAttackOffense,
   resolveCanonicalParryBase,
+  resolveCanonicalWeaponParryBase,
 } from "./combatManualCalculationResolution";
 
 function buildParticipant(): ScenarioParticipant {
@@ -134,6 +135,7 @@ function buildArmedParticipant(): ScenarioParticipant {
     material: "steel" as const,
     quality: "standard" as const,
     quantity: 1,
+    revision: "2026-08-07T09:00:00.000Z",
     specificityType: "generic" as const,
     storageAssignment: { carryMode: "equipped" as const, locationId },
     templateId,
@@ -244,8 +246,7 @@ describe("server-owned combat defense resolution", () => {
       equipment: { sourceKind: "unarmed" },
       flatDbAdjustment: 1,
       participantId: "scenario-defender",
-      sourceSnapshotId:
-        "scenario-participant:scenario-defender:snapshot:2026-08-07T09:00:00.000Z",
+      sourceSnapshotId: "scenario-participant:scenario-defender:snapshot:2026-08-07T09:00:00.000Z",
     });
     if (calculation.completeness === "complete") {
       expect(calculation.effectiveDb).toBe(calculation.percentage.db + 1);
@@ -333,9 +334,7 @@ describe("server-owned combat defense resolution", () => {
       sameGroupCalculation.completeness === "complete" &&
       laterGroupCalculation.completeness === "complete"
     ) {
-      expect(laterGroupCalculation.effectiveDb).toBeLessThan(
-        sameGroupCalculation.effectiveDb,
-      );
+      expect(laterGroupCalculation.effectiveDb).toBeLessThan(sameGroupCalculation.effectiveDb);
     }
   });
 });
@@ -394,6 +393,97 @@ describe("server-owned manual combat inputs", () => {
       expect(calculation.mainHandParryScore).toEqual(expect.any(Number));
       expect(calculation.offHandParryScore).toEqual(expect.any(Number));
     }
+  });
+
+  it("binds special Parry to one exact main/off-hand weapon and excludes combined sources", () => {
+    const participant = buildArmedParticipant();
+    const equipmentState = participant.snapshot.equipmentState as {
+      itemsById: Record<string, { templateId: string }>;
+    };
+    const mainHand = resolveCanonicalWeaponParryBase({
+      expectedItemRevision: "2026-08-07T09:00:00.000Z",
+      expectedTemplateId: equipmentState.itemsById["item-primary"]!.templateId,
+      participant,
+      weaponItemId: "item-primary",
+    });
+    const offHand = resolveCanonicalWeaponParryBase({
+      expectedItemRevision: "2026-08-07T09:00:00.000Z",
+      expectedTemplateId: equipmentState.itemsById["item-secondary"]!.templateId,
+      participant,
+      weaponItemId: "item-secondary",
+    });
+    const forgedCombined = resolveCanonicalParryBase({
+      participant,
+      usedMainHand: true,
+      usedOffHand: true,
+    });
+
+    expect(mainHand).toMatchObject({
+      completeness: "complete",
+      offHandParryScore: undefined,
+      parrySourceLabel: "Long sword",
+      usedMainHand: true,
+      usedOffHand: false,
+    });
+    expect(offHand).toMatchObject({
+      completeness: "complete",
+      mainHandParryScore: undefined,
+      parrySourceLabel: "Dagger",
+      usedMainHand: false,
+      usedOffHand: true,
+    });
+    if (mainHand.completeness === "complete" && forgedCombined.completeness === "complete") {
+      expect(mainHand.combinedParryScore).not.toBe(forgedCombined.combinedParryScore);
+    }
+  });
+
+  it("rejects stale, mismatched, and no-longer-wielded special Parry Items", () => {
+    const participant = buildArmedParticipant();
+    const equipmentState = participant.snapshot.equipmentState as {
+      activeLoadoutByCharacterId: Record<string, Record<string, unknown>>;
+      itemsById: Record<string, { templateId: string }>;
+    };
+    const primaryTemplateId = equipmentState.itemsById["item-primary"]!.templateId;
+    const resolve = (override: Partial<Parameters<typeof resolveCanonicalWeaponParryBase>[0]>) =>
+      resolveCanonicalWeaponParryBase({
+        expectedItemRevision: "2026-08-07T09:00:00.000Z",
+        expectedTemplateId: primaryTemplateId,
+        participant,
+        weaponItemId: "item-primary",
+        ...override,
+      });
+
+    expect(resolve({ expectedItemRevision: "2026-08-07T08:00:00.000Z" })).toMatchObject({
+      completeness: "partial",
+      missingFacts: ["parry_source_identity"],
+    });
+    expect(resolve({ expectedTemplateId: "weapon-template-dagger" })).toMatchObject({
+      completeness: "partial",
+      missingFacts: ["parry_source_identity"],
+    });
+    expect(
+      resolve({
+        participant: {
+          ...participant,
+          snapshot: {
+            ...participant.snapshot,
+            equipmentState: {
+              ...equipmentState,
+              activeLoadoutByCharacterId: {
+                [participant.characterId!]: {
+                  ...equipmentState.activeLoadoutByCharacterId[participant.characterId!],
+                  activePrimaryWeaponItemId: null,
+                  quickAccessItemIds: ["item-primary"],
+                },
+              },
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      completeness: "partial",
+      missingFacts: ["parry_source_identity"],
+    });
   });
 
   it("fails closed instead of accepting presentation totals for incomplete participants", () => {

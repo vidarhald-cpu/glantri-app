@@ -1593,6 +1593,199 @@ describe("authorizeCombatProgressionTask", () => {
     ).toMatchObject({ code: "task_mismatch", ok: false });
   });
 
+  it.each([
+    ["hit", 80, 20],
+    ["miss", 0, 1],
+  ] as const)(
+    "routes a reactive Parry-Disarm %s to the defender's canonical player and GM parry task",
+    (_outcome, ob, rollTotal) => {
+      const attemptId = "disarm:round:2:phase1:actor:guard";
+      const opportunityId = "round:2:participant:hero:phase1:attack_1";
+      const initial = state({
+        cursorParticipantId: "hero",
+        cursorStep: "A1",
+        currentStep: "phase_1_actions",
+        overrides: {
+          disarmAttempts: [
+            {
+              actingParticipantId: "guard",
+              actingWeaponItemId: "item-main-gauche",
+              actingWeaponTemplateId: "weapon-template-main-gauche",
+              contactQualityModifier: 0,
+              disarmCapability: "trap",
+              id: attemptId,
+              method: "reactive_parry",
+              phase: "phase1",
+              resistingParticipantId: "hero",
+              roundNumber: 2,
+              status: "awaiting_contact",
+              targetWeaponItemId: "item-hero-sword",
+              targetWeaponItemRevision: "2026-07-19T09:00:00.000Z",
+              targetWeaponTemplateId: "weapon-template-sword",
+            },
+          ],
+          phaseResolutionCursor: { participantId: "hero", phase: "phase1", substep: "attack" },
+        },
+        participantOverrides: [
+          {
+            declaration: {
+              actionId: "attack_parry",
+              attackOpportunities: [
+                {
+                  actionId: "attack_parry",
+                  attackIndex: 1,
+                  attackModeId: "mode-sword",
+                  declarationId: "round:2:participant:hero:declaration",
+                  id: opportunityId,
+                  itemId: "item-hero-sword",
+                  origin: "declared",
+                  phase: "phase1",
+                  slot: "attack_1",
+                  sourceKind: "weapon",
+                  status: "committed",
+                  targetParticipantId: "guard",
+                  weaponInstanceId: "item-hero-sword",
+                  weaponSourceId: "item:item-hero-sword",
+                  weaponSourceSlot: "primary",
+                  weaponTemplateId: "weapon-template-sword",
+                },
+              ],
+              phaseContexts: { phase1: { targetParticipantId: "guard" } },
+              roundNumber: 2,
+              submittedBy: "player",
+            },
+          },
+          {
+            declaration: {
+              actionId: "parry_disarm",
+              disarm: {
+                actingWeapon: {
+                  capability: "trap",
+                  controlRating: 2,
+                  itemId: "item-main-gauche",
+                  itemRevision: "2026-07-19T09:00:00.000Z",
+                  label: "Main gauche",
+                  parryModifier: 2,
+                  templateId: "weapon-template-main-gauche",
+                },
+                method: "reactive_parry",
+                phase: "phase1",
+                targetParticipantId: "hero",
+                targetWeapon: {
+                  capability: "none",
+                  controlRating: 3,
+                  itemId: "item-hero-sword",
+                  itemRevision: "2026-07-19T09:00:00.000Z",
+                  label: "Sword",
+                  parryModifier: 0,
+                  templateId: "weapon-template-sword",
+                },
+              },
+              roundNumber: 2,
+              submittedBy: "player",
+            },
+          },
+        ],
+      });
+      const attackResult = buildCombatRoundAttackRollResult({
+        actionId: "attack_parry",
+        attackIndex: 1,
+        attackModeId: "mode-sword",
+        attackOpportunityId: opportunityId,
+        attackSlot: "attack_1",
+        attackerParticipantId: "hero",
+        declarationId: "round:2:participant:hero:declaration",
+        defenderDb: 0,
+        defenderParticipantId: "guard",
+        ob,
+        phase: "phase1",
+        rollD20: rollTotal,
+        rollTotal,
+        rolledAt: "2026-07-19T10:00:00.000Z",
+        weaponInstanceId: "item-hero-sword",
+        weaponName: "Sword",
+        weaponSourceId: "item:item-hero-sword",
+        weaponSourceSlot: "primary",
+        weaponTemplateId: "weapon-template-sword",
+      });
+      const afterAttack = recordCombatRoundAttackResult({
+        command: { commandId: `attack-${_outcome}`, createdAt: attackResult.rolledAt },
+        participantId: "hero",
+        result: attackResult,
+        state: initial,
+        submittedBy: "player",
+      });
+
+      expect(afterAttack).toMatchObject({
+        phaseResolutionCursor: { participantId: "guard", phase: "phase1", substep: "parry" },
+        selectedParticipantId: "guard",
+        selectedStep: "review_phase_2_actions",
+      });
+      const projection = buildCombatProgressionProjection(afterAttack);
+      const gmTask = projection.boundary.processes
+        .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+        .find((task) => task.kind === "parry");
+      const playerProjection = projectCombatProgressionPresentation({
+        projection,
+        viewer: {
+          controlledParticipantIds: new Set(["guard"]),
+          kind: "player",
+          visibleParticipantIds: new Set(["guard"]),
+        },
+      });
+      const playerTask = playerProjection.processes
+        .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+        .find((task) => task.kind === "parry");
+      expect(gmTask).toMatchObject({
+        expectedCommand: "roll_parry",
+        identity: {
+          disarmAttemptId: attemptId,
+          parryPurpose: "parry_disarm",
+          parrySourceId: "declared-disarm-weapon",
+        },
+        owner: { participantId: "guard" },
+      });
+      expect(playerTask).toMatchObject({
+        actorAccess: { combatant: true },
+        expectedCommand: "roll_parry",
+        identity: {
+          disarmAttemptId: attemptId,
+          parryPurpose: "parry_disarm",
+          parrySourceId: "declared-disarm-weapon",
+        },
+        owner: { participantId: "guard" },
+      });
+      const safeAfterAttack = {
+        ...afterAttack,
+        disarmAttempts: afterAttack.disarmAttempts.map((attempt) => ({
+          ...attempt,
+          actingWeaponItemId: "redacted:disarm:acting-weapon",
+          actingWeaponTemplateId: "redacted:disarm:acting-template",
+          targetWeaponItemId: "redacted:disarm:target-weapon",
+          targetWeaponItemRevision: "1970-01-01T00:00:00.000Z",
+          targetWeaponTemplateId: "redacted:disarm:target-template",
+        })),
+        participants: afterAttack.participants.map((participant) =>
+          participant.participantId === "guard" && participant.declaration
+            ? { ...participant, declaration: { ...participant.declaration, disarm: undefined } }
+            : participant,
+        ),
+      };
+      const safeTask = buildCombatProgressionProjection(safeAfterAttack)
+        .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+        .find((task) => task.kind === "parry");
+      expect(safeTask).toMatchObject({
+        identity: {
+          disarmAttemptId: attemptId,
+          parryPurpose: "parry_disarm",
+          parrySourceId: "declared-disarm-weapon",
+        },
+      });
+      expect(JSON.stringify(playerProjection)).not.toContain("item-main-gauche");
+      expect(JSON.stringify(playerProjection)).not.toContain('"participantId":"hero"');
+    },
+  );
+
   it("projects the recorded hit as one live defender task with canonical attack context", () => {
     const initial = state({
       cursorParticipantId: "hero",

@@ -62,6 +62,7 @@ export function getCombatRoundStepForProgressionBoundary(
 export type CombatProgressionProcessKind =
   | "adjust_distance"
   | "break_off"
+  | "disarm"
   | "attack_decision"
   | "attack"
   | "combat_experience"
@@ -129,6 +130,9 @@ export type CombatProgressionTaskKind =
   | "break_off_escapee_roll"
   | "break_off_attacker_roll"
   | "break_off_commit"
+  | "disarm_actor_roll"
+  | "disarm_holder_roll"
+  | "disarm_commit"
   | "combat_experience"
   | "continued_contact_maintenance_roll"
   | "critical"
@@ -209,6 +213,7 @@ export interface CombatProgressionTaskIdentity {
   readonly damageRollExpression?: string;
   readonly damageReviewId?: string;
   readonly declarationId?: string;
+  readonly disarmAttemptId?: string;
   readonly declaredOpponentParticipantId?: string;
   readonly defenderParticipantId?: string;
   readonly executionGroupId: string;

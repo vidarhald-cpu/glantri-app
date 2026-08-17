@@ -55,7 +55,7 @@ describe("combat declaration target validation", () => {
   });
 
   it("marks active legacy unsupported declarations incomplete instead of substituting an attack", () => {
-    for (const actionId of ["counterattack", "disarm", "parry_disarm", "other"]) {
+    for (const actionId of ["counterattack", "other"]) {
       expect(
         validateCombatDeclarationTargets({
           actionId,
@@ -67,6 +67,13 @@ describe("combat declaration target validation", () => {
         message: `Combat action is not yet available: ${actionId}.`,
         missingPhases: [],
         valid: false,
+      });
+    }
+
+    for (const actionId of ["disarm", "parry_disarm"]) {
+      expect(validateCombatDeclarationTargets({ actionId })).toMatchObject({
+        missingPhases: [],
+        valid: true,
       });
     }
   });

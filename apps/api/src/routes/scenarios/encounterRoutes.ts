@@ -127,6 +127,7 @@ import {
   getCombatRoundCriticalResultId,
   getCanonicalAttackOpportunityIdentity,
   getCombatRoundDamageReviewId,
+  resolveCombatDisarmContactQualityModifier,
   getCombatRoundGrazeDamageRollContext,
   getCombatRoundCombatExperienceDifficulty,
   getCombatDistanceParticipantAliases,
@@ -161,10 +162,15 @@ import {
   reviewCombatRoundBreakOff,
   recordCombatRoundAdjustDistanceRoll,
   recordCombatRoundBreakOffRoll,
+  recordCombatRoundDisarmRoll,
   commitCombatRoundAdjustDistance,
   commitCombatRoundBreakOff,
+  commitCombatRoundDisarm,
+  cancelCombatRoundDisarmWithoutContact,
+  openCombatRoundDisarmAfterContact,
   combatAdjustDistanceRollResultSchema,
   combatBreakOffRollSchema,
+  combatDisarmRollSchema,
   combatRoundEndDistanceRollResultSchema,
   recordCombatRoundFeintRoll,
   commitCombatRoundFeintResult,
@@ -255,6 +261,8 @@ import type {
   CombatParryModifierValidationProjection,
   CombatActionGeneratedDistanceModifierInput,
   CombatAttackSourceRef,
+  CombatDisarmAttempt,
+  CombatDisarmRoll,
   CombatDistanceWeaponLike,
   CombatRoundAttackOpportunity,
   CombatRoundCommand,
@@ -312,6 +320,7 @@ import {
   getCombatMovementModifierApplicability,
   resolveCombatObservationSkillProfile,
   resolveGenericCombatActionRoll,
+  resolveCombatDisarmRoll,
 } from "@glantri/rules-engine";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
@@ -330,6 +339,7 @@ import { resolveCanonicalCombatInitiativeBaseForTask } from "./combatInitiativeR
 import {
   resolveCanonicalAttackOffense,
   resolveCanonicalParryBase,
+  resolveCanonicalWeaponParryBase,
 } from "./combatManualCalculationResolution";
 
 const campaignService = instrumentCombatService(new CampaignService(), {
@@ -1513,6 +1523,15 @@ function parseCombatDeclarationBody(body: unknown): ParsedCombatTaskCommandIdent
     method: "movement" | "weapon";
     targetParticipantId: string;
   };
+  disarm?: {
+    actingItemId: string;
+    actingItemRevision: string;
+    method: "proactive" | "reactive_parry";
+    phase: "phase1" | "phase2";
+    targetItemId: string;
+    targetItemRevision: string;
+    targetParticipantId: string;
+  };
 } {
   const value = parseBodyObject(body, "Combat declaration payload");
   const scenarioParticipantId = value.scenarioParticipantId;
@@ -1569,6 +1588,37 @@ function parseCombatDeclarationBody(body: unknown): ParsedCombatTaskCommandIdent
               (value.feint as Record<string, unknown>).targetParticipantId,
             ),
           }
+        : undefined,
+    disarm:
+      value.disarm && typeof value.disarm === "object"
+        ? (() => {
+            const disarm = value.disarm as Record<string, unknown>;
+            const method =
+              disarm.method === "proactive" || disarm.method === "reactive_parry"
+                ? disarm.method
+                : undefined;
+            const phase =
+              disarm.phase === "phase1" || disarm.phase === "phase2" ? disarm.phase : undefined;
+            if (!method || !phase) throw new Error("Choose a valid Disarm method and phase.");
+            return {
+              actingItemId: parseNonEmptyString(disarm.actingItemId, "actingItemId"),
+              actingItemRevision: parseNonEmptyString(
+                disarm.actingItemRevision,
+                "actingItemRevision",
+              ),
+              method,
+              phase,
+              targetItemId: parseNonEmptyString(disarm.targetItemId, "targetItemId"),
+              targetItemRevision: parseNonEmptyString(
+                disarm.targetItemRevision,
+                "targetItemRevision",
+              ),
+              targetParticipantId: parseNonEmptyString(
+                disarm.targetParticipantId,
+                "targetParticipantId",
+              ),
+            };
+          })()
         : undefined,
   };
 }
@@ -2630,6 +2680,25 @@ function getCombatThrownWeaponAttackUndo(
   return value as unknown as CombatThrownWeaponAttackUndo;
 }
 
+function getCombatDisarmItemUndo(
+  command: CombatRoundCommand,
+): CombatThrownWeaponAttackUndo | undefined {
+  const value = command.facts.disarmItemUndo;
+  if (!isRecord(value) || value.version !== 1 || value.actionId !== command.id) return undefined;
+  if (
+    command.type !== "commit_disarm" ||
+    typeof value.encounterId !== "string" ||
+    typeof value.itemAfterRevision !== "string" ||
+    typeof value.ownerCharacterId !== "string" ||
+    !isRecord(value.itemBefore) ||
+    typeof value.itemBefore.id !== "string" ||
+    !Array.isArray(value.loadoutsBefore)
+  ) {
+    return undefined;
+  }
+  return value as unknown as CombatThrownWeaponAttackUndo;
+}
+
 function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & {
   attackResultId: string;
   attackerParticipantId: string;
@@ -2637,12 +2706,13 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
   effectCutoffInitiativeGroupId?: string;
   declarationId?: string;
   declaredOpponentParticipantId?: string;
+  disarmAttemptId?: string;
   defenderParticipantId: string;
   expectedParticipantRevision: string;
   modifierValidationTaskId: string;
   offensiveParryAttemptId?: string;
   opportunityId?: string;
-  parryPurpose: "ordinary_defense" | "offensive_parry";
+  parryPurpose: "ordinary_defense" | "offensive_parry" | "parry_disarm";
   parrySourceId: string;
   phase: CombatRoundPhase;
   processId: string;
@@ -2658,7 +2728,9 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
     throw new Error("commandType must be roll_parry.");
   }
   const parryPurpose =
-    value.parryPurpose === "ordinary_defense" || value.parryPurpose === "offensive_parry"
+    value.parryPurpose === "ordinary_defense" ||
+    value.parryPurpose === "offensive_parry" ||
+    value.parryPurpose === "parry_disarm"
       ? value.parryPurpose
       : undefined;
   if (!parryPurpose) {
@@ -2676,6 +2748,10 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
     value.offensiveParryAttemptId === undefined
       ? undefined
       : parseNonEmptyString(value.offensiveParryAttemptId, "offensiveParryAttemptId");
+  const disarmAttemptId =
+    value.disarmAttemptId === undefined
+      ? undefined
+      : parseNonEmptyString(value.disarmAttemptId, "disarmAttemptId");
   if (
     parryPurpose === "offensive_parry" &&
     (!declarationId ||
@@ -2686,6 +2762,9 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
     throw new Error(
       "Offensive Parry requires declarationId, declaredOpponentParticipantId, offensiveParryAttemptId, and opportunityId.",
     );
+  }
+  if (parryPurpose === "parry_disarm" && !disarmAttemptId) {
+    throw new Error("Parry-Disarm requires disarmAttemptId.");
   }
 
   return {
@@ -2703,6 +2782,7 @@ function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & 
         : parseNonEmptyString(value.effectCutoffInitiativeGroupId, "effectCutoffInitiativeGroupId"),
     declarationId,
     declaredOpponentParticipantId,
+    disarmAttemptId,
     defenderParticipantId: parseNonEmptyString(
       value.defenderParticipantId,
       "defenderParticipantId",
@@ -3082,6 +3162,43 @@ function getScenarioParticipantActiveWeaponItemIds(participant: ScenarioParticip
     activeLoadout?.["activeSecondaryWeaponItemId"],
     activeLoadout?.["activeMissileWeaponItemId"],
   ].filter((itemId): itemId is string => typeof itemId === "string" && itemId.length > 0);
+}
+
+function getScenarioParticipantWieldedWeaponItemIds(participant: ScenarioParticipant): string[] {
+  const equipmentState = getSnapshotEquipmentState(participant);
+  const activeLoadoutsValue = equipmentState?.["activeLoadoutByCharacterId"];
+  const activeLoadouts = isRecord(activeLoadoutsValue) ? activeLoadoutsValue : undefined;
+  const characterId =
+    participant.characterId ??
+    (activeLoadouts ? Object.keys(activeLoadouts).find((key) => key.trim().length > 0) : undefined);
+  const activeLoadoutValue = characterId ? activeLoadouts?.[characterId] : undefined;
+  const activeLoadout = isRecord(activeLoadoutValue) ? activeLoadoutValue : undefined;
+  return [
+    activeLoadout?.["activePrimaryWeaponItemId"],
+    activeLoadout?.["activeSecondaryWeaponItemId"],
+  ].filter((itemId): itemId is string => typeof itemId === "string" && itemId.length > 0);
+}
+
+function hasExactWieldedWeaponItem(input: {
+  expectedRevision: string;
+  expectedTemplateId: string;
+  itemId: string;
+  participant: ScenarioParticipant;
+}): boolean {
+  const equipmentState = getSnapshotEquipmentState(input.participant);
+  const itemsById = isRecord(equipmentState?.["itemsById"])
+    ? (equipmentState["itemsById"] as Record<string, unknown>)
+    : undefined;
+  const item = EquipmentItemSchema.safeParse(itemsById?.[input.itemId]);
+  const wieldedIds = getScenarioParticipantWieldedWeaponItemIds(input.participant);
+  return Boolean(
+    item.success &&
+    wieldedIds.includes(input.itemId) &&
+    item.data.templateId === input.expectedTemplateId &&
+    item.data.revision === input.expectedRevision &&
+    item.data.conditionState === "intact" &&
+    item.data.storageAssignment?.carryMode === "equipped",
+  );
 }
 
 function getScenarioParticipantWeaponItemIdForSlot(
@@ -3713,6 +3830,7 @@ function buildCurrentParryModifierValidation(input: {
     dbParryRaw: facts.defenderResolution.total,
     defenderModifierFingerprint: fingerprintCombatModifierResolution(facts.defenderResolution),
     defenderParticipantId: defenderEncounterParticipant.id,
+    disarmAttemptId: task.identity.disarmAttemptId,
     effectCutoffInitiativeGroupId: task.identity.initiativeGroupId,
     encounterId: input.encounterId,
     expectedRevision: input.encounterRevision,
@@ -5719,6 +5837,17 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
     return undefined;
   }
 
+  // Disarm command facts are exact undo snapshots and contain both sides' private
+  // roll calculations and canonical Item identities. The authoritative state keeps
+  // them for retry/undo; player views use the sanitized attempt projection instead.
+  if (
+    input.command.type === "open_disarm" ||
+    input.command.type === "roll_disarm" ||
+    input.command.type === "commit_disarm"
+  ) {
+    return undefined;
+  }
+
   if (
     input.command.type === "submit_phase_initiative_choice" &&
     !input.controlledEncounterParticipantIds.has(input.command.participantId)
@@ -5726,11 +5855,25 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
     return undefined;
   }
 
-  if (
-    input.command.type === "declare_action" &&
-    !input.controlledEncounterParticipantIds.has(input.command.participantId)
-  ) {
-    return undefined;
+  if (input.command.type === "declare_action") {
+    if (!input.controlledEncounterParticipantIds.has(input.command.participantId)) {
+      return undefined;
+    }
+    if (
+      input.command.facts.actionId === "disarm" ||
+      input.command.facts.actionId === "parry_disarm" ||
+      input.command.facts.disarm !== undefined ||
+      input.command.facts.previousDisarmAttempts !== undefined
+    ) {
+      return {
+        ...input.command,
+        facts: {
+          actionId: input.command.facts.actionId,
+          status: input.command.facts.status,
+          step: input.command.facts.step,
+        },
+      };
+    }
   }
 
   if (
@@ -5836,6 +5979,52 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
   }
 
   return input.command;
+}
+
+function sanitizePlayerSafeDisarmRoll(roll: CombatDisarmRoll): CombatDisarmRoll {
+  return {
+    ...roll,
+    calculation: {
+      ...roll.calculation,
+      percentageContributions: roll.calculation.percentageContributions.filter(
+        (contribution) => contribution.category !== "weapon_control",
+      ),
+    },
+    rolledByUserId: undefined,
+  };
+}
+
+const PLAYER_SAFE_DISARM_ITEM_REVISION = "1970-01-01T00:00:00.000Z";
+
+function sanitizePlayerSafeDisarmAttempt(input: {
+  attempt: CombatDisarmAttempt;
+  controlledEncounterParticipantIds: ReadonlySet<string>;
+}): CombatDisarmAttempt {
+  return {
+    ...input.attempt,
+    actingRoll: input.controlledEncounterParticipantIds.has(input.attempt.actingParticipantId)
+      ? input.attempt.actingRoll
+        ? sanitizePlayerSafeDisarmRoll(input.attempt.actingRoll)
+        : undefined
+      : undefined,
+    actingWeaponItemId: "redacted:disarm:acting-weapon",
+    actingWeaponTemplateId: "redacted:disarm:acting-template",
+    difference: undefined,
+    resistingRoll: input.controlledEncounterParticipantIds.has(input.attempt.resistingParticipantId)
+      ? input.attempt.resistingRoll
+        ? sanitizePlayerSafeDisarmRoll(input.attempt.resistingRoll)
+        : undefined
+      : undefined,
+    targetWeaponItemId: "redacted:disarm:target-weapon",
+    targetWeaponItemRevision: PLAYER_SAFE_DISARM_ITEM_REVISION,
+    targetWeaponTemplateId: "redacted:disarm:target-template",
+  };
+}
+
+function sanitizePlayerSafeDisarmDeclaration(
+  declaration: CombatRoundDeclaration | undefined,
+): CombatRoundDeclaration | undefined {
+  return declaration?.disarm ? { ...declaration, disarm: undefined } : declaration;
 }
 
 function buildPlayerSafeCombatRoundStateForUser(input: {
@@ -5963,6 +6152,23 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
     },
     events: [],
     breakOffProposals: safeBreakOffProposals,
+    disarmUnbalancedConditions: roundState.disarmUnbalancedConditions.filter(
+      (condition) =>
+        controlledEncounterParticipantIds.has(condition.affectedParticipantId) ||
+        visibleParticipantIds.has(condition.affectedParticipantId),
+    ),
+    disarmAttempts: roundState.disarmAttempts
+      .filter((attempt) =>
+        isPlayerVisibleCombatRoundResultPair({
+          attackerParticipantId: attempt.actingParticipantId,
+          controlledEncounterParticipantIds,
+          defenderParticipantId: attempt.resistingParticipantId,
+          visibleParticipantIds,
+        }),
+      )
+      .map((attempt) =>
+        sanitizePlayerSafeDisarmAttempt({ attempt, controlledEncounterParticipantIds }),
+      ),
     engagements: roundState.engagements.filter((engagement) =>
       isPlayerVisibleCombatRoundResultPair({
         attackerParticipantId: engagement.participantAId,
@@ -6075,31 +6281,36 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
       .filter((participant) => visibleParticipantIds.has(participant.participantId))
       .map((participant) =>
         controlledEncounterParticipantIds.has(participant.participantId)
-          ? participant
+          ? {
+              ...participant,
+              declaration: sanitizePlayerSafeDisarmDeclaration(participant.declaration),
+            }
           : {
               ...participant,
               declaration:
                 roundState.currentStep === "select_actions"
                   ? undefined
-                  : participant.declaration
-                    ? {
-                        ...participant.declaration,
-                        additionalActionNotes: undefined,
-                        movementIntent: undefined,
-                        secondaryActions:
-                          participant.declaration.secondaryActionId === "observe_opponent"
-                            ? undefined
-                            : participant.declaration.secondaryActions,
-                        secondaryActionContext:
-                          participant.declaration.secondaryActionId === "observe_opponent"
-                            ? undefined
-                            : participant.declaration.secondaryActionContext,
-                        secondaryActionId:
-                          participant.declaration.secondaryActionId === "observe_opponent"
-                            ? undefined
-                            : participant.declaration.secondaryActionId,
-                      }
-                    : undefined,
+                  : participant.declaration?.disarm
+                    ? undefined
+                    : participant.declaration
+                      ? {
+                          ...participant.declaration,
+                          additionalActionNotes: undefined,
+                          movementIntent: undefined,
+                          secondaryActions:
+                            participant.declaration.secondaryActionId === "observe_opponent"
+                              ? undefined
+                              : participant.declaration.secondaryActions,
+                          secondaryActionContext:
+                            participant.declaration.secondaryActionId === "observe_opponent"
+                              ? undefined
+                              : participant.declaration.secondaryActionContext,
+                          secondaryActionId:
+                            participant.declaration.secondaryActionId === "observe_opponent"
+                              ? undefined
+                              : participant.declaration.secondaryActionId,
+                        }
+                      : undefined,
             },
       ),
     phaseResolutionCursor: safePhaseResolutionCursor,
@@ -7750,10 +7961,130 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
 
       let attackOpportunities;
-      let declarationPhaseContexts = submittedPhaseContexts;
+      let declarationPhaseContexts:
+        | ReturnType<typeof combatRoundPhaseContextsSchema.parse>
+        | undefined = submittedPhaseContexts;
       let declarationFeint;
       let declarationAdjustDistance;
-      if (body.actionId === "adjust_range_attack") {
+      let declarationDisarm;
+      if (body.actionId === "disarm" || body.actionId === "parry_disarm") {
+        if (!body.disarm) {
+          return reply.code(400).send({ error: "Select both weapons for Disarm." });
+        }
+        if (
+          (body.actionId === "disarm" && body.disarm.method !== "proactive") ||
+          (body.actionId === "parry_disarm" && body.disarm.method !== "reactive_parry")
+        ) {
+          return reply.code(400).send({ error: "The Disarm method does not match the action." });
+        }
+        const targetEncounterParticipant = membership.participants.find(
+          (participant) =>
+            participant.id === body.disarm?.targetParticipantId ||
+            participant.scenarioParticipantId === body.disarm?.targetParticipantId ||
+            participant.characterId === body.disarm?.targetParticipantId,
+        );
+        if (!targetEncounterParticipant) {
+          return reply.code(400).send({ error: "The Disarm target is unavailable." });
+        }
+        try {
+          declarationDisarm = await combatItemInteractionService.resolveDisarmDeclaration({
+            actingItemId: body.disarm.actingItemId,
+            actingItemRevision: body.disarm.actingItemRevision,
+            actingParticipantId: encounterParticipant.id,
+            campaignId: access.campaignId,
+            encounterId: encounter.id,
+            method: body.disarm.method,
+            participants: membership.participants.map((participant) => ({
+              characterId: participant.characterId,
+              label: participant.label,
+              participantId: participant.id,
+            })),
+            phase: body.disarm.phase,
+            targetItemId: body.disarm.targetItemId,
+            targetItemRevision: body.disarm.targetItemRevision,
+            targetParticipantId: targetEncounterParticipant.id,
+            viewer:
+              access.mode === "gm"
+                ? { kind: "gm" }
+                : {
+                    controlledParticipantIds: new Set([encounterParticipant.id]),
+                    kind: "player",
+                    visibleParticipantIds: buildPlayerSafeCombatScopeForUser({
+                      encounter,
+                      scenarioParticipants,
+                      userId: user.id,
+                    }).visibleParticipantIds,
+                  },
+          });
+        } catch {
+          return reply.code(409).send({
+            code: "disarm_item_unavailable",
+            error: "A selected Disarm weapon is unavailable. Refresh and select again.",
+          });
+        }
+        const targetScenarioParticipant = findScenarioParticipantForEncounterParticipant({
+          encounterParticipant: targetEncounterParticipant,
+          scenarioParticipants,
+        });
+        if (
+          !targetScenarioParticipant ||
+          !hasExactWieldedWeaponItem({
+            expectedRevision: declarationDisarm.actingWeapon.itemRevision,
+            expectedTemplateId: declarationDisarm.actingWeapon.templateId,
+            itemId: declarationDisarm.actingWeapon.itemId,
+            participant: scenarioParticipant,
+          }) ||
+          !hasExactWieldedWeaponItem({
+            expectedRevision: declarationDisarm.targetWeapon.itemRevision,
+            expectedTemplateId: declarationDisarm.targetWeapon.templateId,
+            itemId: declarationDisarm.targetWeapon.itemId,
+            participant: targetScenarioParticipant,
+          })
+        ) {
+          return reply.code(409).send({
+            code: "disarm_item_unavailable",
+            error: "A selected Disarm weapon is unavailable. Refresh and select again.",
+          });
+        }
+        declarationPhaseContexts = {
+          ...submittedPhaseContexts,
+          [body.disarm.phase]: scenarioParticipantCombatContextSchema.parse({
+            ...submittedPhaseContexts?.[body.disarm.phase],
+            targetParticipantId: targetEncounterParticipant.id,
+          }),
+        };
+        if (body.disarm.method === "proactive") {
+          const source = body.phaseAttackSources?.[body.disarm.phase];
+          if (!source || source.sourceKind !== "weapon") {
+            return reply.code(400).send({ error: "Select the trapping weapon as attack source." });
+          }
+          const weaponResolution = resolveDeclaredWeaponSource({
+            participant: scenarioParticipant,
+            phaseLabel: body.disarm.phase === "phase1" ? "Phase 1" : "Phase 2",
+            source,
+          });
+          if (!weaponResolution.ok) return reply.code(400).send({ error: weaponResolution.error });
+          if (
+            weaponResolution.source.itemId !== declarationDisarm.actingWeapon.itemId ||
+            weaponResolution.source.weaponTemplateId !== declarationDisarm.actingWeapon.templateId
+          ) {
+            return reply.code(409).send({ error: "The Disarm attack source changed." });
+          }
+          attackOpportunities = buildCombatRoundDeclaredAttackOpportunities({
+            actionId: body.actionId,
+            disarmPhase: body.disarm.phase,
+            participantId: encounterParticipant.id,
+            phaseContexts: declarationPhaseContexts,
+            roundNumber: roundState.roundNumber,
+            sources: {
+              [body.disarm.phase]: buildDeclaredAttackOpportunitySource({
+                source,
+                weapon: weaponResolution.source,
+              }),
+            },
+          });
+        }
+      } else if (body.actionId === "adjust_range_attack") {
         if (!body.adjustDistance) {
           return reply.code(400).send({ error: "Select an opponent for Adjust Distance-Attack." });
         }
@@ -8194,6 +8525,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         combat: {
           ...scenarioParticipant.state.combat,
           combatContext: submittedCombatContext,
+          disarm: declarationDisarm,
           declarationSubmittedAt: submittedAt,
           declarationSubmittedByUserId: user.id,
           lastDeclaredActionId: body.actionId,
@@ -8220,6 +8552,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           attackOpportunities,
           attackPhaseDefensivePenalties,
           combatContext: submittedCombatContext,
+          disarm: declarationDisarm,
           feint: declarationFeint,
           movementId: body.movementId,
           movementIntent: submittedMovementIntent,
@@ -8931,6 +9264,312 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       if (persistenceErrorResponse) return persistenceErrorResponse;
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to commit Break Off.",
+      });
+    }
+  });
+
+  app.post("/encounters/:encounterId/combat-round/roll-disarm", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const body = parseBodyObject(request.body, "Disarm roll payload");
+      const identity = parseCombatTaskCommandIdentity(body);
+      const attemptId = parseNonEmptyString(body.attemptId, "attemptId");
+      const requestedParticipantId = parseNonEmptyString(
+        body.scenarioParticipantId,
+        "scenarioParticipantId",
+      );
+      const skillChoice =
+        body.skillChoice === "weapon_skill" || body.skillChoice === "parry"
+          ? body.skillChoice
+          : undefined;
+      const characteristicChoice =
+        body.characteristicChoice === "strength" || body.characteristicChoice === "dexterity"
+          ? body.characteristicChoice
+          : undefined;
+      if (!skillChoice || !characteristicChoice) {
+        return reply.code(400).send({ error: "Choose a Skill and characteristic for Disarm." });
+      }
+      const encounter = await encounterService.getEncounterById(encounterId);
+      if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles },
+      );
+      if (!access) return reply.code(404).send({ error: "Encounter not found." });
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(
+        encounter.scenarioId,
+      );
+      const participantResolution = resolveCombatParticipantForRequest({
+        accessMode: access.mode,
+        encounter,
+        requestedParticipantId,
+        scenarioParticipants,
+        userId: user.id,
+      });
+      const scenarioParticipant = participantResolution?.scenarioParticipant;
+      const encounterParticipant = participantResolution?.encounterParticipant;
+      if (!scenarioParticipant || !encounterParticipant) {
+        return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
+      }
+      if (access.mode !== "gm" && scenarioParticipant.controlledByUserId !== user.id) {
+        return reply.code(403).send({ error: "Player does not control this participant." });
+      }
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
+      const attempt = roundState.disarmAttempts.find((candidate) => candidate.id === attemptId);
+      const unavailable = () =>
+        reply.code(409).send({
+          code: "disarm_roll_unavailable",
+          error: "Disarm roll is stale or not currently available.",
+        });
+      if (!attempt || attempt.status !== "awaiting_rolls") return unavailable();
+      const role =
+        encounterParticipant.id === attempt.actingParticipantId
+          ? "actor"
+          : encounterParticipant.id === attempt.resistingParticipantId
+            ? "holder"
+            : undefined;
+      if (!role) return unavailable();
+      const authorization = authorizeCombatTaskCommand({
+        authorization: {
+          actor:
+            access.mode === "gm"
+              ? { kind: "gm" }
+              : { kind: "combatant", participantId: encounterParticipant.id },
+          commandType: "roll_disarm",
+          disarmAttemptId: attempt.id,
+          participantId: encounterParticipant.id,
+          phase: attempt.phase,
+        },
+        encounterRevision: encounter.updatedAt,
+        identity,
+        roundState,
+      });
+      if (!authorization.ok) return unavailable();
+
+      const weaponTemplateId =
+        role === "actor" ? attempt.actingWeaponTemplateId : attempt.targetWeaponTemplateId;
+      const template = equipmentTemplatesById[weaponTemplateId];
+      if (template?.category !== "weapon") return unavailable();
+      const skill =
+        skillChoice === "parry"
+          ? defaultCanonicalContent.skills.find((candidate) => candidate.id === "parry")
+          : resolveCombatFeintWeaponSkillDefinition({
+              skills: defaultCanonicalContent.skills,
+              specializations: defaultCanonicalContent.specializations,
+              weaponSkill: template.weaponSkill,
+            });
+      if (!skill) return reply.code(409).send({ error: "The selected Skill is unavailable." });
+      const profile = resolveParticipantSkillRollProfile({
+        ...getScenarioParticipantFeintSkillInput(scenarioParticipant),
+        linkedStatsOverride: [],
+        preferAdjustedStats: true,
+        skill,
+      });
+      const statId = characteristicChoice === "strength" ? "str" : "dex";
+      const stat = resolveParticipantStatRollProfile({
+        participantId: scenarioParticipant.id,
+        participantName: scenarioParticipant.snapshot.displayName,
+        snapshot: scenarioParticipant.snapshot,
+        statId,
+      });
+      if (stat.statValue === undefined) {
+        return reply.code(409).send({ error: "The selected characteristic is unavailable." });
+      }
+      const declaration = roundState.participants.find(
+        (participant) => participant.participantId === attempt.actingParticipantId,
+      )?.declaration?.disarm;
+      if (!declaration) return unavailable();
+      const activeStunned = (scenarioParticipant.state.combatEffects?.effects ?? []).filter(
+        (effect) =>
+          (effect.status === "active" || effect.status === "pending") &&
+          (effect.canonicalLifecycle?.payload as { effectKind?: string } | undefined)
+            ?.effectKind === "stunned",
+      );
+      const activeUnbalancedIds = new Set([
+        ...roundState.disarmUnbalancedConditions
+          .filter(
+            (condition) =>
+              condition.status === "active" &&
+              condition.affectedParticipantId === encounterParticipant.id,
+          )
+          .map((condition) => condition.id),
+        ...roundState.unbalancedConditions
+          .filter(
+            (condition) =>
+              condition.status === "active" &&
+              condition.affectedParticipantId === encounterParticipant.id,
+          )
+          .map((condition) => condition.id),
+      ]);
+      const roll = rollOpenEndedD20();
+      const createdAt = new Date().toISOString();
+      const calculation = resolveCombatDisarmRoll({
+        actingParryModifier: declaration.actingWeapon.parryModifier,
+        actingWeaponControlRating: declaration.actingWeapon.controlRating,
+        calculationId: `${attempt.id}:roll:${role}`,
+        characteristic: { choice: characteristicChoice, value: stat.statValue },
+        conditions: [
+          ...activeStunned.map((effect) => ({
+            id: effect.id,
+            kind: "stunned" as const,
+            sourceId: effect.canonicalLifecycle?.id ?? effect.id,
+          })),
+          ...[...activeUnbalancedIds].map((id) => ({
+            id,
+            kind: "unbalanced" as const,
+            sourceId: id,
+          })),
+        ],
+        contactQualityModifier: attempt.contactQualityModifier,
+        opponentParticipantId:
+          role === "actor" ? attempt.resistingParticipantId : attempt.actingParticipantId,
+        participantId: encounterParticipant.id,
+        role,
+        roll,
+        skill: {
+          choice: skillChoice,
+          id: skill.id,
+          label: skill.name,
+          totalXp: profile.totalXP + profile.unknownSkillPenalty,
+        },
+        targetWeaponControlRating: declaration.targetWeapon.controlRating,
+      });
+      const result = combatDisarmRollSchema.parse({
+        calculation,
+        characteristicChoice,
+        finalTotal: calculation.finalResult,
+        id: `${attempt.id}:roll:${role}`,
+        participantId: encounterParticipant.id,
+        rolledAt: createdAt,
+        rolledByUserId: user.id,
+        skillChoice,
+      });
+      const nextRoundState = recordCombatRoundDisarmRoll({
+        attemptId,
+        command: { createdAt, createdByUserId: user.id },
+        result,
+        state: roundState,
+      });
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId: encounter.scenarioId,
+        session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt },
+      });
+      return {
+        encounter:
+          access.mode === "player"
+            ? buildPlayerSafeCombatRollMutationEncounterForUser({
+                encounter: savedEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              })
+            : savedEncounter,
+      };
+    } catch (error) {
+      const persistenceErrorResponse = sendCombatWriteError(reply, error);
+      if (persistenceErrorResponse) return persistenceErrorResponse;
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to roll Disarm.",
+      });
+    }
+  });
+
+  app.post("/encounters/:encounterId/combat-round/commit-disarm", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const body = parseBodyObject(request.body, "Disarm commit payload");
+      const identity = parseCombatTaskCommandIdentity(body);
+      const attemptId = parseNonEmptyString(body.attemptId, "attemptId");
+      const encounter = await encounterService.getEncounterById(encounterId);
+      if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles },
+      );
+      if (!access || access.mode !== "gm") {
+        return reply.code(403).send({ error: "The GM must commit Disarm." });
+      }
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(
+        encounter.scenarioId,
+      );
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
+      const attempt = roundState.disarmAttempts.find((candidate) => candidate.id === attemptId);
+      const authorization = authorizeCombatTaskCommand({
+        authorization: {
+          actor: { kind: "gm" },
+          commandType: "commit_disarm",
+          disarmAttemptId: attemptId,
+          phase: attempt?.phase,
+        },
+        encounterRevision: encounter.updatedAt,
+        identity,
+        roundState,
+      });
+      if (!authorization.ok || !attempt || attempt.status !== "awaiting_commit") {
+        return reply.code(409).send({ error: "Disarm commit is stale or unavailable." });
+      }
+      const createdAt = new Date().toISOString();
+      const commandId = buildCombatRoundCommandId({
+        createdAt,
+        participantId: attempt.actingParticipantId,
+        state: roundState,
+        type: "commit_disarm",
+      });
+      const nextRoundState = commitCombatRoundDisarm({
+        attemptId,
+        command: { commandId, createdAt, createdByUserId: user.id },
+        state: roundState,
+      });
+      const session = { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt };
+      if (attempt.result?.disarmed) {
+        const membership = resolveEncounterParticipantMembership({
+          encounter,
+          scenarioParticipants,
+        });
+        const holder = membership.participants.find(
+          (participant) => participant.id === attempt.resistingParticipantId,
+        );
+        if (!holder?.characterId) {
+          return reply.code(409).send({ error: "The weapon holder is unavailable." });
+        }
+        const committed = await combatItemInteractionService.commitDisarm({
+          actorUserId: user.id,
+          campaignId: access.campaignId,
+          commandId,
+          encounterId,
+          expectedEncounterRevision: encounter.updatedAt,
+          ownerCharacterId: holder.characterId,
+          roundNumber: roundState.roundNumber,
+          scenarioId: encounter.scenarioId,
+          session,
+        });
+        return { encounter: committed.encounter };
+      }
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId: encounter.scenarioId,
+        session,
+      });
+      return { encounter: savedEncounter };
+    } catch (error) {
+      const persistenceErrorResponse = sendCombatWriteError(reply, error);
+      if (persistenceErrorResponse) return persistenceErrorResponse;
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to commit Disarm.",
       });
     }
   });
@@ -14747,7 +15386,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         weaponSourceSlot: canonicalOpportunityIdentity.weaponSourceSlot,
         weaponTemplateId: canonicalOpportunityIdentity.weaponTemplateId,
       });
-      const nextRoundState = recordCombatRoundAttackResult({
+      let nextRoundState = recordCombatRoundAttackResult({
         command: {
           createdAt: submittedAt,
           createdByUserId: user.id,
@@ -14786,6 +15425,43 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         submittedBy: access.mode === "gm" ? "gm" : "player",
       });
       const attackCommand = nextRoundState.commands.at(-1);
+      const attackResultId = getCombatRoundAttackResultId({
+        result: attackResult,
+        roundNumber: nextRoundState.roundNumber,
+      });
+      const disarmAttempt = nextRoundState.disarmAttempts.find(
+        (attempt) =>
+          attempt.roundNumber === nextRoundState.roundNumber &&
+          attempt.method === "proactive" &&
+          attempt.status === "awaiting_contact" &&
+          attempt.actingParticipantId === encounterParticipant.id &&
+          attempt.resistingParticipantId === defenderEncounterParticipant.id &&
+          attempt.phase === body.phase,
+      );
+      if (disarmAttempt) {
+        const activeContinuedContact = nextRoundState.continuedContacts.find(
+          (contact) =>
+            contact.status === "active" &&
+            contact.controllerParticipantId === encounterParticipant.id &&
+            contact.affectedParticipantId === defenderEncounterParticipant.id,
+        );
+        nextRoundState =
+          attackResult.hit || activeContinuedContact
+            ? openCombatRoundDisarmAfterContact({
+                attackResultId,
+                attemptId: disarmAttempt.id,
+                command: { createdAt: submittedAt, createdByUserId: user.id },
+                continuedContactId: activeContinuedContact?.id,
+                state: nextRoundState,
+              })
+            : cancelCombatRoundDisarmWithoutContact({
+                attackResultId,
+                attemptId: disarmAttempt.id,
+                command: { createdAt: submittedAt, createdByUserId: user.id },
+                reason: "proactive_attack_missed",
+                state: nextRoundState,
+              });
+      }
       const nextEncounterSession = {
         ...encounter,
         combatRoundState: nextRoundState,
@@ -14815,10 +15491,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             scenarioId,
             session: nextEncounterSession,
           });
-      const attackResultId = getCombatRoundAttackResultId({
-        result: attackResult,
-        roundNumber: nextRoundState.roundNumber,
-      });
       const commandEnvelope = buildCombatRoundCommandEnvelope({
         latestResult: {
           attackResultId,
@@ -14969,6 +15641,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           declarationId: body.declarationId,
           declaredOpponentParticipantId: body.declaredOpponentParticipantId,
           defenderParticipantId: body.defenderParticipantId,
+          disarmAttemptId: body.disarmAttemptId,
           offensiveParryAttemptId: body.offensiveParryAttemptId,
           opportunityId: body.opportunityId,
           parryPurpose: body.parryPurpose,
@@ -15002,6 +15675,46 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             (participant) => participant.id === attackerEncounterParticipant.scenarioParticipantId,
           )
         : undefined;
+      const parryDisarmAttempt =
+        body.parryPurpose === "parry_disarm" && body.disarmAttemptId
+          ? roundState.disarmAttempts.find(
+              (attempt) =>
+                attempt.id === body.disarmAttemptId &&
+                attempt.status === "awaiting_contact" &&
+                attempt.method === "reactive_parry",
+            )
+          : undefined;
+      const parryDisarmDeclaration =
+        body.parryPurpose === "parry_disarm"
+          ? roundState.participants.find(
+              (participant) => participant.participantId === encounterParticipant.id,
+            )?.declaration?.disarm
+          : undefined;
+      if (
+        body.parryPurpose === "parry_disarm" &&
+        (!parryDisarmAttempt ||
+          !parryDisarmDeclaration ||
+          !attackerScenarioParticipant ||
+          parryDisarmAttempt.actingWeaponItemId !== parryDisarmDeclaration.actingWeapon.itemId ||
+          parryDisarmAttempt.targetWeaponItemId !== parryDisarmDeclaration.targetWeapon.itemId ||
+          !hasExactWieldedWeaponItem({
+            expectedRevision: parryDisarmDeclaration.actingWeapon.itemRevision,
+            expectedTemplateId: parryDisarmDeclaration.actingWeapon.templateId,
+            itemId: parryDisarmDeclaration.actingWeapon.itemId,
+            participant: scenarioParticipant,
+          }) ||
+          !hasExactWieldedWeaponItem({
+            expectedRevision: parryDisarmDeclaration.targetWeapon.itemRevision,
+            expectedTemplateId: parryDisarmDeclaration.targetWeapon.templateId,
+            itemId: parryDisarmDeclaration.targetWeapon.itemId,
+            participant: attackerScenarioParticipant,
+          }))
+      ) {
+        return reply.code(409).send({
+          code: "parry_context_unavailable",
+          error: "The declared Parry-Disarm weapon is no longer ready. Refresh combat.",
+        });
+      }
       const canonicalModifierFacts = resolveCanonicalCombatParryModifierFacts({
         attackerScenarioParticipant,
         attackResult,
@@ -15035,11 +15748,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const submittedAt = new Date().toISOString();
       const roll = rollOpenEndedD20();
-      const canonicalParryBase = resolveCanonicalParryBase({
-        participant: scenarioParticipant,
-        usedMainHand: body.usedMainHand,
-        usedOffHand: body.usedOffHand,
-      });
+      const canonicalParryBase =
+        body.parryPurpose === "parry_disarm" && parryDisarmDeclaration
+          ? resolveCanonicalWeaponParryBase({
+              expectedItemRevision: parryDisarmDeclaration.actingWeapon.itemRevision,
+              expectedTemplateId: parryDisarmDeclaration.actingWeapon.templateId,
+              participant: scenarioParticipant,
+              weaponItemId: parryDisarmDeclaration.actingWeapon.itemId,
+            })
+          : resolveCanonicalParryBase({
+              participant: scenarioParticipant,
+              usedMainHand: body.usedMainHand,
+              usedOffHand: body.usedOffHand,
+            });
       if (canonicalParryBase.completeness !== "complete") {
         return reply.code(409).send({
           code: "parry_context_unavailable",
@@ -15056,6 +15777,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         attackResultId: body.attackResultId,
         combinedParryScore: parry.parryBase,
         declaredOpponentParticipantId: body.declaredOpponentParticipantId,
+        disarmAttemptId: body.disarmAttemptId,
         mainHandParryScore: canonicalParryBase.mainHandParryScore,
         modifiedParryBeforeRoll: parry.parryBase + parry.modifierAdjustment,
         modifierAdjustment: parry.modifierAdjustment,
@@ -15080,7 +15802,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         usedMainHand: canonicalParryBase.usedMainHand,
         usedOffHand: canonicalParryBase.usedOffHand,
       };
-      const nextRoundState = recordCombatRoundParryResult({
+      let nextRoundState = recordCombatRoundParryResult({
         attackResult,
         command: {
           createdAt: submittedAt,
@@ -15091,6 +15813,33 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         submittedBy: access.mode === "gm" ? "gm" : "player",
         updatedAt: submittedAt,
       });
+      const recordedParryCommand = nextRoundState.commands.at(-1);
+      const recordedParryResultId =
+        typeof recordedParryCommand?.facts.parryResultId === "string"
+          ? recordedParryCommand.facts.parryResultId
+          : undefined;
+      if (body.parryPurpose === "parry_disarm" && body.disarmAttemptId) {
+        if (parry.success && recordedParryResultId) {
+          nextRoundState = openCombatRoundDisarmAfterContact({
+            attackResultId: body.attackResultId,
+            attemptId: body.disarmAttemptId,
+            command: { createdAt: submittedAt, createdByUserId: user.id },
+            contactQualityModifier: resolveCombatDisarmContactQualityModifier(
+              parry.total - parry.targetNumber,
+            ).modifier,
+            parryResultId: recordedParryResultId,
+            state: nextRoundState,
+          });
+        } else {
+          nextRoundState = cancelCombatRoundDisarmWithoutContact({
+            attackResultId: body.attackResultId,
+            attemptId: body.disarmAttemptId,
+            command: { createdAt: submittedAt, createdByUserId: user.id },
+            reason: "parry_failed",
+            state: nextRoundState,
+          });
+        }
+      }
       const savedEncounter = await encounterService.updateCombatEncounter({
         expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
@@ -15103,7 +15852,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           updatedAt: submittedAt,
         },
       });
-      const parryCommand = nextRoundState.commands.at(-1);
+      const parryCommand = recordedParryCommand;
       const parryResultId =
         typeof parryCommand?.facts?.parryResultId === "string"
           ? parryCommand.facts.parryResultId
@@ -16321,6 +17070,24 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const undo = getCombatThrownWeaponAttackUndo(command);
         return undo ? [{ commandId: command.id, undo }] : [];
       });
+      const removedDisarmCommits = roundState.commands
+        .filter(
+          (command) =>
+            command.roundNumber === roundState.roundNumber &&
+            command.type === "commit_disarm" &&
+            !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
+        )
+        .flatMap((command) => {
+          const undo = getCombatDisarmItemUndo(command);
+          return undo ? [{ commandId: command.id, undo }] : [];
+        });
+      if (removedThrownWeaponAttacks.length > 0 && removedDisarmCommits.length > 0) {
+        return reply.code(409).send({
+          code: "canonical_item_undo_conflict",
+          error:
+            "This rewind crosses multiple canonical Item changes. Rewind one action at a time.",
+        });
+      }
       const removedPhaseInitiativeResolutionCommitCommands = roundState.commands.filter(
         (command) =>
           command.roundNumber === roundState.roundNumber &&
@@ -16522,24 +17289,39 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             updatedAt: submittedAt,
           };
           const saved =
-            removedThrownWeaponAttacks.length > 0
+            removedThrownWeaponAttacks.length > 0 || removedDisarmCommits.length > 0
               ? await (async () => {
-                  const savedEncounter =
-                    await combatItemInteractionService.commitThrownWeaponAttackUndo({
-                      actorUserId: user.id,
-                      campaignId: access.campaignId,
-                      encounterId,
-                      expectedEncounterRevision: encounter.updatedAt,
-                      participantStateUpdates: restorations.map(({ participant, state }) => ({
-                        expectedRevision: participant.updatedAt,
-                        participantId: participant.id,
+                  const savedEncounter = await (removedDisarmCommits.length > 0
+                    ? combatItemInteractionService.commitDisarmUndo({
+                        actorUserId: user.id,
+                        campaignId: access.campaignId,
+                        encounterId,
+                        expectedEncounterRevision: encounter.updatedAt,
+                        participantStateUpdates: restorations.map(({ participant, state }) => ({
+                          expectedRevision: participant.updatedAt,
+                          participantId: participant.id,
+                          scenarioId,
+                          state: refreshScenarioParticipantPersistentCombatModifiers({ state }),
+                        })),
                         scenarioId,
-                        state: refreshScenarioParticipantPersistentCombatModifiers({ state }),
-                      })),
-                      scenarioId,
-                      session,
-                      undos: removedThrownWeaponAttacks,
-                    });
+                        session,
+                        undos: removedDisarmCommits,
+                      })
+                    : combatItemInteractionService.commitThrownWeaponAttackUndo({
+                        actorUserId: user.id,
+                        campaignId: access.campaignId,
+                        encounterId,
+                        expectedEncounterRevision: encounter.updatedAt,
+                        participantStateUpdates: restorations.map(({ participant, state }) => ({
+                          expectedRevision: participant.updatedAt,
+                          participantId: participant.id,
+                          scenarioId,
+                          state: refreshScenarioParticipantPersistentCombatModifiers({ state }),
+                        })),
+                        scenarioId,
+                        session,
+                        undos: removedThrownWeaponAttacks,
+                      }));
                   const refreshed = await scenarioService.listScenarioParticipants(scenarioId);
                   const changedIds = new Set(restorations.map(({ participant }) => participant.id));
                   return {
@@ -16822,24 +17604,39 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         updatedAt: submittedAt,
       };
       const saved =
-        removedThrownWeaponAttacks.length > 0
+        removedThrownWeaponAttacks.length > 0 || removedDisarmCommits.length > 0
           ? await (async () => {
-              const savedEncounter =
-                await combatItemInteractionService.commitThrownWeaponAttackUndo({
-                  actorUserId: user.id,
-                  campaignId: access.campaignId,
-                  encounterId,
-                  expectedEncounterRevision: encounter.updatedAt,
-                  participantStateUpdates: participantMutations.map(({ participant, state }) => ({
-                    expectedRevision: participant.updatedAt,
-                    participantId: participant.id,
+              const savedEncounter = await (removedDisarmCommits.length > 0
+                ? combatItemInteractionService.commitDisarmUndo({
+                    actorUserId: user.id,
+                    campaignId: access.campaignId,
+                    encounterId,
+                    expectedEncounterRevision: encounter.updatedAt,
+                    participantStateUpdates: participantMutations.map(({ participant, state }) => ({
+                      expectedRevision: participant.updatedAt,
+                      participantId: participant.id,
+                      scenarioId,
+                      state: refreshScenarioParticipantPersistentCombatModifiers({ state }),
+                    })),
                     scenarioId,
-                    state: refreshScenarioParticipantPersistentCombatModifiers({ state }),
-                  })),
-                  scenarioId,
-                  session: nextEncounterSession,
-                  undos: removedThrownWeaponAttacks,
-                });
+                    session: nextEncounterSession,
+                    undos: removedDisarmCommits,
+                  })
+                : combatItemInteractionService.commitThrownWeaponAttackUndo({
+                    actorUserId: user.id,
+                    campaignId: access.campaignId,
+                    encounterId,
+                    expectedEncounterRevision: encounter.updatedAt,
+                    participantStateUpdates: participantMutations.map(({ participant, state }) => ({
+                      expectedRevision: participant.updatedAt,
+                      participantId: participant.id,
+                      scenarioId,
+                      state: refreshScenarioParticipantPersistentCombatModifiers({ state }),
+                    })),
+                    scenarioId,
+                    session: nextEncounterSession,
+                    undos: removedThrownWeaponAttacks,
+                  }));
               const refreshed = await scenarioService.listScenarioParticipants(scenarioId);
               const changedIds = new Set(
                 participantMutations.map(({ participant }) => participant.id),

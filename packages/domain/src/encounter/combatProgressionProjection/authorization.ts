@@ -45,6 +45,7 @@ export interface AuthorizeCombatProgressionTaskInput {
   readonly currentBoundary?: CombatProgressionBoundaryKind;
   readonly damageReviewId?: string;
   readonly declarationId?: string;
+  readonly disarmAttemptId?: string;
   readonly declaredOpponentParticipantId?: string;
   readonly defenderParticipantId?: string;
   readonly executionGroupId?: string;
@@ -308,6 +309,24 @@ const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, Comma
     process: "break_off",
     stage: "proposal_commit",
   },
+  open_disarm: {
+    boundary: ["phase1_resolution", "phase2_resolution"],
+    kind: ["attack", "parry"],
+    process: "attack",
+    stage: ["attack", "defense"],
+  },
+  roll_disarm: {
+    boundary: ["phase1_resolution", "phase2_resolution"],
+    kind: ["disarm_actor_roll", "disarm_holder_roll"],
+    process: "disarm",
+    stage: "opposed_rolls",
+  },
+  commit_disarm: {
+    boundary: ["phase1_resolution", "phase2_resolution"],
+    kind: "disarm_commit",
+    process: "disarm",
+    stage: "proposal_commit",
+  },
   roll_feint: {
     boundary: "phase1_resolution",
     kind: ["feint_attacker_roll", "feint_defender_roll"],
@@ -475,6 +494,7 @@ export function authorizeCombatProgressionTask(
       [input.attackIndex, "attackIndex"],
       [input.attackModeId, "attackModeId"],
       [input.declarationId, "declarationId"],
+      [input.disarmAttemptId, "disarmAttemptId"],
       [input.continuedContactId, "continuedContactId"],
       [input.initiativeGroupId, "initiativeGroupId"],
       [input.initiativeValue, "initiativeValue"],

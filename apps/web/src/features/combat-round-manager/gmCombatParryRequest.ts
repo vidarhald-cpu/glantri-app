@@ -51,6 +51,7 @@ export function buildGmCombatParryModifierRequest(input: {
     dbParryRaw: facts.defenderResolution.total,
     defenderModifierFingerprint: fingerprintCombatModifierResolution(facts.defenderResolution),
     defenderParticipantId: input.defenderCombatantId,
+    disarmAttemptId: descriptor.disarmAttemptId,
     effectCutoffInitiativeGroupId: descriptor.initiativeGroupId,
     encounterId: input.encounterId,
     expectedRevision: descriptor.expectedRevision,

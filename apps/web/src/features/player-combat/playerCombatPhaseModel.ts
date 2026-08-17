@@ -540,6 +540,7 @@ export function buildCombatAttackSourceRef(input: {
  */
 export function buildCombatDeclarationAttackSelection(input: {
   actionId?: string;
+  disarmPhase?: PlayerCombatPhaseKey;
   feintMethod?: "movement" | "weapon";
   phaseContexts: CombatRoundPhaseContexts;
   phaseLoadoutSummaries: Record<
@@ -551,6 +552,7 @@ export function buildCombatDeclarationAttackSelection(input: {
   const attackPhases = new Set<PlayerCombatPhaseKey>(
     getCombatDeclarationAttackPhases({
       actionId: input.actionId,
+      disarmPhase: input.disarmPhase,
       secondaryActionId: input.secondaryActionId,
     }),
   );

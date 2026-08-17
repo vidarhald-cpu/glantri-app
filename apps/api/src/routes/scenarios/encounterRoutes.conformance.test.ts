@@ -302,6 +302,26 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain("body.effectCutoffInitiativeGroupId !== currentInitiativeGroupId");
   });
 
+  it("binds Parry-Disarm to the declared exact wielded weapon instead of client hand flags", () => {
+    const parryRouteStart = source.indexOf(
+      'app.post("/encounters/:encounterId/combat-round/roll-parry"',
+    );
+    const parryRouteEnd = source.indexOf("\n  app.post(", parryRouteStart + 10);
+    const parryRoute = source.slice(parryRouteStart, parryRouteEnd);
+
+    expect(parryRouteStart).toBeGreaterThanOrEqual(0);
+    expect(parryRouteEnd).toBeGreaterThan(parryRouteStart);
+    expect(parryRoute).toContain('body.parryPurpose === "parry_disarm"');
+    expect(parryRoute).toContain("resolveCanonicalWeaponParryBase({");
+    expect(parryRoute).toContain(
+      "parryDisarmAttempt.actingWeaponItemId !== parryDisarmDeclaration.actingWeapon.itemId",
+    );
+    expect(parryRoute).not.toContain(
+      "body.parrySourceId !== parryDisarmDeclaration.actingWeapon.itemId",
+    );
+    expect(parryRoute.match(/hasExactWieldedWeaponItem\(\{/g)).toHaveLength(2);
+  });
+
   it("uses the shared canonical Skill Contest resolver for Offensive Parry and maintenance", () => {
     expect(source).toContain("resolveOffensiveParryBrawlingSkillContestCalculation({");
     expect(source).toContain('purpose: "initial_offensive_parry"');

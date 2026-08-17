@@ -10,6 +10,7 @@ import {
 import {
   DescriptiveItemTraitCategorySchema,
   EquipmentItemFactsV1Schema,
+  EquipmentTemplateOverrideFactSchema,
   ItemFactVisibilitySchema,
   type EquipmentItemFactsV1,
 } from "@glantri/domain/equipment";
@@ -62,10 +63,19 @@ export function parseCampaignItemFacts(value: unknown): EquipmentItemFactsV1 {
   const finalOb = body.finalAttackObDelta == null ? null : bodyObject(body.finalAttackObDelta);
   const descriptive = body.descriptiveTraits ?? [];
   const unsupported = body.unsupportedCapabilities ?? [];
+  const templateOverrides = body.templateOverrides ?? [];
 
-  if (!Array.isArray(descriptive) || !Array.isArray(unsupported)) {
+  if (
+    !Array.isArray(descriptive) ||
+    !Array.isArray(templateOverrides) ||
+    !Array.isArray(unsupported)
+  ) {
     throw new Error("Item traits and capabilities must be lists.");
   }
+
+  const nonInitiativeTemplateOverrides = templateOverrides
+    .map((entry) => EquipmentTemplateOverrideFactSchema.parse(entry))
+    .filter((entry) => entry.kind !== "weapon_initiative_override");
 
   return EquipmentItemFactsV1Schema.parse({
     activeMechanics: finalOb
@@ -90,18 +100,21 @@ export function parseCampaignItemFacts(value: unknown): EquipmentItemFactsV1 {
         visibility: visibility(fact),
       };
     }),
-    templateOverrides: initiative
-      ? [
-          {
-            id: optionalFactId(initiative),
-            kind: "weapon_initiative_override",
-            scope: "all_attack_modes",
-            unit: "initiative_points",
-            value: integerValue(initiative, "value"),
-            visibility: visibility(initiative),
-          },
-        ]
-      : [],
+    templateOverrides: [
+      ...(initiative
+        ? [
+            {
+              id: optionalFactId(initiative),
+              kind: "weapon_initiative_override",
+              scope: "all_attack_modes",
+              unit: "initiative_points",
+              value: integerValue(initiative, "value"),
+              visibility: visibility(initiative),
+            },
+          ]
+        : []),
+      ...nonInitiativeTemplateOverrides,
+    ],
     unsupportedCapabilities: unsupported.map((entry) => {
       const fact = bodyObject(entry);
       return {

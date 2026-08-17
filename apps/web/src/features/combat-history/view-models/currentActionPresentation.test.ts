@@ -226,6 +226,73 @@ function build(
 }
 
 describe("CurrentActionPresentation", () => {
+  it.each([
+    ["disarm_actor_roll", aria],
+    ["disarm_holder_roll", borin],
+  ] as const)("keeps the exact attempt identity on the player %s command", (kind, owner) => {
+    const rollTask = task({
+      actionKind: "disarm",
+      actor: aria,
+      command: "roll_disarm",
+      kind,
+      owner,
+      target: borin,
+    });
+    const projectedTask = {
+      ...rollTask,
+      identity: {
+        ...rollTask.identity,
+        disarmAttemptId: "disarm-attempt-1",
+      },
+    };
+    const result = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-disarm",
+      progression: progression({ tasks: [projectedTask] }),
+      viewer: { controlledParticipantIds: new Set([owner.participantId]), kind: "player" },
+    });
+
+    expect(result?.primaryAction.descriptor).toMatchObject({
+      commandType: "roll_disarm",
+      disarmAttemptId: "disarm-attempt-1",
+      participantId: owner.participantId,
+    });
+  });
+
+  it("keeps the exact attempt identity on a player reactive Parry-Disarm command", () => {
+    const parryTask = task({
+      actionKind: "parry_disarm",
+      actor: borin,
+      command: "roll_parry",
+      kind: "parry",
+      owner: aria,
+      target: aria,
+    });
+    const projectedTask = {
+      ...parryTask,
+      identity: {
+        ...parryTask.identity,
+        disarmAttemptId: "disarm-attempt-reactive",
+        parryPurpose: "parry_disarm" as const,
+        parrySourceId: "item-main-gauche",
+      },
+    };
+    const result = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-disarm",
+      progression: progression({ tasks: [projectedTask] }),
+      viewer: { controlledParticipantIds: new Set(["aria"]), kind: "player" },
+    });
+
+    expect(result?.primaryAction.descriptor).toMatchObject({
+      commandType: "roll_parry",
+      disarmAttemptId: "disarm-attempt-reactive",
+      parryPurpose: "parry_disarm",
+      parrySourceId: "item-main-gauche",
+      participantId: "aria",
+    });
+  });
+
   it("binds an enriched attack to its revision, task, opportunity, and command", () => {
     const result = build([
       task({

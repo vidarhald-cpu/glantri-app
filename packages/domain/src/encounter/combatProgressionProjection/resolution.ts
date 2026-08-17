@@ -13,6 +13,7 @@ import {
   getCombatRoundPhaseInitiativeChoiceStatuses,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundOffensiveParryAttemptIdentity,
+  getCombatRoundParryDisarmAttemptIdentity,
   isCombatRoundPhaseResolutionComplete,
   type CombatRoundPhase,
 } from "../combatRoundManager";
@@ -707,6 +708,105 @@ function buildBreakOffProcess(
   );
 }
 
+function buildDisarmProcess(
+  context: ProjectionBuildContext,
+  attempt: ProjectionBuildContext["state"]["disarmAttempts"][number],
+): CombatProgressionProcess {
+  const actor = context.identities.get(attempt.actingParticipantId);
+  const holder = context.identities.get(attempt.resistingParticipantId);
+  const rollsActive = attempt.status === "awaiting_rolls";
+  const commitActive = attempt.status === "awaiting_commit";
+  const trackerStep = attempt.phase === "phase1" ? ("A1" as const) : ("A2" as const);
+  const identity = {
+    disarmAttemptId: attempt.id,
+    opponentParticipantId: attempt.resistingParticipantId,
+    phase: attempt.phase,
+    weaponInstanceId: attempt.actingWeaponItemId,
+  };
+  return buildProcess(
+    context,
+    "disarm",
+    [
+      {
+        executionGroups: rollsActive
+          ? [
+              {
+                key: `${attempt.id}:contest`,
+                tasks: [
+                  ...(attempt.actingRoll
+                    ? []
+                    : [
+                        {
+                          expectedCommand: "roll_disarm" as const,
+                          identity,
+                          key: `${attempt.id}:actor`,
+                          kind: "disarm_actor_roll" as const,
+                          owner: actor,
+                          presentationContext: {
+                            actionKind: attempt.method === "proactive" ? "disarm" : "parry_disarm",
+                            actor,
+                            responder: actor,
+                            target: holder,
+                          },
+                          trackerOwner: actor,
+                          trackerStep,
+                        },
+                      ]),
+                  ...(attempt.resistingRoll
+                    ? []
+                    : [
+                        {
+                          expectedCommand: "roll_disarm" as const,
+                          identity,
+                          key: `${attempt.id}:holder`,
+                          kind: "disarm_holder_roll" as const,
+                          owner: holder,
+                          presentationContext: {
+                            actionKind: attempt.method === "proactive" ? "disarm" : "parry_disarm",
+                            actor,
+                            responder: holder,
+                            target: holder,
+                          },
+                          trackerOwner: holder,
+                          trackerStep,
+                        },
+                      ]),
+                ],
+              },
+            ]
+          : [],
+        kind: "opposed_rolls",
+        state: rollsActive ? "active" : commitActive ? "complete" : "pending",
+        strategy: "parallel_all",
+      },
+      {
+        kind: "proposal_commit",
+        state: commitActive ? "active" : attempt.status === "committed" ? "complete" : "pending",
+        strategy: "gm_review",
+        tasks: commitActive
+          ? [
+              {
+                allowedActors: ["gm"],
+                expectedCommand: "commit_disarm",
+                identity,
+                kind: "disarm_commit",
+                owner: GM_IDENTITY,
+                presentationContext: {
+                  actionKind: attempt.method === "proactive" ? "disarm" : "parry_disarm",
+                  actor,
+                  target: holder,
+                },
+                trackerOwner: actor,
+                trackerStep,
+              },
+            ]
+          : [],
+      },
+    ],
+    { key: attempt.id },
+  );
+}
+
 function adapterStageTaskKind(stage: CombatActionProcessStage): TaskSpec["kind"] | undefined {
   switch (stage.kind) {
     case "attack":
@@ -748,6 +848,9 @@ function buildAdapterAttackProcess(
         attackResult,
         state: context.state,
       })
+    : undefined;
+  const parryDisarmAttempt = attackResult
+    ? getCombatRoundParryDisarmAttemptIdentity({ attackResult, state: context.state })
     : undefined;
   const attackSnapshot = [...context.state.stepSnapshots]
     .reverse()
@@ -895,8 +998,11 @@ function buildAdapterAttackProcess(
                       : opportunityIdentity?.declarationId,
                   declaredOpponentParticipantId:
                     taskKind === "parry"
-                      ? offensiveParryAttempt?.declaredOpponentParticipantId
+                      ? (offensiveParryAttempt?.declaredOpponentParticipantId ??
+                        parryDisarmAttempt?.declaredOpponentParticipantId)
                       : undefined,
+                  disarmAttemptId:
+                    taskKind === "parry" ? parryDisarmAttempt?.disarmAttemptId : undefined,
                   damageRollExpression:
                     taskKind === "damage_roll" ? damageRollExpression : undefined,
                   opponentParticipantId:
@@ -908,11 +1014,15 @@ function buildAdapterAttackProcess(
                       : undefined,
                   parryPurpose:
                     taskKind === "parry"
-                      ? (offensiveParryAttempt?.parryPurpose ?? "ordinary_defense")
+                      ? (offensiveParryAttempt?.parryPurpose ??
+                        parryDisarmAttempt?.parryPurpose ??
+                        "ordinary_defense")
                       : undefined,
                   parrySourceId:
                     taskKind === "parry"
-                      ? (offensiveParryAttempt?.parrySourceId ?? "auto")
+                      ? (offensiveParryAttempt?.parrySourceId ??
+                        parryDisarmAttempt?.parrySourceId ??
+                        "auto")
                       : undefined,
                   phase: task.phase,
                   weaponInstanceId: opportunityIdentity?.weaponInstanceId,
@@ -921,8 +1031,9 @@ function buildAdapterAttackProcess(
                   weaponTemplateId: opportunityIdentity?.weaponTemplateId,
                 },
                 key:
-                  taskKind === "parry" && offensiveParryAttempt
-                    ? offensiveParryAttempt.offensiveParryAttemptId
+                  taskKind === "parry" && (offensiveParryAttempt || parryDisarmAttempt)
+                    ? (offensiveParryAttempt?.offensiveParryAttemptId ??
+                      parryDisarmAttempt!.disarmAttemptId)
                     : task.opportunityId,
                 kind: taskKind,
                 owner,
@@ -930,7 +1041,9 @@ function buildAdapterAttackProcess(
                   actionKind:
                     taskKind === "parry" && offensiveParryAttempt
                       ? "offensive_parry"
-                      : plan.actionKind,
+                      : taskKind === "parry" && parryDisarmAttempt
+                        ? "parry_disarm"
+                        : plan.actionKind,
                   attackOutcome: attackResult?.hit === true ? "hit" : "miss",
                   actor: attacker,
                   damageRollExpression:
@@ -992,6 +1105,13 @@ export function buildResolutionProcesses(
 ): CombatProgressionProcess[] {
   const phaseCombatExperienceProcess = buildPhaseCombatExperienceProcess(context, phase);
   if (phaseCombatExperienceProcess) return [phaseCombatExperienceProcess];
+  const activeDisarm = context.state.disarmAttempts.find(
+    (attempt) =>
+      attempt.roundNumber === context.state.roundNumber &&
+      attempt.phase === phase &&
+      (attempt.status === "awaiting_rolls" || attempt.status === "awaiting_commit"),
+  );
+  if (activeDisarm) return [buildDisarmProcess(context, activeDisarm)];
 
   if (isCombatRoundPhaseResolutionComplete({ phase, state: context.state })) {
     const completedProcess = buildProcess(context, "attack", [

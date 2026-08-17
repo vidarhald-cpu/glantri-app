@@ -977,7 +977,7 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
-  it("rolls combat parry through the encounter round domain", async () => {
+  it("rolls player Parry-Disarm with the exact attempt identity", async () => {
     const encounter = {
       id: "encounter-1",
       scenarioId: "scenario-1",
@@ -991,14 +991,15 @@ describe("localServiceClient wire contract", () => {
         attackerParticipantId: "attacker",
         commandType: "roll_parry",
         defenderParticipantId: "defender",
+        disarmAttemptId: "disarm-attempt-1",
         encounterId: "encounter-1",
         executionGroupId: "parry-group",
         expectedParticipantRevision: "participant-revision-2",
         expectedRevision: "2026-07-22T10:00:00.000Z",
         modifierValidationTaskId: "parry-task",
         opportunityId: "attack-opportunity",
-        parryPurpose: "ordinary_defense",
-        parrySourceId: "auto",
+        parryPurpose: "parry_disarm",
+        parrySourceId: "item-main-gauche",
         phase: "phase1",
         processId: "attack-process",
         scenarioParticipantId: "participant-2",
@@ -1015,13 +1016,14 @@ describe("localServiceClient wire contract", () => {
         attackerParticipantId: "attacker",
         commandType: "roll_parry",
         defenderParticipantId: "defender",
+        disarmAttemptId: "disarm-attempt-1",
         executionGroupId: "parry-group",
         expectedParticipantRevision: "participant-revision-2",
         expectedRevision: "2026-07-22T10:00:00.000Z",
         modifierValidationTaskId: "parry-task",
         opportunityId: "attack-opportunity",
-        parryPurpose: "ordinary_defense",
-        parrySourceId: "auto",
+        parryPurpose: "parry_disarm",
+        parrySourceId: "item-main-gauche",
         phase: "phase1",
         processId: "attack-process",
         scenarioParticipantId: "participant-2",

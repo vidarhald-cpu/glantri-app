@@ -51,6 +51,41 @@ describe("campaign item fact parsing", () => {
 
     expect(facts.descriptiveTraits.map((fact) => fact.visibility)).toEqual(["gm_only", "gm_only"]);
   });
+
+  it("accepts explicit Disarm capability/control additions and removals", () => {
+    const overrides = [
+      {
+        id: "capability",
+        kind: "weapon_disarm_capability_override",
+        scope: "all_attack_modes",
+        value: "none",
+        visibility: "gm_only",
+      },
+      {
+        id: "control",
+        kind: "weapon_disarm_control_override",
+        scope: "all_attack_modes",
+        unit: "control_rating",
+        value: 4,
+        visibility: "revealed",
+      },
+    ];
+
+    expect(
+      parseCampaignItemFacts({
+        descriptiveTraits: [],
+        templateOverrides: overrides,
+        unsupportedCapabilities: [],
+      }).templateOverrides,
+    ).toEqual(overrides);
+    expect(
+      parseCampaignItemFacts({
+        descriptiveTraits: [],
+        templateOverrides: [],
+        unsupportedCapabilities: [],
+      }).templateOverrides,
+    ).toEqual([]);
+  });
 });
 
 describe("campaign item routes", () => {

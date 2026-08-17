@@ -252,6 +252,15 @@ export async function submitCombatDeclarationOnServer(input: {
   secondaryActionId?: string;
   taskId: string;
   currentEncounter?: EncounterSession;
+  disarm?: {
+    actingItemId: string;
+    actingItemRevision: string;
+    method: "proactive" | "reactive_parry";
+    phase: "phase1" | "phase2";
+    targetItemId: string;
+    targetItemRevision: string;
+    targetParticipantId: string;
+  };
   feint?: {
     attackerSkillId?: string;
     method: "movement" | "weapon";
@@ -276,6 +285,7 @@ export async function submitCombatDeclarationOnServer(input: {
         adjustDistance: input.adjustDistance,
         additionalActionNotes: input.additionalActionNotes,
         combatContext: input.combatContext,
+        disarm: input.disarm,
         movementId: input.movementId,
         movementIntent: input.movementIntent,
         phaseContexts: input.phaseContexts,
@@ -382,6 +392,41 @@ export async function commitCombatBreakOffOnServer(input: {
 }): Promise<EncounterSession> {
   const payload = await sendCombatMutationJson<{ encounter: EncounterSession }>(
     `/encounters/${input.encounterId}/combat-round/commit-break-off`,
+    { body: combatMutationBody(input), method: "POST" },
+    input.currentEncounter,
+  );
+  return payload.encounter;
+}
+
+export async function rollCombatDisarmOnServer(input: {
+  attemptId: string;
+  characteristicChoice: "strength" | "dexterity";
+  currentEncounter?: EncounterSession;
+  encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  scenarioParticipantId: string;
+  skillChoice: "weapon_skill" | "parry";
+  taskId: string;
+}): Promise<EncounterSession> {
+  const payload = await sendCombatMutationJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/roll-disarm`,
+    { body: combatMutationBody(input), method: "POST" },
+    input.currentEncounter,
+  );
+  return payload.encounter;
+}
+
+export async function commitCombatDisarmOnServer(input: {
+  attemptId: string;
+  currentEncounter?: EncounterSession;
+  encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  taskId: string;
+}): Promise<EncounterSession> {
+  const payload = await sendCombatMutationJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/commit-disarm`,
     { body: combatMutationBody(input), method: "POST" },
     input.currentEncounter,
   );
@@ -1280,6 +1325,7 @@ export async function rollCombatParryOnServer(input: {
   declarationId?: string;
   declaredOpponentParticipantId?: string;
   defenderParticipantId: string;
+  disarmAttemptId?: string;
   encounterId: string;
   executionGroupId: string;
   expectedParticipantRevision: string;
@@ -1311,6 +1357,7 @@ export async function rollCombatParryOnServer(input: {
         declarationId: input.declarationId,
         declaredOpponentParticipantId: input.declaredOpponentParticipantId,
         defenderParticipantId: input.defenderParticipantId,
+        disarmAttemptId: input.disarmAttemptId,
         executionGroupId: input.executionGroupId,
         expectedParticipantRevision: input.expectedParticipantRevision,
         expectedRevision: input.expectedRevision,
@@ -1475,6 +1522,7 @@ export async function rollCombatParryCommandOnServer(input: {
   declarationId?: string;
   declaredOpponentParticipantId?: string;
   defenderParticipantId: string;
+  disarmAttemptId?: string;
   encounterId: string;
   executionGroupId: string;
   expectedParticipantRevision: string;
@@ -1514,6 +1562,7 @@ export async function rollCombatParryCommandOnServer(input: {
         declarationId: input.declarationId,
         declaredOpponentParticipantId: input.declaredOpponentParticipantId,
         defenderParticipantId: input.defenderParticipantId,
+        disarmAttemptId: input.disarmAttemptId,
         executionGroupId: input.executionGroupId,
         expectedParticipantRevision: input.expectedParticipantRevision,
         expectedRevision: input.expectedRevision,
@@ -1700,10 +1749,24 @@ export interface CombatItemInteractionOption {
   operations: CombatItemInteractionOperation[];
   revision: string;
   state: "held" | "equipped" | "stowed" | "present_unheld";
+  templateId: string;
+  weaponDisarm?: {
+    capability: "none" | "trap";
+    controlRating: number;
+    gripClass: "one_handed" | "two_handed";
+    parryModifier: number;
+  };
 }
 
 export interface CombatItemInteractionOptions {
   actors: Array<{
+    characterId?: string;
+    items: CombatItemInteractionOption[];
+    label: string;
+    participantId: string;
+    unsupportedReason?: string;
+  }>;
+  disarmTargets: Array<{
     characterId?: string;
     items: CombatItemInteractionOption[];
     label: string;
