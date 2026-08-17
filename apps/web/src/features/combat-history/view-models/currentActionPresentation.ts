@@ -951,23 +951,31 @@ export function buildCurrentActionPresentation(
     weaponSourceSlot: task.identity.weaponSourceSlot,
     weaponTemplateId: task.identity.weaponTemplateId,
   } satisfies CurrentActionCommandDescriptor);
-  const waitingForParallelBrawlingRoll =
+  const waitingForParallelParticipantRoll =
     (task.kind === "offensive_parry_brawling_roll" ||
-      task.kind === "continued_contact_maintenance_roll") &&
+      task.kind === "continued_contact_maintenance_roll" ||
+      task.kind === "break_off_escapee_roll" ||
+      task.kind === "break_off_attacker_roll") &&
     input.viewer.kind === "player" &&
     !viewerMayInvoke &&
-    (task.kind === "continued_contact_maintenance_roll"
-      ? task.presentationContext?.opponentRollRecorded === true &&
-        task.identity.opponentParticipantId !== undefined &&
-        (input.viewer.controlledParticipantIds ?? new Set()).has(
-          task.identity.opponentParticipantId,
+    (task.kind === "break_off_escapee_roll" || task.kind === "break_off_attacker_roll"
+      ? [actor?.id, target?.id].some(
+          (participantId) =>
+            participantId !== undefined &&
+            (input.viewer.controlledParticipantIds ?? new Set()).has(participantId),
         )
-      : actor?.id !== undefined &&
-        (input.viewer.controlledParticipantIds ?? new Set()).has(actor.id));
-  const summary = waitingForParallelBrawlingRoll
-    ? `Your Brawling roll is recorded. Waiting for ${required.label}.`
+      : task.kind === "continued_contact_maintenance_roll"
+        ? task.presentationContext?.opponentRollRecorded === true &&
+          task.identity.opponentParticipantId !== undefined &&
+          (input.viewer.controlledParticipantIds ?? new Set()).has(
+            task.identity.opponentParticipantId,
+          )
+        : actor?.id !== undefined &&
+          (input.viewer.controlledParticipantIds ?? new Set()).has(actor.id));
+  const summary = waitingForParallelParticipantRoll
+    ? `Your ${task.kind.startsWith("break_off_") ? "Dodge" : "Brawling"} roll is recorded. Waiting for ${required.label}.`
     : summaryFor({ action, actor, target, task });
-  const requiredNow = waitingForParallelBrawlingRoll
+  const requiredNow = waitingForParallelParticipantRoll
     ? `Waiting for ${required.label}.`
     : requiredNowFor(task, status, required.label);
 

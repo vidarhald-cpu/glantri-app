@@ -22840,6 +22840,269 @@ describe("scenarios route contract", () => {
     });
   });
 
+  it("atomically ends canonical Continued Contact and restores its persisted effect on exact undo", async () => {
+    const prepared = makeContinuedContactMaintenanceFixture();
+    const originalEffect = prepared.participants[1]!.state.combatEffects?.effects.find(
+      (effect) => effect.id === prepared.conditionId,
+    );
+    expect(originalEffect).toBeDefined();
+    const baseState = combatRoundStateSchema.parse(prepared.encounter.combatRoundState);
+    const roundState = combatRoundStateSchema.parse({
+      ...baseState,
+      breakOffProposals: [
+        {
+          attackerParticipantId: "encounter-participant-1",
+          difference: 5,
+          escapeeParticipantId: "encounter-participant-2",
+          id: "break-off-contact-cleanup",
+          pairKey: "encounter-participant-1::encounter-participant-2",
+          result: {
+            attackerObModifier: 0,
+            defenderDbParryModifier: 0,
+            escaped: true,
+            tableRowId: "defender_1_to_5",
+          },
+          roundNumber: baseState.roundNumber,
+          status: "awaiting_commit",
+        },
+      ],
+      commands: [
+        {
+          afterCursor: {
+            participantId: "encounter-participant-2",
+            roundNumber: baseState.roundNumber,
+            step: "A1",
+          },
+          beforeCursor: {
+            participantId: "encounter-participant-2",
+            roundNumber: baseState.roundNumber,
+            step: "i1",
+          },
+          createdAt: "2026-01-01T00:01:30.000Z",
+          facts: {},
+          id: "command-break-off-initiative",
+          participantId: "encounter-participant-2",
+          phase: "phase1",
+          roundNumber: baseState.roundNumber,
+          step: "i1",
+          type: "commit_phase_initiative_resolution",
+        },
+      ],
+      currentCursor: {
+        participantId: "encounter-participant-2",
+        roundNumber: baseState.roundNumber,
+        step: "A1",
+      },
+      currentStep: "phase_1_actions",
+      participants: baseState.participants.map((participant) => ({
+        ...participant,
+        declaration: {
+          actionId:
+            participant.participantId === "encounter-participant-2"
+              ? "break_off_engagement"
+              : "attack_parry",
+          roundNumber: baseState.roundNumber,
+          submittedBy: "player",
+        },
+        initiatives: {
+          phase1: {
+            rolls: [participant.participantId === "encounter-participant-2" ? 2 : 6],
+            total: participant.participantId === "encounter-participant-2" ? 2 : 18,
+          },
+        },
+      })),
+      phaseResolutionCursor: {
+        participantId: "encounter-participant-2",
+        phase: "phase1",
+        substep: "break_off",
+      },
+      phaseResolutionStatuses: {
+        "encounter-participant-2": { phase1: { substep: "break_off" } },
+      },
+      roundEndReview: undefined,
+      selectedParticipantId: "encounter-participant-2",
+      selectedStep: "phase_1_actions",
+      unbalancedConditions: baseState.unbalancedConditions.map((condition) => ({
+        ...condition,
+        canonicalLifecycle: originalEffect!.canonicalLifecycle,
+      })),
+    });
+    const encounter = {
+      ...prepared.encounter,
+      combatRoundState: roundState,
+      currentRound: roundState.roundNumber,
+    };
+    const mutable = setupMutableCombatRouteState({
+      encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    try {
+      const membership = resolveEncounterParticipantMembership({
+        encounter,
+        scenarioParticipants: prepared.participants,
+      });
+      const materialized = initializeCombatRoundState({
+        encounter: { ...encounter, participants: membership.participants },
+      });
+      const commitTask = getCurrentExecutableCombatTasks(
+        buildCombatProgressionProjection(materialized),
+      ).find((task) => task.expectedCommand === "commit_break_off");
+      expect(commitTask).toBeDefined();
+      const committed = await app.inject({
+        method: "POST",
+        payload: {
+          proposalId: "break-off-contact-cleanup",
+        },
+        url: "/encounters/encounter-1/combat-round/commit-break-off",
+      });
+      expect(committed.statusCode, committed.body).toBe(200);
+      expect(mocks.encounterService.commitCombatParticipantStateMutations).toHaveBeenCalledTimes(1);
+      expect(mutable.encounter.combatRoundState?.continuedContacts[0]).toMatchObject({
+        canonicalLifecycle: { lifecycle: { state: "resolved" } },
+        status: "ended",
+      });
+      expect(mutable.encounter.combatRoundState?.unbalancedConditions[0]).toMatchObject({
+        canonicalLifecycle: { lifecycle: { state: "resolved" } },
+        status: "ended",
+      });
+      const expiredEffect = mutable.participants[1]!.state.combatEffects?.effects.find(
+        (effect) => effect.id === prepared.conditionId,
+      );
+      expect(expiredEffect).toMatchObject({
+        canonicalLifecycle: { lifecycle: { state: "resolved" } },
+        status: "expired",
+      });
+      expect(
+        mutable.encounter.combatRoundState?.commands.at(-1)?.facts
+          .continuedContactEffectTransitions,
+      ).toEqual([
+        expect.objectContaining({
+          nextEffect: expiredEffect,
+          previousEffect: originalEffect,
+          scenarioParticipantId: "participant-2",
+        }),
+      ]);
+
+      const undone = await app.inject({
+        method: "POST",
+        payload: {
+          participantId: "encounter-participant-2",
+          step: "phase_1_actions",
+        },
+        url: "/encounters/encounter-1/combat-round/clear-current-step",
+      });
+      expect(undone.statusCode, undone.body).toBe(200);
+      expect(mocks.encounterService.commitCombatParticipantStateMutations).toHaveBeenCalledTimes(2);
+      expect(mutable.encounter.combatRoundState?.continuedContacts).toEqual(
+        roundState.continuedContacts,
+      );
+      expect(mutable.encounter.combatRoundState?.unbalancedConditions).toEqual(
+        roundState.unbalancedConditions,
+      );
+      expect(
+        mutable.participants[1]!.state.combatEffects?.effects.find(
+          (effect) => effect.id === prepared.conditionId,
+        ),
+      ).toEqual(originalEffect);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("makes hidden and nonexistent Break Off roll probes privacy-equivalent with zero writes", async () => {
+    const encounterParticipants = [
+      ...makeTwoCombatEncounterParticipants(),
+      {
+        ...makeTwoCombatEncounterParticipants()[1]!,
+        id: "encounter-participant-3",
+        label: "Hidden guard",
+        scenarioParticipantId: "participant-3",
+      },
+    ];
+    const participants = [
+      makeCombatScenarioParticipant({
+        controlledByUserId: "player-1",
+        id: "participant-1",
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "participant-2",
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "third-player",
+        id: "participant-3",
+      }),
+    ];
+    const baseEncounter = makeCombatEncounter({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const baseState = initializeCombatRoundState({ encounter: baseEncounter });
+    const roundState = combatRoundStateSchema.parse({
+      ...baseState,
+      breakOffProposals: [
+        {
+          attackerParticipantId: "encounter-participant-3",
+          escapeeParticipantId: "encounter-participant-2",
+          gmReview: { attackerAdjustment: 0, escapeeAdjustment: 0 },
+          id: "hidden-break-off",
+          pairKey: "encounter-participant-2::encounter-participant-3",
+          roundNumber: 1,
+          status: "awaiting_rolls",
+        },
+      ],
+      currentCursor: { participantId: "encounter-participant-2", roundNumber: 1, step: "A1" },
+      currentStep: "phase_1_actions",
+      participants: baseState.participants.map((participant) => ({
+        ...participant,
+        declaration: {
+          actionId:
+            participant.participantId === "encounter-participant-2"
+              ? "break_off_engagement"
+              : "attack_parry",
+          roundNumber: 1,
+          submittedBy: "player",
+        },
+      })),
+      phaseResolutionCursor: {
+        participantId: "encounter-participant-2",
+        phase: "phase1",
+        substep: "break_off",
+      },
+      phaseResolutionStatuses: {
+        "encounter-participant-2": { phase1: { substep: "break_off" } },
+      },
+    });
+    setupMutableCombatRouteState({
+      encounter: { ...baseEncounter, combatRoundState: roundState },
+      participants,
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+    try {
+      const probe = (proposalId: string) =>
+        app.inject({
+          method: "POST",
+          payload: { proposalId, scenarioParticipantId: "participant-1" },
+          url: "/encounters/encounter-1/combat-round/roll-break-off",
+        });
+      const hidden = await probe("hidden-break-off");
+      const nonexistent = await probe("nonexistent-break-off");
+      expect(hidden.statusCode).toBe(409);
+      expect(nonexistent.statusCode).toBe(409);
+      expect(hidden.json()).toEqual(nonexistent.json());
+      expect(hidden.json()).toEqual({
+        code: "break_off_roll_unavailable",
+        error: "Break Off roll is stale or not currently available.",
+      });
+      expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+      expect(mocks.encounterService.commitCombatParticipantStateMutations).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
   it("rejects player roleplay rolls for silent assignments", async () => {
     const encounter = {
       actionLog: [],

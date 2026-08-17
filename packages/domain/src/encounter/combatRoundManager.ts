@@ -18622,6 +18622,7 @@ export function recordCombatRoundDeclaration(input: {
           adjustDistance: declaration.adjustDistance,
           feint: declaration.feint,
           movementIntent: declaration.movementIntent,
+          previousBreakOffProposals: existingBreakOffProposals,
           previousDeclaration,
           previousStepStatus,
           status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
@@ -18955,7 +18956,12 @@ export function recordCombatRoundBreakOffRoll(input: {
 }
 
 export function commitCombatRoundBreakOff(input: {
-  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  command: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+    createdRevision?: string;
+  };
   proposalId: string;
   state: CombatRoundState;
 }): CombatRoundState {
@@ -18994,6 +19000,32 @@ export function commitCombatRoundBreakOff(input: {
       state: normalized,
       type: "commit_break_off",
     });
+  const terminalSequence = getCombatRoundNextEventSequence(normalized);
+  const resolveProcessLifecycle = <
+    T extends { canonicalLifecycle?: unknown; canonicalTransitions?: unknown[] },
+  >(
+    entry: T,
+  ) => {
+    if (!input.command.createdRevision || !entry.canonicalLifecycle) return entry;
+    const lifecycle = entry.canonicalLifecycle as Parameters<
+      typeof transitionCanonicalCombatModifierEffect
+    >[0]["effect"];
+    const transitioned = transitionCanonicalCombatModifierEffect({
+      acceptedRevision: input.command.createdRevision,
+      acceptedSequence: terminalSequence,
+      commandId,
+      effect: lifecycle,
+      nextState: "resolved",
+      reason: "condition_cleared",
+      transitionId: `${commandId}:break-off:resolve:${lifecycle.id}`,
+      transitionType: "resolve",
+    });
+    return {
+      ...entry,
+      canonicalLifecycle: transitioned.effect,
+      canonicalTransitions: [...(entry.canonicalTransitions ?? []), transitioned.transition],
+    };
+  };
   let next = replaceCombatRoundBreakOffProposal({ proposal, state: normalized });
   if (result.escaped) {
     const [participantAId, participantBId] = proposal.pairKey.split("::");
@@ -19016,7 +19048,12 @@ export function commitCombatRoundBreakOff(input: {
         contact.status === "active" &&
         makeDistancePairKey(contact.controllerParticipantId, contact.affectedParticipantId) ===
           proposal.pairKey
-          ? { ...contact, endedRound: next.roundNumber, status: "ended" as const }
+          ? continuedContactSchema.parse({
+              ...contact,
+              ...resolveProcessLifecycle(contact),
+              endedRound: next.roundNumber,
+              status: "ended",
+            })
           : contact,
       ),
       unbalancedConditions: next.unbalancedConditions.map((condition) => {
@@ -19027,7 +19064,12 @@ export function commitCombatRoundBreakOff(input: {
           contact &&
           makeDistancePairKey(contact.controllerParticipantId, contact.affectedParticipantId) ===
             proposal.pairKey
-          ? { ...condition, endedRound: next.roundNumber, status: "ended" as const }
+          ? unbalancedCombatConditionSchema.parse({
+              ...condition,
+              ...resolveProcessLifecycle(condition),
+              endedRound: next.roundNumber,
+              status: "ended",
+            })
           : condition;
       }),
     });
@@ -19061,6 +19103,27 @@ export function commitCombatRoundBreakOff(input: {
     eventType: "break_off_committed",
     facts: {
       involvedOutcome: { difference: proposal.difference, ...proposal.result },
+      endedContinuedContactIds: normalized.continuedContacts
+        .filter(
+          (contact) =>
+            contact.status === "active" &&
+            makeDistancePairKey(contact.controllerParticipantId, contact.affectedParticipantId) ===
+              proposal.pairKey,
+        )
+        .map((contact) => contact.id),
+      endedUnbalancedConditionIds: normalized.unbalancedConditions
+        .filter((condition) => {
+          const contact = normalized.continuedContacts.find(
+            (entry) => entry.id === condition.sourceContinuedContactId,
+          );
+          return (
+            condition.status === "active" &&
+            contact !== undefined &&
+            makeDistancePairKey(contact.controllerParticipantId, contact.affectedParticipantId) ===
+              proposal.pairKey
+          );
+        })
+        .map((condition) => condition.id),
       previousContinuedContacts,
       previousEngagements,
       previousProposal,
@@ -21918,8 +21981,21 @@ function undoCombatRoundGlobalCommandAtIndex(input: {
   const previousStepStatus = combatRoundStepStatusSchema.safeParse(
     command.facts.previousStepStatus,
   );
+  const previousBreakOffProposals = z
+    .array(combatBreakOffProposalSchema)
+    .safeParse(command.facts.previousBreakOffProposals);
   return combatRoundStateSchema.parse({
     ...baseState,
+    breakOffProposals: previousBreakOffProposals.success
+      ? [
+          ...baseState.breakOffProposals.filter(
+            (proposal) =>
+              proposal.roundNumber !== command.roundNumber ||
+              proposal.escapeeParticipantId !== command.participantId,
+          ),
+          ...previousBreakOffProposals.data,
+        ]
+      : baseState.breakOffProposals,
     participants: baseState.participants.map((participant) =>
       participant.participantId === command.participantId
         ? {

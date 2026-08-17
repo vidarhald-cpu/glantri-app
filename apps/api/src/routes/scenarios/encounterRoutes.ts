@@ -4945,24 +4945,29 @@ function attachContinuedContactEffectTransitionFacts(input: {
     ...input.state,
     commands: input.state.commands.map((command) =>
       command.id === input.commandId
-        ? {
-            ...command,
-            facts: {
-              ...command.facts,
-              continuedContactEffectTransition: {
-                nextEffect: input.nextEffect,
-                previousEffect: input.previousEffect,
-                scenarioParticipantId: input.scenarioParticipantId,
+        ? (() => {
+            const transition = {
+              nextEffect: input.nextEffect,
+              previousEffect: input.previousEffect,
+              scenarioParticipantId: input.scenarioParticipantId,
+            };
+            const existing = getContinuedContactEffectTransitionFactsList(command);
+            return {
+              ...command,
+              facts: {
+                ...command.facts,
+                // Retain the singular fact for compatibility with existing persisted commands.
+                continuedContactEffectTransition: transition,
+                continuedContactEffectTransitions: [...existing, transition],
               },
-            },
-          }
+            };
+          })()
         : command,
     ),
   };
 }
 
-function getContinuedContactEffectTransitionFacts(command: CombatRoundCommand) {
-  const value = command.facts.continuedContactEffectTransition;
+function parseContinuedContactEffectTransitionFact(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const facts = value as Record<string, unknown>;
   const previousEffect = combatEffectSchema.safeParse(facts.previousEffect);
@@ -4976,6 +4981,25 @@ function getContinuedContactEffectTransitionFacts(command: CombatRoundCommand) {
         scenarioParticipantId: facts.scenarioParticipantId,
       }
     : undefined;
+}
+
+function getContinuedContactEffectTransitionFactsList(command: CombatRoundCommand) {
+  const plural = Array.isArray(command.facts.continuedContactEffectTransitions)
+    ? command.facts.continuedContactEffectTransitions
+        .map(parseContinuedContactEffectTransitionFact)
+        .filter(
+          (
+            transition,
+          ): transition is NonNullable<
+            ReturnType<typeof parseContinuedContactEffectTransitionFact>
+          > => transition !== undefined,
+        )
+    : [];
+  if (plural.length > 0) return plural;
+  const singular = parseContinuedContactEffectTransitionFact(
+    command.facts.continuedContactEffectTransition,
+  );
+  return singular ? [singular] : [];
 }
 
 function attachCombatNpcDeclarationProposalProvenance(input: {
@@ -8612,33 +8636,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
       if (access.mode !== "gm" && scenarioParticipant.controlledByUserId !== user.id)
         return reply.code(403).send({ error: "Player does not control this participant." });
-      const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
       const roundState = initializeMaterializedCombatRoundState({
         encounter,
         scenarioParticipants,
       });
-      const proposal = roundState.breakOffProposals.find((entry) => entry.id === proposalId);
-      if (!proposal || proposal.status !== "awaiting_rolls")
-        return reply.code(409).send({ error: "Break Off rolls are not currently available." });
-      const side =
-        encounterParticipant.id === proposal.escapeeParticipantId
-          ? "escapee"
-          : encounterParticipant.id === proposal.attackerParticipantId
-            ? "attacker"
-            : undefined;
-      if (!side)
-        return reply
-          .code(409)
-          .send({ error: "Only an involved participant may roll Break Off Dodge." });
-      if (
-        (side === "escapee" && proposal.escapeeRoll) ||
-        (side === "attacker" && proposal.attackerRoll)
-      )
-        return reply
-          .code(409)
-          .send({ error: "This participant has already rolled Break Off Dodge." });
-      const opponentParticipantId =
-        side === "escapee" ? proposal.attackerParticipantId : proposal.escapeeParticipantId;
+      const unavailableBreakOffRoll = () =>
+        reply.code(409).send({
+          code: "break_off_roll_unavailable",
+          error: "Break Off roll is stale or not currently available.",
+        });
+      // Authorize only against the caller's exact projected task before inspecting proposal state.
+      // Hidden, nonexistent, completed, and wrong-pair proposal probes are intentionally equivalent.
       const authorization = authorizeCombatTaskCommand({
         authorization: {
           actor:
@@ -8646,8 +8654,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               ? { kind: "gm" }
               : { kind: "combatant", participantId: encounterParticipant.id },
           commandType: "roll_break_off",
-          opponentParticipantId: proposal.attackerParticipantId,
-          pairId: proposal.pairKey,
           participantId: encounterParticipant.id,
           phase: "phase1",
           proposalId,
@@ -8656,10 +8662,24 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         identity,
         roundState,
       });
-      if (!authorization.ok)
-        return reply
-          .code(409)
-          .send({ error: "Break Off roll is stale or not currently available." });
+      if (!authorization.ok) return unavailableBreakOffRoll();
+      const proposal = roundState.breakOffProposals.find((entry) => entry.id === proposalId);
+      if (!proposal || proposal.status !== "awaiting_rolls") return unavailableBreakOffRoll();
+      const side =
+        encounterParticipant.id === proposal.escapeeParticipantId
+          ? "escapee"
+          : encounterParticipant.id === proposal.attackerParticipantId
+            ? "attacker"
+            : undefined;
+      if (!side) return unavailableBreakOffRoll();
+      if (
+        (side === "escapee" && proposal.escapeeRoll) ||
+        (side === "attacker" && proposal.attackerRoll)
+      )
+        return unavailableBreakOffRoll();
+      const opponentParticipantId =
+        side === "escapee" ? proposal.attackerParticipantId : proposal.escapeeParticipantId;
+      const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
       const opponentEncounterParticipant = membership.participants.find(
         (participant) => participant.id === opponentParticipantId,
       );
@@ -8780,19 +8800,132 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           .code(409)
           .send({ error: "Break Off commit is stale or not currently available." });
       const createdAt = new Date().toISOString();
-      const nextRoundState = commitCombatRoundBreakOff({
-        command: { createdAt, createdByUserId: user.id },
+      let stateToSave = commitCombatRoundBreakOff({
+        command: {
+          createdAt,
+          createdByUserId: user.id,
+          createdRevision: encounter.updatedAt,
+        },
         proposalId,
         state: roundState,
       });
+      const command = stateToSave.commands.at(-1)!;
+      const endedConditions = roundState.unbalancedConditions.filter((condition) => {
+        const next = stateToSave.unbalancedConditions.find((entry) => entry.id === condition.id);
+        return condition.status === "active" && next?.status === "ended";
+      });
+      const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
+      const participantMutations = new Map<
+        string,
+        { participant: ScenarioParticipant; state: ScenarioParticipant["state"] }
+      >();
+      const transitionSequence = Math.max(
+        0,
+        stateToSave.events.reduce((highest, event) => Math.max(highest, event.sequence), -1),
+      );
+      for (const endedCondition of endedConditions) {
+        const affectedEncounterParticipant = membership.participants.find(
+          (participant) => participant.id === endedCondition.affectedParticipantId,
+        );
+        const affected = affectedEncounterParticipant?.scenarioParticipantId
+          ? scenarioParticipants.find(
+              (participant) =>
+                participant.id === affectedEncounterParticipant.scenarioParticipantId,
+            )
+          : undefined;
+        if (!affected) {
+          throw new RangeError("The Unbalanced participant is not assigned to this encounter.");
+        }
+        const currentState = participantMutations.get(affected.id)?.state ?? affected.state;
+        const effects = combatEffectsStateSchema.parse(currentState.combatEffects);
+        const previousEffect = effects.effects.find(
+          (effect) =>
+            effect.id === endedCondition.id &&
+            (effect.status === "active" || effect.status === "pending"),
+        );
+        if (!previousEffect) {
+          throw new RangeError(
+            "The active Continued Contact relationship has no matching Unbalanced effect.",
+          );
+        }
+        const activated =
+          previousEffect.canonicalLifecycle?.lifecycle.state === "pending_activation"
+            ? transitionCanonicalCombatModifierEffect({
+                acceptedRevision: encounter.updatedAt,
+                acceptedSequence: transitionSequence,
+                commandId: command.id,
+                effect: previousEffect.canonicalLifecycle,
+                nextState: "active",
+                reason: "activation_cutoff_reached",
+                transitionId: `${command.id}:activate:${previousEffect.id}`,
+                transitionType: "activate",
+              })
+            : undefined;
+        const canonicalBeforeResolution = activated?.effect ?? previousEffect.canonicalLifecycle;
+        const transitioned = canonicalBeforeResolution
+          ? transitionCanonicalCombatModifierEffect({
+              acceptedRevision: encounter.updatedAt,
+              acceptedSequence: transitionSequence,
+              commandId: command.id,
+              effect: canonicalBeforeResolution,
+              nextState: "resolved",
+              reason: "condition_cleared",
+              transitionId: `${command.id}:resolve:${previousEffect.id}`,
+              transitionType: "resolve",
+            })
+          : undefined;
+        const nextEffect = combatEffectSchema.parse({
+          ...previousEffect,
+          canonicalLifecycle: transitioned?.effect ?? previousEffect.canonicalLifecycle,
+          canonicalTransitions: transitioned
+            ? [
+                ...(previousEffect.canonicalTransitions ?? []),
+                ...(activated ? [activated.transition] : []),
+                transitioned.transition,
+              ]
+            : previousEffect.canonicalTransitions,
+          status: "expired",
+          updatedAt: createdAt,
+        });
+        stateToSave = attachContinuedContactEffectTransitionFacts({
+          commandId: command.id,
+          nextEffect,
+          previousEffect,
+          scenarioParticipantId: affected.id,
+          state: stateToSave,
+        });
+        participantMutations.set(affected.id, {
+          participant: affected,
+          state: {
+            ...currentState,
+            combatEffects: combatEffectsStateSchema.parse({
+              ...effects,
+              effects: effects.effects.map((effect) =>
+                effect.id === previousEffect.id ? nextEffect : effect,
+              ),
+            }),
+          },
+        });
+      }
+      if (participantMutations.size > 0) {
+        const saved = await encounterService.commitCombatParticipantStateMutations({
+          campaignId: access.campaignId,
+          encounterId,
+          expectedEncounterRevision: encounter.updatedAt,
+          participants: [...participantMutations.values()],
+          scenarioId: encounter.scenarioId,
+          session: { ...encounter, combatRoundState: stateToSave, updatedAt: createdAt },
+        });
+        return { encounter: saved.encounter, participants: saved.participants };
+      }
       const savedEncounter = await encounterService.updateCombatEncounter({
         expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
         encounterId,
         scenarioId: encounter.scenarioId,
-        session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt },
+        session: { ...encounter, combatRoundState: stateToSave, updatedAt: createdAt },
       });
-      return { encounter: savedEncounter };
+      return { encounter: savedEncounter, participants: [] };
     } catch (error) {
       const persistenceErrorResponse = sendCombatWriteError(reply, error);
       if (persistenceErrorResponse) return persistenceErrorResponse;
@@ -16218,6 +16351,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           command.type === "roll_continued_contact_maintenance" &&
           !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
       );
+      const removedBreakOffCommitCommands = roundState.commands.filter(
+        (command) =>
+          command.roundNumber === roundState.roundNumber &&
+          command.type === "commit_break_off" &&
+          !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
+      );
       const removedModifierReviewCommands = roundState.commands.filter(
         (command) =>
           command.roundNumber === roundState.roundNumber &&
@@ -16246,71 +16385,77 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         ...removedModifierReviewCommands,
         ...removedRoundEndHealthCheckCommands,
         ...removedRoundEndParticipantReviewCommands,
-        ...removedContinuedContactMaintenanceCommands.filter((command) =>
-          Boolean(getContinuedContactEffectTransitionFacts(command)),
+        ...removedContinuedContactMaintenanceCommands.filter(
+          (command) => getContinuedContactEffectTransitionFactsList(command).length > 0,
+        ),
+        ...removedBreakOffCommitCommands.filter(
+          (command) => getContinuedContactEffectTransitionFactsList(command).length > 0,
         ),
       ].sort(
         (left, right) =>
           roundState.commands.findIndex((command) => command.id === right.id) -
           roundState.commands.findIndex((command) => command.id === left.id),
       );
-      const hasExactContinuedContactEffectRestoration =
-        removedContinuedContactMaintenanceCommands.some((command) =>
-          Boolean(getContinuedContactEffectTransitionFacts(command)),
-        );
+      const hasExactContinuedContactEffectRestoration = [
+        ...removedContinuedContactMaintenanceCommands,
+        ...removedBreakOffCommitCommands,
+      ].some((command) => getContinuedContactEffectTransitionFactsList(command).length > 0);
       if (atomicParticipantEffectCommands.length > 0) {
         const restorationStates = new Map(
           scenarioParticipants.map((participant) => [participant.id, participant.state]),
         );
         let completeAtomicRestoration = true;
         for (const command of atomicParticipantEffectCommands) {
-          const continuedContactEffectTransition =
-            command.type === "roll_continued_contact_maintenance"
-              ? getContinuedContactEffectTransitionFacts(command)
-              : undefined;
+          const continuedContactEffectTransitions =
+            getContinuedContactEffectTransitionFactsList(command);
+          if (continuedContactEffectTransitions.length > 0) {
+            for (const transition of continuedContactEffectTransitions) {
+              const scenarioParticipant = scenarioParticipants.find(
+                (participant) => participant.id === transition.scenarioParticipantId,
+              );
+              if (!scenarioParticipant) {
+                completeAtomicRestoration = false;
+                break;
+              }
+              const currentState = restorationStates.get(scenarioParticipant.id)!;
+              const effects = combatEffectsStateSchema.parse(currentState.combatEffects);
+              const currentEffect = effects.effects.find(
+                (effect) => effect.id === transition.nextEffect.id,
+              );
+              if (
+                !currentEffect ||
+                JSON.stringify(currentEffect) !== JSON.stringify(transition.nextEffect)
+              ) {
+                completeAtomicRestoration = false;
+                break;
+              }
+              restorationStates.set(scenarioParticipant.id, {
+                ...currentState,
+                combatEffects: combatEffectsStateSchema.parse({
+                  ...effects,
+                  effects: effects.effects.map((effect) =>
+                    effect.id === transition.nextEffect.id ? transition.previousEffect : effect,
+                  ),
+                }),
+              });
+            }
+            if (!completeAtomicRestoration) break;
+            continue;
+          }
           const encounterParticipant = membership.participants.find(
             (participant) => participant.id === command.participantId,
           );
-          const scenarioParticipant = continuedContactEffectTransition
+          const scenarioParticipant = encounterParticipant
             ? scenarioParticipants.find(
-                (participant) =>
-                  participant.id === continuedContactEffectTransition.scenarioParticipantId,
+                (participant) => participant.id === encounterParticipant.scenarioParticipantId,
               )
-            : encounterParticipant
-              ? scenarioParticipants.find(
-                  (participant) => participant.id === encounterParticipant.scenarioParticipantId,
-                )
-              : undefined;
+            : undefined;
           if (!scenarioParticipant) {
             completeAtomicRestoration = false;
             break;
           }
           const currentState = restorationStates.get(scenarioParticipant.id)!;
-          if (continuedContactEffectTransition) {
-            const effects = combatEffectsStateSchema.parse(currentState.combatEffects);
-            const currentEffect = effects.effects.find(
-              (effect) => effect.id === continuedContactEffectTransition.nextEffect.id,
-            );
-            if (
-              !currentEffect ||
-              JSON.stringify(currentEffect) !==
-                JSON.stringify(continuedContactEffectTransition.nextEffect)
-            ) {
-              completeAtomicRestoration = false;
-              break;
-            }
-            restorationStates.set(scenarioParticipant.id, {
-              ...currentState,
-              combatEffects: combatEffectsStateSchema.parse({
-                ...effects,
-                effects: effects.effects.map((effect) =>
-                  effect.id === continuedContactEffectTransition.nextEffect.id
-                    ? continuedContactEffectTransition.previousEffect
-                    : effect,
-                ),
-              }),
-            });
-          } else if (
+          if (
             command.type === "review_modifiers_phase1" ||
             command.type === "review_modifiers_phase2"
           ) {
@@ -16354,8 +16499,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         if (completeAtomicRestoration) {
           const affectedParticipantIds = new Set(
             atomicParticipantEffectCommands.flatMap((command) => {
-              const transition = getContinuedContactEffectTransitionFacts(command);
-              if (transition) return [transition.scenarioParticipantId];
+              const transitions = getContinuedContactEffectTransitionFactsList(command);
+              if (transitions.length > 0) {
+                return transitions.map((transition) => transition.scenarioParticipantId);
+              }
               const encounterParticipant = membership.participants.find(
                 (participant) => participant.id === command.participantId,
               );
@@ -16428,7 +16575,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         removedRoundEndParticipantReviewCommands.length > 0 ||
         removedRoundEndHealthCheckCommands.length > 0 ||
         removedOffensiveParryBrawlingCommands.length > 0 ||
-        removedContinuedContactMaintenanceCommands.length > 0
+        removedContinuedContactMaintenanceCommands.length > 0 ||
+        removedBreakOffCommitCommands.length > 0
           ? scenarioParticipants.flatMap((participant) => {
               const encounterParticipant = membership.participants.find(
                 (entry) => entry.scenarioParticipantId === participant.id,

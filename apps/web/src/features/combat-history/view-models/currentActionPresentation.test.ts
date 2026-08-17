@@ -91,13 +91,18 @@ function task(input: {
       opportunityId: "opportunity-1",
       opponentParticipantId:
         input.kind === "parry" ? input.actor?.participantId : input.target?.participantId,
-      pairId: input.kind.startsWith("adjust_distance") ? "aria::borin" : undefined,
+      pairId:
+        input.kind.startsWith("adjust_distance") || input.kind.startsWith("break_off")
+          ? "aria::borin"
+          : undefined,
       phase: input.phase ?? "phase1",
       proposalId: input.kind.includes("feint")
         ? "proposal-feint"
         : input.kind.startsWith("adjust_distance")
           ? "proposal-distance"
-          : undefined,
+          : input.kind.startsWith("break_off")
+            ? "proposal-break-off"
+            : undefined,
     },
     kind: input.kind,
     opponent: input.kind === "parry" ? input.actor : input.target,
@@ -645,6 +650,75 @@ describe("CurrentActionPresentation", () => {
     });
     expect(defender?.primaryAction.descriptor).toBeUndefined();
     expect(gmPlayer).toEqual(player);
+  });
+
+  it.each([
+    ["break_off_escapee_roll", aria, "aria"],
+    ["break_off_attacker_roll", borin, "borin"],
+  ] as const)(
+    "lets the controlling player execute %s with exact task identity",
+    (kind, owner, controlledId) => {
+      const breakOffTask = task({
+        actionKind: "break_off_engagement",
+        actor: aria,
+        command: "roll_break_off",
+        kind,
+        owner,
+        responder: owner,
+        target: borin,
+      });
+      const result = buildCurrentActionPresentation({
+        encounterId: "encounter-1",
+        encounterRevision: "2026-07-20T12:00:00.000Z",
+        progression: progression({ tasks: [breakOffTask] }),
+        viewer: { controlledParticipantIds: new Set([controlledId]), kind: "player" },
+      });
+
+      expect(result).toMatchObject({
+        actionName: "Break Off",
+        primaryAction: {
+          enabled: true,
+          label: "Roll Dodge",
+          viewerMayInvoke: true,
+        },
+        requiredNow: "Roll Dodge.",
+        status: "executable",
+      });
+      expect(result?.primaryAction.descriptor).toMatchObject({
+        commandType: "roll_break_off",
+        expectedRevision: "2026-07-20T12:00:00.000Z",
+        pairId: "aria::borin",
+        participantId: controlledId,
+        proposalId: "proposal-break-off",
+        taskId: `task:${kind}`,
+      });
+    },
+  );
+
+  it("shows a safe wait after the player's Break Off roll while the opponent owns the remaining roll", () => {
+    const remainingOpponentTask = task({
+      actionKind: "break_off_engagement",
+      actor: aria,
+      command: "roll_break_off",
+      kind: "break_off_attacker_roll",
+      owner: borin,
+      responder: borin,
+      target: borin,
+    });
+    const result = buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "2026-07-20T12:00:00.000Z",
+      progression: progression({ tasks: [remainingOpponentTask] }),
+      viewer: { controlledParticipantIds: new Set(["aria"]), kind: "player" },
+    });
+
+    expect(result).toMatchObject({
+      primaryAction: { enabled: false, viewerMayInvoke: false },
+      requiredNow: "Waiting for Borin.",
+      status: "waiting",
+      summary: "Your Dodge roll is recorded. Waiting for Borin.",
+    });
+    expect(result?.primaryAction.descriptor).toBeUndefined();
   });
 
   it("presents the Double Attack decision without future-work explanation", () => {

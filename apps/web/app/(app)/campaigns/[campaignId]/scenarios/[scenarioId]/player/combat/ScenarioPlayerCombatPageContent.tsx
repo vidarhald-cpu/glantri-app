@@ -187,6 +187,7 @@ import {
   rollCombatFeintOnServer,
   respondCombatAdjustDistanceOnServer,
   rollCombatAdjustDistanceOnServer,
+  rollCombatBreakOffOnServer,
   rollRoundEndDistanceControlOnServer,
   rollRoundEndHealthCheckOnServer,
   submitCombatDeclarationOnServer,
@@ -2831,6 +2832,38 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
+  async function rollBreakOff(descriptor: CurrentActionCommandDescriptor) {
+    if (
+      readOnlyInspection ||
+      !selectedParticipant ||
+      !encounterId ||
+      !descriptor.proposalId ||
+      !descriptor.participantId
+    ) {
+      return;
+    }
+    setSavingCombatContext(true);
+    try {
+      const encounter = await rollCombatBreakOffOnServer({
+        currentEncounter: encounterSession,
+        encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        proposalId: descriptor.proposalId,
+        scenarioParticipantId: descriptor.participantId,
+        taskId: descriptor.taskId,
+      });
+      acceptEncounterSession(encounter);
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to roll Break Off Dodge.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
   async function rollInitiative(descriptor: CurrentActionCommandDescriptor) {
     if (readOnlyInspection) {
       return;
@@ -4347,6 +4380,9 @@ export default function ScenarioPlayerCombatPageContent({
         return;
       case "roll_feint":
         void invokeResultProducingProxyCommand(descriptor, () => rollFeint(descriptor));
+        return;
+      case "roll_break_off":
+        void invokeResultProducingProxyCommand(descriptor, () => rollBreakOff(descriptor));
         return;
       case "roll_round_end_distance_control":
         void invokeResultProducingProxyCommand(descriptor, () => rollDistanceControl(descriptor));

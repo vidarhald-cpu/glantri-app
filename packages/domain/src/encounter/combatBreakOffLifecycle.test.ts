@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildCombatBreakOffProposalId, combatBreakOffProposalSchema } from "./combatBreakOff";
 import { makeDistancePairKey } from "./combatDistance";
 import { buildCombatProgressionProjection } from "./combatProgressionProjection";
+import { projectProcessRestrictionToCanonicalModifierLifecycle } from "./combatModifierLifecycleCompatibility";
 import {
   commitCombatRoundBreakOff,
   combatRoundStateSchema,
@@ -11,6 +12,7 @@ import {
   isCombatPairEngaged,
   recordCombatRoundAttackResult,
   recordCombatRoundBreakOffRoll,
+  recordCombatRoundDeclaration,
   reviewCombatRoundBreakOff,
   undoLatestCombatRoundCommand,
   type CombatRoundState,
@@ -116,6 +118,7 @@ function resolvePair(
   proposalId: string,
   escapeeTotal: number,
   attackerTotal: number,
+  createdRevision?: string,
 ) {
   let current = reviewCombatRoundBreakOff({
     attackerAdjustment: 0,
@@ -139,7 +142,79 @@ function resolvePair(
     result: roll(attacker, attackerTotal, "break_off_attacker"),
     state: current,
   });
-  return commitCombatRoundBreakOff({ command: { createdAt: at }, proposalId, state: current });
+  return commitCombatRoundBreakOff({
+    command: { createdAt: at, createdRevision },
+    proposalId,
+    state: current,
+  });
+}
+
+function stateWithContinuedContact() {
+  const initial = state();
+  const context = {
+    createdAt: "2026-08-17T11:00:00.000Z",
+    createdRevision: "revision-before-break-off",
+    createdSequence: 1,
+    encounterId: initial.encounterId,
+  };
+  const duration = {
+    conditionId: "contact-1",
+    conditionKind: "contact_ended" as const,
+    kind: "until_condition" as const,
+    startPhase: "phase1" as const,
+    startRound: 1,
+    startSequence: 1,
+  };
+  return combatRoundStateSchema.parse({
+    ...initial,
+    continuedContacts: [
+      {
+        affectedParticipantId: "escapee",
+        brawlingContestResultId: "brawling-1",
+        canonicalLifecycle: projectProcessRestrictionToCanonicalModifierLifecycle({
+          context,
+          duration,
+          effectId: "contact-1",
+          effectKind: "continued_contact",
+          opponentParticipantId: "escapee",
+          ownerParticipantId: "attacker",
+          processId: "contact-1",
+          publicLabel: "Continued Contact",
+        }).effect,
+        controllerParticipantId: "attacker",
+        establishedPhase: "phase1",
+        establishedRound: 1,
+        id: "contact-1",
+        sourceActionId: "offensive_parry",
+        sourceAttackResultId: "attack-1",
+        sourceDeclarationId: "declaration-1",
+        sourceOpportunityId: "opportunity-1",
+        sourceParryResultId: "parry-1",
+        status: "active",
+      },
+    ],
+    unbalancedConditions: [
+      {
+        affectedParticipantId: "escapee",
+        canonicalLifecycle: projectProcessRestrictionToCanonicalModifierLifecycle({
+          context,
+          duration,
+          effectId: "unbalanced-1",
+          effectKind: "unbalanced",
+          opponentParticipantId: "attacker",
+          ownerParticipantId: "escapee",
+          processId: "contact-1",
+          publicLabel: "Unbalanced",
+        }).effect,
+        establishedRound: 1,
+        id: "unbalanced-1",
+        modifierValue: -2,
+        sourceActionId: "offensive_parry",
+        sourceContinuedContactId: "contact-1",
+        status: "active",
+      },
+    ],
+  });
 }
 
 describe("Break Off lifecycle", () => {
@@ -274,18 +349,80 @@ describe("Break Off lifecycle", () => {
   });
 
   it("undoes the exact commit, engagement, cursor, and committed history event", () => {
-    const initial = state();
+    const initial = stateWithContinuedContact();
     const proposalId = initial.breakOffProposals[0]!.id;
-    const committed = resolvePair(initial, proposalId, 25, 20);
+    const committed = resolvePair(initial, proposalId, 25, 20, "revision-at-commit");
     const commitCommand = committed.commands.at(-1)!;
     expect(commitCommand.type).toBe("commit_break_off");
     expect(committed.engagements).toHaveLength(1);
     expect(committed.events.some((event) => event.commandId === commitCommand.id)).toBe(true);
+    expect(committed.continuedContacts[0]).toMatchObject({
+      canonicalLifecycle: { lifecycle: { state: "resolved" } },
+      status: "ended",
+    });
+    expect(committed.unbalancedConditions[0]).toMatchObject({
+      canonicalLifecycle: { lifecycle: { state: "resolved" } },
+      status: "ended",
+    });
+    expect(commitCommand.facts).toMatchObject({
+      endedContinuedContactIds: ["contact-1"],
+      endedUnbalancedConditionIds: ["unbalanced-1"],
+    });
 
     const undone = undoLatestCombatRoundCommand({ state: committed });
     expect(undone?.breakOffProposals[0]?.status).toBe("awaiting_commit");
     expect(undone?.engagements).toEqual(initial.engagements);
+    expect(undone?.continuedContacts).toEqual(initial.continuedContacts);
+    expect(undone?.unbalancedConditions).toEqual(initial.unbalancedConditions);
     expect(undone?.currentCursor).toEqual(commitCommand.beforeCursor);
     expect(undone?.events.some((event) => event.commandId === commitCommand.id)).toBe(false);
+  });
+
+  it("exactly undoes new and replacement Break Off declarations with every pair proposal", () => {
+    const declarationState = combatRoundStateSchema.parse({
+      ...state([]),
+      currentCursor: { participantId: "escapee", roundNumber: 2, step: "DE" },
+      currentStep: "select_actions",
+      participants: state([]).participants.map((participant) => ({
+        ...participant,
+        declaration: undefined,
+        stepStatuses: {},
+      })),
+      roundNumber: 2,
+    });
+    const declared = recordCombatRoundDeclaration({
+      command: { createdAt: "2026-08-17T12:01:00.000Z" },
+      declaration: { actionId: "break_off_engagement", roundNumber: 2 },
+      participantId: "escapee",
+      state: declarationState,
+      submittedBy: "player",
+    });
+    expect(declared.breakOffProposals.map((entry) => entry.attackerParticipantId).sort()).toEqual([
+      "attacker",
+      "second",
+    ]);
+
+    const undoneNew = undoLatestCombatRoundCommand({ state: declared });
+    expect(undoneNew?.breakOffProposals).toEqual([]);
+    expect(
+      buildCombatProgressionProjection(undoneNew!).boundary.processes.some(
+        (process) => process.kind === "break_off",
+      ),
+    ).toBe(false);
+
+    const replaced = recordCombatRoundDeclaration({
+      command: { createdAt: "2026-08-17T12:02:00.000Z" },
+      declaration: { actionId: "parry", roundNumber: 2 },
+      participantId: "escapee",
+      state: declared,
+      submittedBy: "player",
+    });
+    expect(replaced.breakOffProposals).toEqual([]);
+
+    const undoneReplacement = undoLatestCombatRoundCommand({ state: replaced });
+    expect(
+      undoneReplacement?.breakOffProposals.map((entry) => entry.attackerParticipantId).sort(),
+    ).toEqual(["attacker", "second"]);
+    expect(undoneReplacement?.participants[1]?.declaration?.actionId).toBe("break_off_engagement");
   });
 });
