@@ -1014,6 +1014,7 @@ function buildAdapterAttackProcess(
                   actionId: opportunityIdentity?.actionId,
                   attackIndex: opportunityIdentity?.attackIndex,
                   attackModeId: opportunityIdentity?.attackModeId,
+                  attackerParticipantId: plan.ownerParticipantId,
                   declarationId:
                     taskKind === "parry" && offensiveParryAttempt
                       ? offensiveParryAttempt.declarationId
@@ -1027,6 +1028,7 @@ function buildAdapterAttackProcess(
                     taskKind === "parry" ? parryDisarmAttempt?.disarmAttemptId : undefined,
                   damageRollExpression:
                     taskKind === "damage_roll" ? damageRollExpression : undefined,
+                  defenderParticipantId: plan.targetParticipantId,
                   opponentParticipantId:
                     task.owner === "defender" ? plan.ownerParticipantId : plan.targetParticipantId,
                   opportunityId: task.opportunityId,

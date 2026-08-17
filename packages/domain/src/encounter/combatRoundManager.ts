@@ -150,7 +150,11 @@ import {
   isCombatDeclarationActionAvailable,
   validateCombatDeclarationCompatibility,
 } from "./combatDeclarationCompatibility";
-import { movementIntentSchema, type DistancePreferenceIntent } from "./combatMovementIntent";
+import {
+  movementIntentSchema,
+  type DistancePreferenceIntent,
+  type MovementIntent,
+} from "./combatMovementIntent";
 import {
   combatEffectEventSchema,
   combatEffectBleedStateSchema,
@@ -18676,6 +18680,25 @@ function interruptParticipantMissileReadinessForSubstantialAction(input: {
   };
 }
 
+function canRetainMissileReadinessThroughDeclarationMovement(
+  movementIntent: MovementIntent | undefined,
+): boolean {
+  if (
+    !movementIntent ||
+    movementIntent.mode === "hold_position" ||
+    movementIntent.mode === "set_distance_preferences"
+  ) {
+    return true;
+  }
+
+  const movement = movementIntent.environmentalMovement;
+  if (!movement || movement.pace === "run") return false;
+
+  // A bounded phase reposition/walk can remain part of the same prepared shot.
+  // Longer or GM-sized environmental movement is a substantial action.
+  return movement.duration.kind === "phase";
+}
+
 function restoreCombatMissileReadinessSnapshots(input: {
   current: CombatMissileReadiness[];
   snapshots: unknown;
@@ -18768,6 +18791,7 @@ export function recordCombatRoundDeclaration(input: {
         participantId: input.participantId,
         preserve: (readiness) =>
           Boolean(
+            canRetainMissileReadinessThroughDeclarationMovement(declaration.movementIntent) &&
             declaration.attackOpportunities?.some(
               (opportunity) =>
                 opportunity.status === "committed" &&

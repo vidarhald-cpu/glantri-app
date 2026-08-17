@@ -6110,15 +6110,21 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
   }
 
   if (input.command.type === "roll_attack") {
-    const safeFacts = { ...input.command.facts };
-    delete safeFacts.attackerCalculation;
-    delete safeFacts.defenderCalculation;
-    delete safeFacts.interruptedMissileReadiness;
-    delete safeFacts.pendingMissileAttack;
-    delete safeFacts.missileAmmoUndo;
-    delete safeFacts.previousMissileReadiness;
-    delete safeFacts.thrownWeaponUndo;
-    return { ...input.command, facts: safeFacts };
+    if (!input.controlledEncounterParticipantIds.has(input.command.participantId)) {
+      return undefined;
+    }
+    return {
+      ...input.command,
+      createdByUserId: undefined,
+      facts: {
+        actionId: input.command.facts.actionId,
+        attackOpportunityId: input.command.facts.attackOpportunityId,
+        attackResultId: input.command.facts.attackResultId,
+        attackType: input.command.facts.attackType,
+        phase: input.command.facts.phase,
+        status: input.command.facts.status,
+      },
+    };
   }
 
   // Readiness commands carry exact ammunition identities/revisions, GM timing
@@ -15506,26 +15512,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         scenarioParticipants,
         userId: user.id,
       });
-      const defenderResolution = resolveEncounterParticipantForViewer({
-        encounter,
-        requestedParticipantId: body.defenderParticipantId,
-        scenarioParticipants,
-        viewer: { kind: "gm" },
-      });
       const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
       const scenarioParticipant = participantResolution?.scenarioParticipant;
       const encounterParticipant = participantResolution?.encounterParticipant;
-      const defenderEncounterParticipant = defenderResolution?.encounterParticipant;
-      const defenderScenarioParticipant = defenderResolution?.scenarioParticipant;
 
-      if (
-        !scenarioParticipant ||
-        !scenarioParticipant.isActive ||
-        !encounterParticipant ||
-        !defenderScenarioParticipant ||
-        !defenderScenarioParticipant.isActive ||
-        !defenderEncounterParticipant
-      ) {
+      if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
         return reply.code(403).send({
           error: "Participant is not assigned to this encounter.",
         });
@@ -15566,6 +15557,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           attackIndex: body.attackIndex,
           attackModeId: body.attackModeId,
           declarationId: body.declarationId,
+          defenderParticipantId: body.defenderParticipantId,
           opportunityId: body.opportunityId,
           participantId: encounterParticipant.id,
           phase: body.phase,
@@ -15579,6 +15571,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         roundState,
       });
       if (!attackAuthorization.ok) {
+        if (
+          access.mode !== "gm" &&
+          (attackAuthorization.code === "wrong_participant" ||
+            attackAuthorization.code === "stale_opportunity" ||
+            attackAuthorization.code === "task_not_found" ||
+            attackAuthorization.code === "task_mismatch")
+        ) {
+          return reply.code(409).send({
+            code: "task_mismatch",
+            error: "Attack task is unavailable. Refresh combat before rolling.",
+          });
+        }
         return reply.code(409).send({
           code: attackAuthorization.code,
           error:
@@ -15588,6 +15592,40 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
       const projectedAttackTask = attackAuthorization.task;
+      const projectedDefenderParticipantId =
+        projectedAttackTask.identity.defenderParticipantId ?? body.defenderParticipantId;
+      const playerVisibleParticipantIds =
+        access.mode === "player"
+          ? buildPlayerSafeCombatScopeForUser({
+              encounter,
+              scenarioParticipants,
+              userId: user.id,
+            }).visibleParticipantIds
+          : undefined;
+      const defenderResolution = resolveEncounterParticipantForViewer({
+        encounter,
+        requestedParticipantId: projectedDefenderParticipantId,
+        scenarioParticipants,
+        viewer: { kind: "gm" },
+      });
+      const defenderEncounterParticipant = defenderResolution?.encounterParticipant;
+      const defenderScenarioParticipant = defenderResolution?.scenarioParticipant;
+      if (
+        !defenderScenarioParticipant ||
+        !defenderScenarioParticipant.isActive ||
+        !defenderEncounterParticipant ||
+        (playerVisibleParticipantIds &&
+          !playerVisibleParticipantIds.has(defenderEncounterParticipant.id))
+      ) {
+        return access.mode === "gm"
+          ? reply.code(403).send({
+              error: "Participant is not assigned to this encounter.",
+            })
+          : reply.code(409).send({
+              code: "task_mismatch",
+              error: "Attack task is unavailable. Refresh combat before rolling.",
+            });
+      }
       if (
         body.modifierValidationTaskId &&
         body.modifierValidationTaskId !== projectedAttackTask?.id

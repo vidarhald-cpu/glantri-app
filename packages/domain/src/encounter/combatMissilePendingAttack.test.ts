@@ -148,6 +148,12 @@ describe("pending missile defense boundary", () => {
       selectedParticipantId: "archer",
       selectedStep: "review_action_modifiers",
       roundNumber: 2,
+      missileReadiness: state().missileReadiness.map((readiness) => ({
+        ...readiness,
+        aimCompletedRounds: 2,
+        aimLevel: 1,
+        aimRequiredRounds: 2,
+      })),
     });
     const compatible = recordCombatRoundDeclaration({
       command: { createdAt: "2026-08-18T10:01:00.000Z" },
@@ -162,7 +168,76 @@ describe("pending missile defense boundary", () => {
       submittedBy: "player",
     });
     expect(compatible.missileReadiness[0]?.status).toBe("ready");
+    expect(compatible.missileReadiness[0]?.aimCompletedRounds).toBe(2);
     expect(compatible.commands.at(-1)?.facts.previousMissileReadiness).toEqual([]);
+
+    const smallMovement = recordCombatRoundDeclaration({
+      command: { createdAt: "2026-08-18T10:01:30.000Z" },
+      declaration: {
+        actionId: "attack_parry",
+        attackOpportunities: declarationState.participants[0]!.declaration!.attackOpportunities,
+        id: "declaration-small-movement",
+        movementIntent: {
+          distancePreferences: [],
+          environmentalMovement: {
+            destination: { description: "the next firing position", kind: "description" },
+            duration: { kind: "phase", phase: "phase1" },
+            pace: "reposition",
+          },
+          mode: "move_in_environment",
+        },
+        roundNumber: 2,
+      },
+      participantId: "archer",
+      state: compatible,
+      submittedBy: "player",
+    });
+    expect(smallMovement.missileReadiness[0]).toMatchObject({
+      aimCompletedRounds: 2,
+      baseCompletedRounds: 1,
+      status: "ready",
+    });
+    expect(smallMovement.commands.at(-1)?.facts.previousMissileReadiness).toEqual([]);
+
+    const majorMovement = recordCombatRoundDeclaration({
+      command: { createdAt: "2026-08-18T10:01:45.000Z" },
+      declaration: {
+        actionId: "attack_parry",
+        attackOpportunities: declarationState.participants[0]!.declaration!.attackOpportunities,
+        id: "declaration-major-movement",
+        movementIntent: {
+          distancePreferences: [],
+          environmentalMovement: {
+            destination: { description: "the far ridge", kind: "description" },
+            duration: { kind: "rounds", rounds: 2 },
+            pace: "run",
+          },
+          mode: "move_in_environment",
+        },
+        roundNumber: 2,
+      },
+      participantId: "archer",
+      state: smallMovement,
+      submittedBy: "player",
+    });
+    expect(majorMovement.missileReadiness[0]).toMatchObject({
+      aimCompletedRounds: 0,
+      baseCompletedRounds: 0,
+      status: "idle",
+    });
+    expect(majorMovement.commands.at(-1)?.facts.previousMissileReadiness).toHaveLength(1);
+    const majorMovementUndone = undoLatestCombatRoundCommand({
+      state: combatRoundStateSchema.parse(JSON.parse(JSON.stringify(majorMovement))),
+    });
+    expect(majorMovementUndone?.participants[0]?.declaration?.id).toBe(
+      "declaration-small-movement",
+    );
+    expect(majorMovementUndone?.missileReadiness[0]).toMatchObject({
+      aimCompletedRounds: 2,
+      baseCompletedRounds: 1,
+      status: "ready",
+      targetParticipantId: "target",
+    });
 
     const changed = recordCombatRoundDeclaration({
       command: { createdAt: "2026-08-18T10:02:00.000Z" },
@@ -192,7 +267,7 @@ describe("pending missile defense boundary", () => {
         roundNumber: 2,
       },
       participantId: "archer",
-      state: compatible,
+      state: smallMovement,
       submittedBy: "player",
     });
     expect(changed.missileReadiness[0]).toMatchObject({ status: "idle" });
@@ -200,10 +275,170 @@ describe("pending missile defense boundary", () => {
     const undone = undoLatestCombatRoundCommand({
       state: combatRoundStateSchema.parse(JSON.parse(JSON.stringify(changed))),
     });
-    expect(undone?.participants[0]?.declaration?.id).toBe("declaration-2");
+    expect(undone?.participants[0]?.declaration?.id).toBe("declaration-small-movement");
     expect(undone?.missileReadiness[0]).toMatchObject({
+      aimCompletedRounds: 2,
       baseCompletedRounds: 1,
       status: "ready",
+      targetParticipantId: "target",
+    });
+  });
+
+  it("invalidates fragile Sling work but retains a loaded crossbow stage through major movement", () => {
+    const declarationState = combatRoundStateSchema.parse({
+      ...state(),
+      currentCursor: { participantId: "archer", roundNumber: 2, step: "M1" },
+      currentStep: "review_action_modifiers",
+      phaseResolutionCursor: undefined,
+      phaseResolutionStatuses: {},
+      roundNumber: 2,
+      selectedParticipantId: "archer",
+      selectedStep: "review_action_modifiers",
+    });
+    const runMovement = {
+      distancePreferences: [],
+      environmentalMovement: {
+        destination: { description: "cover across the courtyard", kind: "description" as const },
+        duration: { kind: "round" as const },
+        pace: "run" as const,
+      },
+      mode: "move_in_environment" as const,
+    };
+    const exercise = (input: {
+      opportunity: NonNullable<
+        (typeof declarationState.participants)[number]["declaration"]
+      >["attackOpportunities"];
+      readiness: (typeof declarationState.missileReadiness)[number];
+    }) => {
+      const next = recordCombatRoundDeclaration({
+        command: { createdAt: "2026-08-18T10:03:00.000Z" },
+        declaration: {
+          actionId: "attack_parry",
+          attackOpportunities: input.opportunity,
+          id: `declaration-${input.readiness.family}`,
+          movementIntent: runMovement,
+          roundNumber: 2,
+        },
+        participantId: "archer",
+        state: combatRoundStateSchema.parse({
+          ...declarationState,
+          missileReadiness: [input.readiness],
+          participants: declarationState.participants.map((participant) =>
+            participant.participantId === "archer" && participant.declaration
+              ? {
+                  ...participant,
+                  declaration: {
+                    ...participant.declaration,
+                    attackOpportunities: input.opportunity,
+                  },
+                }
+              : participant,
+          ),
+        }),
+        submittedBy: "player",
+      });
+      return {
+        next,
+        undone: undoLatestCombatRoundCommand({
+          state: combatRoundStateSchema.parse(JSON.parse(JSON.stringify(next))),
+        }),
+      };
+    };
+
+    const slingProfile = {
+      ammoFamily: "sling_projectile" as const,
+      canRemainReady: false,
+      family: "sling" as const,
+      fullNormalCycleRounds: 2,
+      preparationModel: "continuous_fragile" as const,
+      rapidShotAllowed: true,
+      standardPreparationRounds: 1,
+    };
+    const sling = exercise({
+      opportunity: declarationState.participants[0]!.declaration!.attackOpportunities!.map(
+        (opportunity) => ({
+          ...opportunity,
+          itemId: "sling",
+          missileProfile: slingProfile,
+          weaponInstanceId: "sling",
+          weaponSourceId: "sling",
+          weaponTemplateId: "weapon-template-sling",
+        }),
+      ),
+      readiness: {
+        ...declarationState.missileReadiness[0]!,
+        aimCompletedRounds: 2,
+        aimLevel: 1,
+        aimRequiredRounds: 2,
+        ammoFamily: "sling_projectile",
+        ammoItemId: "stones",
+        family: "sling",
+        id: "missile-readiness:archer:sling",
+        profile: slingProfile,
+        weaponItemId: "sling",
+        weaponTemplateId: "weapon-template-sling",
+      },
+    });
+    expect(sling.next.missileReadiness[0]).toMatchObject({
+      aimCompletedRounds: 0,
+      baseCompletedRounds: 0,
+      status: "idle",
+    });
+    expect(sling.undone?.missileReadiness[0]).toMatchObject({
+      aimCompletedRounds: 2,
+      baseCompletedRounds: 1,
+      status: "ready",
+    });
+
+    const crossbowProfile = {
+      ammoFamily: "crossbow_bolt" as const,
+      canRemainReady: true,
+      family: "crossbow" as const,
+      fullNormalCycleRounds: 8,
+      preparationModel: "staged_persistent" as const,
+      rapidShotAllowed: false,
+      standardPreparationRounds: 7,
+    };
+    const crossbow = exercise({
+      opportunity: declarationState.participants[0]!.declaration!.attackOpportunities!.map(
+        (opportunity) => ({
+          ...opportunity,
+          itemId: "crossbow",
+          missileProfile: crossbowProfile,
+          weaponInstanceId: "crossbow",
+          weaponSourceId: "crossbow",
+          weaponTemplateId: "weapon-template-crossbow",
+        }),
+      ),
+      readiness: {
+        ...declarationState.missileReadiness[0]!,
+        aimCompletedRounds: 1,
+        aimLevel: 1,
+        aimRequiredRounds: 2,
+        ammoFamily: "crossbow_bolt",
+        ammoItemId: "bolts",
+        baseCompletedRounds: 7,
+        baseRequiredRounds: 7,
+        family: "crossbow",
+        id: "missile-readiness:archer:crossbow",
+        profile: crossbowProfile,
+        status: "loaded",
+        weaponItemId: "crossbow",
+        weaponTemplateId: "weapon-template-crossbow",
+      },
+    });
+    expect(crossbow.next.missileReadiness[0]).toMatchObject({
+      aimCompletedRounds: 0,
+      aimLevel: 0,
+      baseCompletedRounds: 7,
+      status: "loaded",
+      targetParticipantId: undefined,
+    });
+    expect(crossbow.undone?.missileReadiness[0]).toMatchObject({
+      aimCompletedRounds: 1,
+      aimLevel: 1,
+      baseCompletedRounds: 7,
+      status: "loaded",
       targetParticipantId: "target",
     });
   });
