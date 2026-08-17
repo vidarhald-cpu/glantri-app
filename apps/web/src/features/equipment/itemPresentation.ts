@@ -32,20 +32,38 @@ export function buildItemPresentationSections(
   template: EquipmentTemplate,
 ): ItemPresentationSection[] {
   if (!item.itemFacts) return [];
-  const initiative = item.itemFacts.templateOverrides[0];
   const standardInitiative = template.category === "weapon" ? template.initiative : undefined;
+  const templateOverrideEntries = item.itemFacts.templateOverrides.flatMap((override) => {
+    switch (override.kind) {
+      case "weapon_initiative_override":
+        return typeof standardInitiative === "number"
+          ? [
+              {
+                label: `Initiative ${override.value} (standard ${standardInitiative})`,
+                visibility: override.visibility,
+              },
+            ]
+          : [];
+      case "weapon_disarm_capability_override":
+        return [
+          {
+            label: `Disarm capability ${words(override.value)}`,
+            visibility: override.visibility,
+          },
+        ];
+      case "weapon_disarm_control_override":
+        return [
+          {
+            label: `Disarm control rating ${override.value}`,
+            visibility: override.visibility,
+          },
+        ];
+    }
+  });
 
   return [
     {
-      entries:
-        initiative && typeof standardInitiative === "number"
-          ? [
-              {
-                label: `Initiative ${initiative.value} (standard ${standardInitiative})`,
-                visibility: initiative.visibility,
-              },
-            ]
-          : [],
+      entries: templateOverrideEntries,
       id: "template_differences",
       title: "Differences from standard",
     },

@@ -261,6 +261,7 @@ import type {
   CombatParryModifierValidationProjection,
   CombatActionGeneratedDistanceModifierInput,
   CombatAttackSourceRef,
+  CombatDisarmRoll,
   CombatDistanceWeaponLike,
   CombatRoundAttackOpportunity,
   CombatRoundCommand,
@@ -337,6 +338,7 @@ import { resolveCanonicalCombatInitiativeBaseForTask } from "./combatInitiativeR
 import {
   resolveCanonicalAttackOffense,
   resolveCanonicalParryBase,
+  resolveCanonicalWeaponParryBase,
 } from "./combatManualCalculationResolution";
 
 const campaignService = instrumentCombatService(new CampaignService(), {
@@ -3161,6 +3163,43 @@ function getScenarioParticipantActiveWeaponItemIds(participant: ScenarioParticip
   ].filter((itemId): itemId is string => typeof itemId === "string" && itemId.length > 0);
 }
 
+function getScenarioParticipantWieldedWeaponItemIds(participant: ScenarioParticipant): string[] {
+  const equipmentState = getSnapshotEquipmentState(participant);
+  const activeLoadoutsValue = equipmentState?.["activeLoadoutByCharacterId"];
+  const activeLoadouts = isRecord(activeLoadoutsValue) ? activeLoadoutsValue : undefined;
+  const characterId =
+    participant.characterId ??
+    (activeLoadouts ? Object.keys(activeLoadouts).find((key) => key.trim().length > 0) : undefined);
+  const activeLoadoutValue = characterId ? activeLoadouts?.[characterId] : undefined;
+  const activeLoadout = isRecord(activeLoadoutValue) ? activeLoadoutValue : undefined;
+  return [
+    activeLoadout?.["activePrimaryWeaponItemId"],
+    activeLoadout?.["activeSecondaryWeaponItemId"],
+  ].filter((itemId): itemId is string => typeof itemId === "string" && itemId.length > 0);
+}
+
+function hasExactWieldedWeaponItem(input: {
+  expectedRevision: string;
+  expectedTemplateId: string;
+  itemId: string;
+  participant: ScenarioParticipant;
+}): boolean {
+  const equipmentState = getSnapshotEquipmentState(input.participant);
+  const itemsById = isRecord(equipmentState?.["itemsById"])
+    ? (equipmentState["itemsById"] as Record<string, unknown>)
+    : undefined;
+  const item = EquipmentItemSchema.safeParse(itemsById?.[input.itemId]);
+  const wieldedIds = getScenarioParticipantWieldedWeaponItemIds(input.participant);
+  return Boolean(
+    item.success &&
+    wieldedIds.includes(input.itemId) &&
+    item.data.templateId === input.expectedTemplateId &&
+    item.data.revision === input.expectedRevision &&
+    item.data.conditionState === "intact" &&
+    item.data.storageAssignment?.carryMode === "equipped",
+  );
+}
+
 function getScenarioParticipantWeaponItemIdForSlot(
   participant: ScenarioParticipant,
   slot: CombatAttackSourceRef["slot"],
@@ -5797,6 +5836,17 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
     return undefined;
   }
 
+  // Disarm command facts are exact undo snapshots and contain both sides' private
+  // roll calculations and canonical Item identities. The authoritative state keeps
+  // them for retry/undo; player views use the sanitized attempt projection instead.
+  if (
+    input.command.type === "open_disarm" ||
+    input.command.type === "roll_disarm" ||
+    input.command.type === "commit_disarm"
+  ) {
+    return undefined;
+  }
+
   if (
     input.command.type === "submit_phase_initiative_choice" &&
     !input.controlledEncounterParticipantIds.has(input.command.participantId)
@@ -5914,6 +5964,19 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
   }
 
   return input.command;
+}
+
+function sanitizePlayerSafeDisarmRoll(roll: CombatDisarmRoll): CombatDisarmRoll {
+  return {
+    ...roll,
+    calculation: {
+      ...roll.calculation,
+      percentageContributions: roll.calculation.percentageContributions.filter(
+        (contribution) => contribution.category !== "weapon_control",
+      ),
+    },
+    rolledByUserId: undefined,
+  };
 }
 
 function buildPlayerSafeCombatRoundStateForUser(input: {
@@ -6041,6 +6104,11 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
     },
     events: [],
     breakOffProposals: safeBreakOffProposals,
+    disarmUnbalancedConditions: roundState.disarmUnbalancedConditions.filter(
+      (condition) =>
+        controlledEncounterParticipantIds.has(condition.affectedParticipantId) ||
+        visibleParticipantIds.has(condition.affectedParticipantId),
+    ),
     disarmAttempts: roundState.disarmAttempts
       .filter((attempt) =>
         isPlayerVisibleCombatRoundResultPair({
@@ -6052,14 +6120,15 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
       )
       .map((attempt) => ({
         ...attempt,
+        difference: undefined,
         actingRoll: controlledEncounterParticipantIds.has(attempt.actingParticipantId)
           ? attempt.actingRoll
-            ? { ...attempt.actingRoll, rolledByUserId: undefined }
+            ? sanitizePlayerSafeDisarmRoll(attempt.actingRoll)
             : undefined
           : undefined,
         resistingRoll: controlledEncounterParticipantIds.has(attempt.resistingParticipantId)
           ? attempt.resistingRoll
-            ? { ...attempt.resistingRoll, rolledByUserId: undefined }
+            ? sanitizePlayerSafeDisarmRoll(attempt.resistingRoll)
             : undefined
           : undefined,
       })),
@@ -6181,25 +6250,27 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
               declaration:
                 roundState.currentStep === "select_actions"
                   ? undefined
-                  : participant.declaration
-                    ? {
-                        ...participant.declaration,
-                        additionalActionNotes: undefined,
-                        movementIntent: undefined,
-                        secondaryActions:
-                          participant.declaration.secondaryActionId === "observe_opponent"
-                            ? undefined
-                            : participant.declaration.secondaryActions,
-                        secondaryActionContext:
-                          participant.declaration.secondaryActionId === "observe_opponent"
-                            ? undefined
-                            : participant.declaration.secondaryActionContext,
-                        secondaryActionId:
-                          participant.declaration.secondaryActionId === "observe_opponent"
-                            ? undefined
-                            : participant.declaration.secondaryActionId,
-                      }
-                    : undefined,
+                  : participant.declaration?.disarm
+                    ? undefined
+                    : participant.declaration
+                      ? {
+                          ...participant.declaration,
+                          additionalActionNotes: undefined,
+                          movementIntent: undefined,
+                          secondaryActions:
+                            participant.declaration.secondaryActionId === "observe_opponent"
+                              ? undefined
+                              : participant.declaration.secondaryActions,
+                          secondaryActionContext:
+                            participant.declaration.secondaryActionId === "observe_opponent"
+                              ? undefined
+                              : participant.declaration.secondaryActionContext,
+                          secondaryActionId:
+                            participant.declaration.secondaryActionId === "observe_opponent"
+                              ? undefined
+                              : participant.declaration.secondaryActionId,
+                        }
+                      : undefined,
             },
       ),
     phaseResolutionCursor: safePhaseResolutionCursor,
@@ -7906,6 +7977,30 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   },
           });
         } catch {
+          return reply.code(409).send({
+            code: "disarm_item_unavailable",
+            error: "A selected Disarm weapon is unavailable. Refresh and select again.",
+          });
+        }
+        const targetScenarioParticipant = findScenarioParticipantForEncounterParticipant({
+          encounterParticipant: targetEncounterParticipant,
+          scenarioParticipants,
+        });
+        if (
+          !targetScenarioParticipant ||
+          !hasExactWieldedWeaponItem({
+            expectedRevision: declarationDisarm.actingWeapon.itemRevision,
+            expectedTemplateId: declarationDisarm.actingWeapon.templateId,
+            itemId: declarationDisarm.actingWeapon.itemId,
+            participant: scenarioParticipant,
+          }) ||
+          !hasExactWieldedWeaponItem({
+            expectedRevision: declarationDisarm.targetWeapon.itemRevision,
+            expectedTemplateId: declarationDisarm.targetWeapon.templateId,
+            itemId: declarationDisarm.targetWeapon.itemId,
+            participant: targetScenarioParticipant,
+          })
+        ) {
           return reply.code(409).send({
             code: "disarm_item_unavailable",
             error: "A selected Disarm weapon is unavailable. Refresh and select again.",
@@ -15540,6 +15635,47 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             (participant) => participant.id === attackerEncounterParticipant.scenarioParticipantId,
           )
         : undefined;
+      const parryDisarmAttempt =
+        body.parryPurpose === "parry_disarm" && body.disarmAttemptId
+          ? roundState.disarmAttempts.find(
+              (attempt) =>
+                attempt.id === body.disarmAttemptId &&
+                attempt.status === "awaiting_contact" &&
+                attempt.method === "reactive_parry",
+            )
+          : undefined;
+      const parryDisarmDeclaration =
+        body.parryPurpose === "parry_disarm"
+          ? roundState.participants.find(
+              (participant) => participant.participantId === encounterParticipant.id,
+            )?.declaration?.disarm
+          : undefined;
+      if (
+        body.parryPurpose === "parry_disarm" &&
+        (!parryDisarmAttempt ||
+          !parryDisarmDeclaration ||
+          !attackerScenarioParticipant ||
+          body.parrySourceId !== parryDisarmDeclaration.actingWeapon.itemId ||
+          parryDisarmAttempt.actingWeaponItemId !== parryDisarmDeclaration.actingWeapon.itemId ||
+          parryDisarmAttempt.targetWeaponItemId !== parryDisarmDeclaration.targetWeapon.itemId ||
+          !hasExactWieldedWeaponItem({
+            expectedRevision: parryDisarmDeclaration.actingWeapon.itemRevision,
+            expectedTemplateId: parryDisarmDeclaration.actingWeapon.templateId,
+            itemId: parryDisarmDeclaration.actingWeapon.itemId,
+            participant: scenarioParticipant,
+          }) ||
+          !hasExactWieldedWeaponItem({
+            expectedRevision: parryDisarmDeclaration.targetWeapon.itemRevision,
+            expectedTemplateId: parryDisarmDeclaration.targetWeapon.templateId,
+            itemId: parryDisarmDeclaration.targetWeapon.itemId,
+            participant: attackerScenarioParticipant,
+          }))
+      ) {
+        return reply.code(409).send({
+          code: "parry_context_unavailable",
+          error: "The declared Parry-Disarm weapon is no longer ready. Refresh combat.",
+        });
+      }
       const canonicalModifierFacts = resolveCanonicalCombatParryModifierFacts({
         attackerScenarioParticipant,
         attackResult,
@@ -15573,11 +15709,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const submittedAt = new Date().toISOString();
       const roll = rollOpenEndedD20();
-      const canonicalParryBase = resolveCanonicalParryBase({
-        participant: scenarioParticipant,
-        usedMainHand: body.usedMainHand,
-        usedOffHand: body.usedOffHand,
-      });
+      const canonicalParryBase =
+        body.parryPurpose === "parry_disarm" && parryDisarmDeclaration
+          ? resolveCanonicalWeaponParryBase({
+              expectedItemRevision: parryDisarmDeclaration.actingWeapon.itemRevision,
+              expectedTemplateId: parryDisarmDeclaration.actingWeapon.templateId,
+              participant: scenarioParticipant,
+              weaponItemId: parryDisarmDeclaration.actingWeapon.itemId,
+            })
+          : resolveCanonicalParryBase({
+              participant: scenarioParticipant,
+              usedMainHand: body.usedMainHand,
+              usedOffHand: body.usedOffHand,
+            });
       if (canonicalParryBase.completeness !== "complete") {
         return reply.code(409).send({
           code: "parry_context_unavailable",

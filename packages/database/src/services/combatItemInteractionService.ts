@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { equipmentTemplatesById } from "@glantri/content";
 import {
   projectCombatItemInteractionRecipients,
+  revealableEquipmentItemFacts,
   resolveWeaponDisarmMismatch,
   resolveWeaponDisarmProfile,
   type CombatDisarmDeclaration,
@@ -347,7 +348,10 @@ function supportedOperations(
   return operations;
 }
 
-function toOption(record: CombatItemInteractionRecord): CombatItemInteractionOption {
+function toOption(
+  record: CombatItemInteractionRecord,
+  itemFacts = record.item.itemFacts,
+): CombatItemInteractionOption {
   if (!record.item.revision) {
     throw new Error("Canonical Item revision is unavailable.");
   }
@@ -357,7 +361,7 @@ function toOption(record: CombatItemInteractionRecord): CombatItemInteractionOpt
     record.item.category === "weapon" && template?.category === "weapon"
       ? (() => {
           const profile = resolveWeaponDisarmProfile({
-            itemFacts: record.item.itemFacts,
+            itemFacts,
             template,
           });
           return {
@@ -379,6 +383,18 @@ function toOption(record: CombatItemInteractionRecord): CombatItemInteractionOpt
     templateId: record.item.templateId,
     weaponDisarm,
   };
+}
+
+function toOptionForViewer(
+  record: CombatItemInteractionRecord,
+  viewer: CombatItemInteractionViewer,
+): CombatItemInteractionOption {
+  return toOption(
+    record,
+    viewer.kind === "gm"
+      ? record.item.itemFacts
+      : revealableEquipmentItemFacts(record.item.itemFacts),
+  );
 }
 
 export class CombatItemInteractionService {
@@ -421,7 +437,7 @@ export class CombatItemInteractionService {
               (input.viewer.kind === "gm" || !record.hidden) &&
               record.item.holderCharacterId === participant.characterId,
           )
-          .map(toOption),
+          .map((record) => toOptionForViewer(record, input.viewer)),
         label: participant.label,
         participantId: participant.participantId,
       };
@@ -433,7 +449,7 @@ export class CombatItemInteractionService {
           !record.item.holderCharacterId &&
           (input.viewer.kind === "gm" || !record.hidden),
       )
-      .map(toOption);
+      .map((record) => toOptionForViewer(record, input.viewer));
     const disarmTargets = input.participants
       .filter(
         (participant) =>
@@ -452,7 +468,7 @@ export class CombatItemInteractionService {
                     record.item.category === "weapon" &&
                     (input.viewer.kind === "gm" || !record.hidden),
                 )
-                .map(toOption)
+                .map((record) => toOptionForViewer(record, input.viewer))
             : [],
           label: participant.label,
           participantId: participant.participantId,
@@ -596,6 +612,18 @@ export class CombatItemInteractionService {
     );
     if (!actingRecord || !targetRecord) throw new CombatItemUnavailableError();
 
+    const visibleActing = toOptionForViewer(actingRecord, input.viewer);
+    const visibleTargetWeapon = toOptionForViewer(targetRecord, input.viewer);
+    if (
+      visibleActing.category !== "weapon" ||
+      visibleTargetWeapon.category !== "weapon" ||
+      visibleActing.weaponDisarm?.capability !== "trap" ||
+      !visibleTargetWeapon.weaponDisarm
+    ) {
+      throw new CombatItemUnavailableError();
+    }
+    // Player-facing availability is based only on revealed facts; the resulting
+    // declaration still uses the full canonical facts for GM-owned mechanics.
     const acting = toOption(actingRecord);
     const targetWeapon = toOption(targetRecord);
     if (

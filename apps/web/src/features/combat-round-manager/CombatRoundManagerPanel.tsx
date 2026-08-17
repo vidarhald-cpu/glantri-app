@@ -4073,6 +4073,7 @@ export default function CombatRoundManagerPanel({
     useState<InspectorCurrentActionOutcomeSelection>("perform");
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const [combatItemOptions, setCombatItemOptions] = useState<CombatItemInteractionOptions>();
+  const [combatItemOptionsError, setCombatItemOptionsError] = useState<string>();
   const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
     useState<
       Record<
@@ -7659,12 +7660,15 @@ export default function CombatRoundManagerPanel({
     let cancelled = false;
     void loadCombatItemInteractionOptions(encounter.id)
       .then((options) => {
-        if (!cancelled) setCombatItemOptions(options);
+        if (!cancelled) {
+          setCombatItemOptions(options);
+          setCombatItemOptionsError(undefined);
+        }
       })
       .catch((caughtError: unknown) => {
         if (!cancelled) {
           setCombatItemOptions(undefined);
-          setSaveError(
+          setCombatItemOptionsError(
             caughtError instanceof Error
               ? caughtError.message
               : "Unable to load canonical Disarm weapons.",
@@ -11385,25 +11389,32 @@ export default function CombatRoundManagerPanel({
                         />
                         {inspectorDisplayDraft.actionId === "disarm" ||
                         inspectorDisplayDraft.actionId === "parry_disarm" ? (
-                          <CombatDisarmDeclarationControls
-                            actingParticipantId={inspector.participant?.participantId}
-                            disabled={
-                              saving ||
-                              !selectedRoundIsActive ||
-                              inspectorIsHistorical ||
-                              inspectorCombatExperienceRequired
-                            }
-                            method={
-                              inspectorDisplayDraft.actionId === "disarm"
-                                ? "proactive"
-                                : "reactive_parry"
-                            }
-                            onChange={(disarmSelection) =>
-                              updateInspectorDraft({ disarmSelection })
-                            }
-                            options={combatItemOptions}
-                            selection={inspectorDisplayDraft.disarmSelection}
-                          />
+                          <>
+                            <CombatDisarmDeclarationControls
+                              actingParticipantId={inspector.participant?.participantId}
+                              disabled={
+                                saving ||
+                                !selectedRoundIsActive ||
+                                inspectorIsHistorical ||
+                                inspectorCombatExperienceRequired
+                              }
+                              method={
+                                inspectorDisplayDraft.actionId === "disarm"
+                                  ? "proactive"
+                                  : "reactive_parry"
+                              }
+                              onChange={(disarmSelection) =>
+                                updateInspectorDraft({ disarmSelection })
+                              }
+                              options={combatItemOptions}
+                              selection={inspectorDisplayDraft.disarmSelection}
+                            />
+                            {combatItemOptionsError ? (
+                              <div style={{ color: "#8a3b1f", fontSize: "0.82rem" }}>
+                                {combatItemOptionsError}
+                              </div>
+                            ) : null}
+                          </>
                         ) : null}
                       </>
                     )}

@@ -45,23 +45,27 @@ export function buildCombatDisarmConditionContributions(input: {
   role: "actor" | "holder";
 }): CombatSkillContestPercentageContribution[] {
   if (input.role !== "holder") return [];
-  const byId = new Map<string, CombatSkillContestPercentageContribution>();
+  const byKind = new Map<CombatDisarmConditionInput["kind"], Set<string>>();
   for (const condition of input.conditions ?? []) {
-    const contribution: CombatSkillContestPercentageContribution = {
+    const sourceIds = byKind.get(condition.kind) ?? new Set<string>();
+    sourceIds.add(condition.sourceId);
+    byKind.set(condition.kind, sourceIds);
+  }
+  return [...byKind.entries()].map(([kind, sourceIds]) => {
+    const aggregateSourceId = [...sourceIds].sort().join("|");
+    return {
       category: "condition",
-      id: `${input.calculationId}:condition:${condition.id}`,
-      label: condition.kind === "stunned" ? "Stunned resistance" : "Unbalanced resistance",
+      id: `${input.calculationId}:condition:${kind}`,
+      label: kind === "stunned" ? "Stunned resistance" : "Unbalanced resistance",
       provenance:
-        condition.kind === "stunned"
-          ? "Typed Stunned condition · Disarm resistance only"
-          : "Canonical Unbalanced condition · Disarm resistance",
-      sourceId: condition.sourceId,
+        kind === "stunned"
+          ? `Typed Stunned condition · Disarm resistance only · sources ${aggregateSourceId}`
+          : `Canonical Unbalanced condition · Disarm resistance · sources ${aggregateSourceId}`,
+      sourceId: aggregateSourceId,
       unit: "percentage",
       value: -2,
     };
-    if (!byId.has(contribution.id)) byId.set(contribution.id, contribution);
-  }
-  return [...byId.values()];
+  });
 }
 
 function buildWeaponContributions(

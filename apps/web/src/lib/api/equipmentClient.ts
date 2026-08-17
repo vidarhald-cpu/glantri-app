@@ -3,6 +3,7 @@ import type {
   CarryMode,
   DescriptiveItemTraitCategory,
   EquipmentTemplate,
+  EquipmentTemplateOverrideFact,
   ItemFactVisibility,
   ItemConditionState,
   LocationAvailabilityClass,
@@ -35,6 +36,9 @@ export interface CampaignItemFactDraft {
     value: number;
     visibility: ItemFactVisibility;
   } | null;
+  templateOverrides: Array<
+    Exclude<EquipmentTemplateOverrideFact, { kind: "weapon_initiative_override" }>
+  >;
   descriptiveTraits: Array<{
     category: DescriptiveItemTraitCategory;
     id?: string;

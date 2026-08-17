@@ -286,6 +286,97 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
     ).rejects.toEqual(new CombatItemUnavailableError());
   });
 
+  it("projects only revealed Disarm override facts to players while retaining GM mechanics", async () => {
+    const hiddenCapability = record({
+      holderCharacterId: "character-1",
+      id: "secret-trap-dagger",
+      itemFacts: {
+        activeMechanics: [],
+        descriptiveTraits: [],
+        templateOverrides: [
+          {
+            id: "secret-capability",
+            kind: "weapon_disarm_capability_override",
+            scope: "all_attack_modes",
+            value: "trap",
+            visibility: "gm_only",
+          },
+        ],
+        unsupportedCapabilities: [],
+        version: 1,
+      },
+    });
+    const hiddenControl = record({
+      holderCharacterId: "character-2",
+      id: "secret-control-dagger",
+      itemFacts: {
+        activeMechanics: [],
+        descriptiveTraits: [],
+        templateOverrides: [
+          {
+            id: "secret-control",
+            kind: "weapon_disarm_control_override",
+            scope: "all_attack_modes",
+            unit: "control_rating",
+            value: 6,
+            visibility: "gm_only",
+          },
+        ],
+        unsupportedCapabilities: [],
+        version: 1,
+      },
+    });
+    const service = new CombatItemInteractionService(repository([hiddenCapability, hiddenControl]));
+    const playerViewer = {
+      controlledParticipantIds: new Set(["participant-1"]),
+      kind: "player" as const,
+      visibleParticipantIds: new Set(["participant-1", "participant-2"]),
+    };
+    const playerOptions = await service.getOptions({
+      campaignId: "campaign-1",
+      encounterId: "encounter-1",
+      participants,
+      viewer: playerViewer,
+    });
+    const gmOptions = await service.getOptions({
+      campaignId: "campaign-1",
+      encounterId: "encounter-1",
+      participants,
+      viewer: { kind: "gm" },
+    });
+
+    expect(playerOptions.actors[0]?.items[0]?.weaponDisarm?.capability).toBe("none");
+    expect(
+      playerOptions.disarmTargets.find((target) => target.participantId === "participant-2")
+        ?.items[0]?.weaponDisarm?.controlRating,
+    ).not.toBe(6);
+    expect(gmOptions.actors[0]?.items[0]?.weaponDisarm?.capability).toBe("trap");
+    expect(
+      gmOptions.disarmTargets.find((target) => target.participantId === "participant-2")?.items[0]
+        ?.weaponDisarm?.controlRating,
+    ).toBe(6);
+
+    const resolve = (actingItemId: string) =>
+      service.resolveDisarmDeclaration({
+        actingItemId,
+        actingItemRevision: hiddenCapability.item.revision!,
+        actingParticipantId: "participant-1",
+        campaignId: "campaign-1",
+        encounterId: "encounter-1",
+        method: "proactive",
+        participants,
+        phase: "phase1",
+        targetItemId: hiddenControl.item.id,
+        targetItemRevision: hiddenControl.item.revision!,
+        targetParticipantId: "participant-2",
+        viewer: playerViewer,
+      });
+    await expect(resolve(hiddenCapability.item.id)).rejects.toEqual(
+      new CombatItemUnavailableError(),
+    );
+    await expect(resolve("missing-item")).rejects.toEqual(new CombatItemUnavailableError());
+  });
+
   it("makes hidden and nonexistent Disarm targets fail identically", async () => {
     const actor = record({
       holderCharacterId: "character-1",

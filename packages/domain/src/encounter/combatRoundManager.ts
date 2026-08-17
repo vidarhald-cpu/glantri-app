@@ -7490,7 +7490,7 @@ export function recordCombatRoundPhaseResolutionAttackDone(input: {
         ? input.attackResult.defenderParticipantId
         : input.attackResult.attackerParticipantId,
     selectedStep:
-      input.attackResult.hit || offensiveParryAttempt
+      input.attackResult.hit || offensiveParryAttempt || parryDisarmAttempt
         ? getCombatRoundParryReviewStepForPhase(input.attackResult.phase)
         : getCombatRoundDamageReviewStepForPhase(input.attackResult.phase),
   };

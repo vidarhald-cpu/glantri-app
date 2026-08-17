@@ -1,0 +1,262 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  commitCombatRoundDisarm,
+  initializeCombatRoundState,
+  openCombatRoundDisarmAfterContact,
+  recordCombatRoundDeclaration,
+  recordCombatRoundDisarmRoll,
+  undoLatestCombatRoundCommand,
+  type CombatDisarmRoll,
+  type EncounterParticipant,
+  type EncounterSession,
+  type ScenarioParticipant,
+} from "@glantri/domain";
+import { buildPlayerSafeEncounterForUser } from "./encounterRoutes";
+
+const NOW = "2026-08-17T10:00:00.000Z";
+const REVISION = "2026-08-17T09:00:00.000Z";
+
+function participant(id: string): EncounterParticipant {
+  return {
+    declaration: {
+      actionType: "none",
+      defenseFocus: "none",
+      defensePosture: "none",
+      targetLocation: "any",
+    },
+    facing: "north",
+    id,
+    initiative: 0,
+    label: id,
+    order: 0,
+    orientation: "neutral",
+    participantType: "scenario",
+    position: { x: 0, y: 0, zone: "center" },
+    scenarioParticipantId: `scenario-${id}`,
+  };
+}
+
+function roll(input: {
+  finalTotal: number;
+  participantId: string;
+  role: "disarm_actor" | "disarm_holder";
+}): CombatDisarmRoll {
+  return {
+    calculation: {
+      baseSkill: 10,
+      calculationId: `calculation:${input.participantId}`,
+      completeness: "complete",
+      contestType: "disarm",
+      derivedIntegerAdjustment: input.finalTotal - 20,
+      finalResult: input.finalTotal,
+      governingStat: { id: "strength", label: "Strength", value: 10 },
+      missingContributionPoints: [],
+      openEndedDie: { openEndedD10s: [], rollD20: 10, rollTotal: 10 },
+      opponentParticipantId: input.participantId === "actor" ? "holder" : "actor",
+      participantId: input.participantId,
+      percentageContributions:
+        input.role === "disarm_actor"
+          ? [
+              {
+                category: "weapon_control",
+                id: "secret-control",
+                label: "Weapon-control mismatch",
+                provenance: "Target 5 vs acting 2",
+                sourceId: "gm-only-control",
+                unit: "percentage",
+                value: -9,
+              },
+            ]
+          : [],
+      preDieTotal: input.finalTotal - 10,
+      role: input.role,
+      skill: { id: "weapon-skill", label: "Weapon skill", totalXp: 0 },
+      totalPercentageAdjustment: input.role === "disarm_actor" ? -9 : 0,
+      visibility: "roller_and_gm",
+    },
+    characteristicChoice: "strength",
+    finalTotal: input.finalTotal,
+    id: `roll:${input.participantId}`,
+    participantId: input.participantId,
+    rolledAt: NOW,
+    rolledByUserId: `user-${input.participantId}`,
+    skillChoice: "weapon_skill",
+  };
+}
+
+function fixture() {
+  const encounterParticipants = [
+    participant("actor"),
+    participant("holder"),
+    participant("observer"),
+  ];
+  let state = initializeCombatRoundState({
+    encounter: { currentRound: 3, id: "encounter-1", participants: encounterParticipants },
+  });
+  state = recordCombatRoundDeclaration({
+    command: { commandId: "declare", createdAt: NOW },
+    declaration: {
+      actionId: "disarm",
+      disarm: {
+        actingWeapon: {
+          capability: "trap",
+          controlRating: 2,
+          itemId: "secret-acting-item",
+          itemRevision: REVISION,
+          label: "Secret trap",
+          parryModifier: 2,
+          templateId: "secret-acting-template",
+        },
+        method: "proactive",
+        phase: "phase1",
+        targetParticipantId: "holder",
+        targetWeapon: {
+          capability: "none",
+          controlRating: 5,
+          itemId: "secret-target-item",
+          itemRevision: REVISION,
+          label: "Secret target",
+          parryModifier: 0,
+          templateId: "secret-target-template",
+        },
+      },
+      roundNumber: 3,
+    },
+    participantId: "actor",
+    state,
+    submittedBy: "gm",
+  });
+  const attemptId = state.disarmAttempts[0]!.id;
+  state = openCombatRoundDisarmAfterContact({
+    attackResultId: "attack-1",
+    attemptId,
+    command: { commandId: "open", createdAt: NOW },
+    state,
+  });
+  state = recordCombatRoundDisarmRoll({
+    attemptId,
+    command: { commandId: "actor-roll", createdAt: NOW },
+    result: roll({ finalTotal: 31, participantId: "actor", role: "disarm_actor" }),
+    state,
+  });
+  state = recordCombatRoundDisarmRoll({
+    attemptId,
+    command: { commandId: "holder-roll", createdAt: NOW },
+    result: roll({ finalTotal: 15, participantId: "holder", role: "disarm_holder" }),
+    state,
+  });
+  state = commitCombatRoundDisarm({
+    attemptId,
+    command: { commandId: "commit", createdAt: NOW },
+    state,
+  });
+  const scenarioParticipants = ["actor", "holder", "observer"].map(
+    (id) =>
+      ({
+        characterId: `character-${id}`,
+        controlledByUserId: `user-${id}`,
+        id: `scenario-${id}`,
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: id },
+      }) as unknown as ScenarioParticipant,
+  );
+  const encounter = {
+    combatRoundState: state,
+    currentRound: 3,
+    id: "encounter-1",
+    participantVisibility: {
+      actor: { actor: true, holder: true },
+      holder: { actor: true, holder: true },
+      observer: { observer: true },
+    },
+    participants: encounterParticipants,
+    scenarioId: "scenario-1",
+    updatedAt: NOW,
+  } as unknown as EncounterSession;
+  return { encounter, scenarioParticipants, state };
+}
+
+describe("player-safe Disarm state", () => {
+  it("keeps each involved roll usable without commands, opposite roll math, or hidden ratings", () => {
+    const { encounter, scenarioParticipants } = fixture();
+    const actor = buildPlayerSafeEncounterForUser({
+      encounter,
+      scenarioParticipants,
+      userId: "user-actor",
+    }).combatRoundState!;
+    const holder = buildPlayerSafeEncounterForUser({
+      encounter,
+      scenarioParticipants,
+      userId: "user-holder",
+    }).combatRoundState!;
+    const actorAttempt = actor.disarmAttempts[0]!;
+    const holderAttempt = holder.disarmAttempts[0]!;
+
+    expect(actor.commands.map((command) => command.type)).not.toEqual(
+      expect.arrayContaining(["open_disarm", "roll_disarm", "commit_disarm"]),
+    );
+    expect(actorAttempt).toMatchObject({
+      actingRoll: { finalTotal: 31, rolledByUserId: undefined },
+      difference: undefined,
+      resistingRoll: undefined,
+    });
+    expect(actorAttempt.actingRoll?.calculation.percentageContributions).toEqual([]);
+    expect(JSON.stringify(actorAttempt)).not.toContain("Target 5 vs acting 2");
+    expect(holderAttempt).toMatchObject({
+      actingRoll: undefined,
+      difference: undefined,
+      resistingRoll: { finalTotal: 15, rolledByUserId: undefined },
+    });
+  });
+
+  it("makes an uncontrolled Disarm declaration equivalent to no declaration and hides it from an uninvolved viewer", () => {
+    const { encounter, scenarioParticipants } = fixture();
+    const holder = buildPlayerSafeEncounterForUser({
+      encounter,
+      scenarioParticipants,
+      userId: "user-holder",
+    });
+    const noDeclaration = buildPlayerSafeEncounterForUser({
+      encounter: {
+        ...encounter,
+        combatRoundState: {
+          ...encounter.combatRoundState!,
+          participants: encounter.combatRoundState!.participants.map((entry) =>
+            entry.participantId === "actor" ? { ...entry, declaration: undefined } : entry,
+          ),
+        },
+      },
+      scenarioParticipants,
+      userId: "user-holder",
+    });
+    const holderActor = holder.combatRoundState?.participants.find(
+      (entry) => entry.participantId === "actor",
+    );
+    const noDeclarationActor = noDeclaration.combatRoundState?.participants.find(
+      (entry) => entry.participantId === "actor",
+    );
+    expect(holderActor?.declaration).toEqual(noDeclarationActor?.declaration);
+
+    const observer = buildPlayerSafeEncounterForUser({
+      encounter,
+      scenarioParticipants,
+      userId: "user-observer",
+    });
+    expect(observer.combatRoundState?.disarmAttempts).toEqual([]);
+    expect(observer.combatRoundState?.disarmUnbalancedConditions).toEqual([]);
+    expect(JSON.stringify(observer)).not.toContain("secret-acting-item");
+    expect(JSON.stringify(observer)).not.toContain("secret-target-item");
+  });
+
+  it("does not mutate authoritative undo snapshots while projecting safe views", () => {
+    const { encounter, scenarioParticipants, state } = fixture();
+    buildPlayerSafeEncounterForUser({ encounter, scenarioParticipants, userId: "user-actor" });
+    const undone = undoLatestCombatRoundCommand({ state });
+
+    expect(undone?.disarmAttempts[0]?.status).toBe("awaiting_commit");
+    expect(undone?.commands.at(-1)?.type).toBe("roll_disarm");
+  });
+});

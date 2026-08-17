@@ -78,6 +78,51 @@ describe("CampaignItemsWorkspace", () => {
     mocks.load.mockResolvedValue(emptyResponse);
     mocks.create.mockResolvedValue(emptyResponse);
     mocks.transfer.mockResolvedValue(assignedResponse);
+    mocks.update.mockResolvedValue(assignedResponse);
+  });
+
+  it("preserves structured Disarm overrides when unrelated item details are edited", async () => {
+    const user = userEvent.setup();
+    const disarmOverrides = [
+      {
+        id: "disarm-capability",
+        kind: "weapon_disarm_capability_override" as const,
+        scope: "all_attack_modes" as const,
+        value: "none" as const,
+        visibility: "gm_only" as const,
+      },
+      {
+        id: "disarm-control",
+        kind: "weapon_disarm_control_override" as const,
+        scope: "all_attack_modes" as const,
+        unit: "control_rating" as const,
+        value: 4,
+        visibility: "revealed" as const,
+      },
+    ];
+    mocks.load.mockResolvedValue({
+      ...assignedResponse,
+      state: {
+        ...assignedResponse.state,
+        itemsById: {
+          [assignedItem.id]: {
+            ...assignedItem,
+            itemFacts: { ...assignedItem.itemFacts, templateOverrides: disarmOverrides },
+          },
+        },
+      },
+    });
+    render(<CampaignItemsWorkspace campaignId="campaign-1" />);
+
+    expect(await screen.findByText("Disarm capability None")).toBeVisible();
+    expect(screen.getByText("Disarm control rating 4")).toBeVisible();
+    expect(screen.queryByText(/Initiative undefined/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit item" }));
+    await user.type(screen.getByLabelText("Description (optional)"), "A documented heirloom.");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(mocks.update).toHaveBeenCalled());
+    expect(mocks.update.mock.calls[0]?.[0].facts.templateOverrides).toEqual(disarmOverrides);
   });
 
   it("creates ordinary and customized items through the same focused flow", async () => {

@@ -1325,6 +1325,7 @@ export async function rollCombatParryOnServer(input: {
   declarationId?: string;
   declaredOpponentParticipantId?: string;
   defenderParticipantId: string;
+  disarmAttemptId?: string;
   encounterId: string;
   executionGroupId: string;
   expectedParticipantRevision: string;
@@ -1356,6 +1357,7 @@ export async function rollCombatParryOnServer(input: {
         declarationId: input.declarationId,
         declaredOpponentParticipantId: input.declaredOpponentParticipantId,
         defenderParticipantId: input.defenderParticipantId,
+        disarmAttemptId: input.disarmAttemptId,
         executionGroupId: input.executionGroupId,
         expectedParticipantRevision: input.expectedParticipantRevision,
         expectedRevision: input.expectedRevision,

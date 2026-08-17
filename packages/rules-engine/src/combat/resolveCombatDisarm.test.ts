@@ -77,6 +77,32 @@ describe("resolveCombatDisarmRoll", () => {
     ]);
   });
 
+  it("collapses repeated same-kind conditions while retaining every source", () => {
+    const result = resolveCombatDisarmRoll({
+      actingWeaponControlRating: 2,
+      calculationId: "disarm:deduplicated-holder",
+      characteristic: { choice: "strength", value: 13 },
+      conditions: [
+        { id: "unbalanced-1", kind: "unbalanced", sourceId: "contact-a" },
+        { id: "unbalanced-2", kind: "unbalanced", sourceId: "contact-b" },
+        { id: "stunned-1", kind: "stunned", sourceId: "critical-a" },
+        { id: "stunned-2", kind: "stunned", sourceId: "critical-b" },
+      ],
+      opponentParticipantId: "actor",
+      participantId: "holder",
+      role: "holder",
+      roll,
+      skill: { choice: "weapon_skill", id: "fencing", label: "Fencing", totalXp: 4 },
+      targetWeaponControlRating: 2,
+    });
+
+    expect(result.totalPercentageAdjustment).toBe(-4);
+    expect(result.percentageContributions).toMatchObject([
+      { label: "Unbalanced resistance", sourceId: "contact-a|contact-b", value: -2 },
+      { label: "Stunned resistance", sourceId: "critical-a|critical-b", value: -2 },
+    ]);
+  });
+
   it("rejects the normal action at a rating gap of four", () => {
     expect(() =>
       resolveCombatDisarmRoll({

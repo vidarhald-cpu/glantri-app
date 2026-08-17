@@ -164,6 +164,10 @@ import {
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
 } from "@/lib/campaigns/playerEncounter";
+import {
+  dispatchPlayerCombatDisarmRoll,
+  getPlayerParryDisarmAttemptId,
+} from "@/lib/campaigns/playerCombatDisarmDispatch";
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import {
   backOutPhaseAttackOnServer,
@@ -193,7 +197,6 @@ import {
   respondCombatAdjustDistanceOnServer,
   rollCombatAdjustDistanceOnServer,
   rollCombatBreakOffOnServer,
-  rollCombatDisarmOnServer,
   rollRoundEndDistanceControlOnServer,
   rollRoundEndHealthCheckOnServer,
   submitCombatDeclarationOnServer,
@@ -1094,6 +1097,7 @@ export default function ScenarioPlayerCombatPageContent({
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const [error, setError] = useState<string>();
   const [combatActionError, setCombatActionError] = useState<string>();
+  const [combatItemOptionsError, setCombatItemOptionsError] = useState<string>();
   const [attackContextFailure, setAttackContextFailure] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [slowContextReady, setSlowContextReady] = useState(false);
@@ -1570,17 +1574,21 @@ export default function ScenarioPlayerCombatPageContent({
   useEffect(() => {
     if (!encounterId || !encounterSession) {
       setCombatItemOptions(undefined);
+      setCombatItemOptionsError(undefined);
       return;
     }
     let cancelled = false;
     void loadCombatItemInteractionOptions(encounterId)
       .then((options) => {
-        if (!cancelled) setCombatItemOptions(options);
+        if (!cancelled) {
+          setCombatItemOptions(options);
+          setCombatItemOptionsError(undefined);
+        }
       })
       .catch((caughtError: unknown) => {
         if (!cancelled) {
           setCombatItemOptions(undefined);
-          setError(
+          setCombatItemOptionsError(
             caughtError instanceof Error
               ? caughtError.message
               : "Unable to load canonical Disarm weapons.",
@@ -2991,17 +2999,14 @@ export default function ScenarioPlayerCombatPageContent({
     }
     setSavingCombatContext(true);
     try {
-      const encounter = await rollCombatDisarmOnServer({
-        attemptId: descriptor.disarmAttemptId,
+      const encounter = await dispatchPlayerCombatDisarmRoll({
         characteristicChoice: disarmCharacteristicChoice,
         currentEncounter: encounterSession,
+        descriptor,
         encounterId,
-        executionGroupId: descriptor.executionGroupId!,
-        expectedRevision: descriptor.expectedRevision,
-        scenarioParticipantId: descriptor.participantId,
         skillChoice: disarmSkillChoice,
-        taskId: descriptor.taskId,
       });
+      if (!encounter) return;
       acceptEncounterSession(encounter);
       setError(undefined);
     } catch (caughtError) {
@@ -3558,6 +3563,10 @@ export default function ScenarioPlayerCombatPageContent({
       setError("The Offensive Parry task identity is incomplete.");
       return;
     }
+    if (descriptor.parryPurpose === "parry_disarm" && !descriptor.disarmAttemptId) {
+      setError("The Parry-Disarm task identity is incomplete.");
+      return;
+    }
 
     if (currentParryBase === undefined) {
       setCombatActionError("No parry source is available.");
@@ -3593,6 +3602,7 @@ export default function ScenarioPlayerCombatPageContent({
         defenderParticipantId: descriptor.participantId,
         declarationId: descriptor.declarationId,
         declaredOpponentParticipantId: descriptor.declaredOpponentParticipantId,
+        disarmAttemptId: getPlayerParryDisarmAttemptId(descriptor),
         encounterId,
         executionGroupId: descriptor.executionGroupId,
         expectedParticipantRevision: selectedParticipant.updatedAt,
@@ -4969,17 +4979,24 @@ export default function ScenarioPlayerCombatPageContent({
               secondaryActionId={selectedSecondaryActionId}
             />
             {selectedActionId === "disarm" || selectedActionId === "parry_disarm" ? (
-              <CombatDisarmDeclarationControls
-                actingParticipantId={selectedRoundParticipant?.participantId}
-                disabled={declarationControlsDisabled}
-                method={selectedActionId === "disarm" ? "proactive" : "reactive_parry"}
-                onChange={(selection) => {
-                  markCombatDeclarationDraftDirty();
-                  setDisarmSelection(selection);
-                }}
-                options={combatItemOptions}
-                selection={disarmSelection}
-              />
+              <>
+                <CombatDisarmDeclarationControls
+                  actingParticipantId={selectedRoundParticipant?.participantId}
+                  disabled={declarationControlsDisabled}
+                  method={selectedActionId === "disarm" ? "proactive" : "reactive_parry"}
+                  onChange={(selection) => {
+                    markCombatDeclarationDraftDirty();
+                    setDisarmSelection(selection);
+                  }}
+                  options={combatItemOptions}
+                  selection={disarmSelection}
+                />
+                {combatItemOptionsError ? (
+                  <div style={{ color: "#8a3b1f", fontSize: "0.82rem" }}>
+                    {combatItemOptionsError}
+                  </div>
+                ) : null}
+              </>
             ) : null}
             {phaseCards.map((phaseCard, index) => {
               const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";

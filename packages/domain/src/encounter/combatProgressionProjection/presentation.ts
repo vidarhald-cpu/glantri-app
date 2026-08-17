@@ -142,6 +142,7 @@ function visibleTaskIdentity(
     defenderParticipantId: participantVisible(task.identity.defenderParticipantId)
       ? task.identity.defenderParticipantId
       : undefined,
+    disarmAttemptId: task.identity.disarmAttemptId,
     executionGroupId: task.identity.executionGroupId,
     healthRollId: task.identity.healthRollId,
     hitLocationResultId: task.identity.hitLocationResultId,

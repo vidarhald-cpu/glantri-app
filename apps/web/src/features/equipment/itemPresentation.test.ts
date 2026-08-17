@@ -60,4 +60,49 @@ describe("campaign item presentation", () => {
       "standard",
     );
   });
+
+  it("presents Disarm-only overrides by kind without inventing initiative text", () => {
+    const template = equipmentTemplatesById["weapon-template-rapier"]!;
+    const item = CanonicalEquipmentItemSchema.parse({
+      campaignContextId: "campaign-1",
+      category: "weapon",
+      characterId: null,
+      conditionState: "intact",
+      holderCharacterId: null,
+      id: "item-disarm",
+      isStackable: false,
+      itemFacts: {
+        activeMechanics: [],
+        descriptiveTraits: [],
+        templateOverrides: [
+          {
+            id: "capability",
+            kind: "weapon_disarm_capability_override",
+            value: "none",
+            visibility: "gm_only",
+          },
+          {
+            id: "control",
+            kind: "weapon_disarm_control_override",
+            value: 4,
+            visibility: "revealed",
+          },
+        ],
+        unsupportedCapabilities: [],
+        version: 1,
+      },
+      material: "steel",
+      quality: "standard",
+      quantity: 1,
+      specificityType: "specific",
+      storageAssignment: null,
+      templateId: template.id,
+    });
+
+    const labels = buildItemPresentationSections(item, template)[0]?.entries.map(
+      (entry) => entry.label,
+    );
+    expect(labels).toEqual(["Disarm capability None", "Disarm control rating 4"]);
+    expect(labels?.join(" ")).not.toContain("Initiative");
+  });
 });

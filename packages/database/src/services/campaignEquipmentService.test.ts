@@ -161,4 +161,61 @@ describe("campaign equipment services", () => {
     expect(edited.storageAssignment).toEqual(created.storageAssignment);
     expect(edited.itemFacts.descriptiveTraits[0]?.visibility).toBe("revealed");
   });
+
+  it("round-trips adding, preserving, and removing Disarm template overrides", async () => {
+    const { repository } = repositoryStub();
+    const write = new CharacterEquipmentWriteService(repository);
+    const read = new CharacterEquipmentReadModelService(repository);
+    const created = await write.createCampaignEquipmentItem({
+      campaignId: "campaign-1",
+      holderCharacterId: null,
+      itemFacts: emptyFacts,
+      templateId: "weapon-template-rapier",
+    });
+    const disarmOverrides = [
+      {
+        id: "capability",
+        kind: "weapon_disarm_capability_override" as const,
+        scope: "all_attack_modes" as const,
+        value: "none" as const,
+        visibility: "gm_only" as const,
+      },
+      {
+        id: "control",
+        kind: "weapon_disarm_control_override" as const,
+        scope: "all_attack_modes" as const,
+        unit: "control_rating" as const,
+        value: 4,
+        visibility: "revealed" as const,
+      },
+    ];
+
+    await write.updateCampaignEquipmentItemAuthoring({
+      campaignId: "campaign-1",
+      displayName: "Disarming rapier",
+      itemFacts: { ...created.itemFacts, templateOverrides: disarmOverrides },
+      itemId: created.id,
+      notes: "First edit",
+    });
+    const added = (await read.getCampaignEquipmentState("campaign-1")).itemsById[created.id]!;
+    expect(added.itemFacts.templateOverrides).toEqual(disarmOverrides);
+
+    await write.updateCampaignEquipmentItemAuthoring({
+      campaignId: "campaign-1",
+      displayName: "Renamed disarming rapier",
+      itemFacts: added.itemFacts,
+      itemId: created.id,
+      notes: "Unrelated edit",
+    });
+    const preserved = (await read.getCampaignEquipmentState("campaign-1")).itemsById[created.id]!;
+    expect(preserved.itemFacts.templateOverrides).toEqual(disarmOverrides);
+
+    await write.updateCampaignEquipmentItemAuthoring({
+      campaignId: "campaign-1",
+      itemFacts: { ...preserved.itemFacts, templateOverrides: [] },
+      itemId: created.id,
+    });
+    const removed = (await read.getCampaignEquipmentState("campaign-1")).itemsById[created.id]!;
+    expect(removed.itemFacts.templateOverrides).toEqual([]);
+  });
 });

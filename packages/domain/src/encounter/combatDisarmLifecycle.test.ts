@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { CombatDisarmRoll } from "./combatDisarm";
+import {
+  buildCombatProgressionProjection,
+  projectCombatProgressionPresentation,
+} from "./combatProgressionProjection";
 import type { EncounterParticipant } from "./session";
 import {
   commitCombatRoundDisarm,
+  combatRoundStateSchema,
   initializeCombatRoundState,
   openCombatRoundDisarmAfterContact,
   recordCombatRoundDeclaration,
@@ -126,12 +131,91 @@ describe("combat Disarm lifecycle", () => {
         participants: [participant("actor"), participant("holder")],
       },
     });
+    state = combatRoundStateSchema.parse({
+      ...state,
+      currentCursor: { participantId: "actor", roundNumber: 3, step: "A1" },
+      currentStep: "phase_1_actions",
+      phaseResolutionCursor: { participantId: "actor", phase: "phase1", substep: "attack" },
+      selectedParticipantId: "actor",
+      selectedStep: "phase_1_actions",
+    });
     state = openCombatRoundDisarmAfterContact({
       attackResultId: "attack:actor:phase1",
       attemptId,
       command: { commandId: "contact", createdAt: NOW },
       state,
     });
+    const progression = buildCombatProgressionProjection(state);
+    const actorView = projectCombatProgressionPresentation({
+      projection: progression,
+      viewer: {
+        controlledParticipantIds: new Set(["actor"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["actor", "holder"]),
+      },
+    });
+    const actorHiddenTargetView = projectCombatProgressionPresentation({
+      projection: progression,
+      viewer: {
+        controlledParticipantIds: new Set(["actor"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["actor"]),
+      },
+    });
+    const holderView = projectCombatProgressionPresentation({
+      projection: progression,
+      viewer: {
+        controlledParticipantIds: new Set(["holder"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["actor", "holder"]),
+      },
+    });
+    const holderHiddenActorView = projectCombatProgressionPresentation({
+      projection: progression,
+      viewer: {
+        controlledParticipantIds: new Set(["holder"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["holder"]),
+      },
+    });
+    const actorRollTask = actorView.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.kind === "disarm_actor_roll");
+    const actorHiddenTargetRollTask = actorHiddenTargetView.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.kind === "disarm_actor_roll");
+    const holderRollTask = holderView.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.kind === "disarm_holder_roll");
+    const holderHiddenActorRollTask = holderHiddenActorView.processes
+      .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.kind === "disarm_holder_roll");
+    expect(actorRollTask).toMatchObject({
+      actorAccess: { combatant: true },
+      expectedCommand: "roll_disarm",
+      identity: { disarmAttemptId: attemptId },
+      owner: { participantId: "actor" },
+    });
+    expect(actorHiddenTargetRollTask).toMatchObject({
+      actorAccess: { combatant: true },
+      expectedCommand: "roll_disarm",
+      identity: { disarmAttemptId: attemptId },
+      owner: { participantId: "actor" },
+    });
+    expect(holderRollTask).toMatchObject({
+      actorAccess: { combatant: true },
+      expectedCommand: "roll_disarm",
+      identity: { disarmAttemptId: attemptId },
+      owner: { participantId: "holder" },
+    });
+    expect(holderHiddenActorRollTask).toMatchObject({
+      actorAccess: { combatant: true },
+      expectedCommand: "roll_disarm",
+      identity: { disarmAttemptId: attemptId },
+      owner: { participantId: "holder" },
+    });
+    expect(JSON.stringify(actorHiddenTargetView)).not.toContain('"participantId":"holder"');
+    expect(JSON.stringify(holderHiddenActorView)).not.toContain('"participantId":"actor"');
     state = recordCombatRoundDisarmRoll({
       attemptId,
       command: { commandId: "actor-roll", createdAt: NOW },
