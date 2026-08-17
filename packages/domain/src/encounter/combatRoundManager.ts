@@ -88,6 +88,16 @@ import {
   type CombatAdjustDistanceRollResult,
 } from "./combatAdjustDistance";
 import {
+  buildCombatBreakOffProposalId,
+  combatBreakOffProposalSchema,
+  combatBreakOffRollSchema,
+  combatEngagementSchema,
+  resolveCombatBreakOffProposal,
+  type CombatBreakOffProposal,
+  type CombatBreakOffRoll,
+  type CombatEngagement,
+} from "./combatBreakOff";
+import {
   combatDistanceEdgeSchema,
   combatDistanceSchema,
   combatDistanceStateSchema,
@@ -461,6 +471,9 @@ export const combatRoundCommandTypeSchema = z.enum([
   "review_adjust_distance_roll_adjustment",
   "roll_adjust_distance",
   "commit_adjust_distance",
+  "review_break_off",
+  "roll_break_off",
+  "commit_break_off",
   "complete_remaining_step",
   "skip_phase_action",
   "back_out_phase_attack",
@@ -1032,6 +1045,7 @@ export type CombatRoundAdjustDistanceDeclaration = z.infer<
 >;
 
 export const combatRoundPhaseResolutionSubstepSchema = z.enum([
+  "break_off",
   "feint",
   "adjust_distance",
   "attack",
@@ -2446,6 +2460,7 @@ export type CombatRoundGmBacktrackHold = z.infer<typeof combatRoundGmBacktrackHo
 export interface CompletedCombatRound {
   activeParticipantId?: string;
   adjustDistanceProposals: CombatAdjustDistanceProposal[];
+  breakOffProposals: CombatBreakOffProposal[];
   combatExperienceDifficulty?: number;
   commands: z.infer<typeof combatRoundCommandSchema>[];
   completedAt?: string;
@@ -2454,6 +2469,7 @@ export interface CompletedCombatRound {
   currentCursor?: z.infer<typeof combatRoundCursorSchema>;
   currentStep: z.infer<typeof combatRoundStepSchema>;
   distanceState?: CombatDistanceState;
+  engagements: CombatEngagement[];
   encounterId?: string;
   events: CombatStepEvent[];
   feintProposals: CombatFeintProposal[];
@@ -2478,6 +2494,7 @@ export const completedCombatRoundSchema: z.ZodType<CompletedCombatRound, z.ZodTy
     normalizeCombatRoundAttackResultAuthorityInput,
     z.object({
       activeParticipantId: idSchema.optional(),
+      breakOffProposals: z.array(combatBreakOffProposalSchema).default([]),
       combatExperienceDifficulty: z.number().int().positive().optional(),
       commands: z.array(combatRoundCommandSchema).default([]),
       continuedContacts: z.array(continuedContactSchema).default([]),
@@ -2486,6 +2503,7 @@ export const completedCombatRoundSchema: z.ZodType<CompletedCombatRound, z.ZodTy
       currentCursor: combatRoundCursorSchema.optional(),
       currentStep: combatRoundStepSchema.default("round_summary"),
       distanceState: combatDistanceStateSchema.optional(),
+      engagements: z.array(combatEngagementSchema).default([]),
       encounterId: idSchema.optional(),
       events: combatStepEventArraySchema.default([]),
       feintProposals: z.array(combatFeintProposalSchema).default([]),
@@ -2509,6 +2527,7 @@ export const completedCombatRoundSchema: z.ZodType<CompletedCombatRound, z.ZodTy
 
 export interface CombatRoundState {
   adjustDistanceProposals: CombatAdjustDistanceProposal[];
+  breakOffProposals: CombatBreakOffProposal[];
   activeParticipantId?: string;
   combatExperienceDifficulty?: number;
   commands: z.infer<typeof combatRoundCommandSchema>[];
@@ -2516,6 +2535,7 @@ export interface CombatRoundState {
   currentCursor?: z.infer<typeof combatRoundCursorSchema>;
   currentStep: z.infer<typeof combatRoundStepSchema>;
   distanceState: CombatDistanceState;
+  engagements: CombatEngagement[];
   encounterId?: string;
   events: CombatStepEvent[];
   feintProposals: CombatFeintProposal[];
@@ -2541,6 +2561,7 @@ export type ActiveCombatRoundState = Omit<CombatRoundState, "rounds">;
 
 const activeCombatRoundStateShape = {
   adjustDistanceProposals: z.array(combatAdjustDistanceProposalSchema).default([]),
+  breakOffProposals: z.array(combatBreakOffProposalSchema).default([]),
   activeParticipantId: idSchema.optional(),
   combatExperienceDifficulty: z.number().int().positive().optional(),
   commands: z.array(combatRoundCommandSchema).default([]),
@@ -2548,6 +2569,7 @@ const activeCombatRoundStateShape = {
   currentCursor: combatRoundCursorSchema.optional(),
   currentStep: combatRoundStepSchema.default("select_actions"),
   distanceState: combatDistanceStateSchema.default({ edges: {} }),
+  engagements: z.array(combatEngagementSchema).default([]),
   encounterId: idSchema.optional(),
   events: combatStepEventArraySchema.default([]),
   feintProposals: z.array(combatFeintProposalSchema).default([]),
@@ -3753,6 +3775,7 @@ function getCombatRoundCursorStepForPhaseResolutionSubstep(input: {
   substep: CombatRoundPhaseResolutionSubstep;
 }): CombatRoundCursorStep {
   switch (input.substep) {
+    case "break_off":
     case "feint":
     case "adjust_distance":
     case "attack":
@@ -5477,6 +5500,9 @@ function isUndoableCombatRoundCommandType(type: CombatRoundCommandType): boolean
     type === "review_adjust_distance_roll_adjustment" ||
     type === "roll_adjust_distance" ||
     type === "commit_adjust_distance" ||
+    type === "review_break_off" ||
+    type === "roll_break_off" ||
+    type === "commit_break_off" ||
     type === "complete_remaining_step" ||
     type === "skip_phase_action" ||
     type === "back_out_phase_attack" ||
@@ -6457,6 +6483,15 @@ export function combatRoundParticipantHasExecutablePhaseAttack(input: {
       (attackResult) =>
         targetParticipant && attackResult.attackerParticipantId === targetParticipant.participantId,
     );
+  const pairAllowsOrdinaryMelee =
+    !candidate ||
+    candidate.weaponSourceSlot === "throwing" ||
+    !targetParticipant ||
+    isCombatPairEngaged({
+      participantAId: input.participantId,
+      participantBId: targetParticipant.participantId,
+      state: normalized,
+    });
 
   return Boolean(
     combatRoundParticipantHasPhaseAttack({
@@ -6465,6 +6500,7 @@ export function combatRoundParticipantHasExecutablePhaseAttack(input: {
       state: normalized,
     }) &&
     reactiveAttackIsOpen &&
+    pairAllowsOrdinaryMelee &&
     targetParticipant,
   );
 }
@@ -6493,12 +6529,49 @@ export function getCombatRoundAdjustDistanceProposal(input: {
   );
 }
 
+export function getCombatEngagementBetween(input: {
+  participantAId: string;
+  participantBId: string;
+  state: CombatRoundState;
+}): CombatEngagement | undefined {
+  const pairKey = makeDistancePairKey(input.participantAId, input.participantBId);
+  return combatRoundStateSchema
+    .parse(input.state)
+    .engagements.find((engagement) => engagement.pairKey === pairKey);
+}
+
+/** Missing legacy edges are ordinary engaged pairs until a canonical transition says otherwise. */
+export function isCombatPairEngaged(input: {
+  participantAId: string;
+  participantBId: string;
+  state: CombatRoundState;
+}): boolean {
+  return getCombatEngagementBetween(input)?.status !== "disengaged";
+}
+
+export function getCombatRoundBreakOffProposals(input: {
+  escapeeParticipantId: string;
+  state: CombatRoundState;
+}): CombatBreakOffProposal[] {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  return normalized.breakOffProposals.filter(
+    (proposal) =>
+      proposal.roundNumber === normalized.roundNumber &&
+      proposal.escapeeParticipantId === input.escapeeParticipantId,
+  );
+}
+
 export function combatRoundParticipantHasExecutablePhaseAction(input: {
   participantId: string;
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): boolean {
   if (input.phase === "phase1") {
+    const breakOffProposals = getCombatRoundBreakOffProposals({
+      escapeeParticipantId: input.participantId,
+      state: input.state,
+    });
+    if (breakOffProposals.some((proposal) => proposal.status !== "committed")) return true;
     const adjustDistanceProposal = getCombatRoundAdjustDistanceProposal({
       attackerParticipantId: input.participantId,
       state: input.state,
@@ -6719,7 +6792,7 @@ function clearUnsupportedCombatRoundPhaseActionProgress(input: {
     ...normalized.phaseResolutionStatuses,
   };
   const participants = normalized.participants.map((participant) => {
-    const executable = combatRoundParticipantHasExecutablePhaseAttack({
+    const executable = combatRoundParticipantHasExecutablePhaseAction({
       participantId: participant.participantId,
       phase: input.phase,
       state: normalized,
@@ -6770,6 +6843,14 @@ function getCombatRoundInitialPhaseResolutionSubstep(input: {
   state: CombatRoundState;
 }): CombatRoundPhaseResolutionSubstep {
   if (input.phase === "phase1") {
+    if (
+      getCombatRoundBreakOffProposals({
+        escapeeParticipantId: input.participantId,
+        state: input.state,
+      }).some((proposal) => proposal.status !== "committed")
+    ) {
+      return "break_off";
+    }
     const adjustDistanceProposal = getCombatRoundAdjustDistanceProposal({
       attackerParticipantId: input.participantId,
       state: input.state,
@@ -6836,6 +6917,18 @@ export function getCombatRoundParticipantPhaseStepStatus(input: {
   });
 
   if (input.step === actionStep) {
+    const breakOffProposals =
+      phase === "phase1"
+        ? getCombatRoundBreakOffProposals({
+            escapeeParticipantId: input.participantId,
+            state: normalized,
+          })
+        : [];
+    if (breakOffProposals.length > 0) {
+      return breakOffProposals.every((proposal) => proposal.status === "committed")
+        ? "complete"
+        : "ready";
+    }
     const feintProposal =
       phase === "phase1"
         ? getCombatRoundFeintProposal({
@@ -6986,9 +7079,16 @@ export function getCombatRoundPhaseResolutionOrder(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): string[] {
-  return sortCombatRoundParticipantsByInitiative(input).map(
-    (participant) => participant.participantId,
-  );
+  const ordered = sortCombatRoundParticipantsByInitiative(input);
+  if (input.phase !== "phase1") return ordered.map((participant) => participant.participantId);
+  // Source timing: Break Off resolves first in the round, before ordinary melee.
+  return [...ordered]
+    .sort((left, right) => {
+      const leftBreaksOff = left.declaration?.actionId === "break_off_engagement" ? 0 : 1;
+      const rightBreaksOff = right.declaration?.actionId === "break_off_engagement" ? 0 : 1;
+      return leftBreaksOff - rightBreaksOff;
+    })
+    .map((participant) => participant.participantId);
 }
 
 function moveCombatRoundToPhaseInitiativeResolution(input: {
@@ -7178,9 +7278,13 @@ export function initializeCombatRoundPhaseResolutionCursor(input: {
     });
   }
 
-  const withOpenedFeint = openCombatRoundFeintRollsForActionTurn({
+  const withOpenedBreakOff = openCombatRoundBreakOffForActionTurn({
     participantId,
     state: normalized,
+  });
+  const withOpenedFeint = openCombatRoundFeintRollsForActionTurn({
+    participantId,
+    state: withOpenedBreakOff,
   });
   const withOpenedAction = openCombatRoundAdjustDistanceForActionTurn({
     participantId,
@@ -7250,9 +7354,13 @@ function moveCombatRoundPhaseResolutionCursorToNextParticipant(input: {
     });
   }
 
-  const withOpenedFeint = openCombatRoundFeintRollsForActionTurn({
+  const withOpenedBreakOff = openCombatRoundBreakOffForActionTurn({
     participantId,
     state: normalized,
+  });
+  const withOpenedFeint = openCombatRoundFeintRollsForActionTurn({
+    participantId,
+    state: withOpenedBreakOff,
   });
   const withOpenedAction = openCombatRoundAdjustDistanceForActionTurn({
     participantId,
@@ -17345,6 +17453,7 @@ function buildCompletedCombatRound(input: {
   return completedCombatRoundSchema.parse({
     adjustDistanceProposals: normalized.adjustDistanceProposals,
     activeParticipantId: normalized.activeParticipantId,
+    breakOffProposals: normalized.breakOffProposals,
     commands: normalized.commands,
     continuedContacts: normalized.continuedContacts,
     completedAt: input.completedAt,
@@ -17352,6 +17461,7 @@ function buildCompletedCombatRound(input: {
     currentCursor: normalized.currentCursor,
     currentStep: normalized.currentStep,
     distanceState: normalized.distanceState,
+    engagements: normalized.engagements,
     encounterId: normalized.encounterId,
     events: normalized.events,
     feintProposals: normalized.feintProposals,
@@ -17781,6 +17891,12 @@ export function initializeCombatRoundState(input: {
         participantIds.has(proposal.attackerParticipantId) &&
         participantIds.has(proposal.defenderParticipantId),
     ),
+    breakOffProposals: (existing?.breakOffProposals ?? []).filter(
+      (proposal) =>
+        proposal.roundNumber === roundNumber &&
+        participantIds.has(proposal.escapeeParticipantId) &&
+        participantIds.has(proposal.attackerParticipantId),
+    ),
     activeParticipantId,
     combatExperienceDifficulty: existing?.combatExperienceDifficulty,
     commands,
@@ -17798,6 +17914,11 @@ export function initializeCombatRoundState(input: {
               })
             : undefined,
     distanceState,
+    engagements: (existing?.engagements ?? []).filter(
+      (engagement) =>
+        participantIds.has(engagement.participantAId) &&
+        participantIds.has(engagement.participantBId),
+    ),
     encounterId: input.encounter.id,
     events,
     feintProposals: (existing?.feintProposals ?? []).filter(
@@ -18150,6 +18271,7 @@ export function advanceCombatRoundStep(
       activeParticipantId: undefined,
       combatExperienceDifficulty: undefined,
       commands: [],
+      breakOffProposals: [],
       continuedContacts: completedRoundState.continuedContacts,
       currentCursor: getDefaultCombatRoundCursor({
         participantId: nextParticipantId,
@@ -18158,6 +18280,7 @@ export function advanceCombatRoundStep(
       }),
       currentStep: "select_actions",
       distanceState: completedRoundState.distanceState,
+      engagements: completedRoundState.engagements,
       events: [],
       adjustDistanceProposals: [],
       feintProposals: [],
@@ -18363,6 +18486,16 @@ export function recordCombatRoundDeclaration(input: {
       proposal.roundNumber === normalized.roundNumber &&
       proposal.attackerParticipantId === input.participantId,
   );
+  const existingBreakOffProposals = normalized.breakOffProposals.filter(
+    (proposal) =>
+      proposal.roundNumber === normalized.roundNumber &&
+      proposal.escapeeParticipantId === input.participantId,
+  );
+  const withoutPreviousBreakOff = normalized.breakOffProposals.filter(
+    (proposal) =>
+      proposal.roundNumber !== normalized.roundNumber ||
+      proposal.escapeeParticipantId !== input.participantId,
+  );
   const feintProposal =
     normalized.currentStep !== "select_actions" && existingFeintProposal
       ? existingFeintProposal
@@ -18431,12 +18564,45 @@ export function recordCombatRoundDeclaration(input: {
             status: "awaiting_action_turn",
           })
         : undefined;
+  const breakOffProposals =
+    normalized.currentStep !== "select_actions" && existingBreakOffProposals.length > 0
+      ? existingBreakOffProposals
+      : declaration.actionId === "break_off_engagement"
+        ? normalized.participants.flatMap((opponent) => {
+            if (
+              opponent.participantId === input.participantId ||
+              !isCombatPairEngaged({
+                participantAId: input.participantId,
+                participantBId: opponent.participantId,
+                state: normalized,
+              })
+            ) {
+              return [];
+            }
+            return [
+              combatBreakOffProposalSchema.parse({
+                attackerParticipantId: opponent.participantId,
+                escapeeParticipantId: input.participantId,
+                id: buildCombatBreakOffProposalId({
+                  attackerParticipantId: opponent.participantId,
+                  escapeeParticipantId: input.participantId,
+                  roundNumber: normalized.roundNumber,
+                }),
+                intentNote: declaration.additionalActionNotes?.trim() || undefined,
+                pairKey: makeDistancePairKey(input.participantId, opponent.participantId),
+                roundNumber: normalized.roundNumber,
+                status: "awaiting_action_turn",
+              }),
+            ];
+          })
+        : [];
 
   const withDeclaration: CombatRoundState = {
     ...normalized,
     adjustDistanceProposals: adjustDistanceProposal
       ? [...withoutPreviousAdjustDistance, adjustDistanceProposal]
       : withoutPreviousAdjustDistance,
+    breakOffProposals: [...withoutPreviousBreakOff, ...breakOffProposals],
     feintProposals: feintProposal ? [...withoutPreviousFeint, feintProposal] : withoutPreviousFeint,
     participants: normalized.participants.map((participant) =>
       participant.participantId === input.participantId
@@ -18536,6 +18702,401 @@ function openCombatRoundAdjustDistanceForActionTurn(input: {
     }),
     state: input.state,
   });
+}
+
+function replaceCombatRoundBreakOffProposal(input: {
+  proposal: CombatBreakOffProposal;
+  state: CombatRoundState;
+}): CombatRoundState {
+  return combatRoundStateSchema.parse({
+    ...input.state,
+    breakOffProposals: input.state.breakOffProposals.map((proposal) =>
+      proposal.id === input.proposal.id ? input.proposal : proposal,
+    ),
+  });
+}
+
+function openCombatRoundBreakOffForActionTurn(input: {
+  participantId: string;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const proposals = getCombatRoundBreakOffProposals({
+    escapeeParticipantId: input.participantId,
+    state: input.state,
+  });
+  if (!proposals.some((proposal) => proposal.status === "awaiting_action_turn")) {
+    return input.state;
+  }
+  return combatRoundStateSchema.parse({
+    ...input.state,
+    breakOffProposals: input.state.breakOffProposals.map((proposal) =>
+      proposal.escapeeParticipantId === input.participantId &&
+      proposal.roundNumber === input.state.roundNumber &&
+      proposal.status === "awaiting_action_turn"
+        ? { ...proposal, status: "awaiting_gm_review" }
+        : proposal,
+    ),
+  });
+}
+
+function recordCombatRoundBreakOffCommand(input: {
+  beforeCursor?: CombatRoundCursor;
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  eventType: "break_off_review" | "break_off_roll" | "break_off_result" | "break_off_committed";
+  facts: Record<string, unknown>;
+  participantId: string;
+  proposal: CombatBreakOffProposal;
+  state: CombatRoundState;
+  type: "review_break_off" | "roll_break_off" | "commit_break_off";
+}): CombatRoundState {
+  const involvedOutcome =
+    typeof input.facts.involvedOutcome === "object" &&
+    input.facts.involvedOutcome !== null &&
+    !Array.isArray(input.facts.involvedOutcome)
+      ? (input.facts.involvedOutcome as Record<string, unknown>)
+      : {};
+  const rollerPrivate =
+    typeof input.facts.rollerPrivate === "object" &&
+    input.facts.rollerPrivate !== null &&
+    !Array.isArray(input.facts.rollerPrivate)
+      ? (input.facts.rollerPrivate as Record<string, unknown>)
+      : undefined;
+  const beforeCursor = input.beforeCursor ??
+    input.state.currentCursor ?? {
+      participantId: input.proposal.escapeeParticipantId,
+      roundNumber: input.state.roundNumber,
+      step: "A1" as const,
+    };
+  const afterCursor = input.state.currentCursor ?? beforeCursor;
+  const command = combatRoundCommandSchema.parse({
+    afterCursor,
+    beforeCursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: input.facts,
+    id:
+      input.command.commandId ??
+      buildCombatRoundCommandId({
+        createdAt: input.command.createdAt,
+        participantId: input.participantId,
+        state: input.state,
+        type: input.type,
+      }),
+    participantId: input.participantId,
+    phase: "phase1",
+    roundNumber: input.state.roundNumber,
+    step: "A1",
+    type: input.type,
+  });
+  return appendCombatRoundEventForCommand({
+    command,
+    draft: {
+      actorParticipantId: input.proposal.escapeeParticipantId,
+      attackerParticipantId: input.proposal.attackerParticipantId,
+      defenderParticipantId: input.proposal.escapeeParticipantId,
+      facts: {
+        involvedOutcome,
+        gmReview: input.eventType === "break_off_review" ? input.proposal.gmReview : undefined,
+        rollerPrivate: input.eventType === "break_off_roll" ? rollerPrivate : undefined,
+      },
+      involvedParticipantIds: [
+        input.proposal.escapeeParticipantId,
+        input.proposal.attackerParticipantId,
+      ],
+      outcomeScope: "involved",
+      ownerParticipantId: input.participantId,
+      phase: "phase1",
+      rollerParticipantId: input.eventType === "break_off_roll" ? input.participantId : undefined,
+      sourceIds: [input.proposal.id, input.proposal.pairKey],
+      status: input.eventType === "break_off_committed" ? "committed" : "recorded",
+      step: "phase_1_actions",
+      targetParticipantId: input.proposal.attackerParticipantId,
+      type: input.eventType,
+    },
+    state: combatRoundStateSchema.parse({
+      ...input.state,
+      commands: [...input.state.commands, command],
+      currentCursor: afterCursor,
+      currentStep: "phase_1_actions",
+      selectedParticipantId: input.proposal.escapeeParticipantId,
+      selectedStep: "phase_1_actions",
+    }),
+  });
+}
+
+export function reviewCombatRoundBreakOff(input: {
+  attackerAdjustment: number;
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  escapeeAdjustment: number;
+  notes?: string;
+  proposalId: string;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const previousProposal = normalized.breakOffProposals.find(
+    (proposal) => proposal.id === input.proposalId,
+  );
+  if (!previousProposal || previousProposal.status !== "awaiting_gm_review") {
+    throw new RangeError("The GM must review this Break Off contest before the rolls.");
+  }
+  if (!Number.isInteger(input.attackerAdjustment) || !Number.isInteger(input.escapeeAdjustment)) {
+    throw new RangeError("Break Off situational modifiers must be integers.");
+  }
+  const proposal = combatBreakOffProposalSchema.parse({
+    ...previousProposal,
+    gmReview: {
+      attackerAdjustment: input.attackerAdjustment,
+      escapeeAdjustment: input.escapeeAdjustment,
+      notes: input.notes?.trim() || undefined,
+    },
+    status: "awaiting_rolls",
+  });
+  return recordCombatRoundBreakOffCommand({
+    command: input.command,
+    eventType: "break_off_review",
+    facts: {
+      involvedOutcome: { proposalId: proposal.id, reviewConfirmed: true },
+      previousProposal,
+      proposalId: proposal.id,
+    },
+    participantId: proposal.escapeeParticipantId,
+    proposal,
+    state: replaceCombatRoundBreakOffProposal({ proposal, state: normalized }),
+    type: "review_break_off",
+  });
+}
+
+export function recordCombatRoundBreakOffRoll(input: {
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  proposalId: string;
+  result: CombatBreakOffRoll;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const previousProposal = normalized.breakOffProposals.find(
+    (proposal) => proposal.id === input.proposalId,
+  );
+  if (!previousProposal || previousProposal.status !== "awaiting_rolls") {
+    throw new RangeError("Break Off rolls are not currently available.");
+  }
+  const side =
+    input.result.participantId === previousProposal.escapeeParticipantId
+      ? "escapee"
+      : input.result.participantId === previousProposal.attackerParticipantId
+        ? "attacker"
+        : undefined;
+  if (!side) throw new RangeError("Only a participant in this Break Off contest may roll Dodge.");
+  if (side === "escapee" && previousProposal.escapeeRoll)
+    throw new RangeError("The escapee has already rolled Dodge.");
+  if (side === "attacker" && previousProposal.attackerRoll)
+    throw new RangeError("The attacker has already rolled Dodge.");
+  const parsedRoll = combatBreakOffRollSchema.parse(input.result);
+  if (
+    parsedRoll.calculation.participantId !== parsedRoll.participantId ||
+    parsedRoll.calculation.contestType !== "break_off" ||
+    parsedRoll.calculation.finalResult !== parsedRoll.finalTotal
+  ) {
+    throw new RangeError("Break Off roll calculation does not match its participant or result.");
+  }
+  const escapeeRoll = side === "escapee" ? parsedRoll : previousProposal.escapeeRoll;
+  const attackerRoll = side === "attacker" ? parsedRoll : previousProposal.attackerRoll;
+  const standard =
+    escapeeRoll && attackerRoll
+      ? resolveCombatBreakOffProposal({
+          attackerTotal: attackerRoll.finalTotal,
+          escapeeTotal: escapeeRoll.finalTotal,
+        })
+      : undefined;
+  const proposal = combatBreakOffProposalSchema.parse({
+    ...previousProposal,
+    attackerRoll,
+    difference: standard?.difference,
+    escapeeRoll,
+    result: standard?.result,
+    status: standard ? "awaiting_commit" : "awaiting_rolls",
+  });
+  let next = recordCombatRoundBreakOffCommand({
+    command: input.command,
+    eventType: "break_off_roll",
+    facts: {
+      involvedOutcome: { proposalId: proposal.id, side },
+      previousProposal,
+      proposalId: proposal.id,
+      rollerPrivate: { calculation: parsedRoll.calculation, finalTotal: parsedRoll.finalTotal },
+    },
+    participantId: parsedRoll.participantId,
+    proposal,
+    state: replaceCombatRoundBreakOffProposal({ proposal, state: normalized }),
+    type: "roll_break_off",
+  });
+  if (standard) {
+    const command = next.commands.at(-1)!;
+    next = appendCombatRoundEventForCommand({
+      command,
+      draft: {
+        actorParticipantId: proposal.escapeeParticipantId,
+        attackerParticipantId: proposal.attackerParticipantId,
+        defenderParticipantId: proposal.escapeeParticipantId,
+        facts: { involvedOutcome: { difference: standard.difference, ...standard.result } },
+        involvedParticipantIds: [proposal.escapeeParticipantId, proposal.attackerParticipantId],
+        outcomeScope: "involved",
+        ownerParticipantId: proposal.escapeeParticipantId,
+        phase: "phase1",
+        sourceIds: [proposal.id, proposal.pairKey],
+        status: "proposed",
+        step: "phase_1_actions",
+        targetParticipantId: proposal.attackerParticipantId,
+        type: "break_off_result",
+      },
+      state: next,
+    });
+  }
+  return next;
+}
+
+export function commitCombatRoundBreakOff(input: {
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  proposalId: string;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const previousProposal = normalized.breakOffProposals.find(
+    (proposal) => proposal.id === input.proposalId,
+  );
+  if (
+    !previousProposal ||
+    previousProposal.status !== "awaiting_commit" ||
+    !previousProposal.result
+  ) {
+    throw new RangeError("The GM must commit a resolved Break Off proposal.");
+  }
+  const proposal = combatBreakOffProposalSchema.parse({
+    ...previousProposal,
+    committedAt: input.command.createdAt,
+    committedByUserId: input.command.createdByUserId,
+    status: "committed",
+  });
+  const result = proposal.result;
+  if (!result) throw new RangeError("Break Off result is unavailable.");
+  const previousEngagements = normalized.engagements;
+  const previousContinuedContacts = normalized.continuedContacts;
+  const previousUnbalancedConditions = normalized.unbalancedConditions;
+  const beforeCursor = normalized.currentCursor ?? {
+    participantId: proposal.escapeeParticipantId,
+    roundNumber: normalized.roundNumber,
+    step: "A1" as const,
+  };
+  const commandId =
+    input.command.commandId ??
+    buildCombatRoundCommandId({
+      createdAt: input.command.createdAt,
+      participantId: proposal.escapeeParticipantId,
+      state: normalized,
+      type: "commit_break_off",
+    });
+  let next = replaceCombatRoundBreakOffProposal({ proposal, state: normalized });
+  if (result.escaped) {
+    const [participantAId, participantBId] = proposal.pairKey.split("::");
+    next = combatRoundStateSchema.parse({
+      ...next,
+      engagements: [
+        ...next.engagements.filter((engagement) => engagement.pairKey !== proposal.pairKey),
+        combatEngagementSchema.parse({
+          changedAt: input.command.createdAt,
+          changedByCommandId: commandId,
+          participantAId,
+          participantBId,
+          pairKey: proposal.pairKey,
+          reason: "break_off",
+          sourceProposalId: proposal.id,
+          status: "disengaged",
+        }),
+      ],
+      continuedContacts: next.continuedContacts.map((contact) =>
+        contact.status === "active" &&
+        makeDistancePairKey(contact.controllerParticipantId, contact.affectedParticipantId) ===
+          proposal.pairKey
+          ? { ...contact, endedRound: next.roundNumber, status: "ended" as const }
+          : contact,
+      ),
+      unbalancedConditions: next.unbalancedConditions.map((condition) => {
+        const contact = next.continuedContacts.find(
+          (entry) => entry.id === condition.sourceContinuedContactId,
+        );
+        return condition.status === "active" &&
+          contact &&
+          makeDistancePairKey(contact.controllerParticipantId, contact.affectedParticipantId) ===
+            proposal.pairKey
+          ? { ...condition, endedRound: next.roundNumber, status: "ended" as const }
+          : condition;
+      }),
+    });
+  }
+  const allCommitted = getCombatRoundBreakOffProposals({
+    escapeeParticipantId: proposal.escapeeParticipantId,
+    state: next,
+  }).every((entry) => entry.status === "committed");
+  if (allCommitted) {
+    const withDoneStatus = setCombatRoundPhaseResolutionStatus({
+      participantId: proposal.escapeeParticipantId,
+      phase: "phase1",
+      state: next,
+      status: { substep: "done", updatedAt: input.command.createdAt },
+    });
+    const withStepStatus = setCombatRoundParticipantStepStatus({
+      participantId: proposal.escapeeParticipantId,
+      state: withDoneStatus,
+      status: "complete",
+      step: "phase_1_actions",
+    });
+    next = moveCombatRoundPhaseResolutionCursorToNextParticipant({
+      phase: "phase1",
+      state: withStepStatus,
+      updatedAt: input.command.createdAt,
+    });
+  }
+  return recordCombatRoundBreakOffCommand({
+    beforeCursor,
+    command: { ...input.command, commandId },
+    eventType: "break_off_committed",
+    facts: {
+      involvedOutcome: { difference: proposal.difference, ...proposal.result },
+      previousContinuedContacts,
+      previousEngagements,
+      previousProposal,
+      previousUnbalancedConditions,
+      proposalId: proposal.id,
+    },
+    participantId: proposal.escapeeParticipantId,
+    proposal,
+    state: next,
+    type: "commit_break_off",
+  });
+}
+
+export function getCombatBreakOffPairConsequence(input: {
+  attackerParticipantId: string;
+  defenderParticipantId: string;
+  state: CombatRoundState;
+}): { attackerObModifier: number; defenderDbParryModifier: number; disengaged: boolean } {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const pairKey = makeDistancePairKey(input.attackerParticipantId, input.defenderParticipantId);
+  const committed = normalized.breakOffProposals.find(
+    (proposal) =>
+      proposal.roundNumber === normalized.roundNumber &&
+      proposal.pairKey === pairKey &&
+      proposal.status === "committed" &&
+      proposal.attackerParticipantId === input.attackerParticipantId,
+  );
+  return {
+    attackerObModifier: committed?.result?.attackerObModifier ?? 0,
+    defenderDbParryModifier: committed?.result?.defenderDbParryModifier ?? 0,
+    disengaged: !isCombatPairEngaged({
+      participantAId: input.attackerParticipantId,
+      participantBId: input.defenderParticipantId,
+      state: normalized,
+    }),
+  };
 }
 
 function moveCombatRoundAdjustDistanceToNextAction(input: {
@@ -20240,6 +20801,18 @@ export function recordCombatRoundAttackResult(input: {
 }): CombatRoundState {
   const attackStep = input.result.phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
   const normalized = combatRoundStateSchema.parse(input.state);
+  if (
+    input.result.weaponSourceSlot !== "throwing" &&
+    !isCombatPairEngaged({
+      participantAId: input.result.attackerParticipantId,
+      participantBId: input.result.defenderParticipantId,
+      state: normalized,
+    })
+  ) {
+    throw new RangeError(
+      "Ordinary direct melee cannot execute while this pair is disengaged. Movement must re-establish engagement first.",
+    );
+  }
   const opportunity = input.result.attackOpportunityId
     ? getCombatRoundPhaseAttackCandidates({
         phase: input.result.phase,
@@ -23240,6 +23813,75 @@ function undoCombatRoundAdjustDistanceCommandAtIndex(input: {
   });
 }
 
+function undoCombatRoundBreakOffCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+  if (
+    !command ||
+    (command.type !== "review_break_off" &&
+      command.type !== "roll_break_off" &&
+      command.type !== "commit_break_off")
+  ) {
+    return undefined;
+  }
+  const previousProposal = combatBreakOffProposalSchema.safeParse(command.facts.previousProposal);
+  if (!previousProposal.success) return undefined;
+  const previousEngagements = Array.isArray(command.facts.previousEngagements)
+    ? command.facts.previousEngagements.flatMap((value) => {
+        const parsed = combatEngagementSchema.safeParse(value);
+        return parsed.success ? [parsed.data] : [];
+      })
+    : normalized.engagements;
+  const previousContacts = Array.isArray(command.facts.previousContinuedContacts)
+    ? command.facts.previousContinuedContacts.flatMap((value) => {
+        const parsed = continuedContactSchema.safeParse(value);
+        return parsed.success ? [parsed.data] : [];
+      })
+    : normalized.continuedContacts;
+  const previousConditions = Array.isArray(command.facts.previousUnbalancedConditions)
+    ? command.facts.previousUnbalancedConditions.flatMap((value) => {
+        const parsed = unbalancedCombatConditionSchema.safeParse(value);
+        return parsed.success ? [parsed.data] : [];
+      })
+    : normalized.unbalancedConditions;
+  const stateWithoutEvents = removeCombatRoundEventsForCommand({
+    commandId: command.id,
+    state: normalized,
+  });
+  return combatRoundStateSchema.parse({
+    ...stateWithoutEvents,
+    breakOffProposals: normalized.breakOffProposals.map((proposal) =>
+      proposal.id === previousProposal.data.id ? previousProposal.data : proposal,
+    ),
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    continuedContacts: previousContacts,
+    currentCursor: command.beforeCursor,
+    currentStep: "phase_1_actions",
+    engagements: previousEngagements,
+    phaseResolutionStatuses: {
+      ...normalized.phaseResolutionStatuses,
+      [previousProposal.data.escapeeParticipantId]: {
+        ...normalized.phaseResolutionStatuses[previousProposal.data.escapeeParticipantId],
+        phase1: { substep: "break_off", updatedAt: command.createdAt },
+      },
+    },
+    participants: normalized.participants.map((participant) =>
+      participant.participantId === previousProposal.data.escapeeParticipantId
+        ? {
+            ...participant,
+            stepStatuses: { ...participant.stepStatuses, phase_1_actions: "ready" },
+          }
+        : participant,
+    ),
+    selectedParticipantId: previousProposal.data.escapeeParticipantId,
+    selectedStep: "phase_1_actions",
+    unbalancedConditions: previousConditions,
+  });
+}
+
 function undoCombatRoundOffensiveParryBrawlingCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
@@ -23524,6 +24166,17 @@ function undoCombatRoundCommandAtIndex(input: {
     command.type === "commit_adjust_distance"
   ) {
     return undoCombatRoundAdjustDistanceCommandAtIndex({
+      commandIndex: input.commandIndex,
+      state: normalized,
+    });
+  }
+
+  if (
+    command.type === "review_break_off" ||
+    command.type === "roll_break_off" ||
+    command.type === "commit_break_off"
+  ) {
+    return undoCombatRoundBreakOffCommandAtIndex({
       commandIndex: input.commandIndex,
       state: normalized,
     });
@@ -25260,12 +25913,17 @@ export function getCombatRoundTimelineRoundStates(state: CombatRoundState): Comb
       combatRoundStateSchema.parse({
         adjustDistanceProposals: round.adjustDistanceProposals,
         activeParticipantId: round.activeParticipantId,
+        breakOffProposals: round.breakOffProposals,
         commands: round.commands,
+        continuedContacts: round.continuedContacts,
         currentCursor: round.currentCursor,
         currentStep: round.currentStep,
         encounterId: round.encounterId ?? normalized.encounterId,
+        engagements: round.engagements,
         events: round.events,
         feintProposals: round.feintProposals,
+        genericActions: round.genericActions,
+        offensiveParryContests: round.offensiveParryContests,
         observationAttempts: round.observationAttempts,
         observationRelationships: round.observationRelationships,
         phaseResolutionCursor: round.phaseResolutionCursor,
@@ -25278,6 +25936,7 @@ export function getCombatRoundTimelineRoundStates(state: CombatRoundState): Comb
         selectedParticipantId: round.selectedParticipantId,
         selectedStep: round.selectedStep,
         stepSnapshots: round.stepSnapshots,
+        unbalancedConditions: round.unbalancedConditions,
       }),
     );
 

@@ -94,6 +94,7 @@ export const COMBAT_DECLARATION_ACTION_LABELS: Record<string, string> = {
   parry: "Parry",
   parry_attack: "Reactive attack",
   parry_disarm: "Parry - Disarm",
+  break_off_engagement: "Break Off Engagement",
 };
 
 export function getCombatDeclarationActionLabel(actionId?: string): string {

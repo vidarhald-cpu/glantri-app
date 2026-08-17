@@ -37,6 +37,10 @@ export const combatStepEventTypeSchema = z.enum([
   "adjust_distance_roll",
   "adjust_distance_result",
   "adjust_distance_committed",
+  "break_off_review",
+  "break_off_roll",
+  "break_off_result",
+  "break_off_committed",
 ]);
 export type CombatStepEventType = z.infer<typeof combatStepEventTypeSchema>;
 
@@ -152,6 +156,9 @@ export const combatStepEventCommandTypeSchema = z.enum([
   "review_adjust_distance_roll_adjustment",
   "roll_adjust_distance",
   "commit_adjust_distance",
+  "review_break_off",
+  "roll_break_off",
+  "commit_break_off",
   "complete_remaining_step",
 ]);
 

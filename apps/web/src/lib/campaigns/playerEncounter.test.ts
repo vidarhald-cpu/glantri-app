@@ -94,6 +94,7 @@ describe("playerEncounter", () => {
       "adjust_range_attack",
       "offensive_parry",
       "parry",
+      "break_off_engagement",
       "move_only",
     ]);
     expect(PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS.map((option) => option.value)).toEqual([
@@ -132,9 +133,9 @@ describe("playerEncounter", () => {
     );
     expect(
       getPlayerEncounterDeclarationCompatibilityMessage({
-        actionId: "break_off_engagement",
+        actionId: "disarm",
       }),
-    ).toBe("Break Off Engagement is unavailable and cannot be declared.");
+    ).toBe("Disarm is unavailable and cannot be declared.");
   });
 
   it("keeps unsupported legacy action identities and labels readable", () => {

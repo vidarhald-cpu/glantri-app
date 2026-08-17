@@ -61,6 +61,7 @@ export function getCombatRoundStepForProgressionBoundary(
 
 export type CombatProgressionProcessKind =
   | "adjust_distance"
+  | "break_off"
   | "attack_decision"
   | "attack"
   | "combat_experience"
@@ -124,6 +125,10 @@ export type CombatProgressionTaskKind =
   | "adjust_distance_defender_roll"
   | "adjust_distance_response"
   | "attack"
+  | "break_off_review"
+  | "break_off_escapee_roll"
+  | "break_off_attacker_roll"
+  | "break_off_commit"
   | "combat_experience"
   | "continued_contact_maintenance_roll"
   | "critical"

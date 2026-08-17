@@ -163,12 +163,16 @@ describe("resolveCombatMovementBurden", () => {
   });
 
   it("uses Strength, Size, and Constitution for carrying capacity", () => {
-    expect(resolve({ load: 20, stats: { constitution: 10, size: 10, strength: 10 } })).toMatchObject({
+    expect(
+      resolve({ load: 20, stats: { constitution: 10, size: 10, strength: 10 } }),
+    ).toMatchObject({
       carryingCapacity: 25,
       carriedPercentage: 80,
       encumbranceLevel: 3,
     });
-    expect(resolve({ load: 20, stats: { constitution: 20, size: 15, strength: 15 } })).toMatchObject({
+    expect(
+      resolve({ load: 20, stats: { constitution: 20, size: 15, strength: 15 } }),
+    ).toMatchObject({
       carryingCapacity: 40,
       carriedPercentage: 50,
       encumbranceLevel: 2,
@@ -250,6 +254,7 @@ describe("Movement Modifier applicability", () => {
       "not_applicable",
     );
     expect(getCombatMovementModifierApplicability("continued_contact")).toBe("not_applicable");
+    expect(getCombatMovementModifierApplicability("break_off")).toBe("required");
     expect(getCombatMovementModifierApplicability("observe_opponent")).toBe("not_applicable");
   });
 });

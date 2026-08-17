@@ -2,10 +2,7 @@ import { z } from "zod";
 
 const idSchema = z.string().min(1);
 
-export const combatMovementModifierApplicabilitySchema = z.enum([
-  "required",
-  "not_applicable",
-]);
+export const combatMovementModifierApplicabilitySchema = z.enum(["required", "not_applicable"]);
 export type CombatMovementModifierApplicability = z.infer<
   typeof combatMovementModifierApplicabilitySchema
 >;
@@ -17,12 +14,11 @@ export const combatMovementModifierManeuverSchema = z.enum([
   "weapon_feint",
   "offensive_parry_brawling",
   "continued_contact",
+  "break_off",
   "observe_opponent",
   "weapon_resolution",
 ]);
-export type CombatMovementModifierManeuver = z.infer<
-  typeof combatMovementModifierManeuverSchema
->;
+export type CombatMovementModifierManeuver = z.infer<typeof combatMovementModifierManeuverSchema>;
 
 export const combatMovementBurdenMissingFactSchema = z.enum([
   "characteristics",
@@ -33,9 +29,7 @@ export const combatMovementBurdenMissingFactSchema = z.enum([
   "carrying_capacity",
   "shield",
 ]);
-export type CombatMovementBurdenMissingFact = z.infer<
-  typeof combatMovementBurdenMissingFactSchema
->;
+export type CombatMovementBurdenMissingFact = z.infer<typeof combatMovementBurdenMissingFactSchema>;
 
 export const combatMovementBurdenSnapshotSchema = z.object({
   schemaVersion: z.literal(1),
@@ -82,6 +76,4 @@ export const combatMovementBurdenSnapshotSchema = z.object({
     workbook: z.literal("Themistogenes 1.07.xlsx"),
   }),
 });
-export type CombatMovementBurdenSnapshot = z.infer<
-  typeof combatMovementBurdenSnapshotSchema
->;
+export type CombatMovementBurdenSnapshot = z.infer<typeof combatMovementBurdenSnapshotSchema>;

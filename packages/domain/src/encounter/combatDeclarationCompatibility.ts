@@ -7,9 +7,9 @@ export const COMBAT_PRIMARY_ACTION_IDS = [
   "counterattack",
   "offensive_parry",
   "parry",
+  "break_off_engagement",
   "parry_disarm",
   "disarm",
-  "break_off_engagement",
   "other",
 ] as const;
 
@@ -24,7 +24,6 @@ export const COMBAT_SECONDARY_ACTION_IDS = [
   "offensive_parry",
   "parry_disarm",
   "disarm",
-  "break_off_engagement",
   "other",
 ] as const;
 
@@ -51,6 +50,7 @@ const AVAILABLE_PRIMARY_ACTION_IDS = new Set<string>([
   "adjust_range_attack",
   "offensive_parry",
   "parry",
+  "break_off_engagement",
 ]);
 
 const UNAVAILABLE_PRIMARY_ACTION_IDS = new Set<string>(["counterattack", "disarm"]);
@@ -166,6 +166,7 @@ const MOVEMENT_OWNING_PRIMARY_ACTION_IDS = new Set<string>([
   "adjust_range_attack",
   "offensive_parry",
   "parry",
+  "break_off_engagement",
 ]);
 
 export const COMBAT_DECLARATION_COMPATIBILITY_RULES: readonly CombatDeclarationCompatibilityRule[] =

@@ -47,6 +47,10 @@ export function classifyCombatTrackerTaskAttention(
     case "adjust_distance_commit":
     case "adjust_distance_defender_roll":
     case "adjust_distance_response":
+    case "break_off_review":
+    case "break_off_escapee_roll":
+    case "break_off_attacker_roll":
+    case "break_off_commit":
     case "combat_experience":
     case "continued_contact_maintenance_roll":
     case "critical":
@@ -98,6 +102,11 @@ function actionLabel(kind: CombatProgressionTaskKind): string {
       return "Initiative";
     case "attack":
       return "Attack";
+    case "break_off_review":
+    case "break_off_escapee_roll":
+    case "break_off_attacker_roll":
+    case "break_off_commit":
+      return "Break Off";
     case "parry":
       return "Parry";
     case "offensive_parry_brawling_roll":
@@ -152,6 +161,10 @@ function gmText(task: CombatProgressionPresentationTask, owner: string | undefin
       return `Awaiting GM: Review ${phaseLabel(task) ?? "phase"} modifiers${owner ? ` for ${owner}` : ""}.`;
     case "feint_commit":
       return `Awaiting GM: Review Feint${owner ? ` for ${owner}` : ""}.`;
+    case "break_off_review":
+      return `Awaiting GM: Review Break Off${owner ? ` for ${owner}` : ""}.`;
+    case "break_off_commit":
+      return `Awaiting GM: Commit Break Off${owner ? ` for ${owner}` : ""}.`;
     case "adjust_distance_adjustment":
       return `Awaiting GM: Enter the Adjust Distance roll adjustment${owner ? ` for ${owner}` : ""}.`;
     case "adjust_distance_commit":
@@ -250,6 +263,12 @@ export function buildCombatTrackerTaskHover(
           ? `${owner} must roll Dodge for Adjust Distance${opponent ? ` against ${opponent}` : ""}.`
           : "A Dodge roll is required before combat can continue.";
         break;
+      case "break_off_escapee_roll":
+      case "break_off_attacker_roll":
+        text = owner
+          ? `${owner} must roll Dodge for Break Off${opponent ? ` against ${opponent}` : ""}.`
+          : "A Break Off Dodge roll is required before combat can continue.";
+        break;
       case "feint_attacker_roll":
         text = owner
           ? `${owner} must roll Feint${opponent ? ` against ${opponent}` : ""}.`
@@ -291,6 +310,8 @@ export function buildCombatTrackerTaskHover(
       case "modifier_review":
       case "commit_initiative":
       case "feint_commit":
+      case "break_off_review":
+      case "break_off_commit":
       case "adjust_distance_adjustment":
       case "adjust_distance_commit":
       case "distance_commit":

@@ -190,6 +190,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   adjust_distance: "Adjust Distance",
   adjust_distance_attack: "Adjust Distance-Attack",
   attack: "Attack",
+  break_off_engagement: "Break Off",
   combat_experience: "Combat Experience",
   continued_contact_distance_control: "Continued Contact",
   continued_contact_maintenance_controller: "Continued Contact",
@@ -220,6 +221,10 @@ const TASK_ACTION_NAMES: Record<CombatProgressionTaskKind, string> = {
   adjust_distance_defender_roll: "Adjust Distance",
   adjust_distance_response: "Adjust Distance",
   attack: "Attack",
+  break_off_attacker_roll: "Break Off",
+  break_off_commit: "Break Off",
+  break_off_escapee_roll: "Break Off",
+  break_off_review: "Break Off",
   combat_experience: "Combat Experience",
   continued_contact_maintenance_roll: "Continued Contact",
   commit_initiative: "Initiative",
@@ -412,6 +417,11 @@ function summaryFor(input: {
       return `${actor} is attempting to adjust the distance${target ? ` to ${target}` : ""}.`;
     case "attack":
       return `${actor} is attacking${target ? ` ${target}` : ""}.`;
+    case "break_off_review":
+    case "break_off_escapee_roll":
+    case "break_off_attacker_roll":
+    case "break_off_commit":
+      return `${actor} is attempting to break off${target ? ` from ${target}` : ""}.`;
     case "parry":
       if (input.task.identity.parryPurpose === "offensive_parry") {
         const attackOutcome = input.task.presentationContext?.attackOutcome;
@@ -553,6 +563,13 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
       return "Choose Continue or Cancel";
     case "attack":
       return "Roll attack";
+    case "break_off_review":
+      return "Review Break Off";
+    case "break_off_escapee_roll":
+    case "break_off_attacker_roll":
+      return "Roll Dodge";
+    case "break_off_commit":
+      return "Commit Break Off";
     case "parry":
       return task.identity.parryPurpose === "offensive_parry"
         ? "Roll Offensive Parry"
@@ -632,6 +649,13 @@ function requiredNowFor(
       return "Choose Continue or Cancel.";
     case "attack":
       return "Roll attack.";
+    case "break_off_review":
+      return "Review the Break Off modifiers.";
+    case "break_off_escapee_roll":
+    case "break_off_attacker_roll":
+      return "Roll Dodge.";
+    case "break_off_commit":
+      return "Commit the Break Off result.";
     case "parry":
       return task.identity.parryPurpose === "offensive_parry"
         ? "Attempt the parry."

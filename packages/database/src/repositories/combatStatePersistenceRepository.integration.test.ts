@@ -103,6 +103,24 @@ if (!process.env.DATABASE_URL_TEST) {
           description: "Active-only mutation",
           combatRoundState: {
             ...materialized.combatRoundState!,
+            breakOffProposals: [
+              {
+                attackerParticipantId: "borin",
+                escapeeParticipantId: "aria",
+                id: "break-off:round:2:escapee:aria:attacker:borin",
+                pairKey: "aria::borin",
+                roundNumber: 2,
+                status: "awaiting_gm_review",
+              },
+            ],
+            engagements: [
+              {
+                participantAId: "aria",
+                participantBId: "borin",
+                pairKey: "aria::borin",
+                status: "engaged",
+              },
+            ],
             selectedParticipantId: "aria",
           },
         },
@@ -115,6 +133,22 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(afterMutation.archivedCombatRounds).toHaveLength(1);
       expect(afterMutation.archivedCombatRounds[0]!.createdAt).toEqual(archiveCreatedAt);
       expect(activeMutation.combatRoundState?.selectedParticipantId).toBe("aria");
+      expect(activeMutation.combatRoundState?.breakOffProposals[0]).toMatchObject({
+        id: "break-off:round:2:escapee:aria:attacker:borin",
+        status: "awaiting_gm_review",
+      });
+      await expect(reads.getFullEncounterById(initial.id)).resolves.toMatchObject({
+        encounter: expect.objectContaining({
+          combatRoundState: expect.objectContaining({
+            breakOffProposals: [
+              expect.objectContaining({
+                id: "break-off:round:2:escapee:aria:attacker:borin",
+              }),
+            ],
+            engagements: [expect.objectContaining({ pairKey: "aria::borin" })],
+          }),
+        }),
+      });
 
       await prisma!.encounter.delete({ where: { id: initial.id } });
       await expect(

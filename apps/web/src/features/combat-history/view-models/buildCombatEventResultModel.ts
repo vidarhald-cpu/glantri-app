@@ -72,6 +72,10 @@ const EVENT_TITLES: Record<ProjectedCombatHistoryEvent["type"], string> = {
   adjust_distance_roll: "Dodge roll",
   adjust_distance_result: "Distance proposal",
   adjust_distance_committed: "Distance adjustment committed",
+  break_off_review: "Break Off review",
+  break_off_roll: "Break Off Dodge roll",
+  break_off_result: "Break Off result",
+  break_off_committed: "Break Off committed",
 };
 
 function humanize(key: string): string {
@@ -267,6 +271,37 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
         summary: `Observe Opponent${event.identities.find((identity) => identity.role === "target")?.displayName ? ` — ${event.identities.find((identity) => identity.role === "target")?.displayName}` : ""}.`,
       };
     }
+    case "break_off_review":
+      return {
+        outcomeRows: [],
+        summary: `The GM reviewed ${actor ? `${actor}'s ` : "the "}Break Off contest.`,
+      };
+    case "break_off_roll": {
+      const finalTotal = factLabel(factValue(event, "finalTotal"));
+      return {
+        outcomeRows: resultRow(event, finalTotal ? `Dodge result: ${finalTotal}` : undefined),
+        summary: `${roller ?? "Participant"} rolled Dodge for Break Off.`,
+      };
+    }
+    case "break_off_result": {
+      const difference = factLabel(factValue(event, "difference"));
+      const escaped = factValue(event, "escaped");
+      return {
+        outcomeRows: resultRow(event, difference ? `Difference: ${difference}` : undefined),
+        summary:
+          escaped === true
+            ? `${defender ?? "The escapee"} won the Break Off contest.`
+            : `${attacker ?? "The attacker"} maintained the engagement.`,
+      };
+    }
+    case "break_off_committed":
+      return {
+        outcomeRows: [],
+        summary:
+          factValue(event, "escaped") === true
+            ? "Break Off committed; the pair disengaged."
+            : "Break Off committed; the pair remains engaged.",
+      };
     case "hit_location": {
       const location = factLabel(factValue(event, "selectedHitLocation", "hitLocation"));
       return {
@@ -463,7 +498,8 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
                           ? "automatic change rejected"
                           : changeType === "replaced"
                             ? "replaced"
-                            : [valueChange, durationChange].filter(Boolean).join(" · ") || changeType;
+                            : [valueChange, durationChange].filter(Boolean).join(" · ") ||
+                              changeType;
             return [
               {
                 key: `${event.id}:outcome:change:${index}`,

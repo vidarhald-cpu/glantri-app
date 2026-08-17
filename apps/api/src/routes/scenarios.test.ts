@@ -458,6 +458,9 @@ async function buildScenarioTestApp() {
       ["/combat-round/review-adjust-distance", ["review_adjust_distance_roll_adjustment"]],
       ["/combat-round/roll-adjust-distance", ["roll_adjust_distance"]],
       ["/combat-round/commit-adjust-distance", ["commit_adjust_distance"]],
+      ["/combat-round/review-break-off", ["review_break_off"]],
+      ["/combat-round/roll-break-off", ["roll_break_off"]],
+      ["/combat-round/commit-break-off", ["commit_break_off"]],
       ["/combat-round/roll-feint", ["roll_feint"]],
       ["/combat-round/commit-feint", ["commit_feint_result"]],
       ["/combat-round/roll-distance-control", ["roll_round_end_distance_control"]],
@@ -7353,13 +7356,7 @@ describe("scenarios route contract", () => {
     setupCombatDeclarationRoute();
     const app = await buildScenarioTestApp();
 
-    for (const actionId of [
-      "counterattack",
-      "disarm",
-      "parry_disarm",
-      "break_off_engagement",
-      "other",
-    ]) {
+    for (const actionId of ["counterattack", "disarm", "parry_disarm", "other"]) {
       const response = await app.inject({
         method: "POST",
         payload: {
@@ -22656,6 +22653,191 @@ describe("scenarios route contract", () => {
     expect(
       mutable.encounter.combatRoundState?.participants[0]?.attackResults.phase2,
     ).toBeUndefined();
+  });
+
+  it("runs the projected Break Off review, participant-owned Dodge rolls, and GM commit", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const roundState = combatRoundStateSchema.parse({
+      breakOffProposals: [
+        {
+          attackerParticipantId: "encounter-participant-2",
+          escapeeParticipantId: "encounter-participant-1",
+          id: "break-off-proposal",
+          pairKey: "encounter-participant-1::encounter-participant-2",
+          roundNumber: 1,
+          status: "awaiting_gm_review",
+        },
+      ],
+      commands: [
+        {
+          afterCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "A1" },
+          beforeCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "i1" },
+          createdAt: "2026-01-01T00:01:30.000Z",
+          facts: {},
+          id: "command-i1",
+          participantId: "encounter-participant-1",
+          phase: "phase1",
+          roundNumber: 1,
+          step: "i1",
+          type: "commit_phase_initiative_resolution",
+        },
+      ],
+      currentCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "A1" },
+      currentStep: "phase_1_actions",
+      phaseResolutionCursor: {
+        participantId: "encounter-participant-1",
+        phase: "phase1",
+        substep: "break_off",
+      },
+      participants: [
+        {
+          declaration: {
+            actionId: "break_off_engagement",
+            roundNumber: 1,
+            submittedBy: "player",
+          },
+          initiatives: { phase1: { rolls: [2], total: 2 } },
+          label: "The Gladiator",
+          participantId: "encounter-participant-1",
+          scenarioParticipantId: "participant-1",
+        },
+        {
+          initiatives: { phase1: { rolls: [6], total: 18 } },
+          label: "City guard",
+          participantId: "encounter-participant-2",
+          scenarioParticipantId: "participant-2",
+        },
+      ],
+      phaseResolutionStatuses: {
+        "encounter-participant-1": { phase1: { substep: "break_off" } },
+      },
+      roundNumber: 1,
+    });
+    const participants = [
+      makeCombatScenarioParticipant({
+        characterId: "character-1",
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        snapshot: {
+          build: makeDodgeCharacterBuild("character-1", "The Gladiator"),
+          displayName: "The Gladiator",
+          equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-1" }),
+        },
+      }),
+      makeCombatScenarioParticipant({
+        characterId: "character-2",
+        controlledByUserId: "other-player",
+        id: "participant-2",
+        snapshot: {
+          build: makeDodgeCharacterBuild("character-2", "City guard"),
+          displayName: "City guard",
+          equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-2" }),
+        },
+      }),
+    ];
+    const mutable = setupMutableCombatRouteState({
+      encounter: makeCombatEncounter({
+        combatRoundState: roundState,
+        participants: encounterParticipants,
+      }) as EncounterSession,
+      participants,
+      user: mocks.adminUser,
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.4);
+    const app = await buildScenarioTestApp();
+    const reviewTask = buildCombatProgressionProjection(roundState)
+      .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.expectedCommand === "review_break_off");
+    expect(reviewTask).toBeDefined();
+
+    const reviewed = await app.inject({
+      method: "POST",
+      payload: {
+        attackerAdjustment: -2,
+        escapeeAdjustment: 3,
+        notes: "The doorway favors the escapee.",
+        proposalId: "break-off-proposal",
+        executionGroupId: reviewTask!.executionGroupId,
+        expectedRevision: "2026-01-01T00:00:00.000Z",
+        taskId: reviewTask!.id,
+      },
+      url: "/encounters/encounter-1/combat-round/review-break-off",
+    });
+    const attackerRoll = await app.inject({
+      method: "POST",
+      payload: { proposalId: "break-off-proposal", scenarioParticipantId: "participant-2" },
+      url: "/encounters/encounter-1/combat-round/roll-break-off",
+    });
+    const writesBeforeRejectedReplay = mocks.encounterService.updateEncounter.mock.calls.length;
+    const duplicateAttackerRoll = await app.inject({
+      method: "POST",
+      payload: { proposalId: "break-off-proposal", scenarioParticipantId: "participant-2" },
+      url: "/encounters/encounter-1/combat-round/roll-break-off",
+    });
+    const staleEscapeeRoll = await app.inject({
+      method: "POST",
+      payload: {
+        expectedRevision: "2026-01-01T00:00:00.000Z",
+        proposalId: "break-off-proposal",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-break-off",
+    });
+    expect(mocks.encounterService.updateEncounter.mock.calls).toHaveLength(
+      writesBeforeRejectedReplay,
+    );
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
+    const escapeeRoll = await app.inject({
+      method: "POST",
+      payload: { proposalId: "break-off-proposal", scenarioParticipantId: "participant-1" },
+      url: "/encounters/encounter-1/combat-round/roll-break-off",
+    });
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.adminUser);
+    const committed = await app.inject({
+      method: "POST",
+      payload: { proposalId: "break-off-proposal" },
+      url: "/encounters/encounter-1/combat-round/commit-break-off",
+    });
+
+    randomSpy.mockRestore();
+    await app.close();
+
+    expect(reviewed.statusCode, JSON.stringify(reviewed.json())).toBe(200);
+    expect(escapeeRoll.statusCode, JSON.stringify(escapeeRoll.json())).toBe(200);
+    expect(attackerRoll.statusCode, JSON.stringify(attackerRoll.json())).toBe(200);
+    expect(duplicateAttackerRoll.statusCode).toBe(409);
+    expect(staleEscapeeRoll.statusCode).toBe(409);
+    expect(committed.statusCode, JSON.stringify(committed.json())).toBe(200);
+    const playerSafeProposal = escapeeRoll.json().encounter.combatRoundState.breakOffProposals[0];
+    expect(playerSafeProposal.attackerRoll).toBeUndefined();
+    expect(playerSafeProposal.escapeeRoll.rolledByUserId).toBeUndefined();
+    expect(playerSafeProposal.gmReview.notes).toBeUndefined();
+    expect(mutable.encounter.combatRoundState?.breakOffProposals[0]).toMatchObject({
+      attackerRoll: {
+        calculation: expect.objectContaining({
+          contestType: "break_off",
+          role: "break_off_attacker",
+          percentageContributions: expect.arrayContaining([
+            expect.objectContaining({ category: "gm_adjustment", value: -2 }),
+          ]),
+        }),
+      },
+      escapeeRoll: {
+        calculation: expect.objectContaining({
+          contestType: "break_off",
+          role: "break_off_escapee",
+          percentageContributions: expect.arrayContaining([
+            expect.objectContaining({ category: "gm_adjustment", value: 3 }),
+          ]),
+        }),
+      },
+      gmReview: {
+        attackerAdjustment: -2,
+        escapeeAdjustment: 3,
+        notes: "The doorway favors the escapee.",
+      },
+      status: "committed",
+    });
   });
 
   it("rejects player roleplay rolls for silent assignments", async () => {

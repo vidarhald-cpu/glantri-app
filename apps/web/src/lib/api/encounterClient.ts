@@ -336,6 +336,58 @@ export async function reviewCombatAdjustDistanceOnServer(input: {
   return payload.encounter;
 }
 
+export async function reviewCombatBreakOffOnServer(input: {
+  attackerAdjustment: number;
+  currentEncounter?: EncounterSession;
+  encounterId: string;
+  escapeeAdjustment: number;
+  executionGroupId: string;
+  expectedRevision: string;
+  notes?: string;
+  proposalId: string;
+  taskId: string;
+}): Promise<EncounterSession> {
+  const payload = await sendCombatMutationJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/review-break-off`,
+    { body: combatMutationBody(input), method: "POST" },
+    input.currentEncounter,
+  );
+  return payload.encounter;
+}
+
+export async function rollCombatBreakOffOnServer(input: {
+  currentEncounter?: EncounterSession;
+  encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  proposalId: string;
+  scenarioParticipantId: string;
+  taskId: string;
+}): Promise<EncounterSession> {
+  const payload = await sendCombatMutationJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/roll-break-off`,
+    { body: combatMutationBody(input), method: "POST" },
+    input.currentEncounter,
+  );
+  return payload.encounter;
+}
+
+export async function commitCombatBreakOffOnServer(input: {
+  currentEncounter?: EncounterSession;
+  encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  proposalId: string;
+  taskId: string;
+}): Promise<EncounterSession> {
+  const payload = await sendCombatMutationJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/commit-break-off`,
+    { body: combatMutationBody(input), method: "POST" },
+    input.currentEncounter,
+  );
+  return payload.encounter;
+}
+
 export async function rollCombatAdjustDistanceOnServer(input: {
   currentEncounter?: EncounterSession;
   encounterId: string;
