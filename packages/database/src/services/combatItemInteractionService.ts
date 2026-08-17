@@ -3,6 +3,9 @@ import { isDeepStrictEqual } from "node:util";
 import { equipmentTemplatesById } from "@glantri/content";
 import {
   projectCombatItemInteractionRecipients,
+  resolveWeaponDisarmMismatch,
+  resolveWeaponDisarmProfile,
+  type CombatDisarmDeclaration,
   type CombatGenericAction,
   type CombatGenericActionReference,
   type CombatItemInteraction,
@@ -51,6 +54,13 @@ export interface CombatItemInteractionOption {
   playerVisible: boolean;
   revision: string;
   state: CombatItemInteractionState;
+  templateId: string;
+  weaponDisarm?: {
+    capability: "none" | "trap";
+    controlRating: number;
+    gripClass: "one_handed" | "two_handed";
+    parryModifier: number;
+  };
 }
 
 export interface CombatItemInteractionActorOptions {
@@ -63,6 +73,7 @@ export interface CombatItemInteractionActorOptions {
 
 export interface CombatItemInteractionOptions {
   actors: CombatItemInteractionActorOptions[];
+  disarmTargets: CombatItemInteractionActorOptions[];
   presentItems: CombatItemInteractionOption[];
   recipients: Array<{ label: string; participantId: string }>;
 }
@@ -101,6 +112,33 @@ export interface CommitCombatThrownWeaponAttackInput {
   scenarioId: string;
   session: EncounterSession;
   templateId: string;
+}
+
+export interface CommitCombatDisarmInput {
+  actorUserId: string;
+  campaignId: string;
+  commandId: string;
+  encounterId: string;
+  expectedEncounterRevision: string;
+  ownerCharacterId: string;
+  roundNumber: number;
+  scenarioId: string;
+  session: EncounterSession;
+}
+
+export interface ResolveCombatDisarmDeclarationInput {
+  actingItemId: string;
+  actingItemRevision: string;
+  actingParticipantId: string;
+  campaignId: string;
+  encounterId: string;
+  method: CombatDisarmDeclaration["method"];
+  participants: readonly CombatItemParticipantContext[];
+  phase: CombatDisarmDeclaration["phase"];
+  targetItemId: string;
+  targetItemRevision: string;
+  targetParticipantId: string;
+  viewer: CombatItemInteractionViewer;
 }
 
 type CombatItemInteractionTransactionBoundary = "item" | "encounter" | "event";
@@ -233,6 +271,49 @@ function commandHasThrownWeaponUndo(
   );
 }
 
+function findDisarmAttempt(encounter: EncounterSession, commandId: string) {
+  const command = findCombatCommand(encounter, commandId);
+  const attemptId = command?.facts.attemptId;
+  const state = encounter.combatRoundState;
+  if (command?.type !== "commit_disarm" || typeof attemptId !== "string" || !state) {
+    return undefined;
+  }
+  return [state, ...state.rounds]
+    .flatMap((round) => round.disarmAttempts)
+    .find((attempt) => attempt.id === attemptId);
+}
+
+function attachDisarmItemUndo(
+  encounter: EncounterSession,
+  commandId: string,
+  undo: CombatThrownWeaponAttackUndo,
+): EncounterSession {
+  const state = encounter.combatRoundState;
+  if (!state) throw new CombatItemUnavailableError();
+  let found = false;
+  const commands = state.commands.map((command) => {
+    if (command.id !== commandId || command.type !== "commit_disarm") return command;
+    found = true;
+    return { ...command, facts: { ...command.facts, disarmItemUndo: undo } };
+  });
+  if (!found) throw new CombatItemUnavailableError();
+  return { ...encounter, combatRoundState: { ...state, commands } };
+}
+
+function commandHasDisarmItemUndo(
+  encounter: EncounterSession,
+  commandId: string,
+  undo: CombatThrownWeaponAttackUndo,
+): boolean {
+  const command = findCombatCommand(encounter, commandId);
+  return (
+    command?.type === "commit_disarm" &&
+    undo.actionId === commandId &&
+    undo.encounterId === encounter.id &&
+    isDeepStrictEqual(command.facts.disarmItemUndo, undo)
+  );
+}
+
 function itemState(record: CombatItemInteractionRecord): CombatItemInteractionState {
   if (!record.item.holderCharacterId) return "present_unheld";
   if (record.item.isEquipped || record.item.storageAssignment?.carryMode === "equipped") {
@@ -271,6 +352,22 @@ function toOption(record: CombatItemInteractionRecord): CombatItemInteractionOpt
     throw new Error("Canonical Item revision is unavailable.");
   }
   const state = itemState(record);
+  const template = equipmentTemplatesById[record.item.templateId];
+  const weaponDisarm =
+    record.item.category === "weapon" && template?.category === "weapon"
+      ? (() => {
+          const profile = resolveWeaponDisarmProfile({
+            itemFacts: record.item.itemFacts,
+            template,
+          });
+          return {
+            capability: profile.capability,
+            controlRating: profile.controlRating,
+            gripClass: profile.gripClass,
+            parryModifier: template.parry ?? 0,
+          };
+        })()
+      : undefined;
   return {
     category: record.item.category,
     id: record.item.id,
@@ -279,6 +376,8 @@ function toOption(record: CombatItemInteractionRecord): CombatItemInteractionOpt
     playerVisible: !record.hidden,
     revision: record.item.revision,
     state,
+    templateId: record.item.templateId,
+    weaponDisarm,
   };
 }
 
@@ -335,9 +434,37 @@ export class CombatItemInteractionService {
           (input.viewer.kind === "gm" || !record.hidden),
       )
       .map(toOption);
+    const disarmTargets = input.participants
+      .filter(
+        (participant) =>
+          input.viewer.kind === "gm" ||
+          input.viewer.visibleParticipantIds.has(participant.participantId),
+      )
+      .map(
+        (participant): CombatItemInteractionActorOptions => ({
+          characterId: participant.characterId,
+          items: participant.characterId
+            ? records
+                .filter(
+                  (record) =>
+                    record.availableInEncounter &&
+                    record.item.holderCharacterId === participant.characterId &&
+                    record.item.category === "weapon" &&
+                    (input.viewer.kind === "gm" || !record.hidden),
+                )
+                .map(toOption)
+            : [],
+          label: participant.label,
+          participantId: participant.participantId,
+          unsupportedReason: participant.characterId
+            ? undefined
+            : "Canonical Disarm currently requires a Character participant.",
+        }),
+      );
 
     return {
       actors,
+      disarmTargets,
       presentItems,
       recipients: projectCombatItemInteractionRecipients({
         participants: input.participants.filter((participant) => Boolean(participant.characterId)),
@@ -416,6 +543,96 @@ export class CombatItemInteractionService {
         kind: "item",
         label: item.label,
         ownerParticipantId: input.ownerParticipantId,
+      },
+    };
+  }
+
+  /**
+   * Resolve exact canonical weapon snapshots for Disarm without leaking whether a hidden or
+   * nonexistent target Item exists. Resolution never trusts labels, template ids, or ratings
+   * supplied by a client.
+   */
+  async resolveDisarmDeclaration(
+    input: ResolveCombatDisarmDeclarationInput,
+  ): Promise<CombatDisarmDeclaration> {
+    const actor = input.participants.find(
+      (participant) => participant.participantId === input.actingParticipantId,
+    );
+    const target = input.participants.find(
+      (participant) => participant.participantId === input.targetParticipantId,
+    );
+    const viewerMayAct =
+      input.viewer.kind === "gm" ||
+      input.viewer.controlledParticipantIds.has(input.actingParticipantId);
+    const viewerMaySeeTarget =
+      input.viewer.kind === "gm" ||
+      input.viewer.visibleParticipantIds.has(input.targetParticipantId);
+    if (
+      !viewerMayAct ||
+      !viewerMaySeeTarget ||
+      !actor?.characterId ||
+      !target?.characterId ||
+      actor.participantId === target.participantId
+    ) {
+      throw new CombatItemUnavailableError();
+    }
+
+    const records = await this.repository.getCombatItemInteractionRecords(input.campaignId);
+    const actingRecord = records.find(
+      (record) =>
+        record.availableInEncounter &&
+        record.item.id === input.actingItemId &&
+        record.item.revision === input.actingItemRevision &&
+        record.item.holderCharacterId === actor.characterId &&
+        (input.viewer.kind === "gm" || !record.hidden),
+    );
+    const targetRecord = records.find(
+      (record) =>
+        record.availableInEncounter &&
+        record.item.id === input.targetItemId &&
+        record.item.revision === input.targetItemRevision &&
+        record.item.holderCharacterId === target.characterId &&
+        (input.viewer.kind === "gm" || !record.hidden),
+    );
+    if (!actingRecord || !targetRecord) throw new CombatItemUnavailableError();
+
+    const acting = toOption(actingRecord);
+    const targetWeapon = toOption(targetRecord);
+    if (
+      acting.category !== "weapon" ||
+      targetWeapon.category !== "weapon" ||
+      acting.weaponDisarm?.capability !== "trap" ||
+      !targetWeapon.weaponDisarm
+    ) {
+      throw new CombatItemUnavailableError();
+    }
+    const mismatch = resolveWeaponDisarmMismatch({
+      actingControlRating: acting.weaponDisarm.controlRating,
+      targetControlRating: targetWeapon.weaponDisarm.controlRating,
+    });
+    if (!mismatch.feasible) throw new CombatItemUnavailableError();
+
+    return {
+      actingWeapon: {
+        capability: "trap",
+        controlRating: acting.weaponDisarm.controlRating,
+        itemId: acting.id,
+        itemRevision: acting.revision,
+        label: acting.label,
+        parryModifier: acting.weaponDisarm.parryModifier,
+        templateId: acting.templateId,
+      },
+      method: input.method,
+      phase: input.phase,
+      targetParticipantId: target.participantId,
+      targetWeapon: {
+        capability: targetWeapon.weaponDisarm.capability,
+        controlRating: targetWeapon.weaponDisarm.controlRating,
+        itemId: targetWeapon.id,
+        itemRevision: targetWeapon.revision,
+        label: targetWeapon.label,
+        parryModifier: targetWeapon.weaponDisarm.parryModifier,
+        templateId: targetWeapon.templateId,
       },
     };
   }
@@ -554,6 +771,246 @@ export class CombatItemInteractionService {
     throw new CombatPersistenceError(
       "transaction_conflict",
       "Combat state changed while saving. Refresh and try again.",
+    );
+  }
+
+  async commitDisarm(
+    input: CommitCombatDisarmInput,
+  ): Promise<{ encounter: EncounterSession; item?: ApplyCombatItemInteractionResult }> {
+    const completedAttempt = findDisarmAttempt(input.session, input.commandId);
+    if (
+      input.session.id !== input.encounterId ||
+      input.session.campaignId !== input.campaignId ||
+      input.session.scenarioId !== input.scenarioId ||
+      completedAttempt?.status !== "committed" ||
+      !completedAttempt.result?.disarmed
+    ) {
+      throw new CombatItemUnavailableError();
+    }
+    for (let transactionAttempt = 1; transactionAttempt <= 3; transactionAttempt += 1) {
+      try {
+        return await this.client.$transaction(
+          async (transaction) => {
+            await transaction.$queryRaw(
+              Prisma.sql`SELECT "id" FROM "Encounter" WHERE "id" = ${input.encounterId} FOR UPDATE`,
+            );
+            const persistedEncounter = (
+              await createPrismaCombatStateReadRepository(transaction).getFullEncounterById(
+                input.encounterId,
+              )
+            )?.encounter;
+            if (
+              !persistedEncounter ||
+              persistedEncounter.campaignId !== input.campaignId ||
+              persistedEncounter.scenarioId !== input.scenarioId
+            ) {
+              throw new CombatItemUnavailableError();
+            }
+
+            const priorCommand = findCombatCommand(persistedEncounter, input.commandId);
+            if (priorCommand?.type === "commit_disarm") {
+              const undo = priorCommand.facts.disarmItemUndo as
+                | CombatThrownWeaponAttackUndo
+                | undefined;
+              if (
+                !undo ||
+                undo.ownerCharacterId !== input.ownerCharacterId ||
+                undo.itemBefore.id !== completedAttempt.targetWeaponItemId ||
+                !commandHasDisarmItemUndo(persistedEncounter, input.commandId, undo)
+              ) {
+                throw new CombatItemUnavailableError();
+              }
+              const canonical = await createPrismaCharacterEquipmentRepository(
+                transaction,
+              ).getCanonicalEquipmentItemById(undo.itemBefore.id);
+              if (!canonical || canonical.revision !== undo.itemAfterRevision) {
+                throw new CombatItemUnavailableError();
+              }
+              return {
+                encounter: persistedEncounter,
+                item: { alreadyApplied: true, item: canonical },
+              };
+            }
+            if (persistedEncounter.updatedAt !== input.expectedEncounterRevision) {
+              throw new CombatItemUnavailableError();
+            }
+            const persistedState = persistedEncounter.combatRoundState;
+            const persistedAttempt = persistedState
+              ? [persistedState, ...persistedState.rounds]
+                  .flatMap((round) => round.disarmAttempts)
+                  .find((attempt) => attempt.id === completedAttempt.id)
+              : undefined;
+            if (
+              persistedAttempt?.status !== "awaiting_commit" ||
+              !persistedAttempt.result?.disarmed ||
+              persistedAttempt.targetWeaponItemId !== completedAttempt.targetWeaponItemId ||
+              persistedAttempt.targetWeaponItemRevision !==
+                completedAttempt.targetWeaponItemRevision
+            ) {
+              throw new CombatItemUnavailableError();
+            }
+
+            const repository = createPrismaCharacterEquipmentRepository(transaction);
+            const itemBefore = await repository.getCanonicalEquipmentItemById(
+              completedAttempt.targetWeaponItemId,
+            );
+            const loadoutsBefore = await repository.getCharacterLoadouts(input.ownerCharacterId);
+            if (
+              !itemBefore ||
+              !itemBefore.revision ||
+              itemBefore.revision !== completedAttempt.targetWeaponItemRevision ||
+              itemBefore.campaignContextId !== input.campaignId ||
+              itemBefore.holderCharacterId !== input.ownerCharacterId ||
+              itemBefore.templateId !== completedAttempt.targetWeaponTemplateId ||
+              itemBefore.category !== "weapon"
+            ) {
+              throw new CombatItemUnavailableError();
+            }
+            const item = await repository.applyCombatItemInteraction({
+              actionId: input.commandId,
+              campaignId: input.campaignId,
+              encounterId: input.encounterId,
+              expectedItemRevision: itemBefore.revision,
+              itemId: itemBefore.id,
+              operation: "drop",
+              ownerCharacterId: input.ownerCharacterId,
+            });
+            await this.transactionBoundaryHook?.("item");
+            if (!item.item.revision) throw new CombatItemUnavailableError();
+            const undo: CombatThrownWeaponAttackUndo = {
+              actionId: input.commandId,
+              encounterId: input.encounterId,
+              itemAfterRevision: item.item.revision,
+              itemBefore,
+              loadoutsBefore,
+              ownerCharacterId: input.ownerCharacterId,
+              version: 1,
+            };
+            const session = attachDisarmItemUndo(input.session, input.commandId, undo);
+            const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
+              maxTransactionAttempts: 1,
+            }).updateCombatEncounter({
+              campaignId: input.campaignId,
+              encounterId: input.encounterId,
+              expectedRevision: input.expectedEncounterRevision,
+              scenarioId: input.scenarioId,
+              session,
+            });
+            await this.transactionBoundaryHook?.("encounter");
+            await transaction.scenarioEventLog.create({
+              data: {
+                actorUserId: input.actorUserId,
+                eventType: "encounter_updated",
+                payloadJson: {
+                  commandId: input.commandId,
+                  encounterId: input.encounterId,
+                  itemId: itemBefore.id,
+                  resolutionKind: "canonical_disarm",
+                },
+                roundNumber: input.roundNumber,
+                scenarioId: input.scenarioId,
+                summary: "Canonical Disarm resolved.",
+              },
+            });
+            await this.transactionBoundaryHook?.("event");
+            return { encounter, item };
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        if (!isRetryableCombatTransactionError(error)) throw error;
+        if (transactionAttempt === 3) {
+          throw new CombatPersistenceError(
+            "transaction_conflict",
+            "Combat state changed while saving. Refresh and try again.",
+            error,
+          );
+        }
+      }
+    }
+    throw new CombatPersistenceError(
+      "transaction_conflict",
+      "Combat state changed while saving. Refresh and try again.",
+    );
+  }
+
+  async commitDisarmUndo(input: {
+    actorUserId: string;
+    campaignId: string;
+    encounterId: string;
+    expectedEncounterRevision: string;
+    participantStateUpdates?: Array<{
+      expectedRevision: string;
+      participantId: string;
+      scenarioId: string;
+      state: ScenarioParticipantState;
+    }>;
+    scenarioId: string;
+    session: EncounterSession;
+    undos: Array<{ commandId: string; undo: CombatThrownWeaponAttackUndo }>;
+  }): Promise<EncounterSession> {
+    return this.client.$transaction(
+      async (transaction) => {
+        await transaction.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "Encounter" WHERE "id" = ${input.encounterId} FOR UPDATE`,
+        );
+        const persistedEncounter = (
+          await createPrismaCombatStateReadRepository(transaction).getFullEncounterById(
+            input.encounterId,
+          )
+        )?.encounter;
+        if (
+          !persistedEncounter ||
+          input.undos.length === 0 ||
+          persistedEncounter.updatedAt !== input.expectedEncounterRevision ||
+          persistedEncounter.campaignId !== input.campaignId ||
+          persistedEncounter.scenarioId !== input.scenarioId ||
+          input.undos.some(
+            ({ commandId, undo }) =>
+              !commandHasDisarmItemUndo(persistedEncounter, commandId, undo) ||
+              findCombatCommand(input.session, commandId),
+          )
+        ) {
+          throw new CombatItemUnavailableError();
+        }
+        const repository = createPrismaCharacterEquipmentRepository(transaction);
+        if (!repository.restoreCombatThrownWeaponAttack) throw new CombatItemUnavailableError();
+        for (const { undo } of input.undos) {
+          await repository.restoreCombatThrownWeaponAttack({
+            campaignId: input.campaignId,
+            undo,
+          });
+        }
+        await this.transactionBoundaryHook?.("item");
+        const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
+          maxTransactionAttempts: 1,
+        }).updateCombatEncounter({
+          campaignId: input.campaignId,
+          encounterId: input.encounterId,
+          expectedRevision: input.expectedEncounterRevision,
+          participantStateUpdates: input.participantStateUpdates,
+          scenarioId: input.scenarioId,
+          session: input.session,
+        });
+        await this.transactionBoundaryHook?.("encounter");
+        await transaction.scenarioEventLog.create({
+          data: {
+            actorUserId: input.actorUserId,
+            eventType: "encounter_updated",
+            payloadJson: {
+              commandIds: input.undos.map(({ commandId }) => commandId),
+              encounterId: input.encounterId,
+              itemIds: input.undos.map(({ undo }) => undo.itemBefore.id),
+              resolutionKind: "canonical_disarm_undo",
+            },
+            scenarioId: input.scenarioId,
+            summary: "Canonical Disarm undone.",
+          },
+        });
+        await this.transactionBoundaryHook?.("event");
+        return encounter;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
   }
 

@@ -18,6 +18,9 @@ export interface WeaponAttackModeEnrichment {
 export interface WeaponTemplateEnrichment {
   notes?: string[];
   attackModes?: Record<string, WeaponAttackModeEnrichment>;
+  disarmCapability?: "none" | "trap";
+  disarmGripClass?: "one_handed" | "two_handed";
+  disarmControlOverride?: number;
 }
 
 export interface ThemistogenesWeaponEnrichmentReport {
@@ -79,6 +82,13 @@ const repeatedThrustMode1Ids = [
 
 const repeatedThrustMode2Ids = ["weapon-template-broad-sword"];
 
+const trapDisarmWeaponIds = [
+  "weapon-template-main-gauche",
+  "weapon-template-swordbreaker",
+  "weapon-template-rapier",
+  "weapon-template-fencing-sword",
+];
+
 export const themistogenesWeaponEnrichments: Record<string, WeaponTemplateEnrichment> = {
   ...fromIds(repeatedThrustMode1Ids, {
     attackModes: {
@@ -113,6 +123,33 @@ export const themistogenesWeaponEnrichments: Record<string, WeaponTemplateEnrich
     },
   }),
 };
+
+for (const id of trapDisarmWeaponIds) {
+  const current = themistogenesWeaponEnrichments[id] ?? {};
+  themistogenesWeaponEnrichments[id] = {
+    ...current,
+    disarmCapability: "trap",
+    notes: [
+      ...(current.notes ?? []),
+      "Approved Disarm V1 specialist capability (combat source p. 8).",
+    ],
+  };
+}
+
+for (const [id, sourceRow] of [
+  ["weapon-template-1-h-javelin", 27],
+  ["weapon-template-1-h-spear", 28],
+] as const) {
+  const current = themistogenesWeaponEnrichments[id] ?? {};
+  themistogenesWeaponEnrichments[id] = {
+    ...current,
+    disarmGripClass: "one_handed",
+    notes: [
+      ...(current.notes ?? []),
+      `Source-backed one-handed polearm normalization (Weapon1 row ${sourceRow}).`,
+    ],
+  };
+}
 
 function resolveWarningCategory(warning: string): string {
   if (warning.includes("no explicit secondary attack label column")) {
@@ -356,6 +393,10 @@ export function applyThemistogenesWeaponEnrichments(templates: WeaponTemplate[])
     return {
       ...template,
       attackModes: orderedAttackModes,
+      disarmCapability: enrichment?.disarmCapability ?? template.disarmCapability ?? "none",
+      disarmControlOverride:
+        enrichment?.disarmControlOverride ?? template.disarmControlOverride ?? null,
+      disarmGripClass: enrichment?.disarmGripClass ?? template.disarmGripClass ?? null,
       primeAttackType,
       primaryAttackType:
         primeAttackType ?? primaryMode?.label ?? template.primaryAttackType ?? null,

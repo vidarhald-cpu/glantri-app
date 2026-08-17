@@ -89,6 +89,10 @@ import {
   EquipmentLoadoutModule,
 } from "@/features/equipment/loadoutModule";
 import {
+  CombatDisarmDeclarationControls,
+  type CombatDisarmDeclarationSelection,
+} from "@/features/player-combat/CombatDisarmDeclarationControls";
+import {
   buildPlayerCombatModifierRows,
   PlayerCombatAttackLocationSelector,
   PlayerCombatAttackModeSelector,
@@ -167,6 +171,7 @@ import {
   continuePhaseAttackOnServer,
   decideDoubleAttackPhase2OnServer,
   loadCombatHistory,
+  loadCombatItemInteractionOptions,
   loadCharacterEquipmentState,
   loadEncounterById,
   loadEncounterRevision,
@@ -188,9 +193,11 @@ import {
   respondCombatAdjustDistanceOnServer,
   rollCombatAdjustDistanceOnServer,
   rollCombatBreakOffOnServer,
+  rollCombatDisarmOnServer,
   rollRoundEndDistanceControlOnServer,
   rollRoundEndHealthCheckOnServer,
   submitCombatDeclarationOnServer,
+  type CombatItemInteractionOptions,
   type ServerCharacterRecord,
 } from "@/lib/api/localServiceClient";
 import {
@@ -1129,6 +1136,13 @@ export default function ScenarioPlayerCombatPageContent({
   const [selectableParticipants, setSelectableParticipants] = useState<ScenarioParticipant[]>([]);
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>("");
   const [selectedActionId, setSelectedActionId] = useState<PlayerEncounterActionId | "">("");
+  const [disarmSelection, setDisarmSelection] = useState<CombatDisarmDeclarationSelection>({
+    actingItemId: "",
+    phase: "phase1",
+    targetItemId: "",
+    targetParticipantId: "",
+  });
+  const [combatItemOptions, setCombatItemOptions] = useState<CombatItemInteractionOptions>();
   const [feintMethod, setFeintMethod] = useState<"movement" | "weapon">("movement");
   const [adjustDistanceResponse, setAdjustDistanceResponse] = useState<"allow" | "oppose">(
     "oppose",
@@ -1161,6 +1175,12 @@ export default function ScenarioPlayerCombatPageContent({
     useState<PhaseAttackChoiceSelection>("continue");
   const [doubleAttackPhase2Decision, setDoubleAttackPhase2Decision] =
     useState<DoubleAttackPhase2Decision>("continue");
+  const [disarmSkillChoice, setDisarmSkillChoice] = useState<"weapon_skill" | "parry">(
+    "weapon_skill",
+  );
+  const [disarmCharacteristicChoice, setDisarmCharacteristicChoice] = useState<
+    "strength" | "dexterity"
+  >("strength");
   const controlsDisabled = readOnlyInspection || revisionRefreshPending;
   const historyPerspectiveKey = isGameMaster ? selectedParticipantId : "player";
   const combatHistory =
@@ -1546,6 +1566,31 @@ export default function ScenarioPlayerCombatPageContent({
     scenarioId,
     sessionLoading,
   ]);
+
+  useEffect(() => {
+    if (!encounterId || !encounterSession) {
+      setCombatItemOptions(undefined);
+      return;
+    }
+    let cancelled = false;
+    void loadCombatItemInteractionOptions(encounterId)
+      .then((options) => {
+        if (!cancelled) setCombatItemOptions(options);
+      })
+      .catch((caughtError: unknown) => {
+        if (!cancelled) {
+          setCombatItemOptions(undefined);
+          setError(
+            caughtError instanceof Error
+              ? caughtError.message
+              : "Unable to load canonical Disarm weapons.",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [encounterId, encounterSession?.updatedAt]);
 
   const accessibleParticipants = useMemo(() => {
     if (!projection) {
@@ -2004,6 +2049,12 @@ export default function ScenarioPlayerCombatPageContent({
   useEffect(() => {
     if (!selectedParticipant) {
       setSelectedActionId("");
+      setDisarmSelection({
+        actingItemId: "",
+        phase: "phase1",
+        targetItemId: "",
+        targetParticipantId: "",
+      });
       setSelectedSecondaryActionId("");
       setSecondaryActionContext(undefined);
       setSelectedMovementId("hold");
@@ -2035,6 +2086,12 @@ export default function ScenarioPlayerCombatPageContent({
     });
 
     setSelectedActionId(nextDraft.actionId);
+    setDisarmSelection({
+      actingItemId: selectedRoundDeclaration?.disarm?.actingWeapon.itemId ?? "",
+      phase: selectedRoundDeclaration?.disarm?.phase ?? "phase1",
+      targetItemId: selectedRoundDeclaration?.disarm?.targetWeapon.itemId ?? "",
+      targetParticipantId: selectedRoundDeclaration?.disarm?.targetParticipantId ?? "",
+    });
     setSelectedSecondaryActionId(nextDraft.secondaryActionId);
     setSecondaryActionContext(nextDraft.secondaryActionContext);
     setSelectedMovementId(nextDraft.movementId);
@@ -2642,14 +2699,60 @@ export default function ScenarioPlayerCombatPageContent({
         },
       };
     }
+    const disarmMethod =
+      selectedActionId === "disarm"
+        ? ("proactive" as const)
+        : selectedActionId === "parry_disarm"
+          ? ("reactive_parry" as const)
+          : undefined;
+    const disarmActingActor = combatItemOptions?.actors.find(
+      (actor) => actor.participantId === selectedRoundParticipant?.participantId,
+    );
+    const disarmActingItem = disarmActingActor?.items.find(
+      (item) => item.id === disarmSelection.actingItemId,
+    );
+    const disarmTargetActor = combatItemOptions?.disarmTargets.find(
+      (actor) => actor.participantId === disarmSelection.targetParticipantId,
+    );
+    const disarmTargetItem = disarmTargetActor?.items.find(
+      (item) => item.id === disarmSelection.targetItemId,
+    );
+    if (disarmMethod) {
+      if (
+        !disarmActingItem ||
+        disarmActingItem.weaponDisarm?.capability !== "trap" ||
+        !disarmTargetActor ||
+        !disarmTargetItem
+      ) {
+        setError("Select a trapping weapon, opponent, and exact weapon to disarm.");
+        return;
+      }
+      requestPhaseContexts = {
+        ...requestPhaseContexts,
+        [disarmSelection.phase]: {
+          ...requestPhaseContexts[disarmSelection.phase],
+          targetParticipantId: disarmTargetActor.participantId,
+        },
+      };
+    }
     const declarationAttackSelection = buildCombatDeclarationAttackSelection({
       actionId: selectedActionId || undefined,
+      disarmPhase: disarmMethod === "proactive" ? disarmSelection.phase : undefined,
       feintMethod,
       phaseContexts: requestPhaseContexts,
       phaseLoadoutSummaries: phaseCombatLoadoutSummaries,
       secondaryActionId: selectedSecondaryActionId || undefined,
     });
     requestPhaseContexts = declarationAttackSelection.phaseContexts;
+    const disarmAttackSource = declarationAttackSelection.phaseAttackSources[disarmSelection.phase];
+    if (
+      disarmMethod === "proactive" &&
+      (disarmAttackSource?.sourceKind !== "weapon" ||
+        disarmAttackSource.scenarioItemId !== disarmActingItem?.id)
+    ) {
+      setError("Use the selected trapping weapon as the attack source for that phase.");
+      return;
+    }
     const attackModeUnavailableMessage = Object.values(phaseCombatLoadoutSummaries).find(
       (summary) => summary.attackModeUnavailableMessage,
     )?.attackModeUnavailableMessage;
@@ -2710,6 +2813,18 @@ export default function ScenarioPlayerCombatPageContent({
             : undefined,
         additionalActionNotes,
         combatContext: projectedCombatContextDraft,
+        disarm:
+          disarmMethod && disarmActingItem && disarmTargetActor && disarmTargetItem
+            ? {
+                actingItemId: disarmActingItem.id,
+                actingItemRevision: disarmActingItem.revision,
+                method: disarmMethod,
+                phase: disarmSelection.phase,
+                targetItemId: disarmTargetItem.id,
+                targetItemRevision: disarmTargetItem.revision,
+                targetParticipantId: disarmTargetActor.participantId,
+              }
+            : undefined,
         encounterId,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
@@ -2859,6 +2974,38 @@ export default function ScenarioPlayerCombatPageContent({
       setError(
         caughtError instanceof Error ? caughtError.message : "Unable to roll Break Off Dodge.",
       );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
+  async function rollDisarm(descriptor: CurrentActionCommandDescriptor) {
+    if (
+      readOnlyInspection ||
+      !selectedParticipant ||
+      !encounterId ||
+      !descriptor.disarmAttemptId ||
+      !descriptor.participantId
+    ) {
+      return;
+    }
+    setSavingCombatContext(true);
+    try {
+      const encounter = await rollCombatDisarmOnServer({
+        attemptId: descriptor.disarmAttemptId,
+        characteristicChoice: disarmCharacteristicChoice,
+        currentEncounter: encounterSession,
+        encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        scenarioParticipantId: descriptor.participantId,
+        skillChoice: disarmSkillChoice,
+        taskId: descriptor.taskId,
+      });
+      acceptEncounterSession(encounter);
+      setError(undefined);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to roll Disarm.");
     } finally {
       setSavingCombatContext(false);
     }
@@ -3928,12 +4075,14 @@ export default function ScenarioPlayerCombatPageContent({
     () =>
       buildCombatDeclarationAttackSelection({
         actionId: selectedActionId || undefined,
+        disarmPhase: selectedActionId === "disarm" ? disarmSelection.phase : undefined,
         feintMethod,
         phaseContexts: normalizedFeintPhaseContexts,
         phaseLoadoutSummaries: phaseCombatLoadoutSummaries,
         secondaryActionId: selectedSecondaryActionId || undefined,
       }),
     [
+      disarmSelection.phase,
       feintMethod,
       normalizedFeintPhaseContexts,
       phaseCombatLoadoutSummaries,
@@ -4300,11 +4449,18 @@ export default function ScenarioPlayerCombatPageContent({
     ),
   );
   const declarationTargetValidationMessage =
-    selectedActionId === "feint_attack" && feintMethod === "weapon" && !resolvedFeintAttackerSkill
-      ? "The selected weapon has no valid combat skill for a weapon feint."
-      : !currentInitiativePhase && declarationIncomplete
-        ? targetValidation.message
-        : undefined;
+    (selectedActionId === "disarm" || selectedActionId === "parry_disarm") &&
+    (!disarmSelection.actingItemId ||
+      !disarmSelection.targetParticipantId ||
+      !disarmSelection.targetItemId)
+      ? "Select a trapping weapon, opponent, and weapon to disarm."
+      : selectedActionId === "feint_attack" &&
+          feintMethod === "weapon" &&
+          !resolvedFeintAttackerSkill
+        ? "The selected weapon has no valid combat skill for a weapon feint."
+        : !currentInitiativePhase && declarationIncomplete
+          ? targetValidation.message
+          : undefined;
   const combatExperienceValidationMessage: string | undefined = undefined;
   const currentActionDomainValidationDisabled =
     controlsDisabled ||
@@ -4383,6 +4539,9 @@ export default function ScenarioPlayerCombatPageContent({
         return;
       case "roll_break_off":
         void invokeResultProducingProxyCommand(descriptor, () => rollBreakOff(descriptor));
+        return;
+      case "roll_disarm":
+        void invokeResultProducingProxyCommand(descriptor, () => rollDisarm(descriptor));
         return;
       case "roll_round_end_distance_control":
         void invokeResultProducingProxyCommand(descriptor, () => rollDistanceControl(descriptor));
@@ -4479,6 +4638,45 @@ export default function ScenarioPlayerCombatPageContent({
       </select>
     </label>
   ) : null;
+  const selectedDisarmRollControls =
+    currentActionPresentation?.taskKind === "disarm_actor_roll" ||
+    currentActionPresentation?.taskKind === "disarm_holder_roll" ? (
+      <div
+        aria-label="Disarm roll choices"
+        style={{
+          display: "grid",
+          gap: "0.45rem",
+          gridTemplateColumns: "repeat(auto-fit, minmax(9rem, 1fr))",
+        }}
+      >
+        <label style={{ display: "grid", gap: "0.25rem" }}>
+          <strong>Skill</strong>
+          <select
+            disabled={controlsDisabled || savingCombatContext}
+            onChange={(event) =>
+              setDisarmSkillChoice(event.target.value as "weapon_skill" | "parry")
+            }
+            value={disarmSkillChoice}
+          >
+            <option value="weapon_skill">Weapon skill</option>
+            <option value="parry">Parry</option>
+          </select>
+        </label>
+        <label style={{ display: "grid", gap: "0.25rem" }}>
+          <strong>Characteristic</strong>
+          <select
+            disabled={controlsDisabled || savingCombatContext}
+            onChange={(event) =>
+              setDisarmCharacteristicChoice(event.target.value as "strength" | "dexterity")
+            }
+            value={disarmCharacteristicChoice}
+          >
+            <option value="strength">Strength</option>
+            <option value="dexterity">Dexterity</option>
+          </select>
+        </label>
+      </div>
+    ) : null;
   const selectedPhaseCombatExperienceThreats =
     selectedPhaseCombatExperienceRequirement?.threats ??
     selectedPhaseAttackBackOutOpportunity?.threats ??
@@ -4770,6 +4968,19 @@ export default function ScenarioPlayerCombatPageContent({
               roundNumber={combatRoundState?.roundNumber}
               secondaryActionId={selectedSecondaryActionId}
             />
+            {selectedActionId === "disarm" || selectedActionId === "parry_disarm" ? (
+              <CombatDisarmDeclarationControls
+                actingParticipantId={selectedRoundParticipant?.participantId}
+                disabled={declarationControlsDisabled}
+                method={selectedActionId === "disarm" ? "proactive" : "reactive_parry"}
+                onChange={(selection) => {
+                  markCombatDeclarationDraftDirty();
+                  setDisarmSelection(selection);
+                }}
+                options={combatItemOptions}
+                selection={disarmSelection}
+              />
+            ) : null}
             {phaseCards.map((phaseCard, index) => {
               const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
               const phaseCombatContext =
@@ -5375,6 +5586,8 @@ export default function ScenarioPlayerCombatPageContent({
                         <option value="allow">Allow adjustment</option>
                       </select>
                     </label>
+                  ) : selectedDisarmRollControls ? (
+                    selectedDisarmRollControls
                   ) : (
                     selectedPhaseAttackChoiceControls
                   )

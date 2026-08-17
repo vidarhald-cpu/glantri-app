@@ -6,4 +6,5 @@ export * from "./deriveCombatValues";
 export * from "./resolveCombatSkillContest";
 export * from "./resolveCombatOffensiveParry";
 export * from "./resolveCombatMovementBurden";
+export * from "./resolveCombatDisarm";
 export * from "./workbookCombatMath";

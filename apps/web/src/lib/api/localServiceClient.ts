@@ -88,6 +88,8 @@ export {
   reviewCombatAdjustDistanceOnServer,
   rollCombatAdjustDistanceOnServer,
   rollCombatBreakOffOnServer,
+  rollCombatDisarmOnServer,
+  commitCombatDisarmOnServer,
   createEncounterOnServer,
   loadEncounterById,
   loadEncounterRevision,

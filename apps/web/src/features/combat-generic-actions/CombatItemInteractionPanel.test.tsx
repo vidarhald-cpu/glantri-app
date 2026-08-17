@@ -35,12 +35,14 @@ describe("CombatItemInteractionPanel", () => {
               operations: ["draw", "drop", "pass", "use"],
               revision: "2026-08-16T09:59:00.000Z",
               state: "held",
+              templateId: "weapon-dagger",
             },
           ],
           label: "Aster",
           participantId: "participant-1",
         },
       ],
+      disarmTargets: [],
       presentItems: [],
       recipients: [
         { label: "Aster", participantId: "participant-1" },
@@ -86,6 +88,7 @@ describe("CombatItemInteractionPanel", () => {
   it("renders present-unheld Items without exposing IDs and keeps use as GM-adjudicated intent", async () => {
     vi.mocked(loadCombatItemInteractionOptions).mockResolvedValueOnce({
       actors: [{ items: [], label: "Aster", participantId: "participant-1" }],
+      disarmTargets: [],
       presentItems: [
         {
           category: "weapon",
@@ -94,6 +97,7 @@ describe("CombatItemInteractionPanel", () => {
           operations: ["pickup"],
           revision: "2026-08-16T09:59:00.000Z",
           state: "present_unheld",
+          templateId: "weapon-dagger",
         },
       ],
       recipients: [],
@@ -125,12 +129,14 @@ describe("CombatItemInteractionPanel", () => {
               operations: ["pass"],
               revision: "2026-08-16T09:59:00.000Z",
               state: "held",
+              templateId: "weapon-dagger",
             },
           ],
           label: "Aster",
           participantId: "participant-1",
         },
       ],
+      disarmTargets: [],
       presentItems: [],
       recipients: [{ label: "Aster", participantId: "participant-1" }],
     });

@@ -97,8 +97,12 @@ const mocks = vi.hoisted(() => {
     listScenarioEncounterManagementProjections: vi.fn(),
   };
   const combatItemInteractionService = {
+    commitDisarm: vi.fn(),
+    commitDisarmUndo: vi.fn(),
     commitThrownWeaponAttack: vi.fn(),
     commitThrownWeaponAttackUndo: vi.fn(),
+    getOptions: vi.fn(),
+    resolveDisarmDeclaration: vi.fn(),
   };
   const updateEncounter = vi.fn();
   const encounterService = {
@@ -461,6 +465,8 @@ async function buildScenarioTestApp() {
       ["/combat-round/review-break-off", ["review_break_off"]],
       ["/combat-round/roll-break-off", ["roll_break_off"]],
       ["/combat-round/commit-break-off", ["commit_break_off"]],
+      ["/combat-round/roll-disarm", ["roll_disarm"]],
+      ["/combat-round/commit-disarm", ["commit_disarm"]],
       ["/combat-round/roll-feint", ["roll_feint"]],
       ["/combat-round/commit-feint", ["commit_feint_result"]],
       ["/combat-round/roll-distance-control", ["roll_round_end_distance_control"]],
@@ -7356,7 +7362,7 @@ describe("scenarios route contract", () => {
     setupCombatDeclarationRoute();
     const app = await buildScenarioTestApp();
 
-    for (const actionId of ["counterattack", "disarm", "parry_disarm", "other"]) {
+    for (const actionId of ["counterattack", "other"]) {
       const response = await app.inject({
         method: "POST",
         payload: {
@@ -7381,6 +7387,92 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("uses player-safe participant visibility when resolving a Disarm declaration", async () => {
+    const actingParticipant = makeCombatScenarioParticipant({
+      characterId: "character-1",
+      controlledByUserId: "player-1",
+      id: "participant-1",
+    });
+    const hiddenParticipant = makeCombatScenarioParticipant({
+      characterId: "character-hidden",
+      controlledByUserId: "player-hidden",
+      id: "participant-hidden",
+    });
+    setupCombatDeclarationRoute({
+      encounter: {
+        roleplayState: {
+          visibility: {
+            "encounter-participant-1": {
+              "encounter-participant-1": true,
+              "encounter-target-hidden": false,
+            },
+          },
+        },
+        participants: [
+          {
+            characterId: "character-1",
+            id: "encounter-participant-1",
+            initiative: 0,
+            label: "The Gladiator",
+            order: 0,
+            participantType: "scenario",
+            scenarioParticipantId: "participant-1",
+          },
+          {
+            characterId: "character-hidden",
+            id: "encounter-target-hidden",
+            initiative: 0,
+            label: "Hidden target",
+            order: 1,
+            participantType: "scenario",
+            scenarioParticipantId: "participant-hidden",
+          },
+        ],
+      },
+      participant: actingParticipant,
+      participants: [actingParticipant, hiddenParticipant],
+      user: mocks.playerUser,
+    });
+    mocks.combatItemInteractionService.resolveDisarmDeclaration.mockRejectedValue(
+      new Error("Unavailable"),
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "disarm",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        disarm: {
+          actingItemId: "item-main-gauche",
+          actingItemRevision: "2026-08-17T10:00:00.000Z",
+          method: "proactive",
+          phase: "phase1",
+          targetItemId: "item-hidden-sword",
+          targetItemRevision: "2026-08-17T10:00:00.000Z",
+          targetParticipantId: "encounter-target-hidden",
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.body).not.toContain("Hidden target");
+    expect(response.body).not.toContain("item-hidden-sword");
+    const declarationRequest =
+      mocks.combatItemInteractionService.resolveDisarmDeclaration.mock.calls[0]?.[0];
+    expect(declarationRequest.viewer.kind).toBe("player");
+    expect(declarationRequest.viewer.visibleParticipantIds.has("encounter-participant-1")).toBe(
+      true,
+    );
+    expect(declarationRequest.viewer.visibleParticipantIds.has("encounter-target-hidden")).toBe(
+      false,
+    );
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 

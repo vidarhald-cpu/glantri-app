@@ -182,6 +182,7 @@ export interface CombatAttackModifierValidationProjection {
   attackerModifierFingerprint: string;
   attackerParticipantId: string;
   defenderParticipantId: string;
+  disarmAttemptId?: string;
   /** The current initiative group is also the effect cutoff for this attack calculation. */
   effectCutoffInitiativeGroupId?: string;
   encounterId: string;
@@ -203,6 +204,7 @@ export interface CombatParryModifierValidationProjection {
   dbParryRaw: number;
   defenderModifierFingerprint: string;
   defenderParticipantId: string;
+  disarmAttemptId?: string;
   /** The current initiative group is also the effect cutoff for this parry calculation. */
   effectCutoffInitiativeGroupId?: string;
   encounterId: string;
@@ -210,7 +212,7 @@ export interface CombatParryModifierValidationProjection {
   initiativeGroupId?: string;
   initiativeValue?: number;
   opportunityId: string;
-  parryPurpose: "ordinary_defense" | "offensive_parry";
+  parryPurpose: "ordinary_defense" | "offensive_parry" | "parry_disarm";
   parrySourceId: string;
   processId: string;
   stageId: string;
@@ -625,9 +627,7 @@ function projectSnapshot(input: {
               : archivedDeclaration?.movementId,
           movementIntent: archivedDeclaration?.movementIntent,
           movementPreferenceTargets: input.roundParticipants
-            .filter(
-              (participant) => participant.participantId !== input.snapshot.participantId,
-            )
+            .filter((participant) => participant.participantId !== input.snapshot.participantId)
             .map((participant) => ({
               displayName: participant.label,
               id: participant.participantId,
@@ -666,27 +666,23 @@ function projectSnapshot(input: {
             movementIntent: declarationSummary?.movementIntent
               ? {
                   ...declarationSummary.movementIntent,
-                  distancePreferences:
-                    declarationSummary.movementIntent.distancePreferences.filter(
-                      (preference) =>
-                        isVisible({
-                          participantId: preference.targetParticipantId,
-                          viewer: input.viewer,
-                        }),
-                    ),
+                  distancePreferences: declarationSummary.movementIntent.distancePreferences.filter(
+                    (preference) =>
+                      isVisible({
+                        participantId: preference.targetParticipantId,
+                        viewer: input.viewer,
+                      }),
+                  ),
                 }
               : undefined,
             movementLabel: declarationSummary?.movementLabel,
-            movementPreferenceTargets: targetOptions(
-              declarationSummary?.movementPreferenceTargets,
-            ),
+            movementPreferenceTargets: targetOptions(declarationSummary?.movementPreferenceTargets),
             secondaryActionId: declarationSummary?.secondaryActionId,
             secondaryActionLabel: declarationSummary?.secondaryActionLabel,
             secondaryActionTargetParticipantId:
               declarationSummary?.secondaryActionContext?.targetParticipantId &&
               isVisible({
-                participantId:
-                  declarationSummary.secondaryActionContext.targetParticipantId,
+                participantId: declarationSummary.secondaryActionContext.targetParticipantId,
                 viewer: input.viewer,
               })
                 ? declarationSummary.secondaryActionContext.targetParticipantId

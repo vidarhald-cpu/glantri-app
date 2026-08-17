@@ -288,9 +288,10 @@ describe("canonical NPC declaration proposals", () => {
       reasons: ["declaration_review_required"],
       status: "requires_review",
     });
-    expect(proposalFor(priorRoundState({ actionId: "disarm" }))?.validation.status).toBe(
-      "unsupported",
-    );
+    expect(proposalFor(priorRoundState({ actionId: "disarm" }))?.validation).toMatchObject({
+      reasons: ["source_identity_incomplete"],
+      status: "legacy_incomplete",
+    });
   });
 
   it("blocks changed targets, sources, ownership, capability, and restrictions conservatively", () => {

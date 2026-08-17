@@ -51,9 +51,11 @@ const AVAILABLE_PRIMARY_ACTION_IDS = new Set<string>([
   "offensive_parry",
   "parry",
   "break_off_engagement",
+  "parry_disarm",
+  "disarm",
 ]);
 
-const UNAVAILABLE_PRIMARY_ACTION_IDS = new Set<string>(["counterattack", "disarm"]);
+const UNAVAILABLE_PRIMARY_ACTION_IDS = new Set<string>(["counterattack"]);
 
 export const COMBAT_DECLARATION_CAPABILITIES: readonly CombatDeclarationCapability[] = [
   ...COMBAT_PRIMARY_ACTION_IDS.map(
@@ -167,6 +169,8 @@ const MOVEMENT_OWNING_PRIMARY_ACTION_IDS = new Set<string>([
   "offensive_parry",
   "parry",
   "break_off_engagement",
+  "parry_disarm",
+  "disarm",
 ]);
 
 export const COMBAT_DECLARATION_COMPATIBILITY_RULES: readonly CombatDeclarationCompatibilityRule[] =

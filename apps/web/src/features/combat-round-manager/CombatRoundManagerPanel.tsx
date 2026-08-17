@@ -138,6 +138,10 @@ import {
   type CurrentActionCommandDescriptor,
 } from "@/features/combat-history";
 import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
+import {
+  CombatDisarmDeclarationControls,
+  type CombatDisarmDeclarationSelection,
+} from "@/features/player-combat/CombatDisarmDeclarationControls";
 import { buildCombatNpcDeclarationProposalPresentation } from "./view-models/combatNpcDeclarationProposalPresentation";
 import { buildGmCombatParryModifierRequest } from "./gmCombatParryRequest";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
@@ -159,6 +163,9 @@ import {
   reviewCombatBreakOffOnServer,
   rollCombatBreakOffOnServer,
   commitCombatBreakOffOnServer,
+  rollCombatDisarmOnServer,
+  commitCombatDisarmOnServer,
+  loadCombatItemInteractionOptions,
   commitRoundEndDistanceControlOnServer,
   commitRoundEndParticipantReviewOnServer,
   rollCombatAttackOnServer,
@@ -168,6 +175,7 @@ import {
   rollCombatObservationOnServer,
   rollContinuedContactMaintenanceOnServer,
   rollOffensiveParryBrawlingOnServer,
+  type CombatItemInteractionOptions,
   rollCombatCriticalOnServer,
   rollCombatHitLocationOnServer,
   rollCurrentRoundEndDistanceControlOnServer,
@@ -472,6 +480,7 @@ interface CombatInspectorDeclarationDraft {
   actionId: PlayerEncounterActionId | "";
   additionalActionNotes: string;
   combatContext: ScenarioParticipantCombatContext;
+  disarmSelection: CombatDisarmDeclarationSelection;
   movementId: PlayerEncounterMovementId | "";
   movementIntent: MovementIntent;
   phaseContexts: CombatInspectorPhaseContextDrafts;
@@ -693,6 +702,12 @@ function buildDeclarationDraft(
         ? (declaration.combatContext ?? scopedCombat?.combatContext)
         : scopedCombat?.combatContext,
     }),
+    disarmSelection: {
+      actingItemId: declaration?.disarm?.actingWeapon.itemId ?? "",
+      phase: declaration?.disarm?.phase ?? "phase1",
+      targetItemId: declaration?.disarm?.targetWeapon.itemId ?? "",
+      targetParticipantId: declaration?.disarm?.targetParticipantId ?? "",
+    },
     movementId: (declaration?.movementId ??
       scopedCombat?.lastDeclaredMovementId ??
       "hold") as PlayerEncounterMovementId,
@@ -768,6 +783,7 @@ function buildInspectorDisplayDraft(input: {
       (input.snapshot.declarationSummary?.actionId as PlayerEncounterActionId | undefined) ?? "",
     additionalActionNotes: input.snapshot.declarationSummary?.additionalActionNotes ?? "",
     combatContext: createEmptyPlayerEncounterCombatContext(),
+    disarmSelection: input.draft.disarmSelection,
     movementId:
       (input.snapshot.declarationSummary?.movementId as PlayerEncounterMovementId | undefined) ??
       "",
@@ -4047,9 +4063,16 @@ export default function CombatRoundManagerPanel({
   const [inspectorBreakOffAttackerAdjustment, setInspectorBreakOffAttackerAdjustment] =
     useState("0");
   const [inspectorBreakOffNote, setInspectorBreakOffNote] = useState("");
+  const [inspectorDisarmSkillChoice, setInspectorDisarmSkillChoice] = useState<
+    "weapon_skill" | "parry"
+  >("weapon_skill");
+  const [inspectorDisarmCharacteristicChoice, setInspectorDisarmCharacteristicChoice] = useState<
+    "strength" | "dexterity"
+  >("strength");
   const [inspectorCurrentActionOutcomeSelection, setInspectorCurrentActionOutcomeSelection] =
     useState<InspectorCurrentActionOutcomeSelection>("perform");
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
+  const [combatItemOptions, setCombatItemOptions] = useState<CombatItemInteractionOptions>();
   const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
     useState<
       Record<
@@ -5829,6 +5852,10 @@ export default function CombatRoundManagerPanel({
     () =>
       buildCombatDeclarationAttackSelection({
         actionId: inspectorDisplayDraft.actionId || undefined,
+        disarmPhase:
+          inspectorDisplayDraft.actionId === "disarm"
+            ? inspectorDisplayDraft.disarmSelection.phase
+            : undefined,
         feintMethod: inspectorDisplayDraft.feintMethod,
         phaseContexts: inspectorNormalizedFeintPhaseContexts,
         phaseLoadoutSummaries: inspectorPhaseLoadoutSummaries,
@@ -5836,6 +5863,7 @@ export default function CombatRoundManagerPanel({
       }),
     [
       inspectorDisplayDraft.actionId,
+      inspectorDisplayDraft.disarmSelection.phase,
       inspectorDisplayDraft.feintMethod,
       inspectorDisplayDraft.secondaryActionId,
       inspectorNormalizedFeintPhaseContexts,
@@ -6429,13 +6457,20 @@ export default function CombatRoundManagerPanel({
       : undefined;
   const inspectorCurrentCommandType =
     currentActionPresentation?.primaryAction.descriptor?.commandType;
+  const inspectorDisarmSelectionValidationMessage =
+    (inspectorDraft.actionId === "disarm" || inspectorDraft.actionId === "parry_disarm") &&
+    (!inspectorDraft.disarmSelection.actingItemId ||
+      !inspectorDraft.disarmSelection.targetParticipantId ||
+      !inspectorDraft.disarmSelection.targetItemId)
+      ? "Select a trapping weapon, opponent, and weapon to disarm."
+      : undefined;
   const inspectorActionValidationMessage =
     inspectorCurrentCommandType === "set_combat_experience_difficulty"
       ? inspectorCombatExperienceDifficultyValidationMessage
       : inspectorCurrentCommandType === "declare_action" ||
           inspectorCurrentCommandType === "review_modifiers_phase1" ||
           inspectorCurrentCommandType === "review_modifiers_phase2"
-        ? inspectorTargetValidationMessage
+        ? (inspectorDisarmSelectionValidationMessage ?? inspectorTargetValidationMessage)
         : inspectorCurrentCommandType === "roll_attack"
           ? (inspectorTargetValidationMessage ?? inspectorAttackSourceValidationMessage)
           : inspectorCurrentCommandType === "commit_round_end_distance_control" &&
@@ -6664,6 +6699,45 @@ export default function CombatRoundManagerPanel({
       </select>
     </label>
   ) : null;
+  const inspectorDisarmControls =
+    currentActionPresentation?.taskKind === "disarm_actor_roll" ||
+    currentActionPresentation?.taskKind === "disarm_holder_roll" ? (
+      <div
+        aria-label="Disarm roll choices"
+        style={{
+          display: "grid",
+          gap: "0.45rem",
+          gridTemplateColumns: "repeat(auto-fit, minmax(10rem, 1fr))",
+        }}
+      >
+        <label style={compactFieldLabelStyle}>
+          <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Skill</span>
+          <select
+            disabled={saving || Boolean(inspectorSnapshot) || inspectorIsInspectionOnly}
+            onChange={(event) =>
+              setInspectorDisarmSkillChoice(event.target.value as "weapon_skill" | "parry")
+            }
+            value={inspectorDisarmSkillChoice}
+          >
+            <option value="weapon_skill">Weapon skill</option>
+            <option value="parry">Parry</option>
+          </select>
+        </label>
+        <label style={compactFieldLabelStyle}>
+          <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Characteristic</span>
+          <select
+            disabled={saving || Boolean(inspectorSnapshot) || inspectorIsInspectionOnly}
+            onChange={(event) =>
+              setInspectorDisarmCharacteristicChoice(event.target.value as "strength" | "dexterity")
+            }
+            value={inspectorDisarmCharacteristicChoice}
+          >
+            <option value="strength">Strength</option>
+            <option value="dexterity">Dexterity</option>
+          </select>
+        </label>
+      </div>
+    ) : null;
   const inspectorBulkStepLabel =
     currentActionPresentation?.taskKind === "modifier_review"
       ? "Accept remaining NPC reviews"
@@ -7304,6 +7378,7 @@ export default function CombatRoundManagerPanel({
   ) : null;
   const inspectorPreActionControls =
     inspectorCurrentActionOutcomeControls ||
+    inspectorDisarmControls ||
     inspectorCombatExperienceDifficultyControls ||
     inspectorFeintControls ||
     inspectorBreakOffControls ||
@@ -7317,6 +7392,7 @@ export default function CombatRoundManagerPanel({
         {inspectorStepWorkflowStatus}
         {inspectorDeclarationProposal}
         {inspectorCurrentActionOutcomeControls}
+        {inspectorDisarmControls}
         {inspectorCombatExperienceDifficultyControls}
         {inspectorFeintControls}
         {inspectorBreakOffControls}
@@ -7578,6 +7654,27 @@ export default function CombatRoundManagerPanel({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadCombatItemInteractionOptions(encounter.id)
+      .then((options) => {
+        if (!cancelled) setCombatItemOptions(options);
+      })
+      .catch((caughtError: unknown) => {
+        if (!cancelled) {
+          setCombatItemOptions(undefined);
+          setSaveError(
+            caughtError instanceof Error
+              ? caughtError.message
+              : "Unable to load canonical Disarm weapons.",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [encounter.id, encounter.updatedAt]);
 
   useEffect(() => {
     const participantId = selectedScenarioParticipant?.id;
@@ -8646,14 +8743,61 @@ export default function CombatRoundManagerPanel({
         },
       };
     }
+    const disarmMethod =
+      !isModifierReview && inspectorDraft.actionId === "disarm"
+        ? ("proactive" as const)
+        : !isModifierReview && inspectorDraft.actionId === "parry_disarm"
+          ? ("reactive_parry" as const)
+          : undefined;
+    const disarmActingActor = combatItemOptions?.actors.find(
+      (actor) => actor.participantId === taskEncounterParticipant.id,
+    );
+    const disarmActingItem = disarmActingActor?.items.find(
+      (item) => item.id === inspectorDraft.disarmSelection.actingItemId,
+    );
+    const disarmTargetActor = combatItemOptions?.disarmTargets.find(
+      (actor) => actor.participantId === inspectorDraft.disarmSelection.targetParticipantId,
+    );
+    const disarmTargetItem = disarmTargetActor?.items.find(
+      (item) => item.id === inspectorDraft.disarmSelection.targetItemId,
+    );
+    if (disarmMethod) {
+      if (
+        !disarmActingItem ||
+        disarmActingItem.weaponDisarm?.capability !== "trap" ||
+        !disarmTargetActor ||
+        !disarmTargetItem
+      ) {
+        setSaveError("Select a trapping weapon, opponent, and exact weapon to disarm.");
+        return;
+      }
+      requestPhaseContexts = {
+        ...requestPhaseContexts,
+        [inspectorDraft.disarmSelection.phase]: {
+          ...requestPhaseContexts[inspectorDraft.disarmSelection.phase],
+          targetParticipantId: disarmTargetActor.participantId,
+        },
+      };
+    }
     const declarationAttackSelection = buildCombatDeclarationAttackSelection({
       actionId: inspectorDraft.actionId || undefined,
+      disarmPhase: disarmMethod === "proactive" ? inspectorDraft.disarmSelection.phase : undefined,
       feintMethod: inspectorDraft.feintMethod,
       phaseContexts: requestPhaseContexts,
       phaseLoadoutSummaries: inspectorPhaseLoadoutSummaries,
       secondaryActionId: inspectorDraft.secondaryActionId || undefined,
     });
     requestPhaseContexts = declarationAttackSelection.phaseContexts;
+    const disarmAttackSource =
+      declarationAttackSelection.phaseAttackSources[inspectorDraft.disarmSelection.phase];
+    if (
+      disarmMethod === "proactive" &&
+      (disarmAttackSource?.sourceKind !== "weapon" ||
+        disarmAttackSource.scenarioItemId !== disarmActingItem?.id)
+    ) {
+      setSaveError("Use the selected trapping weapon as the attack source for that phase.");
+      return;
+    }
     const attackModeUnavailableMessage = Object.values(inspectorPhaseLoadoutSummaries).find(
       (summary) => summary.attackModeUnavailableMessage,
     )?.attackModeUnavailableMessage;
@@ -8747,6 +8891,18 @@ export default function CombatRoundManagerPanel({
             ? modifierReviewInputSnapshot!.combatContext
             : inspectorGeneratedCombatContext,
         encounterId: encounter.id,
+        disarm:
+          disarmMethod && disarmActingItem && disarmTargetActor && disarmTargetItem
+            ? {
+                actingItemId: disarmActingItem.id,
+                actingItemRevision: disarmActingItem.revision,
+                method: disarmMethod,
+                phase: inspectorDraft.disarmSelection.phase,
+                targetItemId: disarmTargetItem.id,
+                targetItemRevision: disarmTargetItem.revision,
+                targetParticipantId: disarmTargetActor.participantId,
+              }
+            : undefined,
         executionGroupId: descriptor.executionGroupId!,
         expectedRevision: descriptor.expectedRevision,
         expectedParticipantRevision: isModifierReview
@@ -9090,6 +9246,55 @@ export default function CombatRoundManagerPanel({
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to advance Break Off.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function advanceInspectorDisarm(descriptor: CurrentActionCommandDescriptor) {
+    if (!descriptor.disarmAttemptId || saving) return;
+    setSaving(true);
+    try {
+      let nextEncounter: EncounterSession;
+      if (descriptor.commandType === "roll_disarm") {
+        const scenarioParticipant = scenarioParticipantForTask(descriptor);
+        if (!scenarioParticipant) {
+          setSaveError("The Disarm roller is no longer available.");
+          return;
+        }
+        nextEncounter = await rollCombatDisarmOnServer({
+          attemptId: descriptor.disarmAttemptId,
+          characteristicChoice: inspectorDisarmCharacteristicChoice,
+          currentEncounter: encounter,
+          encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
+          scenarioParticipantId: scenarioParticipant.id,
+          skillChoice: inspectorDisarmSkillChoice,
+          taskId: descriptor.taskId,
+        });
+      } else if (descriptor.commandType === "commit_disarm") {
+        nextEncounter = await commitCombatDisarmOnServer({
+          attemptId: descriptor.disarmAttemptId,
+          currentEncounter: encounter,
+          encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
+          taskId: descriptor.taskId,
+        });
+      } else {
+        setSaveError("Combat state changed. Review the current Disarm task before continuing.");
+        return;
+      }
+      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
+      setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to advance Disarm.",
       );
     } finally {
       setSaving(false);
@@ -9758,7 +9963,11 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
-    if (!attackResult.hit && descriptor.parryPurpose !== "offensive_parry") {
+    if (
+      !attackResult.hit &&
+      descriptor.parryPurpose !== "offensive_parry" &&
+      descriptor.parryPurpose !== "parry_disarm"
+    ) {
       setSaveError("Attack missed; parry is not applicable.");
       return;
     }
@@ -9769,6 +9978,10 @@ export default function CombatRoundManagerPanel({
         !descriptor.offensiveParryAttemptId)
     ) {
       setSaveError("The Offensive Parry task identity is incomplete.");
+      return;
+    }
+    if (descriptor.parryPurpose === "parry_disarm" && !descriptor.disarmAttemptId) {
+      setSaveError("The Parry-Disarm task identity is incomplete.");
       return;
     }
 
@@ -9849,6 +10062,7 @@ export default function CombatRoundManagerPanel({
         attackerParticipantId: descriptor.opponentParticipantId,
         commandType: "roll_parry",
         defenderParticipantId: descriptor.participantId,
+        disarmAttemptId: descriptor.disarmAttemptId,
         declarationId: descriptor.declarationId,
         declaredOpponentParticipantId: descriptor.declaredOpponentParticipantId,
         encounterId: encounter.id,
@@ -10817,6 +11031,10 @@ export default function CombatRoundManagerPanel({
       case "commit_break_off":
         void invokeResultProducingGmCommand(descriptor, () => advanceInspectorBreakOff(descriptor));
         return;
+      case "roll_disarm":
+      case "commit_disarm":
+        void invokeResultProducingGmCommand(descriptor, () => advanceInspectorDisarm(descriptor));
+        return;
       case "roll_parry":
         void invokeResultProducingGmCommand(descriptor, () => rollInspectorParry(descriptor));
         return;
@@ -11123,47 +11341,71 @@ export default function CombatRoundManagerPanel({
                         }
                       />
                     ) : (
-                      <PlayerCombatActionSelectorPanel
-                        actionId={inspectorDisplayDraft.actionId}
-                        actionOptions={inspectorHistoricalActionOptions}
-                        additionalActionNotes={inspectorDisplayDraft.additionalActionNotes}
-                        controlsDisabled={
-                          saving ||
-                          !selectedRoundIsActive ||
-                          inspectorIsHistorical ||
-                          inspectorCombatExperienceRequired
-                        }
-                        declarationRecorded={Boolean(inspector.participant?.declaration)}
-                        distancePreferenceOptions={inspectorDisplayDistancePreferenceOptions}
-                        movementId={inspectorDisplayDraft.movementId}
-                        movementIntent={inspectorDisplayDraft.movementIntent}
-                        onActionChange={(actionId) =>
-                          updateInspectorDraft({
-                            actionId,
-                            ...(actionId === "feint_attack"
-                              ? { feintMethod: "movement", feintSkillId: "dodge" }
-                              : {}),
-                          })
-                        }
-                        onAdditionalActionNotesChange={(additionalActionNotes) =>
-                          updateInspectorDraft({ additionalActionNotes })
-                        }
-                        onMovementChange={(movementId) => updateInspectorDraft({ movementId })}
-                        onMovementIntentChange={(movementIntent) =>
-                          updateInspectorDraft({ movementIntent })
-                        }
-                        onSecondaryActionChange={(secondaryActionId) =>
-                          updateInspectorDraft({
-                            secondaryActionId,
-                            ...(secondaryActionId === "observe_opponent"
-                              ? {}
-                              : { secondaryActionContext: undefined }),
-                          })
-                        }
-                        roundNumber={selectedRoundNumber}
-                        secondaryActionId={inspectorDisplayDraft.secondaryActionId}
-                        sourceLabel={inspectorSourceLabel}
-                      />
+                      <>
+                        <PlayerCombatActionSelectorPanel
+                          actionId={inspectorDisplayDraft.actionId}
+                          actionOptions={inspectorHistoricalActionOptions}
+                          additionalActionNotes={inspectorDisplayDraft.additionalActionNotes}
+                          controlsDisabled={
+                            saving ||
+                            !selectedRoundIsActive ||
+                            inspectorIsHistorical ||
+                            inspectorCombatExperienceRequired
+                          }
+                          declarationRecorded={Boolean(inspector.participant?.declaration)}
+                          distancePreferenceOptions={inspectorDisplayDistancePreferenceOptions}
+                          movementId={inspectorDisplayDraft.movementId}
+                          movementIntent={inspectorDisplayDraft.movementIntent}
+                          onActionChange={(actionId) =>
+                            updateInspectorDraft({
+                              actionId,
+                              ...(actionId === "feint_attack"
+                                ? { feintMethod: "movement", feintSkillId: "dodge" }
+                                : {}),
+                            })
+                          }
+                          onAdditionalActionNotesChange={(additionalActionNotes) =>
+                            updateInspectorDraft({ additionalActionNotes })
+                          }
+                          onMovementChange={(movementId) => updateInspectorDraft({ movementId })}
+                          onMovementIntentChange={(movementIntent) =>
+                            updateInspectorDraft({ movementIntent })
+                          }
+                          onSecondaryActionChange={(secondaryActionId) =>
+                            updateInspectorDraft({
+                              secondaryActionId,
+                              ...(secondaryActionId === "observe_opponent"
+                                ? {}
+                                : { secondaryActionContext: undefined }),
+                            })
+                          }
+                          roundNumber={selectedRoundNumber}
+                          secondaryActionId={inspectorDisplayDraft.secondaryActionId}
+                          sourceLabel={inspectorSourceLabel}
+                        />
+                        {inspectorDisplayDraft.actionId === "disarm" ||
+                        inspectorDisplayDraft.actionId === "parry_disarm" ? (
+                          <CombatDisarmDeclarationControls
+                            actingParticipantId={inspector.participant?.participantId}
+                            disabled={
+                              saving ||
+                              !selectedRoundIsActive ||
+                              inspectorIsHistorical ||
+                              inspectorCombatExperienceRequired
+                            }
+                            method={
+                              inspectorDisplayDraft.actionId === "disarm"
+                                ? "proactive"
+                                : "reactive_parry"
+                            }
+                            onChange={(disarmSelection) =>
+                              updateInspectorDraft({ disarmSelection })
+                            }
+                            options={combatItemOptions}
+                            selection={inspectorDisplayDraft.disarmSelection}
+                          />
+                        ) : null}
+                      </>
                     )}
                     {inspectorPhaseCards.map((phaseCard, index) => {
                       const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";

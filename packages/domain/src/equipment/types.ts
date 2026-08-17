@@ -55,6 +55,12 @@ export type WeaponAttackModeProvenance = "imported" | "manual" | "derived";
 
 export type WeaponAttackModeType = "melee" | "missile" | "thrown";
 
+/** Explicit specialist capability; absence is conservatively treated as none. */
+export type WeaponDisarmCapability = "none" | "trap";
+
+/** Normalized grip used only for weapon-control calculations. */
+export type WeaponDisarmGripClass = "one_handed" | "two_handed";
+
 export interface EquipmentTemplateBase {
   id: string;
   category: EquipmentCategory;
@@ -260,6 +266,12 @@ export interface WeaponTemplate extends EquipmentTemplateBase {
   manualEnrichment?: WeaponTemplateManualEnrichment | null;
   formulaNormalization?: WeaponTemplateFormulaNormalization | null;
   durabilityProfile?: WeaponDurabilityProfile | null;
+  /** First-class specialist capability. Resolution must never infer this from the weapon name. */
+  disarmCapability?: WeaponDisarmCapability | null;
+  /** Explicit normalization for source handling labels such as one-handed polearms. */
+  disarmGripClass?: WeaponDisarmGripClass | null;
+  /** Optional rules/content override for the derived 1-6 weapon-control rating. */
+  disarmControlOverride?: number | null;
 }
 
 export interface ShieldTemplate extends EquipmentTemplateBase {
@@ -348,6 +360,28 @@ export interface WeaponInitiativeOverrideFact {
   visibility: ItemFactVisibility;
 }
 
+export interface WeaponDisarmCapabilityOverrideFact {
+  id: string;
+  kind: "weapon_disarm_capability_override";
+  scope: "all_attack_modes";
+  value: WeaponDisarmCapability;
+  visibility: ItemFactVisibility;
+}
+
+export interface WeaponDisarmControlOverrideFact {
+  id: string;
+  kind: "weapon_disarm_control_override";
+  scope: "all_attack_modes";
+  unit: "control_rating";
+  value: number;
+  visibility: ItemFactVisibility;
+}
+
+export type EquipmentTemplateOverrideFact =
+  | WeaponInitiativeOverrideFact
+  | WeaponDisarmCapabilityOverrideFact
+  | WeaponDisarmControlOverrideFact;
+
 export interface FinalAttackObDeltaFact {
   id: string;
   kind: "final_attack_ob_delta";
@@ -386,7 +420,7 @@ export interface UnsupportedItemCapability {
 
 export interface EquipmentItemFactsV1 {
   version: 1;
-  templateOverrides: WeaponInitiativeOverrideFact[];
+  templateOverrides: EquipmentTemplateOverrideFact[];
   activeMechanics: FinalAttackObDeltaFact[];
   descriptiveTraits: DescriptiveItemTrait[];
   unsupportedCapabilities: UnsupportedItemCapability[];

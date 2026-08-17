@@ -6,6 +6,7 @@ import {
   getCombatRoundDamageSubstate,
   getCombatRoundDoubleAttackPhase2Decision,
   getCombatRoundOffensiveParryAttemptIdentity,
+  getCombatRoundParryDisarmAttemptIdentity,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundParticipantAttackResults,
   type CombatRoundAttackOpportunity,
@@ -123,7 +124,7 @@ export interface CombatActionProcessTaskDescriptor {
     | "gm"
     | "offensive_parry_controller"
     | "offensive_parry_responder";
-  readonly parryPurpose?: "ordinary_defense" | "offensive_parry";
+  readonly parryPurpose?: "ordinary_defense" | "offensive_parry" | "parry_disarm";
   readonly parryResultId?: string;
   readonly parrySourceId?: string;
   readonly phase: CombatRoundPhase;
@@ -292,7 +293,11 @@ function stageStates(input: {
     attackResult: attack,
     state: input.state,
   });
-  if (!attack.hit && !offensiveParryAttempt) {
+  const parryDisarmAttempt = getCombatRoundParryDisarmAttemptIdentity({
+    attackResult: attack,
+    state: input.state,
+  });
+  if (!attack.hit && !offensiveParryAttempt && !parryDisarmAttempt) {
     for (const kind of STAGE_ORDER.slice(1)) pending[kind] = "skipped";
     return { completion: { complete: true, reason: "miss" }, states: pending };
   }

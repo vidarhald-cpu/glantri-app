@@ -98,6 +98,17 @@ import {
   type CombatEngagement,
 } from "./combatBreakOff";
 import {
+  buildCombatDisarmAttemptId,
+  buildCombatDisarmUnbalancedConditionId,
+  combatDisarmAttemptSchema,
+  combatDisarmDeclarationSchema,
+  combatDisarmRollSchema,
+  combatDisarmUnbalancedConditionSchema,
+  resolveCombatDisarmAttempt,
+  type CombatDisarmAttempt,
+  type CombatDisarmRoll,
+} from "./combatDisarm";
+import {
   combatDistanceEdgeSchema,
   combatDistanceSchema,
   combatDistanceStateSchema,
@@ -474,6 +485,9 @@ export const combatRoundCommandTypeSchema = z.enum([
   "review_break_off",
   "roll_break_off",
   "commit_break_off",
+  "open_disarm",
+  "roll_disarm",
+  "commit_disarm",
   "complete_remaining_step",
   "skip_phase_action",
   "back_out_phase_attack",
@@ -1264,6 +1278,7 @@ export const combatRoundParryResolutionSchema = z.object({
   attackResultId: idSchema.optional(),
   combinedParryScore: z.number().int().optional(),
   declaredOpponentParticipantId: idSchema.optional(),
+  disarmAttemptId: idSchema.optional(),
   mainHandParryScore: z.number().int().optional(),
   modifiedParryBeforeRoll: z.number().int().optional(),
   modifierAdjustment: z.number().int().optional(),
@@ -2142,6 +2157,7 @@ export const combatRoundDeclarationSchema = z.object({
   attackOpportunities: z.array(combatRoundAttackOpportunitySchema).optional(),
   attackPhaseDefensivePenalties: z.array(combatAttackPhaseDefensivePenaltySchema).optional(),
   combatContext: scenarioParticipantCombatContextSchema.optional(),
+  disarm: combatDisarmDeclarationSchema.optional(),
   feint: combatRoundFeintDeclarationSchema.optional(),
   movementId: z.string().min(1).optional(),
   movementIntent: movementIntentSchema.optional(),
@@ -2466,6 +2482,8 @@ export interface CompletedCombatRound {
   completedAt?: string;
   completedByUserId?: string;
   continuedContacts: z.infer<typeof continuedContactSchema>[];
+  disarmAttempts: CombatDisarmAttempt[];
+  disarmUnbalancedConditions: z.infer<typeof combatDisarmUnbalancedConditionSchema>[];
   currentCursor?: z.infer<typeof combatRoundCursorSchema>;
   currentStep: z.infer<typeof combatRoundStepSchema>;
   distanceState?: CombatDistanceState;
@@ -2498,6 +2516,8 @@ export const completedCombatRoundSchema: z.ZodType<CompletedCombatRound, z.ZodTy
       combatExperienceDifficulty: z.number().int().positive().optional(),
       commands: z.array(combatRoundCommandSchema).default([]),
       continuedContacts: z.array(continuedContactSchema).default([]),
+      disarmAttempts: z.array(combatDisarmAttemptSchema).default([]),
+      disarmUnbalancedConditions: z.array(combatDisarmUnbalancedConditionSchema).default([]),
       completedAt: z.string().datetime().optional(),
       completedByUserId: idSchema.optional(),
       currentCursor: combatRoundCursorSchema.optional(),
@@ -2532,6 +2552,8 @@ export interface CombatRoundState {
   combatExperienceDifficulty?: number;
   commands: z.infer<typeof combatRoundCommandSchema>[];
   continuedContacts: z.infer<typeof continuedContactSchema>[];
+  disarmAttempts: CombatDisarmAttempt[];
+  disarmUnbalancedConditions: z.infer<typeof combatDisarmUnbalancedConditionSchema>[];
   currentCursor?: z.infer<typeof combatRoundCursorSchema>;
   currentStep: z.infer<typeof combatRoundStepSchema>;
   distanceState: CombatDistanceState;
@@ -2566,6 +2588,8 @@ const activeCombatRoundStateShape = {
   combatExperienceDifficulty: z.number().int().positive().optional(),
   commands: z.array(combatRoundCommandSchema).default([]),
   continuedContacts: z.array(continuedContactSchema).default([]),
+  disarmAttempts: z.array(combatDisarmAttemptSchema).default([]),
+  disarmUnbalancedConditions: z.array(combatDisarmUnbalancedConditionSchema).default([]),
   currentCursor: combatRoundCursorSchema.optional(),
   currentStep: combatRoundStepSchema.default("select_actions"),
   distanceState: combatDistanceStateSchema.default({ edges: {} }),
@@ -5503,6 +5527,9 @@ function isUndoableCombatRoundCommandType(type: CombatRoundCommandType): boolean
     type === "review_break_off" ||
     type === "roll_break_off" ||
     type === "commit_break_off" ||
+    type === "open_disarm" ||
+    type === "roll_disarm" ||
+    type === "commit_disarm" ||
     type === "complete_remaining_step" ||
     type === "skip_phase_action" ||
     type === "back_out_phase_attack" ||
@@ -6282,6 +6309,7 @@ export function getCanonicalAttackOpportunityIdentity(input: {
 
 export function buildCombatRoundDeclaredAttackOpportunities(input: {
   actionId?: string;
+  disarmPhase?: CombatRoundPhase;
   participantId: string;
   phaseContexts?: CombatRoundPhaseContexts;
   roundNumber: number;
@@ -6304,6 +6332,7 @@ export function buildCombatRoundDeclaredAttackOpportunities(input: {
 }): CombatRoundAttackOpportunity[] {
   return getCombatDeclarationAttackPhases({
     actionId: input.actionId,
+    disarmPhase: input.disarmPhase,
     secondaryActionId: input.secondaryActionId,
   }).flatMap((phase) => {
     const targetParticipantId = input.phaseContexts?.[phase]?.targetParticipantId;
@@ -7410,7 +7439,11 @@ export function recordCombatRoundPhaseResolutionAttackDone(input: {
     attackResult: input.attackResult,
     state: input.state,
   });
-  if (!input.attackResult.hit && !offensiveParryAttempt) {
+  const parryDisarmAttempt = getCombatRoundParryDisarmAttemptIdentity({
+    attackResult: input.attackResult,
+    state: input.state,
+  });
+  if (!input.attackResult.hit && !offensiveParryAttempt && !parryDisarmAttempt) {
     const withMissDoneStatus = setCombatRoundPhaseResolutionStatus({
       participantId: input.attackResult.attackerParticipantId,
       phase: input.attackResult.phase,
@@ -7428,9 +7461,10 @@ export function recordCombatRoundPhaseResolutionAttackDone(input: {
     });
   }
 
-  const nextSubstep = offensiveParryAttempt
-    ? "parry"
-    : getCombatRoundPostAttackResolutionSubstep(input.attackResult);
+  const nextSubstep =
+    offensiveParryAttempt || parryDisarmAttempt
+      ? "parry"
+      : getCombatRoundPostAttackResolutionSubstep(input.attackResult);
   const withStatus = setCombatRoundPhaseResolutionStatus({
     participantId: input.attackResult.attackerParticipantId,
     phase: input.attackResult.phase,
@@ -7445,14 +7479,14 @@ export function recordCombatRoundPhaseResolutionAttackDone(input: {
     ...withStatus,
     phaseResolutionCursor: {
       participantId:
-        input.attackResult.hit || offensiveParryAttempt
+        input.attackResult.hit || offensiveParryAttempt || parryDisarmAttempt
           ? input.attackResult.defenderParticipantId
           : input.attackResult.attackerParticipantId,
       phase: input.attackResult.phase,
       substep: nextSubstep,
     },
     selectedParticipantId:
-      input.attackResult.hit || offensiveParryAttempt
+      input.attackResult.hit || offensiveParryAttempt || parryDisarmAttempt
         ? input.attackResult.defenderParticipantId
         : input.attackResult.attackerParticipantId,
     selectedStep:
@@ -8732,6 +8766,55 @@ export function getCombatRoundOffensiveParryAttemptIdentity(input: {
   };
 }
 
+export function getCombatRoundParryDisarmAttemptIdentity(input: {
+  attackResult: CombatRoundAttackRollResult;
+  state: CombatRoundState;
+}):
+  | {
+      attackResultId: string;
+      declaredOpponentParticipantId: string;
+      disarmAttemptId: string;
+      parryPurpose: "parry_disarm";
+      parrySourceId: string;
+    }
+  | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const defender = normalized.participants.find(
+    (participant) => participant.participantId === input.attackResult.defenderParticipantId,
+  );
+  const declaration = defender?.declaration;
+  const disarm = declaration?.disarm;
+  if (
+    declaration?.actionId !== "parry_disarm" ||
+    declaration.roundNumber !== normalized.roundNumber ||
+    disarm?.method !== "reactive_parry" ||
+    disarm.phase !== input.attackResult.phase ||
+    disarm.targetParticipantId !== input.attackResult.attackerParticipantId ||
+    disarm.targetWeapon.itemId !== input.attackResult.weaponInstanceId
+  ) {
+    return undefined;
+  }
+  const attempt = normalized.disarmAttempts.find(
+    (candidate) =>
+      candidate.status === "awaiting_contact" &&
+      candidate.actingParticipantId === input.attackResult.defenderParticipantId &&
+      candidate.resistingParticipantId === input.attackResult.attackerParticipantId &&
+      candidate.targetWeaponItemId === disarm.targetWeapon.itemId &&
+      candidate.phase === input.attackResult.phase,
+  );
+  if (!attempt) return undefined;
+  return {
+    attackResultId: getCombatRoundAttackResultId({
+      result: input.attackResult,
+      roundNumber: normalized.roundNumber,
+    }),
+    declaredOpponentParticipantId: input.attackResult.attackerParticipantId,
+    disarmAttemptId: attempt.id,
+    parryPurpose: "parry_disarm",
+    parrySourceId: disarm.actingWeapon.itemId,
+  };
+}
+
 export function getCombatRoundAttackResultForOpportunity(input: {
   opportunityId: string;
   state: CombatRoundState;
@@ -8828,7 +8911,14 @@ export function buildCombatRoundPhaseResolutionResult(input: {
         state: input.state,
       })
     : undefined;
-  const parryRequired = input.attackResult.hit || Boolean(offensiveParryAttempt);
+  const parryDisarmAttempt = input.state
+    ? getCombatRoundParryDisarmAttemptIdentity({
+        attackResult: input.attackResult,
+        state: input.state,
+      })
+    : undefined;
+  const parryRequired =
+    input.attackResult.hit || Boolean(offensiveParryAttempt) || Boolean(parryDisarmAttempt);
 
   return combatRoundPhaseResolutionResultSchema.parse({
     attackResultId,
@@ -8851,10 +8941,14 @@ export function buildCombatRoundPhaseResolutionResult(input: {
           attackOpportunityId: offensiveParryAttempt?.attackOpportunityId,
           attackResultId: offensiveParryAttempt?.attackResultId,
           declaredOpponentParticipantId: offensiveParryAttempt?.declaredOpponentParticipantId,
+          disarmAttemptId: parryDisarmAttempt?.disarmAttemptId,
           offensiveParryAttemptId: offensiveParryAttempt?.offensiveParryAttemptId,
           offensiveParryDeclarationId: offensiveParryAttempt?.declarationId,
-          parrySourceId: offensiveParryAttempt?.parrySourceId,
-          purpose: offensiveParryAttempt?.parryPurpose ?? "ordinary_defense",
+          parrySourceId: offensiveParryAttempt?.parrySourceId ?? parryDisarmAttempt?.parrySourceId,
+          purpose:
+            offensiveParryAttempt?.parryPurpose ??
+            parryDisarmAttempt?.parryPurpose ??
+            "ordinary_defense",
           status: "pending",
         }
       : {
@@ -17456,6 +17550,8 @@ function buildCompletedCombatRound(input: {
     breakOffProposals: normalized.breakOffProposals,
     commands: normalized.commands,
     continuedContacts: normalized.continuedContacts,
+    disarmAttempts: normalized.disarmAttempts,
+    disarmUnbalancedConditions: normalized.disarmUnbalancedConditions,
     completedAt: input.completedAt,
     completedByUserId: input.completedByUserId,
     currentCursor: normalized.currentCursor,
@@ -17935,6 +18031,15 @@ export function initializeCombatRoundState(input: {
         participantIds.has(contact.controllerParticipantId) &&
         participantIds.has(contact.affectedParticipantId),
     ),
+    disarmAttempts: (existing?.disarmAttempts ?? []).filter(
+      (attempt) =>
+        attempt.roundNumber === roundNumber &&
+        participantIds.has(attempt.actingParticipantId) &&
+        participantIds.has(attempt.resistingParticipantId),
+    ),
+    disarmUnbalancedConditions: (existing?.disarmUnbalancedConditions ?? []).filter((condition) =>
+      participantIds.has(condition.affectedParticipantId),
+    ),
     currentStep,
     gmBacktrackHold:
       existing?.gmBacktrackHold?.roundNumber === roundNumber &&
@@ -18273,6 +18378,12 @@ export function advanceCombatRoundStep(
       commands: [],
       breakOffProposals: [],
       continuedContacts: completedRoundState.continuedContacts,
+      disarmAttempts: [],
+      disarmUnbalancedConditions: completedRoundState.disarmUnbalancedConditions.map((condition) =>
+        condition.expiresAfterRound < nextRoundNumber
+          ? { ...condition, status: "ended" as const }
+          : condition,
+      ),
       currentCursor: getDefaultCombatRoundCursor({
         participantId: nextParticipantId,
         roundNumber: nextRoundNumber,
@@ -18496,6 +18607,16 @@ export function recordCombatRoundDeclaration(input: {
       proposal.roundNumber !== normalized.roundNumber ||
       proposal.escapeeParticipantId !== input.participantId,
   );
+  const existingDisarmAttempts = normalized.disarmAttempts.filter(
+    (attempt) =>
+      attempt.roundNumber === normalized.roundNumber &&
+      attempt.actingParticipantId === input.participantId,
+  );
+  const withoutPreviousDisarm = normalized.disarmAttempts.filter(
+    (attempt) =>
+      attempt.roundNumber !== normalized.roundNumber ||
+      attempt.actingParticipantId !== input.participantId,
+  );
   const feintProposal =
     normalized.currentStep !== "select_actions" && existingFeintProposal
       ? existingFeintProposal
@@ -18596,6 +18717,35 @@ export function recordCombatRoundDeclaration(input: {
             ];
           })
         : [];
+  const disarmAttempt =
+    normalized.currentStep !== "select_actions" && existingDisarmAttempts.length === 1
+      ? existingDisarmAttempts[0]
+      : declaration.disarm &&
+          ((declaration.actionId === "disarm" && declaration.disarm.method === "proactive") ||
+            (declaration.actionId === "parry_disarm" &&
+              declaration.disarm.method === "reactive_parry"))
+        ? combatDisarmAttemptSchema.parse({
+            actingParticipantId: input.participantId,
+            actingWeaponItemId: declaration.disarm.actingWeapon.itemId,
+            actingWeaponTemplateId: declaration.disarm.actingWeapon.templateId,
+            contactQualityModifier: 0,
+            disarmCapability: "trap",
+            id: buildCombatDisarmAttemptId({
+              actingParticipantId: input.participantId,
+              phase: declaration.disarm.phase,
+              roundNumber: normalized.roundNumber,
+              targetWeaponItemId: declaration.disarm.targetWeapon.itemId,
+            }),
+            method: declaration.disarm.method,
+            phase: declaration.disarm.phase,
+            resistingParticipantId: declaration.disarm.targetParticipantId,
+            roundNumber: normalized.roundNumber,
+            status: "awaiting_contact",
+            targetWeaponItemId: declaration.disarm.targetWeapon.itemId,
+            targetWeaponItemRevision: declaration.disarm.targetWeapon.itemRevision,
+            targetWeaponTemplateId: declaration.disarm.targetWeapon.templateId,
+          })
+        : undefined;
 
   const withDeclaration: CombatRoundState = {
     ...normalized,
@@ -18603,6 +18753,9 @@ export function recordCombatRoundDeclaration(input: {
       ? [...withoutPreviousAdjustDistance, adjustDistanceProposal]
       : withoutPreviousAdjustDistance,
     breakOffProposals: [...withoutPreviousBreakOff, ...breakOffProposals],
+    disarmAttempts: disarmAttempt
+      ? [...withoutPreviousDisarm, disarmAttempt]
+      : withoutPreviousDisarm,
     feintProposals: feintProposal ? [...withoutPreviousFeint, feintProposal] : withoutPreviousFeint,
     participants: normalized.participants.map((participant) =>
       participant.participantId === input.participantId
@@ -18621,8 +18774,10 @@ export function recordCombatRoundDeclaration(input: {
           actionId: declaration.actionId,
           adjustDistance: declaration.adjustDistance,
           feint: declaration.feint,
+          disarm: declaration.disarm,
           movementIntent: declaration.movementIntent,
           previousBreakOffProposals: existingBreakOffProposals,
+          previousDisarmAttempts: existingDisarmAttempts,
           previousDeclaration,
           previousStepStatus,
           status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
@@ -19160,6 +19315,378 @@ export function getCombatBreakOffPairConsequence(input: {
       state: normalized,
     }),
   };
+}
+
+function replaceCombatRoundDisarmAttempt(input: {
+  attempt: CombatDisarmAttempt;
+  state: CombatRoundState;
+}): CombatRoundState {
+  return combatRoundStateSchema.parse({
+    ...input.state,
+    disarmAttempts: input.state.disarmAttempts.map((attempt) =>
+      attempt.id === input.attempt.id ? input.attempt : attempt,
+    ),
+  });
+}
+
+function recordCombatRoundDisarmCommand(input: {
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  eventType: "disarm_opened" | "disarm_roll" | "disarm_result" | "disarm_committed";
+  facts: Record<string, unknown>;
+  participantId: string;
+  attempt: CombatDisarmAttempt;
+  state: CombatRoundState;
+  type: "open_disarm" | "roll_disarm" | "commit_disarm";
+}): CombatRoundState {
+  const beforeCursor = input.state.currentCursor ?? {
+    participantId: input.attempt.actingParticipantId,
+    roundNumber: input.state.roundNumber,
+    step: input.attempt.phase === "phase1" ? ("A1" as const) : ("A2" as const),
+  };
+  const command = combatRoundCommandSchema.parse({
+    afterCursor: beforeCursor,
+    beforeCursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: input.facts,
+    id:
+      input.command.commandId ??
+      buildCombatRoundCommandId({
+        createdAt: input.command.createdAt,
+        participantId: input.participantId,
+        state: input.state,
+        type: input.type,
+      }),
+    participantId: input.participantId,
+    phase: input.attempt.phase,
+    roundNumber: input.state.roundNumber,
+    step: input.attempt.phase === "phase1" ? "A1" : "A2",
+    type: input.type,
+  });
+  const involvedOutcome =
+    typeof input.facts.involvedOutcome === "object" && input.facts.involvedOutcome !== null
+      ? (input.facts.involvedOutcome as Record<string, unknown>)
+      : {};
+  const rollerPrivate =
+    typeof input.facts.rollerPrivate === "object" && input.facts.rollerPrivate !== null
+      ? (input.facts.rollerPrivate as Record<string, unknown>)
+      : {};
+  return appendCombatRoundEventForCommand({
+    command,
+    draft: {
+      actorParticipantId: input.attempt.actingParticipantId,
+      facts: {
+        involvedOutcome,
+        rollerPrivate: input.eventType === "disarm_roll" ? rollerPrivate : undefined,
+      },
+      involvedParticipantIds: [
+        input.attempt.actingParticipantId,
+        input.attempt.resistingParticipantId,
+      ],
+      outcomeScope: "involved",
+      ownerParticipantId: input.participantId,
+      phase: input.attempt.phase,
+      rollerParticipantId: input.eventType === "disarm_roll" ? input.participantId : undefined,
+      sourceIds: [
+        input.attempt.id,
+        input.attempt.actingWeaponItemId,
+        input.attempt.targetWeaponItemId,
+      ],
+      status: input.eventType === "disarm_committed" ? "committed" : "recorded",
+      step: input.attempt.phase === "phase1" ? "phase_1_actions" : "phase_2_actions",
+      targetParticipantId: input.attempt.resistingParticipantId,
+      type: input.eventType,
+    },
+    state: combatRoundStateSchema.parse({
+      ...input.state,
+      commands: [...input.state.commands, command],
+    }),
+  });
+}
+
+export function openCombatRoundDisarmAfterContact(input: {
+  attackResultId: string;
+  attemptId: string;
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  contactQualityModifier?: number;
+  continuedContactId?: string;
+  parryResultId?: string;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const previousAttempt = normalized.disarmAttempts.find(
+    (attempt) => attempt.id === input.attemptId,
+  );
+  if (!previousAttempt || previousAttempt.status !== "awaiting_contact") {
+    throw new RangeError("This Disarm attempt is no longer waiting for weapon contact.");
+  }
+  if (
+    previousAttempt.method === "reactive_parry" &&
+    (!input.parryResultId || input.continuedContactId)
+  ) {
+    throw new RangeError("Reactive Parry-Disarm requires its successful special Parry result.");
+  }
+  if (previousAttempt.method === "proactive" && input.parryResultId && !input.continuedContactId) {
+    throw new RangeError("Proactive Disarm uses attack contact, not a reactive Parry result.");
+  }
+  const contactQualityModifier = input.contactQualityModifier ?? 0;
+  if (
+    !Number.isInteger(contactQualityModifier) ||
+    contactQualityModifier < 0 ||
+    contactQualityModifier > 4
+  ) {
+    throw new RangeError("Disarm contact quality must be an integer from 0 to 4.");
+  }
+  const attempt = combatDisarmAttemptSchema.parse({
+    ...previousAttempt,
+    attackResultId: input.attackResultId,
+    contactQualityModifier,
+    continuedContactId: input.continuedContactId,
+    parryResultId: input.parryResultId,
+    status: "awaiting_rolls",
+  });
+  return recordCombatRoundDisarmCommand({
+    attempt,
+    command: input.command,
+    eventType: "disarm_opened",
+    facts: {
+      attemptId: attempt.id,
+      involvedOutcome: {
+        attemptId: attempt.id,
+        contactEstablished: true,
+        method: attempt.method,
+      },
+      previousAttempt,
+    },
+    participantId: attempt.actingParticipantId,
+    state: replaceCombatRoundDisarmAttempt({ attempt, state: normalized }),
+    type: "open_disarm",
+  });
+}
+
+export function cancelCombatRoundDisarmWithoutContact(input: {
+  attemptId: string;
+  attackResultId?: string;
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  reason: "no_incoming_attack" | "parry_failed" | "proactive_attack_missed";
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const previousAttempt = normalized.disarmAttempts.find(
+    (attempt) => attempt.id === input.attemptId,
+  );
+  if (!previousAttempt || previousAttempt.status !== "awaiting_contact") {
+    throw new RangeError("This Disarm attempt is no longer waiting for weapon contact.");
+  }
+  const attempt = combatDisarmAttemptSchema.parse({
+    ...previousAttempt,
+    attackResultId: input.attackResultId,
+    status: "cancelled",
+  });
+  const recorded = recordCombatRoundDisarmCommand({
+    attempt,
+    command: input.command,
+    eventType: "disarm_result",
+    facts: {
+      involvedOutcome: { attemptId: attempt.id, reason: input.reason, result: "no_contact" },
+      previousAttempt,
+    },
+    participantId: attempt.actingParticipantId,
+    state: replaceCombatRoundDisarmAttempt({ attempt, state: normalized }),
+    type: "open_disarm",
+  });
+  if (attempt.method !== "proactive") return recorded;
+  const withPhaseDone = setCombatRoundPhaseResolutionStatus({
+    participantId: attempt.actingParticipantId,
+    phase: attempt.phase,
+    state: recorded,
+    status: { substep: "done", updatedAt: input.command.createdAt },
+  });
+  const withStepDone = setCombatRoundParticipantStepStatus({
+    participantId: attempt.actingParticipantId,
+    state: withPhaseDone,
+    status: "complete",
+    step: getCombatRoundPhaseActionStepForPhase(attempt.phase),
+  });
+  return moveCombatRoundPhaseResolutionCursorToNextParticipant({
+    phase: attempt.phase,
+    state: withStepDone,
+    updatedAt: input.command.createdAt,
+  });
+}
+
+export function recordCombatRoundDisarmRoll(input: {
+  attemptId: string;
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  result: CombatDisarmRoll;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const previousAttempt = normalized.disarmAttempts.find(
+    (attempt) => attempt.id === input.attemptId,
+  );
+  if (!previousAttempt || previousAttempt.status !== "awaiting_rolls") {
+    throw new RangeError("Disarm rolls are not currently available.");
+  }
+  const result = combatDisarmRollSchema.parse(input.result);
+  const side =
+    result.participantId === previousAttempt.actingParticipantId
+      ? "actor"
+      : result.participantId === previousAttempt.resistingParticipantId
+        ? "holder"
+        : undefined;
+  if (!side) throw new RangeError("Only a participant in this Disarm contest may roll.");
+  if (
+    result.calculation.contestType !== "disarm" ||
+    result.calculation.participantId !== result.participantId ||
+    result.calculation.role !== (side === "actor" ? "disarm_actor" : "disarm_holder") ||
+    result.calculation.finalResult !== result.finalTotal
+  ) {
+    throw new RangeError("Disarm roll calculation does not match its participant or result.");
+  }
+  if (
+    (side === "actor" && previousAttempt.actingRoll) ||
+    (side === "holder" && previousAttempt.resistingRoll)
+  ) {
+    throw new RangeError("This participant has already rolled Disarm.");
+  }
+  const actingRoll = side === "actor" ? result : previousAttempt.actingRoll;
+  const resistingRoll = side === "holder" ? result : previousAttempt.resistingRoll;
+  const resolution =
+    actingRoll && resistingRoll
+      ? resolveCombatDisarmAttempt({
+          actingTotal: actingRoll.finalTotal,
+          resistingTotal: resistingRoll.finalTotal,
+        })
+      : undefined;
+  const attempt = combatDisarmAttemptSchema.parse({
+    ...previousAttempt,
+    actingRoll,
+    difference: resolution?.difference,
+    resistingRoll,
+    result: resolution?.result,
+    status: resolution ? "awaiting_commit" : "awaiting_rolls",
+  });
+  let next = recordCombatRoundDisarmCommand({
+    attempt,
+    command: input.command,
+    eventType: "disarm_roll",
+    facts: {
+      involvedOutcome: { attemptId: attempt.id, side, submitted: true },
+      previousAttempt,
+      rollerPrivate: {
+        calculation: result.calculation,
+        characteristicChoice: result.characteristicChoice,
+        finalTotal: result.finalTotal,
+        skillChoice: result.skillChoice,
+      },
+    },
+    participantId: result.participantId,
+    state: replaceCombatRoundDisarmAttempt({ attempt, state: normalized }),
+    type: "roll_disarm",
+  });
+  if (resolution) {
+    next = appendCombatRoundEventForCommand({
+      command: next.commands.at(-1)!,
+      draft: {
+        actorParticipantId: attempt.actingParticipantId,
+        facts: {
+          involvedOutcome: {
+            attemptId: attempt.id,
+            difference: resolution.difference,
+            ...resolution.result,
+          },
+        },
+        involvedParticipantIds: [attempt.actingParticipantId, attempt.resistingParticipantId],
+        outcomeScope: "involved",
+        ownerParticipantId: attempt.actingParticipantId,
+        phase: attempt.phase,
+        sourceIds: [attempt.id, attempt.targetWeaponItemId],
+        status: "proposed",
+        step: attempt.phase === "phase1" ? "phase_1_actions" : "phase_2_actions",
+        targetParticipantId: attempt.resistingParticipantId,
+        type: "disarm_result",
+      },
+      state: next,
+    });
+  }
+  return next;
+}
+
+export function commitCombatRoundDisarm(input: {
+  attemptId: string;
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const previousAttempt = normalized.disarmAttempts.find(
+    (attempt) => attempt.id === input.attemptId,
+  );
+  if (!previousAttempt || previousAttempt.status !== "awaiting_commit" || !previousAttempt.result) {
+    throw new RangeError("A resolved Disarm contest is required before commit.");
+  }
+  const resolvedResult = previousAttempt.result;
+  const attempt = combatDisarmAttemptSchema.parse({ ...previousAttempt, status: "committed" });
+  const condition = resolvedResult.unbalanced
+    ? combatDisarmUnbalancedConditionSchema.parse({
+        affectedParticipantId: attempt.resistingParticipantId,
+        establishedRound: normalized.roundNumber,
+        expiresAfterRound: normalized.roundNumber + 1,
+        id: buildCombatDisarmUnbalancedConditionId({
+          affectedParticipantId: attempt.resistingParticipantId,
+          attemptId: attempt.id,
+        }),
+        modifierValue: -2,
+        sourceActionId: attempt.method === "proactive" ? "disarm" : "parry_disarm",
+        sourceDisarmAttemptId: attempt.id,
+        status: "active",
+      })
+    : undefined;
+  const next = combatRoundStateSchema.parse({
+    ...replaceCombatRoundDisarmAttempt({ attempt, state: normalized }),
+    disarmUnbalancedConditions: condition
+      ? [
+          ...normalized.disarmUnbalancedConditions.filter((entry) => entry.id !== condition.id),
+          condition,
+        ]
+      : normalized.disarmUnbalancedConditions,
+  });
+  const recorded = recordCombatRoundDisarmCommand({
+    attempt,
+    command: input.command,
+    eventType: "disarm_committed",
+    facts: {
+      attemptId: attempt.id,
+      involvedOutcome: {
+        attemptId: attempt.id,
+        difference: attempt.difference,
+        noDirectDamage: true,
+        ...attempt.result,
+      },
+      previousAttempt,
+      targetWeaponItemId: attempt.targetWeaponItemId,
+    },
+    participantId: attempt.actingParticipantId,
+    state: next,
+    type: "commit_disarm",
+  });
+  const withPhaseDone = setCombatRoundPhaseResolutionStatus({
+    participantId: attempt.actingParticipantId,
+    phase: attempt.phase,
+    state: recorded,
+    status: { substep: "done", updatedAt: input.command.createdAt },
+  });
+  const withStepDone = setCombatRoundParticipantStepStatus({
+    participantId: attempt.actingParticipantId,
+    state: withPhaseDone,
+    status: "complete",
+    step: getCombatRoundPhaseActionStepForPhase(attempt.phase),
+  });
+  return moveCombatRoundPhaseResolutionCursorToNextParticipant({
+    phase: attempt.phase,
+    state: withStepDone,
+    updatedAt: input.command.createdAt,
+  });
 }
 
 function moveCombatRoundAdjustDistanceToNextAction(input: {
@@ -20670,6 +21197,10 @@ function getCombatRoundAttackCommandAfterCursor(input: {
     getCombatRoundOffensiveParryAttemptIdentity({
       attackResult: input.result,
       state: input.state,
+    }) ||
+    getCombatRoundParryDisarmAttemptIdentity({
+      attackResult: input.result,
+      state: input.state,
     })
   ) {
     return combatRoundCursorSchema.parse({
@@ -21389,7 +21920,9 @@ function resetCombatRoundParryForAttackResult(input: {
   resolution: CombatRoundPhaseResolutionResult;
   updatedAt: string;
 }): CombatRoundPhaseResolutionResult {
-  const offensiveParryPending = input.resolution.parryResolution.purpose === "offensive_parry";
+  const specialParryPending =
+    input.resolution.parryResolution.purpose === "offensive_parry" ||
+    input.resolution.parryResolution.purpose === "parry_disarm";
   return combatRoundPhaseResolutionResultSchema.parse({
     ...input.resolution,
     damageProposal: {
@@ -21412,12 +21945,13 @@ function resetCombatRoundParryForAttackResult(input: {
       status: "pending",
     },
     parryResolution:
-      input.attackResult.hit || offensiveParryPending
+      input.attackResult.hit || specialParryPending
         ? {
             attackOpportunityId: input.resolution.parryResolution.attackOpportunityId,
             attackResultId: input.resolution.parryResolution.attackResultId,
             declaredOpponentParticipantId:
               input.resolution.parryResolution.declaredOpponentParticipantId,
+            disarmAttemptId: input.resolution.parryResolution.disarmAttemptId,
             offensiveParryAttemptId: input.resolution.parryResolution.offensiveParryAttemptId,
             offensiveParryDeclarationId:
               input.resolution.parryResolution.offensiveParryDeclarationId,
@@ -21984,6 +22518,9 @@ function undoCombatRoundGlobalCommandAtIndex(input: {
   const previousBreakOffProposals = z
     .array(combatBreakOffProposalSchema)
     .safeParse(command.facts.previousBreakOffProposals);
+  const previousDisarmAttempts = z
+    .array(combatDisarmAttemptSchema)
+    .safeParse(command.facts.previousDisarmAttempts);
   return combatRoundStateSchema.parse({
     ...baseState,
     breakOffProposals: previousBreakOffProposals.success
@@ -21996,6 +22533,16 @@ function undoCombatRoundGlobalCommandAtIndex(input: {
           ...previousBreakOffProposals.data,
         ]
       : baseState.breakOffProposals,
+    disarmAttempts: previousDisarmAttempts.success
+      ? [
+          ...baseState.disarmAttempts.filter(
+            (attempt) =>
+              attempt.roundNumber !== command.roundNumber ||
+              attempt.actingParticipantId !== command.participantId,
+          ),
+          ...previousDisarmAttempts.data,
+        ]
+      : baseState.disarmAttempts,
     participants: baseState.participants.map((participant) =>
       participant.participantId === command.participantId
         ? {
@@ -23958,6 +24505,45 @@ function undoCombatRoundBreakOffCommandAtIndex(input: {
   });
 }
 
+function undoCombatRoundDisarmCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+  if (
+    !command ||
+    (command.type !== "open_disarm" &&
+      command.type !== "roll_disarm" &&
+      command.type !== "commit_disarm")
+  ) {
+    return undefined;
+  }
+  const previousAttempt = combatDisarmAttemptSchema.safeParse(command.facts.previousAttempt);
+  if (!previousAttempt.success) return undefined;
+  const stateWithoutEvents = removeCombatRoundEventsForCommand({
+    commandId: command.id,
+    state: normalized,
+  });
+  return combatRoundStateSchema.parse({
+    ...stateWithoutEvents,
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    currentCursor: command.beforeCursor,
+    currentStep: getCombatRoundStepForCursorStep(command.beforeCursor.step),
+    disarmAttempts: normalized.disarmAttempts.map((attempt) =>
+      attempt.id === previousAttempt.data.id ? previousAttempt.data : attempt,
+    ),
+    disarmUnbalancedConditions:
+      command.type === "commit_disarm"
+        ? normalized.disarmUnbalancedConditions.filter(
+            (condition) => condition.sourceDisarmAttemptId !== previousAttempt.data.id,
+          )
+        : normalized.disarmUnbalancedConditions,
+    selectedParticipantId: command.beforeCursor.participantId ?? command.participantId,
+    selectedStep: getCombatRoundStepForCursorStep(command.beforeCursor.step),
+  });
+}
+
 function undoCombatRoundOffensiveParryBrawlingCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
@@ -24253,6 +24839,17 @@ function undoCombatRoundCommandAtIndex(input: {
     command.type === "commit_break_off"
   ) {
     return undoCombatRoundBreakOffCommandAtIndex({
+      commandIndex: input.commandIndex,
+      state: normalized,
+    });
+  }
+
+  if (
+    command.type === "open_disarm" ||
+    command.type === "roll_disarm" ||
+    command.type === "commit_disarm"
+  ) {
+    return undoCombatRoundDisarmCommandAtIndex({
       commandIndex: input.commandIndex,
       state: normalized,
     });

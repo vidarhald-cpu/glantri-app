@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { encounterSessionSchema, initializeCombatRoundState } from "@glantri/domain";
+import {
+  commitCombatRoundDisarm,
+  encounterSessionSchema,
+  initializeCombatRoundState,
+  undoLatestCombatRoundCommand,
+} from "@glantri/domain";
 
 import { createPrismaCharacterEquipmentRepository } from "../repositories/characterEquipmentRepository";
 import { createPrismaCombatStatePersistenceRepository } from "../repositories/combatStatePersistenceRepository";
@@ -178,6 +183,61 @@ if (!process.env.DATABASE_URL_TEST) {
         recipient,
         scenario,
       };
+    }
+
+    async function disarmFixture(suffix: string) {
+      const current = await fixture(`disarm-${suffix}`);
+      const attemptId = `disarm-attempt-${suffix}`;
+      const commandId = `disarm-command-${suffix}`;
+      const awaitingAttempt = {
+        actingParticipantId: `participant-recipient-disarm-${suffix}`,
+        actingWeaponItemId: `acting-item-${suffix}`,
+        actingWeaponTemplateId: "weapon-template-main-gauche",
+        contactQualityModifier: 0,
+        difference: 11,
+        disarmCapability: "trap" as const,
+        id: attemptId,
+        method: "proactive" as const,
+        phase: "phase1" as const,
+        resistingParticipantId: `participant-disarm-${suffix}`,
+        result: { disarmed: true, tableRowId: "disarmed" as const, unbalanced: false },
+        roundNumber: 1,
+        status: "awaiting_commit" as const,
+        targetWeaponItemId: current.item.id,
+        targetWeaponItemRevision: current.item.revision!,
+        targetWeaponTemplateId: current.item.templateId,
+      };
+      const waitingSession = encounterSessionSchema.parse({
+        ...current.persisted,
+        combatRoundState: {
+          ...current.persisted.combatRoundState!,
+          disarmAttempts: [awaitingAttempt],
+        },
+      });
+      const waiting = await createPrismaCombatStatePersistenceRepository(
+        prisma!,
+      ).updateCombatEncounter({
+        campaignId: current.campaign.id,
+        encounterId: current.encounterId,
+        expectedRevision: current.persisted.updatedAt,
+        scenarioId: current.scenario.id,
+        session: waitingSession,
+      });
+      const completedState = commitCombatRoundDisarm({
+        attemptId,
+        command: {
+          commandId,
+          createdAt: "2026-08-16T10:04:00.000Z",
+          createdByUserId: current.gm.id,
+        },
+        state: waiting.combatRoundState!,
+      });
+      const completedSession = encounterSessionSchema.parse({
+        ...waiting,
+        combatRoundState: completedState,
+        updatedAt: "2026-08-16T10:04:00.000Z",
+      });
+      return { ...current, attemptId, commandId, completedSession, waiting };
     }
 
     it("rolls back Item, Encounter completion, and event after every injected transaction boundary", async () => {
@@ -479,6 +539,168 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(await prisma!.characterEquipmentItem.count({ where: { id: current.item.id } })).toBe(
         1,
       );
+    });
+
+    it("atomically disarms the exact Item with rollback, idempotent retry, and exact undo", async () => {
+      for (const boundary of ["item", "encounter", "event"] as const) {
+        const current = await disarmFixture(`rollback-${boundary}`);
+        const beforeItem = await current.itemRepository.getCanonicalEquipmentItemById(
+          current.item.id,
+        );
+        const beforeEncounter = await prisma!.encounter.findUniqueOrThrow({
+          include: { activeCombatState: true },
+          where: { id: current.encounterId },
+        });
+        const service = new CombatItemInteractionService(
+          current.itemRepository,
+          prisma!,
+          (reached) => {
+            if (reached === boundary) throw new Error(`injected-disarm-${boundary}`);
+          },
+        );
+        await expect(
+          service.commitDisarm({
+            actorUserId: current.gm.id,
+            campaignId: current.campaign.id,
+            commandId: current.commandId,
+            encounterId: current.encounterId,
+            expectedEncounterRevision: current.waiting.updatedAt,
+            ownerCharacterId: current.character.id,
+            roundNumber: 1,
+            scenarioId: current.scenario.id,
+            session: current.completedSession,
+          }),
+        ).rejects.toThrow(`injected-disarm-${boundary}`);
+        expect(await current.itemRepository.getCanonicalEquipmentItemById(current.item.id)).toEqual(
+          beforeItem,
+        );
+        const afterEncounter = await prisma!.encounter.findUniqueOrThrow({
+          include: { activeCombatState: true },
+          where: { id: current.encounterId },
+        });
+        expect(afterEncounter.updatedAt).toEqual(beforeEncounter.updatedAt);
+        expect(afterEncounter.activeCombatState?.stateJson).toEqual(
+          beforeEncounter.activeCombatState?.stateJson,
+        );
+        expect(
+          await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
+        ).toBe(0);
+      }
+
+      const current = await disarmFixture("success");
+      const service = new CombatItemInteractionService(current.itemRepository, prisma!);
+      const input = {
+        actorUserId: current.gm.id,
+        campaignId: current.campaign.id,
+        commandId: current.commandId,
+        encounterId: current.encounterId,
+        expectedEncounterRevision: current.waiting.updatedAt,
+        ownerCharacterId: current.character.id,
+        roundNumber: 1,
+        scenarioId: current.scenario.id,
+        session: current.completedSession,
+      };
+      const committed = await service.commitDisarm(input);
+      expect(committed.item?.item).toMatchObject({
+        holderCharacterId: null,
+        id: current.item.id,
+        isEquipped: false,
+      });
+      expect(await prisma!.characterEquipmentItem.count({ where: { id: current.item.id } })).toBe(
+        1,
+      );
+      expect(
+        (await current.itemRepository.getCharacterLoadouts(current.character.id))[0]
+          ?.activePrimaryWeaponItemId,
+      ).toBeNull();
+      const persistedCommand = committed.encounter.combatRoundState!.commands.find(
+        (command) => command.id === current.commandId,
+      )!;
+      expect(persistedCommand.facts.disarmItemUndo).toMatchObject({
+        actionId: current.commandId,
+        itemBefore: { id: current.item.id },
+        ownerCharacterId: current.character.id,
+        version: 1,
+      });
+
+      const eventCountBeforeRetry = await prisma!.scenarioEventLog.count({
+        where: { scenarioId: current.scenario.id },
+      });
+      const retry = await service.commitDisarm(input);
+      expect(retry.item).toMatchObject({ alreadyApplied: true, item: { id: current.item.id } });
+      expect(retry.encounter.updatedAt).toBe(committed.encounter.updatedAt);
+      expect(
+        await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
+      ).toBe(eventCountBeforeRetry);
+
+      await expect(
+        service.commitDisarm({ ...input, ownerCharacterId: current.recipient.id }),
+      ).rejects.toBeInstanceOf(Error);
+      expect(
+        await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
+      ).toBe(eventCountBeforeRetry);
+
+      const exactUndo = persistedCommand.facts.disarmItemUndo as Record<string, unknown>;
+      const undoneState = undoLatestCombatRoundCommand({
+        state: committed.encounter.combatRoundState!,
+      })!;
+      const restoredSession = encounterSessionSchema.parse({
+        ...committed.encounter,
+        combatRoundState: undoneState,
+      });
+      await expect(
+        service.commitDisarmUndo({
+          actorUserId: current.gm.id,
+          campaignId: current.campaign.id,
+          encounterId: current.encounterId,
+          expectedEncounterRevision: committed.encounter.updatedAt,
+          scenarioId: current.scenario.id,
+          session: restoredSession,
+          undos: [
+            {
+              commandId: current.commandId,
+              undo: { ...exactUndo, ownerCharacterId: current.recipient.id } as never,
+            },
+          ],
+        }),
+      ).rejects.toBeInstanceOf(Error);
+      expect(
+        await current.itemRepository.getCanonicalEquipmentItemById(current.item.id),
+      ).toMatchObject({ holderCharacterId: null, id: current.item.id });
+
+      const restored = await service.commitDisarmUndo({
+        actorUserId: current.gm.id,
+        campaignId: current.campaign.id,
+        encounterId: current.encounterId,
+        expectedEncounterRevision: committed.encounter.updatedAt,
+        scenarioId: current.scenario.id,
+        session: restoredSession,
+        undos: [{ commandId: current.commandId, undo: exactUndo as never }],
+      });
+      expect(
+        await current.itemRepository.getCanonicalEquipmentItemById(current.item.id),
+      ).toMatchObject({ holderCharacterId: current.character.id, id: current.item.id });
+      expect(
+        (await current.itemRepository.getCharacterLoadouts(current.character.id))[0]
+          ?.activePrimaryWeaponItemId,
+      ).toBe(current.item.id);
+      const eventCountAfterUndo = await prisma!.scenarioEventLog.count({
+        where: { scenarioId: current.scenario.id },
+      });
+      await expect(
+        service.commitDisarmUndo({
+          actorUserId: current.gm.id,
+          campaignId: current.campaign.id,
+          encounterId: current.encounterId,
+          expectedEncounterRevision: restored.updatedAt,
+          scenarioId: current.scenario.id,
+          session: restoredSession,
+          undos: [{ commandId: current.commandId, undo: exactUndo as never }],
+        }),
+      ).rejects.toBeInstanceOf(Error);
+      expect(
+        await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
+      ).toBe(eventCountAfterUndo);
     });
 
     it("scopes idempotency to the exact Encounter fingerprint and rejects forged mismatches", async () => {

@@ -41,6 +41,10 @@ export const combatStepEventTypeSchema = z.enum([
   "break_off_roll",
   "break_off_result",
   "break_off_committed",
+  "disarm_opened",
+  "disarm_roll",
+  "disarm_result",
+  "disarm_committed",
 ]);
 export type CombatStepEventType = z.infer<typeof combatStepEventTypeSchema>;
 
@@ -159,6 +163,9 @@ export const combatStepEventCommandTypeSchema = z.enum([
   "review_break_off",
   "roll_break_off",
   "commit_break_off",
+  "open_disarm",
+  "roll_disarm",
+  "commit_disarm",
   "complete_remaining_step",
 ]);
 

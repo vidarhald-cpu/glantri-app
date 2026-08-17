@@ -12,6 +12,7 @@ export const combatSkillContestTypeSchema = z.enum([
   "offensive_parry_brawling",
   "continued_contact_maintenance",
   "break_off",
+  "disarm",
 ]);
 export type CombatSkillContestType = z.infer<typeof combatSkillContestTypeSchema>;
 
@@ -28,6 +29,8 @@ export const combatSkillContestRoleSchema = z.enum([
   "continued_contact_responder",
   "break_off_escapee",
   "break_off_attacker",
+  "disarm_actor",
+  "disarm_holder",
 ]);
 export type CombatSkillContestRole = z.infer<typeof combatSkillContestRoleSchema>;
 
@@ -40,6 +43,8 @@ export const combatSkillContestModifierCategorySchema = z.enum([
   "encumbrance",
   "gm_adjustment",
   "withdrawal_backout",
+  "weapon_control",
+  "condition",
 ]);
 export type CombatSkillContestModifierCategory = z.infer<
   typeof combatSkillContestModifierCategorySchema

@@ -331,9 +331,13 @@ created.
 
 ### Disarm
 
-A future Disarm may create weapon-availability or possession state. It grants controller authority
-only if the verified rule names a tactical choice; disabling another participant's weapon alone
-does not make the attacker their controller.
+Disarm creates an exact, source-linked Item availability transition without granting participant
+control. A successful forced drop moves the targeted canonical Item to encounter-present/unheld
+state and clears holder, readiness, and loadout references through the Item transaction authority.
+The attacker gains no tactical choice over the affected participant; any Unbalanced result remains
+a separate participant condition with its own source lineage and duration. Contest tasks grant only
+the named actor/holder roll and GM commit capabilities, while retry and undo remain bound to the
+exact attempt, Item, encounter, owner, and command identities.
 
 ### Throws
 

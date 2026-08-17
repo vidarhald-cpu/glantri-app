@@ -39,6 +39,7 @@ export * from "./encounter/combatEffects";
 export * from "./encounter/combatFeint";
 export * from "./encounter/combatAdjustDistance";
 export * from "./encounter/combatBreakOff";
+export * from "./encounter/combatDisarm";
 export * from "./encounter/combatSkillContest";
 export * from "./encounter/combatModifierProjection";
 export * from "./encounter/combatModifierContributions";

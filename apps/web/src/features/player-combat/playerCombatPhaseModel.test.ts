@@ -685,6 +685,23 @@ describe("player combat phase model", () => {
         phaseLoadoutSummaries: summaries,
       }).phaseAttackSources,
     ).toEqual({});
+    expect(
+      buildCombatDeclarationAttackSelection({
+        actionId: "disarm",
+        disarmPhase: "phase2",
+        phaseContexts: contexts,
+        phaseLoadoutSummaries: summaries,
+      }).phaseAttackSources,
+    ).toMatchObject({
+      phase2: { opportunitySlot: "attack_2", scenarioItemId: "scenario-long-sword" },
+    });
+    expect(
+      buildCombatDeclarationAttackSelection({
+        actionId: "parry_disarm",
+        phaseContexts: contexts,
+        phaseLoadoutSummaries: summaries,
+      }).phaseAttackSources,
+    ).toEqual({});
   });
 
   it("retains the committed loadout slot when an enriched row uses an item alias", () => {

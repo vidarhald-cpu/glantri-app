@@ -94,6 +94,8 @@ describe("playerEncounter", () => {
       "adjust_range_attack",
       "offensive_parry",
       "parry",
+      "parry_disarm",
+      "disarm",
       "break_off_engagement",
       "move_only",
     ]);
@@ -133,9 +135,9 @@ describe("playerEncounter", () => {
     );
     expect(
       getPlayerEncounterDeclarationCompatibilityMessage({
-        actionId: "disarm",
+        actionId: "counterattack",
       }),
-    ).toBe("Disarm is unavailable and cannot be declared.");
+    ).toBe("Counterattack is unavailable and cannot be declared.");
   });
 
   it("keeps unsupported legacy action identities and labels readable", () => {

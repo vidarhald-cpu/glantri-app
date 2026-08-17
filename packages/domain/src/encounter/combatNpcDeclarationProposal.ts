@@ -216,6 +216,12 @@ function structuralValidation(input: {
   if (declaration.actionId === "adjust_range_attack" && !declaration.adjustDistance) {
     return { reasons: ["source_identity_incomplete"], status: "legacy_incomplete" };
   }
+  if (
+    (declaration.actionId === "disarm" || declaration.actionId === "parry_disarm") &&
+    !declaration.disarm
+  ) {
+    return { reasons: ["source_identity_incomplete"], status: "legacy_incomplete" };
+  }
   return { reasons: [], status: "complete" };
 }
 

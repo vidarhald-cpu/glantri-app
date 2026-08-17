@@ -103,6 +103,7 @@ export function getCombatDeclarationActionLabel(actionId?: string): string {
 
 export function getCombatDeclarationAttackPhases(input: {
   actionId?: string;
+  disarmPhase?: CombatDeclarationPhaseKey;
   secondaryActionId?: string;
 }): CombatDeclarationPhaseKey[] {
   switch (input.actionId) {
@@ -116,6 +117,8 @@ export function getCombatDeclarationAttackPhases(input: {
       return ["phase2"];
     case "adjust_range_attack":
       return ["phase2"];
+    case "disarm":
+      return input.disarmPhase ? [input.disarmPhase] : [];
     default:
       return [];
   }

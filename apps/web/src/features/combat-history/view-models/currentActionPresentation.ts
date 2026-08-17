@@ -34,6 +34,7 @@ export interface CurrentActionCommandDescriptor {
   readonly declarationId?: string;
   readonly declaredOpponentParticipantId?: string;
   readonly defenderParticipantId?: string;
+  readonly disarmAttemptId?: string;
   readonly encounterId: string;
   readonly executionGroupId?: string;
   readonly expectedBoundary: CombatProgressionBoundaryKind;
@@ -46,7 +47,7 @@ export interface CurrentActionCommandDescriptor {
   readonly opportunityId?: string;
   readonly offensiveParryAttemptId?: string;
   readonly observationAttemptId?: string;
-  readonly parryPurpose?: "ordinary_defense" | "offensive_parry";
+  readonly parryPurpose?: "ordinary_defense" | "offensive_parry" | "parry_disarm";
   readonly parryResultId?: string;
   readonly parrySourceId?: string;
   readonly pairId?: string;
@@ -225,6 +226,9 @@ const TASK_ACTION_NAMES: Record<CombatProgressionTaskKind, string> = {
   break_off_commit: "Break Off",
   break_off_escapee_roll: "Break Off",
   break_off_review: "Break Off",
+  disarm_actor_roll: "Disarm",
+  disarm_holder_roll: "Disarm",
+  disarm_commit: "Disarm",
   combat_experience: "Combat Experience",
   continued_contact_maintenance_roll: "Continued Contact",
   commit_initiative: "Initiative",
@@ -570,6 +574,11 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
       return "Roll Dodge";
     case "break_off_commit":
       return "Commit Break Off";
+    case "disarm_actor_roll":
+    case "disarm_holder_roll":
+      return "Roll Disarm";
+    case "disarm_commit":
+      return "Commit Disarm";
     case "parry":
       return task.identity.parryPurpose === "offensive_parry"
         ? "Roll Offensive Parry"
@@ -656,6 +665,11 @@ function requiredNowFor(
       return "Roll Dodge.";
     case "break_off_commit":
       return "Commit the Break Off result.";
+    case "disarm_actor_roll":
+    case "disarm_holder_roll":
+      return "Roll weapon control for Disarm.";
+    case "disarm_commit":
+      return "Commit the Disarm result.";
     case "parry":
       return task.identity.parryPurpose === "offensive_parry"
         ? "Attempt the parry."
@@ -920,6 +934,7 @@ export function buildCurrentActionPresentation(
     declarationId: task.identity.declarationId,
     declaredOpponentParticipantId: task.identity.declaredOpponentParticipantId,
     defenderParticipantId: task.identity.defenderParticipantId,
+    disarmAttemptId: task.identity.disarmAttemptId,
     encounterId: input.encounterId,
     executionGroupId: task.executionGroupId,
     expectedBoundary: input.progression.boundary.kind,

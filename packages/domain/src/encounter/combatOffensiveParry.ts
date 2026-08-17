@@ -6,14 +6,18 @@ import {
 } from "./combatModifierLifecycle";
 
 const idSchema = z.string().min(1);
-const processModifierEffectSchema = z.unknown().refine(
-  (value) => canonicalCombatModifierEffectSchema.safeParse(value).success,
-  "Invalid process modifier lifecycle.",
-);
-const processModifierTransitionSchema = z.unknown().refine(
-  (value) => canonicalCombatModifierLifecycleTransitionSchema.safeParse(value).success,
-  "Invalid process modifier transition.",
-);
+const processModifierEffectSchema = z
+  .unknown()
+  .refine(
+    (value) => canonicalCombatModifierEffectSchema.safeParse(value).success,
+    "Invalid process modifier lifecycle.",
+  );
+const processModifierTransitionSchema = z
+  .unknown()
+  .refine(
+    (value) => canonicalCombatModifierLifecycleTransitionSchema.safeParse(value).success,
+    "Invalid process modifier transition.",
+  );
 
 export const offensiveParryRollPurposeSchema = z.enum([
   "offensive_parry_brawling",
@@ -21,7 +25,11 @@ export const offensiveParryRollPurposeSchema = z.enum([
 ]);
 export type OffensiveParryRollPurpose = z.infer<typeof offensiveParryRollPurposeSchema>;
 
-export const combatParryPurposeSchema = z.enum(["ordinary_defense", "offensive_parry"]);
+export const combatParryPurposeSchema = z.enum([
+  "ordinary_defense",
+  "offensive_parry",
+  "parry_disarm",
+]);
 export type CombatParryPurpose = z.infer<typeof combatParryPurposeSchema>;
 
 export const offensiveParryBrawlingRollSchema = z.object({

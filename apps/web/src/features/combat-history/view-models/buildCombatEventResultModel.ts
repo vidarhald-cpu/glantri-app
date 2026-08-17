@@ -76,6 +76,10 @@ const EVENT_TITLES: Record<ProjectedCombatHistoryEvent["type"], string> = {
   break_off_roll: "Break Off Dodge roll",
   break_off_result: "Break Off result",
   break_off_committed: "Break Off committed",
+  disarm_opened: "Disarm contact",
+  disarm_roll: "Disarm roll",
+  disarm_result: "Disarm result",
+  disarm_committed: "Disarm committed",
 };
 
 function humanize(key: string): string {
@@ -301,6 +305,39 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
           factValue(event, "escaped") === true
             ? "Break Off committed; the pair disengaged."
             : "Break Off committed; the pair remains engaged.",
+      };
+    case "disarm_opened":
+      return {
+        outcomeRows: [],
+        summary: `${actor ?? "The acting combatant"} established weapon contact for Disarm.`,
+      };
+    case "disarm_roll": {
+      const total = factLabel(factValue(event, "finalTotal"));
+      return {
+        outcomeRows: resultRow(event, total ? `Result: ${total}` : undefined),
+        summary: `${roller ?? "Participant"} rolled for Disarm.`,
+      };
+    }
+    case "disarm_result": {
+      const difference = factLabel(factValue(event, "difference"));
+      const result = factLabel(factValue(event, "tableRowId", "result"));
+      return {
+        outcomeRows: resultRow(
+          event,
+          [result, difference ? `difference ${difference}` : undefined].filter(Boolean).join(" · "),
+        ),
+        summary: result ? `Disarm result: ${result}.` : "Disarm produced no effect.",
+      };
+    }
+    case "disarm_committed":
+      return {
+        outcomeRows: [],
+        summary:
+          factValue(event, "disarmed") === true
+            ? "Disarm committed; the exact weapon was dropped."
+            : factValue(event, "unbalanced") === true
+              ? "Disarm committed; the holder is Unbalanced."
+              : "Disarm committed with no direct damage.",
       };
     case "hit_location": {
       const location = factLabel(factValue(event, "selectedHitLocation", "hitLocation"));
