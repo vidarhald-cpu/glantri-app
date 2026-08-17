@@ -105,16 +105,43 @@ describe("importThemistogenesWeapons", () => {
     expect(knife?.attackModes?.map((mode) => mode.id)).toEqual(["mode-1", "mode-2", "mode-3"]);
     expect(knife?.attackModes?.[2]).toMatchObject({
       id: "mode-3",
+      attackType: "thrown",
+      canonicalMeleeMode: null,
+      allowsRepeatedRoundAttack: false,
       ob: 2,
       dmb: -1,
       crit: "DP",
       armorModifier: "A",
+      initiative: 0,
+      range: "0.0",
+      sourceMetadata: {
+        sheet: "Weapon2",
+      },
     });
   });
 
-  it("keeps ambiguous thrown rows separate when the workbook does not name a single exact base weapon", () => {
+  it("merges the approved Javelin and heavy two-handed Spear mappings", () => {
+    expect(templatesById["weapon-template-t-javelin"]).toBeUndefined();
+    expect(templatesById["weapon-template-t-spear"]).toBeUndefined();
+    expect(templatesById["weapon-template-1-h-javelin"]?.attackModes?.at(-1)).toMatchObject({
+      attackType: "thrown",
+      sourceMetadata: { sheet: "Weapon2" },
+    });
+    expect(templatesById["weapon-template-spear"]?.name).toBe("2-h Spear");
+    expect(templatesById["weapon-template-spear"]?.tags).toContain("polearm");
+    expect(templatesById["weapon-template-spear"]?.attackModes?.at(-1)).toMatchObject({
+      attackType: "thrown",
+      sourceMetadata: { sheet: "Weapon2" },
+    });
+  });
+
+  it("keeps the standalone throwing dagger separate and explicitly typed", () => {
     expect(templatesById["weapon-template-t-th-dagger"]?.name).toBe("T. Th. dagger");
-    expect(templatesById["weapon-template-t-javelin"]?.name).toBe("T. Javelin");
-    expect(templatesById["weapon-template-t-spear"]?.name).toBe("T. Spear");
+    expect(templatesById["weapon-template-t-th-dagger"]?.attackModes?.[0]).toMatchObject({
+      attackType: "thrown",
+      canonicalMeleeMode: null,
+      allowsRepeatedRoundAttack: false,
+      sourceMetadata: { sheet: "Weapon2" },
+    });
   });
 });

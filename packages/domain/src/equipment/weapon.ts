@@ -5,10 +5,16 @@ import type { WeaponAttackMode } from "./types";
 export const weaponSchema = z.object({
   baseOb: z.number(),
   id: z.string(),
-  name: z.string()
+  name: z.string(),
 });
 
 export type Weapon = z.infer<typeof weaponSchema>;
+
+export function isThrownWeaponAttackMode(
+  mode: Pick<WeaponAttackMode, "attackType"> | undefined,
+): boolean {
+  return mode?.attackType === "thrown";
+}
 
 /** Same-source Double Attack is opt-in and restricted to an explicit melee thrust mode. */
 export function canRepeatWeaponAttackInRound(
@@ -19,11 +25,15 @@ export function canRepeatWeaponAttackInRound(
 
 export type PreferredAttackModeFailure = "no_legal_modes" | "selected_mode_invalid";
 
-export interface AttackModeSelectionCandidate
-  extends Pick<
-    WeaponAttackMode,
-    "allowsRepeatedRoundAttack" | "canonicalMeleeMode" | "id" | "isPrimaryAttack" | "order"
-  > {}
+export interface AttackModeSelectionCandidate extends Pick<
+  WeaponAttackMode,
+  | "allowsRepeatedRoundAttack"
+  | "attackType"
+  | "canonicalMeleeMode"
+  | "id"
+  | "isPrimaryAttack"
+  | "order"
+> {}
 
 export interface PreferredAttackModeResolution<TMode extends AttackModeSelectionCandidate> {
   legalModes: TMode[];
@@ -38,6 +48,7 @@ export interface PreferredAttackModeResolution<TMode extends AttackModeSelection
  * store the returned mode id and never call this resolver during replay.
  */
 export function resolvePreferredAttackMode<TMode extends AttackModeSelectionCandidate>(input: {
+  allowThrownAttack?: boolean;
   requireRepeatedRoundAttack?: boolean;
   selectedModeId?: string;
   weapon: { attackModes?: readonly TMode[] | null };
@@ -52,7 +63,8 @@ export function resolvePreferredAttackMode<TMode extends AttackModeSelectionCand
     .map(({ mode }) => mode);
   const legalModes = orderedModes.filter(
     (mode) =>
-      mode.canonicalMeleeMode != null &&
+      (mode.canonicalMeleeMode != null ||
+        (input.allowThrownAttack && isThrownWeaponAttackMode(mode))) &&
       (!input.requireRepeatedRoundAttack || canRepeatWeaponAttackInRound(mode)),
   );
 

@@ -48,7 +48,7 @@ if (!process.env.DATABASE_URL_TEST) {
       const equipmentService = new CharacterEquipmentWriteService(itemRepository);
       await equipmentService.ensureCharacterEquipmentInitialized(character.id);
       await equipmentService.ensureCharacterEquipmentInitialized(recipient.id);
-      const item = await equipmentService.createCampaignEquipmentItem({
+      const createdItem = await equipmentService.createCampaignEquipmentItem({
         campaignId: campaign.id,
         displayName: `Atomic dagger ${suffix}`,
         holderCharacterId: character.id,
@@ -61,6 +61,8 @@ if (!process.env.DATABASE_URL_TEST) {
         },
         templateId: "weapon-template-dagger",
       });
+      await equipmentService.setCharacterActiveWeapon(character.id, "primary", createdItem.id);
+      const item = (await itemRepository.getCanonicalEquipmentItemById(createdItem.id))!;
 
       const encounterId = `atomic-encounter-${suffix}`;
       const base = encounterSessionSchema.parse({
@@ -244,6 +246,239 @@ if (!process.env.DATABASE_URL_TEST) {
           await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
         ).toBe(1);
       }
+    });
+
+    it("atomically drops the exact thrown Item on attack execution and restores it on exact undo", async () => {
+      for (const boundary of ["item", "encounter", "event"] as const) {
+        const current = await fixture(`thrown-rollback-${boundary}`);
+        const commandId = `thrown-command-${boundary}`;
+        const cursor = current.persisted.combatRoundState!.currentCursor;
+        const session = encounterSessionSchema.parse({
+          ...current.persisted,
+          combatRoundState: {
+            ...current.persisted.combatRoundState!,
+            commands: [
+              ...current.persisted.combatRoundState!.commands,
+              {
+                afterCursor: cursor,
+                beforeCursor: cursor,
+                createdAt: "2026-08-16T10:04:00.000Z",
+                facts: { attackResult: boundary === "item" ? "miss" : "hit" },
+                id: commandId,
+                participantId: `participant-thrown-rollback-${boundary}`,
+                roundNumber: 1,
+                type: "roll_attack",
+              },
+            ],
+          },
+          updatedAt: "2026-08-16T10:04:00.000Z",
+        });
+        const beforeItem = await current.itemRepository.getCanonicalEquipmentItemById(
+          current.item.id,
+        );
+        const beforeLoadouts = await current.itemRepository.getCharacterLoadouts(
+          current.character.id,
+        );
+        const beforeEncounter = await prisma!.encounter.findUniqueOrThrow({
+          include: { activeCombatState: true },
+          where: { id: current.encounterId },
+        });
+        const service = new CombatItemInteractionService(
+          current.itemRepository,
+          prisma!,
+          (reached) => {
+            if (reached === boundary) throw new Error(`injected-thrown-${boundary}`);
+          },
+        );
+
+        await expect(
+          service.commitThrownWeaponAttack({
+            actorUserId: current.gm.id,
+            campaignId: current.campaign.id,
+            commandId,
+            encounterId: current.encounterId,
+            expectedEncounterRevision: current.persisted.updatedAt,
+            itemId: current.item.id,
+            ownerCharacterId: current.character.id,
+            roundNumber: 1,
+            scenarioId: current.scenario.id,
+            session,
+            templateId: current.item.templateId,
+          }),
+        ).rejects.toThrow(`injected-thrown-${boundary}`);
+
+        expect(await current.itemRepository.getCanonicalEquipmentItemById(current.item.id)).toEqual(
+          beforeItem,
+        );
+        expect(await current.itemRepository.getCharacterLoadouts(current.character.id)).toEqual(
+          beforeLoadouts,
+        );
+        const afterEncounter = await prisma!.encounter.findUniqueOrThrow({
+          include: { activeCombatState: true },
+          where: { id: current.encounterId },
+        });
+        expect(afterEncounter.updatedAt).toEqual(beforeEncounter.updatedAt);
+        expect(afterEncounter.activeCombatState?.stateJson).toEqual(
+          beforeEncounter.activeCombatState?.stateJson,
+        );
+        expect(
+          await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
+        ).toBe(0);
+      }
+
+      const current = await fixture("thrown-success");
+      const commandId = "thrown-command-success";
+      const cursor = current.persisted.combatRoundState!.currentCursor;
+      const session = encounterSessionSchema.parse({
+        ...current.persisted,
+        combatRoundState: {
+          ...current.persisted.combatRoundState!,
+          commands: [
+            ...current.persisted.combatRoundState!.commands,
+            {
+              afterCursor: cursor,
+              beforeCursor: cursor,
+              createdAt: "2026-08-16T10:04:00.000Z",
+              facts: { attackResult: "miss" },
+              id: commandId,
+              participantId: "participant-thrown-success",
+              roundNumber: 1,
+              type: "roll_attack",
+            },
+          ],
+        },
+        updatedAt: "2026-08-16T10:04:00.000Z",
+      });
+      const service = new CombatItemInteractionService(current.itemRepository, prisma!);
+      const committed = await service.commitThrownWeaponAttack({
+        actorUserId: current.gm.id,
+        campaignId: current.campaign.id,
+        commandId,
+        encounterId: current.encounterId,
+        expectedEncounterRevision: current.persisted.updatedAt,
+        itemId: current.item.id,
+        ownerCharacterId: current.character.id,
+        roundNumber: 1,
+        scenarioId: current.scenario.id,
+        session,
+        templateId: current.item.templateId,
+      });
+
+      expect(committed.item.item).toMatchObject({
+        holderCharacterId: null,
+        id: current.item.id,
+        isEquipped: false,
+        storageAssignment: null,
+      });
+      expect(
+        (await current.itemRepository.getCharacterLoadouts(current.character.id))[0]
+          ?.activePrimaryWeaponItemId,
+      ).toBeNull();
+      const persistedCommand = committed.encounter.combatRoundState!.commands.find(
+        (command) => command.id === commandId,
+      )!;
+      expect(persistedCommand.facts.thrownWeaponUndo).toMatchObject({
+        actionId: commandId,
+        itemBefore: { id: current.item.id },
+        ownerCharacterId: current.character.id,
+        version: 1,
+      });
+      expect(
+        await current.itemRepository.getCombatItemInteractionRecords(current.campaign.id),
+      ).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            item: expect.objectContaining({ holderCharacterId: null, id: current.item.id }),
+            presentEncounterId: current.encounterId,
+          }),
+        ]),
+      );
+
+      await expect(
+        service.commitThrownWeaponAttack({
+          actorUserId: current.gm.id,
+          campaignId: current.campaign.id,
+          commandId,
+          encounterId: current.encounterId,
+          expectedEncounterRevision: current.persisted.updatedAt,
+          itemId: current.item.id,
+          ownerCharacterId: current.character.id,
+          roundNumber: 1,
+          scenarioId: current.scenario.id,
+          session,
+          templateId: current.item.templateId,
+        }),
+      ).rejects.toBeInstanceOf(Error);
+      expect(await prisma!.characterEquipmentItem.count({ where: { id: current.item.id } })).toBe(
+        1,
+      );
+      expect(
+        await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
+      ).toBe(1);
+
+      const restoredSession = encounterSessionSchema.parse({
+        ...committed.encounter,
+        combatRoundState: {
+          ...committed.encounter.combatRoundState!,
+          commands: committed.encounter.combatRoundState!.commands.filter(
+            (command) => command.id !== commandId,
+          ),
+        },
+        updatedAt: "2026-08-16T10:05:00.000Z",
+      });
+      const exactUndo = persistedCommand.facts.thrownWeaponUndo as Record<string, unknown>;
+      await expect(
+        service.commitThrownWeaponAttackUndo({
+          actorUserId: current.gm.id,
+          campaignId: current.campaign.id,
+          encounterId: current.encounterId,
+          expectedEncounterRevision: committed.encounter.updatedAt,
+          scenarioId: current.scenario.id,
+          session: restoredSession,
+          undos: [
+            {
+              commandId,
+              undo: { ...exactUndo, ownerCharacterId: current.recipient.id } as never,
+            },
+          ],
+        }),
+      ).rejects.toBeInstanceOf(Error);
+      expect(
+        await current.itemRepository.getCanonicalEquipmentItemById(current.item.id),
+      ).toMatchObject({ holderCharacterId: null, id: current.item.id });
+      expect(
+        await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
+      ).toBe(1);
+
+      await service.commitThrownWeaponAttackUndo({
+        actorUserId: current.gm.id,
+        campaignId: current.campaign.id,
+        encounterId: current.encounterId,
+        expectedEncounterRevision: committed.encounter.updatedAt,
+        scenarioId: current.scenario.id,
+        session: restoredSession,
+        undos: [
+          {
+            commandId,
+            undo: exactUndo as never,
+          },
+        ],
+      });
+
+      expect(
+        await current.itemRepository.getCanonicalEquipmentItemById(current.item.id),
+      ).toMatchObject({
+        holderCharacterId: current.character.id,
+        id: current.item.id,
+        isEquipped: true,
+      });
+      expect(
+        (await current.itemRepository.getCharacterLoadouts(current.character.id))[0]
+          ?.activePrimaryWeaponItemId,
+      ).toBe(current.item.id);
+      expect(await prisma!.characterEquipmentItem.count({ where: { id: current.item.id } })).toBe(
+        1,
+      );
     });
 
     it("scopes idempotency to the exact Encounter fingerprint and rejects forged mismatches", async () => {

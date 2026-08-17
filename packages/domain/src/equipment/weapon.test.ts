@@ -69,7 +69,8 @@ describe("resolvePreferredAttackMode", () => {
   it("keeps thrown modes distinct and fails safely when no melee mode is eligible", () => {
     const thrownOnly = weapon([
       {
-        allowsRepeatedRoundAttack: true,
+        allowsRepeatedRoundAttack: false,
+        attackType: "thrown",
         canonicalMeleeMode: null,
         id: "throw",
         label: "Throw",
@@ -79,6 +80,36 @@ describe("resolvePreferredAttackMode", () => {
 
     expect(
       resolvePreferredAttackMode({ requireRepeatedRoundAttack: true, weapon: thrownOnly }),
+    ).toMatchObject({ legalModes: [], reason: "no_legal_modes" });
+    expect(resolvePreferredAttackMode({ weapon: thrownOnly })).toMatchObject({
+      legalModes: [],
+      reason: "no_legal_modes",
+    });
+    expect(
+      resolvePreferredAttackMode({
+        allowThrownAttack: true,
+        selectedModeId: "throw",
+        weapon: thrownOnly,
+      }),
+    ).toMatchObject({ mode: { id: "throw" } });
+  });
+
+  it("does not treat an untyped non-melee mode as thrown", () => {
+    const unresolved = weapon([
+      {
+        canonicalMeleeMode: null,
+        id: "unresolved",
+        label: "Unknown",
+        provenance: "manual",
+      },
+    ]);
+
+    expect(
+      resolvePreferredAttackMode({
+        allowThrownAttack: true,
+        selectedModeId: "unresolved",
+        weapon: unresolved,
+      }),
     ).toMatchObject({ legalModes: [], reason: "no_legal_modes" });
   });
 

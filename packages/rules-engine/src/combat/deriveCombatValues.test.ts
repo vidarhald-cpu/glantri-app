@@ -67,7 +67,9 @@ describe("getWeaponSkillXp", () => {
   });
 
   it("returns null when template has no weaponSkill", () => {
-    expect(getWeaponSkillXp({} as never, makeCharacterInputs({ combatSkillXpByName: { Sword: 5 } }))).toBeNull();
+    expect(
+      getWeaponSkillXp({} as never, makeCharacterInputs({ combatSkillXpByName: { Sword: 5 } })),
+    ).toBeNull();
   });
 
   it("returns xp value by weapon skill name", () => {
@@ -99,7 +101,9 @@ describe("getSkillXpByName", () => {
   });
 
   it("returns xp for a known skill", () => {
-    expect(getSkillXpByName("Throwing", makeCharacterInputs({ combatSkillXpByName: { Throwing: 7 } }))).toBe(7);
+    expect(
+      getSkillXpByName("Throwing", makeCharacterInputs({ combatSkillXpByName: { Throwing: 7 } })),
+    ).toBe(7);
   });
 });
 
@@ -112,32 +116,88 @@ describe("getGripSummary", () => {
   const shield = {} as never;
 
   it("returns Unarmed when nothing equipped", () => {
-    expect(getGripSummary({ primaryTemplate: null, secondaryTemplate: null, missileTemplate: null, shieldTemplate: null })).toBe("Unarmed");
+    expect(
+      getGripSummary({
+        primaryTemplate: null,
+        secondaryTemplate: null,
+        missileTemplate: null,
+        shieldTemplate: null,
+      }),
+    ).toBe("Unarmed");
   });
 
   it("returns One-handed for single one-handed weapon", () => {
-    expect(getGripSummary({ primaryTemplate: sword, secondaryTemplate: null, missileTemplate: null, shieldTemplate: null })).toBe("One-handed");
+    expect(
+      getGripSummary({
+        primaryTemplate: sword,
+        secondaryTemplate: null,
+        missileTemplate: null,
+        shieldTemplate: null,
+      }),
+    ).toBe("One-handed");
   });
 
   it("returns One-handed + shield", () => {
-    expect(getGripSummary({ primaryTemplate: sword, secondaryTemplate: null, missileTemplate: null, shieldTemplate: shield })).toBe("One-handed + shield");
+    expect(
+      getGripSummary({
+        primaryTemplate: sword,
+        secondaryTemplate: null,
+        missileTemplate: null,
+        shieldTemplate: shield,
+      }),
+    ).toBe("One-handed + shield");
   });
 
   it("returns Two-handed primary for two-handed weapon", () => {
-    expect(getGripSummary({ primaryTemplate: twoHander, secondaryTemplate: null, missileTemplate: null, shieldTemplate: null })).toBe("Two-handed primary");
-    expect(getGripSummary({ primaryTemplate: polearm, secondaryTemplate: null, missileTemplate: null, shieldTemplate: null })).toBe("Two-handed primary");
+    expect(
+      getGripSummary({
+        primaryTemplate: twoHander,
+        secondaryTemplate: null,
+        missileTemplate: null,
+        shieldTemplate: null,
+      }),
+    ).toBe("Two-handed primary");
+    expect(
+      getGripSummary({
+        primaryTemplate: polearm,
+        secondaryTemplate: null,
+        missileTemplate: null,
+        shieldTemplate: null,
+      }),
+    ).toBe("Two-handed primary");
   });
 
   it("returns Dual-wield for two weapons without shield", () => {
-    expect(getGripSummary({ primaryTemplate: sword, secondaryTemplate: dagger, missileTemplate: null, shieldTemplate: null })).toBe("Dual-wield / paired weapons ready");
+    expect(
+      getGripSummary({
+        primaryTemplate: sword,
+        secondaryTemplate: dagger,
+        missileTemplate: null,
+        shieldTemplate: null,
+      }),
+    ).toBe("Dual-wield / paired weapons ready");
   });
 
   it("returns Missile ready when only missile weapon is ready", () => {
-    expect(getGripSummary({ primaryTemplate: null, secondaryTemplate: null, missileTemplate: bow, shieldTemplate: null })).toBe("Missile ready");
+    expect(
+      getGripSummary({
+        primaryTemplate: null,
+        secondaryTemplate: null,
+        missileTemplate: bow,
+        shieldTemplate: null,
+      }),
+    ).toBe("Missile ready");
   });
 
   it("returns Shield-ready when only shield is equipped", () => {
-    expect(getGripSummary({ primaryTemplate: null, secondaryTemplate: null, missileTemplate: null, shieldTemplate: shield })).toBe("Shield-ready, otherwise unarmed");
+    expect(
+      getGripSummary({
+        primaryTemplate: null,
+        secondaryTemplate: null,
+        missileTemplate: null,
+        shieldTemplate: shield,
+      }),
+    ).toBe("Shield-ready, otherwise unarmed");
   });
 });
 
@@ -159,11 +219,17 @@ describe("getDmbValue", () => {
   });
 
   it("formats numeric dmbFormula", () => {
-    expect(getDmbValue({ dmbFormula: { kind: "numeric", numericValue: 4, raw: "4" } } as never)).toBe("4");
+    expect(
+      getDmbValue({ dmbFormula: { kind: "numeric", numericValue: 4, raw: "4" } } as never),
+    ).toBe("4");
   });
 
   it("formats dice dmbFormula", () => {
-    expect(getDmbValue({ dmbFormula: { kind: "dice", diceCount: 1, diceSides: 6, raw: "1d6" } } as never)).toBe("1d6");
+    expect(
+      getDmbValue({
+        dmbFormula: { kind: "dice", diceCount: 1, diceSides: 6, raw: "1d6" },
+      } as never),
+    ).toBe("1d6");
   });
 });
 
@@ -173,24 +239,30 @@ describe("getDerivedInitiativeValue · workbook golden values", () => {
   });
 
   it("returns raw template initiative when characterInputs are absent", () => {
-    expect(getDerivedInitiativeValue({ template: { handlingClass: "one_handed", initiative: 3 } as never })).toBe(3);
+    expect(
+      getDerivedInitiativeValue({
+        template: { handlingClass: "one_handed", initiative: 3 } as never,
+      }),
+    ).toBe(3);
   });
 
   it("returns — when template has no initiative and no characterInputs", () => {
-    expect(getDerivedInitiativeValue({ template: { handlingClass: "one_handed" } as never })).toBe("—");
+    expect(getDerivedInitiativeValue({ template: { handlingClass: "one_handed" } as never })).toBe(
+      "—",
+    );
   });
 
-  it(
-    "Themistogenes 1.07.xlsx → Calculations!I19: melee initiative dex-gm 3, skill 15, weapon-init 1 → 5",
-    () => {
-      expect(
-        getDerivedInitiativeValue({
-          template: { handlingClass: "one_handed", initiative: 1, weaponSkill: "Sword" } as never,
-          characterInputs: makeCharacterInputs({ dexterityGm: 3, combatSkillXpByName: { Sword: 15 } }),
+  it("Themistogenes 1.07.xlsx → Calculations!I19: melee initiative dex-gm 3, skill 15, weapon-init 1 → 5", () => {
+    expect(
+      getDerivedInitiativeValue({
+        template: { handlingClass: "one_handed", initiative: 1, weaponSkill: "Sword" } as never,
+        characterInputs: makeCharacterInputs({
+          dexterityGm: 3,
+          combatSkillXpByName: { Sword: 15 },
         }),
-      ).toBe(5);
-    },
-  );
+      }),
+    ).toBe(5);
+  });
 
   it("missile weapon uses initiative + dexterityGm directly", () => {
     expect(
@@ -210,33 +282,51 @@ describe("getDerivedInitiativeValue · workbook golden values", () => {
       }),
     ).toBe(5);
   });
+
+  it("uses the explicit thrown-mode initiative instead of the base melee initiative", () => {
+    expect(
+      getDerivedInitiativeValue({
+        attackMode: { initiative: -2 },
+        template: { handlingClass: "two_handed", initiative: 1 } as never,
+        characterInputs: makeCharacterInputs({
+          combatSkillXpByName: { Polearm: 20, Throwing: 4 },
+          dexterityGm: 3,
+        }),
+        treatAsThrownUse: true,
+      }),
+    ).toBe(1);
+  });
 });
 
 describe("getDerivedObValue · workbook golden values", () => {
   const alloc = defaultCombatAllocationState;
 
   it("returns — for null mode", () => {
-    expect(getDerivedObValue({ allocationInputs: alloc, armorTemplate: null, mode: null, template: null })).toBe("—");
+    expect(
+      getDerivedObValue({
+        allocationInputs: alloc,
+        armorTemplate: null,
+        mode: null,
+        template: null,
+      }),
+    ).toBe("—");
   });
 
-  it(
-    "Themistogenes 1.07.xlsx → Weapon1!A10:O10 (scimitar-like ob 3): dex-gm 3, str-gm 3, skill 15, weapon-ob 3 → finalOb 16",
-    () => {
-      expect(
-        getDerivedObValue({
-          allocationInputs: alloc,
-          armorTemplate: null,
-          characterInputs: makeCharacterInputs({
-            dexterityGm: 3,
-            strengthGm: 3,
-            combatSkillXpByName: { Scimitar: 15 },
-          }),
-          mode: { ob: 3 } as never,
-          template: { handlingClass: "one_handed", weaponSkill: "Scimitar" } as never,
+  it("Themistogenes 1.07.xlsx → Weapon1!A10:O10 (scimitar-like ob 3): dex-gm 3, str-gm 3, skill 15, weapon-ob 3 → finalOb 16", () => {
+    expect(
+      getDerivedObValue({
+        allocationInputs: alloc,
+        armorTemplate: null,
+        characterInputs: makeCharacterInputs({
+          dexterityGm: 3,
+          strengthGm: 3,
+          combatSkillXpByName: { Scimitar: 15 },
         }),
-      ).toBe(16);
-    },
-  );
+        mode: { ob: 3 } as never,
+        template: { handlingClass: "one_handed", weaponSkill: "Scimitar" } as never,
+      }),
+    ).toBe(16);
+  });
 
   it("falls back to base OB formula when characterInputs are missing", () => {
     expect(
@@ -250,7 +340,10 @@ describe("getDerivedObValue · workbook golden values", () => {
   });
 
   it("applies situational attack modifier from allocationInputs", () => {
-    const allocWithMod = { ...alloc, situationalModifiers: { ...alloc.situationalModifiers, attack: 5 } };
+    const allocWithMod = {
+      ...alloc,
+      situationalModifiers: { ...alloc.situationalModifiers, attack: 5 },
+    };
     const result = getDerivedObValue({
       allocationInputs: allocWithMod,
       armorTemplate: null,
@@ -332,23 +425,20 @@ describe("getDerivedDmbValue · workbook golden values", () => {
     expect(getDerivedDmbValue({ armorTemplate: null, mode: null, template: null })).toBe("—");
   });
 
-  it(
-    "Themistogenes 1.07.xlsx → Weapon1!A10:O10 (scimitar-like ob 3, dmb 3): dex-gm 3, str-gm 3, skill 15 → finalDmb 6",
-    () => {
-      expect(
-        getDerivedDmbValue({
-          armorTemplate: null,
-          characterInputs: makeCharacterInputs({
-            dexterityGm: 3,
-            strengthGm: 3,
-            combatSkillXpByName: { Scimitar: 15 },
-          }),
-          mode: { ob: 3, dmb: 3 } as never,
-          template: { handlingClass: "one_handed", weaponSkill: "Scimitar" } as never,
+  it("Themistogenes 1.07.xlsx → Weapon1!A10:O10 (scimitar-like ob 3, dmb 3): dex-gm 3, str-gm 3, skill 15 → finalDmb 6", () => {
+    expect(
+      getDerivedDmbValue({
+        armorTemplate: null,
+        characterInputs: makeCharacterInputs({
+          dexterityGm: 3,
+          strengthGm: 3,
+          combatSkillXpByName: { Scimitar: 15 },
         }),
-      ).toBe(6);
-    },
-  );
+        mode: { ob: 3, dmb: 3 } as never,
+        template: { handlingClass: "one_handed", weaponSkill: "Scimitar" } as never,
+      }),
+    ).toBe(6);
+  });
 
   it("thrown use: returns strengthGm + mode.dmb when both present", () => {
     expect(
@@ -365,7 +455,13 @@ describe("getDerivedDmbValue · workbook golden values", () => {
 
 describe("getWorkbookOneItemDefensePair", () => {
   it("returns — for both values when inputs are missing", () => {
-    expect(getWorkbookOneItemDefensePair({ characterInputs: undefined, encumbranceLevel: null, equipmentModifier: 0 })).toEqual({ db: "—", dm: "—" });
+    expect(
+      getWorkbookOneItemDefensePair({
+        characterInputs: undefined,
+        encumbranceLevel: null,
+        equipmentModifier: 0,
+      }),
+    ).toEqual({ db: "—", dm: "—" });
   });
 
   it("returns — when encumbranceLevel is null even with character inputs", () => {
@@ -381,7 +477,9 @@ describe("getWorkbookOneItemDefensePair", () => {
 
 describe("getWorkbookWeaponRowParry · workbook golden values", () => {
   it("returns — when characterInputs are absent", () => {
-    expect(getWorkbookWeaponRowParry({ armorTemplate: null, template: { parry: -1 } as never })).toBe("—");
+    expect(
+      getWorkbookWeaponRowParry({ armorTemplate: null, template: { parry: -1 } as never }),
+    ).toBe("—");
   });
 
   it("returns — when template has no parry modifier", () => {
@@ -394,23 +492,22 @@ describe("getWorkbookWeaponRowParry · workbook golden values", () => {
     ).toBe("—");
   });
 
-  it(
-    "Themistogenes 1.07.xlsx → Parry column: dex-gm 3, parry-skill 13, weapon-parry -1 → finalParry 10",
-    () => {
-      expect(
-        getWorkbookWeaponRowParry({
-          armorTemplate: null,
-          characterInputs: makeCharacterInputs({ dexterityGm: 3, parryCombatSkillXp: 13 }),
-          template: { parry: -1 } as never,
-        }),
-      ).toBe(10);
-    },
-  );
+  it("Themistogenes 1.07.xlsx → Parry column: dex-gm 3, parry-skill 13, weapon-parry -1 → finalParry 10", () => {
+    expect(
+      getWorkbookWeaponRowParry({
+        armorTemplate: null,
+        characterInputs: makeCharacterInputs({ dexterityGm: 3, parryCombatSkillXp: 13 }),
+        template: { parry: -1 } as never,
+      }),
+    ).toBe(10);
+  });
 });
 
 describe("getWorkbookShieldRowParry", () => {
   it("returns — when characterInputs are absent", () => {
-    expect(getWorkbookShieldRowParry({ armorTemplate: null, shieldTemplate: { parry: 2 } as never })).toBe("—");
+    expect(
+      getWorkbookShieldRowParry({ armorTemplate: null, shieldTemplate: { parry: 2 } as never }),
+    ).toBe("—");
   });
 
   it("returns — when shield has no parry modifier", () => {
@@ -423,18 +520,15 @@ describe("getWorkbookShieldRowParry", () => {
     ).toBe("—");
   });
 
-  it(
-    "Themistogenes 1.07.xlsx → Shield parry column: dex-gm 3, parry-skill 13, shield-parry 2 → uses same formula as weapon parry",
-    () => {
-      const result = getWorkbookShieldRowParry({
-        armorTemplate: null,
-        characterInputs: makeCharacterInputs({ dexterityGm: 3, parryCombatSkillXp: 13 }),
-        shieldTemplate: { parry: 2 } as never,
-      });
-      expect(typeof result).toBe("number");
-      expect(result).toBeGreaterThan(0);
-    },
-  );
+  it("Themistogenes 1.07.xlsx → Shield parry column: dex-gm 3, parry-skill 13, shield-parry 2 → uses same formula as weapon parry", () => {
+    const result = getWorkbookShieldRowParry({
+      armorTemplate: null,
+      characterInputs: makeCharacterInputs({ dexterityGm: 3, parryCombatSkillXp: 13 }),
+      shieldTemplate: { parry: 2 } as never,
+    });
+    expect(typeof result).toBe("number");
+    expect(result).toBeGreaterThan(0);
+  });
 });
 
 describe("getWorkbookCombinedRowParry", () => {

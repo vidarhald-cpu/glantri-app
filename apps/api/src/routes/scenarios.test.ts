@@ -96,6 +96,10 @@ const mocks = vi.hoisted(() => {
     listEncounterAccessMetadataByScenario: vi.fn(),
     listScenarioEncounterManagementProjections: vi.fn(),
   };
+  const combatItemInteractionService = {
+    commitThrownWeaponAttack: vi.fn(),
+    commitThrownWeaponAttackUndo: vi.fn(),
+  };
   const updateEncounter = vi.fn();
   const encounterService = {
     commitCombatParticipantStateMutation: vi.fn(),
@@ -129,6 +133,7 @@ const mocks = vi.hoisted(() => {
     adminUser,
     campaignService,
     characterService,
+    combatItemInteractionService,
     combatStateReadService,
     encounterService,
     playerUser,
@@ -141,6 +146,7 @@ const mocks = vi.hoisted(() => {
 vi.mock("@glantri/database", () => ({
   CampaignService: vi.fn(() => mocks.campaignService),
   CharacterService: vi.fn(() => mocks.characterService),
+  CombatItemInteractionService: vi.fn(() => mocks.combatItemInteractionService),
   CombatStateReadService: vi.fn(() => mocks.combatStateReadService),
   EncounterCombatWriteError: class EncounterCombatWriteError extends Error {
     constructor(
@@ -17197,6 +17203,115 @@ describe("scenarios route contract", () => {
     ).toMatchObject({ authority: "canonical_scenario_state", effectiveOb: 1 });
   });
 
+  it("commits the exact canonical Item only when an explicit thrown-mode attack is rolled", async () => {
+    const baseState = makeOpenPhase1AttackRoundState({ snapshotWeaponName: "Dagger" });
+    const itemId = "item-character-1-weapon-template-dagger";
+    const source = {
+      attackModeId: "mode-3",
+      itemId,
+      sourceKind: "weapon" as const,
+      weaponInstanceId: itemId,
+      weaponSourceId: `weapon:${itemId}`,
+      weaponSourceSlot: "throwing" as const,
+      weaponTemplateId: "weapon-template-dagger",
+    };
+    const combatRoundState = {
+      ...baseState,
+      participants: baseState.participants.map((participant, index) =>
+        index === 0
+          ? {
+              ...participant,
+              declaration: {
+                ...participant.declaration,
+                attackOpportunities: buildCombatRoundDeclaredAttackOpportunities({
+                  actionId: "attack_parry",
+                  participantId: "encounter-participant-1",
+                  phaseContexts: {
+                    phase1: testCombatPhaseContext("encounter-participant-2"),
+                  },
+                  roundNumber: 1,
+                  sources: { phase1: source },
+                }),
+              },
+            }
+          : participant,
+      ),
+    };
+    const attackerSnapshot = makeCanonicalCombatCalculationSnapshot({
+      characterId: "character-1",
+      displayName: "The Gladiator",
+    });
+    attackerSnapshot.build.progression.skills.push({
+      category: "secondary",
+      categoryId: "combat",
+      groupId: "basic_missile_training",
+      secondaryRanks: 8,
+      skillId: "throwing",
+    });
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState,
+        participants: makeTwoCombatEncounterParticipants(),
+      },
+      participants: [
+        {
+          characterId: "character-1",
+          id: "participant-1",
+          snapshot: attackerSnapshot,
+        },
+        { controlledByUserId: "other-player", id: "participant-2" },
+      ],
+      user: mocks.playerUser,
+    });
+    mocks.combatItemInteractionService.commitThrownWeaponAttack.mockImplementation(
+      async (input: { session: EncounterSession }) => ({ encounter: input.session }),
+    );
+    const app = await buildScenarioTestApp();
+
+    expect(mocks.combatItemInteractionService.commitThrownWeaponAttack).not.toHaveBeenCalled();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "attack_parry",
+        attackIndex: 1,
+        attackModeId: "mode-3",
+        declarationId: "round:1:participant:encounter-participant-1:declaration",
+        defenderScenarioParticipantId: "participant-2",
+        opportunityId: "round:1:participant:encounter-participant-1:phase1:attack_1",
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+        weaponSourceId: `weapon:${itemId}`,
+        weaponSourceSlot: "throwing",
+        weaponTemplateId: "weapon-template-dagger",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(mocks.encounterService.updateCombatEncounter).not.toHaveBeenCalled();
+    expect(mocks.combatItemInteractionService.commitThrownWeaponAttack).toHaveBeenCalledWith(
+      expect.objectContaining({
+        campaignId: "campaign-1",
+        encounterId: "encounter-1",
+        itemId,
+        ownerCharacterId: "character-1",
+        templateId: "weapon-template-dagger",
+      }),
+    );
+    const committedInput = mocks.combatItemInteractionService.commitThrownWeaponAttack.mock
+      .calls[0]?.[0] as { commandId: string; session: EncounterSession };
+    expect(committedInput.commandId).toBeTruthy();
+    expect(committedInput.session.combatRoundState?.commands.at(-1)).toMatchObject({
+      id: committedInput.commandId,
+      facts: expect.objectContaining({
+        attackModeId: "mode-3",
+        weaponSourceId: `weapon:${itemId}`,
+      }),
+      type: "roll_attack",
+    });
+  });
+
   it.each([
     ["player", mocks.playerUser],
     ["GM proxy", mocks.adminUser],
@@ -19553,6 +19668,25 @@ describe("scenarios route contract", () => {
       state: initializeCombatRoundState({ encounter: combatEncounter }),
       submittedBy: "gm",
     });
+    const afterRelevantAttackWithPrivateThrownUndo = {
+      ...afterRelevantAttack,
+      commands: afterRelevantAttack.commands.map((command) =>
+        command.type === "roll_attack"
+          ? {
+              ...command,
+              facts: {
+                ...command.facts,
+                thrownWeaponUndo: {
+                  actionId: command.id,
+                  itemAfterRevision: "private-item-revision",
+                  itemBefore: { id: "private-thrown-item" },
+                  version: 1,
+                },
+              },
+            }
+          : command,
+      ),
+    };
     const unrelatedAttack = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
       attackerParticipantId: "encounter-participant-3",
@@ -19572,7 +19706,7 @@ describe("scenarios route contract", () => {
       },
       participantId: "encounter-participant-3",
       result: unrelatedAttack,
-      state: afterRelevantAttack,
+      state: afterRelevantAttackWithPrivateThrownUndo,
       submittedBy: "gm",
     });
     const afterUnrelatedParry = recordCombatRoundParryResult({
@@ -19720,6 +19854,8 @@ describe("scenarios route contract", () => {
     expect(JSON.stringify(responseRoundState.phaseResolutionResults)).not.toContain(
       "secret-gm-review",
     );
+    expect(JSON.stringify(responseRoundState)).not.toContain("private-thrown-item");
+    expect(JSON.stringify(responseRoundState)).not.toContain("private-item-revision");
     expect(
       responseRoundState.participants.find(
         (participant: { participantId: string }) =>

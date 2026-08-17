@@ -58,6 +58,8 @@ export const CanonicalMeleeModeSchema = z.enum(["slash", "strike", "thrust"]);
 
 export const WeaponAttackModeProvenanceSchema = z.enum(["imported", "manual", "derived"]);
 
+export const WeaponAttackModeTypeSchema = z.enum(["melee", "missile", "thrown"]);
+
 export const EquipmentSpecialPropertiesSchema = z.object({
   magicEffects: z.array(z.string()).optional(),
   damageEffects: z.array(z.string()).optional(),
@@ -188,8 +190,18 @@ export const WeaponDurabilityProfileSchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
+export const ImportedWeaponSourceMetadataSchema = z.object({
+  workbook: z.string(),
+  sheet: z.string(),
+  row: z.number().int().positive(),
+  sourceRange: z.string(),
+  sourceColumns: z.record(z.string()),
+  rawRow: z.record(z.string()),
+});
+
 export const WeaponAttackModeSchema = z.object({
   id: z.string(),
+  attackType: WeaponAttackModeTypeSchema.nullable().optional(),
   label: z.string().nullable().optional(),
   order: z.number().int().nonnegative().nullable().optional(),
   canonicalMeleeMode: CanonicalMeleeModeSchema.nullable().optional(),
@@ -217,7 +229,10 @@ export const WeaponAttackModeSchema = z.object({
   crit: z.string().nullable().optional(),
   secondCrit: z.string().nullable().optional(),
   armorModifier: z.string().nullable().optional(),
+  initiative: z.number().nullable().optional(),
+  range: z.string().nullable().optional(),
   provenance: WeaponAttackModeProvenanceSchema,
+  sourceMetadata: ImportedWeaponSourceMetadataSchema.nullable().optional(),
   notes: z.string().nullable().optional(),
 });
 
@@ -229,15 +244,6 @@ export const WeaponEncumbranceFormulaSchema = z.object({
   ammoValue: z.number().nonnegative().nullable().optional(),
   specialValue: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
-});
-
-export const ImportedWeaponSourceMetadataSchema = z.object({
-  workbook: z.string(),
-  sheet: z.string(),
-  row: z.number().int().positive(),
-  sourceRange: z.string(),
-  sourceColumns: z.record(z.string()),
-  rawRow: z.record(z.string()),
 });
 
 export const ImportedShieldSourceMetadataSchema = z.object({

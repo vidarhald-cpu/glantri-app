@@ -11,10 +11,12 @@ import {
   CampaignService,
   CharacterService,
   CombatStateReadService,
+  CombatItemInteractionService,
   EncounterCombatWriteError,
   EncounterService,
   EncounterWriteError,
   ScenarioService,
+  type CombatThrownWeaponAttackUndo,
 } from "@glantri/database";
 import {
   buildPlayerSafeRoleplayStateForUser,
@@ -141,6 +143,7 @@ import {
   getParticipantCombatExperienceSkillTotalLookup,
   initializeCombatRoundState,
   isCombatStartExperienceRollRequired,
+  isThrownWeaponAttackMode,
   isCombatRoundCombatExperienceWindowOpen,
   isCombatStepAutomationProjectionWithinScope,
   isUserAssignedToEncounterMembership,
@@ -169,6 +172,7 @@ import {
   recordContinuedContactMaintenanceRoll,
   reviewCombatRoundDamageResult,
   recordCombatRoundParticipantStepReview,
+  refreshScenarioParticipantPersistentCombatModifiers,
   removeCombatRoundCombatExperienceCombatContextModifiers,
   removeCombatRoundCombatExperienceEffects,
   restoreCombatRoundPhaseInitiativeResolutionCombatContextModifiers,
@@ -329,6 +333,7 @@ const campaignService = instrumentCombatService(new CampaignService(), {
   },
 });
 const characterService = new CharacterService();
+const combatItemInteractionService = new CombatItemInteractionService();
 const combatStateReadService = instrumentCombatService(new CombatStateReadService(), {
   getActiveCombatStateById: {
     stage: "repository_read_active",
@@ -2594,6 +2599,24 @@ function parseOptionalBoolean(value: unknown, label: string): boolean | undefine
   return value;
 }
 
+function getCombatThrownWeaponAttackUndo(
+  command: CombatRoundCommand,
+): CombatThrownWeaponAttackUndo | undefined {
+  const value = command.facts.thrownWeaponUndo;
+  if (!isRecord(value) || value.version !== 1 || value.actionId !== command.id) return undefined;
+  if (
+    typeof value.encounterId !== "string" ||
+    typeof value.itemAfterRevision !== "string" ||
+    typeof value.ownerCharacterId !== "string" ||
+    !isRecord(value.itemBefore) ||
+    typeof value.itemBefore.id !== "string" ||
+    !Array.isArray(value.loadoutsBefore)
+  ) {
+    return undefined;
+  }
+  return value as unknown as CombatThrownWeaponAttackUndo;
+}
+
 function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & {
   attackResultId: string;
   attackerParticipantId: string;
@@ -3106,6 +3129,7 @@ function resolveDeclaredWeaponSource(input: {
       source: {
         attackModeId: string;
         itemId: string;
+        isThrownAttack: boolean;
         repeatEligible: boolean;
         weaponArmorClass?: ReturnType<typeof normalizeCombatArmorModifierClass>;
         weaponCriticalCode?: string;
@@ -3136,7 +3160,11 @@ function resolveDeclaredWeaponSource(input: {
   const isReadyOtherSource =
     input.source.slot === "other" &&
     getScenarioParticipantReadyItemIds(input.participant).includes(itemId);
-  if (!usableItemIds.has(itemId) || (!isReadyOtherSource && expectedSlotItemId !== itemId)) {
+  const isExplicitThrowingSource = input.source.slot === "throwing";
+  if (
+    !usableItemIds.has(itemId) ||
+    (!isReadyOtherSource && !isExplicitThrowingSource && expectedSlotItemId !== itemId)
+  ) {
     return { error: `The selected ${input.phaseLabel} weapon is not ready.`, ok: false };
   }
   const item = itemsById[itemId];
@@ -3158,7 +3186,8 @@ function resolveDeclaredWeaponSource(input: {
   const mode = template.attackModes?.find(
     (candidate) => candidate.id === input.source.attackModeId,
   );
-  if (!mode || mode.canonicalMeleeMode == null) {
+  const isExplicitThrownMode = input.source.slot === "throwing" && isThrownWeaponAttackMode(mode);
+  if (!mode || (mode.canonicalMeleeMode == null && !isExplicitThrownMode)) {
     return {
       error: `${template.name} does not have the selected ${input.phaseLabel} attack mode.`,
       ok: false,
@@ -3169,6 +3198,7 @@ function resolveDeclaredWeaponSource(input: {
     source: {
       attackModeId: mode.id,
       itemId,
+      isThrownAttack: isExplicitThrownMode,
       repeatEligible: canRepeatWeaponAttackInRound(mode),
       weaponArmorClass: normalizeCombatArmorModifierClass(mode.armorModifier),
       weaponCriticalCode:
@@ -3251,6 +3281,7 @@ function resolveCanonicalAttackOpportunityWeaponFacts(input: {
 }):
   | {
       attackModeId: string;
+      isThrownAttack: boolean;
       weaponArmorClass?: ReturnType<typeof normalizeCombatArmorModifierClass>;
       weaponCriticalCode?: string;
       weaponDamageClass?: string;
@@ -3283,6 +3314,7 @@ function resolveCanonicalAttackOpportunityWeaponFacts(input: {
     return resolution.ok
       ? {
           attackModeId: resolution.source.attackModeId,
+          isThrownAttack: resolution.source.isThrownAttack,
           weaponArmorClass: resolution.source.weaponArmorClass,
           weaponCriticalCode: resolution.source.weaponCriticalCode,
           weaponDamageClass: resolution.source.weaponDamageClass,
@@ -3301,6 +3333,7 @@ function resolveCanonicalAttackOpportunityWeaponFacts(input: {
   if (!template || !mode) return undefined;
   return {
     attackModeId: mode.id,
+    isThrownAttack: false,
     weaponArmorClass: normalizeCombatArmorModifierClass(mode.armorModifier),
     weaponCriticalCode:
       mode.crit && mode.secondCrit ? `${mode.crit}${mode.secondCrit}` : (mode.crit ?? undefined),
@@ -5701,6 +5734,7 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
     const safeFacts = { ...input.command.facts };
     delete safeFacts.attackerCalculation;
     delete safeFacts.defenderCalculation;
+    delete safeFacts.thrownWeaponUndo;
     return { ...input.command, facts: safeFacts };
   }
 
@@ -14229,19 +14263,36 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         state: roundState,
         submittedBy: access.mode === "gm" ? "gm" : "player",
       });
-      const savedEncounter = await encounterService.updateCombatEncounter({
-        expectedRevision: encounter.updatedAt,
-        campaignId: access.campaignId,
-        encounterId,
-        scenarioId,
-        session: {
-          ...encounter,
-          combatRoundState: nextRoundState,
-          currentRound: nextRoundState.roundNumber,
-          updatedAt: submittedAt,
-        },
-      });
       const attackCommand = nextRoundState.commands.at(-1);
+      const nextEncounterSession = {
+        ...encounter,
+        combatRoundState: nextRoundState,
+        currentRound: nextRoundState.roundNumber,
+        updatedAt: submittedAt,
+      };
+      const savedEncounter = canonicalWeaponFacts.isThrownAttack
+        ? (
+            await combatItemInteractionService.commitThrownWeaponAttack({
+              actorUserId: user.id,
+              campaignId: access.campaignId,
+              commandId: attackCommand?.id ?? "",
+              encounterId,
+              expectedEncounterRevision: encounter.updatedAt,
+              itemId: canonicalOpportunityIdentity.weaponInstanceId ?? "",
+              ownerCharacterId: scenarioParticipant.characterId ?? "",
+              roundNumber: nextRoundState.roundNumber,
+              scenarioId,
+              session: nextEncounterSession,
+              templateId: canonicalOpportunityIdentity.weaponTemplateId,
+            })
+          ).encounter
+        : await encounterService.updateCombatEncounter({
+            expectedRevision: encounter.updatedAt,
+            campaignId: access.campaignId,
+            encounterId,
+            scenarioId,
+            session: nextEncounterSession,
+          });
       const attackResultId = getCombatRoundAttackResultId({
         result: attackResult,
         roundNumber: nextRoundState.roundNumber,
@@ -15744,6 +15795,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           command.type === "roll_attack" &&
           !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
       );
+      const removedThrownWeaponAttacks = removedAttackCommands.flatMap((command) => {
+        const undo = getCombatThrownWeaponAttackUndo(command);
+        return undo ? [{ commandId: command.id, undo }] : [];
+      });
       const removedPhaseInitiativeResolutionCommitCommands = roundState.commands.filter(
         (command) =>
           command.roundNumber === roundState.roundNumber &&
@@ -15924,19 +15979,46 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               participant,
               state: restorationStates.get(participant.id)!,
             }));
-          const saved = await encounterService.commitCombatParticipantStateMutations({
-            campaignId: access.campaignId,
-            encounterId,
-            expectedEncounterRevision: encounter.updatedAt,
-            participants: restorations,
-            scenarioId,
-            session: {
-              ...encounter,
-              combatRoundState: nextRoundState,
-              currentRound: nextRoundState.roundNumber,
-              updatedAt: submittedAt,
-            },
-          });
+          const session = {
+            ...encounter,
+            combatRoundState: nextRoundState,
+            currentRound: nextRoundState.roundNumber,
+            updatedAt: submittedAt,
+          };
+          const saved =
+            removedThrownWeaponAttacks.length > 0
+              ? await (async () => {
+                  const savedEncounter =
+                    await combatItemInteractionService.commitThrownWeaponAttackUndo({
+                      actorUserId: user.id,
+                      campaignId: access.campaignId,
+                      encounterId,
+                      expectedEncounterRevision: encounter.updatedAt,
+                      participantStateUpdates: restorations.map(({ participant, state }) => ({
+                        expectedRevision: participant.updatedAt,
+                        participantId: participant.id,
+                        scenarioId,
+                        state: refreshScenarioParticipantPersistentCombatModifiers({ state }),
+                      })),
+                      scenarioId,
+                      session,
+                      undos: removedThrownWeaponAttacks,
+                    });
+                  const refreshed = await scenarioService.listScenarioParticipants(scenarioId);
+                  const changedIds = new Set(restorations.map(({ participant }) => participant.id));
+                  return {
+                    encounter: savedEncounter,
+                    participants: refreshed.filter((participant) => changedIds.has(participant.id)),
+                  };
+                })()
+              : await encounterService.commitCombatParticipantStateMutations({
+                  campaignId: access.campaignId,
+                  encounterId,
+                  expectedEncounterRevision: encounter.updatedAt,
+                  participants: restorations,
+                  scenarioId,
+                  session,
+                });
           return saved;
         }
         if (hasExactContinuedContactEffectRestoration) {
@@ -16196,36 +16278,59 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             })
           : [];
 
+      const nextEncounterSession = {
+        ...encounter,
+        combatRoundState: nextRoundState,
+        currentRound: nextRoundState.roundNumber,
+        updatedAt: submittedAt,
+      };
       const saved =
-        participantMutations.length > 0
-          ? await encounterService.commitCombatParticipantStateMutations({
-              campaignId: access.campaignId,
-              encounterId,
-              expectedEncounterRevision: encounter.updatedAt,
-              participants: participantMutations,
-              scenarioId,
-              session: {
-                ...encounter,
-                combatRoundState: nextRoundState,
-                currentRound: nextRoundState.roundNumber,
-                updatedAt: submittedAt,
-              },
-            })
-          : {
-              encounter: await encounterService.updateCombatEncounter({
-                expectedRevision: encounter.updatedAt,
+        removedThrownWeaponAttacks.length > 0
+          ? await (async () => {
+              const savedEncounter =
+                await combatItemInteractionService.commitThrownWeaponAttackUndo({
+                  actorUserId: user.id,
+                  campaignId: access.campaignId,
+                  encounterId,
+                  expectedEncounterRevision: encounter.updatedAt,
+                  participantStateUpdates: participantMutations.map(({ participant, state }) => ({
+                    expectedRevision: participant.updatedAt,
+                    participantId: participant.id,
+                    scenarioId,
+                    state: refreshScenarioParticipantPersistentCombatModifiers({ state }),
+                  })),
+                  scenarioId,
+                  session: nextEncounterSession,
+                  undos: removedThrownWeaponAttacks,
+                });
+              const refreshed = await scenarioService.listScenarioParticipants(scenarioId);
+              const changedIds = new Set(
+                participantMutations.map(({ participant }) => participant.id),
+              );
+              return {
+                encounter: savedEncounter,
+                participants: refreshed.filter((participant) => changedIds.has(participant.id)),
+              };
+            })()
+          : participantMutations.length > 0
+            ? await encounterService.commitCombatParticipantStateMutations({
                 campaignId: access.campaignId,
                 encounterId,
+                expectedEncounterRevision: encounter.updatedAt,
+                participants: participantMutations,
                 scenarioId,
-                session: {
-                  ...encounter,
-                  combatRoundState: nextRoundState,
-                  currentRound: nextRoundState.roundNumber,
-                  updatedAt: submittedAt,
-                },
-              }),
-              participants: [] as ScenarioParticipant[],
-            };
+                session: nextEncounterSession,
+              })
+            : {
+                encounter: await encounterService.updateCombatEncounter({
+                  expectedRevision: encounter.updatedAt,
+                  campaignId: access.campaignId,
+                  encounterId,
+                  scenarioId,
+                  session: nextEncounterSession,
+                }),
+                participants: [] as ScenarioParticipant[],
+              };
 
       return saved;
     } catch (error) {
