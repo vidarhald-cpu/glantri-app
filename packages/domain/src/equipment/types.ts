@@ -53,6 +53,8 @@ export type CanonicalMeleeMode = "slash" | "strike" | "thrust";
 
 export type WeaponAttackModeProvenance = "imported" | "manual" | "derived";
 
+export type WeaponAttackModeType = "melee" | "missile" | "thrown";
+
 export interface EquipmentTemplateBase {
   id: string;
   category: EquipmentCategory;
@@ -78,6 +80,8 @@ export interface WeaponDurabilityProfile {
 
 export interface WeaponAttackMode {
   id: string;
+  /** Explicit delivery family; live declarations must not infer thrown use from a missing melee mode. */
+  attackType?: WeaponAttackModeType | null;
   label?: string | null;
   /** Canonical display/default resolution order; legacy data falls back to array order. */
   order?: number | null;
@@ -94,7 +98,13 @@ export interface WeaponAttackMode {
   crit?: string | null;
   secondCrit?: string | null;
   armorModifier?: string | null;
+  /** Mode-specific initiative from the source row; never fall back to melee initiative for throws. */
+  initiative?: number | null;
+  /** Mode-specific source range/reach. V1 preserves this without imposing a maximum-distance rule. */
+  range?: string | null;
   provenance: WeaponAttackModeProvenance;
+  /** Typed row-level provenance when this mode originates from a different source row/template. */
+  sourceMetadata?: ImportedWeaponSourceMetadata | null;
   notes?: string | null;
 }
 

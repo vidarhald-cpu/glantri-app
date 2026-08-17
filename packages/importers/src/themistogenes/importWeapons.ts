@@ -56,6 +56,16 @@ const WEAPON_TWO_SOURCE_COLUMNS = {
   ammoEncumbrance: "K",
 } as const;
 
+const APPROVED_THROWN_BASE_TEMPLATE_BY_THROWN_TEMPLATE_ID: Record<string, string> = {
+  "weapon-template-t-knife": "weapon-template-knife",
+  "weapon-template-t-dagger": "weapon-template-dagger",
+  "weapon-template-t-hatchet": "weapon-template-hatchet",
+  "weapon-template-t-wood-axe": "weapon-template-wood-axe",
+  "weapon-template-t-hand-axe": "weapon-template-hand-axe",
+  "weapon-template-t-javelin": "weapon-template-1-h-javelin",
+  "weapon-template-t-spear": "weapon-template-spear",
+};
+
 type SourceRow = Record<string, string>;
 
 export interface ImportedWeaponRowWarning {
@@ -109,49 +119,45 @@ function getMergedThrownMode(template: WeaponTemplate): WeaponAttackMode | null 
 
   return {
     ...thrownMode,
+    attackType: "thrown",
+    allowsRepeatedRoundAttack: false,
+    canonicalMeleeMode: null,
     id: "mode-3",
     isPrimaryAttack: false,
-    notes: [thrownMode.notes, buildMergedThrownModeNote(template)].filter(Boolean).join(" | ") || null,
+    initiative: template.initiative,
+    order: 2,
+    range: template.range,
+    sourceMetadata: template.sourceMetadata,
+    notes:
+      [thrownMode.notes, buildMergedThrownModeNote(template)].filter(Boolean).join(" | ") || null,
   };
 }
 
-function getSafeThrownBaseName(template: WeaponTemplate, baseNames: Set<string>): string | null {
-  if (
-    template.sourceMetadata?.sheet !== "Weapon2" ||
-    !template.name.startsWith("T. ")
-  ) {
-    return null;
-  }
-
-  const baseName = template.name.slice(3).trim();
-  return baseNames.has(baseName) ? baseName : null;
+function getApprovedThrownBaseTemplateId(template: WeaponTemplate): string | null {
+  if (template.sourceMetadata?.sheet !== "Weapon2") return null;
+  return APPROVED_THROWN_BASE_TEMPLATE_BY_THROWN_TEMPLATE_ID[template.id] ?? null;
 }
 
 function mergeThrownWeaponTemplates(templates: WeaponTemplate[]): WeaponTemplate[] {
-  const baseTemplatesByName = new Map(
+  const baseTemplatesById = new Map(
     templates
       .filter((template) => template.sourceMetadata?.sheet === "Weapon1")
-      .map((template) => [template.name, template] as const),
+      .map((template) => [template.id, template] as const),
   );
-  const baseNames = new Set(baseTemplatesByName.keys());
-  const thrownTemplatesByBaseName = new Map<string, WeaponTemplate>();
+  const thrownTemplatesByBaseId = new Map<string, WeaponTemplate>();
 
   for (const template of templates) {
-    const baseName = getSafeThrownBaseName(template, baseNames);
-    if (!baseName) {
-      continue;
-    }
-
-    thrownTemplatesByBaseName.set(baseName, template);
+    const baseId = getApprovedThrownBaseTemplateId(template);
+    if (baseId && baseTemplatesById.has(baseId)) thrownTemplatesByBaseId.set(baseId, template);
   }
 
   return templates.flatMap((template) => {
-    const baseName = getSafeThrownBaseName(template, baseNames);
-    if (baseName) {
+    const baseId = getApprovedThrownBaseTemplateId(template);
+    if (baseId && baseTemplatesById.has(baseId)) {
       return [];
     }
 
-    const thrownTemplate = thrownTemplatesByBaseName.get(template.name);
+    const thrownTemplate = thrownTemplatesByBaseId.get(template.id);
     if (!thrownTemplate) {
       return [template];
     }
@@ -164,7 +170,10 @@ function mergeThrownWeaponTemplates(templates: WeaponTemplate[]): WeaponTemplate
     return [
       {
         ...template,
-        attackModes: [...(template.attackModes ?? []).filter((mode) => mode.id !== "mode-3"), mergedMode],
+        attackModes: [
+          ...(template.attackModes ?? []).filter((mode) => mode.id !== "mode-3"),
+          mergedMode,
+        ],
         tags: Array.from(new Set([...template.tags, "thrown"])),
         importWarnings: [
           ...(template.importWarnings ?? []),
@@ -208,7 +217,10 @@ function parseSharedStrings(xml: string): string[] {
   return values;
 }
 
-function parseWorksheetRows(xml: string, sharedStrings: string[]): Array<{ rowNumber: number; values: SourceRow }> {
+function parseWorksheetRows(
+  xml: string,
+  sharedStrings: string[],
+): Array<{ rowNumber: number; values: SourceRow }> {
   const rows: Array<{ rowNumber: number; values: SourceRow }> = [];
 
   for (const rowMatch of xml.matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>/g)) {
@@ -241,7 +253,7 @@ function parseWorksheetRows(xml: string, sharedStrings: string[]): Array<{ rowNu
       } else {
         const valueMatch = /<v>([\s\S]*?)<\/v>/.exec(cellBody);
         const raw = valueMatch ? decodeXmlText(valueMatch[1]) : "";
-        text = type === "s" ? sharedStrings[Number(raw)] ?? "" : raw;
+        text = type === "s" ? (sharedStrings[Number(raw)] ?? "") : raw;
       }
 
       values[column] = text;
@@ -264,9 +276,9 @@ function slugify(value: string): string {
 
 function stableWeaponId(name: string): string {
   const aliasMap: Record<string, string> = {
-    "dagger": "weapon-template-dagger",
+    dagger: "weapon-template-dagger",
     "long sword": "weapon-template-longsword",
-    "mace": "weapon-template-mace",
+    mace: "weapon-template-mace",
     "2-h spear": "weapon-template-spear",
     "short bow": "weapon-template-bow",
   };
@@ -274,7 +286,12 @@ function stableWeaponId(name: string): string {
   return aliasMap[name.toLowerCase()] ?? `weapon-template-${slugify(name)}`;
 }
 
-function deriveHandlingClass(input: { name: string; range: string | null; skill: string; sheet: string }): WeaponHandlingClass {
+function deriveHandlingClass(input: {
+  name: string;
+  range: string | null;
+  skill: string;
+  sheet: string;
+}): WeaponHandlingClass {
   const lowerName = input.name.toLowerCase();
   const lowerSkill = input.skill.toLowerCase();
   const lowerRange = (input.range ?? "").toLowerCase();
@@ -295,7 +312,12 @@ function deriveHandlingClass(input: { name: string; range: string | null; skill:
   if (lowerSkill.includes("polearm") || lowerSkill.includes("lance")) {
     return "polearm";
   }
-  if (lowerName.includes("knife") || lowerName.includes("dagger") || lowerName.includes("main gauche") || lowerName.includes("swordbreaker")) {
+  if (
+    lowerName.includes("knife") ||
+    lowerName.includes("dagger") ||
+    lowerName.includes("main gauche") ||
+    lowerName.includes("swordbreaker")
+  ) {
     return "light";
   }
   if (lowerRange.includes("&")) {
@@ -308,10 +330,20 @@ function deriveWeaponClass(input: { name: string; skill: string }): string {
   const lowerName = input.name.toLowerCase();
   const lowerSkill = input.skill.toLowerCase();
 
-  if (lowerName.includes("sword") || lowerName.includes("sabre") || lowerName.includes("scimitar") || lowerName.includes("rapier")) {
+  if (
+    lowerName.includes("sword") ||
+    lowerName.includes("sabre") ||
+    lowerName.includes("scimitar") ||
+    lowerName.includes("rapier")
+  ) {
     return "sword";
   }
-  if (lowerName.includes("dagger") || lowerName.includes("knife") || lowerName.includes("dirk") || lowerName.includes("main gauche")) {
+  if (
+    lowerName.includes("dagger") ||
+    lowerName.includes("knife") ||
+    lowerName.includes("dirk") ||
+    lowerName.includes("main gauche")
+  ) {
     return "knife";
   }
   if (lowerName.includes("mace") || lowerName.includes("maul") || lowerName.includes("club")) {
@@ -320,7 +352,13 @@ function deriveWeaponClass(input: { name: string; skill: string }): string {
   if (lowerName.includes("axe") || lowerName.includes("hatchet")) {
     return "axe";
   }
-  if (lowerName.includes("spear") || lowerName.includes("javelin") || lowerName.includes("lance") || lowerName.includes("halberd") || lowerName.includes("pole")) {
+  if (
+    lowerName.includes("spear") ||
+    lowerName.includes("javelin") ||
+    lowerName.includes("lance") ||
+    lowerName.includes("halberd") ||
+    lowerName.includes("pole")
+  ) {
     return "polearm";
   }
   if (lowerName.includes("bow")) {
@@ -329,7 +367,14 @@ function deriveWeaponClass(input: { name: string; skill: string }): string {
   if (lowerName.includes("crossbow") || lowerName.includes("ballista")) {
     return "crossbow";
   }
-  if (lowerSkill.includes("firearms") || lowerName.includes("musket") || lowerName.includes("pistol") || lowerName.includes("cannon") || lowerName.includes("arquebus") || lowerName.includes("rifle")) {
+  if (
+    lowerSkill.includes("firearms") ||
+    lowerName.includes("musket") ||
+    lowerName.includes("pistol") ||
+    lowerName.includes("cannon") ||
+    lowerName.includes("arquebus") ||
+    lowerName.includes("rifle")
+  ) {
     return "firearm";
   }
   if (lowerSkill.includes("throw")) {
@@ -348,13 +393,23 @@ function deriveDamageClassFromText(input: string | null | undefined): WeaponDama
 
   const value = input.toLowerCase();
 
-  if (value.includes("thrust") || value.includes("pierce") || value.includes("puncture") || value.includes("strangle")) {
+  if (
+    value.includes("thrust") ||
+    value.includes("pierce") ||
+    value.includes("puncture") ||
+    value.includes("strangle")
+  ) {
     return "pointed";
   }
   if (value.includes("slash") || value.includes("cut")) {
     return "edged";
   }
-  if (value.includes("strike") || value.includes("bash") || value.includes("blunt") || value.includes("crush")) {
+  if (
+    value.includes("strike") ||
+    value.includes("bash") ||
+    value.includes("blunt") ||
+    value.includes("crush")
+  ) {
     return "blunt";
   }
 
@@ -429,7 +484,14 @@ function buildTags(input: {
   if (name.includes("crossbow") || name.includes("ballista")) {
     tags.add("crossbow");
   }
-  if (name.includes("gun") || name.includes("musket") || name.includes("pistol") || name.includes("rifle") || name.includes("arquebus") || name.includes("cannon")) {
+  if (
+    name.includes("gun") ||
+    name.includes("musket") ||
+    name.includes("pistol") ||
+    name.includes("rifle") ||
+    name.includes("arquebus") ||
+    name.includes("cannon")
+  ) {
     tags.add("firearm");
   }
   if (skill.includes("throw")) {
@@ -467,8 +529,7 @@ function buildAttackMode(input: {
   }
 
   const damageClass =
-    deriveDamageClassFromText(input.label) ??
-    deriveDamageClassFromCrit(input.crit);
+    deriveDamageClassFromText(input.label) ?? deriveDamageClassFromCrit(input.crit);
 
   if (!damageClass) {
     input.rowWarnings.push(
@@ -525,16 +586,14 @@ function buildWeaponTemplate(input: {
   const primaryAttackType = input.sheet === "Weapon1" ? input.row.C?.trim() || null : null;
   const primaryModeFamily = getCanonicalMeleeModeFromAttackLabel(primaryAttackType);
   const secondaryModeFamily =
-    input.sheet === "Weapon1"
-      ? getCanonicalMeleeModeFromCrit(input.row.N?.trim() || null)
-      : null;
+    input.sheet === "Weapon1" ? getCanonicalMeleeModeFromCrit(input.row.N?.trim() || null) : null;
   const secondCrit = input.sheet === "Weapon1" ? input.row.Q?.trim() || null : null;
 
   const mode1 = buildAttackMode({
     armorModifier: input.row[input.sheet === "Weapon1" ? "K" : "H"],
     canonicalMeleeMode:
       input.sheet === "Weapon1"
-        ? primaryModeFamily ?? getCanonicalMeleeModeFromCrit(input.row.M?.trim() || null)
+        ? (primaryModeFamily ?? getCanonicalMeleeModeFromCrit(input.row.M?.trim() || null))
         : null,
     crit: input.row[input.sheet === "Weapon1" ? "M" : "I"],
     dmb: input.row[input.sheet === "Weapon1" ? "E" : "D"],
@@ -564,20 +623,52 @@ function buildWeaponTemplate(input: {
         })
       : null;
 
-  const attackModes = [mode1, mode2].filter((mode): mode is WeaponAttackMode => mode != null);
-
   const range = input.row[input.sheet === "Weapon1" ? "J" : "G"]?.trim() || null;
+  const initiative = parseNumber(input.row[input.sheet === "Weapon1" ? "I" : "F"]);
+  const sourceMetadata = {
+    workbook: THEMISTOGENES_WORKBOOK_NAME,
+    sheet: input.sheet,
+    row: input.rowNumber,
+    sourceRange: `${input.sheet}!A${input.rowNumber}:${input.sheet === "Weapon1" ? "Q" : "K"}${input.rowNumber}`,
+    sourceColumns: input.sourceColumns,
+    rawRow: input.row,
+  };
+  const attackType: WeaponAttackMode["attackType"] =
+    input.sheet === "Weapon1"
+      ? "melee"
+      : skill.toLowerCase().includes("throw")
+        ? "thrown"
+        : "missile";
+  const attackModes = [mode1, mode2]
+    .filter((mode): mode is WeaponAttackMode => mode != null)
+    .map(
+      (mode, index): WeaponAttackMode => ({
+        ...mode,
+        attackType,
+        allowsRepeatedRoundAttack: attackType === "melee" ? mode.allowsRepeatedRoundAttack : false,
+        initiative,
+        order: index,
+        range,
+        sourceMetadata,
+      }),
+    );
   const encumbranceRaw = input.row[input.sheet === "Weapon1" ? "O" : "J"]?.trim() || "";
   const baseEncumbrance = parseLeadingNumber(encumbranceRaw) ?? 0;
   if (encumbranceRaw && parseNumber(encumbranceRaw) == null) {
-    rowWarnings.push(`${name}: encumbrance '${encumbranceRaw}' reduced to compatibility number ${baseEncumbrance}.`);
+    rowWarnings.push(
+      `${name}: encumbrance '${encumbranceRaw}' reduced to compatibility number ${baseEncumbrance}.`,
+    );
   }
 
   const ammoEncumbranceRaw = input.sheet === "Weapon2" ? input.row.K?.trim() || null : null;
   const ammoEncumbrance =
-    ammoEncumbranceRaw && parseNumber(ammoEncumbranceRaw) != null ? parseNumber(ammoEncumbranceRaw) : null;
+    ammoEncumbranceRaw && parseNumber(ammoEncumbranceRaw) != null
+      ? parseNumber(ammoEncumbranceRaw)
+      : null;
   if (ammoEncumbranceRaw && ammoEncumbrance == null) {
-    rowWarnings.push(`${name}: ammo encumbrance '${ammoEncumbranceRaw}' preserved as raw source text.`);
+    rowWarnings.push(
+      `${name}: ammo encumbrance '${ammoEncumbranceRaw}' preserved as raw source text.`,
+    );
   }
 
   const parrySource = input.row[input.sheet === "Weapon1" ? "H" : "E"]?.trim() || "";
@@ -586,7 +677,7 @@ function buildWeaponTemplate(input: {
     rowWarnings.push(`${name}: parry '${parrySource}' could not be parsed as a number.`);
   }
 
-  const secondaryAttackType = mode2 ? mode2.label ?? null : null;
+  const secondaryAttackType = mode2 ? (mode2.label ?? null) : null;
   const handlingClass = deriveHandlingClass({
     name,
     range,
@@ -608,9 +699,12 @@ function buildWeaponTemplate(input: {
       skill,
     }),
     specificityTypeDefault: "generic",
-    defaultMaterial: skill.toLowerCase().includes("bow") || name.toLowerCase().includes("staff") || name.toLowerCase().includes("club")
-      ? "wood"
-      : "steel",
+    defaultMaterial:
+      skill.toLowerCase().includes("bow") ||
+      name.toLowerCase().includes("staff") ||
+      name.toLowerCase().includes("club")
+        ? "wood"
+        : "steel",
     baseEncumbrance,
     baseValue: null,
     rulesNotes: null,
@@ -627,7 +721,7 @@ function buildWeaponTemplate(input: {
     ob2: mode2?.ob ?? null,
     dmb2: mode2?.dmb ?? null,
     parry,
-    initiative: parseNumber(input.row[input.sheet === "Weapon1" ? "I" : "F"]),
+    initiative,
     range,
     armorMod1: mode1?.armorModifier ?? null,
     armorMod2: mode2?.armorModifier ?? null,
@@ -637,14 +731,7 @@ function buildWeaponTemplate(input: {
     defensiveValue: parseNumber(input.row.P),
     ammoEncumbrance,
     ammoEncumbranceRaw,
-    sourceMetadata: {
-      workbook: THEMISTOGENES_WORKBOOK_NAME,
-      sheet: input.sheet,
-      row: input.rowNumber,
-      sourceRange: `${input.sheet}!A${input.rowNumber}:${input.sheet === "Weapon1" ? "Q" : "K"}${input.rowNumber}`,
-      sourceColumns: input.sourceColumns,
-      rawRow: input.row,
-    },
+    sourceMetadata,
     importWarnings: rowWarnings.length > 0 ? rowWarnings : null,
     durabilityProfile: null,
   };
@@ -672,12 +759,20 @@ function shouldSkipWeaponTwoRow(row: SourceRow): string | null {
   return name ? null : "blank";
 }
 
-export function importThemistogenesWeapons(workbookPath = THEMISTOGENES_WORKBOOK_PATH): ImportedWeaponsResult {
+export function importThemistogenesWeapons(
+  workbookPath = THEMISTOGENES_WORKBOOK_PATH,
+): ImportedWeaponsResult {
   const sharedStringsXml = readZipEntryUtf8(workbookPath, "xl/sharedStrings.xml");
   const sharedStrings = parseSharedStrings(sharedStringsXml);
 
-  const weaponOneRows = parseWorksheetRows(readZipEntryUtf8(workbookPath, WEAPON_ONE_TARGET), sharedStrings);
-  const weaponTwoRows = parseWorksheetRows(readZipEntryUtf8(workbookPath, WEAPON_TWO_TARGET), sharedStrings);
+  const weaponOneRows = parseWorksheetRows(
+    readZipEntryUtf8(workbookPath, WEAPON_ONE_TARGET),
+    sharedStrings,
+  );
+  const weaponTwoRows = parseWorksheetRows(
+    readZipEntryUtf8(workbookPath, WEAPON_TWO_TARGET),
+    sharedStrings,
+  );
 
   const templates: WeaponTemplate[] = [];
   const warnings: ImportedWeaponRowWarning[] = [];

@@ -7,6 +7,7 @@ import {
   type CombatItemInteractionOperation,
   type CombatItemInteractionState,
   type EncounterSession,
+  type ScenarioParticipantState,
 } from "@glantri/domain";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
@@ -17,6 +18,7 @@ import {
   type ApplyCombatItemInteractionResult,
   type CharacterEquipmentRepository,
   type CombatItemInteractionRecord,
+  type CombatThrownWeaponAttackUndo,
 } from "../repositories/characterEquipmentRepository";
 import {
   CombatPersistenceError,
@@ -26,6 +28,7 @@ import {
 import { createPrismaCombatStateReadRepository } from "../repositories/combatStateReadRepository";
 
 export { CombatPersistenceError } from "../repositories/combatStatePersistenceRepository";
+export type { CombatThrownWeaponAttackUndo } from "../repositories/characterEquipmentRepository";
 
 export {
   CombatItemRevisionError,
@@ -82,6 +85,20 @@ export interface CommitCombatItemInteractionResolutionInput {
   recipientCharacterId?: string;
   roundNumber: number;
   scenarioId: string;
+}
+
+export interface CommitCombatThrownWeaponAttackInput {
+  actorUserId: string;
+  campaignId: string;
+  commandId: string;
+  encounterId: string;
+  expectedEncounterRevision: string;
+  itemId: string;
+  ownerCharacterId: string;
+  roundNumber: number;
+  scenarioId: string;
+  session: EncounterSession;
+  templateId: string;
 }
 
 type CombatItemInteractionTransactionBoundary = "item" | "encounter" | "event";
@@ -170,6 +187,42 @@ function itemLabel(record: CombatItemInteractionRecord): string {
     equipmentTemplatesById[record.item.templateId]?.name ||
     "Item"
   );
+}
+
+function findCombatCommand(encounter: EncounterSession, commandId: string) {
+  const state = encounter.combatRoundState;
+  if (!state) return undefined;
+  for (const round of [state, ...state.rounds]) {
+    const command = round.commands.find((candidate) => candidate.id === commandId);
+    if (command) return command;
+  }
+  return undefined;
+}
+
+function attachThrownWeaponUndo(
+  encounter: EncounterSession,
+  commandId: string,
+  undo: CombatThrownWeaponAttackUndo,
+): EncounterSession {
+  const state = encounter.combatRoundState;
+  if (!state) throw new CombatItemUnavailableError();
+  let found = false;
+  const commands = state.commands.map((command) => {
+    if (command.id !== commandId || command.type !== "roll_attack") return command;
+    found = true;
+    return { ...command, facts: { ...command.facts, thrownWeaponUndo: undo } };
+  });
+  if (!found) throw new CombatItemUnavailableError();
+  return { ...encounter, combatRoundState: { ...state, commands } };
+}
+
+function commandHasThrownWeaponUndo(
+  encounter: EncounterSession,
+  commandId: string,
+  undo: CombatThrownWeaponAttackUndo,
+): boolean {
+  const fact = findCombatCommand(encounter, commandId)?.facts.thrownWeaponUndo;
+  return JSON.stringify(fact) === JSON.stringify(undo);
 }
 
 function itemState(record: CombatItemInteractionRecord): CombatItemInteractionState {
@@ -377,6 +430,204 @@ export class CombatItemInteractionService {
       ownerCharacterId: input.ownerCharacterId,
       recipientCharacterId: input.recipientCharacterId,
     });
+  }
+
+  async commitThrownWeaponAttack(
+    input: CommitCombatThrownWeaponAttackInput,
+  ): Promise<{ encounter: EncounterSession; item: ApplyCombatItemInteractionResult }> {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await this.client.$transaction(
+          async (transaction) => {
+            await transaction.$queryRaw(
+              Prisma.sql`SELECT "id" FROM "Encounter" WHERE "id" = ${input.encounterId} FOR UPDATE`,
+            );
+            const persistedEncounter = (
+              await createPrismaCombatStateReadRepository(transaction).getFullEncounterById(
+                input.encounterId,
+              )
+            )?.encounter;
+            if (
+              !persistedEncounter ||
+              persistedEncounter.updatedAt !== input.expectedEncounterRevision ||
+              persistedEncounter.campaignId !== input.campaignId ||
+              persistedEncounter.scenarioId !== input.scenarioId ||
+              findCombatCommand(persistedEncounter, input.commandId) ||
+              findCombatCommand(input.session, input.commandId)?.type !== "roll_attack"
+            ) {
+              throw new CombatItemUnavailableError();
+            }
+
+            const repository = createPrismaCharacterEquipmentRepository(transaction);
+            const itemBefore = await repository.getCanonicalEquipmentItemById(input.itemId);
+            const loadoutsBefore = await repository.getCharacterLoadouts(input.ownerCharacterId);
+            const readyInLoadout = loadoutsBefore.some((loadout) =>
+              [
+                loadout.activePrimaryWeaponItemId,
+                loadout.activeSecondaryWeaponItemId,
+                loadout.activeMissileWeaponItemId,
+                ...loadout.quickAccessItemIds,
+              ].includes(input.itemId),
+            );
+            if (
+              !itemBefore ||
+              !itemBefore.revision ||
+              itemBefore.campaignContextId !== input.campaignId ||
+              itemBefore.holderCharacterId !== input.ownerCharacterId ||
+              itemBefore.templateId !== input.templateId ||
+              (!itemBefore.isEquipped && !readyInLoadout)
+            ) {
+              throw new CombatItemUnavailableError();
+            }
+            const item = await repository.applyCombatItemInteraction({
+              actionId: input.commandId,
+              campaignId: input.campaignId,
+              encounterId: input.encounterId,
+              expectedItemRevision: itemBefore.revision,
+              itemId: input.itemId,
+              operation: "drop",
+              ownerCharacterId: input.ownerCharacterId,
+            });
+            await this.transactionBoundaryHook?.("item");
+            if (!item.item.revision) {
+              throw new CombatItemUnavailableError();
+            }
+            const undo: CombatThrownWeaponAttackUndo = {
+              actionId: input.commandId,
+              encounterId: input.encounterId,
+              itemAfterRevision: item.item.revision,
+              itemBefore,
+              loadoutsBefore,
+              ownerCharacterId: input.ownerCharacterId,
+              version: 1,
+            };
+            const session = attachThrownWeaponUndo(input.session, input.commandId, undo);
+            const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
+              maxTransactionAttempts: 1,
+            }).updateCombatEncounter({
+              campaignId: input.campaignId,
+              encounterId: input.encounterId,
+              expectedRevision: input.expectedEncounterRevision,
+              scenarioId: input.scenarioId,
+              session,
+            });
+            await this.transactionBoundaryHook?.("encounter");
+            await transaction.scenarioEventLog.create({
+              data: {
+                actorUserId: input.actorUserId,
+                eventType: "encounter_updated",
+                payloadJson: {
+                  commandId: input.commandId,
+                  encounterId: input.encounterId,
+                  itemId: input.itemId,
+                  resolutionKind: "canonical_thrown_weapon",
+                },
+                roundNumber: input.roundNumber,
+                scenarioId: input.scenarioId,
+                summary: "Canonical thrown weapon attack resolved.",
+              },
+            });
+            await this.transactionBoundaryHook?.("event");
+            return { encounter, item };
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        if (!isRetryableCombatTransactionError(error)) throw error;
+        if (attempt === 3) {
+          throw new CombatPersistenceError(
+            "transaction_conflict",
+            "Combat state changed while saving. Refresh and try again.",
+            error,
+          );
+        }
+      }
+    }
+    throw new CombatPersistenceError(
+      "transaction_conflict",
+      "Combat state changed while saving. Refresh and try again.",
+    );
+  }
+
+  async commitThrownWeaponAttackUndo(input: {
+    actorUserId: string;
+    campaignId: string;
+    encounterId: string;
+    expectedEncounterRevision: string;
+    participantStateUpdates?: Array<{
+      expectedRevision: string;
+      participantId: string;
+      scenarioId: string;
+      state: ScenarioParticipantState;
+    }>;
+    scenarioId: string;
+    session: EncounterSession;
+    undos: Array<{ commandId: string; undo: CombatThrownWeaponAttackUndo }>;
+  }): Promise<EncounterSession> {
+    return this.client.$transaction(
+      async (transaction) => {
+        await transaction.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "Encounter" WHERE "id" = ${input.encounterId} FOR UPDATE`,
+        );
+        const persistedEncounter = (
+          await createPrismaCombatStateReadRepository(transaction).getFullEncounterById(
+            input.encounterId,
+          )
+        )?.encounter;
+        if (
+          !persistedEncounter ||
+          persistedEncounter.updatedAt !== input.expectedEncounterRevision ||
+          persistedEncounter.campaignId !== input.campaignId ||
+          persistedEncounter.scenarioId !== input.scenarioId ||
+          input.undos.some(
+            ({ commandId, undo }) =>
+              !commandHasThrownWeaponUndo(persistedEncounter, commandId, undo) ||
+              findCombatCommand(input.session, commandId),
+          )
+        ) {
+          throw new CombatItemUnavailableError();
+        }
+        const repository = createPrismaCharacterEquipmentRepository(transaction);
+        if (!repository.restoreCombatThrownWeaponAttack) {
+          throw new CombatItemUnavailableError();
+        }
+        for (const { undo } of input.undos) {
+          await repository.restoreCombatThrownWeaponAttack({
+            campaignId: input.campaignId,
+            undo,
+          });
+        }
+        await this.transactionBoundaryHook?.("item");
+        const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
+          maxTransactionAttempts: 1,
+        }).updateCombatEncounter({
+          campaignId: input.campaignId,
+          encounterId: input.encounterId,
+          expectedRevision: input.expectedEncounterRevision,
+          participantStateUpdates: input.participantStateUpdates,
+          scenarioId: input.scenarioId,
+          session: input.session,
+        });
+        await this.transactionBoundaryHook?.("encounter");
+        await transaction.scenarioEventLog.create({
+          data: {
+            actorUserId: input.actorUserId,
+            eventType: "encounter_updated",
+            payloadJson: {
+              commandIds: input.undos.map(({ commandId }) => commandId),
+              encounterId: input.encounterId,
+              itemIds: input.undos.map(({ undo }) => undo.itemBefore.id),
+              resolutionKind: "canonical_thrown_weapon_undo",
+            },
+            scenarioId: input.scenarioId,
+            summary: "Canonical thrown weapon attack undone.",
+          },
+        });
+        await this.transactionBoundaryHook?.("event");
+        return encounter;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   async commitResolution(

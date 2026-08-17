@@ -28,9 +28,7 @@ export type DerivedCombatValue = string | number;
 function getAttackRawModifiers(allocationInputs: CombatAllocationState): WorkbookRawModifier[] {
   const attackModifier = allocationInputs.situationalModifiers.attack;
 
-  return attackModifier === 0
-    ? []
-    : [{ label: "OB/Skill", value: attackModifier }];
+  return attackModifier === 0 ? [] : [{ label: "OB/Skill", value: attackModifier }];
 }
 
 function applyRawModifiersToDerivedValue(
@@ -41,10 +39,12 @@ function applyRawModifiersToDerivedValue(
     return baseValue;
   }
 
-  return calculateWorkbookPercentageAdjustmentTrace({
-    baseValue,
-    rawModifiers,
-  })?.finalValue ?? baseValue;
+  return (
+    calculateWorkbookPercentageAdjustmentTrace({
+      baseValue,
+      rawModifiers,
+    })?.finalValue ?? baseValue
+  );
 }
 
 function formatFormulaModifier(value: number | null | undefined): string {
@@ -193,6 +193,7 @@ export function getDmbValue(
 }
 
 export function getDerivedInitiativeValue(input: {
+  attackMode?: Pick<WeaponAttackMode, "initiative"> | null;
   characterInputs?: CombatStateCharacterInputs;
   template: WeaponTemplate | null;
   treatAsThrownUse?: boolean;
@@ -203,18 +204,20 @@ export function getDerivedInitiativeValue(input: {
 
   const skillXp = getWeaponSkillXp(input.template, input.characterInputs);
   const dexterityGm = input.characterInputs?.dexterityGm ?? null;
+  const weaponInitiative = input.attackMode?.initiative ?? input.template.initiative;
 
   if (
+    !input.treatAsThrownUse &&
     canUseWorkbookMeleeCalculation(input.template) &&
     skillXp != null &&
     dexterityGm != null &&
-    input.template.initiative != null
+    weaponInitiative != null
   ) {
     const workbookInitiative = calculateWorkbookMeleeInitiative({
       dexterityGm,
       gameModifier: 0,
       skillXp,
-      weaponInitiative: input.template.initiative,
+      weaponInitiative,
     });
 
     if (workbookInitiative) {
@@ -223,10 +226,10 @@ export function getDerivedInitiativeValue(input: {
   }
 
   if (input.template.handlingClass === "missile" || input.treatAsThrownUse) {
-    return (input.template.initiative ?? 0) + (input.characterInputs?.dexterityGm ?? 0);
+    return (weaponInitiative ?? 0) + (input.characterInputs?.dexterityGm ?? 0);
   }
 
-  return input.template.initiative ?? "—";
+  return weaponInitiative ?? "—";
 }
 
 export function getDerivedObValue(input: {

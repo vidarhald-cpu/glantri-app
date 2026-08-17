@@ -1,6 +1,7 @@
 import {
   getMaterialFactor,
   getQualityFactor,
+  isThrownWeaponAttackMode,
   type ArmorTemplate,
   type EquipmentItem,
   type EquipmentTemplate,
@@ -51,6 +52,7 @@ export type { DerivedCombatValue } from "@glantri/rules-engine";
 
 export interface DerivedCombatAttackMode {
   allowsRepeatedRoundAttack: boolean;
+  attackType?: WeaponAttackMode["attackType"];
   armorModifier: DerivedCombatValue;
   canonicalMeleeMode?: WeaponAttackMode["canonicalMeleeMode"];
   crit: DerivedCombatValue;
@@ -165,9 +167,7 @@ function formatDamageClass(value: WeaponAttackMode["damageClass"]): string {
   return value ? formatLabel(value) : "Unspecified";
 }
 
-function asWeaponTemplate(
-  template: EquipmentTemplate | undefined,
-): WeaponTemplate | null {
+function asWeaponTemplate(template: EquipmentTemplate | undefined): WeaponTemplate | null {
   return template?.category === "weapon" ? template : null;
 }
 
@@ -236,9 +236,7 @@ function getDefenseRawModifiers(
 ): WorkbookRawModifier[] {
   const defenseModifier = allocationInputs.situationalModifiers.defense;
 
-  return defenseModifier === 0
-    ? []
-    : [{ label: "DB/Parry", value: defenseModifier }];
+  return defenseModifier === 0 ? [] : [{ label: "DB/Parry", value: defenseModifier }];
 }
 
 function getAttackLabel(mode: WeaponAttackMode | null): DerivedCombatValue {
@@ -258,9 +256,7 @@ function formatModeCatalogNote(mode: WeaponAttackMode | null): string | null {
     return null;
   }
 
-  const parts = [
-    `${mode.label ?? formatLabel(mode.id)} ${formatDamageClass(mode.damageClass)}`,
-  ];
+  const parts = [`${mode.label ?? formatLabel(mode.id)} ${formatDamageClass(mode.damageClass)}`];
 
   if (mode.armorModifier) {
     parts.push(`AM ${mode.armorModifier}`);
@@ -341,14 +337,10 @@ function getIntrinsicItemEncumbrance(item: EquipmentItem, template: EquipmentTem
   );
 }
 
-function getMountEncumbranceTotal(
-  state: EquipmentFeatureState,
-  characterId: string,
-): number {
+function getMountEncumbranceTotal(state: EquipmentFeatureState, characterId: string): number {
   return Object.values(state.itemsById)
     .filter(
-      (item) =>
-        item.characterId === characterId && item.storageAssignment.carryMode === "mount",
+      (item) => item.characterId === characterId && item.storageAssignment.carryMode === "mount",
     )
     .reduce((total, item) => {
       const template = getEquipmentTemplateById(state, item.templateId);
@@ -393,8 +385,14 @@ function buildThrowingWeaponRow(input: {
   state: EquipmentFeatureState;
   template: WeaponTemplate;
 }): DerivedCombatWeaponRow | null {
-  const mode = getAttackMode(input.template, "mode-3")
-    ?? (input.template.handlingClass === "thrown" ? getAttackMode(input.template, "mode-1") : null);
+  const mode3 = getAttackMode(input.template, "mode-3");
+  const standaloneMode =
+    input.template.handlingClass === "thrown" ? getAttackMode(input.template, "mode-1") : null;
+  const mode = isThrownWeaponAttackMode(mode3 ?? undefined)
+    ? mode3
+    : isThrownWeaponAttackMode(standaloneMode ?? undefined)
+      ? standaloneMode
+      : null;
 
   if (!mode) {
     return null;
@@ -406,32 +404,55 @@ function buildThrowingWeaponRow(input: {
     equipmentModifier: input.template.defensiveValue ?? 0,
     rawModifiers: getDefenseRawModifiers(input.allocationInputs),
   });
+  const thrownOb = getDerivedObValue({
+    allocationInputs: input.allocationInputs,
+    armorTemplate: input.armorTemplate,
+    characterInputs: input.characterInputs,
+    mode,
+    template: input.template,
+    treatAsThrownUse: true,
+  });
+  const thrownDmb = getDerivedDmbValue({
+    armorTemplate: input.armorTemplate,
+    characterInputs: input.characterInputs,
+    mode,
+    template: input.template,
+    treatAsThrownUse: true,
+  });
 
   return {
+    attackModes: [
+      {
+        allowsRepeatedRoundAttack: false,
+        armorModifier: getArmorModifierValue(mode),
+        attackType: "thrown",
+        canonicalMeleeMode: null,
+        crit: mode.crit ?? "—",
+        damageClass: mode.damageClass,
+        dmb: thrownDmb,
+        id: mode.id,
+        isPrimaryAttack: true,
+        label: String(getAttackLabel(mode)),
+        ob: thrownOb,
+        order: mode.order ?? 0,
+        secondCrit: mode.secondCrit ?? "—",
+      },
+    ],
+    attackMode1Id: mode.id,
     slotLabel: "Throwing weapon",
     modeLabel: "Thrown",
     currentItemLabel: getItemLabel(input.state, input.item),
+    itemId: input.item.id,
+    templateId: input.template.id,
     damageClass1: mode.damageClass,
     initiative: getDerivedInitiativeValue({
+      attackMode: mode,
       characterInputs: input.characterInputs,
       template: input.template,
       treatAsThrownUse: true,
     }),
-    ob1: getDerivedObValue({
-      allocationInputs: input.allocationInputs,
-      armorTemplate: input.armorTemplate,
-      characterInputs: input.characterInputs,
-      mode,
-      template: input.template,
-      treatAsThrownUse: true,
-    }),
-    dmb1: getDerivedDmbValue({
-      armorTemplate: input.armorTemplate,
-      characterInputs: input.characterInputs,
-      mode,
-      template: input.template,
-      treatAsThrownUse: true,
-    }),
+    ob1: thrownOb,
+    dmb1: thrownDmb,
     attack1: getAttackLabel(mode),
     crit1: mode.crit ?? "—",
     sec: mode.secondCrit ?? input.template.secondCrit ?? "—",
@@ -478,6 +499,7 @@ function buildWeaponRow(input: {
   const attackModes: DerivedCombatAttackMode[] = (input.template?.attackModes ?? []).map(
     (mode, index) => ({
       allowsRepeatedRoundAttack: mode.allowsRepeatedRoundAttack === true,
+      attackType: mode.attackType,
       armorModifier: getArmorModifierValue(mode),
       canonicalMeleeMode: mode.canonicalMeleeMode,
       crit: mode.crit ?? "—",
@@ -824,7 +846,8 @@ function getWorkbookDefenseCases(input: {
     toHitModifier,
   });
 
-  const combinedWeaponTemplate = input.primaryWeaponTemplate ?? input.secondaryWeaponTemplate ?? null;
+  const combinedWeaponTemplate =
+    input.primaryWeaponTemplate ?? input.secondaryWeaponTemplate ?? null;
   const offHandCandidates = [
     input.shieldTemplate
       ? {
@@ -858,8 +881,7 @@ function getWorkbookDefenseCases(input: {
     combinedWeaponTemplate && offHandCandidate
       ? calculateWorkbookDefensePair({
           baseDb,
-          equipmentModifier:
-            (combinedWeaponTemplate.defensiveValue ?? 0) + offHandCandidate.value,
+          equipmentModifier: (combinedWeaponTemplate.defensiveValue ?? 0) + offHandCandidate.value,
           rawModifiers: defenseRawModifiers,
           toHitModifier,
         })
@@ -888,10 +910,15 @@ function getReadinessSummary(input: {
   backpackCount: number;
   gripSummary: string;
 }): string {
-  const notes = [`Posture ${getCombatDefensePostureLabel(input.allocationInputs.defensePosture)}`, input.gripSummary];
+  const notes = [
+    `Posture ${getCombatDefensePostureLabel(input.allocationInputs.defensePosture)}`,
+    input.gripSummary,
+  ];
 
   if (input.backpackCount > 0) {
-    notes.push(`${input.backpackCount} backpack item${input.backpackCount === 1 ? "" : "s"} slow to access`);
+    notes.push(
+      `${input.backpackCount} backpack item${input.backpackCount === 1 ? "" : "s"} slow to access`,
+    );
   }
 
   return notes.join(" | ");
@@ -946,10 +973,14 @@ function getLoadNotes(input: {
   }
 
   if (input.backpackCount > 0) {
-    notes.push("Backpack load still affects readiness summaries even when exact combat penalties remain incomplete.");
+    notes.push(
+      "Backpack load still affects readiness summaries even when exact combat penalties remain incomplete.",
+    );
   }
 
-  return notes.length > 0 ? notes.join(" ") : "Current carried-state totals are exact; special load formulas are not active in this loadout.";
+  return notes.length > 0
+    ? notes.join(" ")
+    : "Current carried-state totals are exact; special load formulas are not active in this loadout.";
 }
 
 export function deriveCombatStateSnapshot(
@@ -972,8 +1003,10 @@ export function deriveCombatStateSnapshot(
   const backpackCount = getBackpackItems(state, characterId).length;
   const encounterAccessibleGearCount = getEncounterAccessibleGearItems(state, characterId).length;
   const valuablesCount = getCharacterValuableItems(state, characterId).length;
-  const encounterAccessibleValuablesCount =
-    getEncounterAccessibleValuableItems(state, characterId).length;
+  const encounterAccessibleValuablesCount = getEncounterAccessibleValuableItems(
+    state,
+    characterId,
+  ).length;
   const carriedCoinQuantity = getEncounterAccessibleCoinQuantity(state, characterId);
   const storedCount = getStoredItems(state, characterId).length;
   const workbookMovement = buildWorkbookMovementSummary({
@@ -1219,10 +1252,9 @@ export function deriveCombatStateSnapshot(
     activePrimaryLabel: getItemLabel(state, primaryItem),
     activeSecondaryLabel: getItemLabel(state, secondaryItem),
     activeMissileLabel: getItemLabel(state, missileItem),
-    unarmedSummary:
-      shieldTemplate
-        ? "Punch and Kick remain available; shield defensive values are exact where current rules support them."
-        : "Punch and Kick remain available as workbook-backed brawling rows.",
+    unarmedSummary: shieldTemplate
+      ? "Punch and Kick remain available; shield defensive values are exact where current rules support them."
+      : "Punch and Kick remain available as workbook-backed brawling rows.",
     armorRating: armorTemplate?.armorRating ?? "Unarmored",
     armorMobilityPenalty: armorTemplate?.mobilityPenalty ?? "—",
     shieldBonus: shieldTemplate?.shieldBonus ?? "No ready shield",

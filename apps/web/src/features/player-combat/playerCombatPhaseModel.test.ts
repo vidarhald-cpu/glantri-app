@@ -474,6 +474,80 @@ describe("player combat phase model", () => {
     });
   });
 
+  it("preserves an explicitly selected thrown mode on the same canonical Item", () => {
+    const summary = buildPlayerCombatLoadoutSummary({
+      actionId: "attack_parry",
+      loadoutModel: buildLoadoutModel({
+        rows: [["Primary", "Dagger", "2", "Thrust", "8", "3", "DP", "—", "A"]],
+        sourceItemId: "scenario-dagger",
+        valueLabel: "Dagger",
+        weaponRows: [
+          {
+            attackModes: [
+              {
+                attackType: "melee",
+                canonicalMeleeMode: "thrust",
+                crit: "DP",
+                dmb: 3,
+                id: "mode-1",
+                isPrimaryAttack: true,
+                label: "Thrust",
+                ob: 1,
+                order: 0,
+              },
+              {
+                allowsRepeatedRoundAttack: false,
+                armorModifier: "A",
+                attackType: "thrown",
+                canonicalMeleeMode: null,
+                crit: "DP",
+                damageClass: "pointed",
+                dmb: -1,
+                id: "mode-3",
+                label: "Throw",
+                ob: 2,
+                order: 2,
+              },
+            ],
+            attackMode1Id: "mode-1",
+            currentItemLabel: "Dagger",
+            itemId: "scenario-dagger",
+            modeLabel: "Primary",
+            templateId: "weapon-template-dagger",
+          },
+        ],
+      }),
+      phaseKey: "phase1",
+      secondaryActionId: "",
+      selectedAttackModeId: "mode-3",
+    });
+
+    expect(summary.selectedAttackModeId).toBe("mode-3");
+    expect(summary.reference).toMatchObject({
+      am: "A",
+      attackMode: "Throw",
+      crit: "DP",
+      dmb: "-1",
+      ob: "2",
+      sourceAttackModeId: "mode-3",
+      sourceItemId: "scenario-dagger",
+      sourceSlot: "throwing",
+      sourceTemplateId: "weapon-template-dagger",
+    });
+    expect(
+      buildCombatAttackSourceRef({
+        phaseKey: "phase1",
+        reference: summary.reference,
+        unarmedTemplateId: "virtual-weapon-template-punch",
+      }),
+    ).toMatchObject({
+      attackModeId: "mode-3",
+      scenarioItemId: "scenario-dagger",
+      slot: "throwing",
+      templateId: "weapon-template-dagger",
+    });
+  });
+
   it("surfaces an explicit unavailable Phase 2 mode for an ineligible same-source weapon", () => {
     const phase2 = buildPlayerCombatLoadoutSummary({
       actionId: "double_attack",

@@ -203,6 +203,9 @@ export interface CharacterEquipmentRepository {
   applyCombatItemInteraction(
     input: ApplyCombatItemInteractionInput,
   ): Promise<ApplyCombatItemInteractionResult>;
+  restoreCombatThrownWeaponAttack?(
+    input: RestoreCombatThrownWeaponAttackInput,
+  ): Promise<CanonicalEquipmentItem>;
   getCombatItemInteractionRecords(campaignId: string): Promise<CombatItemInteractionRecord[]>;
   updateCharacterEquipmentItem(item: AssignedEquipmentItem): Promise<AssignedEquipmentItem>;
   removeCharacterEquipmentItem(characterId: string, itemId: string): Promise<void>;
@@ -246,6 +249,21 @@ export interface ApplyCombatItemInteractionInput {
 export interface ApplyCombatItemInteractionResult {
   alreadyApplied: boolean;
   item: CanonicalEquipmentItem;
+}
+
+export interface CombatThrownWeaponAttackUndo {
+  actionId: string;
+  encounterId: string;
+  itemAfterRevision: string;
+  itemBefore: CanonicalEquipmentItem;
+  loadoutsBefore: DomainCharacterLoadout[];
+  ownerCharacterId: string;
+  version: 1;
+}
+
+export interface RestoreCombatThrownWeaponAttackInput {
+  campaignId: string;
+  undo: CombatThrownWeaponAttackUndo;
 }
 
 export class CombatItemUnavailableError extends Error {
@@ -581,6 +599,7 @@ export function createPrismaCharacterEquipmentRepository(
         }
 
         const presentTag = `${COMBAT_ITEM_PRESENT_PREFIX}${input.encounterId}`;
+        const appliedTag = `${COMBAT_ITEM_APPLIED_PREFIX}${input.actionId}`;
         const isPresentHere = storedTags.includes(presentTag);
         const rosterCharacterIds = [input.ownerCharacterId, input.recipientCharacterId].filter(
           (id): id is string => Boolean(id),
@@ -815,6 +834,8 @@ export function createPrismaCharacterEquipmentRepository(
           }
         }
 
+        nextTags.push(appliedTag);
+
         const updated = await transaction.characterEquipmentItem.update({
           data: {
             carryMode,
@@ -831,6 +852,103 @@ export function createPrismaCharacterEquipmentRepository(
         return { alreadyApplied: false, item: mapCanonicalEquipmentItem(updated) };
       };
       return transactionClient ? apply(transactionClient) : prisma.$transaction(apply);
+    },
+    async restoreCombatThrownWeaponAttack(input) {
+      const restore = async (transaction: Prisma.TransactionClient) => {
+        const undo = input.undo;
+        await transaction.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "CharacterEquipmentItem" WHERE "id" = ${undo.itemBefore.id} FOR UPDATE`,
+        );
+        const current = await transaction.characterEquipmentItem.findUnique({
+          where: { id: undo.itemBefore.id },
+        });
+        const currentTags = parseStoredStatusTags(current?.statusTagsJson);
+        if (
+          !current ||
+          current.campaignContextId !== input.campaignId ||
+          current.updatedAt.toISOString() !== undo.itemAfterRevision ||
+          current.holderCharacterId !== null ||
+          !currentTags.includes(`${COMBAT_ITEM_PRESENT_PREFIX}${undo.encounterId}`) ||
+          !currentTags.includes(`${COMBAT_ITEM_APPLIED_PREFIX}${undo.actionId}`)
+        ) {
+          throw new CombatItemRevisionError();
+        }
+
+        const loadouts = await transaction.characterLoadout.findMany({
+          orderBy: { id: "asc" },
+          where: { characterId: undo.ownerCharacterId },
+        });
+        const beforeById = new Map(undo.loadoutsBefore.map((loadout) => [loadout.id, loadout]));
+        if (loadouts.length !== beforeById.size) throw new CombatItemRevisionError();
+        for (const loadout of loadouts) {
+          const before = beforeById.get(loadout.id);
+          if (!before) throw new CombatItemRevisionError();
+          const expectedAfter = {
+            activeAmmoItemIds: before.activeAmmoItemIds.filter((id) => id !== undo.itemBefore.id),
+            activeMissileWeaponItemId:
+              before.activeMissileWeaponItemId === undo.itemBefore.id
+                ? null
+                : before.activeMissileWeaponItemId,
+            activePrimaryWeaponItemId:
+              before.activePrimaryWeaponItemId === undo.itemBefore.id
+                ? null
+                : before.activePrimaryWeaponItemId,
+            activeSecondaryWeaponItemId:
+              before.activeSecondaryWeaponItemId === undo.itemBefore.id
+                ? null
+                : before.activeSecondaryWeaponItemId,
+            quickAccessItemIds: before.quickAccessItemIds.filter((id) => id !== undo.itemBefore.id),
+            readyShieldItemId:
+              before.readyShieldItemId === undo.itemBefore.id ? null : before.readyShieldItemId,
+            wornArmorItemId:
+              before.wornArmorItemId === undo.itemBefore.id ? null : before.wornArmorItemId,
+          };
+          if (
+            JSON.stringify(loadout.activeAmmoItemIds) !==
+              JSON.stringify(expectedAfter.activeAmmoItemIds) ||
+            loadout.activeMissileWeaponItemId !== expectedAfter.activeMissileWeaponItemId ||
+            loadout.activePrimaryWeaponItemId !== expectedAfter.activePrimaryWeaponItemId ||
+            loadout.activeSecondaryWeaponItemId !== expectedAfter.activeSecondaryWeaponItemId ||
+            JSON.stringify(parseStringArrayOrNull(loadout.quickAccessItemIdsJson) ?? []) !==
+              JSON.stringify(expectedAfter.quickAccessItemIds) ||
+            loadout.readyShieldItemId !== expectedAfter.readyShieldItemId ||
+            loadout.wornArmorItemId !== expectedAfter.wornArmorItemId
+          ) {
+            throw new CombatItemRevisionError();
+          }
+        }
+
+        for (const before of undo.loadoutsBefore) {
+          await transaction.characterLoadout.update({
+            data: {
+              activeAmmoItemIds: before.activeAmmoItemIds,
+              activeMissileWeaponItemId: before.activeMissileWeaponItemId ?? null,
+              activePrimaryWeaponItemId: before.activePrimaryWeaponItemId ?? null,
+              activeSecondaryWeaponItemId: before.activeSecondaryWeaponItemId ?? null,
+              quickAccessItemIdsJson: before.quickAccessItemIds,
+              readyShieldItemId: before.readyShieldItemId ?? null,
+              wornArmorItemId: before.wornArmorItemId ?? null,
+            },
+            where: { id: before.id },
+          });
+        }
+        const before = undo.itemBefore;
+        const updated = await transaction.characterEquipmentItem.update({
+          data: {
+            carryMode: before.storageAssignment?.carryMode ?? null,
+            holderCharacterId: before.holderCharacterId,
+            isEquipped: before.isEquipped ?? false,
+            locationId: before.storageAssignment?.locationId ?? null,
+            previousCarryMode: before.previousStorageAssignment?.carryMode ?? null,
+            previousLocationId: before.previousStorageAssignment?.locationId ?? null,
+            statusTagsJson: serializeJsonArray(before.statusTags),
+            updatedAt: new Date(Math.max(Date.now(), current.updatedAt.getTime() + 1)),
+          },
+          where: { id: before.id },
+        });
+        return mapCanonicalEquipmentItem(updated);
+      };
+      return transactionClient ? restore(transactionClient) : prisma.$transaction(restore);
     },
     async updateCharacterEquipmentItem(item) {
       const result = await prisma.characterEquipmentItem.updateMany({

@@ -784,6 +784,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
     selectedSourceItemId === primaryItemId,
   );
   const modeResolution = resolvePreferredAttackMode({
+    allowThrownAttack: Boolean(rawReferenceRow?.itemId),
     requireRepeatedRoundAttack,
     selectedModeId: input.selectedAttackModeId,
     weapon: {
@@ -791,6 +792,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
     },
   });
   const selectedDerivedMode = modeResolution.mode;
+  const selectedIsThrownMode = selectedDerivedMode?.attackType === "thrown";
   const reference = {
     am: selectedDerivedMode
       ? String(selectedDerivedMode.armorModifier)
@@ -915,7 +917,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
       input.selectedAttackModeId ??
       (requireRepeatedRoundAttack ? undefined : rawReferenceRow?.attackMode1Id),
     sourceItemId: selectedSourceItemId,
-    sourceSlot: sourceSlot === "missile" ? "throwing" : sourceSlot,
+    sourceSlot: selectedIsThrownMode || sourceSlot === "missile" ? "throwing" : sourceSlot,
     sourceTemplateId: rawReferenceRow?.templateId,
   };
 

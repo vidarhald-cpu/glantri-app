@@ -141,10 +141,7 @@ function trimToNull(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
-function getRawSourceValue(
-  template: WeaponTemplate,
-  sourceKey: string,
-): string | null {
+function getRawSourceValue(template: WeaponTemplate, sourceKey: string): string | null {
   const sourceColumn = template.sourceMetadata?.sourceColumns?.[sourceKey];
   if (!sourceColumn) {
     return null;
@@ -187,12 +184,8 @@ function applyCanonicalWeaponOneMeleeMapping(
     if (mode.id === "mode-1") {
       nextModes.push({
         ...mode,
-        label:
-          primaryAttackLabel ??
-          mode.label ??
-          getCanonicalMeleeModeLabel(primaryModeFamily),
-        canonicalMeleeMode:
-          primaryModeFamily ?? getCanonicalMeleeModeFromCrit(mode.crit),
+        label: primaryAttackLabel ?? mode.label ?? getCanonicalMeleeModeLabel(primaryModeFamily),
+        canonicalMeleeMode: primaryModeFamily ?? getCanonicalMeleeModeFromCrit(mode.crit),
         isPrimaryAttack: true,
         secondCrit,
       });
@@ -226,7 +219,10 @@ function applyCanonicalWeaponOneMeleeMapping(
 function applyAttackModeEnrichment(
   modes: WeaponAttackMode[] | null | undefined,
   enrichment: WeaponTemplateEnrichment | undefined,
-): { attackModes: WeaponAttackMode[] | null | undefined; overrides: Array<{ modeId: string; fields: string[]; note?: string | null }> } {
+): {
+  attackModes: WeaponAttackMode[] | null | undefined;
+  overrides: Array<{ modeId: string; fields: string[]; note?: string | null }>;
+} {
   if (!modes || !enrichment?.attackModes) {
     return { attackModes: modes, overrides: [] };
   }
@@ -280,22 +276,24 @@ function isWarningResolvedByOverride(
   overrides: Array<{ modeId: string; fields: string[] }>,
 ): boolean {
   if (warning.includes("mode-1") && warning.includes("attack label")) {
-    return overrides.some((override) => override.modeId === "mode-1" && override.fields.includes("label"));
+    return overrides.some(
+      (override) => override.modeId === "mode-1" && override.fields.includes("label"),
+    );
   }
   if (warning.includes("mode-2") && warning.includes("secondary attack label")) {
     const secondaryMode = template.attackModes?.find((mode) => mode.id === "mode-2");
     return (
       secondaryMode == null ||
       secondaryMode.label != null ||
-      overrides.some((override) => override.modeId === "mode-2" && override.fields.includes("label"))
+      overrides.some(
+        (override) => override.modeId === "mode-2" && override.fields.includes("label"),
+      )
     );
   }
   return false;
 }
 
-export function applyThemistogenesWeaponEnrichments(
-  templates: WeaponTemplate[],
-): WeaponTemplate[] {
+export function applyThemistogenesWeaponEnrichments(templates: WeaponTemplate[]): WeaponTemplate[] {
   return templates.map((template) => {
     const enrichment = themistogenesWeaponEnrichments[template.id];
     const primeAttackType =
@@ -312,10 +310,20 @@ export function applyThemistogenesWeaponEnrichments(
     );
     const orderedAttackModes = attackModes?.map((mode, index) => ({
       ...mode,
+      attackType:
+        mode.attackType ??
+        (canonicallyMappedTemplate.handlingClass === "thrown"
+          ? "thrown"
+          : canonicallyMappedTemplate.handlingClass === "missile"
+            ? "missile"
+            : "melee"),
+      initiative: mode.initiative ?? canonicallyMappedTemplate.initiative,
       isPrimaryAttack:
         mode.isPrimaryAttack ??
         (attackModes.some((candidate) => candidate.isPrimaryAttack === true) ? false : index === 0),
       order: mode.order ?? index,
+      range: mode.range ?? canonicallyMappedTemplate.range,
+      sourceMetadata: mode.sourceMetadata ?? canonicallyMappedTemplate.sourceMetadata,
     }));
     const enrichedTemplateWithModes: WeaponTemplate = {
       ...canonicallyMappedTemplate,
@@ -329,7 +337,10 @@ export function applyThemistogenesWeaponEnrichments(
     );
 
     const manualEnrichment: WeaponTemplateManualEnrichment | null =
-      enrichment || overrides.length > 0 || resolvedWarnings.length > 0 || unresolvedWarnings.length > 0
+      enrichment ||
+      overrides.length > 0 ||
+      resolvedWarnings.length > 0 ||
+      unresolvedWarnings.length > 0
         ? {
             source: "themistogenes-manual-v1",
             notes: enrichment?.notes ?? null,
@@ -346,7 +357,8 @@ export function applyThemistogenesWeaponEnrichments(
       ...template,
       attackModes: orderedAttackModes,
       primeAttackType,
-      primaryAttackType: primeAttackType ?? primaryMode?.label ?? template.primaryAttackType ?? null,
+      primaryAttackType:
+        primeAttackType ?? primaryMode?.label ?? template.primaryAttackType ?? null,
       secondaryAttackType: secondaryMode?.label ?? template.secondaryAttackType ?? null,
       importWarnings: unresolvedWarnings.length > 0 ? unresolvedWarnings : null,
       manualEnrichment,

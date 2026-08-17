@@ -76,6 +76,7 @@ export function resolveCanonicalCombatInitiativeBase(input: {
     return { completeness: "partial", missingFacts: [...missingFacts].sort() };
   }
   const initiative = getDerivedInitiativeValue({
+    attackMode: template.attackModes?.find((mode) => mode.id === opportunity?.attackModeId),
     characterInputs,
     template,
     treatAsThrownUse: opportunity?.weaponSourceSlot === "throwing",
