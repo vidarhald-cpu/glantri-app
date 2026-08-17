@@ -59,10 +59,12 @@ export interface DerivedCombatAttackMode {
   damageClass?: string | null;
   dmb: DerivedCombatValue;
   id: string;
+  initiative: DerivedCombatValue;
   isPrimaryAttack: boolean;
   label: string;
   ob: DerivedCombatValue;
   order: number;
+  range?: WeaponAttackMode["range"];
   secondCrit: DerivedCombatValue;
 }
 
@@ -431,10 +433,17 @@ function buildThrowingWeaponRow(input: {
         damageClass: mode.damageClass,
         dmb: thrownDmb,
         id: mode.id,
+        initiative: getDerivedInitiativeValue({
+          attackMode: mode,
+          characterInputs: input.characterInputs,
+          template: input.template,
+          treatAsThrownUse: true,
+        }),
         isPrimaryAttack: true,
         label: String(getAttackLabel(mode)),
         ob: thrownOb,
         order: mode.order ?? 0,
+        range: mode.range,
         secondCrit: mode.secondCrit ?? "—",
       },
     ],
@@ -486,8 +495,11 @@ function buildWeaponRow(input: {
   state: EquipmentFeatureState;
   template: WeaponTemplate | null;
 }): DerivedCombatWeaponRow {
-  const mode1 = getAttackMode(input.template, "mode-1");
-  const mode2 = getAttackMode(input.template, "mode-2");
+  const selectableAttackModes = (input.template?.attackModes ?? []).filter(
+    (mode) => !isThrownWeaponAttackMode(mode),
+  );
+  const mode1 = selectableAttackModes.find((mode) => mode.id === "mode-1") ?? null;
+  const mode2 = selectableAttackModes.find((mode) => mode.id === "mode-2") ?? null;
   const oneItemDefensePair = getWorkbookOneItemDefensePair({
     characterInputs: input.characterInputs,
     encumbranceLevel: input.encumbranceLevel,
@@ -495,40 +507,42 @@ function buildWeaponRow(input: {
     rawModifiers: getDefenseRawModifiers(input.allocationInputs),
   });
   const notes = input.template ? formatWeaponNotes(input.template) : "Not equipped";
-  const mode3 = getAttackMode(input.template, "mode-3");
-  const attackModes: DerivedCombatAttackMode[] = (input.template?.attackModes ?? []).map(
-    (mode, index) => ({
-      allowsRepeatedRoundAttack: mode.allowsRepeatedRoundAttack === true,
-      attackType: mode.attackType,
-      armorModifier: getArmorModifierValue(mode),
-      canonicalMeleeMode: mode.canonicalMeleeMode,
-      crit: mode.crit ?? "—",
-      damageClass: mode.damageClass,
-      dmb: getDerivedDmbValue({
-        armorTemplate: input.armorTemplate,
-        characterInputs: input.characterInputs,
-        mode,
-        template: input.template,
-      }),
-      id: mode.id,
-      isPrimaryAttack:
-        mode.isPrimaryAttack === true ||
-        (!(input.template?.attackModes ?? []).some(
-          (candidate) => candidate.isPrimaryAttack === true,
-        ) &&
-          index === 0),
-      label: String(getAttackLabel(mode)),
-      ob: getDerivedObValue({
-        allocationInputs: input.allocationInputs,
-        armorTemplate: input.armorTemplate,
-        characterInputs: input.characterInputs,
-        mode,
-        template: input.template,
-      }),
-      order: mode.order ?? index,
-      secondCrit: mode.secondCrit ?? (index === 0 ? input.template?.secondCrit : undefined) ?? "—",
+  const mode3 = selectableAttackModes.find((mode) => mode.id === "mode-3") ?? null;
+  const attackModes: DerivedCombatAttackMode[] = selectableAttackModes.map((mode, index) => ({
+    allowsRepeatedRoundAttack: mode.allowsRepeatedRoundAttack === true,
+    attackType: mode.attackType,
+    armorModifier: getArmorModifierValue(mode),
+    canonicalMeleeMode: mode.canonicalMeleeMode,
+    crit: mode.crit ?? "—",
+    damageClass: mode.damageClass,
+    dmb: getDerivedDmbValue({
+      armorTemplate: input.armorTemplate,
+      characterInputs: input.characterInputs,
+      mode,
+      template: input.template,
     }),
-  );
+    id: mode.id,
+    initiative: getDerivedInitiativeValue({
+      attackMode: mode,
+      characterInputs: input.characterInputs,
+      template: input.template,
+    }),
+    isPrimaryAttack:
+      mode.isPrimaryAttack === true ||
+      (!selectableAttackModes.some((candidate) => candidate.isPrimaryAttack === true) &&
+        index === 0),
+    label: String(getAttackLabel(mode)),
+    ob: getDerivedObValue({
+      allocationInputs: input.allocationInputs,
+      armorTemplate: input.armorTemplate,
+      characterInputs: input.characterInputs,
+      mode,
+      template: input.template,
+    }),
+    order: mode.order ?? index,
+    range: mode.range,
+    secondCrit: mode.secondCrit ?? (index === 0 ? input.template?.secondCrit : undefined) ?? "—",
+  }));
 
   return {
     attackModes,

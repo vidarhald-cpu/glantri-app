@@ -599,7 +599,6 @@ export function createPrismaCharacterEquipmentRepository(
         }
 
         const presentTag = `${COMBAT_ITEM_PRESENT_PREFIX}${input.encounterId}`;
-        const appliedTag = `${COMBAT_ITEM_APPLIED_PREFIX}${input.actionId}`;
         const isPresentHere = storedTags.includes(presentTag);
         const rosterCharacterIds = [input.ownerCharacterId, input.recipientCharacterId].filter(
           (id): id is string => Boolean(id),
@@ -834,8 +833,6 @@ export function createPrismaCharacterEquipmentRepository(
           }
         }
 
-        nextTags.push(appliedTag);
-
         const updated = await transaction.characterEquipmentItem.update({
           data: {
             carryMode,
@@ -868,8 +865,7 @@ export function createPrismaCharacterEquipmentRepository(
           current.campaignContextId !== input.campaignId ||
           current.updatedAt.toISOString() !== undo.itemAfterRevision ||
           current.holderCharacterId !== null ||
-          !currentTags.includes(`${COMBAT_ITEM_PRESENT_PREFIX}${undo.encounterId}`) ||
-          !currentTags.includes(`${COMBAT_ITEM_APPLIED_PREFIX}${undo.actionId}`)
+          !currentTags.includes(`${COMBAT_ITEM_PRESENT_PREFIX}${undo.encounterId}`)
         ) {
           throw new CombatItemRevisionError();
         }

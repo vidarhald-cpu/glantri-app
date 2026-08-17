@@ -281,6 +281,21 @@ function getRelevantLoadoutFieldId(
   }
 }
 
+function getLoadoutFieldWeaponModeLabel(
+  fieldId: "missile" | "primary" | "secondary" | "throwing",
+): string {
+  switch (fieldId) {
+    case "missile":
+      return "Missile";
+    case "primary":
+      return "Primary";
+    case "secondary":
+      return "Secondary";
+    case "throwing":
+      return "Thrown";
+  }
+}
+
 function hasDisplayValue(value: string): boolean {
   return value.length > 0 && value !== "—";
 }
@@ -611,9 +626,11 @@ export function buildPlayerCombatLoadoutSummary(input: {
     doubleAttackFieldId ?? getRelevantLoadoutFieldId(input.actionId),
     getRelevantLoadoutFieldId(input.secondaryActionId),
   ].filter((value): value is "missile" | "primary" | "secondary" | "throwing" => value !== null);
-  const preferredItemIds = preferredFieldIds
-    .map((fieldId) => loadoutFieldDisplayMap.get(fieldId)?.value)
-    .filter((value): value is string => Boolean(value));
+  const preferredItemSources = preferredFieldIds.flatMap((fieldId) => {
+    const itemId = loadoutFieldDisplayMap.get(fieldId)?.value;
+    return itemId ? [{ fieldId, itemId }] : [];
+  });
+  const preferredItemIds = preferredItemSources.map(({ itemId }) => itemId);
   const preferredWeaponLabels = preferredFieldIds
     .map((fieldId) => loadoutFieldDisplayMap.get(fieldId)?.valueLabel)
     .filter((value): value is string => Boolean(value) && value !== "None");
@@ -635,8 +652,22 @@ export function buildPlayerCombatLoadoutSummary(input: {
       selectedAttackModeUsedFallback: false,
     };
   }
-  const preferredRawReferenceRow = preferredItemIds
-    .map((itemId) => combatPanelModel.weaponRows?.find((row) => row.itemId === itemId) ?? null)
+  const preferredRawReferenceRow = preferredItemSources
+    .map(({ fieldId, itemId }) => {
+      const candidateRows =
+        combatPanelModel.weaponRows?.filter((row) => row.itemId === itemId) ?? [];
+      const selectedModeRow = input.selectedAttackModeId
+        ? candidateRows.find((row) =>
+            row.attackModes?.some((mode) => mode.id === input.selectedAttackModeId),
+          )
+        : undefined;
+      return (
+        selectedModeRow ??
+        candidateRows.find((row) => row.modeLabel === getLoadoutFieldWeaponModeLabel(fieldId)) ??
+        candidateRows[0] ??
+        null
+      );
+    })
     .find((row) => row !== null);
   const referenceRow =
     (preferredRawReferenceRow
@@ -777,6 +808,16 @@ export function buildPlayerCombatLoadoutSummary(input: {
   const selectedSourceItemId =
     (sourceSlot ? loadoutFieldDisplayMap.get(sourceSlot)?.value : undefined) ??
     rawReferenceRow?.itemId;
+  const availableAttackModes = Array.from(
+    new Map(
+      (selectedSourceItemId
+        ? (combatPanelModel.weaponRows ?? [])
+            .filter((row) => row.itemId === selectedSourceItemId)
+            .flatMap((row) => row.attackModes ?? [])
+        : (rawReferenceRow?.attackModes ?? [])
+      ).map((mode) => [mode.id, mode]),
+    ).values(),
+  );
   const requireRepeatedRoundAttack = Boolean(
     input.actionId === "double_attack" &&
     input.phaseKey === "phase2" &&
@@ -788,7 +829,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
     requireRepeatedRoundAttack,
     selectedModeId: input.selectedAttackModeId,
     weapon: {
-      attackModes: rawReferenceRow?.attackModes ?? [],
+      attackModes: availableAttackModes,
     },
   });
   const selectedDerivedMode = modeResolution.mode;
@@ -882,11 +923,14 @@ export function buildPlayerCombatLoadoutSummary(input: {
       label: "DM",
       row: referenceRow,
     }),
-    initiative: getCombatTableCell({
-      columns: combatPanelModel.weaponModeTable.columns,
-      label: "I",
-      row: referenceRow,
-    }),
+    initiative:
+      selectedDerivedMode?.initiative != null
+        ? String(selectedDerivedMode.initiative)
+        : getCombatTableCell({
+            columns: combatPanelModel.weaponModeTable.columns,
+            label: "I",
+            row: referenceRow,
+          }),
     ob: selectedDerivedMode
       ? String(selectedDerivedMode.ob)
       : getCombatTableCell({

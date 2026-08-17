@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+
 import { equipmentTemplatesById } from "@glantri/content";
 import {
   projectCombatItemInteractionRecipients,
@@ -221,8 +223,14 @@ function commandHasThrownWeaponUndo(
   commandId: string,
   undo: CombatThrownWeaponAttackUndo,
 ): boolean {
-  const fact = findCombatCommand(encounter, commandId)?.facts.thrownWeaponUndo;
-  return JSON.stringify(fact) === JSON.stringify(undo);
+  const command = findCombatCommand(encounter, commandId);
+  const fact = command?.facts.thrownWeaponUndo;
+  return (
+    command?.type === "roll_attack" &&
+    undo.actionId === commandId &&
+    undo.encounterId === encounter.id &&
+    isDeepStrictEqual(fact, undo)
+  );
 }
 
 function itemState(record: CombatItemInteractionRecord): CombatItemInteractionState {
@@ -576,6 +584,7 @@ export class CombatItemInteractionService {
         )?.encounter;
         if (
           !persistedEncounter ||
+          input.undos.length === 0 ||
           persistedEncounter.updatedAt !== input.expectedEncounterRevision ||
           persistedEncounter.campaignId !== input.campaignId ||
           persistedEncounter.scenarioId !== input.scenarioId ||

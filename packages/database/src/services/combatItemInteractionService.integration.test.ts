@@ -426,6 +426,30 @@ if (!process.env.DATABASE_URL_TEST) {
         },
         updatedAt: "2026-08-16T10:05:00.000Z",
       });
+      const exactUndo = persistedCommand.facts.thrownWeaponUndo as Record<string, unknown>;
+      await expect(
+        service.commitThrownWeaponAttackUndo({
+          actorUserId: current.gm.id,
+          campaignId: current.campaign.id,
+          encounterId: current.encounterId,
+          expectedEncounterRevision: committed.encounter.updatedAt,
+          scenarioId: current.scenario.id,
+          session: restoredSession,
+          undos: [
+            {
+              commandId,
+              undo: { ...exactUndo, ownerCharacterId: current.recipient.id } as never,
+            },
+          ],
+        }),
+      ).rejects.toBeInstanceOf(Error);
+      expect(
+        await current.itemRepository.getCanonicalEquipmentItemById(current.item.id),
+      ).toMatchObject({ holderCharacterId: null, id: current.item.id });
+      expect(
+        await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
+      ).toBe(1);
+
       await service.commitThrownWeaponAttackUndo({
         actorUserId: current.gm.id,
         campaignId: current.campaign.id,
@@ -436,7 +460,7 @@ if (!process.env.DATABASE_URL_TEST) {
         undos: [
           {
             commandId,
-            undo: persistedCommand.facts.thrownWeaponUndo as never,
+            undo: exactUndo as never,
           },
         ],
       });
