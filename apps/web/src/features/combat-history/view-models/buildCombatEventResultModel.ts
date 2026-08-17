@@ -128,6 +128,16 @@ function resultRow(event: ProjectedCombatHistoryEvent, text?: string): CombatEve
   return text ? [{ key: `${event.id}:outcome:result`, text }] : [];
 }
 
+function weaponProvenanceLabel(value: unknown): string | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const metadata = value as Record<string, unknown>;
+  const sheet = typeof metadata.sheet === "string" ? metadata.sheet : undefined;
+  const row = typeof metadata.row === "number" ? metadata.row : undefined;
+  const sourceRange = typeof metadata.sourceRange === "string" ? metadata.sourceRange : undefined;
+  if (!sheet && !sourceRange) return undefined;
+  return `${sheet ?? "Source"}${row ? ` row ${row}` : ""}${sourceRange ? ` · ${sourceRange}` : ""}`;
+}
+
 function eventPresentation(event: ProjectedCombatHistoryEvent): {
   outcomeRows: CombatEventResultFactRow[];
   summary: string;
@@ -157,8 +167,32 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
     }
     case "attack": {
       const weapon = event.facts.involvedOutcome?.weaponName;
+      const status = factValue(event, "status");
+      const range = factLabel(factValue(event, "weaponModeRange"));
+      const provenance = weaponProvenanceLabel(factValue(event, "weaponModeSourceMetadata"));
+      if (status === "awaiting_defense" || status === "shot_committed") {
+        return {
+          outcomeRows: [
+            ...resultRow(event, "Shot committed · awaiting defense review"),
+            ...(range ? [{ key: `${event.id}:outcome:range`, text: `Range: ${range}` }] : []),
+            ...(provenance
+              ? [{ key: `${event.id}:outcome:source`, text: `Source: ${provenance}` }]
+              : []),
+          ],
+          summary:
+            attacker && defender
+              ? `${attacker} fired at ${defender}${typeof weapon === "string" ? ` with a ${weapon}` : ""}; defense review is pending.`
+              : "Missile shot committed; defense review is pending.",
+        };
+      }
       return {
-        outcomeRows: resultRow(event, `Result: ${attackOutcome(event)}`),
+        outcomeRows: [
+          ...resultRow(event, `Result: ${attackOutcome(event)}`),
+          ...(range ? [{ key: `${event.id}:outcome:range`, text: `Range: ${range}` }] : []),
+          ...(provenance
+            ? [{ key: `${event.id}:outcome:source`, text: `Source: ${provenance}` }]
+            : []),
+        ],
         summary:
           attacker && defender
             ? `${attacker} attacked ${defender}${typeof weapon === "string" ? ` with a ${weapon}` : ""}.`
@@ -167,8 +201,30 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
     }
     case "missile_readiness": {
       const status = factLabel(factValue(event, "status"));
+      const baseCompleted = factLabel(event.facts.privateCalculation?.baseCompletedRounds);
+      const baseRequired = factLabel(event.facts.privateCalculation?.baseRequiredRounds);
+      const aimCompleted = factLabel(event.facts.privateCalculation?.aimCompletedRounds);
+      const aimRequired = factLabel(event.facts.privateCalculation?.aimRequiredRounds);
       return {
-        outcomeRows: resultRow(event, status ? `Status: ${status}` : undefined),
+        outcomeRows: [
+          ...resultRow(event, status ? `Status: ${status}` : undefined),
+          ...(baseCompleted && baseRequired
+            ? [
+                {
+                  key: `${event.id}:outcome:preparation-progress`,
+                  text: `Preparation: ${baseCompleted}/${baseRequired}`,
+                },
+              ]
+            : []),
+          ...(aimCompleted && aimRequired
+            ? [
+                {
+                  key: `${event.id}:outcome:aim-progress`,
+                  text: `Aim: ${aimCompleted}/${aimRequired}`,
+                },
+              ]
+            : []),
+        ],
         summary: `${actor ?? "Participant"} worked on missile preparation.`,
       };
     }

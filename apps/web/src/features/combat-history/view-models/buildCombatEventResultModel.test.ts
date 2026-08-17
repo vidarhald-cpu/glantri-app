@@ -58,6 +58,81 @@ function resultEnvelope(): CombatResultEnvelope {
 }
 
 describe("buildCombatEventResultModel", () => {
+  it("presents private readiness counts explicitly without inventing them for the target", () => {
+    const actor = buildCombatEventResultModel([
+      event("missile_readiness", 1, {
+        facts: {
+          involvedOutcome: { status: "preparing" },
+          privateCalculation: {
+            aimCompletedRounds: 1,
+            aimRequiredRounds: 4,
+            baseCompletedRounds: 2,
+            baseRequiredRounds: 3,
+          },
+          publicOutcome: { status: "preparing" },
+        },
+      }),
+    ]);
+    expect(actor.items[0]?.outcomeRows.map((row) => row.text)).toEqual([
+      "Status: preparing",
+      "Preparation: 2/3",
+      "Aim: 1/4",
+    ]);
+
+    const target = buildCombatEventResultModel([
+      event("missile_readiness", 1, {
+        facts: {
+          involvedOutcome: { status: "preparing" },
+          publicOutcome: { status: "preparing" },
+        },
+      }),
+    ]);
+    expect(target.items[0]?.outcomeRows.map((row) => row.text)).toEqual(["Status: preparing"]);
+  });
+
+  it("presents a pending missile shot with Range and exact source provenance", () => {
+    const model = buildCombatEventResultModel([
+      event("attack", 1, {
+        facts: {
+          involvedOutcome: {
+            status: "awaiting_defense",
+            weaponModeRange: "70/210/420",
+            weaponModeSourceMetadata: {
+              row: 17,
+              sheet: "Weapon2",
+              sourceRange: "A17:K17",
+            },
+            weaponName: "Longbow",
+          },
+          publicOutcome: { status: "shot_committed" },
+        },
+        identities: [
+          {
+            displayName: "Aria",
+            participantId: "aria",
+            role: "attacker",
+            visibility: "visible",
+          },
+          {
+            displayName: "Borin",
+            participantId: "borin",
+            role: "defender",
+            visibility: "visible",
+          },
+        ],
+        status: "proposed",
+      }),
+    ]);
+    expect(model.items[0]?.summary).toBe(
+      "Aria fired at Borin with a Longbow; defense review is pending.",
+    );
+    expect(model.items[0]?.outcomeRows.map((row) => row.text)).toEqual([
+      "Shot committed · awaiting defense review",
+      "Range: 70/210/420",
+      "Source: Weapon2 row 17 · A17:K17",
+    ]);
+  });
+
   it("excludes workflow boundary provenance from participant combat results", () => {
     const boundary = event("round_boundary", 1, {
       completeness: "legacy_derived",

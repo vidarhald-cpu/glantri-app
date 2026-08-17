@@ -90,6 +90,9 @@ const mocks = vi.hoisted(() => {
     getCharacterById: vi.fn(),
     getOwnedCharacter: vi.fn(),
   };
+  const characterEquipmentReadModelService = {
+    getCharacterEquipmentState: vi.fn(),
+  };
   const combatStateReadService = {
     getCombatHistorySourceById: vi.fn(),
     getEncounterMetadataById: vi.fn(),
@@ -136,6 +139,7 @@ const mocks = vi.hoisted(() => {
   return {
     adminUser,
     campaignService,
+    characterEquipmentReadModelService,
     characterService,
     combatItemInteractionService,
     combatStateReadService,
@@ -149,6 +153,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("@glantri/database", () => ({
   CampaignService: vi.fn(() => mocks.campaignService),
+  CharacterEquipmentReadModelService: vi.fn(() => mocks.characterEquipmentReadModelService),
   CharacterService: vi.fn(() => mocks.characterService),
   CombatItemInteractionService: vi.fn(() => mocks.combatItemInteractionService),
   CombatStateReadService: vi.fn(() => mocks.combatStateReadService),
@@ -4049,6 +4054,112 @@ describe("scenarios route contract", () => {
       },
       status: "reviewed",
     });
+  });
+
+  it("interrupts fragile missile preparation once when a reviewed generic action becomes substantial", async () => {
+    const baseEncounter = makeCombatEncounter() as EncounterSession;
+    const roundState = initializeCombatRoundState({ encounter: baseEncounter });
+    const genericActions = declareCombatGenericAction({
+      action: {
+        createdAt: "2026-08-18T10:00:00.000Z",
+        duration: { kind: "round" },
+        id: "generic-substantial-1",
+        intent: "Force the barred gate.",
+        ownerParticipantId: "encounter-participant-1",
+      },
+      actions: [],
+    });
+    const encounter = {
+      ...baseEncounter,
+      combatRoundState: combatRoundStateSchema.parse({
+        ...roundState,
+        genericActions,
+        missileReadiness: [
+          {
+            aimCompletedRounds: 1,
+            aimLevel: 1,
+            aimRequiredRounds: 2,
+            ammoFamily: "arrow",
+            ammoItemId: "arrows",
+            ammoItemRevision: "ammo-revision-1",
+            baseCompletedRounds: 1,
+            baseRequiredRounds: 1,
+            family: "long_bow",
+            gmPreparationAdjustment: 0,
+            id: "missile-readiness:encounter-participant-1:bow",
+            participantId: "encounter-participant-1",
+            profile: {
+              ammoFamily: "arrow",
+              canRemainReady: false,
+              family: "long_bow",
+              fullNormalCycleRounds: 2,
+              preparationModel: "continuous_fragile",
+              rapidShotAllowed: true,
+              standardPreparationRounds: 1,
+            },
+            rapidShot: false,
+            status: "preparing",
+            targetParticipantId: "encounter-participant-2",
+            updatedAt: "2026-08-18T10:00:00.000Z",
+            weaponItemId: "bow",
+            weaponTemplateId: "weapon-template-long-bow",
+          },
+        ],
+      }),
+    } as EncounterSession;
+    const participant = makeCombatScenarioParticipant();
+    setupCombatDeclarationRoute({ encounter, participants: [participant], user: mocks.adminUser });
+    setupMutableCombatRouteState({ encounter, participants: [participant], user: mocks.adminUser });
+    const app = await buildScenarioTestApp();
+
+    const reviewed = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "generic-substantial-1",
+        duration: { kind: "round" },
+        expectedRevision: encounter.updatedAt,
+        operation: "review",
+        referenceKind: "none",
+        rollKind: "none",
+      },
+      url: "/encounters/encounter-1/combat-round/generic-actions",
+    });
+    expect(reviewed.statusCode, JSON.stringify(reviewed.json())).toBe(200);
+    expect(reviewed.json().encounter.combatRoundState.missileReadiness[0].status).toBe("preparing");
+    expect(reviewed.json().encounter.combatRoundState.commands).toHaveLength(0);
+
+    const activated = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "generic-substantial-1",
+        expectedRevision: reviewed.json().encounter.updatedAt,
+        operation: "activate",
+      },
+      url: "/encounters/encounter-1/combat-round/generic-actions",
+    });
+    expect(activated.statusCode, JSON.stringify(activated.json())).toBe(200);
+    expect(activated.json().encounter.combatRoundState.missileReadiness[0]).toMatchObject({
+      aimCompletedRounds: 0,
+      baseCompletedRounds: 0,
+      status: "idle",
+    });
+    expect(activated.json().encounter.combatRoundState.commands).toHaveLength(1);
+    expect(activated.json().encounter.combatRoundState.commands[0].type).toBe(
+      "interrupt_missile_readiness",
+    );
+
+    const cancelled = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "generic-substantial-1",
+        expectedRevision: activated.json().encounter.updatedAt,
+        operation: "cancel",
+      },
+      url: "/encounters/encounter-1/combat-round/generic-actions",
+    });
+    await app.close();
+    expect(cancelled.statusCode, JSON.stringify(cancelled.json())).toBe(200);
+    expect(cancelled.json().encounter.combatRoundState.commands).toHaveLength(1);
   });
 
   it("lists campaigns for the authenticated game master", async () => {

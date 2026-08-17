@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   advanceCombatMissileReadiness,
+  canInterruptCombatMissileReadiness,
   consumeCombatMissileReadinessAfterShot,
   getCombatMissileAttackModifier,
   getCombatMissileRequiredRounds,
@@ -50,6 +51,34 @@ function advance(
     submittedAt: `2026-08-${String(round).padStart(2, "0")}T00:00:00.000Z`,
     weaponItemId: "longbow",
     weaponTemplateId: "weapon-template-long-bow",
+  });
+}
+
+function advanceCrossbow(input: {
+  aimLevel?: 0 | 1 | 2 | 3;
+  current?: Parameters<typeof advanceCombatMissileReadiness>[0]["current"];
+  gmPreparationAdjustment?: number;
+  round: number;
+  targetParticipantId?: string;
+}) {
+  return advanceCombatMissileReadiness({
+    commandId: `crossbow-command-${input.round}`,
+    current: input.current,
+    intent: {
+      aimLevel: input.aimLevel ?? 0,
+      ammoItemId: "bolts",
+      ammoItemRevision: "2026-08-01T00:00:00.000Z",
+      gmPreparationAdjustment: input.gmPreparationAdjustment ?? 0,
+      rapidShot: false,
+      targetParticipantId: input.targetParticipantId ?? "target",
+    },
+    participantId: "archer",
+    phase: "phase1",
+    profile: crossbow,
+    roundNumber: input.round,
+    submittedAt: `2026-08-${String(input.round).padStart(2, "0")}T00:00:00.000Z`,
+    weaponItemId: "crossbow",
+    weaponTemplateId: "weapon-template-crossbow",
   });
 }
 
@@ -120,5 +149,87 @@ describe("Missile Weapons V1 readiness", () => {
       interruptedAt: "2026-08-02T00:00:00.000Z",
     });
     expect(staged).toMatchObject({ baseCompletedRounds: 6, status: "spanned" });
+    expect(canInterruptCombatMissileReadiness(staged)).toBe(false);
+    expect(canInterruptCombatMissileReadiness(advance(undefined, 1))).toBe(true);
+  });
+
+  it("preserves only completed persistent crossbow stages across interruption", () => {
+    let partial = advanceCrossbow({ round: 1 });
+    for (let round = 2; round <= 5; round += 1) {
+      partial = advanceCrossbow({ current: partial, round });
+    }
+    expect(partial).toMatchObject({ baseCompletedRounds: 5, status: "preparing" });
+    expect(
+      interruptCombatMissileReadiness({
+        current: partial,
+        interruptedAt: "2026-08-06T00:00:00.000Z",
+      }),
+    ).toMatchObject({ baseCompletedRounds: 0, status: "idle" });
+
+    const spanned = advanceCrossbow({ current: partial, round: 6 });
+    expect(spanned).toMatchObject({ baseCompletedRounds: 6, status: "spanned" });
+    expect(
+      interruptCombatMissileReadiness({
+        current: spanned,
+        interruptedAt: "2026-08-07T00:00:00.000Z",
+      }),
+    ).toMatchObject({ baseCompletedRounds: 6, status: "spanned" });
+
+    const loaded = advanceCrossbow({ current: spanned, round: 7 });
+    expect(loaded).toMatchObject({ baseCompletedRounds: 7, status: "loaded" });
+    const loadedAiming = advanceCrossbow({ aimLevel: 1, current: loaded, round: 8 });
+    expect(loadedAiming).toMatchObject({
+      aimCompletedRounds: 1,
+      baseCompletedRounds: 7,
+      status: "loaded",
+    });
+    const interrupted = interruptCombatMissileReadiness({
+      current: loadedAiming,
+      interruptedAt: "2026-08-09T00:00:00.000Z",
+    });
+    expect(interrupted).toMatchObject({
+      aimCompletedRounds: 0,
+      aimLevel: 0,
+      baseCompletedRounds: 7,
+      status: "loaded",
+      targetParticipantId: undefined,
+    });
+    expect(canInterruptCombatMissileReadiness(interrupted)).toBe(false);
+  });
+
+  it("scopes a GM timing adjustment to one shot while retaining a loaded stage", () => {
+    let adjusted = advanceCrossbow({ gmPreparationAdjustment: -3, round: 1 });
+    for (let round = 2; round <= 4; round += 1) {
+      adjusted = advanceCrossbow({ current: adjusted, gmPreparationAdjustment: -3, round });
+    }
+    expect(adjusted).toMatchObject({
+      baseCompletedRounds: 4,
+      baseRequiredRounds: 4,
+      gmPreparationAdjustment: -3,
+      status: "loaded",
+    });
+    const nextTask = advanceCrossbow({
+      current: { ...adjusted, targetParticipantId: undefined },
+      gmPreparationAdjustment: 0,
+      round: 5,
+      targetParticipantId: "new-target",
+    });
+    expect(nextTask).toMatchObject({
+      baseCompletedRounds: 7,
+      baseRequiredRounds: 7,
+      gmPreparationAdjustment: 0,
+      status: "loaded",
+    });
+    expect(
+      consumeCombatMissileReadinessAfterShot({
+        current: nextTask,
+        firedAt: "2026-08-06T00:00:00.000Z",
+      }),
+    ).toMatchObject({
+      baseCompletedRounds: 0,
+      baseRequiredRounds: 7,
+      gmPreparationAdjustment: 0,
+      status: "idle",
+    });
   });
 });

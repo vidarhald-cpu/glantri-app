@@ -192,6 +192,8 @@ export interface PlayerCombatLoadoutReference {
   ob: string;
   ob2: string;
   parry: string;
+  provenance?: string;
+  range?: string;
   secondCrit: string;
   selectedWeapon: string;
   sourceAttackModeId?: string;
@@ -836,6 +838,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
   });
   const selectedDerivedMode = modeResolution.mode;
   const selectedIsThrownMode = selectedDerivedMode?.attackType === "thrown";
+  const sourceMetadata = selectedDerivedMode?.sourceMetadata;
   const reference = {
     am: selectedDerivedMode
       ? String(selectedDerivedMode.armorModifier)
@@ -950,6 +953,10 @@ export function buildPlayerCombatLoadoutSummary(input: {
       label: "Parry",
       row: referenceRow,
     }),
+    provenance: sourceMetadata
+      ? `${sourceMetadata.sheet} row ${sourceMetadata.row} · ${sourceMetadata.sourceRange}`
+      : selectedDerivedMode?.provenance,
+    range: selectedDerivedMode?.range ?? "—",
     secondCrit: selectedDerivedMode
       ? String(selectedDerivedMode.secondCrit ?? "—")
       : getCombatTableCell({
@@ -1027,6 +1034,8 @@ export function buildPlayerCombatAttackStats(
     initiative: reference.initiative,
     maxCrits: `${crit}${!useSecondAttack && hasDisplayValue(reference.secondCrit) ? ` / ${reference.secondCrit}` : ""}`,
     ob,
+    provenance: reference.provenance,
+    range: reference.range ?? "—",
     weaponArmorClass: hasDisplayValue(attackMode) ? attackMode : undefined,
     weaponCriticalCode: hasDisplayValue(combinedFirstCriticalCode)
       ? combinedFirstCriticalCode

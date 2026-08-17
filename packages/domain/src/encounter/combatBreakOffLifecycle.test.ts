@@ -218,6 +218,72 @@ function stateWithContinuedContact() {
 }
 
 describe("Break Off lifecycle", () => {
+  it("invalidates fragile preparation exactly with the participant roll and restores it on undo", () => {
+    const initial = combatRoundStateSchema.parse({
+      ...state(),
+      missileReadiness: [
+        {
+          aimCompletedRounds: 1,
+          aimLevel: 1,
+          aimRequiredRounds: 2,
+          ammoFamily: "arrow",
+          ammoItemId: "arrows",
+          ammoItemRevision: "ammo-revision-1",
+          baseCompletedRounds: 1,
+          baseRequiredRounds: 1,
+          family: "long_bow",
+          gmPreparationAdjustment: 0,
+          id: "missile-readiness:escapee:bow",
+          participantId: "escapee",
+          profile: {
+            ammoFamily: "arrow",
+            canRemainReady: false,
+            family: "long_bow",
+            fullNormalCycleRounds: 2,
+            preparationModel: "continuous_fragile",
+            rapidShotAllowed: true,
+            standardPreparationRounds: 1,
+          },
+          rapidShot: false,
+          status: "preparing",
+          targetParticipantId: "attacker",
+          updatedAt: at,
+          weaponItemId: "bow",
+          weaponTemplateId: "weapon-template-long-bow",
+        },
+      ],
+    });
+    const proposalId = initial.breakOffProposals[0]!.id;
+    const reviewed = reviewCombatRoundBreakOff({
+      attackerAdjustment: 0,
+      command: { createdAt: at },
+      escapeeAdjustment: 0,
+      proposalId,
+      state: initial,
+    });
+    expect(reviewed.missileReadiness[0]?.status).toBe("preparing");
+    const rolled = recordCombatRoundBreakOffRoll({
+      command: { createdAt: "2026-08-17T12:01:00.000Z" },
+      proposalId,
+      result: roll("escapee", 20, "break_off_escapee"),
+      state: reviewed,
+    });
+    expect(rolled.commands.at(-1)?.type).toBe("roll_break_off");
+    expect(rolled.commands.at(-1)?.facts.previousMissileReadiness).toHaveLength(1);
+    expect(rolled.missileReadiness[0]).toMatchObject({
+      aimCompletedRounds: 0,
+      baseCompletedRounds: 0,
+      status: "idle",
+    });
+    const reloaded = combatRoundStateSchema.parse(JSON.parse(JSON.stringify(rolled)));
+    expect(undoLatestCombatRoundCommand({ state: reloaded })?.missileReadiness[0]).toMatchObject({
+      aimCompletedRounds: 1,
+      baseCompletedRounds: 1,
+      status: "preparing",
+      targetParticipantId: "attacker",
+    });
+  });
+
   it("projects the exact review task for the active pair", () => {
     const projection = buildCombatProgressionProjection(state());
     const tasks = projection.boundary.processes.flatMap((process) =>

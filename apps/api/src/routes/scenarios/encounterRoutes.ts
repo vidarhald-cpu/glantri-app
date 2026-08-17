@@ -125,8 +125,10 @@ import {
   getCombatRoundParryReviewStepForPhase,
   getCombatRoundAttackResultById,
   getCombatRoundAttackResultForOpportunity,
+  getCombatRoundPendingMissileIncomingAttack,
   getCombatRoundAttackResultId,
   getCombatMissileAttackModifier,
+  canInterruptCombatMissileReadiness,
   getCombatRoundCriticalResultId,
   getCanonicalAttackOpportunityIdentity,
   getCombatRoundDamageReviewId,
@@ -180,6 +182,8 @@ import {
   recordCombatRoundHitLocationRoll,
   recordCombatRoundInitiative,
   recordCombatRoundAttackResult,
+  recordCombatRoundMissileShot,
+  combatMissileIncomingAttackSchema,
   progressCombatRoundMissileReadiness,
   interruptCombatRoundMissileReadiness,
   recordCombatRoundParryResult,
@@ -3668,25 +3672,6 @@ export function rollMissileWeaponDmbSnapshot(input: {
   };
 }
 
-function resolveMissileDmbSnapshot(input: {
-  participant: ScenarioParticipant;
-  weaponFacts: NonNullable<ReturnType<typeof resolveCanonicalAttackOpportunityWeaponFacts>>;
-}) {
-  if (!input.weaponFacts.isMissileAttack || !input.weaponFacts.weaponDmbFormula) return undefined;
-  const build = characterBuildSchema.safeParse(input.participant.snapshot.build);
-  const strengthGm = build.success
-    ? buildCombatStateCharacterInputs(
-        buildCharacterSheetSummary({ build: build.data, content: defaultCanonicalContent }),
-      ).strengthGm
-    : undefined;
-  return rollMissileWeaponDmbSnapshot({
-    formula: input.weaponFacts.weaponDmbFormula,
-    raw: input.weaponFacts.weaponDmbRaw,
-    sourceMetadata: input.weaponFacts.weaponModeSourceMetadata,
-    strengthGm,
-  });
-}
-
 function getSnapshotActiveWeaponTemplates(participant: ScenarioParticipant): WeaponTemplate[] {
   const equipmentState = getSnapshotEquipmentState(participant);
   const activeWeaponItemIds = getScenarioParticipantActiveWeaponItemIds(participant);
@@ -6128,7 +6113,10 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
     const safeFacts = { ...input.command.facts };
     delete safeFacts.attackerCalculation;
     delete safeFacts.defenderCalculation;
+    delete safeFacts.interruptedMissileReadiness;
+    delete safeFacts.pendingMissileAttack;
     delete safeFacts.missileAmmoUndo;
+    delete safeFacts.previousMissileReadiness;
     delete safeFacts.thrownWeaponUndo;
     return { ...input.command, facts: safeFacts };
   }
@@ -7064,9 +7052,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       let stateWithGenericAction = { ...roundState, genericActions };
       if (
         existingAction &&
-        ["roll", "resolve", "interrupt", "cancel"].includes(body.operation) &&
+        ["activate", "roll", "resolve"].includes(body.operation) &&
         roundState.missileReadiness.some(
-          (entry) => entry.participantId === existingAction.ownerParticipantId,
+          (entry) =>
+            entry.participantId === existingAction.ownerParticipantId &&
+            canInterruptCombatMissileReadiness(entry),
         )
       ) {
         stateWithGenericAction = interruptCombatRoundMissileReadiness({
@@ -15334,6 +15324,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           });
         }
         const submittedAt = new Date().toISOString();
+        const existingReadiness = roundState.missileReadiness.find(
+          (entry) =>
+            entry.participantId === encounterParticipant.id &&
+            entry.weaponItemId === body.weaponInstanceId,
+        );
+        const playerContinuesSamePreparationTask =
+          access.mode !== "gm" &&
+          existingReadiness !== undefined &&
+          existingReadiness.status !== "idle" &&
+          existingReadiness.aimLevel === body.aimLevel &&
+          existingReadiness.ammoItemId === body.ammoItemId &&
+          existingReadiness.rapidShot === body.rapidShot &&
+          existingReadiness.targetParticipantId === body.targetParticipantId;
         const nextState = progressCombatRoundMissileReadiness({
           command: { createdAt: submittedAt, createdByUserId: user.id },
           intent: {
@@ -15343,11 +15346,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             gmPreparationAdjustment:
               access.mode === "gm"
                 ? body.gmPreparationAdjustment
-                : (roundState.missileReadiness.find(
-                    (entry) =>
-                      entry.participantId === encounterParticipant.id &&
-                      entry.weaponItemId === body.weaponInstanceId,
-                  )?.gmPreparationAdjustment ?? 0),
+                : playerContinuesSamePreparationTask
+                  ? existingReadiness.gmPreparationAdjustment
+                  : 0,
             rapidShot: body.rapidShot,
             targetParticipantId: body.targetParticipantId,
           },
@@ -15612,7 +15613,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         state: roundState,
       });
 
-      if (existingAttackResult) {
+      const existingPendingMissileAttack = getCombatRoundPendingMissileIncomingAttack({
+        opportunityId: body.opportunityId,
+        state: roundState,
+      });
+
+      if (existingAttackResult || existingPendingMissileAttack) {
         return reply.code(409).send({
           error: "Attack already rolled for this participant and phase.",
         });
@@ -15719,33 +15725,41 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         state: roundState,
       });
       const weaponName = canonicalWeaponFacts.weaponName;
-      const canonicalDefense = resolveCanonicalScenarioParticipantDefense({
-        defenderResolution: canonicalModifierFacts.defenderResolution,
-        flatDbResolution: canonicalModifierFacts.defenderFlatResolution,
-        participant: defenderScenarioParticipant,
-      });
+      const canonicalDefense = canonicalWeaponFacts.isMissileAttack
+        ? undefined
+        : resolveCanonicalScenarioParticipantDefense({
+            defenderResolution: canonicalModifierFacts.defenderResolution,
+            flatDbResolution: canonicalModifierFacts.defenderFlatResolution,
+            participant: defenderScenarioParticipant,
+          });
       const latestDefenderSnapshot =
-        canonicalDefense.completeness === "complete"
+        canonicalDefense?.completeness === "complete"
           ? undefined
-          : findLegacyCombatDefenseSnapshot({
-              defenderParticipantId: defenderEncounterParticipant.id,
-              phase: body.phase,
-              state: roundState,
-            });
+          : canonicalDefense
+            ? findLegacyCombatDefenseSnapshot({
+                defenderParticipantId: defenderEncounterParticipant.id,
+                phase: body.phase,
+                state: roundState,
+              })
+            : undefined;
       const defenderFlatDbAdjustment =
-        canonicalDefense.completeness === "complete"
+        canonicalDefense?.completeness === "complete"
           ? canonicalDefense.flatDbAdjustment
-          : getMergedCombatDbFlatAdjustmentTotal({
-              combatContext: canonicalModifierFacts.defenderCombatContext,
-              phase: body.phase,
-            });
+          : canonicalDefense
+            ? getMergedCombatDbFlatAdjustmentTotal({
+                combatContext: canonicalModifierFacts.defenderCombatContext,
+                phase: body.phase,
+              })
+            : undefined;
       const baseDefenderDb =
-        canonicalDefense.completeness === "complete"
+        canonicalDefense?.completeness === "complete"
           ? canonicalDefense.effectiveDb
-          : resolveLegacyAttackDefenderDb({
-              currentFlatAdjustment: defenderFlatDbAdjustment,
-              snapshot: latestDefenderSnapshot,
-            });
+          : canonicalDefense && defenderFlatDbAdjustment !== undefined
+            ? resolveLegacyAttackDefenderDb({
+                currentFlatAdjustment: defenderFlatDbAdjustment,
+                snapshot: latestDefenderSnapshot,
+              })
+            : undefined;
 
       const breakOffDefenderTrace =
         baseDefenderDb === undefined || breakOffConsequence.defenderDbParryModifier === 0
@@ -15764,7 +15778,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           ? baseDefenderDb
           : breakOffDefenderTrace?.finalValue;
 
-      if (!weaponName || defenderDb === undefined) {
+      if (!weaponName || (!canonicalWeaponFacts.isMissileAttack && defenderDb === undefined)) {
         return reply.code(409).send({
           code: "attack_context_unavailable",
           error: "Required attack context is unavailable. Refresh combat before rolling.",
@@ -15855,10 +15869,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
       const roll = rollOpenEndedCombatToHitD20();
-      const missileDmbSnapshot = resolveMissileDmbSnapshot({
-        participant: scenarioParticipant,
-        weaponFacts: canonicalWeaponFacts,
-      });
       const declaredAttackPhaseDefensivePenalty =
         attackerRoundParticipant?.declaration?.attackPhaseDefensivePenalties?.find(
           (penalty) => penalty.attackOpportunityId === canonicalOpportunityIdentity.opportunityId,
@@ -15871,102 +15881,158 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               roundNumber: roundState.roundNumber,
             })
           : undefined);
-      const defenderCalculation = buildAcceptedCombatDefenseCalculationFact({
-        calculation: canonicalDefense,
-        cutoffInitiativeGroupId: body.effectCutoffInitiativeGroupId,
-        cutoffSequence: getCombatRoundNextEventSequence(roundState),
-        defenderResolution: canonicalDefenderDbParryResolution,
-        effectiveDb: defenderDb,
-        flatResolution: canonicalModifierFacts.defenderFlatResolution,
-        legacySnapshot: latestDefenderSnapshot,
-      });
-      const attackResult = buildCombatRoundAttackRollResult({
-        actionId,
-        attackPhaseDefensivePenalty: declaredAttackPhaseDefensivePenalty
-          ? resolveCombatAttackPhaseDefensivePenalty({
-              commitment: "committed",
-              executionState: "executed",
-              opportunity: declaredOpportunity,
-              participantId: encounterParticipant.id,
-              reason: "ordinary_committed_attack",
-              roundNumber: roundState.roundNumber,
-            })
-          : undefined,
-        attackIndex: canonicalOpportunityIdentity.attackIndex,
-        attackModeId: canonicalOpportunityIdentity.attackModeId,
-        attackType: canonicalWeaponFacts.attackType,
-        attackOpportunityId: canonicalOpportunityIdentity.opportunityId,
-        attackSlot: declaredOpportunity.slot,
-        attackerParticipantId: encounterParticipant.id,
-        declarationId: canonicalOpportunityIdentity.declarationId,
-        defenderDb,
-        defenderParticipantId: defenderEncounterParticipant.id,
-        ob: opponentSpecificObTrace.finalValue,
-        openEndedD10s: roll.openEndedD10s,
-        phase: body.phase,
-        rollD20: roll.rollD20,
-        rollTotal: roll.rollTotal,
-        rolledAt: submittedAt,
-        rolledByUserId: user.id,
-        weaponArmorClass: canonicalWeaponFacts.weaponArmorClass,
-        weaponCriticalCode: canonicalWeaponFacts.weaponCriticalCode,
-        weaponDamageClass: canonicalWeaponFacts.weaponDamageClass,
-        weaponDmb: missileDmbSnapshot?.total ?? canonicalWeaponFacts.weaponDmb,
-        weaponDmbRoll: missileDmbSnapshot,
-        weaponDmbFormula: canonicalWeaponFacts.weaponDmbFormula,
-        weaponDmbRaw: canonicalWeaponFacts.weaponDmbRaw,
-        weaponModeInitiative: canonicalWeaponFacts.weaponModeInitiative,
-        weaponModeRange: canonicalWeaponFacts.weaponModeRange,
-        weaponModeSourceMetadata: canonicalWeaponFacts.weaponModeSourceMetadata,
-        weaponInstanceId: canonicalOpportunityIdentity.weaponInstanceId,
-        weaponName,
-        weaponSourceId: canonicalOpportunityIdentity.weaponSourceId,
-        weaponSourceSlot: canonicalOpportunityIdentity.weaponSourceSlot,
-        weaponTemplateId: canonicalOpportunityIdentity.weaponTemplateId,
-      });
-      let nextRoundState = recordCombatRoundAttackResult({
-        command: {
-          createdAt: submittedAt,
-          createdByUserId: user.id,
-          facts: {
-            defenderCalculation,
-            defenderFlatDbAdjustment,
-            ...(distanceModifierDetail ? { distanceModifier: distanceModifierDetail } : {}),
-            obSkillRaw: canonicalObSkillRaw,
-            attackerCalculation: {
-              authority: canonicalOffense.authority,
-              baseOb: canonicalOffense.baseOb,
-              dynamicRawPercentage: canonicalOffense.dynamicRawPercentage,
-              effectiveOb: opponentSpecificObTrace.finalValue,
-              equipmentLoadoutRevision: canonicalOffense.equipmentLoadoutRevision,
-              opponentSpecificRawPercentage:
-                canonicalModifierFacts.attackerOpponentResolution.total,
-              participantId: canonicalOffense.participantId,
-              preOpponentOb: canonicalOffense.preOpponentOb,
-              schemaVersion: 1,
-              sourceSnapshotId: canonicalOffense.sourceSnapshotId,
-            },
-            ...(opponentSpecificObModifierRows.length > 0
-              ? {
-                  obBeforeOpponentSpecificModifier: canonicalOffense.preOpponentOb,
-                  opponentSpecificObPercentageAdjustment:
-                    opponentSpecificObTrace.percentageAdjustment,
-                  opponentSpecificObRaw: canonicalModifierFacts.attackerOpponentResolution.total,
-                  opponentSpecificObModifierRows,
-                }
-              : {}),
-          },
+      const executedAttackPhaseDefensivePenalty = declaredAttackPhaseDefensivePenalty
+        ? resolveCombatAttackPhaseDefensivePenalty({
+            commitment: "committed",
+            executionState: "executed",
+            opportunity: declaredOpportunity,
+            participantId: encounterParticipant.id,
+            reason: "ordinary_committed_attack",
+            roundNumber: roundState.roundNumber,
+          })
+        : undefined;
+      const attackerCalculationFacts = {
+        ...(distanceModifierDetail ? { distanceModifier: distanceModifierDetail } : {}),
+        obSkillRaw: canonicalObSkillRaw,
+        attackerCalculation: {
+          authority: canonicalOffense.authority,
+          baseOb: canonicalOffense.baseOb,
+          dynamicRawPercentage: canonicalOffense.dynamicRawPercentage,
+          effectiveOb: opponentSpecificObTrace.finalValue,
+          equipmentLoadoutRevision: canonicalOffense.equipmentLoadoutRevision,
+          opponentSpecificRawPercentage: canonicalModifierFacts.attackerOpponentResolution.total,
+          participantId: canonicalOffense.participantId,
+          preOpponentOb: canonicalOffense.preOpponentOb,
+          schemaVersion: 1,
+          sourceSnapshotId: canonicalOffense.sourceSnapshotId,
         },
-        participantId: encounterParticipant.id,
-        result: attackResult,
-        state: roundState,
-        submittedBy: access.mode === "gm" ? "gm" : "player",
-      });
+        ...(opponentSpecificObModifierRows.length > 0
+          ? {
+              obBeforeOpponentSpecificModifier: canonicalOffense.preOpponentOb,
+              opponentSpecificObPercentageAdjustment: opponentSpecificObTrace.percentageAdjustment,
+              opponentSpecificObRaw: canonicalModifierFacts.attackerOpponentResolution.total,
+              opponentSpecificObModifierRows,
+            }
+          : {}),
+      };
+      const pendingMissileAttack = canonicalWeaponFacts.isMissileAttack
+        ? combatMissileIncomingAttackSchema.parse({
+            actionId,
+            attackIndex: canonicalOpportunityIdentity.attackIndex,
+            attackModeId: canonicalOpportunityIdentity.attackModeId,
+            attackOpportunityId: canonicalOpportunityIdentity.opportunityId,
+            attackSlot: declaredOpportunity.slot,
+            attackerParticipantId: encounterParticipant.id,
+            declarationId: canonicalOpportunityIdentity.declarationId,
+            defenderParticipantId: defenderEncounterParticipant.id,
+            id: `missile-incoming:round:${roundState.roundNumber}:${canonicalOpportunityIdentity.opportunityId}`,
+            kind: "missileIncomingAttack",
+            ob: opponentSpecificObTrace.finalValue,
+            openEndedD10s: roll.openEndedD10s,
+            phase: body.phase,
+            rollD20: roll.rollD20,
+            rollTotal: roll.rollTotal,
+            rolledAt: submittedAt,
+            rolledByUserId: user.id,
+            status: "awaiting_defense",
+            weaponArmorClass: canonicalWeaponFacts.weaponArmorClass,
+            weaponCriticalCode: canonicalWeaponFacts.weaponCriticalCode,
+            weaponDamageClass: canonicalWeaponFacts.weaponDamageClass,
+            weaponDmbFormula: canonicalWeaponFacts.weaponDmbFormula,
+            weaponDmbRaw: canonicalWeaponFacts.weaponDmbRaw,
+            weaponInstanceId: canonicalOpportunityIdentity.weaponInstanceId,
+            weaponModeInitiative: canonicalWeaponFacts.weaponModeInitiative,
+            weaponModeRange: canonicalWeaponFacts.weaponModeRange,
+            weaponModeSourceMetadata: canonicalWeaponFacts.weaponModeSourceMetadata,
+            weaponName,
+            weaponSourceId: canonicalOpportunityIdentity.weaponSourceId,
+            weaponSourceSlot: canonicalOpportunityIdentity.weaponSourceSlot,
+            weaponTemplateId: canonicalOpportunityIdentity.weaponTemplateId,
+          })
+        : undefined;
+      const defenderCalculation =
+        canonicalDefense && defenderDb !== undefined
+          ? buildAcceptedCombatDefenseCalculationFact({
+              calculation: canonicalDefense,
+              cutoffInitiativeGroupId: body.effectCutoffInitiativeGroupId,
+              cutoffSequence: getCombatRoundNextEventSequence(roundState),
+              defenderResolution: canonicalDefenderDbParryResolution,
+              effectiveDb: defenderDb,
+              flatResolution: canonicalModifierFacts.defenderFlatResolution,
+              legacySnapshot: latestDefenderSnapshot,
+            })
+          : undefined;
+      const attackResult = pendingMissileAttack
+        ? undefined
+        : buildCombatRoundAttackRollResult({
+            actionId,
+            attackPhaseDefensivePenalty: executedAttackPhaseDefensivePenalty,
+            attackIndex: canonicalOpportunityIdentity.attackIndex,
+            attackModeId: canonicalOpportunityIdentity.attackModeId,
+            attackType: canonicalWeaponFacts.attackType,
+            attackOpportunityId: canonicalOpportunityIdentity.opportunityId,
+            attackSlot: declaredOpportunity.slot,
+            attackerParticipantId: encounterParticipant.id,
+            declarationId: canonicalOpportunityIdentity.declarationId,
+            defenderDb: defenderDb!,
+            defenderParticipantId: defenderEncounterParticipant.id,
+            ob: opponentSpecificObTrace.finalValue,
+            openEndedD10s: roll.openEndedD10s,
+            phase: body.phase,
+            rollD20: roll.rollD20,
+            rollTotal: roll.rollTotal,
+            rolledAt: submittedAt,
+            rolledByUserId: user.id,
+            weaponArmorClass: canonicalWeaponFacts.weaponArmorClass,
+            weaponCriticalCode: canonicalWeaponFacts.weaponCriticalCode,
+            weaponDamageClass: canonicalWeaponFacts.weaponDamageClass,
+            weaponDmb: canonicalWeaponFacts.weaponDmb,
+            weaponDmbFormula: canonicalWeaponFacts.weaponDmbFormula,
+            weaponDmbRaw: canonicalWeaponFacts.weaponDmbRaw,
+            weaponModeInitiative: canonicalWeaponFacts.weaponModeInitiative,
+            weaponModeRange: canonicalWeaponFacts.weaponModeRange,
+            weaponModeSourceMetadata: canonicalWeaponFacts.weaponModeSourceMetadata,
+            weaponInstanceId: canonicalOpportunityIdentity.weaponInstanceId,
+            weaponName,
+            weaponSourceId: canonicalOpportunityIdentity.weaponSourceId,
+            weaponSourceSlot: canonicalOpportunityIdentity.weaponSourceSlot,
+            weaponTemplateId: canonicalOpportunityIdentity.weaponTemplateId,
+          });
+      let nextRoundState = pendingMissileAttack
+        ? recordCombatRoundMissileShot({
+            attack: pendingMissileAttack,
+            attackPhaseDefensivePenalty: executedAttackPhaseDefensivePenalty,
+            command: {
+              createdAt: submittedAt,
+              createdByUserId: user.id,
+              facts: attackerCalculationFacts,
+            },
+            participantId: encounterParticipant.id,
+            state: roundState,
+            submittedBy: access.mode === "gm" ? "gm" : "player",
+          })
+        : recordCombatRoundAttackResult({
+            command: {
+              createdAt: submittedAt,
+              createdByUserId: user.id,
+              facts: {
+                defenderCalculation,
+                defenderFlatDbAdjustment,
+                ...attackerCalculationFacts,
+              },
+            },
+            participantId: encounterParticipant.id,
+            result: attackResult!,
+            state: roundState,
+            submittedBy: access.mode === "gm" ? "gm" : "player",
+          });
       const attackCommand = nextRoundState.commands.at(-1);
-      const attackResultId = getCombatRoundAttackResultId({
-        result: attackResult,
-        roundNumber: nextRoundState.roundNumber,
-      });
+      const attackResultId = attackResult
+        ? getCombatRoundAttackResultId({
+            result: attackResult,
+            roundNumber: nextRoundState.roundNumber,
+          })
+        : undefined;
       const disarmAttempt = nextRoundState.disarmAttempts.find(
         (attempt) =>
           attempt.roundNumber === nextRoundState.roundNumber &&
@@ -15976,7 +16042,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           attempt.resistingParticipantId === defenderEncounterParticipant.id &&
           attempt.phase === body.phase,
       );
-      if (disarmAttempt) {
+      if (disarmAttempt && attackResult && attackResultId) {
         const activeContinuedContact = nextRoundState.continuedContacts.find(
           (contact) =>
             contact.status === "active" &&
@@ -16056,13 +16122,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               session: nextEncounterSession,
             });
       const commandEnvelope = buildCombatRoundCommandEnvelope({
-        latestResult: {
-          attackResultId,
-          attackerParticipantId: attackResult.attackerParticipantId,
-          defenderParticipantId: attackResult.defenderParticipantId,
-          kind: "attack",
-          phase: attackResult.phase,
-        },
+        latestResult:
+          attackResult && attackResultId
+            ? {
+                attackResultId,
+                attackerParticipantId: attackResult.attackerParticipantId,
+                defenderParticipantId: attackResult.defenderParticipantId,
+                kind: "attack",
+                phase: attackResult.phase,
+              }
+            : undefined,
         state: nextRoundState,
       });
       const refreshedAttackerParticipant =
@@ -16083,6 +16152,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       return {
         attackResult,
+        pendingMissileAttack,
         command:
           access.mode === "gm" || !attackCommand
             ? attackCommand

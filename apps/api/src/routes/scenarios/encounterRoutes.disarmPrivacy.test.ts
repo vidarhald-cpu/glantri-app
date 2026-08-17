@@ -383,11 +383,20 @@ describe("player-safe missile readiness state", () => {
     const attackCommand = {
       ...seedCommand,
       facts: {
+        interruptedMissileReadiness: [
+          {
+            ...readiness,
+            ammoItemId: "secret-interrupted-ammo",
+            ammoItemRevision: REVISION,
+            id: "secret-interrupted-readiness",
+          },
+        ],
         missileAmmoUndo: {
           ammoItemId: "secret-ammo-item",
           quantityAfter: 2,
           quantityBefore: 3,
         },
+        previousMissileReadiness: readiness,
       },
       id: "secret-attack-command",
       participantId: "actor",
@@ -414,6 +423,11 @@ describe("player-safe missile readiness state", () => {
       scenarioParticipants: current.scenarioParticipants,
       userId: "user-observer",
     }).combatRoundState!;
+    const target = buildPlayerSafeEncounterForUser({
+      encounter,
+      scenarioParticipants: current.scenarioParticipants,
+      userId: "user-holder",
+    }).combatRoundState!;
 
     expect(actor.missileReadiness).toHaveLength(1);
     expect(actor.missileReadiness[0]).toMatchObject({
@@ -432,9 +446,17 @@ describe("player-safe missile readiness state", () => {
       "progress_missile_readiness",
     );
     expect(JSON.stringify(actor)).not.toMatch(
-      /secret-ammo-item|secret-readiness-command|quantityBefore|quantityAfter/,
+      /secret-ammo-item|secret-interrupted-ammo|secret-interrupted-readiness|secret-readiness-command|quantityBefore|quantityAfter/,
+    );
+    expect(
+      target.commands.find((command) => command.id === "secret-attack-command")?.facts,
+    ).toEqual({});
+    expect(JSON.stringify(target)).not.toMatch(
+      /secret-ammo-item|secret-interrupted-ammo|secret-interrupted-readiness|secret-readiness-command|quantityBefore|quantityAfter/,
     );
     expect(observer.missileReadiness).toEqual([]);
-    expect(JSON.stringify(observer)).not.toMatch(/secret-ammo-item|other-readiness/);
+    expect(JSON.stringify(observer)).not.toMatch(
+      /secret-ammo-item|secret-interrupted-ammo|secret-interrupted-readiness|other-readiness/,
+    );
   });
 });

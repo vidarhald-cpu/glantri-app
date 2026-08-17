@@ -95,6 +95,12 @@ function statusForProgress(input: {
   if (input.ready) return input.profile.canRemainReady ? "loaded" : "ready";
   if (
     input.profile.preparationModel === "staged_persistent" &&
+    input.baseCompletedRounds >= input.baseRounds
+  ) {
+    return "loaded";
+  }
+  if (
+    input.profile.preparationModel === "staged_persistent" &&
     input.baseRounds > 0 &&
     input.baseCompletedRounds >= Math.max(1, input.baseRounds - 1)
   ) {
@@ -130,6 +136,15 @@ export function advanceCombatMissileReadiness(input: {
 }): CombatMissileReadiness {
   const intent = combatMissileReadinessIntentSchema.parse(input.intent);
   const required = getCombatMissileRequiredRounds({ ...intent, profile: input.profile });
+  const currentRequired = input.current ? getCombatMissileRequiredRounds(input.current) : undefined;
+  const currentBaseRequired = input.current?.baseRequiredRounds ?? currentRequired?.baseRounds;
+  const retainsLoadedPersistentStage =
+    input.current?.weaponItemId === input.weaponItemId &&
+    input.current.profile.family === input.profile.family &&
+    input.current.profile.preparationModel === "staged_persistent" &&
+    input.current.status === "loaded" &&
+    currentBaseRequired !== undefined &&
+    input.current.baseCompletedRounds >= currentBaseRequired;
   const samePhysicalPreparation =
     input.current?.weaponItemId === input.weaponItemId &&
     input.current.profile.family === input.profile.family &&
@@ -139,9 +154,11 @@ export function advanceCombatMissileReadiness(input: {
     samePhysicalPreparation &&
     input.current?.aimLevel === intent.aimLevel &&
     input.current.targetParticipantId === intent.targetParticipantId;
-  let baseCompletedRounds = samePhysicalPreparation
-    ? Math.min(input.current?.baseCompletedRounds ?? 0, required.baseRounds)
-    : 0;
+  let baseCompletedRounds = retainsLoadedPersistentStage
+    ? required.baseRounds
+    : samePhysicalPreparation
+      ? Math.min(input.current?.baseCompletedRounds ?? 0, required.baseRounds)
+      : 0;
   let aimCompletedRounds = sameAim
     ? Math.min(input.current?.aimCompletedRounds ?? 0, required.aimRounds)
     : 0;
@@ -189,20 +206,59 @@ export function interruptCombatMissileReadiness(input: {
   const current = combatMissileReadinessSchema.parse(input.current);
   const persistent = current.profile.preparationModel === "staged_persistent";
   const required = getCombatMissileRequiredRounds(current);
-  const durableBase =
-    persistent && current.baseCompletedRounds >= Math.max(1, required.baseRounds - 1)
-      ? Math.max(1, required.baseRounds - 1)
-      : 0;
+  const interruptedRequired = getCombatMissileRequiredRounds({
+    ...current,
+    aimLevel: 0,
+    gmPreparationAdjustment: 0,
+    rapidShot: false,
+  });
+  const loadedBase = required.baseRounds;
+  const spannedBase = Math.max(1, required.baseRounds - 1);
+  const durableBase = !persistent
+    ? 0
+    : current.baseCompletedRounds >= loadedBase
+      ? loadedBase
+      : current.baseCompletedRounds >= spannedBase
+        ? spannedBase
+        : 0;
   return combatMissileReadinessSchema.parse({
     ...current,
     aimCompletedRounds: 0,
     aimLevel: 0,
+    aimRequiredRounds: interruptedRequired.aimRounds,
     baseCompletedRounds: durableBase,
+    baseRequiredRounds: durableBase > 0 ? required.baseRounds : interruptedRequired.baseRounds,
+    gmPreparationAdjustment: 0,
     rapidShot: false,
-    status: durableBase > 0 ? "spanned" : "idle",
+    status:
+      persistent && durableBase >= loadedBase ? "loaded" : durableBase > 0 ? "spanned" : "idle",
     targetParticipantId: undefined,
     updatedAt: input.interruptedAt,
   });
+}
+
+/**
+ * Returns whether interruption would invalidate any banked preparation or targeting choice.
+ * Timestamps are intentionally ignored so accepted no-op actions cannot manufacture repeat
+ * interruption commands.
+ */
+export function canInterruptCombatMissileReadiness(readiness: CombatMissileReadiness): boolean {
+  const current = combatMissileReadinessSchema.parse(readiness);
+  const interrupted = interruptCombatMissileReadiness({
+    current,
+    interruptedAt: current.updatedAt,
+  });
+  return (
+    current.aimCompletedRounds !== interrupted.aimCompletedRounds ||
+    current.aimLevel !== interrupted.aimLevel ||
+    current.aimRequiredRounds !== interrupted.aimRequiredRounds ||
+    current.baseCompletedRounds !== interrupted.baseCompletedRounds ||
+    current.baseRequiredRounds !== interrupted.baseRequiredRounds ||
+    current.gmPreparationAdjustment !== interrupted.gmPreparationAdjustment ||
+    current.rapidShot !== interrupted.rapidShot ||
+    current.status !== interrupted.status ||
+    current.targetParticipantId !== interrupted.targetParticipantId
+  );
 }
 
 export function consumeCombatMissileReadinessAfterShot(input: {
@@ -215,10 +271,13 @@ export function consumeCombatMissileReadinessAfterShot(input: {
     aimCompletedRounds: 0,
     aimLevel: 0,
     baseCompletedRounds: 0,
+    baseRequiredRounds: input.current.profile.standardPreparationRounds,
+    gmPreparationAdjustment: 0,
     lastCommandId: undefined,
     rapidShot: false,
     status: "idle",
     targetParticipantId: undefined,
+    aimRequiredRounds: 0,
     updatedAt: input.firedAt,
   });
 }

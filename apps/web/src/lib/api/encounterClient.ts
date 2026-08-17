@@ -10,6 +10,7 @@ import {
   CombatHistoryProjection,
   CombatGenericActionDuration,
   CombatItemInteractionOperation,
+  CombatMissileIncomingAttack,
   CombatProgressionBoundaryKind,
   CombatParryPurpose,
   CombatRoundAttackRollResult,
@@ -1273,18 +1274,20 @@ export async function rollCombatAttackOnServer(input: {
   weaponTemplateId: string;
   currentEncounter?: EncounterSession;
 }): Promise<{
-  attackResult: CombatRoundAttackRollResult;
+  attackResult?: CombatRoundAttackRollResult;
   command?: CombatRoundCommand;
   commandEnvelope: CombatRoundCommandEnvelope;
   encounter: EncounterSession;
   participant?: ScenarioParticipant;
+  pendingMissileAttack?: CombatMissileIncomingAttack;
 }> {
   const payload = await sendCombatMutationJson<{
-    attackResult: CombatRoundAttackRollResult;
+    attackResult?: CombatRoundAttackRollResult;
     command?: CombatRoundCommand;
     commandEnvelope: CombatRoundCommandEnvelope;
     encounter: EncounterSession;
     participant?: ScenarioParticipant;
+    pendingMissileAttack?: CombatMissileIncomingAttack;
   }>(
     `/encounters/${input.encounterId}/combat-round/roll-attack`,
     {

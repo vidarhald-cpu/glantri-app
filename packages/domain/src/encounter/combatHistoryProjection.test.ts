@@ -800,6 +800,74 @@ describe("combat history projection", () => {
     expect(roller?.ownerParticipantId).toBe("aria");
   });
 
+  it("keeps missile preparation progress private to the actor while targets see safe status", () => {
+    const readiness = event({
+      actorParticipantId: "aria",
+      facts: {
+        gmReview: { gmPreparationAdjustment: 4 },
+        involvedOutcome: { status: "preparing" },
+        publicOutcome: { status: "preparing" },
+        rollerPrivate: {
+          aimCompletedRounds: 1,
+          aimLevel: 2,
+          aimRequiredRounds: 4,
+          baseCompletedRounds: 1,
+          baseRequiredRounds: 2,
+          family: "short_bow",
+          status: "preparing",
+        },
+      },
+      ownerParticipantId: "aria",
+      rollerParticipantId: "aria",
+      targetParticipantId: "borin",
+      type: "missile_readiness",
+      visibility: {
+        identityRefs: [
+          { participantId: "aria", role: "actor" },
+          { participantId: "borin", role: "target" },
+        ],
+        involvedParticipantIds: ["aria", "borin"],
+        outcomeScope: "involved",
+        rollerParticipantId: "aria",
+      },
+    });
+    const actor = projectCombatHistoryEvent({
+      event: readiness,
+      participants,
+      viewer: player(["aria"], ["aria", "borin", "cyra"]),
+    });
+    const target = projectCombatHistoryEvent({
+      event: readiness,
+      participants,
+      viewer: player(["borin"], ["aria", "borin", "cyra"]),
+    });
+    const uninvolved = projectCombatHistoryEvent({
+      event: readiness,
+      participants,
+      viewer: player(["cyra"], ["aria", "borin", "cyra"]),
+    });
+    const gm = projectCombatHistoryEvent({
+      event: readiness,
+      participants,
+      viewer: { kind: "gm" },
+    });
+
+    expect(actor?.facts.privateCalculation).toMatchObject({
+      aimCompletedRounds: 1,
+      aimLevel: 2,
+      aimRequiredRounds: 4,
+      baseCompletedRounds: 1,
+      baseRequiredRounds: 2,
+    });
+    expect(actor?.facts.gmReview).toBeUndefined();
+    expect(target?.facts).toMatchObject({ involvedOutcome: { status: "preparing" } });
+    expect(target?.facts.privateCalculation).toBeUndefined();
+    expect(JSON.stringify(target)).not.toMatch(/aimRequiredRounds|baseRequiredRounds/);
+    expect(target?.facts.gmReview).toBeUndefined();
+    expect(uninvolved).toBeUndefined();
+    expect(gm?.facts.gmReview).toEqual({ gmPreparationAdjustment: 4 });
+  });
+
   it("shows parry outcome to the attacker without defender calculation", () => {
     const parry = event({
       rollerParticipantId: "borin",

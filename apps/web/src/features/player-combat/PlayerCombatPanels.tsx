@@ -108,7 +108,9 @@ export interface PlayerCombatAttackStatsView {
   initiative: string;
   maxCrits: string;
   ob: string;
+  provenance?: string;
   provisional?: boolean;
+  range?: string;
   weaponArmorClass?: string;
   weaponCriticalCode?: string;
   weaponDamageClass?: string;
@@ -2220,7 +2222,7 @@ export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsT
       <table style={compactStatsTableStyle}>
         <thead>
           <tr>
-            {["I", "OB", "DMB", "AM", "MC"].map((heading) => (
+            {["I", "OB", "DMB", "AM", "MC", "Range"].map((heading) => (
               <th
                 key={heading}
                 style={{
@@ -2236,22 +2238,30 @@ export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsT
         </thead>
         <tbody>
           <tr>
-            {[stats.initiative, stats.ob, stats.dmb, stats.attackMode, stats.maxCrits].map(
-              (value, index) => (
-                <td
-                  key={`${value}-${index}`}
-                  style={{
-                    borderBottom: "1px solid #ece8dc",
-                    padding: "0.2rem",
-                  }}
-                >
-                  {value}
-                </td>
-              ),
-            )}
+            {[
+              stats.initiative,
+              stats.ob,
+              stats.dmb,
+              stats.attackMode,
+              stats.maxCrits,
+              stats.range ?? "—",
+            ].map((value, index) => (
+              <td
+                key={`${value}-${index}`}
+                style={{
+                  borderBottom: "1px solid #ece8dc",
+                  padding: "0.2rem",
+                }}
+              >
+                {value}
+              </td>
+            ))}
           </tr>
         </tbody>
       </table>
+      {stats.provenance ? (
+        <small style={{ color: "#5e5a50" }}>Source: {stats.provenance}</small>
+      ) : null}
     </div>
   );
 }
