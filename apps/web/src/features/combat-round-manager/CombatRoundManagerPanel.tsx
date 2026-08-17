@@ -51,6 +51,7 @@ import type {
 } from "@glantri/domain";
 import {
   COMBAT_FEINT_OUTCOME_TABLE,
+  COMBAT_BREAK_OFF_RESULT_TABLE,
   COMBAT_ROUND_STEP_LABELS,
   buildCombatRoundPhaseResolutionResult,
   buildLiveCombatModifierContributionProjection,
@@ -155,6 +156,9 @@ import {
   reviewCombatAdjustDistanceOnServer,
   rollCombatAdjustDistanceOnServer,
   commitCombatAdjustDistanceOnServer,
+  reviewCombatBreakOffOnServer,
+  rollCombatBreakOffOnServer,
+  commitCombatBreakOffOnServer,
   commitRoundEndDistanceControlOnServer,
   commitRoundEndParticipantReviewOnServer,
   rollCombatAttackOnServer,
@@ -4039,6 +4043,10 @@ export default function CombatRoundManagerPanel({
     "successful" | "unsuccessful" | "allowed"
   >("unsuccessful");
   const [inspectorAdjustDistanceReviewNote, setInspectorAdjustDistanceReviewNote] = useState("");
+  const [inspectorBreakOffEscapeeAdjustment, setInspectorBreakOffEscapeeAdjustment] = useState("0");
+  const [inspectorBreakOffAttackerAdjustment, setInspectorBreakOffAttackerAdjustment] =
+    useState("0");
+  const [inspectorBreakOffNote, setInspectorBreakOffNote] = useState("");
   const [inspectorCurrentActionOutcomeSelection, setInspectorCurrentActionOutcomeSelection] =
     useState<InspectorCurrentActionOutcomeSelection>("perform");
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
@@ -4330,6 +4338,15 @@ export default function CombatRoundManagerPanel({
         "adjust_distance_attacker_roll",
         "adjust_distance_defender_roll",
         "adjust_distance_commit",
+      ].includes(task.kind) && task.state === "executable",
+  );
+  const projectedBreakOffTask = projectedCurrentTasks.find(
+    (task) =>
+      [
+        "break_off_review",
+        "break_off_escapee_roll",
+        "break_off_attacker_roll",
+        "break_off_commit",
       ].includes(task.kind) && task.state === "executable",
   );
   const currentTaskStep = currentTaskSelection?.step ?? roundState.currentStep;
@@ -6301,6 +6318,21 @@ export default function CombatRoundManagerPanel({
             proposal.id === projectedAdjustDistanceTask.identity.proposalId,
         )
       : undefined;
+  const inspectorBreakOffProposal =
+    selectedRoundIsActive && projectedBreakOffTask?.identity.proposalId
+      ? roundState.breakOffProposals.find(
+          (proposal) => proposal.id === projectedBreakOffTask.identity.proposalId,
+        )
+      : undefined;
+  useEffect(() => {
+    setInspectorBreakOffEscapeeAdjustment(
+      String(inspectorBreakOffProposal?.gmReview?.escapeeAdjustment ?? 0),
+    );
+    setInspectorBreakOffAttackerAdjustment(
+      String(inspectorBreakOffProposal?.gmReview?.attackerAdjustment ?? 0),
+    );
+    setInspectorBreakOffNote(inspectorBreakOffProposal?.gmReview?.notes ?? "");
+  }, [inspectorBreakOffProposal]);
   const inspectorAdjustDistanceReview = buildAdjustDistanceReviewPresentation({
     participantLabelsById: roundParticipantLabelsById,
     proposal: inspectorAdjustDistanceProposal,
@@ -6978,6 +7010,94 @@ export default function CombatRoundManagerPanel({
       ) : null}
     </div>
   ) : null;
+  const inspectorBreakOffControls = inspectorBreakOffProposal ? (
+    <div style={{ display: "grid", gap: "0.5rem" }}>
+      <strong>Break Off engagement</strong>
+      <div>
+        {roundParticipantLabelsById[inspectorBreakOffProposal.escapeeParticipantId] ??
+          inspectorBreakOffProposal.escapeeParticipantId}{" "}
+        against{" "}
+        {roundParticipantLabelsById[inspectorBreakOffProposal.attackerParticipantId] ??
+          inspectorBreakOffProposal.attackerParticipantId}
+      </div>
+      {inspectorBreakOffProposal.intentNote ? (
+        <div>{inspectorBreakOffProposal.intentNote}</div>
+      ) : null}
+      {inspectorBreakOffProposal.status === "awaiting_gm_review" ? (
+        <>
+          <label style={compactFieldLabelStyle}>
+            <span>Escapee Dodge adjustment</span>
+            <input
+              disabled={saving}
+              onChange={(event) => setInspectorBreakOffEscapeeAdjustment(event.target.value)}
+              type="number"
+              value={inspectorBreakOffEscapeeAdjustment}
+            />
+          </label>
+          <label style={compactFieldLabelStyle}>
+            <span>Attacker Dodge adjustment</span>
+            <input
+              disabled={saving}
+              onChange={(event) => setInspectorBreakOffAttackerAdjustment(event.target.value)}
+              type="number"
+              value={inspectorBreakOffAttackerAdjustment}
+            />
+          </label>
+          <label style={compactFieldLabelStyle}>
+            <span>Combat note (optional)</span>
+            <input
+              disabled={saving}
+              maxLength={500}
+              onChange={(event) => setInspectorBreakOffNote(event.target.value)}
+              value={inspectorBreakOffNote}
+            />
+          </label>
+        </>
+      ) : null}
+      {inspectorBreakOffProposal.escapeeRoll || inspectorBreakOffProposal.attackerRoll ? (
+        <div>
+          Dodge: {inspectorBreakOffProposal.escapeeRoll?.finalTotal ?? "pending"} vs{" "}
+          {inspectorBreakOffProposal.attackerRoll?.finalTotal ?? "pending"}
+        </div>
+      ) : null}
+      {inspectorBreakOffProposal.status === "awaiting_commit" ? (
+        <>
+          <div>
+            Difference {inspectorBreakOffProposal.difference} ·{" "}
+            {inspectorBreakOffProposal.result?.escaped
+              ? "Break Off succeeds"
+              : "Engagement continues"}
+          </div>
+          <table style={{ borderCollapse: "collapse", fontSize: "0.82rem", width: "100%" }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: "left" }}>Difference</th>
+                <th style={{ textAlign: "left" }}>Canonical result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {COMBAT_BREAK_OFF_RESULT_TABLE.map((row) => {
+                const selected = row.id === inspectorBreakOffProposal.result?.tableRowId;
+                const boundary = `${row.minimum ?? "−∞"}…${row.maximum ?? "+∞"}`;
+                return (
+                  <tr
+                    key={row.id}
+                    style={selected ? { background: "#f3ead2", fontWeight: 700 } : undefined}
+                  >
+                    <td>{boundary}</td>
+                    <td>{row.label}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {inspectorBreakOffProposal.gmReview?.notes ? (
+            <div>GM note: {inspectorBreakOffProposal.gmReview.notes}</div>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  ) : null;
   const inspectorAdjustDistanceControls = inspectorAdjustDistanceProposal ? (
     <div style={{ display: "grid", gap: "0.5rem" }}>
       <strong>Adjustment maneuver</strong>
@@ -7186,6 +7306,7 @@ export default function CombatRoundManagerPanel({
     inspectorCurrentActionOutcomeControls ||
     inspectorCombatExperienceDifficultyControls ||
     inspectorFeintControls ||
+    inspectorBreakOffControls ||
     inspectorAdjustDistanceControls ||
     inspectorDoubleAttackDecisionControls ||
     inspectorPhaseAttackChoiceControls ||
@@ -7198,6 +7319,7 @@ export default function CombatRoundManagerPanel({
         {inspectorCurrentActionOutcomeControls}
         {inspectorCombatExperienceDifficultyControls}
         {inspectorFeintControls}
+        {inspectorBreakOffControls}
         {inspectorAdjustDistanceControls}
         {inspectorDoubleAttackDecisionControls}
         {inspectorPhaseAttackChoiceControls}
@@ -8900,6 +9022,74 @@ export default function CombatRoundManagerPanel({
         caughtError instanceof Error
           ? caughtError.message
           : "Unable to advance the distance adjustment.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function advanceInspectorBreakOff(descriptor: CurrentActionCommandDescriptor) {
+    const proposal = roundState.breakOffProposals.find(
+      (candidate) => candidate.id === descriptor.proposalId,
+    );
+    if (!proposal || saving) return;
+    setSaving(true);
+    try {
+      let nextEncounter: EncounterSession;
+      if (
+        descriptor.commandType === "review_break_off" &&
+        proposal.status === "awaiting_gm_review"
+      ) {
+        nextEncounter = await reviewCombatBreakOffOnServer({
+          attackerAdjustment: Number.parseInt(inspectorBreakOffAttackerAdjustment, 10),
+          currentEncounter: encounter,
+          encounterId: encounter.id,
+          escapeeAdjustment: Number.parseInt(inspectorBreakOffEscapeeAdjustment, 10),
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
+          notes: inspectorBreakOffNote || undefined,
+          proposalId: proposal.id,
+          taskId: descriptor.taskId,
+        });
+      } else if (
+        descriptor.commandType === "roll_break_off" &&
+        proposal.status === "awaiting_rolls"
+      ) {
+        const scenarioParticipant = scenarioParticipantForTask(descriptor);
+        if (!scenarioParticipant) return;
+        nextEncounter = await rollCombatBreakOffOnServer({
+          currentEncounter: encounter,
+          encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
+          proposalId: proposal.id,
+          scenarioParticipantId: scenarioParticipant.id,
+          taskId: descriptor.taskId,
+        });
+      } else if (
+        descriptor.commandType === "commit_break_off" &&
+        proposal.status === "awaiting_commit"
+      ) {
+        nextEncounter = await commitCombatBreakOffOnServer({
+          currentEncounter: encounter,
+          encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedRevision: descriptor.expectedRevision,
+          proposalId: proposal.id,
+          taskId: descriptor.taskId,
+        });
+      } else {
+        setSaveError("Combat state changed. Review the current Break Off task before continuing.");
+        return;
+      }
+      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
+      setInspectionSelection(resolveCombatRoundInspectionSelection({ state: nextRoundState }));
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to advance Break Off.",
       );
     } finally {
       setSaving(false);
@@ -10621,6 +10811,11 @@ export default function CombatRoundManagerPanel({
         void invokeResultProducingGmCommand(descriptor, () =>
           advanceInspectorAdjustDistance(descriptor),
         );
+        return;
+      case "review_break_off":
+      case "roll_break_off":
+      case "commit_break_off":
+        void invokeResultProducingGmCommand(descriptor, () => advanceInspectorBreakOff(descriptor));
         return;
       case "roll_parry":
         void invokeResultProducingGmCommand(descriptor, () => rollInspectorParry(descriptor));

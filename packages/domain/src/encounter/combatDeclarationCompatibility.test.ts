@@ -125,6 +125,7 @@ describe("combat declaration compatibility", () => {
       "adjust_range_attack",
       "offensive_parry",
       "parry",
+      "break_off_engagement",
     ]) {
       expect(isCombatDeclarationActionAvailable({ actionId, kind: "primary" })).toBe(true);
     }
@@ -135,7 +136,7 @@ describe("combat declaration compatibility", () => {
     expect(getCombatDeclarationCapabilityStatus({ actionId: "disarm", kind: "primary" })).toBe(
       "unavailable",
     );
-    for (const actionId of ["parry_disarm", "break_off_engagement", "other"]) {
+    for (const actionId of ["parry_disarm", "other"]) {
       expect(getCombatDeclarationCapabilityStatus({ actionId, kind: "primary" })).toBe(
         "legacy_only",
       );
@@ -218,14 +219,7 @@ describe("combat declaration compatibility", () => {
   });
 
   it("rejects unavailable, legacy-only, and unknown executable declarations precisely", () => {
-    for (const actionId of [
-      "counterattack",
-      "disarm",
-      "parry_disarm",
-      "break_off_engagement",
-      "other",
-      "unknown_action",
-    ]) {
+    for (const actionId of ["counterattack", "disarm", "parry_disarm", "other", "unknown_action"]) {
       expect(validateCombatDeclarationActionAvailability({ actionId, kind: "primary" })).toEqual({
         message: `Combat action is not yet available: ${actionId}.`,
         valid: false,

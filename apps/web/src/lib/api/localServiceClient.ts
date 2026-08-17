@@ -87,6 +87,7 @@ export {
   respondCombatAdjustDistanceOnServer,
   reviewCombatAdjustDistanceOnServer,
   rollCombatAdjustDistanceOnServer,
+  rollCombatBreakOffOnServer,
   createEncounterOnServer,
   loadEncounterById,
   loadEncounterRevision,

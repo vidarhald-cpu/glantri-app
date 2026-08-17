@@ -35,6 +35,7 @@ const MOVEMENT_MODIFIER_POLICY: Record<
   weapon_feint: "not_applicable",
   offensive_parry_brawling: "not_applicable",
   continued_contact: "not_applicable",
+  break_off: "required",
   observe_opponent: "not_applicable",
   weapon_resolution: "not_applicable",
 };
@@ -69,18 +70,16 @@ function calculateArmorEffectiveEncumbrance(input: {
   template: ArmorTemplate;
 }): number {
   const encumbranceFactor = input.template.encumbranceFactor ?? input.template.baseEncumbrance;
-  return (
-    encumbranceFactor *
-    input.item.quantity *
-    input.characterSize
-  );
+  return encumbranceFactor * input.item.quantity * input.characterSize;
 }
 
-function partialSnapshot(input: ResolveCombatMovementBurdenInput & {
-  carriedItems?: CombatMovementBurdenSnapshot["carriedItems"];
-  missingFacts: Iterable<CombatMovementBurdenMissingFact>;
-  totalEffectiveCarriedEncumbrance?: number;
-}): CombatMovementBurdenSnapshot {
+function partialSnapshot(
+  input: ResolveCombatMovementBurdenInput & {
+    carriedItems?: CombatMovementBurdenSnapshot["carriedItems"];
+    missingFacts: Iterable<CombatMovementBurdenMissingFact>;
+    totalEffectiveCarriedEncumbrance?: number;
+  },
+): CombatMovementBurdenSnapshot {
   return combatMovementBurdenSnapshotSchema.parse({
     schemaVersion: 1,
     participantId: input.participantId,

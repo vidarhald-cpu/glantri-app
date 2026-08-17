@@ -104,6 +104,19 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("scenarioParticipantId: selectedParticipant.id");
   });
 
+  it("executes participant-owned Break Off rolls through the exact projected task", () => {
+    const source = readSource();
+
+    expect(source).toContain("rollCombatBreakOffOnServer");
+    expect(source).toContain("async function rollBreakOff(");
+    expect(source).toContain('case "roll_break_off"');
+    expect(source).toContain("proposalId: descriptor.proposalId");
+    expect(source).toContain("scenarioParticipantId: descriptor.participantId");
+    expect(source).toContain("executionGroupId: descriptor.executionGroupId!");
+    expect(source).toContain("expectedRevision: descriptor.expectedRevision");
+    expect(source).toContain("taskId: descriptor.taskId");
+  });
+
   it("keeps the recovered combat panel importable without future placeholder panels", () => {
     const source = readSource();
 

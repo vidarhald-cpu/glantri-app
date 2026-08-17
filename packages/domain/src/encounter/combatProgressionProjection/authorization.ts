@@ -290,6 +290,24 @@ const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, Comma
     process: "adjust_distance",
     stage: "proposal_commit",
   },
+  review_break_off: {
+    boundary: "phase1_resolution",
+    kind: "break_off_review",
+    process: "break_off",
+    stage: "proposal_review",
+  },
+  roll_break_off: {
+    boundary: "phase1_resolution",
+    kind: ["break_off_escapee_roll", "break_off_attacker_roll"],
+    process: "break_off",
+    stage: "opposed_rolls",
+  },
+  commit_break_off: {
+    boundary: "phase1_resolution",
+    kind: "break_off_commit",
+    process: "break_off",
+    stage: "proposal_commit",
+  },
   roll_feint: {
     boundary: "phase1_resolution",
     kind: ["feint_attacker_roll", "feint_defender_roll"],

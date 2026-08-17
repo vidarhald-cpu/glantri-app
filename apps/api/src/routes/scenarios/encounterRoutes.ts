@@ -110,6 +110,7 @@ import {
   expireAdjustDistanceAttackGeneratedModifiersBeforeRound,
   fingerprintCombatModifierResolution,
   getCombatRoundInitiativePhaseForStep,
+  getCombatBreakOffPairConsequence,
   getCombatRoundCurrentInitiativeExecutionGroup,
   getCombatRoundNextEventSequence,
   getCombatNpcDeclarationProposalAttackSources,
@@ -157,9 +158,13 @@ import {
   recordCombatRoundDeclaration,
   respondCombatRoundAdjustDistance,
   reviewCombatRoundAdjustDistanceRollAdjustment,
+  reviewCombatRoundBreakOff,
   recordCombatRoundAdjustDistanceRoll,
+  recordCombatRoundBreakOffRoll,
   commitCombatRoundAdjustDistance,
+  commitCombatRoundBreakOff,
   combatAdjustDistanceRollResultSchema,
+  combatBreakOffRollSchema,
   combatRoundEndDistanceRollResultSchema,
   recordCombatRoundFeintRoll,
   commitCombatRoundFeintResult,
@@ -786,7 +791,7 @@ function resolveAdjustDistanceSkillContestCalculation(input: {
   calculationId: string;
   contestType: Extract<
     CombatSkillContestType,
-    "adjust_distance_attack" | "round_end_adjust_distance"
+    "adjust_distance_attack" | "break_off" | "round_end_adjust_distance"
   >;
   encounterId: string;
   gmAdjustment?: number;
@@ -816,7 +821,7 @@ function resolveAdjustDistanceSkillContestCalculation(input: {
   const movementBurden = resolveScenarioParticipantMovementBurden(input.participant);
   const movementApplicability = getCombatMovementModifierApplicability(input.contestType);
   const context: CombatCalculationContext = {
-    actionId: "adjust_range_attack",
+    actionId: input.contestType === "break_off" ? "break_off_engagement" : "adjust_range_attack",
     encounterId: input.encounterId,
     ownerParticipantId: input.participant.id,
     opponentParticipantId: input.opponentScenarioParticipantId,
@@ -825,9 +830,11 @@ function resolveAdjustDistanceSkillContestCalculation(input: {
       : undefined,
     proposalId: input.proposalId,
     rollType:
-      input.contestType === "adjust_distance_attack"
-        ? "adjust_distance_dodge"
-        : "round_end_distance_dodge",
+      input.contestType === "break_off"
+        ? "break_off_dodge"
+        : input.contestType === "adjust_distance_attack"
+          ? "adjust_distance_dodge"
+          : "round_end_distance_dodge",
     roundNumber: input.roundNumber,
     skillId: "dodge",
     step: input.step,
@@ -894,8 +901,14 @@ function resolveAdjustDistanceSkillContestCalculation(input: {
           {
             category: "gm_adjustment" as const,
             id: `${input.proposalId}:${input.participantCombatantId}:gm-adjustment`,
-            label: "GM maneuver adjustment",
-            provenance: "Accepted Adjust Distance review",
+            label:
+              input.contestType === "break_off"
+                ? "GM Break Off adjustment"
+                : "GM maneuver adjustment",
+            provenance:
+              input.contestType === "break_off"
+                ? "Accepted Break Off review"
+                : "Accepted Adjust Distance review",
             sourceId: input.proposalId,
             unit: "percentage" as const,
             value: input.gmAdjustment,
@@ -4932,24 +4945,29 @@ function attachContinuedContactEffectTransitionFacts(input: {
     ...input.state,
     commands: input.state.commands.map((command) =>
       command.id === input.commandId
-        ? {
-            ...command,
-            facts: {
-              ...command.facts,
-              continuedContactEffectTransition: {
-                nextEffect: input.nextEffect,
-                previousEffect: input.previousEffect,
-                scenarioParticipantId: input.scenarioParticipantId,
+        ? (() => {
+            const transition = {
+              nextEffect: input.nextEffect,
+              previousEffect: input.previousEffect,
+              scenarioParticipantId: input.scenarioParticipantId,
+            };
+            const existing = getContinuedContactEffectTransitionFactsList(command);
+            return {
+              ...command,
+              facts: {
+                ...command.facts,
+                // Retain the singular fact for compatibility with existing persisted commands.
+                continuedContactEffectTransition: transition,
+                continuedContactEffectTransitions: [...existing, transition],
               },
-            },
-          }
+            };
+          })()
         : command,
     ),
   };
 }
 
-function getContinuedContactEffectTransitionFacts(command: CombatRoundCommand) {
-  const value = command.facts.continuedContactEffectTransition;
+function parseContinuedContactEffectTransitionFact(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const facts = value as Record<string, unknown>;
   const previousEffect = combatEffectSchema.safeParse(facts.previousEffect);
@@ -4963,6 +4981,25 @@ function getContinuedContactEffectTransitionFacts(command: CombatRoundCommand) {
         scenarioParticipantId: facts.scenarioParticipantId,
       }
     : undefined;
+}
+
+function getContinuedContactEffectTransitionFactsList(command: CombatRoundCommand) {
+  const plural = Array.isArray(command.facts.continuedContactEffectTransitions)
+    ? command.facts.continuedContactEffectTransitions
+        .map(parseContinuedContactEffectTransitionFact)
+        .filter(
+          (
+            transition,
+          ): transition is NonNullable<
+            ReturnType<typeof parseContinuedContactEffectTransitionFact>
+          > => transition !== undefined,
+        )
+    : [];
+  if (plural.length > 0) return plural;
+  const singular = parseContinuedContactEffectTransitionFact(
+    command.facts.continuedContactEffectTransition,
+  );
+  return singular ? [singular] : [];
 }
 
 function attachCombatNpcDeclarationProposalProvenance(input: {
@@ -5881,6 +5918,30 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
           .filter((proposal): proposal is CombatRoundEndDistanceProposal => Boolean(proposal)),
       }
     : undefined;
+  const safeBreakOffProposals = roundState.breakOffProposals
+    .filter((proposal) =>
+      isPlayerVisibleCombatRoundResultPair({
+        attackerParticipantId: proposal.attackerParticipantId,
+        controlledEncounterParticipantIds,
+        defenderParticipantId: proposal.escapeeParticipantId,
+        visibleParticipantIds,
+      }),
+    )
+    .map((proposal) => ({
+      ...proposal,
+      attackerRoll: controlledEncounterParticipantIds.has(proposal.attackerParticipantId)
+        ? proposal.attackerRoll
+          ? { ...proposal.attackerRoll, rolledByUserId: undefined }
+          : undefined
+        : undefined,
+      committedByUserId: undefined,
+      escapeeRoll: controlledEncounterParticipantIds.has(proposal.escapeeParticipantId)
+        ? proposal.escapeeRoll
+          ? { ...proposal.escapeeRoll, rolledByUserId: undefined }
+          : undefined
+        : undefined,
+      gmReview: proposal.gmReview ? { ...proposal.gmReview, notes: undefined } : undefined,
+    }));
 
   const safeState: CombatRoundState = {
     ...roundState,
@@ -5901,6 +5962,15 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
       edges: safeDistanceEdges,
     },
     events: [],
+    breakOffProposals: safeBreakOffProposals,
+    engagements: roundState.engagements.filter((engagement) =>
+      isPlayerVisibleCombatRoundResultPair({
+        attackerParticipantId: engagement.participantAId,
+        controlledEncounterParticipantIds,
+        defenderParticipantId: engagement.participantBId,
+        visibleParticipantIds,
+      }),
+    ),
     gmBacktrackHold: undefined,
     adjustDistanceProposals: roundState.adjustDistanceProposals
       .filter((proposal) =>
@@ -8454,6 +8524,416 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
     },
   );
+
+  app.post("/encounters/:encounterId/combat-round/review-break-off", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const body = parseBodyObject(request.body, "Break Off review payload");
+      const identity = parseCombatTaskCommandIdentity(body);
+      const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
+      const parseAdjustment = (value: unknown, label: string) => {
+        const adjustment = value === undefined ? 0 : value;
+        if (typeof adjustment !== "number" || !Number.isInteger(adjustment)) {
+          throw new Error(`${label} must be an integer.`);
+        }
+        return adjustment;
+      };
+      const attackerAdjustment = parseAdjustment(body.attackerAdjustment, "Attacker adjustment");
+      const escapeeAdjustment = parseAdjustment(body.escapeeAdjustment, "Escapee adjustment");
+      const encounter = await encounterService.getEncounterById(encounterId);
+      if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles },
+      );
+      if (!access || access.mode !== "gm")
+        return reply.code(403).send({ error: "The GM must review Break Off." });
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(
+        encounter.scenarioId,
+      );
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
+      const proposal = roundState.breakOffProposals.find((entry) => entry.id === proposalId);
+      const authorization = authorizeCombatTaskCommand({
+        authorization: {
+          actor: { kind: "gm" },
+          commandType: "review_break_off",
+          opponentParticipantId: proposal?.attackerParticipantId,
+          pairId: proposal?.pairKey,
+          phase: "phase1",
+          proposalId,
+        },
+        encounterRevision: encounter.updatedAt,
+        identity,
+        roundState,
+      });
+      if (!authorization.ok)
+        return reply
+          .code(409)
+          .send({ error: "Break Off review is stale or not currently available." });
+      const createdAt = new Date().toISOString();
+      const nextRoundState = reviewCombatRoundBreakOff({
+        attackerAdjustment,
+        command: { createdAt, createdByUserId: user.id },
+        escapeeAdjustment,
+        notes: typeof body.notes === "string" ? body.notes : undefined,
+        proposalId,
+        state: roundState,
+      });
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId: encounter.scenarioId,
+        session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt },
+      });
+      return { encounter: savedEncounter };
+    } catch (error) {
+      const persistenceErrorResponse = sendCombatWriteError(reply, error);
+      if (persistenceErrorResponse) return persistenceErrorResponse;
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to review Break Off.",
+      });
+    }
+  });
+
+  app.post("/encounters/:encounterId/combat-round/roll-break-off", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const body = parseBodyObject(request.body, "Break Off roll payload");
+      const identity = parseCombatTaskCommandIdentity(body);
+      const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
+      const scenarioParticipantId = parseNonEmptyString(
+        body.scenarioParticipantId,
+        "scenarioParticipantId",
+      );
+      const encounter = await encounterService.getEncounterById(encounterId);
+      if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles },
+      );
+      if (!access) return reply.code(404).send({ error: "Encounter not found." });
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(
+        encounter.scenarioId,
+      );
+      const participantResolution = resolveCombatParticipantForRequest({
+        accessMode: access.mode,
+        encounter,
+        requestedParticipantId: scenarioParticipantId,
+        scenarioParticipants,
+        userId: user.id,
+      });
+      const scenarioParticipant = participantResolution?.scenarioParticipant;
+      const encounterParticipant = participantResolution?.encounterParticipant;
+      if (!scenarioParticipant || !encounterParticipant)
+        return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
+      if (access.mode !== "gm" && scenarioParticipant.controlledByUserId !== user.id)
+        return reply.code(403).send({ error: "Player does not control this participant." });
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
+      const unavailableBreakOffRoll = () =>
+        reply.code(409).send({
+          code: "break_off_roll_unavailable",
+          error: "Break Off roll is stale or not currently available.",
+        });
+      // Authorize only against the caller's exact projected task before inspecting proposal state.
+      // Hidden, nonexistent, completed, and wrong-pair proposal probes are intentionally equivalent.
+      const authorization = authorizeCombatTaskCommand({
+        authorization: {
+          actor:
+            access.mode === "gm"
+              ? { kind: "gm" }
+              : { kind: "combatant", participantId: encounterParticipant.id },
+          commandType: "roll_break_off",
+          participantId: encounterParticipant.id,
+          phase: "phase1",
+          proposalId,
+        },
+        encounterRevision: encounter.updatedAt,
+        identity,
+        roundState,
+      });
+      if (!authorization.ok) return unavailableBreakOffRoll();
+      const proposal = roundState.breakOffProposals.find((entry) => entry.id === proposalId);
+      if (!proposal || proposal.status !== "awaiting_rolls") return unavailableBreakOffRoll();
+      const side =
+        encounterParticipant.id === proposal.escapeeParticipantId
+          ? "escapee"
+          : encounterParticipant.id === proposal.attackerParticipantId
+            ? "attacker"
+            : undefined;
+      if (!side) return unavailableBreakOffRoll();
+      if (
+        (side === "escapee" && proposal.escapeeRoll) ||
+        (side === "attacker" && proposal.attackerRoll)
+      )
+        return unavailableBreakOffRoll();
+      const opponentParticipantId =
+        side === "escapee" ? proposal.attackerParticipantId : proposal.escapeeParticipantId;
+      const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
+      const opponentEncounterParticipant = membership.participants.find(
+        (participant) => participant.id === opponentParticipantId,
+      );
+      const opponentScenarioParticipant = opponentEncounterParticipant?.scenarioParticipantId
+        ? scenarioParticipants.find(
+            (participant) => participant.id === opponentEncounterParticipant.scenarioParticipantId,
+          )
+        : undefined;
+      const distanceControlInput = buildRoundEndParticipantInputs({
+        encounter,
+        roundState,
+        scenarioParticipants,
+      })[encounterParticipant.id]?.distanceControl;
+      if (!distanceControlInput)
+        return reply.code(409).send({ error: "Dodge profile is unavailable." });
+      const roll = rollOpenEndedD20();
+      const createdAt = new Date().toISOString();
+      const calculation = resolveAdjustDistanceSkillContestCalculation({
+        calculationId: `${proposal.id}:roll:${side}`,
+        contestType: "break_off",
+        encounterId,
+        gmAdjustment:
+          side === "escapee"
+            ? proposal.gmReview?.escapeeAdjustment
+            : proposal.gmReview?.attackerAdjustment,
+        modifierContributions: distanceControlInput.modifierContributions,
+        opponentCombatantId: opponentParticipantId,
+        opponentLabel: opponentScenarioParticipant?.snapshot.displayName,
+        opponentScenarioParticipantId: opponentScenarioParticipant?.id,
+        participant: scenarioParticipant,
+        participantCombatantId: encounterParticipant.id,
+        proposalId,
+        role: side === "escapee" ? "break_off_escapee" : "break_off_attacker",
+        roll,
+        roundNumber: roundState.roundNumber,
+        roundState,
+        step: "phase_1_actions",
+      });
+      const result = combatBreakOffRollSchema.parse({
+        calculation,
+        finalTotal: calculation.finalResult,
+        id: `${proposal.id}:roll:${side}`,
+        participantId: encounterParticipant.id,
+        rolledAt: createdAt,
+        rolledByUserId: user.id,
+      });
+      const nextRoundState = recordCombatRoundBreakOffRoll({
+        command: { createdAt, createdByUserId: user.id },
+        proposalId,
+        result,
+        state: roundState,
+      });
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId: encounter.scenarioId,
+        session: { ...encounter, combatRoundState: nextRoundState, updatedAt: createdAt },
+      });
+      return {
+        encounter:
+          access.mode === "player"
+            ? buildPlayerSafeCombatRollMutationEncounterForUser({
+                encounter: savedEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              })
+            : savedEncounter,
+      };
+    } catch (error) {
+      const persistenceErrorResponse = sendCombatWriteError(reply, error);
+      if (persistenceErrorResponse) return persistenceErrorResponse;
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to roll Break Off Dodge.",
+      });
+    }
+  });
+
+  app.post("/encounters/:encounterId/combat-round/commit-break-off", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const body = parseBodyObject(request.body, "Break Off commit payload");
+      const identity = parseCombatTaskCommandIdentity(body);
+      const proposalId = parseNonEmptyString(body.proposalId, "proposalId");
+      const encounter = await encounterService.getEncounterById(encounterId);
+      if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId: encounter.scenarioId, userId: user.id, userRoles: user.roles },
+      );
+      if (!access || access.mode !== "gm")
+        return reply.code(403).send({ error: "The GM must commit Break Off." });
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(
+        encounter.scenarioId,
+      );
+      const roundState = initializeMaterializedCombatRoundState({
+        encounter,
+        scenarioParticipants,
+      });
+      const proposal = roundState.breakOffProposals.find((entry) => entry.id === proposalId);
+      const authorization = authorizeCombatTaskCommand({
+        authorization: {
+          actor: { kind: "gm" },
+          commandType: "commit_break_off",
+          opponentParticipantId: proposal?.attackerParticipantId,
+          pairId: proposal?.pairKey,
+          phase: "phase1",
+          proposalId,
+        },
+        encounterRevision: encounter.updatedAt,
+        identity,
+        roundState,
+      });
+      if (!authorization.ok)
+        return reply
+          .code(409)
+          .send({ error: "Break Off commit is stale or not currently available." });
+      const createdAt = new Date().toISOString();
+      let stateToSave = commitCombatRoundBreakOff({
+        command: {
+          createdAt,
+          createdByUserId: user.id,
+          createdRevision: encounter.updatedAt,
+        },
+        proposalId,
+        state: roundState,
+      });
+      const command = stateToSave.commands.at(-1)!;
+      const endedConditions = roundState.unbalancedConditions.filter((condition) => {
+        const next = stateToSave.unbalancedConditions.find((entry) => entry.id === condition.id);
+        return condition.status === "active" && next?.status === "ended";
+      });
+      const membership = resolveEncounterParticipantMembership({ encounter, scenarioParticipants });
+      const participantMutations = new Map<
+        string,
+        { participant: ScenarioParticipant; state: ScenarioParticipant["state"] }
+      >();
+      const transitionSequence = Math.max(
+        0,
+        stateToSave.events.reduce((highest, event) => Math.max(highest, event.sequence), -1),
+      );
+      for (const endedCondition of endedConditions) {
+        const affectedEncounterParticipant = membership.participants.find(
+          (participant) => participant.id === endedCondition.affectedParticipantId,
+        );
+        const affected = affectedEncounterParticipant?.scenarioParticipantId
+          ? scenarioParticipants.find(
+              (participant) =>
+                participant.id === affectedEncounterParticipant.scenarioParticipantId,
+            )
+          : undefined;
+        if (!affected) {
+          throw new RangeError("The Unbalanced participant is not assigned to this encounter.");
+        }
+        const currentState = participantMutations.get(affected.id)?.state ?? affected.state;
+        const effects = combatEffectsStateSchema.parse(currentState.combatEffects);
+        const previousEffect = effects.effects.find(
+          (effect) =>
+            effect.id === endedCondition.id &&
+            (effect.status === "active" || effect.status === "pending"),
+        );
+        if (!previousEffect) {
+          throw new RangeError(
+            "The active Continued Contact relationship has no matching Unbalanced effect.",
+          );
+        }
+        const activated =
+          previousEffect.canonicalLifecycle?.lifecycle.state === "pending_activation"
+            ? transitionCanonicalCombatModifierEffect({
+                acceptedRevision: encounter.updatedAt,
+                acceptedSequence: transitionSequence,
+                commandId: command.id,
+                effect: previousEffect.canonicalLifecycle,
+                nextState: "active",
+                reason: "activation_cutoff_reached",
+                transitionId: `${command.id}:activate:${previousEffect.id}`,
+                transitionType: "activate",
+              })
+            : undefined;
+        const canonicalBeforeResolution = activated?.effect ?? previousEffect.canonicalLifecycle;
+        const transitioned = canonicalBeforeResolution
+          ? transitionCanonicalCombatModifierEffect({
+              acceptedRevision: encounter.updatedAt,
+              acceptedSequence: transitionSequence,
+              commandId: command.id,
+              effect: canonicalBeforeResolution,
+              nextState: "resolved",
+              reason: "condition_cleared",
+              transitionId: `${command.id}:resolve:${previousEffect.id}`,
+              transitionType: "resolve",
+            })
+          : undefined;
+        const nextEffect = combatEffectSchema.parse({
+          ...previousEffect,
+          canonicalLifecycle: transitioned?.effect ?? previousEffect.canonicalLifecycle,
+          canonicalTransitions: transitioned
+            ? [
+                ...(previousEffect.canonicalTransitions ?? []),
+                ...(activated ? [activated.transition] : []),
+                transitioned.transition,
+              ]
+            : previousEffect.canonicalTransitions,
+          status: "expired",
+          updatedAt: createdAt,
+        });
+        stateToSave = attachContinuedContactEffectTransitionFacts({
+          commandId: command.id,
+          nextEffect,
+          previousEffect,
+          scenarioParticipantId: affected.id,
+          state: stateToSave,
+        });
+        participantMutations.set(affected.id, {
+          participant: affected,
+          state: {
+            ...currentState,
+            combatEffects: combatEffectsStateSchema.parse({
+              ...effects,
+              effects: effects.effects.map((effect) =>
+                effect.id === previousEffect.id ? nextEffect : effect,
+              ),
+            }),
+          },
+        });
+      }
+      if (participantMutations.size > 0) {
+        const saved = await encounterService.commitCombatParticipantStateMutations({
+          campaignId: access.campaignId,
+          encounterId,
+          expectedEncounterRevision: encounter.updatedAt,
+          participants: [...participantMutations.values()],
+          scenarioId: encounter.scenarioId,
+          session: { ...encounter, combatRoundState: stateToSave, updatedAt: createdAt },
+        });
+        return { encounter: saved.encounter, participants: saved.participants };
+      }
+      const savedEncounter = await encounterService.updateCombatEncounter({
+        expectedRevision: encounter.updatedAt,
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId: encounter.scenarioId,
+        session: { ...encounter, combatRoundState: stateToSave, updatedAt: createdAt },
+      });
+      return { encounter: savedEncounter, participants: [] };
+    } catch (error) {
+      const persistenceErrorResponse = sendCombatWriteError(reply, error);
+      if (persistenceErrorResponse) return persistenceErrorResponse;
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to commit Break Off.",
+      });
+    }
+  });
 
   app.post(
     "/encounters/:encounterId/combat-round/review-adjust-distance",
@@ -14060,6 +14540,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      const breakOffConsequence = getCombatBreakOffPairConsequence({
+        attackerParticipantId: encounterParticipant.id,
+        defenderParticipantId: defenderEncounterParticipant.id,
+        state: roundState,
+      });
+      if (
+        breakOffConsequence.disengaged &&
+        canonicalOpportunityIdentity.weaponSourceSlot !== "throwing"
+      ) {
+        return reply.code(409).send({
+          code: "combat_pair_disengaged",
+          error: "This ordinary direct melee attack is blocked because the pair disengaged.",
+        });
+      }
+
       const latestAttackerSnapshot = [...roundState.stepSnapshots]
         .reverse()
         .find(
@@ -14100,13 +14595,30 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               combatContext: canonicalModifierFacts.defenderCombatContext,
               phase: body.phase,
             });
-      const defenderDb =
+      const baseDefenderDb =
         canonicalDefense.completeness === "complete"
           ? canonicalDefense.effectiveDb
           : resolveLegacyAttackDefenderDb({
               currentFlatAdjustment: defenderFlatDbAdjustment,
               snapshot: latestDefenderSnapshot,
             });
+
+      const breakOffDefenderTrace =
+        baseDefenderDb === undefined || breakOffConsequence.defenderDbParryModifier === 0
+          ? undefined
+          : calculateWorkbookPercentageAdjustmentTrace({
+              baseValue: baseDefenderDb,
+              rawModifiers: [
+                {
+                  label: "Break Off result · DB/Parry",
+                  value: breakOffConsequence.defenderDbParryModifier,
+                },
+              ],
+            });
+      const defenderDb =
+        breakOffConsequence.defenderDbParryModifier === 0
+          ? baseDefenderDb
+          : breakOffDefenderTrace?.finalValue;
 
       if (!weaponName || defenderDb === undefined) {
         return reply.code(409).send({
@@ -14147,12 +14659,22 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       // Canonical pre-opponent OB already contains the committed round modifiers. Observation is
       // opponent-specific, so apply only that direct-action layer here rather than duplicating the
       // whole phase modifier stack.
-      const opponentSpecificObModifierRows =
-        canonicalModifierFacts.attackerOpponentResolution.rows.map((row) => ({
+      const opponentSpecificObModifierRows = [
+        ...canonicalModifierFacts.attackerOpponentResolution.rows.map((row) => ({
           label: `${row.label} · ${defenderScenarioParticipant.snapshot.displayName}`,
           sourceId: row.sourceId,
           value: row.value,
-        }));
+        })),
+        ...(breakOffConsequence.attackerObModifier === 0
+          ? []
+          : [
+              {
+                label: `Break Off result · ${defenderScenarioParticipant.snapshot.displayName}`,
+                sourceId: `break-off:${encounterParticipant.id}:${defenderEncounterParticipant.id}`,
+                value: breakOffConsequence.attackerObModifier,
+              },
+            ]),
+      ];
       const opponentSpecificObTrace = calculateWorkbookPercentageAdjustmentTrace({
         baseValue: canonicalOffense.preOpponentOb,
         rawModifiers: opponentSpecificObModifierRows.map((row) => ({
@@ -15829,6 +16351,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           command.type === "roll_continued_contact_maintenance" &&
           !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
       );
+      const removedBreakOffCommitCommands = roundState.commands.filter(
+        (command) =>
+          command.roundNumber === roundState.roundNumber &&
+          command.type === "commit_break_off" &&
+          !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
+      );
       const removedModifierReviewCommands = roundState.commands.filter(
         (command) =>
           command.roundNumber === roundState.roundNumber &&
@@ -15857,71 +16385,77 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         ...removedModifierReviewCommands,
         ...removedRoundEndHealthCheckCommands,
         ...removedRoundEndParticipantReviewCommands,
-        ...removedContinuedContactMaintenanceCommands.filter((command) =>
-          Boolean(getContinuedContactEffectTransitionFacts(command)),
+        ...removedContinuedContactMaintenanceCommands.filter(
+          (command) => getContinuedContactEffectTransitionFactsList(command).length > 0,
+        ),
+        ...removedBreakOffCommitCommands.filter(
+          (command) => getContinuedContactEffectTransitionFactsList(command).length > 0,
         ),
       ].sort(
         (left, right) =>
           roundState.commands.findIndex((command) => command.id === right.id) -
           roundState.commands.findIndex((command) => command.id === left.id),
       );
-      const hasExactContinuedContactEffectRestoration =
-        removedContinuedContactMaintenanceCommands.some((command) =>
-          Boolean(getContinuedContactEffectTransitionFacts(command)),
-        );
+      const hasExactContinuedContactEffectRestoration = [
+        ...removedContinuedContactMaintenanceCommands,
+        ...removedBreakOffCommitCommands,
+      ].some((command) => getContinuedContactEffectTransitionFactsList(command).length > 0);
       if (atomicParticipantEffectCommands.length > 0) {
         const restorationStates = new Map(
           scenarioParticipants.map((participant) => [participant.id, participant.state]),
         );
         let completeAtomicRestoration = true;
         for (const command of atomicParticipantEffectCommands) {
-          const continuedContactEffectTransition =
-            command.type === "roll_continued_contact_maintenance"
-              ? getContinuedContactEffectTransitionFacts(command)
-              : undefined;
+          const continuedContactEffectTransitions =
+            getContinuedContactEffectTransitionFactsList(command);
+          if (continuedContactEffectTransitions.length > 0) {
+            for (const transition of continuedContactEffectTransitions) {
+              const scenarioParticipant = scenarioParticipants.find(
+                (participant) => participant.id === transition.scenarioParticipantId,
+              );
+              if (!scenarioParticipant) {
+                completeAtomicRestoration = false;
+                break;
+              }
+              const currentState = restorationStates.get(scenarioParticipant.id)!;
+              const effects = combatEffectsStateSchema.parse(currentState.combatEffects);
+              const currentEffect = effects.effects.find(
+                (effect) => effect.id === transition.nextEffect.id,
+              );
+              if (
+                !currentEffect ||
+                JSON.stringify(currentEffect) !== JSON.stringify(transition.nextEffect)
+              ) {
+                completeAtomicRestoration = false;
+                break;
+              }
+              restorationStates.set(scenarioParticipant.id, {
+                ...currentState,
+                combatEffects: combatEffectsStateSchema.parse({
+                  ...effects,
+                  effects: effects.effects.map((effect) =>
+                    effect.id === transition.nextEffect.id ? transition.previousEffect : effect,
+                  ),
+                }),
+              });
+            }
+            if (!completeAtomicRestoration) break;
+            continue;
+          }
           const encounterParticipant = membership.participants.find(
             (participant) => participant.id === command.participantId,
           );
-          const scenarioParticipant = continuedContactEffectTransition
+          const scenarioParticipant = encounterParticipant
             ? scenarioParticipants.find(
-                (participant) =>
-                  participant.id === continuedContactEffectTransition.scenarioParticipantId,
+                (participant) => participant.id === encounterParticipant.scenarioParticipantId,
               )
-            : encounterParticipant
-              ? scenarioParticipants.find(
-                  (participant) => participant.id === encounterParticipant.scenarioParticipantId,
-                )
-              : undefined;
+            : undefined;
           if (!scenarioParticipant) {
             completeAtomicRestoration = false;
             break;
           }
           const currentState = restorationStates.get(scenarioParticipant.id)!;
-          if (continuedContactEffectTransition) {
-            const effects = combatEffectsStateSchema.parse(currentState.combatEffects);
-            const currentEffect = effects.effects.find(
-              (effect) => effect.id === continuedContactEffectTransition.nextEffect.id,
-            );
-            if (
-              !currentEffect ||
-              JSON.stringify(currentEffect) !==
-                JSON.stringify(continuedContactEffectTransition.nextEffect)
-            ) {
-              completeAtomicRestoration = false;
-              break;
-            }
-            restorationStates.set(scenarioParticipant.id, {
-              ...currentState,
-              combatEffects: combatEffectsStateSchema.parse({
-                ...effects,
-                effects: effects.effects.map((effect) =>
-                  effect.id === continuedContactEffectTransition.nextEffect.id
-                    ? continuedContactEffectTransition.previousEffect
-                    : effect,
-                ),
-              }),
-            });
-          } else if (
+          if (
             command.type === "review_modifiers_phase1" ||
             command.type === "review_modifiers_phase2"
           ) {
@@ -15965,8 +16499,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         if (completeAtomicRestoration) {
           const affectedParticipantIds = new Set(
             atomicParticipantEffectCommands.flatMap((command) => {
-              const transition = getContinuedContactEffectTransitionFacts(command);
-              if (transition) return [transition.scenarioParticipantId];
+              const transitions = getContinuedContactEffectTransitionFactsList(command);
+              if (transitions.length > 0) {
+                return transitions.map((transition) => transition.scenarioParticipantId);
+              }
               const encounterParticipant = membership.participants.find(
                 (participant) => participant.id === command.participantId,
               );
@@ -16039,7 +16575,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         removedRoundEndParticipantReviewCommands.length > 0 ||
         removedRoundEndHealthCheckCommands.length > 0 ||
         removedOffensiveParryBrawlingCommands.length > 0 ||
-        removedContinuedContactMaintenanceCommands.length > 0
+        removedContinuedContactMaintenanceCommands.length > 0 ||
+        removedBreakOffCommitCommands.length > 0
           ? scenarioParticipants.flatMap((participant) => {
               const encounterParticipant = membership.participants.find(
                 (entry) => entry.scenarioParticipantId === participant.id,

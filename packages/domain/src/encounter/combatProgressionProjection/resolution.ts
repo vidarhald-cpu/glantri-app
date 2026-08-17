@@ -569,6 +569,144 @@ function buildLegacyAttackProcess(
   return buildProcess(context, "attack", stages);
 }
 
+function buildBreakOffProcess(
+  context: ProjectionBuildContext,
+  escapeeParticipantId: string,
+): CombatProgressionProcess {
+  const escapee = context.identities.get(escapeeParticipantId);
+  const proposals = context.state.breakOffProposals
+    .filter(
+      (proposal) =>
+        proposal.roundNumber === context.state.roundNumber &&
+        proposal.escapeeParticipantId === escapeeParticipantId,
+    )
+    .sort((left, right) => left.pairKey.localeCompare(right.pairKey));
+  const proposal = proposals.find((entry) => entry.status !== "committed");
+  const attacker = proposal ? context.identities.get(proposal.attackerParticipantId) : undefined;
+  const reviewActive = proposal?.status === "awaiting_gm_review";
+  const rollsActive = proposal?.status === "awaiting_rolls";
+  const commitActive = proposal?.status === "awaiting_commit";
+  const sharedIdentity = proposal
+    ? {
+        opponentParticipantId: proposal.attackerParticipantId,
+        pairId: proposal.pairKey,
+        phase: "phase1" as const,
+        proposalId: proposal.id,
+      }
+    : undefined;
+  return buildProcess(
+    context,
+    "break_off",
+    [
+      {
+        kind: "proposal_review",
+        state: reviewActive ? "active" : proposal ? "complete" : "pending",
+        strategy: "gm_review",
+        tasks:
+          reviewActive && sharedIdentity
+            ? [
+                {
+                  allowedActors: ["gm"],
+                  expectedCommand: "review_break_off",
+                  identity: sharedIdentity,
+                  kind: "break_off_review",
+                  owner: GM_IDENTITY,
+                  presentationContext: {
+                    actionKind: "break_off_engagement",
+                    actor: escapee,
+                    reason: "GM reviews the circumstances and situational modifiers.",
+                    target: attacker,
+                  },
+                  trackerOwner: escapee,
+                  trackerStep: "A1",
+                },
+              ]
+            : [],
+      },
+      {
+        executionGroups:
+          rollsActive && proposal && sharedIdentity
+            ? [
+                {
+                  key: `${proposal.id}:dodge`,
+                  tasks: [
+                    ...(proposal.escapeeRoll
+                      ? []
+                      : [
+                          {
+                            expectedCommand: "roll_break_off" as const,
+                            identity: sharedIdentity,
+                            key: `${proposal.id}:escapee`,
+                            kind: "break_off_escapee_roll" as const,
+                            owner: escapee,
+                            presentationContext: {
+                              actionKind: "break_off_engagement",
+                              actor: escapee,
+                              responder: escapee,
+                              skill: { label: "Dodge" },
+                              target: attacker,
+                            },
+                            trackerOwner: escapee,
+                            trackerStep: "A1" as const,
+                          },
+                        ]),
+                    ...(proposal.attackerRoll
+                      ? []
+                      : [
+                          {
+                            expectedCommand: "roll_break_off" as const,
+                            identity: sharedIdentity,
+                            key: `${proposal.id}:attacker`,
+                            kind: "break_off_attacker_roll" as const,
+                            owner: attacker,
+                            presentationContext: {
+                              actionKind: "break_off_engagement",
+                              actor: escapee,
+                              responder: attacker,
+                              skill: { label: "Dodge" },
+                              target: attacker,
+                            },
+                            trackerOwner: attacker,
+                            trackerStep: "A1" as const,
+                          },
+                        ]),
+                  ],
+                },
+              ]
+            : [],
+        kind: "opposed_rolls",
+        state: rollsActive ? "active" : commitActive || !proposal ? "complete" : "pending",
+        strategy: "parallel_all",
+      },
+      {
+        kind: "proposal_commit",
+        state: commitActive ? "active" : !proposal ? "complete" : "pending",
+        strategy: "gm_review",
+        tasks:
+          commitActive && sharedIdentity
+            ? [
+                {
+                  allowedActors: ["gm"],
+                  expectedCommand: "commit_break_off",
+                  identity: sharedIdentity,
+                  kind: "break_off_commit",
+                  owner: GM_IDENTITY,
+                  presentationContext: {
+                    actionKind: "break_off_engagement",
+                    actor: escapee,
+                    target: attacker,
+                  },
+                  trackerOwner: escapee,
+                  trackerStep: "A1",
+                },
+              ]
+            : [],
+      },
+    ],
+    { key: proposal?.id ?? `round:${context.state.roundNumber}:escapee:${escapeeParticipantId}` },
+  );
+}
+
 function adapterStageTaskKind(stage: CombatActionProcessStage): TaskSpec["kind"] | undefined {
   switch (stage.kind) {
     case "attack":
@@ -925,6 +1063,9 @@ export function buildResolutionProcesses(
     context.state.phaseResolutionCursor?.phase === phase
       ? context.state.phaseResolutionCursor.substep
       : undefined;
+  if (phase === "phase1" && substep === "break_off" && participantId) {
+    return [buildBreakOffProcess(context, participantId)];
+  }
   const maneuverPlan = participantId
     ? context.actionProcessPlans.find(
         (plan) =>

@@ -458,6 +458,9 @@ async function buildScenarioTestApp() {
       ["/combat-round/review-adjust-distance", ["review_adjust_distance_roll_adjustment"]],
       ["/combat-round/roll-adjust-distance", ["roll_adjust_distance"]],
       ["/combat-round/commit-adjust-distance", ["commit_adjust_distance"]],
+      ["/combat-round/review-break-off", ["review_break_off"]],
+      ["/combat-round/roll-break-off", ["roll_break_off"]],
+      ["/combat-round/commit-break-off", ["commit_break_off"]],
       ["/combat-round/roll-feint", ["roll_feint"]],
       ["/combat-round/commit-feint", ["commit_feint_result"]],
       ["/combat-round/roll-distance-control", ["roll_round_end_distance_control"]],
@@ -7353,13 +7356,7 @@ describe("scenarios route contract", () => {
     setupCombatDeclarationRoute();
     const app = await buildScenarioTestApp();
 
-    for (const actionId of [
-      "counterattack",
-      "disarm",
-      "parry_disarm",
-      "break_off_engagement",
-      "other",
-    ]) {
+    for (const actionId of ["counterattack", "disarm", "parry_disarm", "other"]) {
       const response = await app.inject({
         method: "POST",
         payload: {
@@ -22656,6 +22653,454 @@ describe("scenarios route contract", () => {
     expect(
       mutable.encounter.combatRoundState?.participants[0]?.attackResults.phase2,
     ).toBeUndefined();
+  });
+
+  it("runs the projected Break Off review, participant-owned Dodge rolls, and GM commit", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const roundState = combatRoundStateSchema.parse({
+      breakOffProposals: [
+        {
+          attackerParticipantId: "encounter-participant-2",
+          escapeeParticipantId: "encounter-participant-1",
+          id: "break-off-proposal",
+          pairKey: "encounter-participant-1::encounter-participant-2",
+          roundNumber: 1,
+          status: "awaiting_gm_review",
+        },
+      ],
+      commands: [
+        {
+          afterCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "A1" },
+          beforeCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "i1" },
+          createdAt: "2026-01-01T00:01:30.000Z",
+          facts: {},
+          id: "command-i1",
+          participantId: "encounter-participant-1",
+          phase: "phase1",
+          roundNumber: 1,
+          step: "i1",
+          type: "commit_phase_initiative_resolution",
+        },
+      ],
+      currentCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "A1" },
+      currentStep: "phase_1_actions",
+      phaseResolutionCursor: {
+        participantId: "encounter-participant-1",
+        phase: "phase1",
+        substep: "break_off",
+      },
+      participants: [
+        {
+          declaration: {
+            actionId: "break_off_engagement",
+            roundNumber: 1,
+            submittedBy: "player",
+          },
+          initiatives: { phase1: { rolls: [2], total: 2 } },
+          label: "The Gladiator",
+          participantId: "encounter-participant-1",
+          scenarioParticipantId: "participant-1",
+        },
+        {
+          initiatives: { phase1: { rolls: [6], total: 18 } },
+          label: "City guard",
+          participantId: "encounter-participant-2",
+          scenarioParticipantId: "participant-2",
+        },
+      ],
+      phaseResolutionStatuses: {
+        "encounter-participant-1": { phase1: { substep: "break_off" } },
+      },
+      roundNumber: 1,
+    });
+    const participants = [
+      makeCombatScenarioParticipant({
+        characterId: "character-1",
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        snapshot: {
+          build: makeDodgeCharacterBuild("character-1", "The Gladiator"),
+          displayName: "The Gladiator",
+          equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-1" }),
+        },
+      }),
+      makeCombatScenarioParticipant({
+        characterId: "character-2",
+        controlledByUserId: "other-player",
+        id: "participant-2",
+        snapshot: {
+          build: makeDodgeCharacterBuild("character-2", "City guard"),
+          displayName: "City guard",
+          equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-2" }),
+        },
+      }),
+    ];
+    const mutable = setupMutableCombatRouteState({
+      encounter: makeCombatEncounter({
+        combatRoundState: roundState,
+        participants: encounterParticipants,
+      }) as EncounterSession,
+      participants,
+      user: mocks.adminUser,
+    });
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.4);
+    const app = await buildScenarioTestApp();
+    const reviewTask = buildCombatProgressionProjection(roundState)
+      .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.expectedCommand === "review_break_off");
+    expect(reviewTask).toBeDefined();
+
+    const reviewed = await app.inject({
+      method: "POST",
+      payload: {
+        attackerAdjustment: -2,
+        escapeeAdjustment: 3,
+        notes: "The doorway favors the escapee.",
+        proposalId: "break-off-proposal",
+        executionGroupId: reviewTask!.executionGroupId,
+        expectedRevision: "2026-01-01T00:00:00.000Z",
+        taskId: reviewTask!.id,
+      },
+      url: "/encounters/encounter-1/combat-round/review-break-off",
+    });
+    const attackerRoll = await app.inject({
+      method: "POST",
+      payload: { proposalId: "break-off-proposal", scenarioParticipantId: "participant-2" },
+      url: "/encounters/encounter-1/combat-round/roll-break-off",
+    });
+    const writesBeforeRejectedReplay = mocks.encounterService.updateEncounter.mock.calls.length;
+    const duplicateAttackerRoll = await app.inject({
+      method: "POST",
+      payload: { proposalId: "break-off-proposal", scenarioParticipantId: "participant-2" },
+      url: "/encounters/encounter-1/combat-round/roll-break-off",
+    });
+    const staleEscapeeRoll = await app.inject({
+      method: "POST",
+      payload: {
+        expectedRevision: "2026-01-01T00:00:00.000Z",
+        proposalId: "break-off-proposal",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-break-off",
+    });
+    expect(mocks.encounterService.updateEncounter.mock.calls).toHaveLength(
+      writesBeforeRejectedReplay,
+    );
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
+    const escapeeRoll = await app.inject({
+      method: "POST",
+      payload: { proposalId: "break-off-proposal", scenarioParticipantId: "participant-1" },
+      url: "/encounters/encounter-1/combat-round/roll-break-off",
+    });
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.adminUser);
+    const committed = await app.inject({
+      method: "POST",
+      payload: { proposalId: "break-off-proposal" },
+      url: "/encounters/encounter-1/combat-round/commit-break-off",
+    });
+
+    randomSpy.mockRestore();
+    await app.close();
+
+    expect(reviewed.statusCode, JSON.stringify(reviewed.json())).toBe(200);
+    expect(escapeeRoll.statusCode, JSON.stringify(escapeeRoll.json())).toBe(200);
+    expect(attackerRoll.statusCode, JSON.stringify(attackerRoll.json())).toBe(200);
+    expect(duplicateAttackerRoll.statusCode).toBe(409);
+    expect(staleEscapeeRoll.statusCode).toBe(409);
+    expect(committed.statusCode, JSON.stringify(committed.json())).toBe(200);
+    const playerSafeProposal = escapeeRoll.json().encounter.combatRoundState.breakOffProposals[0];
+    expect(playerSafeProposal.attackerRoll).toBeUndefined();
+    expect(playerSafeProposal.escapeeRoll.rolledByUserId).toBeUndefined();
+    expect(playerSafeProposal.gmReview.notes).toBeUndefined();
+    expect(mutable.encounter.combatRoundState?.breakOffProposals[0]).toMatchObject({
+      attackerRoll: {
+        calculation: expect.objectContaining({
+          contestType: "break_off",
+          role: "break_off_attacker",
+          percentageContributions: expect.arrayContaining([
+            expect.objectContaining({ category: "gm_adjustment", value: -2 }),
+          ]),
+        }),
+      },
+      escapeeRoll: {
+        calculation: expect.objectContaining({
+          contestType: "break_off",
+          role: "break_off_escapee",
+          percentageContributions: expect.arrayContaining([
+            expect.objectContaining({ category: "gm_adjustment", value: 3 }),
+          ]),
+        }),
+      },
+      gmReview: {
+        attackerAdjustment: -2,
+        escapeeAdjustment: 3,
+        notes: "The doorway favors the escapee.",
+      },
+      status: "committed",
+    });
+  });
+
+  it("atomically ends canonical Continued Contact and restores its persisted effect on exact undo", async () => {
+    const prepared = makeContinuedContactMaintenanceFixture();
+    const originalEffect = prepared.participants[1]!.state.combatEffects?.effects.find(
+      (effect) => effect.id === prepared.conditionId,
+    );
+    expect(originalEffect).toBeDefined();
+    const baseState = combatRoundStateSchema.parse(prepared.encounter.combatRoundState);
+    const roundState = combatRoundStateSchema.parse({
+      ...baseState,
+      breakOffProposals: [
+        {
+          attackerParticipantId: "encounter-participant-1",
+          difference: 5,
+          escapeeParticipantId: "encounter-participant-2",
+          id: "break-off-contact-cleanup",
+          pairKey: "encounter-participant-1::encounter-participant-2",
+          result: {
+            attackerObModifier: 0,
+            defenderDbParryModifier: 0,
+            escaped: true,
+            tableRowId: "defender_1_to_5",
+          },
+          roundNumber: baseState.roundNumber,
+          status: "awaiting_commit",
+        },
+      ],
+      commands: [
+        {
+          afterCursor: {
+            participantId: "encounter-participant-2",
+            roundNumber: baseState.roundNumber,
+            step: "A1",
+          },
+          beforeCursor: {
+            participantId: "encounter-participant-2",
+            roundNumber: baseState.roundNumber,
+            step: "i1",
+          },
+          createdAt: "2026-01-01T00:01:30.000Z",
+          facts: {},
+          id: "command-break-off-initiative",
+          participantId: "encounter-participant-2",
+          phase: "phase1",
+          roundNumber: baseState.roundNumber,
+          step: "i1",
+          type: "commit_phase_initiative_resolution",
+        },
+      ],
+      currentCursor: {
+        participantId: "encounter-participant-2",
+        roundNumber: baseState.roundNumber,
+        step: "A1",
+      },
+      currentStep: "phase_1_actions",
+      participants: baseState.participants.map((participant) => ({
+        ...participant,
+        declaration: {
+          actionId:
+            participant.participantId === "encounter-participant-2"
+              ? "break_off_engagement"
+              : "attack_parry",
+          roundNumber: baseState.roundNumber,
+          submittedBy: "player",
+        },
+        initiatives: {
+          phase1: {
+            rolls: [participant.participantId === "encounter-participant-2" ? 2 : 6],
+            total: participant.participantId === "encounter-participant-2" ? 2 : 18,
+          },
+        },
+      })),
+      phaseResolutionCursor: {
+        participantId: "encounter-participant-2",
+        phase: "phase1",
+        substep: "break_off",
+      },
+      phaseResolutionStatuses: {
+        "encounter-participant-2": { phase1: { substep: "break_off" } },
+      },
+      roundEndReview: undefined,
+      selectedParticipantId: "encounter-participant-2",
+      selectedStep: "phase_1_actions",
+      unbalancedConditions: baseState.unbalancedConditions.map((condition) => ({
+        ...condition,
+        canonicalLifecycle: originalEffect!.canonicalLifecycle,
+      })),
+    });
+    const encounter = {
+      ...prepared.encounter,
+      combatRoundState: roundState,
+      currentRound: roundState.roundNumber,
+    };
+    const mutable = setupMutableCombatRouteState({
+      encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    try {
+      const membership = resolveEncounterParticipantMembership({
+        encounter,
+        scenarioParticipants: prepared.participants,
+      });
+      const materialized = initializeCombatRoundState({
+        encounter: { ...encounter, participants: membership.participants },
+      });
+      const commitTask = getCurrentExecutableCombatTasks(
+        buildCombatProgressionProjection(materialized),
+      ).find((task) => task.expectedCommand === "commit_break_off");
+      expect(commitTask).toBeDefined();
+      const committed = await app.inject({
+        method: "POST",
+        payload: {
+          proposalId: "break-off-contact-cleanup",
+        },
+        url: "/encounters/encounter-1/combat-round/commit-break-off",
+      });
+      expect(committed.statusCode, committed.body).toBe(200);
+      expect(mocks.encounterService.commitCombatParticipantStateMutations).toHaveBeenCalledTimes(1);
+      expect(mutable.encounter.combatRoundState?.continuedContacts[0]).toMatchObject({
+        canonicalLifecycle: { lifecycle: { state: "resolved" } },
+        status: "ended",
+      });
+      expect(mutable.encounter.combatRoundState?.unbalancedConditions[0]).toMatchObject({
+        canonicalLifecycle: { lifecycle: { state: "resolved" } },
+        status: "ended",
+      });
+      const expiredEffect = mutable.participants[1]!.state.combatEffects?.effects.find(
+        (effect) => effect.id === prepared.conditionId,
+      );
+      expect(expiredEffect).toMatchObject({
+        canonicalLifecycle: { lifecycle: { state: "resolved" } },
+        status: "expired",
+      });
+      expect(
+        mutable.encounter.combatRoundState?.commands.at(-1)?.facts
+          .continuedContactEffectTransitions,
+      ).toEqual([
+        expect.objectContaining({
+          nextEffect: expiredEffect,
+          previousEffect: originalEffect,
+          scenarioParticipantId: "participant-2",
+        }),
+      ]);
+
+      const undone = await app.inject({
+        method: "POST",
+        payload: {
+          participantId: "encounter-participant-2",
+          step: "phase_1_actions",
+        },
+        url: "/encounters/encounter-1/combat-round/clear-current-step",
+      });
+      expect(undone.statusCode, undone.body).toBe(200);
+      expect(mocks.encounterService.commitCombatParticipantStateMutations).toHaveBeenCalledTimes(2);
+      expect(mutable.encounter.combatRoundState?.continuedContacts).toEqual(
+        roundState.continuedContacts,
+      );
+      expect(mutable.encounter.combatRoundState?.unbalancedConditions).toEqual(
+        roundState.unbalancedConditions,
+      );
+      expect(
+        mutable.participants[1]!.state.combatEffects?.effects.find(
+          (effect) => effect.id === prepared.conditionId,
+        ),
+      ).toEqual(originalEffect);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("makes hidden and nonexistent Break Off roll probes privacy-equivalent with zero writes", async () => {
+    const encounterParticipants = [
+      ...makeTwoCombatEncounterParticipants(),
+      {
+        ...makeTwoCombatEncounterParticipants()[1]!,
+        id: "encounter-participant-3",
+        label: "Hidden guard",
+        scenarioParticipantId: "participant-3",
+      },
+    ];
+    const participants = [
+      makeCombatScenarioParticipant({
+        controlledByUserId: "player-1",
+        id: "participant-1",
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "participant-2",
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "third-player",
+        id: "participant-3",
+      }),
+    ];
+    const baseEncounter = makeCombatEncounter({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const baseState = initializeCombatRoundState({ encounter: baseEncounter });
+    const roundState = combatRoundStateSchema.parse({
+      ...baseState,
+      breakOffProposals: [
+        {
+          attackerParticipantId: "encounter-participant-3",
+          escapeeParticipantId: "encounter-participant-2",
+          gmReview: { attackerAdjustment: 0, escapeeAdjustment: 0 },
+          id: "hidden-break-off",
+          pairKey: "encounter-participant-2::encounter-participant-3",
+          roundNumber: 1,
+          status: "awaiting_rolls",
+        },
+      ],
+      currentCursor: { participantId: "encounter-participant-2", roundNumber: 1, step: "A1" },
+      currentStep: "phase_1_actions",
+      participants: baseState.participants.map((participant) => ({
+        ...participant,
+        declaration: {
+          actionId:
+            participant.participantId === "encounter-participant-2"
+              ? "break_off_engagement"
+              : "attack_parry",
+          roundNumber: 1,
+          submittedBy: "player",
+        },
+      })),
+      phaseResolutionCursor: {
+        participantId: "encounter-participant-2",
+        phase: "phase1",
+        substep: "break_off",
+      },
+      phaseResolutionStatuses: {
+        "encounter-participant-2": { phase1: { substep: "break_off" } },
+      },
+    });
+    setupMutableCombatRouteState({
+      encounter: { ...baseEncounter, combatRoundState: roundState },
+      participants,
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+    try {
+      const probe = (proposalId: string) =>
+        app.inject({
+          method: "POST",
+          payload: { proposalId, scenarioParticipantId: "participant-1" },
+          url: "/encounters/encounter-1/combat-round/roll-break-off",
+        });
+      const hidden = await probe("hidden-break-off");
+      const nonexistent = await probe("nonexistent-break-off");
+      expect(hidden.statusCode).toBe(409);
+      expect(nonexistent.statusCode).toBe(409);
+      expect(hidden.json()).toEqual(nonexistent.json());
+      expect(hidden.json()).toEqual({
+        code: "break_off_roll_unavailable",
+        error: "Break Off roll is stale or not currently available.",
+      });
+      expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+      expect(mocks.encounterService.commitCombatParticipantStateMutations).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
   });
 
   it("rejects player roleplay rolls for silent assignments", async () => {
