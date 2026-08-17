@@ -1352,6 +1352,24 @@ export async function progressCombatMissileReadinessOnServer(input: {
   );
 }
 
+export async function interruptCombatMissileReadinessOnServer(input: {
+  currentEncounter?: EncounterSession;
+  encounterId: string;
+  expectedRevision: string;
+  reason: string;
+  scenarioParticipantId: string;
+  weaponInstanceId?: string;
+}): Promise<{ commandEnvelope: CombatRoundCommandEnvelope; encounter: EncounterSession }> {
+  return sendCombatMutationJson(
+    `/encounters/${input.encounterId}/combat-round/interrupt-missile-readiness`,
+    {
+      body: JSON.stringify({ ...input, currentEncounter: undefined }),
+      method: "POST",
+    },
+    input.currentEncounter,
+  );
+}
+
 export async function rollCombatParryOnServer(input: {
   attackResultId: string;
   attackerParticipantId: string;

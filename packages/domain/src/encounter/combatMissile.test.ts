@@ -84,6 +84,7 @@ describe("Missile Weapons V1 readiness", () => {
   it("prepares one bow round and four target-specific Aim II rounds", () => {
     let state = advance(undefined, 1);
     expect(state.baseCompletedRounds).toBe(1);
+    expect(state).toMatchObject({ aimRequiredRounds: 4, baseRequiredRounds: 1 });
     for (let round = 2; round <= 5; round += 1) state = advance(state, round);
     expect(isCombatMissileReady(state)).toBe(true);
     expect(getCombatMissileAttackModifier(state)).toBe(2);

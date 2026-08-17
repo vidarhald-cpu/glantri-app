@@ -10,6 +10,7 @@ import {
 import {
   CampaignService,
   CharacterService,
+  CharacterEquipmentReadModelService,
   CombatStateReadService,
   CombatItemInteractionService,
   EncounterCombatWriteError,
@@ -180,6 +181,7 @@ import {
   recordCombatRoundInitiative,
   recordCombatRoundAttackResult,
   progressCombatRoundMissileReadiness,
+  interruptCombatRoundMissileReadiness,
   recordCombatRoundParryResult,
   recordCombatRoundOffensiveParryBrawlingRoll,
   recordCombatObservationRoll,
@@ -351,6 +353,7 @@ const campaignService = instrumentCombatService(new CampaignService(), {
   },
 });
 const characterService = new CharacterService();
+const characterEquipmentReadModelService = new CharacterEquipmentReadModelService();
 const combatItemInteractionService = new CombatItemInteractionService();
 const combatStateReadService = instrumentCombatService(new CombatStateReadService(), {
   getActiveCombatStateById: {
@@ -2698,6 +2701,27 @@ function parseCombatMissileReadinessBody(body: unknown): ParsedCombatTaskCommand
   };
 }
 
+function parseCombatMissileInterruptionBody(body: unknown): {
+  expectedRevision: string;
+  reason: string;
+  scenarioParticipantId: string;
+  weaponInstanceId?: string;
+} {
+  const value = parseBodyObject(body, "Missile interruption payload");
+  return {
+    expectedRevision: parseNonEmptyString(value.expectedRevision, "expectedRevision"),
+    reason: parseNonEmptyString(value.reason, "reason"),
+    scenarioParticipantId: parseNonEmptyString(
+      value.scenarioParticipantId,
+      "scenarioParticipantId",
+    ),
+    weaponInstanceId:
+      value.weaponInstanceId === undefined
+        ? undefined
+        : parseNonEmptyString(value.weaponInstanceId, "weaponInstanceId"),
+  };
+}
+
 function parseOptionalBoolean(value: unknown, label: string): boolean | undefined {
   if (value === undefined) {
     return undefined;
@@ -3593,6 +3617,74 @@ function resolveCanonicalAttackOpportunityWeaponFacts(input: {
     weaponModeSourceMetadata: mode.sourceMetadata ?? undefined,
     weaponName: template.name,
   };
+}
+
+export function rollMissileWeaponDmbSnapshot(input: {
+  formula: NonNullable<NonNullable<WeaponTemplate["attackModes"]>[number]["dmbFormula"]>;
+  randomFn?: () => number;
+  raw?: string;
+  sourceMetadata?: NonNullable<
+    NonNullable<WeaponTemplate["attackModes"]>[number]["sourceMetadata"]
+  >;
+  strengthGm?: number | null;
+}):
+  | {
+      diceCount: number;
+      diceSides: number;
+      flatModifier: number;
+      gmStrengthModifier?: number;
+      provenance: string;
+      rolls: number[];
+      total: number;
+    }
+  | undefined {
+  const formula = input.formula;
+  if (formula.kind !== "dice" || !formula.diceCount || !formula.diceSides) {
+    throw new Error("Missile DMB formula is unavailable.");
+  }
+  const usesStrength = formula.textModifier === "GMstr";
+  if (usesStrength && input.strengthGm == null) {
+    throw new Error("Attacker GMstr is unavailable for missile damage.");
+  }
+  if (formula.textModifier && !usesStrength) {
+    throw new Error(`Unsupported missile DMB modifier ${formula.textModifier}.`);
+  }
+  const rolls = Array.from(
+    { length: formula.diceCount },
+    () => Math.floor((input.randomFn ?? Math.random)() * formula.diceSides!) + 1,
+  );
+  const flatModifier = formula.flatModifier ?? 0;
+  const gmStrengthModifier = usesStrength ? input.strengthGm! : undefined;
+  const total =
+    rolls.reduce((sum, roll) => sum + roll, 0) + flatModifier + (gmStrengthModifier ?? 0);
+  return {
+    diceCount: formula.diceCount,
+    diceSides: formula.diceSides,
+    flatModifier,
+    gmStrengthModifier,
+    provenance: `${input.sourceMetadata?.sheet ?? "Weapon2"}:${input.sourceMetadata?.row ?? "unknown"}:${input.raw ?? formula.raw}`,
+    rolls,
+    total,
+  };
+}
+
+function resolveMissileDmbSnapshot(input: {
+  participant: ScenarioParticipant;
+  weaponFacts: NonNullable<ReturnType<typeof resolveCanonicalAttackOpportunityWeaponFacts>>;
+}) {
+  if (!input.weaponFacts.isMissileAttack || !input.weaponFacts.weaponDmbFormula) return undefined;
+  const build = characterBuildSchema.safeParse(input.participant.snapshot.build);
+  const strengthGm = build.success
+    ? buildCombatStateCharacterInputs(
+        buildCharacterSheetSummary({ build: build.data, content: defaultCanonicalContent }),
+      ).strengthGm
+    : undefined;
+  return rollMissileWeaponDmbSnapshot({
+    formula: input.weaponFacts.weaponDmbFormula,
+    raw: input.weaponFacts.weaponDmbRaw,
+    sourceMetadata: input.weaponFacts.weaponModeSourceMetadata,
+    strengthGm,
+  });
 }
 
 function getSnapshotActiveWeaponTemplates(participant: ScenarioParticipant): WeaponTemplate[] {
@@ -6036,8 +6128,18 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
     const safeFacts = { ...input.command.facts };
     delete safeFacts.attackerCalculation;
     delete safeFacts.defenderCalculation;
+    delete safeFacts.missileAmmoUndo;
     delete safeFacts.thrownWeaponUndo;
     return { ...input.command, facts: safeFacts };
+  }
+
+  // Readiness commands carry exact ammunition identities/revisions, GM timing
+  // adjustments, and undo snapshots. Players use their sanitized readiness row.
+  if (
+    input.command.type === "progress_missile_readiness" ||
+    input.command.type === "interrupt_missile_readiness"
+  ) {
+    return undefined;
   }
 
   if (
@@ -6363,6 +6465,15 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
       controlledParticipantIds: controlledEncounterParticipantIds,
       visibleParticipantIds,
     }),
+    missileReadiness: roundState.missileReadiness
+      .filter((readiness) => controlledEncounterParticipantIds.has(readiness.participantId))
+      .map((readiness) => ({
+        ...readiness,
+        ammoItemId: undefined,
+        ammoItemRevision: undefined,
+        gmPreparationAdjustment: 0,
+        lastCommandId: undefined,
+      })),
     offensiveParryContests: roundState.offensiveParryContests
       .filter((contest) =>
         isPlayerVisibleCombatRoundResultPair({
@@ -6950,6 +7061,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      let stateWithGenericAction = { ...roundState, genericActions };
+      if (
+        existingAction &&
+        ["roll", "resolve", "interrupt", "cancel"].includes(body.operation) &&
+        roundState.missileReadiness.some(
+          (entry) => entry.participantId === existingAction.ownerParticipantId,
+        )
+      ) {
+        stateWithGenericAction = interruptCombatRoundMissileReadiness({
+          command: { createdAt: now, createdByUserId: user.id },
+          participantId: existingAction.ownerParticipantId,
+          reason: `Substantial action: ${existingAction.intent}`,
+          state: stateWithGenericAction,
+        });
+      }
       const nextEncounter = await encounterService.updateCombatEncounter({
         campaignId: access.campaignId,
         encounterId,
@@ -6957,7 +7083,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         scenarioId: encounter.scenarioId,
         session: {
           ...encounter,
-          combatRoundState: { ...roundState, genericActions },
+          combatRoundState: stateWithGenericAction,
           updatedAt: now,
         },
       });
@@ -14592,7 +14718,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const commandEnvelope = buildCombatRoundCommandEnvelope({
         state: nextRoundState,
       });
-
       return {
         commandEnvelope,
         encounter: saved.encounter,
@@ -15172,30 +15297,26 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         if (!authorization.ok) {
           return reply.code(409).send({ code: authorization.code, error: authorization.message });
         }
-        const equipmentState = getSnapshotEquipmentState(participant);
-        const itemsById = isRecord(equipmentState?.["itemsById"])
-          ? (equipmentState!["itemsById"] as Record<string, unknown>)
-          : undefined;
-        const ammoItem = EquipmentItemSchema.safeParse(itemsById?.[body.ammoItemId]);
-        const templatesById = getEquipmentTemplatesById(equipmentState);
+        const characterId = participant.characterId;
+        if (!characterId) {
+          return reply
+            .code(409)
+            .send({ code: "ammo_unavailable", error: "A character is required." });
+        }
+        const equipmentState = await characterEquipmentReadModelService.getCharacterEquipmentState(
+          characterId,
+          access.mode === "gm" ? { kind: "gm" } : { kind: "holder", characterId },
+        );
+        const ammoItem = EquipmentItemSchema.safeParse(equipmentState.itemsById[body.ammoItemId]);
+        const templatesById = equipmentState.templatesById;
         const ammoTemplate = AnyEquipmentTemplateSchema.safeParse(
           ammoItem.success
             ? (templatesById?.[ammoItem.data.templateId] ??
                 equipmentTemplatesById[ammoItem.data.templateId])
             : undefined,
         );
-        const characterId =
-          participant.characterId ??
-          Object.keys(
-            (equipmentState?.["activeLoadoutByCharacterId"] as
-              | Record<string, unknown>
-              | undefined) ?? {},
-          )[0];
-        const loadouts = isRecord(equipmentState?.["activeLoadoutByCharacterId"])
-          ? (equipmentState!["activeLoadoutByCharacterId"] as Record<string, unknown>)
-          : undefined;
         const loadout = CharacterLoadoutSchema.safeParse(
-          characterId ? loadouts?.[characterId] : undefined,
+          equipmentState.activeLoadoutByCharacterId[characterId],
         );
         if (
           !ammoItem.success ||
@@ -15218,8 +15339,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           intent: {
             aimLevel: body.aimLevel,
             ammoItemId: body.ammoItemId,
-            ammoItemRevision: body.ammoItemRevision,
-            gmPreparationAdjustment: body.gmPreparationAdjustment,
+            ammoItemRevision: ammoItem.data.revision!,
+            gmPreparationAdjustment:
+              access.mode === "gm"
+                ? body.gmPreparationAdjustment
+                : (roundState.missileReadiness.find(
+                    (entry) =>
+                      entry.participantId === encounterParticipant.id &&
+                      entry.weaponItemId === body.weaponInstanceId,
+                  )?.gmPreparationAdjustment ?? 0),
             rapidShot: body.rapidShot,
             targetParticipantId: body.targetParticipantId,
           },
@@ -15243,13 +15371,90 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
         return {
           commandEnvelope: buildCombatRoundCommandEnvelope({ state: nextState }),
-          encounter: saved,
+          encounter:
+            access.mode === "gm"
+              ? saved
+              : buildPlayerSafeCombatRollMutationEncounterForUser({
+                  encounter: saved,
+                  scenarioParticipants,
+                  userId: user.id,
+                }),
         };
       } catch (error) {
         const writeError = sendCombatWriteError(reply, error);
         if (writeError) return writeError;
         return reply.code(400).send({
           error: error instanceof Error ? error.message : "Unable to prepare missile weapon.",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/encounters/:encounterId/combat-round/interrupt-missile-readiness",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+        if (!encounter?.scenarioId) return reply.code(404).send({ error: "Encounter not found." });
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId, userId: user.id, userRoles: user.roles },
+        );
+        if (access?.mode !== "gm") {
+          return reply.code(403).send({ error: "Only the GM can invalidate preparation." });
+        }
+        const body = parseCombatMissileInterruptionBody(request.body);
+        if (body.expectedRevision !== encounter.updatedAt) {
+          return reply.code(409).send({ code: "stale_revision", error: "Combat state changed." });
+        }
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const participantResolution = resolveCombatParticipantForRequest({
+          accessMode: "gm",
+          encounter,
+          requestedParticipantId: body.scenarioParticipantId,
+          scenarioParticipants,
+          userId: user.id,
+        });
+        if (!participantResolution) {
+          return reply.code(404).send({ error: "Combat participant not found." });
+        }
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const submittedAt = new Date().toISOString();
+        const nextState = interruptCombatRoundMissileReadiness({
+          command: { createdAt: submittedAt, createdByUserId: user.id },
+          participantId: participantResolution.encounterParticipant.id,
+          reason: body.reason,
+          state: roundState,
+          weaponItemId: body.weaponInstanceId,
+        });
+        const saved = await encounterService.updateCombatEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          expectedRevision: encounter.updatedAt,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: nextState,
+            currentRound: nextState.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+        return {
+          commandEnvelope: buildCombatRoundCommandEnvelope({ state: nextState }),
+          encounter: saved,
+        };
+      } catch (error) {
+        const writeError = sendCombatWriteError(reply, error);
+        if (writeError) return writeError;
+        return reply.code(400).send({
+          error: error instanceof Error ? error.message : "Unable to invalidate preparation.",
         });
       }
     },
@@ -15650,6 +15855,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
       const roll = rollOpenEndedCombatToHitD20();
+      const missileDmbSnapshot = resolveMissileDmbSnapshot({
+        participant: scenarioParticipant,
+        weaponFacts: canonicalWeaponFacts,
+      });
       const declaredAttackPhaseDefensivePenalty =
         attackerRoundParticipant?.declaration?.attackPhaseDefensivePenalties?.find(
           (penalty) => penalty.attackOpportunityId === canonicalOpportunityIdentity.opportunityId,
@@ -15702,7 +15911,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         weaponArmorClass: canonicalWeaponFacts.weaponArmorClass,
         weaponCriticalCode: canonicalWeaponFacts.weaponCriticalCode,
         weaponDamageClass: canonicalWeaponFacts.weaponDamageClass,
-        weaponDmb: canonicalWeaponFacts.weaponDmb,
+        weaponDmb: missileDmbSnapshot?.total ?? canonicalWeaponFacts.weaponDmb,
+        weaponDmbRoll: missileDmbSnapshot,
         weaponDmbFormula: canonicalWeaponFacts.weaponDmbFormula,
         weaponDmbRaw: canonicalWeaponFacts.weaponDmbRaw,
         weaponModeInitiative: canonicalWeaponFacts.weaponModeInitiative,
@@ -15855,6 +16065,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
         state: nextRoundState,
       });
+      const refreshedAttackerParticipant =
+        canonicalWeaponFacts.isMissileAttack && scenarioParticipant.characterId
+          ? {
+              ...scenarioParticipant,
+              snapshot: {
+                ...scenarioParticipant.snapshot,
+                equipmentState: await characterEquipmentReadModelService.getCharacterEquipmentState(
+                  scenarioParticipant.characterId,
+                  access.mode === "gm"
+                    ? { kind: "gm" }
+                    : { kind: "holder", characterId: scenarioParticipant.characterId },
+                ),
+              },
+            }
+          : undefined;
 
       return {
         attackResult,
@@ -15878,6 +16103,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 scenarioParticipants,
                 userId: user.id,
               }),
+        participant: refreshedAttackerParticipant,
       };
     } catch (error) {
       return reply.code(400).send({

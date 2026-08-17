@@ -29,6 +29,7 @@ import {
   getCombatRoundArmorCriticalModifierForDamageResult,
   getCombatRoundAttackResultById,
   getCombatRoundCombatExperienceDifficulty,
+  getCombatMissileRequiredRounds,
   getCombatRoundEffectiveCriticalRoll,
   getCombatRoundEffectiveDamageResult,
   getCombatRoundPhaseInitiativeChoice,
@@ -1932,6 +1933,31 @@ export default function ScenarioPlayerCombatPageContent({
               opportunity.id === currentActionPresentation.primaryAction.descriptor?.opportunityId,
           )
       : undefined;
+  const currentMissileReadiness =
+    currentActionPresentation?.taskKind === "missile_readiness"
+      ? combatRoundState?.missileReadiness.find(
+          (entry) =>
+            entry.participantId ===
+              currentActionPresentation.primaryAction.descriptor?.participantId &&
+            entry.weaponItemId ===
+              currentActionPresentation.primaryAction.descriptor?.weaponInstanceId,
+        )
+      : undefined;
+  const currentMissileRequired = currentMissileReadiness
+    ? {
+        aimRounds:
+          currentMissileReadiness.aimRequiredRounds ??
+          getCombatMissileRequiredRounds(currentMissileReadiness).aimRounds,
+        baseRounds:
+          currentMissileReadiness.baseRequiredRounds ??
+          getCombatMissileRequiredRounds(currentMissileReadiness).baseRounds,
+      }
+    : undefined;
+  useEffect(() => {
+    if (!currentMissileReadiness) return;
+    setMissileAimLevel(currentMissileReadiness.aimLevel);
+    setMissileRapidShot(currentMissileReadiness.rapidShot);
+  }, [currentMissileReadiness?.id, currentMissileReadiness?.updatedAt]);
   const currentStepResultPresentation = useMemo(
     () =>
       playerCombatLog &&
@@ -5660,6 +5686,17 @@ export default function ScenarioPlayerCombatPageContent({
                 preActionControls={
                   currentActionPresentation?.taskKind === "missile_readiness" ? (
                     <div style={{ display: "grid", gap: "0.6rem" }}>
+                      {currentMissileReadiness && currentMissileRequired ? (
+                        <div>
+                          Readiness: {currentMissileReadiness.status} · preparation{" "}
+                          {currentMissileReadiness.baseCompletedRounds}/
+                          {currentMissileRequired.baseRounds} · aim{" "}
+                          {currentMissileReadiness.aimCompletedRounds}/
+                          {currentMissileRequired.aimRounds}
+                        </div>
+                      ) : (
+                        <div>Readiness: not started</div>
+                      )}
                       <label style={{ display: "grid", gap: "0.25rem" }}>
                         <strong>Aim</strong>
                         <select

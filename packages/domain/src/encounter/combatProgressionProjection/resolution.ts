@@ -389,55 +389,60 @@ function buildLegacyAttackProcess(
           state: context.state,
         })
       : undefined;
-    stages[1] = {
-      ...stages[1],
-      tasks: [
-        {
-          dependencies: attack
-            ? undefined
-            : [
-                {
-                  message: "The active parry has no incoming attack.",
-                  owner,
-                  type: "invalid_source",
-                },
-              ],
-          expectedCommand: "roll_parry",
-          identity: {
-            attackResultId: attack
-              ? getCombatRoundAttackResultId({
-                  result: attack,
-                  roundNumber: context.state.roundNumber,
-                })
-              : undefined,
-            attackerParticipantId: attack?.attackerParticipantId,
-            defenderParticipantId: attack?.defenderParticipantId,
-            opportunityId: attack?.attackOpportunityId,
-            opponentParticipantId: attack?.attackerParticipantId,
-            parryPurpose: "ordinary_defense",
-            parrySourceId: "auto",
-            phase,
-          },
-          kind: "parry",
-          owner,
-          presentationContext: {
-            actionKind: presentationActionKind(
-              attack
-                ? context.state.participants.find(
-                    (entry) => entry.participantId === attack.attackerParticipantId,
-                  )?.declaration?.actionId
+    if (attack?.attackType === "missile") {
+      stages[1] = { ...stages[1], state: "complete", tasks: [] };
+      stages[2] = { ...stages[2], state: "active" };
+    } else {
+      stages[1] = {
+        ...stages[1],
+        tasks: [
+          {
+            dependencies: attack
+              ? undefined
+              : [
+                  {
+                    message: "The active parry has no incoming attack.",
+                    owner,
+                    type: "invalid_source",
+                  },
+                ],
+            expectedCommand: "roll_parry",
+            identity: {
+              attackResultId: attack
+                ? getCombatRoundAttackResultId({
+                    result: attack,
+                    roundNumber: context.state.roundNumber,
+                  })
                 : undefined,
-            ),
-            actor: attack ? context.identities.get(attack.attackerParticipantId) : undefined,
-            attackOutcome: attack?.hit === true ? "hit" : "miss",
-            responder: owner,
-            target: owner,
+              attackerParticipantId: attack?.attackerParticipantId,
+              defenderParticipantId: attack?.defenderParticipantId,
+              opportunityId: attack?.attackOpportunityId,
+              opponentParticipantId: attack?.attackerParticipantId,
+              parryPurpose: "ordinary_defense",
+              parrySourceId: "auto",
+              phase,
+            },
+            kind: "parry",
+            owner,
+            presentationContext: {
+              actionKind: presentationActionKind(
+                attack
+                  ? context.state.participants.find(
+                      (entry) => entry.participantId === attack.attackerParticipantId,
+                    )?.declaration?.actionId
+                  : undefined,
+              ),
+              actor: attack ? context.identities.get(attack.attackerParticipantId) : undefined,
+              attackOutcome: attack?.hit === true ? "hit" : "miss",
+              responder: owner,
+              target: owner,
+            },
+            trackerOwner: owner,
+            trackerStep: trackerParry,
           },
-          trackerOwner: owner,
-          trackerStep: trackerParry,
-        },
-      ],
-    };
+        ],
+      };
+    }
   } else if (substep === "damage") {
     const attack = participantId
       ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({

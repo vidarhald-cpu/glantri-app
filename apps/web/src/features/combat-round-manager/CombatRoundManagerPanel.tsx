@@ -84,6 +84,7 @@ import {
   getCombatRoundPhaseDamageCommitReadiness,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundPhaseAttackCandidates,
+  getCombatMissileRequiredRounds,
   getCombatRoundPhaseAttackBackOutOpportunity,
   getCombatRoundParticipantPhaseStepStatus,
   getCombatRoundPhaseResolutionResultForAttack,
@@ -170,6 +171,7 @@ import {
   commitRoundEndDistanceControlOnServer,
   commitRoundEndParticipantReviewOnServer,
   progressCombatMissileReadinessOnServer,
+  interruptCombatMissileReadinessOnServer,
   rollCombatAttackOnServer,
   rollCombatExperienceOnServer,
   rollCombatInitiativeOnServer,
@@ -4277,6 +4279,34 @@ export default function CombatRoundManagerPanel({
   const displayParticipants = combatPresentation.active.displayParticipants;
   const projectedCurrentTasks = combatPresentation.active.projectedCurrentTasks;
   const currentActionPresentation = combatPresentation.active.currentAction;
+  const inspectorMissileReadiness =
+    currentActionPresentation?.taskKind === "missile_readiness"
+      ? roundState.missileReadiness.find(
+          (entry) =>
+            entry.participantId ===
+              currentActionPresentation.primaryAction.descriptor?.participantId &&
+            entry.weaponItemId ===
+              currentActionPresentation.primaryAction.descriptor?.weaponInstanceId,
+        )
+      : undefined;
+  const inspectorMissileRequired = inspectorMissileReadiness
+    ? {
+        aimRounds:
+          inspectorMissileReadiness.aimRequiredRounds ??
+          getCombatMissileRequiredRounds(inspectorMissileReadiness).aimRounds,
+        baseRounds:
+          inspectorMissileReadiness.baseRequiredRounds ??
+          getCombatMissileRequiredRounds(inspectorMissileReadiness).baseRounds,
+      }
+    : undefined;
+  useEffect(() => {
+    if (!inspectorMissileReadiness) return;
+    setInspectorMissileAimLevel(inspectorMissileReadiness.aimLevel);
+    setInspectorMissileRapidShot(inspectorMissileReadiness.rapidShot);
+    setInspectorMissilePreparationAdjustment(
+      String(inspectorMissileReadiness.gmPreparationAdjustment),
+    );
+  }, [inspectorMissileReadiness?.id, inspectorMissileReadiness?.updatedAt]);
   const liveInspectorContext = combatPresentation.active.liveInspectorContext;
   const currentTaskSelection = combatPresentation.active.currentTaskSelection;
   const renderedInspectionSelection = combatPresentation.selection.renderedInspectionSelection;
@@ -7393,6 +7423,15 @@ export default function CombatRoundManagerPanel({
           gridTemplateColumns: "repeat(auto-fit, minmax(10rem, 1fr))",
         }}
       >
+        {inspectorMissileReadiness && inspectorMissileRequired ? (
+          <div style={{ gridColumn: "1 / -1" }}>
+            Readiness: {inspectorMissileReadiness.status} · preparation{" "}
+            {inspectorMissileReadiness.baseCompletedRounds}/{inspectorMissileRequired.baseRounds} ·
+            aim {inspectorMissileReadiness.aimCompletedRounds}/{inspectorMissileRequired.aimRounds}
+          </div>
+        ) : (
+          <div style={{ gridColumn: "1 / -1" }}>Readiness: not started</div>
+        )}
         <label style={compactFieldLabelStyle}>
           <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Aim</span>
           <select
@@ -7426,6 +7465,18 @@ export default function CombatRoundManagerPanel({
           />
           Rapid shot · bows/slings only · −4 OB
         </label>
+        {inspectorMissileReadiness ? (
+          <button
+            disabled={saving || Boolean(inspectorSnapshot) || inspectorIsInspectionOnly}
+            onClick={() => {
+              const descriptor = currentActionPresentation.primaryAction.descriptor;
+              if (descriptor) void invalidateInspectorMissileReadiness(descriptor);
+            }}
+            type="button"
+          >
+            Invalidate preparation
+          </button>
+        ) : null}
       </div>
     ) : null;
   const inspectorPreActionControls =
@@ -10071,6 +10122,41 @@ export default function CombatRoundManagerPanel({
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to prepare missile weapon.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function invalidateInspectorMissileReadiness(candidate: CurrentActionCommandDescriptor) {
+    const participant = scenarioParticipantForTask(candidate);
+    const weaponInstanceId = candidate.weaponInstanceId;
+    if (!participant || !weaponInstanceId || !inspectorMissileReadiness) {
+      setSaveError("No missile preparation is available to invalidate.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { commandEnvelope, encounter: nextEncounter } =
+        await interruptCombatMissileReadinessOnServer({
+          currentEncounter: encounter,
+          encounterId: encounter.id,
+          expectedRevision: candidate.expectedRevision,
+          reason: "GM invalidation",
+          scenarioParticipantId: participant.id,
+          weaponInstanceId,
+        });
+      const { inspectionSelection, state } = getCombatRoundManagerStateFromCommandEnvelope({
+        commandEnvelope,
+        encounter: nextEncounter,
+      });
+      setInspectionSelection(inspectionSelection);
+      acceptCanonicalEncounterState(nextEncounter, state);
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to invalidate preparation.",
       );
     } finally {
       setSaving(false);

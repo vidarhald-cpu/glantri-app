@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { weaponTemplates } from "@glantri/content";
 
 import {
   commitCombatRoundDisarm,
@@ -338,5 +339,102 @@ describe("player-safe Disarm state", () => {
       status: "awaiting_commit",
       targetWeaponItemId: "redacted:disarm:target-weapon",
     });
+  });
+});
+
+describe("player-safe missile readiness state", () => {
+  it("keeps only the actor's progress and removes exact ammo, GM timing, and undo payloads", () => {
+    const current = fixture();
+    const profile = weaponTemplates.find(
+      (weapon) => weapon.id === "weapon-template-bow",
+    )!.missileProfile!;
+    const seedCommand = current.state.commands[0]!;
+    const readiness = {
+      aimCompletedRounds: 1,
+      aimLevel: 2 as const,
+      aimRequiredRounds: 4,
+      ammoFamily: "arrow" as const,
+      ammoItemId: "secret-ammo-item",
+      ammoItemRevision: REVISION,
+      baseCompletedRounds: 1,
+      baseRequiredRounds: 5,
+      family: "short_bow" as const,
+      gmPreparationAdjustment: 4,
+      id: "missile-readiness:actor:secret-bow",
+      lastCommandId: "secret-readiness-command",
+      lastProgressRound: 3,
+      participantId: "actor",
+      phase: "phase1" as const,
+      profile,
+      rapidShot: false,
+      status: "preparing" as const,
+      targetParticipantId: "holder",
+      updatedAt: NOW,
+      weaponItemId: "secret-bow",
+      weaponTemplateId: "weapon-template-bow",
+    };
+    const progressCommand = {
+      ...seedCommand,
+      facts: { ammoItemId: "secret-ammo-item", ammoItemRevision: REVISION, readiness },
+      id: "secret-readiness-command",
+      participantId: "actor",
+      type: "progress_missile_readiness" as const,
+    };
+    const attackCommand = {
+      ...seedCommand,
+      facts: {
+        missileAmmoUndo: {
+          ammoItemId: "secret-ammo-item",
+          quantityAfter: 2,
+          quantityBefore: 3,
+        },
+      },
+      id: "secret-attack-command",
+      participantId: "actor",
+      type: "roll_attack" as const,
+    };
+    const encounter = {
+      ...current.encounter,
+      combatRoundState: {
+        ...current.state,
+        commands: [...current.state.commands, progressCommand, attackCommand],
+        missileReadiness: [
+          readiness,
+          { ...readiness, id: "other-readiness", participantId: "holder" },
+        ],
+      },
+    } as EncounterSession;
+    const actor = buildPlayerSafeEncounterForUser({
+      encounter,
+      scenarioParticipants: current.scenarioParticipants,
+      userId: "user-actor",
+    }).combatRoundState!;
+    const observer = buildPlayerSafeEncounterForUser({
+      encounter,
+      scenarioParticipants: current.scenarioParticipants,
+      userId: "user-observer",
+    }).combatRoundState!;
+
+    expect(actor.missileReadiness).toHaveLength(1);
+    expect(actor.missileReadiness[0]).toMatchObject({
+      aimCompletedRounds: 1,
+      aimLevel: 2,
+      aimRequiredRounds: 4,
+      ammoItemId: undefined,
+      ammoItemRevision: undefined,
+      baseCompletedRounds: 1,
+      baseRequiredRounds: 5,
+      gmPreparationAdjustment: 0,
+      lastCommandId: undefined,
+      participantId: "actor",
+    });
+    expect(actor.commands.map((command) => command.type)).not.toContain(
+      "progress_missile_readiness",
+    );
+    expect(JSON.stringify(actor)).not.toMatch(
+      /secret-ammo-item|secret-readiness-command|quantityBefore|quantityAfter/,
+    );
+    expect(observer.missileReadiness).toEqual([]);
+    expect(JSON.stringify(observer)).not.toMatch(/secret-ammo-item|other-readiness/);
   });
 });

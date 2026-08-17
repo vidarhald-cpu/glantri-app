@@ -25,11 +25,13 @@ export const COMBAT_MISSILE_AIM = Object.freeze({
 
 export const combatMissileReadinessSchema = z.object({
   aimCompletedRounds: z.number().int().nonnegative().default(0),
+  aimRequiredRounds: z.number().int().nonnegative().optional(),
   aimLevel: combatMissileAimLevelSchema.default(0),
   ammoFamily: MissileAmmoFamilySchema,
   ammoItemId: idSchema.optional(),
   ammoItemRevision: idSchema.optional(),
   baseCompletedRounds: z.number().int().nonnegative().default(0),
+  baseRequiredRounds: z.number().int().nonnegative().optional(),
   family: MissileWeaponFamilySchema,
   gmPreparationAdjustment: z.number().int().default(0),
   id: idSchema,
@@ -102,7 +104,11 @@ function statusForProgress(input: {
 }
 
 export function isCombatMissileReady(readiness: CombatMissileReadiness): boolean {
-  const required = getCombatMissileRequiredRounds(readiness);
+  const calculated = getCombatMissileRequiredRounds(readiness);
+  const required = {
+    aimRounds: readiness.aimRequiredRounds ?? calculated.aimRounds,
+    baseRounds: readiness.baseRequiredRounds ?? calculated.baseRounds,
+  };
   return (
     readiness.baseCompletedRounds >= required.baseRounds &&
     readiness.aimCompletedRounds >= required.aimRounds &&
@@ -148,10 +154,12 @@ export function advanceCombatMissileReadiness(input: {
   return combatMissileReadinessSchema.parse({
     aimCompletedRounds,
     aimLevel: intent.aimLevel,
+    aimRequiredRounds: required.aimRounds,
     ammoFamily: input.profile.ammoFamily,
     ammoItemId: intent.ammoItemId,
     ammoItemRevision: intent.ammoItemRevision,
     baseCompletedRounds,
+    baseRequiredRounds: required.baseRounds,
     family: input.profile.family,
     gmPreparationAdjustment: intent.gmPreparationAdjustment,
     id: buildCombatMissileReadinessId(input),

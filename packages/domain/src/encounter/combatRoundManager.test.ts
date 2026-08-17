@@ -86,6 +86,7 @@ import {
   getParticipantCombatExperienceSkillTotalLookup,
   getPreviousCombatRoundStep,
   initializeCombatRoundState,
+  interruptCombatRoundMissileReadiness,
   isCombatRoundCombatExperienceWindowOpen,
   isCombatRoundEndReviewComplete,
   isCombatRoundPhaseCombatExperienceRollRequired,
@@ -482,6 +483,185 @@ describe("canonical Dodge resolution in round-end distance control", () => {
       generalFatigueModifier: -1,
       finalTotal: 20,
     });
+  });
+});
+
+describe("Missile attack lifecycle integration", () => {
+  const bowProfile = {
+    ammoFamily: "arrow" as const,
+    canRemainReady: false,
+    family: "short_bow" as const,
+    fullNormalCycleRounds: 2,
+    preparationModel: "continuous_fragile" as const,
+    rapidShotAllowed: true,
+    standardPreparationRounds: 1,
+  };
+  const ready = (participantId: string, weaponItemId: string) => ({
+    aimCompletedRounds: 0,
+    aimLevel: 0 as const,
+    ammoFamily: "arrow" as const,
+    ammoItemId: `ammo-${participantId}`,
+    ammoItemRevision: "2026-01-01T00:00:00.000Z",
+    baseCompletedRounds: 1,
+    family: "short_bow" as const,
+    gmPreparationAdjustment: 0,
+    id: `missile-readiness:${participantId}:${weaponItemId}`,
+    lastProgressRound: 3,
+    participantId,
+    phase: "phase1" as const,
+    profile: bowProfile,
+    rapidShot: false,
+    status: "ready" as const,
+    targetParticipantId: participantId === "gladiator" ? "guard" : "gladiator",
+    updatedAt: "2026-01-01T00:02:00.000Z",
+    weaponItemId,
+    weaponTemplateId: "weapon-template-bow",
+  });
+
+  it("records incoming missile facts, bypasses ordinary parry, interrupts a hit defender, and undoes exactly", () => {
+    const attackerReadiness = ready("gladiator", "bow-gladiator");
+    const defenderReadiness = ready("guard", "bow-guard");
+    const state = combatRoundStateSchema.parse({
+      ...initializeCombatRoundState({ encounter: encounter() }),
+      currentCursor: { participantId: "gladiator", roundNumber: 3, step: "A1" },
+      currentStep: "phase_1_actions",
+      missileReadiness: [attackerReadiness, defenderReadiness],
+      roundNumber: 3,
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackType: "missile",
+      attackerParticipantId: "gladiator",
+      defenderDb: 0,
+      defenderParticipantId: "guard",
+      ob: 40,
+      phase: "phase1",
+      rollD20: 20,
+      rollTotal: 20,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponDmb: 8,
+      weaponDmbRoll: {
+        diceCount: 2,
+        diceSides: 6,
+        flatModifier: 0,
+        provenance: "Weapon2:14:2d6",
+        rolls: [3, 5],
+        total: 8,
+      },
+      weaponInstanceId: "bow-gladiator",
+      weaponName: "Short bow",
+      weaponTemplateId: "weapon-template-bow",
+    });
+    const fired = recordCombatRoundAttackResult({
+      command: { commandId: "missile-hit", createdAt: result.rolledAt },
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+
+    expect(fired.currentCursor).toEqual({ participantId: "guard", roundNumber: 3, step: "D1" });
+    expect(
+      getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+        participantId: "guard",
+        phase: "phase1",
+        state: fired,
+      }),
+    ).toMatchObject({ attackType: "missile", weaponDmb: 8 });
+    expect(
+      buildCombatProgressionProjection(fired)
+        .boundary.processes.flatMap((process) => process.stages)
+        .flatMap((stage) => stage.tasks ?? [])
+        .map((task) => task.expectedCommand),
+    ).not.toContain("roll_parry");
+    expect(fired.missileReadiness.find((entry) => entry.participantId === "guard")).toMatchObject({
+      baseCompletedRounds: 0,
+      status: "idle",
+    });
+
+    const restored = undoLatestCombatRoundCommand({ state: fired });
+    expect(restored?.missileReadiness).toEqual(
+      expect.arrayContaining([attackerReadiness, defenderReadiness]),
+    );
+  });
+
+  it("records a missile miss as incoming attack facts without opening ordinary parry", () => {
+    const state = combatRoundStateSchema.parse({
+      ...initializeCombatRoundState({ encounter: encounter() }),
+      currentCursor: { participantId: "gladiator", roundNumber: 3, step: "A1" },
+      currentStep: "phase_1_actions",
+      missileReadiness: [ready("gladiator", "bow-gladiator")],
+      roundNumber: 3,
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackType: "missile",
+      attackerParticipantId: "gladiator",
+      defenderDb: 50,
+      defenderParticipantId: "guard",
+      ob: 0,
+      phase: "phase1",
+      rollD20: 1,
+      rollTotal: 1,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponDmb: 2,
+      weaponDmbRoll: {
+        diceCount: 2,
+        diceSides: 6,
+        flatModifier: 0,
+        provenance: "Weapon2:14:2d6",
+        rolls: [1, 1],
+        total: 2,
+      },
+      weaponInstanceId: "bow-gladiator",
+      weaponName: "Short bow",
+      weaponTemplateId: "weapon-template-bow",
+    });
+    const fired = recordCombatRoundAttackResult({
+      command: { commandId: "missile-miss", createdAt: result.rolledAt },
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+
+    expect(fired.currentCursor?.step).not.toBe("P1");
+    expect(
+      getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+        participantId: "guard",
+        phase: "phase1",
+        state: fired,
+      }),
+    ).toMatchObject({ attackType: "missile", hit: false });
+    expect(
+      buildCombatProgressionProjection(fired)
+        .boundary.processes.flatMap((process) => process.stages)
+        .flatMap((stage) => stage.tasks ?? [])
+        .map((task) => task.expectedCommand),
+    ).not.toContain("roll_parry");
+  });
+
+  it("supports an explicit GM invalidation command with exact undo", () => {
+    const readiness = ready("gladiator", "bow-gladiator");
+    const state = combatRoundStateSchema.parse({
+      ...initializeCombatRoundState({ encounter: encounter() }),
+      missileReadiness: [readiness],
+      roundNumber: 3,
+    });
+    const interrupted = interruptCombatRoundMissileReadiness({
+      command: { commandId: "gm-invalidate", createdAt: "2026-01-01T00:04:00.000Z" },
+      participantId: "gladiator",
+      reason: "The archer was knocked down.",
+      state,
+    });
+    expect(interrupted.commands.at(-1)?.type).toBe("interrupt_missile_readiness");
+    expect(interrupted.missileReadiness[0]).toMatchObject({
+      baseCompletedRounds: 0,
+      status: "idle",
+    });
+    expect(undoLatestCombatRoundCommand({ state: interrupted })?.missileReadiness).toEqual([
+      readiness,
+    ]);
   });
 });
 

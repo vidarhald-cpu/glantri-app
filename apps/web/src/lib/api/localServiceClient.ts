@@ -99,6 +99,7 @@ export {
   loadScenarioEncounterManagementProjections,
   prepareCombatRoundEndReviewOnServer,
   progressCombatMissileReadinessOnServer,
+  interruptCombatMissileReadinessOnServer,
   rollCombatAttackOnServer,
   rollCombatCriticalOnServer,
   rollCombatExperienceOnServer,

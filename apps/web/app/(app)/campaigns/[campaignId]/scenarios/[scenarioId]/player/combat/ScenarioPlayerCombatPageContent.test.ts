@@ -13,6 +13,14 @@ function readSource(): string {
 }
 
 describe("ScenarioPlayerCombatPageContent", () => {
+  it("hydrates and presents canonical missile preparation progress for player continuation", () => {
+    const source = readSource();
+
+    expect(source).toContain("setMissileAimLevel(currentMissileReadiness.aimLevel)");
+    expect(source).toContain("currentMissileReadiness.baseRequiredRounds");
+    expect(source).toContain("currentMissileReadiness.aimRequiredRounds");
+    expect(source).toContain("Readiness: {currentMissileReadiness.status}");
+  });
   it("keeps Player and GM Player combat in tracker, workspace, log, ancillary order", () => {
     const source = readSource();
     const tracker = source.indexOf("<CombatTracker");

@@ -119,6 +119,7 @@ import {
   combatMissileReadinessIntentSchema,
   combatMissileReadinessSchema,
   consumeCombatMissileReadinessAfterShot,
+  interruptCombatMissileReadiness,
   isCombatMissileReady,
   type CombatMissileReadiness,
   type CombatMissileReadinessIntent,
@@ -484,6 +485,7 @@ export const combatRoundCommandTypeSchema = z.enum([
   "roll_initiative_phase2",
   "roll_attack",
   "progress_missile_readiness",
+  "interrupt_missile_readiness",
   "roll_parry",
   "roll_offensive_parry_brawling",
   "roll_continued_contact_maintenance",
@@ -1126,6 +1128,18 @@ export const combatRoundAttackRollResultSchema = z
     weaponCriticalCode: z.string().min(1).optional(),
     weaponDamageClass: z.string().min(1).optional(),
     weaponDmb: z.number().int().optional(),
+    weaponDmbRoll: z
+      .object({
+        diceCount: z.number().int().positive(),
+        diceSides: z.number().int().min(2),
+        flatModifier: z.number().int(),
+        gmStrengthModifier: z.number().int().optional(),
+        provenance: z.string().min(1),
+        rolls: z.array(z.number().int().positive()),
+        total: z.number().int(),
+      })
+      .strict()
+      .optional(),
     weaponDmbFormula: WeaponAttackModeSchema.shape.dmbFormula.unwrap().optional(),
     weaponDmbRaw: z.string().min(1).optional(),
     weaponModeInitiative: z.number().optional(),
@@ -1151,6 +1165,25 @@ export const combatRoundAttackRollResultSchema = z
         message: "Combat attack result requires rollD20 or legacy roll.",
         path: ["rollD20"],
       });
+    }
+    if (result.weaponDmbRoll) {
+      const dmb = result.weaponDmbRoll;
+      const expectedTotal =
+        dmb.rolls.reduce((sum, roll) => sum + roll, 0) +
+        dmb.flatModifier +
+        (dmb.gmStrengthModifier ?? 0);
+      if (
+        dmb.rolls.length !== dmb.diceCount ||
+        dmb.rolls.some((roll) => roll > dmb.diceSides) ||
+        dmb.total !== expectedTotal ||
+        result.weaponDmb !== dmb.total
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Missile DMB roll must be a complete, internally consistent snapshot.",
+          path: ["weaponDmbRoll"],
+        });
+      }
     }
   })
   .transform((result) => {
@@ -2047,6 +2080,15 @@ function mergeCombatRoundCriticalEffectProposalIntoReview(input: {
   weaponDamageClass?: string;
   weaponArmorClass?: CombatArmorModifierClass;
   weaponDmb?: number;
+  weaponDmbRoll?: {
+    diceCount: number;
+    diceSides: number;
+    flatModifier: number;
+    gmStrengthModifier?: number;
+    provenance: string;
+    rolls: number[];
+    total: number;
+  };
 }): CombatRoundDamageReview {
   const existingReview = removeCombatRoundCriticalEffectProposalFromReview(
     input.damageResult.review,
@@ -5538,6 +5580,8 @@ function isUndoableCombatRoundCommandType(type: CombatRoundCommandType): boolean
   return (
     isGlobalCombatRoundCommandType(type) ||
     type === "roll_attack" ||
+    type === "progress_missile_readiness" ||
+    type === "interrupt_missile_readiness" ||
     type === "roll_parry" ||
     type === "roll_offensive_parry_brawling" ||
     type === "roll_continued_contact_maintenance" ||
@@ -6029,6 +6073,15 @@ export function buildCombatRoundAttackRollResult(input: {
   weaponCriticalCode?: string;
   weaponDamageClass?: string;
   weaponDmb?: number;
+  weaponDmbRoll?: {
+    diceCount: number;
+    diceSides: number;
+    flatModifier: number;
+    gmStrengthModifier?: number;
+    provenance: string;
+    rolls: number[];
+    total: number;
+  };
   weaponDmbFormula?: NonNullable<z.input<typeof WeaponAttackModeSchema>["dmbFormula"]>;
   weaponDmbRaw?: string;
   weaponModeInitiative?: number;
@@ -6083,6 +6136,7 @@ export function buildCombatRoundAttackRollResult(input: {
     weaponCriticalCode: input.weaponCriticalCode,
     weaponDamageClass: input.weaponDamageClass,
     weaponDmb: input.weaponDmb,
+    weaponDmbRoll: input.weaponDmbRoll,
     weaponDmbFormula: input.weaponDmbFormula,
     weaponDmbRaw: input.weaponDmbRaw,
     weaponModeInitiative: input.weaponModeInitiative,
@@ -21240,6 +21294,16 @@ function getCombatRoundAttackCommandAfterCursor(input: {
   result: CombatRoundAttackRollResult;
   state: CombatRoundState;
 }): CombatRoundCursor {
+  if (input.result.hit && input.result.attackType === "missile") {
+    return combatRoundCursorSchema.parse({
+      participantId: input.result.defenderParticipantId,
+      roundNumber: input.state.roundNumber,
+      step: getCombatRoundCursorStepForPhaseResolutionSubstep({
+        phase: input.result.phase,
+        substep: "damage",
+      }),
+    });
+  }
   if (
     input.result.hit ||
     getCombatRoundOffensiveParryAttemptIdentity({
@@ -21315,6 +21379,7 @@ function recordCombatRoundAttackCommand(input: {
       weaponInstanceId: input.result.weaponInstanceId,
       weaponArmorClass: input.result.weaponArmorClass,
       weaponDmb: input.result.weaponDmb,
+      weaponDmbRoll: input.result.weaponDmbRoll,
       weaponDmbFormula: input.result.weaponDmbFormula,
       weaponDmbRaw: input.result.weaponDmbRaw,
       weaponModeInitiative: input.result.weaponModeInitiative,
@@ -21391,6 +21456,7 @@ function recordCombatRoundAttackCommand(input: {
           weaponName: input.result.weaponName,
           weaponArmorClass: input.result.weaponArmorClass,
           weaponDmb: input.result.weaponDmb,
+          weaponDmbRoll: input.result.weaponDmbRoll,
           weaponDmbFormula: input.result.weaponDmbFormula,
           weaponDmbRaw: input.result.weaponDmbRaw,
           weaponModeInitiative: input.result.weaponModeInitiative,
@@ -21538,10 +21604,22 @@ export function recordCombatRoundAttackResult(input: {
     throw new RangeError("Missile weapon is not ready for this target.");
   }
 
+  const interruptedMissileReadiness = normalized.missileReadiness.filter(
+    (entry) =>
+      (entry.participantId === input.participantId && entry.id !== missileReadiness?.id) ||
+      (recordedResult.hit && entry.participantId === recordedResult.defenderParticipantId),
+  );
+  const interruptedIds = new Set(interruptedMissileReadiness.map((entry) => entry.id));
+  const readinessAfterInterruptions = normalized.missileReadiness.map((entry) =>
+    interruptedIds.has(entry.id)
+      ? interruptCombatMissileReadiness({ current: entry, interruptedAt: recordedResult.rolledAt })
+      : entry,
+  );
+
   const withResult: CombatRoundState = {
     ...normalized,
     missileReadiness: missileReadiness
-      ? normalized.missileReadiness.map((entry) =>
+      ? readinessAfterInterruptions.map((entry) =>
           entry.id === missileReadiness.id
             ? consumeCombatMissileReadinessAfterShot({
                 current: missileReadiness,
@@ -21549,7 +21627,7 @@ export function recordCombatRoundAttackResult(input: {
               })
             : entry,
         )
-      : normalized.missileReadiness,
+      : readinessAfterInterruptions,
     participants: normalized.participants.map((participant) => {
       if (participant.participantId !== input.participantId) return participant;
 
@@ -21605,6 +21683,7 @@ export function recordCombatRoundAttackResult(input: {
           ...input.command,
           facts: {
             ...(input.command.facts ?? {}),
+            interruptedMissileReadiness,
             previousMissileReadiness: missileReadiness ?? null,
             previousAttackPhaseDefensivePenalties: previousAttackPhaseDefensivePenalties ?? null,
           },
@@ -21614,6 +21693,80 @@ export function recordCombatRoundAttackResult(input: {
         state: withReactiveModifiers,
       })
     : withReactiveModifiers;
+}
+
+export function interruptCombatRoundMissileReadiness(input: {
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  participantId: string;
+  reason: string;
+  state: CombatRoundState;
+  weaponItemId?: string;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const previousReadiness = normalized.missileReadiness.filter(
+    (entry) =>
+      entry.participantId === input.participantId &&
+      (!input.weaponItemId || entry.weaponItemId === input.weaponItemId),
+  );
+  if (previousReadiness.length === 0) {
+    throw new RangeError("No missile preparation is available to invalidate.");
+  }
+  const previousIds = new Set(previousReadiness.map((entry) => entry.id));
+  const nextReadiness = previousReadiness.map((entry) =>
+    interruptCombatMissileReadiness({ current: entry, interruptedAt: input.command.createdAt }),
+  );
+  const nextById = new Map(nextReadiness.map((entry) => [entry.id, entry]));
+  const commandType = "interrupt_missile_readiness" satisfies CombatRoundCommandType;
+  const cursor =
+    normalized.currentCursor ??
+    getDefaultCombatRoundCursor({
+      participantId: input.participantId,
+      roundNumber: normalized.roundNumber,
+      step: normalized.currentStep,
+    });
+  const command = combatRoundCommandSchema.parse({
+    afterCursor: cursor,
+    beforeCursor: cursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: { nextReadiness, previousReadiness, reason: input.reason },
+    id:
+      input.command.commandId ??
+      buildCombatRoundCommandId({
+        createdAt: input.command.createdAt,
+        participantId: input.participantId,
+        state: normalized,
+        type: commandType,
+      }),
+    participantId: input.participantId,
+    roundNumber: normalized.roundNumber,
+    step: cursor.step,
+    type: commandType,
+  });
+  return appendCombatRoundEventForCommand({
+    command,
+    draft: {
+      actorParticipantId: input.participantId,
+      facts: {
+        gmReview: { reason: input.reason },
+        involvedOutcome: { reason: input.reason, status: "interrupted" },
+        publicOutcome: { status: "interrupted" },
+        rollerPrivate: {},
+      },
+      involvedParticipantIds: [input.participantId],
+      ownerParticipantId: input.participantId,
+      status: "recorded",
+      step: normalized.currentStep,
+      type: "missile_readiness",
+    },
+    state: combatRoundStateSchema.parse({
+      ...normalized,
+      commands: [...normalized.commands, command],
+      missileReadiness: normalized.missileReadiness.map((entry) =>
+        previousIds.has(entry.id) ? nextById.get(entry.id)! : entry,
+      ),
+    }),
+  });
 }
 
 export function progressCombatRoundMissileReadiness(input: {
@@ -22843,20 +22996,24 @@ function undoCombatRoundAttackCommandAtIndex(input: {
   const previousMissileReadiness = combatMissileReadinessSchema.safeParse(
     command.facts.previousMissileReadiness,
   );
+  const interruptedMissileReadiness = z
+    .array(combatMissileReadinessSchema)
+    .safeParse(command.facts.interruptedMissileReadiness);
+  const restoredReadiness = [
+    ...(previousMissileReadiness.success ? [previousMissileReadiness.data] : []),
+    ...(interruptedMissileReadiness.success ? interruptedMissileReadiness.data : []),
+  ];
+  const restoredReadinessIds = new Set(restoredReadiness.map((entry) => entry.id));
 
   return {
     ...cleared,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
     currentStep: selectedStep,
-    missileReadiness: previousMissileReadiness.success
-      ? [
-          ...cleared.missileReadiness.filter(
-            (entry) => entry.id !== previousMissileReadiness.data.id,
-          ),
-          previousMissileReadiness.data,
-        ]
-      : cleared.missileReadiness,
+    missileReadiness: [
+      ...cleared.missileReadiness.filter((entry) => !restoredReadinessIds.has(entry.id)),
+      ...restoredReadiness,
+    ],
     phaseResolutionCursor: {
       participantId,
       phase,
@@ -22881,6 +23038,33 @@ function undoCombatRoundAttackCommandAtIndex(input: {
     selectedParticipantId: participantId,
     selectedStep,
   };
+}
+
+function undoCombatRoundMissileReadinessInterruptionCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+  if (!command || command.type !== "interrupt_missile_readiness") return undefined;
+  const previousReadiness = z
+    .array(combatMissileReadinessSchema)
+    .safeParse(command.facts.previousReadiness);
+  if (!previousReadiness.success) return undefined;
+  const previousIds = new Set(previousReadiness.data.map((entry) => entry.id));
+  const withoutEvents = removeCombatRoundEventsForCommand({
+    commandId: command.id,
+    state: normalized,
+  });
+  return combatRoundStateSchema.parse({
+    ...withoutEvents,
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    currentCursor: command.beforeCursor,
+    missileReadiness: [
+      ...normalized.missileReadiness.filter((entry) => !previousIds.has(entry.id)),
+      ...previousReadiness.data,
+    ],
+  });
 }
 
 function undoCombatRoundMissileReadinessCommandAtIndex(input: {
@@ -25111,6 +25295,13 @@ function undoCombatRoundCommandAtIndex(input: {
 
   if (command.type === "progress_missile_readiness") {
     return undoCombatRoundMissileReadinessCommandAtIndex({
+      commandIndex: input.commandIndex,
+      state: normalized,
+    });
+  }
+
+  if (command.type === "interrupt_missile_readiness") {
+    return undoCombatRoundMissileReadinessInterruptionCommandAtIndex({
       commandIndex: input.commandIndex,
       state: normalized,
     });
