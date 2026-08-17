@@ -1599,7 +1599,7 @@ describe("authorizeCombatProgressionTask", () => {
   ] as const)(
     "routes a reactive Parry-Disarm %s to the defender's canonical player and GM parry task",
     (_outcome, ob, rollTotal) => {
-      const attemptId = "disarm:round:2:phase1:actor:guard:item:item-hero-sword";
+      const attemptId = "disarm:round:2:phase1:actor:guard";
       const opportunityId = "round:2:participant:hero:phase1:attack_1";
       const initial = state({
         cursorParticipantId: "hero",
@@ -1738,15 +1738,50 @@ describe("authorizeCombatProgressionTask", () => {
         .find((task) => task.kind === "parry");
       expect(gmTask).toMatchObject({
         expectedCommand: "roll_parry",
-        identity: { disarmAttemptId: attemptId, parryPurpose: "parry_disarm" },
+        identity: {
+          disarmAttemptId: attemptId,
+          parryPurpose: "parry_disarm",
+          parrySourceId: "declared-disarm-weapon",
+        },
         owner: { participantId: "guard" },
       });
       expect(playerTask).toMatchObject({
         actorAccess: { combatant: true },
         expectedCommand: "roll_parry",
-        identity: { disarmAttemptId: attemptId, parryPurpose: "parry_disarm" },
+        identity: {
+          disarmAttemptId: attemptId,
+          parryPurpose: "parry_disarm",
+          parrySourceId: "declared-disarm-weapon",
+        },
         owner: { participantId: "guard" },
       });
+      const safeAfterAttack = {
+        ...afterAttack,
+        disarmAttempts: afterAttack.disarmAttempts.map((attempt) => ({
+          ...attempt,
+          actingWeaponItemId: "redacted:disarm:acting-weapon",
+          actingWeaponTemplateId: "redacted:disarm:acting-template",
+          targetWeaponItemId: "redacted:disarm:target-weapon",
+          targetWeaponItemRevision: "1970-01-01T00:00:00.000Z",
+          targetWeaponTemplateId: "redacted:disarm:target-template",
+        })),
+        participants: afterAttack.participants.map((participant) =>
+          participant.participantId === "guard" && participant.declaration
+            ? { ...participant, declaration: { ...participant.declaration, disarm: undefined } }
+            : participant,
+        ),
+      };
+      const safeTask = buildCombatProgressionProjection(safeAfterAttack)
+        .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+        .find((task) => task.kind === "parry");
+      expect(safeTask).toMatchObject({
+        identity: {
+          disarmAttemptId: attemptId,
+          parryPurpose: "parry_disarm",
+          parrySourceId: "declared-disarm-weapon",
+        },
+      });
+      expect(JSON.stringify(playerProjection)).not.toContain("item-main-gauche");
       expect(JSON.stringify(playerProjection)).not.toContain('"participantId":"hero"');
     },
   );

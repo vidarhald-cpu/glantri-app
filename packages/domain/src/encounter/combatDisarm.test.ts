@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCombatDisarmAttemptId,
   evaluateCombatDisarmContactGate,
   resolveCombatDisarmAttempt,
   resolveCombatDisarmContactQualityModifier,
@@ -8,6 +9,20 @@ import {
 } from "./combatDisarm";
 
 describe("combat Disarm source tables and contact gates", () => {
+  it("keeps public attempt correlation stable without embedding either Item identity", () => {
+    const base = {
+      actingParticipantId: "actor",
+      phase: "phase1" as const,
+      roundNumber: 3,
+    };
+    expect(buildCombatDisarmAttemptId({ ...base, targetWeaponItemId: "secret-item" })).toBe(
+      "disarm:round:3:phase1:actor:actor",
+    );
+    expect(buildCombatDisarmAttemptId({ ...base, targetWeaponItemId: "nonexistent-item" })).toBe(
+      "disarm:round:3:phase1:actor:actor",
+    );
+  });
+
   it("protects every exact result-band boundary", () => {
     expect(resolveCombatDisarmResult(-20).id).toBe("no_effect");
     expect(resolveCombatDisarmResult(0).id).toBe("no_effect");

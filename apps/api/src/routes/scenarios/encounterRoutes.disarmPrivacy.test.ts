@@ -85,7 +85,8 @@ function roll(input: {
   };
 }
 
-function fixture() {
+function fixture(input?: { hiddenSuffix?: string }) {
+  const hiddenSuffix = input?.hiddenSuffix ?? "secret";
   const encounterParticipants = [
     participant("actor"),
     participant("holder"),
@@ -102,11 +103,11 @@ function fixture() {
         actingWeapon: {
           capability: "trap",
           controlRating: 2,
-          itemId: "secret-acting-item",
+          itemId: `${hiddenSuffix}-acting-item`,
           itemRevision: REVISION,
           label: "Secret trap",
           parryModifier: 2,
-          templateId: "secret-acting-template",
+          templateId: `${hiddenSuffix}-acting-template`,
         },
         method: "proactive",
         phase: "phase1",
@@ -114,11 +115,11 @@ function fixture() {
         targetWeapon: {
           capability: "none",
           controlRating: 5,
-          itemId: "secret-target-item",
+          itemId: `${hiddenSuffix}-target-item`,
           itemRevision: REVISION,
           label: "Secret target",
           parryModifier: 0,
-          templateId: "secret-target-template",
+          templateId: `${hiddenSuffix}-target-template`,
         },
       },
       roundNumber: 3,
@@ -127,6 +128,7 @@ function fixture() {
     state,
     submittedBy: "gm",
   });
+  const declaredState = state;
   const attemptId = state.disarmAttempts[0]!.id;
   state = openCombatRoundDisarmAfterContact({
     attackResultId: "attack-1",
@@ -134,23 +136,27 @@ function fixture() {
     command: { commandId: "open", createdAt: NOW },
     state,
   });
+  const contactState = state;
   state = recordCombatRoundDisarmRoll({
     attemptId,
     command: { commandId: "actor-roll", createdAt: NOW },
     result: roll({ finalTotal: 31, participantId: "actor", role: "disarm_actor" }),
     state,
   });
+  const actorRolledState = state;
   state = recordCombatRoundDisarmRoll({
     attemptId,
     command: { commandId: "holder-roll", createdAt: NOW },
     result: roll({ finalTotal: 15, participantId: "holder", role: "disarm_holder" }),
     state,
   });
+  const awaitingCommitState = state;
   state = commitCombatRoundDisarm({
     attemptId,
     command: { commandId: "commit", createdAt: NOW },
     state,
   });
+  const committedState = state;
   const scenarioParticipants = ["actor", "holder", "observer"].map(
     (id) =>
       ({
@@ -176,7 +182,18 @@ function fixture() {
     scenarioId: "scenario-1",
     updatedAt: NOW,
   } as unknown as EncounterSession;
-  return { encounter, scenarioParticipants, state };
+  return {
+    encounter,
+    lifecycleStates: [
+      declaredState,
+      contactState,
+      actorRolledState,
+      awaitingCommitState,
+      committedState,
+    ],
+    scenarioParticipants,
+    state,
+  };
 }
 
 describe("player-safe Disarm state", () => {
@@ -200,15 +217,65 @@ describe("player-safe Disarm state", () => {
     );
     expect(actorAttempt).toMatchObject({
       actingRoll: { finalTotal: 31, rolledByUserId: undefined },
+      actingWeaponItemId: "redacted:disarm:acting-weapon",
+      actingWeaponTemplateId: "redacted:disarm:acting-template",
       difference: undefined,
       resistingRoll: undefined,
+      targetWeaponItemId: "redacted:disarm:target-weapon",
+      targetWeaponItemRevision: "1970-01-01T00:00:00.000Z",
+      targetWeaponTemplateId: "redacted:disarm:target-template",
     });
+    expect(actorAttempt.id).toBe("disarm:round:3:phase1:actor:actor");
     expect(actorAttempt.actingRoll?.calculation.percentageContributions).toEqual([]);
-    expect(JSON.stringify(actorAttempt)).not.toContain("Target 5 vs acting 2");
+    expect(JSON.stringify(actorAttempt)).not.toMatch(
+      /Target 5 vs acting 2|secret-acting|secret-target|gm-only-control/,
+    );
     expect(holderAttempt).toMatchObject({
       actingRoll: undefined,
       difference: undefined,
       resistingRoll: { finalTotal: 15, rolledByUserId: undefined },
+    });
+    expect(
+      actor.participants.find((entry) => entry.participantId === "actor")?.declaration?.disarm,
+    ).toBeUndefined();
+    expect(JSON.stringify(holderAttempt)).not.toMatch(/secret-acting|secret-target/);
+  });
+
+  it("keeps actor and holder payloads independent of hidden Item facts across the full lifecycle", () => {
+    const canonical = fixture();
+    const nonexistent = fixture({ hiddenSuffix: "nonexistent" });
+
+    canonical.lifecycleStates.forEach((state, index) => {
+      for (const role of ["actor", "holder"] as const) {
+        const projected = buildPlayerSafeEncounterForUser({
+          encounter: { ...canonical.encounter, combatRoundState: state },
+          scenarioParticipants: canonical.scenarioParticipants,
+          userId: `user-${role}`,
+        });
+        const projectedNonexistent = buildPlayerSafeEncounterForUser({
+          encounter: {
+            ...nonexistent.encounter,
+            combatRoundState: nonexistent.lifecycleStates[index],
+          },
+          scenarioParticipants: nonexistent.scenarioParticipants,
+          userId: `user-${role}`,
+        });
+
+        expect(JSON.stringify(projected)).not.toMatch(
+          /secret-acting|secret-target|secret-acting-template|secret-target-template|gm-only-control|Target 5 vs acting 2/,
+        );
+        expect(projected.combatRoundState?.disarmAttempts).toEqual(
+          projectedNonexistent.combatRoundState?.disarmAttempts,
+        );
+        expect(
+          projected.combatRoundState?.participants.find((entry) => entry.participantId === "actor")
+            ?.declaration,
+        ).toEqual(
+          projectedNonexistent.combatRoundState?.participants.find(
+            (entry) => entry.participantId === "actor",
+          )?.declaration,
+        );
+      }
     });
   });
 
@@ -258,5 +325,18 @@ describe("player-safe Disarm state", () => {
 
     expect(undone?.disarmAttempts[0]?.status).toBe("awaiting_commit");
     expect(undone?.commands.at(-1)?.type).toBe("roll_disarm");
+    const safeUndone = buildPlayerSafeEncounterForUser({
+      encounter: { ...encounter, combatRoundState: undone },
+      scenarioParticipants,
+      userId: "user-actor",
+    });
+    expect(JSON.stringify(safeUndone)).not.toMatch(
+      /secret-acting|secret-target|gm-only-control|Target 5 vs acting 2/,
+    );
+    expect(safeUndone.combatRoundState?.disarmAttempts[0]).toMatchObject({
+      actingWeaponItemId: "redacted:disarm:acting-weapon",
+      status: "awaiting_commit",
+      targetWeaponItemId: "redacted:disarm:target-weapon",
+    });
   });
 });

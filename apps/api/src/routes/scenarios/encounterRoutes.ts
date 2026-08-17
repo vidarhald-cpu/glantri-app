@@ -261,6 +261,7 @@ import type {
   CombatParryModifierValidationProjection,
   CombatActionGeneratedDistanceModifierInput,
   CombatAttackSourceRef,
+  CombatDisarmAttempt,
   CombatDisarmRoll,
   CombatDistanceWeaponLike,
   CombatRoundAttackOpportunity,
@@ -5854,11 +5855,25 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
     return undefined;
   }
 
-  if (
-    input.command.type === "declare_action" &&
-    !input.controlledEncounterParticipantIds.has(input.command.participantId)
-  ) {
-    return undefined;
+  if (input.command.type === "declare_action") {
+    if (!input.controlledEncounterParticipantIds.has(input.command.participantId)) {
+      return undefined;
+    }
+    if (
+      input.command.facts.actionId === "disarm" ||
+      input.command.facts.actionId === "parry_disarm" ||
+      input.command.facts.disarm !== undefined ||
+      input.command.facts.previousDisarmAttempts !== undefined
+    ) {
+      return {
+        ...input.command,
+        facts: {
+          actionId: input.command.facts.actionId,
+          status: input.command.facts.status,
+          step: input.command.facts.step,
+        },
+      };
+    }
   }
 
   if (
@@ -5977,6 +5992,39 @@ function sanitizePlayerSafeDisarmRoll(roll: CombatDisarmRoll): CombatDisarmRoll 
     },
     rolledByUserId: undefined,
   };
+}
+
+const PLAYER_SAFE_DISARM_ITEM_REVISION = "1970-01-01T00:00:00.000Z";
+
+function sanitizePlayerSafeDisarmAttempt(input: {
+  attempt: CombatDisarmAttempt;
+  controlledEncounterParticipantIds: ReadonlySet<string>;
+}): CombatDisarmAttempt {
+  return {
+    ...input.attempt,
+    actingRoll: input.controlledEncounterParticipantIds.has(input.attempt.actingParticipantId)
+      ? input.attempt.actingRoll
+        ? sanitizePlayerSafeDisarmRoll(input.attempt.actingRoll)
+        : undefined
+      : undefined,
+    actingWeaponItemId: "redacted:disarm:acting-weapon",
+    actingWeaponTemplateId: "redacted:disarm:acting-template",
+    difference: undefined,
+    resistingRoll: input.controlledEncounterParticipantIds.has(input.attempt.resistingParticipantId)
+      ? input.attempt.resistingRoll
+        ? sanitizePlayerSafeDisarmRoll(input.attempt.resistingRoll)
+        : undefined
+      : undefined,
+    targetWeaponItemId: "redacted:disarm:target-weapon",
+    targetWeaponItemRevision: PLAYER_SAFE_DISARM_ITEM_REVISION,
+    targetWeaponTemplateId: "redacted:disarm:target-template",
+  };
+}
+
+function sanitizePlayerSafeDisarmDeclaration(
+  declaration: CombatRoundDeclaration | undefined,
+): CombatRoundDeclaration | undefined {
+  return declaration?.disarm ? { ...declaration, disarm: undefined } : declaration;
 }
 
 function buildPlayerSafeCombatRoundStateForUser(input: {
@@ -6118,20 +6166,9 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
           visibleParticipantIds,
         }),
       )
-      .map((attempt) => ({
-        ...attempt,
-        difference: undefined,
-        actingRoll: controlledEncounterParticipantIds.has(attempt.actingParticipantId)
-          ? attempt.actingRoll
-            ? sanitizePlayerSafeDisarmRoll(attempt.actingRoll)
-            : undefined
-          : undefined,
-        resistingRoll: controlledEncounterParticipantIds.has(attempt.resistingParticipantId)
-          ? attempt.resistingRoll
-            ? sanitizePlayerSafeDisarmRoll(attempt.resistingRoll)
-            : undefined
-          : undefined,
-      })),
+      .map((attempt) =>
+        sanitizePlayerSafeDisarmAttempt({ attempt, controlledEncounterParticipantIds }),
+      ),
     engagements: roundState.engagements.filter((engagement) =>
       isPlayerVisibleCombatRoundResultPair({
         attackerParticipantId: engagement.participantAId,
@@ -6244,7 +6281,10 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
       .filter((participant) => visibleParticipantIds.has(participant.participantId))
       .map((participant) =>
         controlledEncounterParticipantIds.has(participant.participantId)
-          ? participant
+          ? {
+              ...participant,
+              declaration: sanitizePlayerSafeDisarmDeclaration(participant.declaration),
+            }
           : {
               ...participant,
               declaration:
@@ -15655,7 +15695,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         (!parryDisarmAttempt ||
           !parryDisarmDeclaration ||
           !attackerScenarioParticipant ||
-          body.parrySourceId !== parryDisarmDeclaration.actingWeapon.itemId ||
           parryDisarmAttempt.actingWeaponItemId !== parryDisarmDeclaration.actingWeapon.itemId ||
           parryDisarmAttempt.targetWeaponItemId !== parryDisarmDeclaration.targetWeapon.itemId ||
           !hasExactWieldedWeaponItem({

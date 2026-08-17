@@ -217,7 +217,7 @@ export function buildCombatDisarmAttemptId(input: {
   roundNumber: number;
   targetWeaponItemId: string;
 }): string {
-  return `disarm:round:${input.roundNumber}:${input.phase}:actor:${input.actingParticipantId}:item:${input.targetWeaponItemId}`;
+  return `disarm:round:${input.roundNumber}:${input.phase}:actor:${input.actingParticipantId}`;
 }
 
 export function buildCombatDisarmUnbalancedConditionId(input: {

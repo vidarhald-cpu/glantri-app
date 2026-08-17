@@ -12,7 +12,7 @@ function descriptor(input: {
 }): CurrentActionCommandDescriptor {
   return {
     commandType: "roll_disarm",
-    disarmAttemptId: "disarm:round:3:phase1:actor:actor:item:item-spear",
+    disarmAttemptId: "disarm:round:3:phase1:actor:actor",
     encounterId: "encounter-1",
     executionGroupId: "execution-disarm",
     expectedBoundary: "phase1_resolution",
@@ -41,7 +41,7 @@ describe("player Disarm dispatch", () => {
       expect(result).toEqual({ id: "encounter-1" });
       expect(send).toHaveBeenCalledWith(
         expect.objectContaining({
-          attemptId: "disarm:round:3:phase1:actor:actor:item:item-spear",
+          attemptId: "disarm:round:3:phase1:actor:actor",
           scenarioParticipantId: id,
           taskId: `disarm-${kind}-task`,
         }),
@@ -56,7 +56,7 @@ describe("player Disarm dispatch", () => {
         commandType: "roll_parry",
         parryPurpose: "parry_disarm",
       }),
-    ).toBe("disarm:round:3:phase1:actor:actor:item:item-spear");
+    ).toBe("disarm:round:3:phase1:actor:actor");
     expect(
       getPlayerParryDisarmAttemptId({
         ...descriptor({ kind: "actor", participantId: "actor" }),

@@ -8787,19 +8787,20 @@ export function getCombatRoundParryDisarmAttemptIdentity(input: {
   if (
     declaration?.actionId !== "parry_disarm" ||
     declaration.roundNumber !== normalized.roundNumber ||
-    disarm?.method !== "reactive_parry" ||
-    disarm.phase !== input.attackResult.phase ||
-    disarm.targetParticipantId !== input.attackResult.attackerParticipantId ||
-    disarm.targetWeapon.itemId !== input.attackResult.weaponInstanceId
+    (disarm &&
+      (disarm.method !== "reactive_parry" ||
+        disarm.phase !== input.attackResult.phase ||
+        disarm.targetParticipantId !== input.attackResult.attackerParticipantId ||
+        disarm.targetWeapon.itemId !== input.attackResult.weaponInstanceId))
   ) {
     return undefined;
   }
   const attempt = normalized.disarmAttempts.find(
     (candidate) =>
       candidate.status === "awaiting_contact" &&
+      candidate.method === "reactive_parry" &&
       candidate.actingParticipantId === input.attackResult.defenderParticipantId &&
       candidate.resistingParticipantId === input.attackResult.attackerParticipantId &&
-      candidate.targetWeaponItemId === disarm.targetWeapon.itemId &&
       candidate.phase === input.attackResult.phase,
   );
   if (!attempt) return undefined;
@@ -8811,7 +8812,7 @@ export function getCombatRoundParryDisarmAttemptIdentity(input: {
     declaredOpponentParticipantId: input.attackResult.attackerParticipantId,
     disarmAttemptId: attempt.id,
     parryPurpose: "parry_disarm",
-    parrySourceId: disarm.actingWeapon.itemId,
+    parrySourceId: "declared-disarm-weapon",
   };
 }
 

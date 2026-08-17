@@ -314,6 +314,9 @@ describe("combat route canonical-conformance guards", () => {
     expect(parryRoute).toContain('body.parryPurpose === "parry_disarm"');
     expect(parryRoute).toContain("resolveCanonicalWeaponParryBase({");
     expect(parryRoute).toContain(
+      "parryDisarmAttempt.actingWeaponItemId !== parryDisarmDeclaration.actingWeapon.itemId",
+    );
+    expect(parryRoute).not.toContain(
       "body.parrySourceId !== parryDisarmDeclaration.actingWeapon.itemId",
     );
     expect(parryRoute.match(/hasExactWieldedWeaponItem\(\{/g)).toHaveLength(2);
