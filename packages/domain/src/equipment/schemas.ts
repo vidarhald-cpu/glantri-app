@@ -60,6 +60,33 @@ export const WeaponAttackModeProvenanceSchema = z.enum(["imported", "manual", "d
 
 export const WeaponAttackModeTypeSchema = z.enum(["melee", "missile", "thrown"]);
 
+export const MissileAmmoFamilySchema = z.enum(["arrow", "crossbow_bolt", "sling_projectile"]);
+
+export const MissileWeaponFamilySchema = z.enum([
+  "sling",
+  "short_bow",
+  "composite_bow",
+  "long_bow",
+  "hand_crossbow",
+  "crossbow",
+  "heavy_crossbow",
+]);
+
+export const MissileWeaponProfileSchema = z.object({
+  ammoFamily: MissileAmmoFamilySchema,
+  canRemainReady: z.boolean(),
+  family: MissileWeaponFamilySchema,
+  fullNormalCycleRounds: z.number().int().positive(),
+  preparationModel: z.enum(["continuous_fragile", "staged_persistent"]),
+  rapidShotAllowed: z.boolean(),
+  standardPreparationRounds: z.number().int().nonnegative(),
+});
+
+export const MissileAmmunitionProfileSchema = z.object({
+  family: MissileAmmoFamilySchema,
+  quantityPerShot: z.number().int().positive().default(1),
+});
+
 export const WeaponDisarmCapabilitySchema = z.enum(["none", "trap"]);
 
 export const WeaponDisarmGripClassSchema = z.enum(["one_handed", "two_handed"]);
@@ -398,6 +425,7 @@ export const WeaponTemplateSchema = EquipmentTemplateSchema.extend({
   disarmCapability: WeaponDisarmCapabilitySchema.nullable().optional(),
   disarmGripClass: WeaponDisarmGripClassSchema.nullable().optional(),
   disarmControlOverride: z.number().int().min(1).max(6).nullable().optional(),
+  missileProfile: MissileWeaponProfileSchema.nullable().optional(),
 });
 
 export const ShieldTemplateSchema = EquipmentTemplateSchema.extend({
@@ -448,6 +476,8 @@ export const ArmorTemplateSchema = EquipmentTemplateSchema.extend({
 
 export const GearTemplateSchema = EquipmentTemplateSchema.extend({
   category: z.literal("gear"),
+  ammunitionProfile: MissileAmmunitionProfileSchema.nullable().optional(),
+  equipmentRole: z.enum(["ammunition", "ammunition_container"]).nullable().optional(),
 });
 
 export const ValuableTemplateSchema = EquipmentTemplateSchema.extend({

@@ -33,6 +33,7 @@ export function classifyCombatTrackerTaskAttention(
 ): CombatTrackerAttention {
   switch (task.kind) {
     case "attack":
+    case "missile_readiness":
     case "commit_initiative":
     case "effect_review":
     case "gm_advance_boundary":
@@ -105,6 +106,8 @@ function actionLabel(kind: CombatProgressionTaskKind): string {
       return "Initiative";
     case "attack":
       return "Attack";
+    case "missile_readiness":
+      return "Missile preparation";
     case "break_off_review":
     case "break_off_escapee_roll":
     case "break_off_attacker_roll":
@@ -238,6 +241,11 @@ export function buildCombatTrackerTaskHover(
         text = owner
           ? `${owner} may make ${phase ? `${phase.toLowerCase()} ` : ""}attack${opponent ? ` against ${opponent}` : ""}.`
           : "An attack is ready.";
+        break;
+      case "missile_readiness":
+        text = owner
+          ? `${owner} must prepare a missile weapon${opponent ? ` for an attack against ${opponent}` : ""}.`
+          : "Missile preparation is required before combat can continue.";
         break;
       case "parry":
         text = owner

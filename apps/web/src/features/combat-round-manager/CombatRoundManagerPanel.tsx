@@ -83,6 +83,7 @@ import {
   getCombatRoundEffectiveDamageResult,
   getCombatRoundPhaseDamageCommitReadiness,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundPhaseAttackCandidates,
   getCombatRoundPhaseAttackBackOutOpportunity,
   getCombatRoundParticipantPhaseStepStatus,
   getCombatRoundPhaseResolutionResultForAttack,
@@ -168,6 +169,7 @@ import {
   loadCombatItemInteractionOptions,
   commitRoundEndDistanceControlOnServer,
   commitRoundEndParticipantReviewOnServer,
+  progressCombatMissileReadinessOnServer,
   rollCombatAttackOnServer,
   rollCombatExperienceOnServer,
   rollCombatInitiativeOnServer,
@@ -4063,6 +4065,10 @@ export default function CombatRoundManagerPanel({
   const [inspectorBreakOffAttackerAdjustment, setInspectorBreakOffAttackerAdjustment] =
     useState("0");
   const [inspectorBreakOffNote, setInspectorBreakOffNote] = useState("");
+  const [inspectorMissileAimLevel, setInspectorMissileAimLevel] = useState<0 | 1 | 2 | 3>(0);
+  const [inspectorMissileRapidShot, setInspectorMissileRapidShot] = useState(false);
+  const [inspectorMissilePreparationAdjustment, setInspectorMissilePreparationAdjustment] =
+    useState("0");
   const [inspectorDisarmSkillChoice, setInspectorDisarmSkillChoice] = useState<
     "weapon_skill" | "parry"
   >("weapon_skill");
@@ -7377,7 +7383,53 @@ export default function CombatRoundManagerPanel({
       ) : null}
     </section>
   ) : null;
+  const inspectorMissileReadinessControls =
+    currentActionPresentation?.taskKind === "missile_readiness" ? (
+      <div
+        aria-label="Missile preparation choices"
+        style={{
+          display: "grid",
+          gap: "0.45rem",
+          gridTemplateColumns: "repeat(auto-fit, minmax(10rem, 1fr))",
+        }}
+      >
+        <label style={compactFieldLabelStyle}>
+          <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Aim</span>
+          <select
+            disabled={saving || Boolean(inspectorSnapshot) || inspectorIsInspectionOnly}
+            onChange={(event) =>
+              setInspectorMissileAimLevel(Number(event.target.value) as 0 | 1 | 2 | 3)
+            }
+            value={inspectorMissileAimLevel}
+          >
+            <option value={0}>Normal</option>
+            <option value={1}>Aim I · +1 OB · 2 rounds</option>
+            <option value={2}>Aim II · +2 OB · 4 rounds</option>
+            <option value={3}>Aim III · +3 OB · 6 rounds</option>
+          </select>
+        </label>
+        <label style={compactFieldLabelStyle}>
+          <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>GM round adjustment</span>
+          <input
+            disabled={saving || Boolean(inspectorSnapshot) || inspectorIsInspectionOnly}
+            inputMode="numeric"
+            onChange={(event) => setInspectorMissilePreparationAdjustment(event.target.value)}
+            value={inspectorMissilePreparationAdjustment}
+          />
+        </label>
+        <label style={{ alignItems: "center", display: "flex", gap: "0.45rem" }}>
+          <input
+            checked={inspectorMissileRapidShot}
+            disabled={saving || Boolean(inspectorSnapshot) || inspectorIsInspectionOnly}
+            onChange={(event) => setInspectorMissileRapidShot(event.target.checked)}
+            type="checkbox"
+          />
+          Rapid shot · bows/slings only · −4 OB
+        </label>
+      </div>
+    ) : null;
   const inspectorPreActionControls =
+    inspectorMissileReadinessControls ||
     inspectorCurrentActionOutcomeControls ||
     inspectorDisarmControls ||
     inspectorCombatExperienceDifficultyControls ||
@@ -7393,6 +7445,7 @@ export default function CombatRoundManagerPanel({
         {inspectorStepWorkflowStatus}
         {inspectorDeclarationProposal}
         {inspectorCurrentActionOutcomeControls}
+        {inspectorMissileReadinessControls}
         {inspectorDisarmControls}
         {inspectorCombatExperienceDifficultyControls}
         {inspectorFeintControls}
@@ -9937,6 +9990,93 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  async function progressInspectorMissileReadiness(candidate: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["progress_missile_readiness"],
+      presentation: currentActionPresentation,
+      requiredFields: [
+        "executionGroupId",
+        "expectedRevision",
+        "opponentParticipantId",
+        "opportunityId",
+        "participantId",
+        "phase",
+        "taskId",
+        "weaponInstanceId",
+        "weaponTemplateId",
+      ],
+    });
+    const participant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
+    const opportunity = descriptor
+      ? getCombatRoundPhaseAttackCandidates({ phase: descriptor.phase!, state: roundState }).find(
+          (entry) => entry.id === descriptor.opportunityId,
+        )
+      : undefined;
+    const characterId = participant?.characterId;
+    const loadout = characterId
+      ? inspectorEquipmentState?.activeLoadoutByCharacterId[characterId]
+      : undefined;
+    const ammo = loadout?.activeAmmoItemIds
+      .map((itemId) => inspectorEquipmentState?.itemsById[itemId])
+      .find((item) => {
+        const template = item
+          ? inspectorEquipmentState?.templates.templatesById[item.templateId]
+          : undefined;
+        return (
+          item &&
+          item.quantity > 0 &&
+          template?.category === "gear" &&
+          template.ammunitionProfile?.family === opportunity?.missileProfile?.ammoFamily
+        );
+      });
+    if (!descriptor || !participant || !opportunity?.missileProfile || !ammo?.revision) {
+      setSaveError("Choose compatible active ammunition before preparing this missile weapon.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { commandEnvelope, encounter: nextEncounter } =
+        await progressCombatMissileReadinessOnServer({
+          aimLevel: inspectorMissileAimLevel,
+          ammoItemId: ammo.id,
+          ammoItemRevision: ammo.revision,
+          currentEncounter: encounter,
+          encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedParticipantRevision: participant.updatedAt,
+          expectedRevision: descriptor.expectedRevision,
+          gmPreparationAdjustment: parseCombatInteger(
+            inspectorMissilePreparationAdjustment,
+            "Missile preparation adjustment",
+          ),
+          opportunityId: descriptor.opportunityId!,
+          phase: descriptor.phase!,
+          rapidShot: inspectorMissileRapidShot,
+          scenarioParticipantId: participant.id,
+          targetParticipantId: descriptor.opponentParticipantId!,
+          taskId: descriptor.taskId,
+          weaponInstanceId: descriptor.weaponInstanceId!,
+          weaponTemplateId: descriptor.weaponTemplateId!,
+        });
+      const { inspectionSelection, state } = getCombatRoundManagerStateFromCommandEnvelope({
+        commandEnvelope,
+        encounter: nextEncounter,
+      });
+      setInspectionSelection(inspectionSelection);
+      acceptCanonicalEncounterState(nextEncounter, state);
+      setSelectedRoundNumber(state.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to prepare missile weapon.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function rollInspectorParry(descriptor: CurrentActionCommandDescriptor) {
     const attackResult = descriptor.attackResultId
       ? getCombatRoundAttackResultById({
@@ -11115,6 +11255,9 @@ export default function CombatRoundManagerPanel({
         return;
       case "roll_attack":
         void invokeResultProducingGmCommand(descriptor, () => rollInspectorPhaseAttack(descriptor));
+        return;
+      case "progress_missile_readiness":
+        void progressInspectorMissileReadiness(descriptor);
         return;
       case "declare_action":
       case "review_modifiers_phase1":

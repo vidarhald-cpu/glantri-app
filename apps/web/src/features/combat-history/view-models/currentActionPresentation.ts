@@ -191,6 +191,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   adjust_distance: "Adjust Distance",
   adjust_distance_attack: "Adjust Distance-Attack",
   attack: "Attack",
+  missile_readiness: "Missile Preparation",
   break_off_engagement: "Break Off",
   combat_experience: "Combat Experience",
   continued_contact_distance_control: "Continued Contact",
@@ -222,6 +223,7 @@ const TASK_ACTION_NAMES: Record<CombatProgressionTaskKind, string> = {
   adjust_distance_defender_roll: "Adjust Distance",
   adjust_distance_response: "Adjust Distance",
   attack: "Attack",
+  missile_readiness: "Missile Preparation",
   break_off_attacker_roll: "Break Off",
   break_off_commit: "Break Off",
   break_off_escapee_roll: "Break Off",
@@ -567,6 +569,8 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
       return "Choose Continue or Cancel";
     case "attack":
       return "Roll attack";
+    case "missile_readiness":
+      return "Prepare missile weapon";
     case "break_off_review":
       return "Review Break Off";
     case "break_off_escapee_roll":
@@ -658,6 +662,8 @@ function requiredNowFor(
       return "Choose Continue or Cancel.";
     case "attack":
       return "Roll attack.";
+    case "missile_readiness":
+      return "Prepare the missile weapon or choose Rapid shot.";
     case "break_off_review":
       return "Review the Break Off modifiers.";
     case "break_off_escapee_roll":

@@ -167,6 +167,12 @@ const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, Comma
     process: "attack",
     stage: "attack",
   },
+  progress_missile_readiness: {
+    boundary: resolutionBoundary,
+    kind: "missile_readiness",
+    process: "attack",
+    stage: "attack",
+  },
   roll_initiative_phase1: {
     boundary: "phase1_initiative",
     kind: "roll_initiative",

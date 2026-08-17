@@ -42,6 +42,7 @@ export interface CombatEventResultModel {
 
 const EVENT_TITLES: Record<ProjectedCombatHistoryEvent["type"], string> = {
   attack: "Attack",
+  missile_readiness: "Missile preparation",
   action_skipped: "Skipped",
   combat_experience: "Combat Experience",
   continued_contact_maintenance: "Continued Contact — Maintenance",
@@ -162,6 +163,13 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
           attacker && defender
             ? `${attacker} attacked ${defender}${typeof weapon === "string" ? ` with a ${weapon}` : ""}.`
             : "Attack recorded.",
+      };
+    }
+    case "missile_readiness": {
+      const status = factLabel(factValue(event, "status"));
+      return {
+        outcomeRows: resultRow(event, status ? `Status: ${status}` : undefined),
+        summary: `${actor ?? "Participant"} worked on missile preparation.`,
       };
     }
     case "parry": {

@@ -35,6 +35,7 @@ import {
   type TaskSpec,
 } from "./internal";
 import type { CombatProgressionProcess, CombatProgressionStageKind } from "./types";
+import { isCombatMissileReady } from "../combatMissile";
 
 function buildPhaseCombatExperienceProcess(
   context: ProjectionBuildContext,
@@ -325,6 +326,18 @@ function buildLegacyAttackProcess(
     const candidate = getCombatRoundPhaseAttackCandidates({ phase, state: context.state }).find(
       (entry) => entry.participantId === participantId,
     );
+    const missileReadiness =
+      candidate?.attackType === "missile"
+        ? context.state.missileReadiness.find(
+            (entry) =>
+              entry.participantId === participantId &&
+              entry.weaponItemId === candidate.weaponInstanceId &&
+              entry.targetParticipantId === candidate.targetParticipantId,
+          )
+        : undefined;
+    const needsMissileReadiness =
+      candidate?.attackType === "missile" &&
+      (!missileReadiness || !isCombatMissileReady(missileReadiness));
     const dependencies: TaskDependency[] = [];
     if (!candidate)
       dependencies.push({
@@ -343,13 +356,17 @@ function buildLegacyAttackProcess(
       tasks: [
         {
           dependencies,
-          expectedCommand: "roll_attack",
+          expectedCommand: needsMissileReadiness ? "progress_missile_readiness" : "roll_attack",
           identity: {
+            ammoItemId: missileReadiness?.ammoItemId,
+            missileReadinessId: missileReadiness?.id,
             opponentParticipantId: candidate?.targetParticipantId,
             opportunityId: candidate?.id,
             phase,
+            weaponInstanceId: candidate?.weaponInstanceId,
+            weaponTemplateId: candidate?.weaponTemplateId,
           },
-          kind: "attack",
+          kind: needsMissileReadiness ? "missile_readiness" : "attack",
           owner,
           presentationContext: {
             actionKind: presentationActionKind(participant?.declaration?.actionId),
