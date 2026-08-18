@@ -1,13 +1,21 @@
 import { z } from "zod";
 
+import { combatResultPresentationFactsSchema } from "./combatResultPresentation";
+
 const idSchema = z.string().min(1);
 const factRecordSchema = z.record(z.string(), z.unknown());
 
 export const combatStepEventTypeSchema = z.enum([
   "declaration",
+  "combat_experience",
+  "modifier_review",
   "initiative",
+  "action_skipped",
   "attack",
   "parry",
+  "offensive_parry_brawling",
+  "continued_contact_maintenance",
+  "observation",
   "hit_location",
   "critical",
   "damage_proposed",
@@ -17,6 +25,8 @@ export const combatStepEventTypeSchema = z.enum([
   "distance_control_applied",
   "health_check",
   "participant_su_review",
+  "effect_review",
+  "round_boundary",
   "feint_feasibility",
   "feint_roll",
   "feint_result",
@@ -27,6 +37,14 @@ export const combatStepEventTypeSchema = z.enum([
   "adjust_distance_roll",
   "adjust_distance_result",
   "adjust_distance_committed",
+  "break_off_review",
+  "break_off_roll",
+  "break_off_result",
+  "break_off_committed",
+  "disarm_opened",
+  "disarm_roll",
+  "disarm_result",
+  "disarm_committed",
 ]);
 export type CombatStepEventType = z.infer<typeof combatStepEventTypeSchema>;
 
@@ -83,6 +101,7 @@ export type CombatStepEventCompleteness = z.infer<typeof combatStepEventComplete
 export const combatStepEventFactsSchema = z.object({
   gmReview: factRecordSchema.default({}),
   involvedOutcome: factRecordSchema.default({}),
+  resultPresentation: combatResultPresentationFactsSchema.optional(),
   publicOutcome: factRecordSchema.default({}),
   rollerPrivate: factRecordSchema.default({}),
 });
@@ -111,8 +130,12 @@ export const combatStepEventCommandTypeSchema = z.enum([
   "roll_initiative_phase2",
   "roll_attack",
   "roll_parry",
+  "roll_offensive_parry_brawling",
+  "roll_continued_contact_maintenance",
+  "roll_observation",
   "roll_hit_location",
   "roll_critical",
+  "decide_double_attack_phase2",
   "skip_phase_action",
   "back_out_phase_attack",
   "submit_phase_initiative_choice",
@@ -137,6 +160,13 @@ export const combatStepEventCommandTypeSchema = z.enum([
   "review_adjust_distance_roll_adjustment",
   "roll_adjust_distance",
   "commit_adjust_distance",
+  "review_break_off",
+  "roll_break_off",
+  "commit_break_off",
+  "open_disarm",
+  "roll_disarm",
+  "commit_disarm",
+  "complete_remaining_step",
 ]);
 
 export const combatStepEventSourceSchema = z.object({
@@ -145,6 +175,22 @@ export const combatStepEventSourceSchema = z.object({
   sourceIds: z.array(idSchema).default([]),
 });
 export type CombatStepEventSource = z.infer<typeof combatStepEventSourceSchema>;
+
+export const combatStepEventStepSchema = z.enum([
+  "select_actions",
+  "review_action_modifiers",
+  "initiative_phase_1",
+  "phase_1_actions",
+  "review_phase_2_actions",
+  "phase_1_damage",
+  "review_phase_2_modifiers",
+  "initiative_phase_2",
+  "phase_2_actions",
+  "review_phase_2_damage",
+  "phase_2_damage",
+  "round_summary",
+]);
+export type CombatStepEventStep = z.infer<typeof combatStepEventStepSchema>;
 
 export const combatStepEventSchema = z.object({
   actorParticipantId: idSchema.optional(),
@@ -163,6 +209,7 @@ export const combatStepEventSchema = z.object({
   id: idSchema,
   missingFacts: z.array(z.string().min(1)).default([]),
   occurredAt: z.string().datetime().nullable(),
+  opportunityId: idSchema.optional(),
   ownerParticipantId: idSchema.optional(),
   parryResultId: idSchema.optional(),
   phase: z.enum(["phase1", "phase2"]).optional(),
@@ -172,20 +219,7 @@ export const combatStepEventSchema = z.object({
   sequence: z.number().int().nonnegative(),
   source: combatStepEventSourceSchema,
   status: combatStepEventStatusSchema,
-  step: z.enum([
-    "select_actions",
-    "review_action_modifiers",
-    "initiative_phase_1",
-    "phase_1_actions",
-    "review_phase_2_actions",
-    "phase_1_damage",
-    "review_phase_2_modifiers",
-    "initiative_phase_2",
-    "phase_2_actions",
-    "review_phase_2_damage",
-    "phase_2_damage",
-    "round_summary",
-  ]),
+  step: combatStepEventStepSchema,
   targetParticipantId: idSchema.optional(),
   type: combatStepEventTypeSchema,
   visibility: combatStepEventVisibilitySchema,

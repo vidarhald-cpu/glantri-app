@@ -1,7 +1,7 @@
 import {
   canPlayerRollCombatInitiative,
   canPlayerSubmitCombatDeclaration,
-  getCombatRoundPhaseInitiativeChoiceStatuses,
+  getCombatRoundCombatExperienceDifficulty,
   isCombatRoundPhaseInitiativeComplete,
   isCombatStartExperienceRollRequired,
   type CombatRoundPhase,
@@ -18,6 +18,26 @@ import {
   type TaskSpec,
 } from "./internal";
 import type { CombatProgressionProcess } from "./types";
+
+function isSuppressedNoWork(input: {
+  context: ProjectionBuildContext;
+  participantId: string;
+  phase: CombatRoundPhase;
+  processFamily: "initiative";
+}): boolean {
+  const fact = input.context.participation?.facts.find(
+    (candidate) =>
+      candidate.identity.processFamily === input.processFamily &&
+      candidate.identity.participantId === input.participantId &&
+      candidate.identity.phase === input.phase,
+  );
+  return Boolean(
+    fact &&
+    fact.status === "not_required" &&
+    fact.workClass === "no_work" &&
+    fact.completeness === "complete",
+  );
+}
 
 export function buildDeclarationProcesses(
   context: ProjectionBuildContext,
@@ -43,7 +63,6 @@ export function buildDeclarationProcesses(
       key: "difficulty",
       kind: "combat_experience",
       owner: GM_IDENTITY,
-      trackerOwner: context.identities.get(context.state.currentCursor?.participantId ?? ""),
       trackerStep: "DE",
     });
   }
@@ -62,6 +81,11 @@ export function buildDeclarationProcesses(
         expectedCommand: "roll_combat_experience",
         kind: "combat_experience",
         owner,
+        presentationContext: {
+          actor: owner,
+          difficulty: getCombatRoundCombatExperienceDifficulty(context.state),
+          responder: owner,
+        },
         trackerOwner: owner,
         trackerStep: "DE",
       });
@@ -139,9 +163,6 @@ export function buildDeclarationProcesses(
                   expectedCommand: "advance_combat_boundary",
                   kind: "gm_advance_boundary",
                   owner: GM_IDENTITY,
-                  trackerOwner: context.identities.get(
-                    context.state.currentCursor?.participantId ?? "",
-                  ),
                   trackerStep: "DE",
                   transition: {
                     currentBoundary: context.boundaryKind,
@@ -172,7 +193,9 @@ export function buildModifierReviewProcess(
   const pending = context.state.participants.filter(
     (participant) => !isCompleteStatus(participant.stepStatuses[step]),
   );
-  const activeId = context.state.currentCursor?.participantId;
+  // Each modifier-review boundary owns a fresh ordered participant iteration. A compatibility
+  // cursor left by declaration, action resolution, or a Double Attack decision must not seed it.
+  const activeId = pending[0]?.participantId;
   const tasks = pending.map<TaskSpec>((participant) => {
     const owner = context.identities.get(participant.participantId);
     return {
@@ -187,8 +210,10 @@ export function buildModifierReviewProcess(
               },
             ],
       expectedCommand,
+      identity: { phase },
       kind: "modifier_review",
       owner,
+      presentationContext: { actor: owner },
       trackerOwner: owner,
       trackerStep,
     };
@@ -203,7 +228,15 @@ export function buildModifierReviewProcess(
       kind: "review",
       state: tasks.length > 0 ? "active" : "complete",
       strategy: "ordered_all",
-      tasks,
+      executionGroups: tasks.map((task) => ({
+        position: context.state.participants.findIndex(
+          (participant) =>
+            task.owner?.kind === "combatant" &&
+            participant.participantId === task.owner.participantId,
+        ),
+        strategy: "ordered_all" as const,
+        tasks: [task],
+      })),
     },
     {
       kind: "boundary",
@@ -263,6 +296,17 @@ export function buildModifierReviewProcesses(
                             key: gate.id,
                             kind: "double_attack_decision",
                             owner,
+                            presentationContext: {
+                              actionKind: "double_attack",
+                              actor: owner,
+                              responder: owner,
+                              target: context.identities.get(
+                                context.state.participants.find(
+                                  (participant) =>
+                                    participant.participantId === gate.ownerParticipantId,
+                                )?.declaration?.phaseContexts?.phase2?.targetParticipantId ?? "",
+                              ),
+                            },
                             trackerOwner: owner,
                             trackerStep: "M2",
                           },
@@ -296,6 +340,16 @@ export function buildInitiativeProcess(
       participant.initiatives[phase]
     )
       return [];
+    if (
+      isSuppressedNoWork({
+        context,
+        participantId: participant.participantId,
+        phase,
+        processFamily: "initiative",
+      })
+    ) {
+      return [];
+    }
     const owner = context.identities.get(participant.participantId);
     return [
       {
@@ -320,23 +374,9 @@ export function buildInitiativeProcess(
       },
     ];
   });
-  const complete = isCombatRoundPhaseInitiativeComplete({ phase, state: context.state });
-  const choiceTasks = complete
-    ? getCombatRoundPhaseInitiativeChoiceStatuses({ phase, state: context.state })
-        .filter((status) => status.unresolved)
-        .map<TaskSpec>((status) => {
-          const owner = context.identities.get(status.participantId);
-          return {
-            expectedCommand: "submit_phase_initiative_choice",
-            identity: { phase },
-            key: `${status.participantId}:choice`,
-            kind: "combat_experience",
-            owner,
-            trackerOwner: owner,
-            trackerStep,
-          };
-        })
-    : [];
+  const complete = context.participation
+    ? initiativeTasks.length === 0
+    : isCombatRoundPhaseInitiativeComplete({ phase, state: context.state });
   const commitTasks: TaskSpec[] = complete
     ? [
         {
@@ -345,7 +385,6 @@ export function buildInitiativeProcess(
           identity: { phase },
           kind: "commit_initiative",
           owner: GM_IDENTITY,
-          trackerOwner: context.identities.get(context.state.currentCursor?.participantId ?? ""),
           trackerStep,
         },
       ]
@@ -356,13 +395,23 @@ export function buildInitiativeProcess(
       kind: "roll",
       state: complete ? "complete" : "active",
       strategy: "initiative_groups",
-      tasks: initiativeTasks,
+      executionGroups: initiativeTasks.map((task) => ({
+        position: context.state.participants.findIndex(
+          (participant) =>
+            task.owner?.kind === "combatant" &&
+            participant.participantId === task.owner.participantId,
+        ),
+        strategy: "initiative_groups" as const,
+        tasks: [task],
+      })),
     },
     {
+      // Phase choices and CE are derived only after the GM commits initiative and the action
+      // boundary opens. The empty compatibility stage keeps initiative process identity stable.
       kind: "input",
-      state: complete && choiceTasks.length > 0 ? "active" : complete ? "complete" : "pending",
+      state: complete ? "complete" : "pending",
       strategy: "parallel_all",
-      tasks: choiceTasks,
+      tasks: [],
     },
     {
       kind: "commit",

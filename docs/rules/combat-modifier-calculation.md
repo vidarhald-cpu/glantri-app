@@ -253,14 +253,16 @@ distance is closer than the current canonical pair distance:
 
 ```text
 Stored bucket key = situationDb
-Value = -2
+Application = percentage
+Value = -2%
 Duration = 1 round
 Details = adjust range
 Source phase = phase 1
 
 ```
 
-The row is deterministic, visible at M1, applies only to Phase 1, and expires before M2.
+The row is deterministic, combines with other Phase 1 DB/Parry percentages before one workbook
+conversion, is visible at M1, applies only to Phase 1, and expires before M2.
 Moving farther creates no automatic row. The Phase 2 attack receives no action-specific DB row;
 its ordinary range modifiers are regenerated from the distance committed by the maneuver.
 

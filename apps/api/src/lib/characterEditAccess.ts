@@ -8,7 +8,10 @@ export async function loadAccessibleCharacterInApi<TCharacter>(input: {
   characterId: string;
   characterService: {
     getCharacterById(characterId: string): Promise<TCharacter | null>;
-    getCharacterByIdInGmCampaigns(gmUserId: string, characterId: string): Promise<TCharacter | null>;
+    getCharacterByIdInGmCampaigns(
+      gmUserId: string,
+      characterId: string,
+    ): Promise<TCharacter | null>;
     getOwnedCharacter(ownerId: string, characterId: string): Promise<TCharacter | null>;
   };
   user: Pick<AuthUser, "id" | "roles">;
@@ -16,8 +19,19 @@ export async function loadAccessibleCharacterInApi<TCharacter>(input: {
   if (input.user.roles.includes("admin")) {
     return input.characterService.getCharacterById(input.characterId);
   }
+
+  const ownedCharacter = await input.characterService.getOwnedCharacter(
+    input.user.id,
+    input.characterId,
+  );
+
+  if (ownedCharacter) {
+    return ownedCharacter;
+  }
+
   if (input.user.roles.includes("game_master")) {
     return input.characterService.getCharacterByIdInGmCampaigns(input.user.id, input.characterId);
   }
-  return input.characterService.getOwnedCharacter(input.user.id, input.characterId);
+
+  return null;
 }

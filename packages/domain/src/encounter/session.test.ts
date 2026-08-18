@@ -3,16 +3,22 @@ import { describe, expect, it } from "vitest";
 import type { ScenarioParticipant } from "../campaign/scenario";
 
 import {
+  buildEncounterSessionRevision,
+  buildEncounterSessionSummary,
   encounterSessionSchema,
+  encounterSessionSummarySchema,
+  buildPlayerSafeRoleplayState,
   buildPlayerSafeRoleplayStateForUser,
   formatEncounterParticipantMembershipLabel,
   isUserAssignedToEncounterMembership,
+  resolveEncounterParticipantForViewer,
   resolveEncounterParticipantMembership,
   type EncounterParticipant,
   type EncounterSession,
 } from "./session";
 
 function scenarioParticipant(input: {
+  characterId?: string;
   controlledByUserId?: string;
   id: string;
   isActive?: boolean;
@@ -20,6 +26,7 @@ function scenarioParticipant(input: {
 }): ScenarioParticipant {
   return {
     controlledByUserId: input.controlledByUserId,
+    characterId: input.characterId,
     createdAt: "2026-01-01T00:00:00.000Z",
     id: input.id,
     isActive: input.isActive ?? true,
@@ -36,6 +43,7 @@ function scenarioParticipant(input: {
 }
 
 function encounterParticipant(input: {
+  characterId?: string;
   id: string;
   label: string;
   scenarioParticipantId?: string;
@@ -48,6 +56,7 @@ function encounterParticipant(input: {
       targetLocation: "any",
     },
     facing: "north",
+    characterId: input.characterId,
     id: input.id,
     initiative: 0,
     label: input.label,
@@ -79,6 +88,50 @@ function encounter(input: Partial<EncounterSession> = {}): EncounterSession {
 }
 
 describe("encounter session normalization invariants", () => {
+  it("projects strict compact summary and revision contracts without session history", () => {
+    const fullEncounter = encounter({
+      campaignId: "campaign-1",
+      description: "Private encounter detail",
+      participants: [
+        encounterParticipant({
+          id: "participant-1",
+          label: "The Gladiator",
+          scenarioParticipantId: "scenario-participant-1",
+        }),
+      ],
+      status: "active",
+    });
+    const summary = buildEncounterSessionSummary(fullEncounter, {
+      viewerAssigned: true,
+    });
+
+    expect(summary).toEqual({
+      campaignId: "campaign-1",
+      createdAt: fullEncounter.createdAt,
+      id: fullEncounter.id,
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Market shadows",
+      updatedAt: fullEncounter.updatedAt,
+      viewerAssigned: true,
+    });
+    expect(summary).not.toHaveProperty("actionLog");
+    expect(summary).not.toHaveProperty("combatRoundState");
+    expect(summary).not.toHaveProperty("participants");
+    expect(
+      encounterSessionSummarySchema.safeParse({
+        ...summary,
+        commands: [],
+      }).success,
+    ).toBe(false);
+    expect(buildEncounterSessionRevision(summary)).toEqual({
+      encounterId: fullEncounter.id,
+      revision: fullEncounter.updatedAt,
+      status: "active",
+      updatedAt: fullEncounter.updatedAt,
+    });
+  });
+
   it("normalizes older roleplay session JSON with safe defaults and legacy difficulty values", () => {
     const session = encounterSessionSchema.parse({
       actionLog: [],
@@ -216,11 +269,19 @@ describe("encounter session normalization invariants", () => {
 
     expect(session.participants[0]?.id).toBe("encounter-participant-1");
     expect(session.participants[0]?.scenarioParticipantId).toBe("scenario-participant-1");
-    expect(session.roleplayState?.pendingSkillRolls[0]?.participantId).toBe("encounter-participant-1");
+    expect(session.roleplayState?.pendingSkillRolls[0]?.participantId).toBe(
+      "encounter-participant-1",
+    );
     expect(session.roleplayState?.actionLog[0]?.participantId).toBe("encounter-participant-1");
-    expect(session.roleplayState?.participantDescriptions).toHaveProperty("encounter-participant-1");
-    expect(session.roleplayState?.visibility["encounter-participant-1"]?.["encounter-participant-2"]).toBe(true);
-    expect(session.roleplayState?.participantDescriptions).not.toHaveProperty("scenario-participant-1");
+    expect(session.roleplayState?.participantDescriptions).toHaveProperty(
+      "encounter-participant-1",
+    );
+    expect(
+      session.roleplayState?.visibility["encounter-participant-1"]?.["encounter-participant-2"],
+    ).toBe(true);
+    expect(session.roleplayState?.participantDescriptions).not.toHaveProperty(
+      "scenario-participant-1",
+    );
     expect(session.roleplayState?.visibility).not.toHaveProperty("scenario-participant-1");
   });
 
@@ -234,13 +295,15 @@ describe("encounter session normalization invariants", () => {
     });
 
     expect(membership.source).toBe("defaultFallback");
-    expect(membership.participants.map((participant) => participant.scenarioParticipantId)).toEqual([
-      "participant-1",
-    ]);
-    expect(formatEncounterParticipantMembershipLabel({
-      encounter: encounter(),
-      scenarioParticipants: [scenarioParticipant({ id: "participant-1" })],
-    })).toBe("1 active scenario participants (default)");
+    expect(membership.participants.map((participant) => participant.scenarioParticipantId)).toEqual(
+      ["participant-1"],
+    );
+    expect(
+      formatEncounterParticipantMembershipLabel({
+        encounter: encounter(),
+        scenarioParticipants: [scenarioParticipant({ id: "participant-1" })],
+      }),
+    ).toBe("1 active scenario participants (default)");
   });
 
   it("keeps explicit membership strict even when the explicit list is empty", () => {
@@ -250,20 +313,28 @@ describe("encounter session normalization invariants", () => {
     });
     const membership = resolveEncounterParticipantMembership({
       encounter: explicitEmptyEncounter,
-      scenarioParticipants: [scenarioParticipant({ controlledByUserId: "player-1", id: "participant-1" })],
+      scenarioParticipants: [
+        scenarioParticipant({ controlledByUserId: "player-1", id: "participant-1" }),
+      ],
     });
 
     expect(membership.source).toBe("explicit");
     expect(membership.participants).toEqual([]);
-    expect(isUserAssignedToEncounterMembership({
-      encounter: explicitEmptyEncounter,
-      scenarioParticipants: [scenarioParticipant({ controlledByUserId: "player-1", id: "participant-1" })],
-      userId: "player-1",
-    })).toBe(false);
-    expect(formatEncounterParticipantMembershipLabel({
-      encounter: explicitEmptyEncounter,
-      scenarioParticipants: [scenarioParticipant({ id: "participant-1" })],
-    })).toBe("0 assigned");
+    expect(
+      isUserAssignedToEncounterMembership({
+        encounter: explicitEmptyEncounter,
+        scenarioParticipants: [
+          scenarioParticipant({ controlledByUserId: "player-1", id: "participant-1" }),
+        ],
+        userId: "player-1",
+      }),
+    ).toBe(false);
+    expect(
+      formatEncounterParticipantMembershipLabel({
+        encounter: explicitEmptyEncounter,
+        scenarioParticipants: [scenarioParticipant({ id: "participant-1" })],
+      }),
+    ).toBe("0 assigned");
   });
 
   it("matches explicit membership by scenario participant id rather than encounter participant row id", () => {
@@ -283,11 +354,149 @@ describe("encounter session normalization invariants", () => {
       ],
     });
 
-    expect(isUserAssignedToEncounterMembership({
-      encounter: explicitEncounter,
-      scenarioParticipants: [playerParticipant],
-      userId: "player-1",
-    })).toBe(true);
+    expect(
+      isUserAssignedToEncounterMembership({
+        encounter: explicitEncounter,
+        scenarioParticipants: [playerParticipant],
+        userId: "player-1",
+      }),
+    ).toBe(true);
+  });
+
+  it("resolves explicit and implicit viewer membership to one canonical participant identity", () => {
+    const playerParticipant = scenarioParticipant({
+      characterId: "character-gladiator",
+      controlledByUserId: "player-1",
+      id: "scenario-participant-gladiator",
+    });
+    const explicitEncounter = encounter({
+      participantMembershipMode: "explicit",
+      participants: [
+        encounterParticipant({
+          characterId: "character-gladiator",
+          id: "encounter-participant-gladiator",
+          label: "The Gladiator",
+          scenarioParticipantId: "scenario-participant-gladiator",
+        }),
+      ],
+    });
+
+    expect(
+      resolveEncounterParticipantForViewer({
+        encounter: explicitEncounter,
+        requestedParticipantId: "character-gladiator",
+        scenarioParticipants: [playerParticipant],
+        viewer: { kind: "player", userId: "player-1" },
+      }),
+    ).toMatchObject({
+      access: "player_controlled",
+      encounterParticipantId: "encounter-participant-gladiator",
+      membershipSource: "explicit",
+      scenarioParticipantId: "scenario-participant-gladiator",
+    });
+    expect(
+      resolveEncounterParticipantForViewer({
+        encounter: encounter(),
+        requestedParticipantId: "scenario-participant-gladiator",
+        scenarioParticipants: [playerParticipant],
+        viewer: { kind: "player", userId: "player-1" },
+      }),
+    ).toMatchObject({
+      encounterParticipantId: "scenario-fallback-scenario-participant-gladiator",
+      membershipSource: "defaultFallback",
+    });
+  });
+
+  it("rejects inactive, unrelated and ambiguous viewer participant aliases", () => {
+    const playerParticipant = scenarioParticipant({
+      characterId: "shared-character",
+      controlledByUserId: "player-1",
+      id: "participant-1",
+    });
+    const unrelatedParticipant = scenarioParticipant({
+      characterId: "other-character",
+      controlledByUserId: "player-2",
+      id: "participant-2",
+    });
+
+    expect(
+      resolveEncounterParticipantForViewer({
+        encounter: encounter(),
+        requestedParticipantId: playerParticipant.id,
+        scenarioParticipants: [playerParticipant],
+        viewer: { kind: "player", userId: "player-2" },
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveEncounterParticipantForViewer({
+        encounter: encounter(),
+        requestedParticipantId: "inactive",
+        scenarioParticipants: [scenarioParticipant({ id: "inactive", isActive: false })],
+        viewer: { kind: "player", userId: "player-1" },
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveEncounterParticipantForViewer({
+        characterId: "shared-character",
+        encounter: encounter(),
+        scenarioParticipants: [
+          playerParticipant,
+          scenarioParticipant({
+            characterId: "shared-character",
+            controlledByUserId: "player-1",
+            id: "participant-duplicate",
+          }),
+          unrelatedParticipant,
+        ],
+        viewer: { kind: "player", userId: "player-1" },
+      }),
+    ).toBeUndefined();
+  });
+
+  it("resolves two player viewers independently without crossing participant ownership", () => {
+    const first = scenarioParticipant({ controlledByUserId: "player-1", id: "participant-1" });
+    const second = scenarioParticipant({ controlledByUserId: "player-2", id: "participant-2" });
+    const explicitEncounter = encounter({
+      participantMembershipMode: "explicit",
+      participants: [
+        encounterParticipant({
+          id: "encounter-participant-1",
+          label: "First",
+          scenarioParticipantId: first.id,
+        }),
+        encounterParticipant({
+          id: "encounter-participant-2",
+          label: "Second",
+          scenarioParticipantId: second.id,
+        }),
+      ],
+    });
+    const scenarioParticipants = [first, second];
+
+    expect(
+      resolveEncounterParticipantForViewer({
+        encounter: explicitEncounter,
+        requestedParticipantId: first.id,
+        scenarioParticipants,
+        viewer: { kind: "player", userId: "player-1" },
+      })?.encounterParticipantId,
+    ).toBe("encounter-participant-1");
+    expect(
+      resolveEncounterParticipantForViewer({
+        encounter: explicitEncounter,
+        requestedParticipantId: second.id,
+        scenarioParticipants,
+        viewer: { kind: "player", userId: "player-2" },
+      })?.encounterParticipantId,
+    ).toBe("encounter-participant-2");
+    expect(
+      resolveEncounterParticipantForViewer({
+        encounter: explicitEncounter,
+        requestedParticipantId: second.id,
+        scenarioParticipants,
+        viewer: { kind: "player", userId: "player-1" },
+      }),
+    ).toBeUndefined();
   });
 
   it("keeps player-safe visibility and descriptions for visible encounter participants only", () => {
@@ -324,7 +533,50 @@ describe("encounter session normalization invariants", () => {
         }),
       ],
       roleplayState: {
-        actionLog: [],
+        actionLog: [
+          {
+            autoSuccess: false,
+            createdAt: "2026-01-01T00:04:00.000Z",
+            fumble: false,
+            id: "own-stat-result",
+            mode: "difficulty",
+            openEndedD10s: [],
+            opponentFumble: false,
+            opponentOpenEndedD10s: [],
+            opponentSilent: false,
+            partial: false,
+            participantId: "scenario-scenario-participant-gladiator",
+            pendingRollId: "own-stat-check",
+            statId: "dex",
+            statLabel: "Dex",
+            statValue: 14,
+            silent: false,
+            summary: "The Gladiator rolled Dex Stat check.",
+            supportOpenEndedD10s: [],
+            type: "stat_check_result",
+          },
+          {
+            autoSuccess: false,
+            createdAt: "2026-01-01T00:03:00.000Z",
+            fumble: false,
+            id: "guard-stat-result",
+            mode: "difficulty",
+            openEndedD10s: [],
+            opponentFumble: false,
+            opponentOpenEndedD10s: [],
+            opponentSilent: false,
+            partial: false,
+            participantId: "scenario-scenario-participant-guard",
+            pendingRollId: "guard-stat-check",
+            statId: "will",
+            statLabel: "Will",
+            statValue: 18,
+            silent: false,
+            summary: "City guard rolled Will Stat check.",
+            supportOpenEndedD10s: [],
+            type: "stat_check_result",
+          },
+        ],
         gmMessage: "The courtyard is tense.",
         participantDescriptions: {
           "scenario-scenario-participant-guard": {
@@ -339,6 +591,26 @@ describe("encounter session normalization invariants", () => {
           },
         },
         pendingSkillRolls: [],
+        pendingStatChecks: [
+          {
+            assignedAt: "2026-01-01T00:02:00.000Z",
+            difficulty: "medium",
+            id: "own-stat-check",
+            participantId: "scenario-scenario-participant-gladiator",
+            statId: "dex",
+            statLabel: "Dex",
+            statValue: 14,
+          },
+          {
+            assignedAt: "2026-01-01T00:01:00.000Z",
+            difficulty: "hard",
+            id: "guard-stat-check",
+            participantId: "scenario-scenario-participant-guard",
+            statId: "will",
+            statLabel: "Will",
+            statValue: 18,
+          },
+        ],
         visibility: {
           "scenario-scenario-participant-gladiator": {
             "scenario-scenario-participant-guard": true,
@@ -352,6 +624,7 @@ describe("encounter session normalization invariants", () => {
       scenarioParticipants: [playerParticipant, visibleParticipant, hiddenParticipant],
       userId: "player-1",
     });
+    const identityFreeSafeState = buildPlayerSafeRoleplayState(session.roleplayState!);
 
     expect(safeState.visibility).toEqual({
       "scenario-scenario-participant-gladiator": {
@@ -365,6 +638,11 @@ describe("encounter session normalization invariants", () => {
         shortDescription: "Armored guard",
       },
     });
+    expect(safeState.pendingStatChecks.map((check) => check.id)).toEqual(["own-stat-check"]);
+    expect(safeState.actionLog.map((entry) => entry.id)).toEqual(["own-stat-result"]);
+    expect(identityFreeSafeState.pendingStatChecks).toEqual([]);
+    expect(identityFreeSafeState.actionLog).toEqual([]);
     expect(JSON.stringify(safeState)).not.toContain("GM-only hidden identity");
+    expect(JSON.stringify(safeState)).not.toContain("guard-stat-check");
   });
 });

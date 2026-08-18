@@ -45,7 +45,7 @@ function composeDbValue(input: CombatDefenseCompositionInput): CombatComposedVal
     dex: input.dexterity,
     shieldBonus: effectiveShieldBonus,
     situationalModifier: input.allocationState.situationalModifiers.defense
-  });
+  }) + (input.allocationState.situationalModifiers.defenseFlat ?? 0);
 }
 
 function composeDmValue(input: CombatDefenseCompositionInput): CombatComposedValue {

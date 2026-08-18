@@ -31,6 +31,7 @@ function buildState() {
         status: "awaiting_defender_response",
       },
     ],
+    encounterId: "encounter-1",
     currentCursor: { participantId: "scyrian", roundNumber: 1, step: "A1" },
     currentStep: "phase_1_actions",
     distanceState: {
@@ -44,14 +45,33 @@ function buildState() {
         },
       },
     },
-    phaseResolutionCursor: { participantId: "scyrian", phase: "phase1", substep: "adjust_distance" },
+    phaseResolutionCursor: {
+      participantId: "scyrian",
+      phase: "phase1",
+      substep: "adjust_distance",
+    },
     participants: [
       {
         declaration: {
           actionId: "adjust_range_attack",
-          adjustDistance: { currentDistance: 3, requestedDistance: 2, targetParticipantId: "gladiator" },
-          attackOpportunities: [{ id: "a2-attack", origin: "adjust_range_attack", phase: "phase2", slot: "attack_2", targetParticipantId: "gladiator" }],
-          phaseContexts: { phase1: { targetParticipantId: "gladiator" }, phase2: { targetParticipantId: "gladiator" } },
+          adjustDistance: {
+            currentDistance: 3,
+            requestedDistance: 2,
+            targetParticipantId: "gladiator",
+          },
+          attackOpportunities: [
+            {
+              id: "a2-attack",
+              origin: "adjust_range_attack",
+              phase: "phase2",
+              slot: "attack_2",
+              targetParticipantId: "gladiator",
+            },
+          ],
+          phaseContexts: {
+            phase1: { targetParticipantId: "gladiator" },
+            phase2: { targetParticipantId: "gladiator" },
+          },
           roundNumber: 1,
           submittedBy: "player",
         },
@@ -81,7 +101,10 @@ function roll(participantId: string, finalTotal: number, id: string) {
 
 describe("Adjust Distance-Attack lifecycle", () => {
   it("opens A1 only after the canonical phase initiative commit", () => {
-    const before = combatRoundStateSchema.parse({ ...buildState(), currentStep: "initiative_phase_1" });
+    const before = combatRoundStateSchema.parse({
+      ...buildState(),
+      currentStep: "initiative_phase_1",
+    });
     const after = combatRoundStateSchema.parse({ ...buildState(), currentStep: "phase_1_actions" });
     expect(isCombatPhaseActionOpen({ phase: "phase1", state: before })).toBe(false);
     expect(isCombatPhaseActionOpen({ phase: "phase1", state: after })).toBe(true);
@@ -89,36 +112,183 @@ describe("Adjust Distance-Attack lifecycle", () => {
   });
 
   it("opposes, applies the GM adjustment once, resolves rolls, and commits the pair distance", () => {
-    let state = respondCombatRoundAdjustDistance({ command: { createdAt }, proposalId: "proposal", response: "oppose", state: buildState() });
-    state = reviewCombatRoundAdjustDistanceRollAdjustment({ command: { createdAt }, participantId: "scyrian", proposalId: "proposal", state, value: 2 });
-    state = recordCombatRoundAdjustDistanceRoll({ command: { createdAt }, proposalId: "proposal", result: roll("scyrian", 20, "attacker-roll"), state });
+    let state = respondCombatRoundAdjustDistance({
+      command: { createdAt },
+      proposalId: "proposal",
+      response: "oppose",
+      state: buildState(),
+    });
+    state = reviewCombatRoundAdjustDistanceRollAdjustment({
+      command: { createdAt },
+      participantId: "scyrian",
+      proposalId: "proposal",
+      state,
+      value: 2,
+    });
+    state = recordCombatRoundAdjustDistanceRoll({
+      command: { createdAt },
+      proposalId: "proposal",
+      result: roll("scyrian", 20, "attacker-roll"),
+      state,
+    });
     expect(state.adjustDistanceProposals[0]).toEqual(
       expect.objectContaining({ attackerRollRecorded: true, defenderRollRecorded: false }),
     );
-    state = recordCombatRoundAdjustDistanceRoll({ command: { createdAt }, proposalId: "proposal", result: roll("gladiator", 18, "defender-roll"), state });
-    expect(state.adjustDistanceProposals[0]).toEqual(expect.objectContaining({ attackerRollRecorded: true, defenderRollRecorded: true, difference: 2, standardOutcome: "successful", standardProposedDistance: 2, status: "awaiting_review" }));
-    state = commitCombatRoundAdjustDistance({ command: { createdAt }, committedDistance: 2, outcome: "successful", proposalId: "proposal", state });
+    state = recordCombatRoundAdjustDistanceRoll({
+      command: { createdAt },
+      proposalId: "proposal",
+      result: roll("gladiator", 18, "defender-roll"),
+      state,
+    });
+    expect(state.adjustDistanceProposals[0]).toEqual(
+      expect.objectContaining({
+        attackerRollRecorded: true,
+        defenderRollRecorded: true,
+        difference: 2,
+        standardOutcome: "successful",
+        standardProposedDistance: 2,
+        standardTableRowId: "initiator_wins",
+        status: "awaiting_review",
+      }),
+    );
+    state = commitCombatRoundAdjustDistance({
+      command: { createdAt },
+      committedDistance: 2,
+      notes: "Presses the advantage.",
+      outcome: "successful",
+      proposalId: "proposal",
+      state,
+    });
     expect(state.distanceState.edges["gladiator::scyrian"]?.distance).toBe(2);
     expect(state.adjustDistanceProposals[0]?.status).toBe("committed");
-    expect(state.participants[0]?.declaration?.attackOpportunities?.[0]).toEqual(expect.objectContaining({ phase: "phase2", status: "committed" }));
+    expect(state.participants[0]?.declaration?.attackOpportunities?.[0]).toEqual(
+      expect.objectContaining({ phase: "phase2", status: "committed" }),
+    );
+    expect(
+      state.events.find((event) => event.type === "adjust_distance_committed")?.facts
+        .resultPresentation,
+    ).toMatchObject({
+      committedConsequences: expect.arrayContaining([
+        expect.objectContaining({ key: "distance", value: 2 }),
+        expect.objectContaining({ key: "outcome", value: "successful" }),
+      ]),
+      publicCombatNote: "Presses the advantage.",
+      standardConsequences: expect.arrayContaining([
+        expect.objectContaining({ key: "table_row", value: "Initiator margin 1 or more" }),
+        expect.objectContaining({ key: "distance", value: 2 }),
+        expect.objectContaining({ key: "outcome", value: "successful" }),
+      ]),
+    });
+    expect(
+      state.events.find((event) => event.type === "adjust_distance_committed")?.facts
+        .resultPresentation?.adjustment,
+    ).toBeUndefined();
+  });
+
+  it("accepts either opposed Dodge roll first, rejects duplicates, and restores the parallel gate on undo", () => {
+    let state = respondCombatRoundAdjustDistance({
+      command: { createdAt },
+      proposalId: "proposal",
+      response: "oppose",
+      state: buildState(),
+    });
+    state = reviewCombatRoundAdjustDistanceRollAdjustment({
+      command: { createdAt },
+      participantId: "scyrian",
+      proposalId: "proposal",
+      state,
+      value: 2,
+    });
+
+    const defenderFirst = recordCombatRoundAdjustDistanceRoll({
+      command: { createdAt: "2026-07-17T08:00:01.000Z" },
+      proposalId: "proposal",
+      result: roll("gladiator", 18, "defender-roll"),
+      state,
+    });
+    expect(defenderFirst.adjustDistanceProposals[0]).toEqual(
+      expect.objectContaining({
+        attackerRollRecorded: false,
+        defenderRollRecorded: true,
+        status: "awaiting_rolls",
+      }),
+    );
+    expect(() =>
+      recordCombatRoundAdjustDistanceRoll({
+        command: { createdAt: "2026-07-17T08:00:02.000Z" },
+        proposalId: "proposal",
+        result: roll("gladiator", 19, "duplicate-defender-roll"),
+        state: defenderFirst,
+      }),
+    ).toThrow("The defender has already rolled Dodge.");
+
+    const resolved = recordCombatRoundAdjustDistanceRoll({
+      command: { createdAt: "2026-07-17T08:00:03.000Z" },
+      proposalId: "proposal",
+      result: roll("scyrian", 20, "attacker-roll"),
+      state: defenderFirst,
+    });
+    expect(resolved.adjustDistanceProposals[0]).toEqual(
+      expect.objectContaining({
+        attackerRollRecorded: true,
+        defenderRollRecorded: true,
+        status: "awaiting_review",
+      }),
+    );
+
+    const undone = undoLatestCombatRoundCommand({ state: resolved });
+    expect(undone?.adjustDistanceProposals[0]).toEqual(
+      expect.objectContaining({
+        attackerRollRecorded: false,
+        defenderRollRecorded: true,
+        status: "awaiting_rolls",
+      }),
+    );
   });
 
   it("Allow skips both Dodge rolls but still requires a GM commit", () => {
-    const state = respondCombatRoundAdjustDistance({ command: { createdAt }, proposalId: "proposal", response: "allow", state: buildState() });
-    expect(state.adjustDistanceProposals[0]).toEqual(expect.objectContaining({ standardOutcome: "allowed", standardProposedDistance: 2, status: "awaiting_review" }));
+    const state = respondCombatRoundAdjustDistance({
+      command: { createdAt },
+      proposalId: "proposal",
+      response: "allow",
+      state: buildState(),
+    });
+    expect(state.adjustDistanceProposals[0]).toEqual(
+      expect.objectContaining({
+        standardOutcome: "allowed",
+        standardProposedDistance: 2,
+        status: "awaiting_review",
+      }),
+    );
     expect(state.adjustDistanceProposals[0]?.attackerRoll).toBeUndefined();
   });
 
   it("accepts signed GM adjustments without policing the suggested range", () => {
-    let state = respondCombatRoundAdjustDistance({ command: { createdAt }, proposalId: "proposal", response: "oppose", state: buildState() });
-    state = reviewCombatRoundAdjustDistanceRollAdjustment({ command: { createdAt }, participantId: "gladiator", proposalId: "proposal", state, value: -10 });
+    let state = respondCombatRoundAdjustDistance({
+      command: { createdAt },
+      proposalId: "proposal",
+      response: "oppose",
+      state: buildState(),
+    });
+    state = reviewCombatRoundAdjustDistanceRollAdjustment({
+      command: { createdAt },
+      participantId: "gladiator",
+      proposalId: "proposal",
+      state,
+      value: -10,
+    });
     expect(state.adjustDistanceProposals[0]?.gmRollAdjustment).toEqual(
       expect.objectContaining({ participantId: "gladiator", value: -10 }),
     );
   });
 
   it("rejects non-integer GM adjustments with the focused validation error", () => {
-    const state = respondCombatRoundAdjustDistance({ command: { createdAt }, proposalId: "proposal", response: "oppose", state: buildState() });
+    const state = respondCombatRoundAdjustDistance({
+      command: { createdAt },
+      proposalId: "proposal",
+      response: "oppose",
+      state: buildState(),
+    });
     expect(() =>
       reviewCombatRoundAdjustDistanceRollAdjustment({
         command: { createdAt },
@@ -150,11 +320,43 @@ describe("Adjust Distance-Attack lifecycle", () => {
       participantId: undefined,
       value: 0,
     });
+    expect(
+      reviewed.events.find((event) => event.type === "adjust_distance_adjustment")?.facts
+        .resultPresentation?.publicCombatNote,
+    ).toBe("no side favored");
   });
 
   it("does not create a duplicate SU contest after an in-round commit", () => {
-    let state = respondCombatRoundAdjustDistance({ command: { createdAt }, proposalId: "proposal", response: "allow", state: buildState() });
-    state = commitCombatRoundAdjustDistance({ command: { createdAt }, committedDistance: 3, outcome: "allowed", proposalId: "proposal", state });
+    let state = respondCombatRoundAdjustDistance({
+      command: { createdAt },
+      proposalId: "proposal",
+      response: "allow",
+      state: buildState(),
+    });
+    state = commitCombatRoundAdjustDistance({
+      command: { createdAt },
+      committedDistance: 3,
+      notes: "The movement stops short.",
+      outcome: "allowed",
+      proposalId: "proposal",
+      state,
+    });
+    expect(
+      state.events.find((event) => event.type === "adjust_distance_committed")?.facts
+        .resultPresentation,
+    ).toMatchObject({
+      adjustment: {
+        entries: [
+          {
+            committedValue: 3,
+            consequenceKey: "distance",
+            label: "Distance",
+            standardValue: 2,
+          },
+        ],
+      },
+      publicCombatNote: "The movement stops short.",
+    });
     state = combatRoundStateSchema.parse({
       ...state,
       currentCursor: { roundNumber: 1, step: "SU" },
@@ -166,7 +368,13 @@ describe("Adjust Distance-Attack lifecycle", () => {
               declaration: {
                 ...participant.declaration,
                 movementIntent: {
-                  distancePreferences: [{ desiredDistance: 2, source: "player_declared", targetParticipantId: "gladiator" }],
+                  distancePreferences: [
+                    {
+                      desiredDistance: 2,
+                      source: "player_declared",
+                      targetParticipantId: "gladiator",
+                    },
+                  ],
                   mode: "set_distance_preferences",
                 },
               },
@@ -180,8 +388,19 @@ describe("Adjust Distance-Attack lifecycle", () => {
   });
 
   it("undoes the commit atomically and restores the review and prior pair distance", () => {
-    let state = respondCombatRoundAdjustDistance({ command: { createdAt }, proposalId: "proposal", response: "allow", state: buildState() });
-    state = commitCombatRoundAdjustDistance({ command: { createdAt }, committedDistance: 2, outcome: "allowed", proposalId: "proposal", state });
+    let state = respondCombatRoundAdjustDistance({
+      command: { createdAt },
+      proposalId: "proposal",
+      response: "allow",
+      state: buildState(),
+    });
+    state = commitCombatRoundAdjustDistance({
+      command: { createdAt },
+      committedDistance: 2,
+      outcome: "allowed",
+      proposalId: "proposal",
+      state,
+    });
 
     const undone = undoLatestCombatRoundCommand({ state });
 

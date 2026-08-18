@@ -81,6 +81,20 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("resolveRoleplaySkillRollModifiers");
     expect(source).toContain("resolveParticipantSkillRollProfile");
     expect(source).toContain("submitPlayerRoleplayRollOnServer");
+    expect(source).toContain("resolveParticipantStatRollProfile");
+  });
+
+  it("presents GM-assigned Stat checks without adding player Stat self-initiation", () => {
+    const source = readSource();
+    const playerSource = readPlayerScreenSource();
+
+    expect(source).toContain("Stat check assignment");
+    expect(source).toContain("Assign Stat check");
+    expect(playerSource).toContain("Assigned Stat check");
+    expect(playerSource).toContain("Roll Stat check");
+    expect(playerSource).toContain("Accept automatic success");
+    expect(playerSource).not.toContain("handleLocalStat");
+    expect(playerSource).not.toContain("Local Stat");
   });
 
   it("preserves GM roleplay text drafts while background refresh updates encounter props", () => {

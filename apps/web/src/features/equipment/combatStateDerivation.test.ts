@@ -14,10 +14,7 @@ import {
   type CombatAllocationState,
 } from "@glantri/rules-engine";
 import type { EquipmentFeatureState } from "./types";
-import {
-  deriveCombatStateSnapshot,
-  getActorCombatState,
-} from "./combatStateDerivation";
+import { deriveCombatStateSnapshot, getActorCombatState } from "./combatStateDerivation";
 
 const sampleCharacterId = "char-themistogenes";
 
@@ -209,7 +206,7 @@ const sampleActiveLoadout: CharacterLoadout = {
   notes: null,
 };
 
-  const sampleCharacterInputs = {
+const sampleCharacterInputs = {
   constitution: 11,
   dexterityGm: 0,
   dexterity: 11,
@@ -337,9 +334,9 @@ describe("combatStateDerivation", () => {
       parry: 8,
       attack1: "—",
     });
-    expect(
-      snapshot.weaponRows.findIndex((row) => row.slotLabel === "Combined"),
-    ).toBeLessThan(snapshot.weaponRows.findIndex((row) => row.slotLabel === "Brawling"));
+    expect(snapshot.weaponRows.findIndex((row) => row.slotLabel === "Combined")).toBeLessThan(
+      snapshot.weaponRows.findIndex((row) => row.slotLabel === "Brawling"),
+    );
     expect(getRowBySlotLabel(snapshot, "Unarmed / brawling")).toBeUndefined();
     expect(punchRow).toMatchObject({
       slotLabel: "Punch",
@@ -546,11 +543,7 @@ describe("combatStateDerivation", () => {
       dexterityGm: 2,
       strengthGm: 4,
     };
-    const theoretical = deriveCombatStateSnapshot(
-      state,
-      sampleCharacterId,
-      broadSwordInputs,
-    );
+    const theoretical = deriveCombatStateSnapshot(state, sampleCharacterId, broadSwordInputs);
     const live = deriveCombatStateSnapshot(
       state,
       sampleCharacterId,
@@ -871,19 +864,15 @@ describe("combatStateDerivation", () => {
     } satisfies CharacterSheetSummary;
 
     const inputs = buildCombatStateCharacterInputs(sheetSummary);
-    const snapshot = deriveCombatStateSnapshot(
-      cloneState(),
-      sampleCharacterId,
-      {
-        ...sampleCharacterInputs,
-        dexterity: 13,
-        dexterityGm: 1,
-        combatSkillXpByName: {
-          ...sampleCharacterInputs.combatSkillXpByName,
-          "1-h edged": inputs.combatSkillXpByName["1-h edged"],
-        },
+    const snapshot = deriveCombatStateSnapshot(cloneState(), sampleCharacterId, {
+      ...sampleCharacterInputs,
+      dexterity: 13,
+      dexterityGm: 1,
+      combatSkillXpByName: {
+        ...sampleCharacterInputs.combatSkillXpByName,
+        "1-h edged": inputs.combatSkillXpByName["1-h edged"],
       },
-    );
+    });
 
     expect(inputs.combatSkillXpByName["1-h edged"]).toBe(6);
     expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(1);
@@ -1026,10 +1015,18 @@ describe("combatStateDerivation", () => {
 
     expect(getRowBySlotLabel(snapshot, "Throwing weapon")).toMatchObject({
       attack1: "Throw",
+      attackModes: [expect.objectContaining({ attackType: "thrown", id: "mode-3" })],
       currentItemLabel: "Dagger",
       modeLabel: "Thrown",
       ob1: 5,
       dmb1: 3,
+    });
+    expect(getRowBySlotLabel(snapshot, "Primary weapon")).toMatchObject({
+      attack3: "—",
+      attackModes: [
+        expect.objectContaining({ attackType: "melee", id: "mode-1" }),
+        expect.objectContaining({ attackType: "melee", id: "mode-2" }),
+      ],
     });
   });
 

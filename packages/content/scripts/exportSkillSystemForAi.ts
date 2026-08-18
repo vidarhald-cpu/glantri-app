@@ -6,13 +6,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   collectCanonicalContentWarnings,
   defaultCanonicalContent,
-  type CanonicalContent
+  type CanonicalContent,
 } from "@glantri/content";
 import {
   getPlayerFacingSkillCategoryId,
   getSkillGroupIds,
   type SkillDefinition,
-  type SkillGroupDefinition
+  type SkillGroupDefinition,
 } from "@glantri/domain";
 import { resolveEffectiveProfessionPackage } from "../../rules-engine/src/professions/resolveEffectiveProfessionPackage";
 import { getMeleeCrossTrainingFactor } from "../../rules-engine/src/skills/deriveSkillRelationships";
@@ -36,7 +36,7 @@ const ALLOWED_SMALL_GROUP_REASONS: Record<string, string> = {
   political_acumen: "Focused social-political reading cluster.",
   social_reading: "Focused social perception cluster.",
   stealth_group: "Broad stealth taxonomy group retained for compatibility.",
-  street_theft: "Focused petty theft and concealment cluster."
+  street_theft: "Focused petty theft and concealment cluster.",
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -54,7 +54,7 @@ function getGitCommit(): string | null {
     return execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: repoRoot,
       encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"]
+      stdio: ["ignore", "pipe", "ignore"],
     }).trim();
   } catch {
     return null;
@@ -71,7 +71,7 @@ function getSkillWeight(skill: SkillDefinition | undefined): number {
 
 function getGroupMemberships(
   content: CanonicalContent,
-  group: SkillGroupDefinition
+  group: SkillGroupDefinition,
 ): NonNullable<SkillGroupDefinition["skillMemberships"]> {
   if (group.skillMemberships?.length) {
     return [...group.skillMemberships].sort((left, right) => {
@@ -88,7 +88,7 @@ function getGroupMemberships(
     .filter((skill) => getSkillGroupIds(skill).includes(group.id))
     .map((skill) => ({
       relevance: skill.groupId === group.id ? ("core" as const) : ("optional" as const),
-      skillId: skill.id
+      skillId: skill.id,
     }))
     .sort((left, right) => {
       const leftSkill = content.skills.find((skill) => skill.id === left.skillId);
@@ -109,7 +109,9 @@ function getGroupName(content: CanonicalContent, groupId: string): string {
 }
 
 function getProfessionName(content: CanonicalContent, professionId: string): string {
-  return content.professions.find((profession) => profession.id === professionId)?.name ?? professionId;
+  return (
+    content.professions.find((profession) => profession.id === professionId)?.name ?? professionId
+  );
 }
 
 function getFamilyName(content: CanonicalContent, familyId: string): string {
@@ -134,10 +136,7 @@ function buildGroupWarningMap(content: CanonicalContent): Map<string, string[]> 
       continue;
     }
 
-    warningsByGroupId.set(match[1], [
-      ...(warningsByGroupId.get(match[1]) ?? []),
-      warning.detail
-    ]);
+    warningsByGroupId.set(match[1], [...(warningsByGroupId.get(match[1]) ?? []), warning.detail]);
   }
 
   for (const group of content.skillGroups) {
@@ -145,19 +144,19 @@ function buildGroupWarningMap(content: CanonicalContent): Map<string, string[]> 
     const weightedContentPoints = memberships.reduce(
       (total, membership) =>
         total + getSkillWeight(content.skills.find((skill) => skill.id === membership.skillId)),
-      0
+      0,
     );
     const warnings = warningsByGroupId.get(group.id) ?? [];
 
     if (weightedContentPoints <= 5) {
       warnings.push(
-        `Weighted content points are ${weightedContentPoints}, which is at or below the low-size review threshold (5).`
+        `Weighted content points are ${weightedContentPoints}, which is at or below the low-size review threshold (5).`,
       );
     }
 
     if (weightedContentPoints >= 12) {
       warnings.push(
-        `Weighted content points are ${weightedContentPoints}, which is at or above the high-size review threshold (12).`
+        `Weighted content points are ${weightedContentPoints}, which is at or above the high-size review threshold (12).`,
       );
     }
 
@@ -174,7 +173,9 @@ function mapSkill(content: CanonicalContent, skill: SkillDefinition): JsonRecord
   const adminWarnings: string[] = [];
 
   if (skill.id === "longbow" && skill.specializationOfSkillId === "bow") {
-    adminWarnings.push("Exports as specialization-only access: Longbow is modeled under Bow, not as a missile slot candidate.");
+    adminWarnings.push(
+      "Exports as specialization-only access: Longbow is modeled under Bow, not as a missile slot candidate.",
+    );
   }
 
   return {
@@ -194,7 +195,7 @@ function mapSkill(content: CanonicalContent, skill: SkillDefinition): JsonRecord
     dependencies: skill.dependencies.map((dependency) => ({
       skillId: dependency.skillId,
       skillName: getSkillName(content, dependency.skillId),
-      strength: dependency.strength
+      strength: dependency.strength,
     })),
     isSpecializationOnly: Boolean(skill.specializationOfSkillId),
     specializationParentId: skill.specializationOfSkillId ?? null,
@@ -203,11 +204,15 @@ function mapSkill(content: CanonicalContent, skill: SkillDefinition): JsonRecord
       : null,
     societyLevel: skill.societyLevel,
     theoretical: skill.isTheoretical,
-    adminNotes: adminWarnings
+    adminNotes: adminWarnings,
   };
 }
 
-function mapSkillGroup(content: CanonicalContent, group: SkillGroupDefinition, warnings: string[]): JsonRecord {
+function mapSkillGroup(
+  content: CanonicalContent,
+  group: SkillGroupDefinition,
+  warnings: string[],
+): JsonRecord {
   const skillsById = new Map(content.skills.map((skill) => [skill.id, skill]));
   const memberships = getGroupMemberships(content, group);
   const fixedSkills = memberships.map((membership) => {
@@ -217,7 +222,7 @@ function mapSkillGroup(content: CanonicalContent, group: SkillGroupDefinition, w
       skillId: membership.skillId,
       skillName: skill?.name ?? membership.skillId,
       relevance: membership.relevance,
-      category: skill?.category ?? null
+      category: skill?.category ?? null,
     };
   });
   const selectionSlots = (group.selectionSlots ?? [])
@@ -228,33 +233,37 @@ function mapSkillGroup(content: CanonicalContent, group: SkillGroupDefinition, w
       choose: slot.chooseCount,
       count: slot.chooseCount,
       candidateSkillIds: [...slot.candidateSkillIds].sort((left, right) =>
-        getSkillName(content, left).localeCompare(getSkillName(content, right))
+        getSkillName(content, left).localeCompare(getSkillName(content, right)),
       ),
       candidateSkills: [...slot.candidateSkillIds]
-        .sort((left, right) => getSkillName(content, left).localeCompare(getSkillName(content, right)))
+        .sort((left, right) =>
+          getSkillName(content, left).localeCompare(getSkillName(content, right)),
+        )
         .map((skillId) => ({
           skillId,
-          skillName: getSkillName(content, skillId)
-        }))
+          skillName: getSkillName(content, skillId),
+        })),
     }))
-    .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id));
+    .sort(
+      (left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id),
+    );
   const allReachableSkillIds = uniqueSorted([
     ...fixedSkills.map((skill) => skill.skillId),
-    ...selectionSlots.flatMap((slot) => slot.candidateSkillIds)
+    ...selectionSlots.flatMap((slot) => slot.candidateSkillIds),
   ]);
   const fixedIndividualCostTotal = fixedSkills.reduce(
     (total, fixedSkill) => total + getSkillWeight(skillsById.get(fixedSkill.skillId)),
-    0
+    0,
   );
   const allCandidateIndividualCostTotal = allReachableSkillIds.reduce(
     (total, skillId) => total + getSkillWeight(skillsById.get(skillId)),
-    0
+    0,
   );
   const ordinarySkillCount = allReachableSkillIds.filter(
-    (skillId) => skillsById.get(skillId)?.category === "ordinary"
+    (skillId) => skillsById.get(skillId)?.category === "ordinary",
   ).length;
   const secondarySkillCount = allReachableSkillIds.filter(
-    (skillId) => skillsById.get(skillId)?.category === "secondary"
+    (skillId) => skillsById.get(skillId)?.category === "secondary",
   ).length;
 
   return {
@@ -267,7 +276,7 @@ function mapSkillGroup(content: CanonicalContent, group: SkillGroupDefinition, w
     allReachableSkillIds,
     allReachableSkills: allReachableSkillIds.map((skillId) => ({
       skillId,
-      skillName: getSkillName(content, skillId)
+      skillName: getSkillName(content, skillId),
     })),
     weightedValue: allCandidateIndividualCostTotal,
     economics: {
@@ -280,14 +289,17 @@ function mapSkillGroup(content: CanonicalContent, group: SkillGroupDefinition, w
       note:
         selectionSlots.length === 0
           ? "No active choice slots; dynamic group cost can be computed from fixed skills."
-          : "Dynamic group cost depends on active selected slot skills. Unselected slot candidates do not count."
+          : "Dynamic group cost depends on active selected slot skills. Unselected slot candidates do not count.",
     },
     allowedSmallGroupReason: ALLOWED_SMALL_GROUP_REASONS[group.id] ?? null,
-    adminWarnings: warnings
+    adminWarnings: warnings,
   };
 }
 
-function mapSpecialization(content: CanonicalContent, specialization: CanonicalContent["specializations"][number]): JsonRecord {
+function mapSpecialization(
+  content: CanonicalContent,
+  specialization: CanonicalContent["specializations"][number],
+): JsonRecord {
   return {
     id: specialization.id,
     name: specialization.name,
@@ -303,9 +315,9 @@ function mapSpecialization(content: CanonicalContent, specialization: CanonicalC
           parentSkillName: getSkillName(content, specialization.specializationBridge.parentSkillId),
           threshold: specialization.specializationBridge.threshold,
           parentExcessOffset: specialization.specializationBridge.parentExcessOffset,
-          reverseFactor: specialization.specializationBridge.reverseFactor
+          reverseFactor: specialization.specializationBridge.reverseFactor,
         }
-      : null
+      : null,
   };
 }
 
@@ -315,39 +327,54 @@ function resolveProfessionPackage(content: CanonicalContent, professionId: strin
   return {
     coreGroupIds: resolved.core.finalEffectiveGroupIds,
     favoredGroupIds: resolved.favored.finalEffectiveGroupIds,
-    groupIds: uniqueSorted([...resolved.core.finalEffectiveGroupIds, ...resolved.favored.finalEffectiveGroupIds]),
-    directSkillIds: uniqueSorted([...resolved.core.finalEffectiveSkillIds, ...resolved.favored.finalEffectiveSkillIds]),
-    directOnlySkillIds: uniqueSorted([...resolved.core.directOnlySkillIds, ...resolved.favored.directOnlySkillIds]),
+    groupIds: uniqueSorted([
+      ...resolved.core.finalEffectiveGroupIds,
+      ...resolved.favored.finalEffectiveGroupIds,
+    ]),
+    directSkillIds: uniqueSorted([
+      ...resolved.core.finalEffectiveSkillIds,
+      ...resolved.favored.finalEffectiveSkillIds,
+    ]),
+    directOnlySkillIds: uniqueSorted([
+      ...resolved.core.directOnlySkillIds,
+      ...resolved.favored.directOnlySkillIds,
+    ]),
     reachableGroupSkillIds: uniqueSorted([
       ...resolved.core.reachableSkillIdsThroughGroups,
-      ...resolved.favored.reachableSkillIdsThroughGroups
+      ...resolved.favored.reachableSkillIdsThroughGroups,
     ]),
     reachableSkillIds: uniqueSorted([
       ...resolved.core.finalEffectiveReachableSkillIds,
-      ...resolved.favored.finalEffectiveReachableSkillIds
-    ])
+      ...resolved.favored.finalEffectiveReachableSkillIds,
+    ]),
   };
 }
 
-function mapProfession(content: CanonicalContent, profession: CanonicalContent["professions"][number]): JsonRecord {
+function mapProfession(
+  content: CanonicalContent,
+  profession: CanonicalContent["professions"][number],
+): JsonRecord {
   const pkg = resolveProfessionPackage(content, profession.id);
   const grants = content.professionSkills.filter(
-    (grant) => grant.professionId === profession.id || (grant.scope === "family" && grant.professionId === profession.familyId)
+    (grant) =>
+      grant.professionId === profession.id ||
+      (grant.scope === "family" && grant.professionId === profession.familyId),
   );
   const availability = content.societyLevels
     .filter((row) => row.professionIds.includes(profession.id))
     .map((row) => ({
       societyId: row.societyId,
       societyName: row.societyName,
-      societyStage: content.societies.find((society) => society.id === row.societyId)?.societyLevel ?? null,
+      societyStage:
+        content.societies.find((society) => society.id === row.societyId)?.societyLevel ?? null,
       classBand: row.societyLevel,
-      classLabel: row.socialClass
+      classLabel: row.socialClass,
     }))
     .sort(
       (left, right) =>
         (left.societyStage ?? 99) - (right.societyStage ?? 99) ||
         left.societyName.localeCompare(right.societyName) ||
-        left.classBand - right.classBand
+        left.classBand - right.classBand,
     );
 
   return {
@@ -360,19 +387,21 @@ function mapProfession(content: CanonicalContent, profession: CanonicalContent["
     category: null,
     effectiveGroups: pkg.groupIds.map((groupId) => ({
       groupId,
-      groupName: getGroupName(content, groupId)
+      groupName: getGroupName(content, groupId),
     })),
     directSkills: pkg.directSkillIds.map((skillId) => ({
       skillId,
-      skillName: getSkillName(content, skillId)
+      skillName: getSkillName(content, skillId),
     })),
     directSpecializations: grants
       .filter((grant) => grant.specializationId)
       .map((grant) => {
-        const specialization = content.specializations.find((candidate) => candidate.id === grant.specializationId);
+        const specialization = content.specializations.find(
+          (candidate) => candidate.id === grant.specializationId,
+        );
         return {
           specializationId: grant.specializationId,
-          specializationName: specialization?.name ?? grant.specializationId
+          specializationName: specialization?.name ?? grant.specializationId,
         };
       }),
     selectionNotes: null,
@@ -380,10 +409,10 @@ function mapProfession(content: CanonicalContent, profession: CanonicalContent["
       uniqueReach: pkg.reachableSkillIds.length,
       groupReach: pkg.reachableGroupSkillIds.length,
       directOnlyReach: pkg.directOnlySkillIds.length,
-      skillIdsReached: pkg.reachableSkillIds
+      skillIdsReached: pkg.reachableSkillIds,
     },
     availability,
-    adminWarnings: []
+    adminWarnings: [],
   };
 }
 
@@ -413,8 +442,8 @@ function buildAvailability(content: CanonicalContent): JsonRecord[] {
           societyStage: society?.societyLevel ?? null,
           classBand: row.societyLevel,
           classLabel: row.socialClass,
-          sourceRowId: `${row.societyId}:class-${row.societyLevel}`
-        }))
+          sourceRowId: `${row.societyId}:class-${row.societyLevel}`,
+        })),
       );
     })
     .sort(
@@ -422,7 +451,7 @@ function buildAvailability(content: CanonicalContent): JsonRecord[] {
         String(left.professionName).localeCompare(String(right.professionName)) ||
         String(left.civilizationName ?? "").localeCompare(String(right.civilizationName ?? "")) ||
         String(left.societyName).localeCompare(String(right.societyName)) ||
-        Number(left.classBand) - Number(right.classBand)
+        Number(left.classBand) - Number(right.classBand),
     );
 }
 
@@ -439,7 +468,7 @@ function buildRelationships(content: CanonicalContent): JsonRecord[] {
         type: "skill_in_group",
         from: entity("skill", membership.skillId, getSkillName(content, membership.skillId)),
         to: entity("skillGroup", group.id, group.name),
-        metadata: { relevance: membership.relevance }
+        metadata: { relevance: membership.relevance },
       });
     }
 
@@ -448,7 +477,7 @@ function buildRelationships(content: CanonicalContent): JsonRecord[] {
         type: "group_has_selection_slot",
         from: entity("skillGroup", group.id, group.name),
         to: entity("selectionSlot", `${group.id}:${slot.id}`, slot.label),
-        metadata: { required: slot.required, chooseCount: slot.chooseCount }
+        metadata: { required: slot.required, chooseCount: slot.chooseCount },
       });
 
       for (const skillId of slot.candidateSkillIds) {
@@ -456,7 +485,7 @@ function buildRelationships(content: CanonicalContent): JsonRecord[] {
           type: "slot_can_select_skill",
           from: entity("selectionSlot", `${group.id}:${slot.id}`, slot.label),
           to: entity("skill", skillId, getSkillName(content, skillId)),
-          metadata: {}
+          metadata: {},
         });
       }
     }
@@ -468,8 +497,8 @@ function buildRelationships(content: CanonicalContent): JsonRecord[] {
       from: entity("specialization", specialization.id, specialization.name),
       to: entity("skill", specialization.skillId, getSkillName(content, specialization.skillId)),
       metadata: {
-        minimumParentLevel: specialization.minimumParentLevel
-      }
+        minimumParentLevel: specialization.minimumParentLevel,
+      },
     });
   }
 
@@ -481,7 +510,7 @@ function buildRelationships(content: CanonicalContent): JsonRecord[] {
         type: "profession_grants_group",
         from: entity("profession", profession.id, profession.name),
         to: entity("skillGroup", groupId, getGroupName(content, groupId)),
-        metadata: {}
+        metadata: {},
       });
     }
 
@@ -491,8 +520,8 @@ function buildRelationships(content: CanonicalContent): JsonRecord[] {
         from: entity("profession", profession.id, profession.name),
         to: entity("skill", skillId, getSkillName(content, skillId)),
         metadata: {
-          directOnly: pkg.directOnlySkillIds.includes(skillId)
-        }
+          directOnly: pkg.directOnlySkillIds.includes(skillId),
+        },
       });
     }
   }
@@ -504,9 +533,9 @@ function buildRelationships(content: CanonicalContent): JsonRecord[] {
       to: entity(
         "societyClass",
         `${String(record.societyId)}:class-${String(record.classBand)}`,
-        `${String(record.societyName)} class ${String(record.classBand)}`
+        `${String(record.societyName)} class ${String(record.classBand)}`,
       ),
-      metadata: record
+      metadata: record,
     });
   }
 
@@ -514,21 +543,25 @@ function buildRelationships(content: CanonicalContent): JsonRecord[] {
     relationships.push({
       type: "civilization_uses_society",
       from: entity("civilization", civilization.id, civilization.name),
-      to: entity("society", civilization.linkedSocietyId, getSocietyName(content, civilization.linkedSocietyId)),
-      metadata: { linkedSocietyLevel: civilization.linkedSocietyLevel }
+      to: entity(
+        "society",
+        civilization.linkedSocietyId,
+        getSocietyName(content, civilization.linkedSocietyId),
+      ),
+      metadata: { linkedSocietyLevel: civilization.linkedSocietyLevel },
     });
 
     for (const languageName of [
       civilization.motherTongueLanguageName,
       civilization.spokenLanguageName,
       civilization.writtenLanguageName,
-      ...civilization.optionalLanguageNames
+      ...civilization.optionalLanguageNames,
     ].filter((name): name is string => Boolean(name))) {
       relationships.push({
         type: "language_materialized_from_language_choice",
         from: entity("civilization", civilization.id, civilization.name),
         to: entity("language", languageName, languageName),
-        metadata: {}
+        metadata: {},
       });
     }
   }
@@ -538,15 +571,17 @@ function buildRelationships(content: CanonicalContent): JsonRecord[] {
       type: "derived_skill_relationship",
       from: rule.source,
       to: rule.target,
-      metadata: rule
+      metadata: rule,
     });
   }
 
   return relationships.sort(
     (left, right) =>
       String(left.type).localeCompare(String(right.type)) ||
-      String((left.from as JsonRecord).name).localeCompare(String((right.from as JsonRecord).name)) ||
-      String((left.to as JsonRecord).name).localeCompare(String((right.to as JsonRecord).name))
+      String((left.from as JsonRecord).name).localeCompare(
+        String((right.from as JsonRecord).name),
+      ) ||
+      String((left.to as JsonRecord).name).localeCompare(String((right.to as JsonRecord).name)),
   );
 }
 
@@ -563,7 +598,7 @@ function buildDerivedRules(content: CanonicalContent): JsonRecord[] {
         ruleLabel: "explicit-derived-grant",
         description: `${sourceSkill.name} contributes derived XP to ${getSkillName(content, grant.skillId)} at ${Math.round(grant.factor * 100)}%.`,
         contributesDerivedXp: true,
-        notes: null
+        notes: null,
       });
     }
 
@@ -574,7 +609,7 @@ function buildDerivedRules(content: CanonicalContent): JsonRecord[] {
 
       const factor = getMeleeCrossTrainingFactor({
         source: sourceSkill.meleeCrossTraining,
-        target: targetSkill.meleeCrossTraining
+        target: targetSkill.meleeCrossTraining,
       });
 
       if (factor <= 0) {
@@ -589,13 +624,17 @@ function buildDerivedRules(content: CanonicalContent): JsonRecord[] {
         ruleLabel: "melee-cross-training",
         description: `${sourceSkill.name} cross-trains into ${targetSkill.name} at ${Math.round(factor * 100)}%.`,
         contributesDerivedXp: true,
-        notes: "Melee cross-training is computed from attack style and hand class."
+        notes: "Melee cross-training is computed from attack style and hand class.",
       });
     }
 
     if (sourceSkill.specializationBridge) {
       rules.push({
-        source: entity("skill", sourceSkill.specializationBridge.parentSkillId, getSkillName(content, sourceSkill.specializationBridge.parentSkillId)),
+        source: entity(
+          "skill",
+          sourceSkill.specializationBridge.parentSkillId,
+          getSkillName(content, sourceSkill.specializationBridge.parentSkillId),
+        ),
         target: entity("skill", sourceSkill.id, sourceSkill.name),
         factor: 1,
         threshold: sourceSkill.specializationBridge.threshold,
@@ -604,8 +643,8 @@ function buildDerivedRules(content: CanonicalContent): JsonRecord[] {
         contributesDerivedXp: true,
         notes: {
           parentExcessOffset: sourceSkill.specializationBridge.parentExcessOffset,
-          reverseFactor: sourceSkill.specializationBridge.reverseFactor
-        }
+          reverseFactor: sourceSkill.specializationBridge.reverseFactor,
+        },
       });
     }
   }
@@ -619,7 +658,7 @@ function buildDerivedRules(content: CanonicalContent): JsonRecord[] {
       source: entity(
         "skill",
         specialization.specializationBridge.parentSkillId,
-        getSkillName(content, specialization.specializationBridge.parentSkillId)
+        getSkillName(content, specialization.specializationBridge.parentSkillId),
       ),
       target: entity("specialization", specialization.id, specialization.name),
       factor: 1,
@@ -629,16 +668,20 @@ function buildDerivedRules(content: CanonicalContent): JsonRecord[] {
       contributesDerivedXp: true,
       notes: {
         parentExcessOffset: specialization.specializationBridge.parentExcessOffset,
-        reverseFactor: specialization.specializationBridge.reverseFactor
-      }
+        reverseFactor: specialization.specializationBridge.reverseFactor,
+      },
     });
   }
 
   return rules.sort(
     (left, right) =>
-      String((left.source as JsonRecord).name).localeCompare(String((right.source as JsonRecord).name)) ||
-      String((left.target as JsonRecord).name).localeCompare(String((right.target as JsonRecord).name)) ||
-      String(left.ruleLabel).localeCompare(String(right.ruleLabel))
+      String((left.source as JsonRecord).name).localeCompare(
+        String((right.source as JsonRecord).name),
+      ) ||
+      String((left.target as JsonRecord).name).localeCompare(
+        String((right.target as JsonRecord).name),
+      ) ||
+      String(left.ruleLabel).localeCompare(String(right.ruleLabel)),
   );
 }
 
@@ -646,7 +689,7 @@ function buildAdminMetrics(content: CanonicalContent) {
   const groupWarnings = buildGroupWarningMap(content);
   const warningRows = collectCanonicalContentWarnings(content).map((warning) => ({
     code: warning.code,
-    detail: warning.detail
+    detail: warning.detail,
   }));
 
   return {
@@ -660,16 +703,20 @@ function buildAdminMetrics(content: CanonicalContent) {
           uniqueReach: pkg.reachableSkillIds.length,
           groupReach: pkg.reachableGroupSkillIds.length,
           directOnlyReach: pkg.directOnlySkillIds.length,
-          skillIdsReached: pkg.reachableSkillIds
+          skillIdsReached: pkg.reachableSkillIds,
         };
       })
-      .sort((left, right) => left.name.localeCompare(right.name) || left.professionId.localeCompare(right.professionId)),
+      .sort(
+        (left, right) =>
+          left.name.localeCompare(right.name) ||
+          left.professionId.localeCompare(right.professionId),
+      ),
     groupWeightedValues: content.skillGroups
       .map((group) => {
         const weightedValue = getGroupMemberships(content, group).reduce(
           (total, membership) =>
             total + getSkillWeight(content.skills.find((skill) => skill.id === membership.skillId)),
-          0
+          0,
         );
 
         return {
@@ -678,19 +725,24 @@ function buildAdminMetrics(content: CanonicalContent) {
           weightedValue,
           belowNormalThreshold: weightedValue < 6,
           allowedExceptionReason: ALLOWED_SMALL_GROUP_REASONS[group.id] ?? null,
-          warnings: groupWarnings.get(group.id) ?? []
+          warnings: groupWarnings.get(group.id) ?? [],
         };
       })
-      .sort((left, right) => left.name.localeCompare(right.name) || left.groupId.localeCompare(right.groupId)),
-    validationWarnings: warningRows
+      .sort(
+        (left, right) =>
+          left.name.localeCompare(right.name) || left.groupId.localeCompare(right.groupId),
+      ),
+    validationWarnings: warningRows,
   };
 }
 
-export function buildSkillSystemAiExport(input: {
-  appCommit?: string | null;
-  generatedAt?: string;
-  content?: CanonicalContent;
-} = {}) {
+export function buildSkillSystemAiExport(
+  input: {
+    appCommit?: string | null;
+    generatedAt?: string;
+    content?: CanonicalContent;
+  } = {},
+) {
   const content = input.content ?? defaultCanonicalContent;
   const groupWarnings = buildGroupWarningMap(content);
 
@@ -698,9 +750,10 @@ export function buildSkillSystemAiExport(input: {
     metadata: {
       exportVersion: EXPORT_VERSION,
       generatedAt: input.generatedAt ?? new Date().toISOString(),
-      source: "packages/content/src/seeds/generatedRepoLocalGlantriSeed.ts via defaultCanonicalContent",
+      source:
+        "packages/content/src/seeds/generatedRepoLocalGlantriSeed.ts via defaultCanonicalContent",
       appCommit: input.appCommit ?? getGitCommit(),
-      warning: EXPORT_WARNING
+      warning: EXPORT_WARNING,
     },
     civilizations: [...content.civilizations].sort(byNameThenId).map((civilization) => ({
       id: civilization.id,
@@ -716,8 +769,8 @@ export function buildSkillSystemAiExport(input: {
         motherTongue: civilization.motherTongueLanguageName,
         spoken: civilization.spokenLanguageName,
         written: civilization.writtenLanguageName,
-        optional: civilization.optionalLanguageNames
-      }
+        optional: civilization.optionalLanguageNames,
+      },
     })),
     societies: [...content.societies].sort(byNameThenId).map((society) => {
       const rows = content.societyLevels.filter((row) => row.societyId === society.id);
@@ -733,7 +786,8 @@ export function buildSkillSystemAiExport(input: {
         glantriExamples: society.glantriExamples ?? null,
         baselineLanguages: (society.baselineLanguageIds ?? []).map((languageId) => ({
           languageId,
-          languageName: content.languages.find((language) => language.id === languageId)?.name ?? languageId
+          languageName:
+            content.languages.find((language) => language.id === languageId)?.name ?? languageId,
         })),
         classBands: rows
           .map((row) => ({
@@ -742,11 +796,11 @@ export function buildSkillSystemAiExport(input: {
             educationValue: row.baseEducation ?? null,
             professionAvailability: row.professionIds.map((professionId) => ({
               professionId,
-              professionName: getProfessionName(content, professionId)
+              professionName: getProfessionName(content, professionId),
             })),
-            notes: row.notes || null
+            notes: row.notes || null,
           }))
-          .sort((left, right) => left.classBand - right.classBand)
+          .sort((left, right) => left.classBand - right.classBand),
       };
     }),
     socialClasses: content.societyLevels
@@ -754,26 +808,31 @@ export function buildSkillSystemAiExport(input: {
         id: `${row.societyId}:class-${row.societyLevel}`,
         societyId: row.societyId,
         societyName: row.societyName,
-        societyStage: content.societies.find((society) => society.id === row.societyId)?.societyLevel ?? null,
+        societyStage:
+          content.societies.find((society) => society.id === row.societyId)?.societyLevel ?? null,
         classBand: row.societyLevel,
         classLabel: row.socialClass,
         educationValue: row.baseEducation ?? null,
         professionIds: row.professionIds,
         skillGroupIds: row.skillGroupIds,
         skillIds: row.skillIds,
-        notes: row.notes ?? null
+        notes: row.notes ?? null,
       }))
       .sort(
         (left, right) =>
           String(left.societyName).localeCompare(String(right.societyName)) ||
-          Number(left.classBand) - Number(right.classBand)
+          Number(left.classBand) - Number(right.classBand),
       ),
     skills: [...content.skills].sort(byNameThenId).map((skill) => mapSkill(content, skill)),
     skillGroups: [...content.skillGroups]
       .sort(byNameThenId)
       .map((group) => mapSkillGroup(content, group, groupWarnings.get(group.id) ?? [])),
-    specializations: [...content.specializations].sort(byNameThenId).map((specialization) => mapSpecialization(content, specialization)),
-    professions: [...content.professions].sort(byNameThenId).map((profession) => mapProfession(content, profession)),
+    specializations: [...content.specializations]
+      .sort(byNameThenId)
+      .map((specialization) => mapSpecialization(content, specialization)),
+    professions: [...content.professions]
+      .sort(byNameThenId)
+      .map((profession) => mapProfession(content, profession)),
     professionFamilies: [...content.professionFamilies].sort(byNameThenId).map((family) => ({
       id: family.id,
       name: family.name,
@@ -781,7 +840,7 @@ export function buildSkillSystemAiExport(input: {
       professionIds: content.professions
         .filter((profession) => profession.familyId === family.id)
         .sort(byNameThenId)
-        .map((profession) => profession.id)
+        .map((profession) => profession.id),
     })),
     professionPackages: content.professions
       .map((profession) => {
@@ -802,9 +861,10 @@ export function buildSkillSystemAiExport(input: {
               .map((membership) => getSkillName(content, membership.skillId)),
             weightedContentPoints: memberships.reduce(
               (total, membership) =>
-                total + getSkillWeight(content.skills.find((skill) => skill.id === membership.skillId)),
-              0
-            )
+                total +
+                getSkillWeight(content.skills.find((skill) => skill.id === membership.skillId)),
+              0,
+            ),
           };
         };
 
@@ -815,25 +875,31 @@ export function buildSkillSystemAiExport(input: {
           familyName: getFamilyName(content, profession.familyId),
           coreSkillGroups: pkg.coreGroupIds.map((groupId) => getGroupName(content, groupId)),
           optionalSkillGroups: pkg.favoredGroupIds.map((groupId) => getGroupName(content, groupId)),
-          directlyGrantedSkills: pkg.directSkillIds.map((skillId) => getSkillName(content, skillId)),
-          directSkillExceptions: pkg.directOnlySkillIds.map((skillId) => getSkillName(content, skillId)),
-          reachableGroupSkills: pkg.reachableGroupSkillIds.map((skillId) => getSkillName(content, skillId)),
+          directlyGrantedSkills: pkg.directSkillIds.map((skillId) =>
+            getSkillName(content, skillId),
+          ),
+          directSkillExceptions: pkg.directOnlySkillIds.map((skillId) =>
+            getSkillName(content, skillId),
+          ),
+          reachableGroupSkills: pkg.reachableGroupSkillIds.map((skillId) =>
+            getSkillName(content, skillId),
+          ),
           totalReachableSkills: pkg.reachableSkillIds.length,
           groupFans: [
             ...pkg.coreGroupIds.map((groupId) => groupFan(groupId, "core")),
-            ...pkg.favoredGroupIds.map((groupId) => groupFan(groupId, "optional"))
+            ...pkg.favoredGroupIds.map((groupId) => groupFan(groupId, "optional")),
           ].sort(
             (left, right) =>
               (left.relevance === "core" ? 0 : 1) - (right.relevance === "core" ? 0 : 1) ||
-              left.groupName.localeCompare(right.groupName)
-          )
+              left.groupName.localeCompare(right.groupName),
+          ),
         };
       })
       .sort((left, right) => left.professionName.localeCompare(right.professionName)),
     availability: buildAvailability(content),
     relationships: buildRelationships(content),
     derivedRules: buildDerivedRules(content),
-    adminMetrics: buildAdminMetrics(content)
+    adminMetrics: buildAdminMetrics(content),
   };
 }
 
@@ -952,27 +1018,19 @@ Readable derived/cross-training/specialization bridge rules. These describe rule
 
 export function writeSkillSystemAiExport(outputDir = defaultOutputDir): {
   exportPath: string;
-  notePath: string;
-  schemaPath: string;
 } {
   fs.mkdirSync(outputDir, { recursive: true });
 
   const exportPath = path.join(outputDir, "glantri-skill-system-export.json");
-  const notePath = path.join(outputDir, "glantri-skill-system-note.md");
-  const schemaPath = path.join(outputDir, "glantri-skill-system-schema.md");
   const exportData = buildSkillSystemAiExport();
 
   fs.writeFileSync(exportPath, `${JSON.stringify(exportData, null, 2)}\n`, "utf8");
-  fs.writeFileSync(notePath, buildSkillSystemNote(), "utf8");
-  fs.writeFileSync(schemaPath, buildSkillSystemSchemaNote(), "utf8");
 
-  return { exportPath, notePath, schemaPath };
+  return { exportPath };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const paths = writeSkillSystemAiExport();
   // Keep script output stable and concise for CI/log review.
   console.log(`Wrote ${path.relative(repoRoot, paths.exportPath)}`);
-  console.log(`Wrote ${path.relative(repoRoot, paths.notePath)}`);
-  console.log(`Wrote ${path.relative(repoRoot, paths.schemaPath)}`);
 }

@@ -2,24 +2,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const draftGetMock = vi.fn();
 const draftSaveMock = vi.fn();
-const loadCanonicalContentMock = vi.fn();
-const characterGetMock = vi.fn();
+const loadLocalCharacterContextMock = vi.fn();
 
-vi.mock("../content/loadCanonicalContent", () => ({
-  loadCanonicalContent: loadCanonicalContentMock
+vi.mock("./loadLocalCharacterContext", () => ({
+  loadLocalCharacterContext: loadLocalCharacterContextMock,
 }));
 
 vi.mock("../offline/repositories/characterDraftRepository", () => ({
   CharacterDraftRepository: class CharacterDraftRepository {
     get = draftGetMock;
     save = draftSaveMock;
-  }
+  },
 }));
 
 vi.mock("../offline/repositories/localCharacterRepository", () => ({
-  LocalCharacterRepository: class LocalCharacterRepository {
-    get = characterGetMock;
-  }
+  getServerCharacterRevision: (record: {
+    serverUpdatedAt?: string;
+    syncStatus: string;
+    updatedAt: string;
+  }) => record.serverUpdatedAt ?? (record.syncStatus === "synced" ? record.updatedAt : undefined),
 }));
 
 const baseBuild = {
@@ -41,9 +42,9 @@ const baseBuild = {
       pow: 10,
       siz: 10,
       str: 10,
-      will: 10
+      will: 10,
     },
-    societyLevel: 0
+    societyLevel: 0,
   },
   progression: {
     chargenMode: "standard",
@@ -55,22 +56,21 @@ const baseBuild = {
     secondaryPoolTotal: 0,
     skillGroups: [],
     skills: [],
-    specializations: []
+    specializations: [],
   },
   progressionState: {
     availablePoints: 0,
     checks: [],
     history: [],
-    pendingAttempts: []
-  }
+    pendingAttempts: [],
+  },
 };
 
 describe("loadLocalCharacterAdvancementContext", () => {
   beforeEach(() => {
     draftGetMock.mockReset();
     draftSaveMock.mockReset();
-    loadCanonicalContentMock.mockReset();
-    characterGetMock.mockReset();
+    loadLocalCharacterContextMock.mockReset();
   });
 
   it("refreshes a stale advancement draft from the newer character record", async () => {
@@ -82,8 +82,9 @@ describe("loadLocalCharacterAdvancementContext", () => {
       characterId: "character-1",
       createdAt: "2026-01-01T00:00:00.000Z",
       id: "character-1",
-      syncStatus: "local",
-      updatedAt: "2026-01-01T00:00:00.000Z"
+      serverUpdatedAt: "2026-01-01T00:00:00.000Z",
+      syncStatus: "synced",
+      updatedAt: "2026-01-01T00:00:00.000Z",
     };
     const record = {
       build: {
@@ -92,29 +93,36 @@ describe("loadLocalCharacterAdvancementContext", () => {
           availablePoints: 4,
           checks: [],
           history: [],
-          pendingAttempts: []
-        }
+          pendingAttempts: [],
+        },
       },
       createdAt: "2026-01-01T00:00:00.000Z",
       finalizedAt: "2026-01-01T00:00:00.000Z",
       id: "character-1",
+      serverUpdatedAt: "2026-01-02T00:00:00.000Z",
       syncStatus: "synced",
-      updatedAt: "2026-01-02T00:00:00.000Z"
+      updatedAt: "2026-01-02T00:00:00.000Z",
     };
     const refreshedDraft = {
       ...draft,
       advancementPointsTotal: 4,
       build: record.build,
+      serverUpdatedAt: record.serverUpdatedAt,
       syncStatus: "synced",
-      updatedAt: record.updatedAt
+      updatedAt: record.updatedAt,
     };
 
-    loadCanonicalContentMock.mockResolvedValue(content);
+    loadLocalCharacterContextMock.mockResolvedValue({
+      canonicalMissing: false,
+      content,
+      hasRevisionConflict: false,
+      record,
+    });
     draftGetMock.mockResolvedValue(draft);
-    characterGetMock.mockResolvedValue(record);
     draftSaveMock.mockResolvedValue(refreshedDraft);
 
-    const { loadLocalCharacterAdvancementContext } = await import("./loadLocalCharacterAdvancementContext");
+    const { loadLocalCharacterAdvancementContext } =
+      await import("./loadLocalCharacterAdvancementContext");
     const result = await loadLocalCharacterAdvancementContext("character-1");
 
     expect(draftSaveMock).toHaveBeenCalledWith({
@@ -123,13 +131,102 @@ describe("loadLocalCharacterAdvancementContext", () => {
       build: record.build,
       characterId: "character-1",
       id: "character-1",
+      serverUpdatedAt: "2026-01-02T00:00:00.000Z",
       syncStatus: "synced",
-      updatedAt: "2026-01-02T00:00:00.000Z"
+      updatedAt: "2026-01-02T00:00:00.000Z",
     });
     expect(result).toEqual({
       content,
       draft: refreshedDraft,
-      record
+      hasRevisionConflict: false,
+      record,
+      recoveryRecord: undefined,
     });
+  });
+
+  it("presents canonical progression while retaining a stale draft for recovery", async () => {
+    const content = { skills: [] };
+    const recoveryDraft = {
+      advancementPointsSpent: 0,
+      advancementPointsTotal: 0,
+      build: { ...baseBuild, name: "Offline progression" },
+      characterId: "character-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      id: "character-1",
+      serverUpdatedAt: "2026-01-01T00:00:00.000Z",
+      syncStatus: "local",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    };
+    const record = {
+      build: { ...baseBuild, name: "Server progression" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      finalizedAt: "2026-01-01T00:00:00.000Z",
+      id: "character-1",
+      serverUpdatedAt: "2026-01-03T00:00:00.000Z",
+      syncStatus: "synced",
+      updatedAt: "2026-01-03T00:00:00.000Z",
+    };
+
+    loadLocalCharacterContextMock.mockResolvedValue({
+      canonicalMissing: false,
+      content,
+      hasRevisionConflict: true,
+      record,
+      recoveryRecord: { build: recoveryDraft.build },
+    });
+    draftGetMock.mockResolvedValue(recoveryDraft);
+
+    const { loadLocalCharacterAdvancementContext } =
+      await import("./loadLocalCharacterAdvancementContext");
+    const result = await loadLocalCharacterAdvancementContext("character-1");
+
+    expect(result.draft?.build).toStrictEqual(record.build);
+    expect(result.recoveryDraft).toBe(recoveryDraft);
+    expect(result.hasRevisionConflict).toBe(true);
+    expect(draftSaveMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps an unsaved Character build separate from current server progression", async () => {
+    const content = { skills: [] };
+    const recoveryRecord = {
+      build: { ...baseBuild, name: "Unsaved Character edit" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      finalizedAt: "2026-01-01T00:00:00.000Z",
+      id: "character-1",
+      serverUpdatedAt: "2026-01-03T00:00:00.000Z",
+      syncStatus: "local",
+      updatedAt: "2026-01-04T00:00:00.000Z",
+    };
+    const record = {
+      build: { ...baseBuild, name: "Current server build" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      finalizedAt: "2026-01-01T00:00:00.000Z",
+      id: "character-1",
+      serverUpdatedAt: "2026-01-03T00:00:00.000Z",
+      syncStatus: "synced",
+      updatedAt: "2026-01-03T00:00:00.000Z",
+    };
+
+    loadLocalCharacterContextMock.mockResolvedValue({
+      canonicalMissing: false,
+      content,
+      hasRevisionConflict: false,
+      record,
+      recoveryRecord,
+    });
+    draftGetMock.mockResolvedValue(undefined);
+
+    const { loadLocalCharacterAdvancementContext } =
+      await import("./loadLocalCharacterAdvancementContext");
+    const result = await loadLocalCharacterAdvancementContext("character-1");
+
+    expect(result.draft?.build).toStrictEqual(record.build);
+    expect(result.recoveryDraft?.build).toStrictEqual(recoveryRecord.build);
+    expect(result.recoveryDraft).toMatchObject({
+      serverUpdatedAt: recoveryRecord.serverUpdatedAt,
+      syncStatus: "local",
+    });
+    expect(result.hasRevisionConflict).toBe(false);
+    expect(draftSaveMock).not.toHaveBeenCalled();
   });
 });

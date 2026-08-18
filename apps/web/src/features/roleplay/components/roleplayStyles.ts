@@ -36,7 +36,7 @@ export const rollEditorStyle = {
   alignItems: "start",
   display: "grid",
   gap: "0.85rem",
-  gridTemplateColumns: "minmax(0, 1fr) minmax(22rem, 1fr)",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 22rem), 1fr))",
   minWidth: 0,
 } as const;
 

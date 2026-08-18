@@ -1,5 +1,10 @@
 import {
+  characterBuildSchema,
+  deriveCharacterStatLayers,
   getSkillGroupIds,
+  glantriCharacteristicKeySchema,
+  glantriCharacteristicLabels,
+  type GlantriCharacteristicKey,
   type CharacterBuild,
   type ProfessionDefinition,
   type ProfessionFamilyDefinition,
@@ -16,10 +21,14 @@ import { selectBestSkillGroupContribution } from "../skills/selectBestSkillGroup
 
 export interface ParticipantSkillRollProfile {
   avgStats: number;
+  /** Average before character/stat modifiers; retained for reproducible roll facts. */
+  baseAvgStats: number;
   derivedXP: number;
   groupXP: number;
   known: boolean;
   linkedStats: string[];
+  /** Net characteristic adjustment included in avgStats. */
+  linkedStatXp: number;
   participantId?: string;
   participantName?: string;
   rollBaseValue: number;
@@ -49,7 +58,28 @@ export interface ResolveParticipantSkillRollProfileInput {
   sheetSummary?: unknown;
   /** Rule-specific characteristic override; skill XP remains the canonical effectiveSkillNumber. */
   linkedStatsOverride?: string[];
+  /** @deprecated Character gameplay reads always prefer Current characteristic values. */
+  preferAdjustedStats?: boolean;
   skill: Pick<SkillDefinition, "groupId" | "groupIds" | "id" | "linkedStats" | "name">;
+}
+
+export interface ParticipantStatRollProfile {
+  participantId?: string;
+  participantName?: string;
+  sourceQuality: "full" | "snapshot" | "missing";
+  statId: GlantriCharacteristicKey;
+  statLabel: string;
+  statValue?: number;
+  warning?: string;
+}
+
+export interface ResolveParticipantStatRollProfileInput {
+  build?: unknown;
+  participantId?: string;
+  participantName?: string;
+  sheetSummary?: unknown;
+  snapshot?: unknown;
+  statId: GlantriCharacteristicKey;
 }
 
 const UNKNOWN_SKILL_WARNING =
@@ -109,6 +139,27 @@ function readStatsFromRecord(value: unknown): Record<string, number> | undefined
 }
 
 function readProfileStats(build: unknown): Record<string, number> | undefined {
+  const parsedBuild = characterBuildSchema.safeParse(build);
+  if (parsedBuild.success) {
+    return deriveCharacterStatLayers(parsedBuild.data).original;
+  }
+
+  if (!isRecord(build) || !isRecord(build.profile)) {
+    return undefined;
+  }
+
+  const resolvedStats = getResolvedProfileStats(
+    build.profile as Parameters<typeof getResolvedProfileStats>[0],
+  );
+  return readStatsFromRecord(resolvedStats);
+}
+
+function readCurrentProfileStats(build: unknown): Record<string, number> | undefined {
+  const parsedBuild = characterBuildSchema.safeParse(build);
+  if (parsedBuild.success) {
+    return deriveCharacterStatLayers(parsedBuild.data).current;
+  }
+
   if (!isRecord(build) || !isRecord(build.profile)) {
     return undefined;
   }
@@ -329,9 +380,11 @@ export function resolveParticipantSkillRollProfile(
     snapshot: input.build,
     skillId: input.skill.id,
   });
-  const stats =
-    readProfileStats(input.build) ?? readSheetStats(sheetSummary) ?? readSnapshotStats(input.build);
+  const profileStats = readProfileStats(input.build) ?? readSnapshotStats(input.build);
+  const adjustedStats = readSheetStats(sheetSummary);
+  const stats = adjustedStats ?? profileStats;
   const linkedStats = input.linkedStatsOverride ?? input.skill.linkedStats;
+  const baseAvgStats = getLinkedStatAverage({ linkedStats, stats: profileStats }) ?? 0;
   const avgStats =
     (input.linkedStatsOverride ? undefined : readNumber(skillView?.linkedStatAverage)) ??
     getLinkedStatAverage({ linkedStats, stats }) ??
@@ -373,10 +426,12 @@ export function resolveParticipantSkillRollProfile(
 
   return {
     avgStats,
+    baseAvgStats,
     derivedXP,
     groupXP,
     known,
     linkedStats: [...linkedStats],
+    linkedStatXp: avgStats - baseAvgStats,
     participantId: input.participantId,
     participantName: input.participantName,
     rollBaseValue: known ? totalSkillLevel : avgStats,
@@ -388,5 +443,42 @@ export function resolveParticipantSkillRollProfile(
     totalXP: known ? totalXP : 0,
     unknownSkillPenalty: known ? 0 : -3,
     warning,
+  };
+}
+
+/**
+ * Reads one canonical current Stat without applying Skill XP, linked-stat averaging,
+ * or Combat modifier machinery. Character resolved Stats are authoritative when
+ * available; persisted actor snapshot Stats are the bounded fallback.
+ */
+export function resolveParticipantStatRollProfile(
+  input: ResolveParticipantStatRollProfileInput,
+): ParticipantStatRollProfile {
+  const statId = glantriCharacteristicKeySchema.parse(input.statId);
+  const snapshot = isRecord(input.snapshot) ? input.snapshot : undefined;
+  const build = input.build ?? snapshot?.build;
+  const sheetSummary = input.sheetSummary ?? snapshot?.sheetSummary;
+  const fullStats = readCurrentProfileStats(build);
+  const snapshotStats = readSnapshotStats(build) ?? readSnapshotStats(input.snapshot);
+  const sheetStats = readSheetStats(sheetSummary);
+  const stats = fullStats ?? snapshotStats ?? sheetStats;
+  const statValue = stats?.[statId];
+  const sourceQuality: ParticipantStatRollProfile["sourceQuality"] = fullStats
+    ? "full"
+    : snapshotStats || sheetStats
+      ? "snapshot"
+      : "missing";
+
+  return {
+    participantId: input.participantId,
+    participantName: input.participantName,
+    sourceQuality,
+    statId,
+    statLabel: glantriCharacteristicLabels[statId],
+    statValue,
+    warning:
+      statValue == null
+        ? `No ${glantriCharacteristicLabels[statId]} Stat is available for this actor.`
+        : undefined,
   };
 }

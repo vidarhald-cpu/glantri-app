@@ -50,4 +50,32 @@ describe("scenarioRepository player scenario access queries", () => {
       }),
     });
   });
+
+  it("excludes delegated owners from current-control Scenario access", async () => {
+    mocks.prisma.scenario.findMany.mockResolvedValue([]);
+    const repository = createPrismaScenarioRepository();
+
+    await repository.listScenariosByCampaignPlayerControl("campaign-1", "player-1");
+
+    expect(mocks.prisma.scenario.findMany).toHaveBeenCalledWith({
+      orderBy: { createdAt: "desc" },
+      where: {
+        campaignId: "campaign-1",
+        participants: {
+          some: {
+            OR: [
+              { controlledByUserId: "player-1" },
+              {
+                character: { ownerId: "player-1" },
+                controlledByUserId: null,
+              },
+            ],
+            isActive: true,
+            role: "player_character",
+          },
+        },
+        status: "live",
+      },
+    });
+  });
 });

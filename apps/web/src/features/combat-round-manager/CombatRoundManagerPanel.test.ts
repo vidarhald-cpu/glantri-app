@@ -5,12 +5,18 @@ import { describe, expect, it } from "vitest";
 
 const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "CombatRoundManagerPanel.tsx");
 const combatHistoryPath = join(dirname(fileURLToPath(import.meta.url)), "../combat-history");
+const presentationModelPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "view-models/combatPresentationModel.ts",
+);
 
 function readSource(): string {
   return [
     sourcePath,
+    presentationModelPath,
     join(combatHistoryPath, "components/CombatTracker.tsx"),
     join(combatHistoryPath, "view-models/buildCombatTrackerModel.ts"),
+    join(combatHistoryPath, "view-models/combatTrackerTaskPresentation.ts"),
   ]
     .map((path) => readFileSync(path, "utf8"))
     .join("\n");
@@ -21,17 +27,41 @@ function readPanelSource(): string {
 }
 
 describe("CombatRoundManagerPanel", () => {
+  it("offers bounded GM Continued Contact maintenance workflow without distance automation", () => {
+    const source = readPanelSource();
+
+    expect(source).toContain("Roll remaining GM Continued Contact checks");
+    expect(source).toContain('descriptor.commandType === "roll_continued_contact_maintenance"');
+    expect(source).toContain("Roll remaining GM distance-control checks");
+    expect(source).toContain('descriptor.commandType === "roll_round_end_distance_control"');
+    expect(source).toContain("Stops before player-owned, relationship-review, or distance work.");
+    expect(source).not.toContain("Accept remaining Continued Contact distances");
+  });
+  it("binds modifier-review commits to one canonical participant input snapshot", () => {
+    const source = readPanelSource();
+
+    expect(source).toContain("getOrCreateCombatModifierReviewInputSnapshot({");
+    expect(source).toContain("modifierReviewInputSnapshot!.combatContext");
+    expect(source).toContain("modifierReviewInputSnapshot?.expectedParticipantRevision");
+    expect(source).toContain("const reviewStepSnapshot = isModifierReview");
+    expect(source).toContain("reviewStepSnapshot,");
+    expect(source).toContain("modifierReviewInputSnapshotsRef.current.clear()");
+    expect(source).not.toContain("onChange={submitCombatDeclarationOnServer}");
+  });
+
   it("keeps Feint-Attack GM adjudication inside the canonical current-action flow", () => {
     const source = readSource();
 
     expect(source).toContain("Feint method");
-    expect(source).toContain("COMBAT_FEINT_REFERENCE_ROWS");
+    expect(source).toContain("COMBAT_FEINT_OUTCOME_TABLE");
+    expect(source).not.toContain("COMBAT_FEINT_REFERENCE_ROWS");
     expect(source).toContain("Commit feint result");
     expect(source).not.toContain("reviewCombatFeintFeasibilityOnServer");
     expect(source).toContain("rollCombatFeintOnServer");
     expect(source).toContain("resolveCombatFeintDeclarationRequestTarget");
     expect(source).toContain("commitCombatFeintOnServer");
-    expect(source).toContain("inspectorFeintExpectedParticipantId");
+    expect(source).toContain("scenarioParticipantForTask(descriptor)");
+    expect(source).toContain('expectedCommandTypes: ["roll_feint"]');
     expect(source).toContain("resolveCombatFeintWeaponSkill");
   });
 
@@ -39,7 +69,8 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("Combat Round Manager");
-    expect(source).toContain("buildCombatAttackSourceRef");
+    expect(source).toContain("buildCombatDeclarationAttackSelection");
+    expect(source).toContain("phaseAttackSources: declarationAttackSelection.phaseAttackSources");
     expect(source).toContain("formatScenarioCombatEquipmentDiagnostic");
     expect(source).not.toContain("refreshScenarioParticipantEquipmentOnServer");
     expect(source).not.toContain("Refresh participant equipment");
@@ -61,9 +92,86 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Step controller");
     expect(source).not.toContain("Round-level controls");
     expect(source).not.toContain("Timeline controls; not part of the current attack/parry step.");
-    expect(source).toContain("Latest combat event");
-    expect(source).toContain("getLatestCombatEventSummary");
-    expect(source).toContain("latestCombatEventSummary.summaryText");
+    expect(source).toContain("<CombatLog");
+    expect(source).toContain("events={combatLogProjection.events}");
+    expect(source).toContain(
+      "selectedCombatLogEventId={combatLogSelection.selectedCombatLogEventId}",
+    );
+    expect(source).toContain(
+      "selectedPresentationTargetId={combatLogSelection.selectedPresentationTargetId}",
+    );
+    expect(source).not.toContain('aria-label="Latest combat event"');
+  });
+
+  it("keeps the GM combat composition in tracker, workspace, log, ancillary order", () => {
+    const source = readPanelSource();
+    const tracker = source.indexOf("<CombatTracker");
+    const genericActions = source.indexOf("<GenericCombatActionPanel", tracker);
+    const inspector = source.indexOf('aria-label="Combat round inspector"');
+    const workspace = source.indexOf("<div style={playerCombatTopPanelRowStyle}", inspector);
+    const combatLog = source.indexOf("<CombatLog", inspector);
+    const distanceMatrix = source.indexOf('aria-label="Distance matrix"');
+
+    expect(tracker).toBeGreaterThan(-1);
+    expect(genericActions).toBeGreaterThan(tracker);
+    expect(inspector).toBeGreaterThan(genericActions);
+    expect(inspector).toBeGreaterThan(tracker);
+    expect(workspace).toBeGreaterThan(inspector);
+    expect(combatLog).toBeGreaterThan(workspace);
+    expect(distanceMatrix).toBeGreaterThan(combatLog);
+    expect(source.slice(tracker, inspector)).not.toContain("<CombatLog");
+  });
+
+  it("keeps observation progress inside Phase 1 instead of adding a main-grid card", () => {
+    const source = readPanelSource();
+
+    expect(source.match(/<PlayerCombatObservationProgress/g)).toHaveLength(1);
+    expect(source).not.toContain("PlayerCombatObservationStatus");
+    expect(source).toContain('label="Opponent"');
+    expect(source.indexOf("<PlayerCombatObservationProgress")).toBeGreaterThan(
+      source.indexOf("<PlayerCombatPhasePanel"),
+    );
+    expect(source.indexOf("<PlayerCombatObservationProgress")).toBeLessThan(
+      source.indexOf("<PlayerCombatModifierPanel"),
+    );
+  });
+
+  it("keeps Combat Log selection independent from live current-step results", () => {
+    const source = readPanelSource();
+    const handlerStart = source.indexOf("const handleCombatLogSelection = useCallback");
+    const handlerEnd = source.indexOf("const combatDistanceRows", handlerStart);
+    const handler = source.slice(handlerStart, handlerEnd);
+
+    expect(handlerStart).toBeGreaterThan(-1);
+    expect(handler).toContain("selectCombatLogEvent({");
+    expect(handler).not.toContain("setInspectionSelection");
+    expect(handler).not.toContain("setRoundState");
+    expect(source).toContain("retainLatestWhenEmpty: false");
+    expect(source).not.toContain("retainLatestWhenEmpty: !inspectorIsHistorical");
+    expect(source).not.toContain("const inspectorActionResult =");
+    expect(source).not.toContain("getLatestRelevantPlayerCombatAttackResult");
+    expect(source).toContain("inspectorIsHistorical && inspectorHasCanonicalActionResult");
+    expect(source).toContain("buildCombatStepResultPresentation({");
+    expect(source).toContain("presentation={gmCurrentStepResultPresentation}");
+    expect(source).not.toContain("selectedCombatLogActionOutcomeEvents");
+  });
+
+  it("keeps recent-result feedback local, exact, passive, and separate from progression", () => {
+    const source = readPanelSource();
+
+    expect(source).toContain("createCombatRecentResultCandidate({");
+    expect(source).toContain("resolveCombatRecentResultFocus({");
+    expect(source).toContain("selectCombatRecentResultPresentation({");
+    expect(source).toContain("recentPresentation={recentResultPresentation}");
+    expect(source).toContain("acceptedEncounterRevisionRef.current");
+    expect(source).toContain("function selectTimelineSelection(");
+    expect(source).toContain("setRecentResultFocus(undefined)");
+    expect(source).toContain("setRecentResultRequest(undefined)");
+    expect(source).not.toContain('aria-label="Post-roll inspection hold"');
+    expect(source).not.toContain("Continue combat");
+    expect(source).not.toContain("Result recorded");
+    expect(source).not.toContain("latestResult");
+    expect(source).not.toContain("setTimeout");
   });
 
   it("keeps Adjust Distance GM review drafts local until explicit confirmation", () => {
@@ -73,30 +181,58 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getDraft: () => draftRef.current");
     expect(source).toContain('type="number"');
     expect(source).toContain('step="1"');
-    expect(source).toContain("GM note (private, optional)");
+    expect(source).toContain("Combat note (optional)");
+    expect(source).not.toContain("GM note (private, optional)");
+    expect(source).toContain("Combat note");
     expect(source).toContain("Typical range: -4 to +4 (guidance only)");
-    expect(source).toContain("if (!inspectorAdjustDistanceProposal || saving) return;");
+    expect(source).toContain("proposal.id === projectedAdjustDistanceTask.identity.proposalId");
+    expect(source).toContain(
+      "async function advanceInspectorAdjustDistance(descriptor: CurrentActionCommandDescriptor)",
+    );
+    expect(source).toContain('descriptor.commandType === "commit_adjust_distance"');
+    expect(source).toContain("candidate.id === descriptor.proposalId");
+    expect(source).not.toContain("projectedAdjustDistanceTask?.trackerFacet.owner?.participantId");
+    expect(source).toContain("buildAdjustDistanceReviewPresentation({");
+    expect(source).toContain("inspectorAdjustDistanceReview.proposedDistance");
+    expect(source).toContain("inspectorAdjustDistanceReview?.legalDistances.map");
+    expect(source).toContain("inspectorAdjustDistanceReview.tableRows.map");
+    expect(source).toContain("inspectorAdjustDistanceReview.applicableTableRowId");
+    expect(source).toContain("Initiator calculation");
+    expect(source).toContain("Opponent calculation");
   });
 
   it("delegates tracker presentation while retaining GM inspection orchestration", () => {
     const source = readSource();
+    const panelSource = readPanelSource();
 
     expect(source).toContain("buildCombatTrackerModel({");
-    expect(source).toContain("buildCombatProgressionProjection(roundState)");
-    expect(source).toContain("buildCombatProgressionTrackerIndex(combatProgressionPresentation)");
-    expect(source.match(/buildCombatProgressionProjection\(roundState\)/g)).toHaveLength(1);
-    expect(source).toContain(
-      "const trackerAttackResult = trackerCanonicalAttackResult ?? trackerSnapshot?.attackResult",
+    expect(source).toContain("buildActiveCombatPresentation");
+    expect(source).toContain("buildArchivedCombatPresentation");
+    expect(source).toContain("buildCombatSelectionOverlay");
+    expect(source).toContain("buildCombatPendingOverlay");
+    expect(source).toContain("createCombatPresentationLayerCache");
+    expect(source).toContain("applyCombatTrackerSelectionOverlay");
+    expect(source).toContain("projectActiveCombatParticipation({");
+    expect(source).toContain("buildCombatProgressionProjection(input.roundState, {");
+    expect(source).toContain("participation,");
+    expect(source).toContain("buildCombatProgressionTrackerIndex(progression)");
+    expect(panelSource).toContain("const combatPresentation = composeCombatPresentationModel");
+    expect(panelSource).toContain(
+      "const currentActionPresentation = combatPresentation.active.currentAction",
+    );
+    expect(panelSource).toContain(
+      "const selectedTimelineRoundState = combatPresentation.selection.selectedRoundState",
     );
     expect(source).toContain("<CombatTracker");
     expect(source).toContain("model={trackerModel}");
     expect(source).toContain("selectInspector(cell.participantId, cell.step, cell.roundNumber)");
     expect(source).toContain("onKeyDown={handleTimelineKeyDown}");
     expect(source).toContain("timelineCellRefs.current[cellKey] = node");
-    expect(source).toContain("activeCurrentCellRef.current = node");
+    expect(source).toContain("followCurrent={!inspectorIsHistorical}");
+    expect(source).toContain("positionCurrentRequest={trackerPositionRequest}");
     expect(source).toContain("getCombatRoundTimelineRoundStates");
     expect(source).toContain("getCombatRoundStepSnapshot");
-    expect(source).toContain("const trackerPhaseResolutionResult = trackerSnapshot");
+    expect(source).toContain("const phaseResolutionResult = snapshot");
     expect(source).not.toContain("commitCurrentStep(participant.participantId");
   });
 
@@ -120,14 +256,25 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("onClick={() => input.onInspect(cell)}");
   });
 
+  it("adopts compact mutation responses from the current authoritative encounter", () => {
+    const source = readPanelSource();
+
+    expect(source).toContain("currentEncounter: encounter");
+    expect(source).toContain(
+      'boundaryTransitionAction.commandType === "complete_round" ? undefined : encounter',
+    );
+    expect(source).toContain("acceptCanonicalEncounterState(nextEncounter");
+    expect(source).toContain("canAcceptCombatRoundViewRevision({");
+  });
+
   it("surfaces phase Combat Experience requirements in the grid and inspector", () => {
     const source = readSource();
 
     expect(source).toContain("getCombatRoundPhaseCombatExperienceRequirement");
-    expect(source).toContain('kinds.has("combat_experience")');
-    expect(source).toContain("Combat Experience work pending.");
+    expect(source).toContain('case "combat_experience"');
+    expect(source).toContain("Combat Experience roll required for");
     expect(source).toContain('marker: "?"');
-    expect(source).toContain('return "required"');
+    expect(source).toContain('liveFacet.attention === "exceptional"');
     expect(source).toContain("inspectorPhaseCombatExperienceRequirement");
     expect(source).toContain("Phase Combat Experience");
     expect(source).toContain("CE roll required — attacked while attacking.");
@@ -286,6 +433,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Committed");
     expect(source).toContain("phaseKey: inspectorModifierPhase");
     expect(source).toContain("validateCombatDeclarationTargets");
+    expect(source).toContain("participantIdentities: selectedTimelineRoundState.participants");
+    expect(source).toContain("canonicalizeCombatObserveTargetContext({");
+    expect(source).toContain("resolveCombatDeclarationParticipantIdentity({");
+    expect(source).toContain("secondaryActionContext: requestSecondaryActionContext");
     expect(source).toContain("inspectorTargetValidation");
     expect(source).toContain("inspectorTargetValidationMessage");
     expect(source).toContain("validationMessage={inspectorActionValidationMessage}");
@@ -296,7 +447,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("entry ?? createModifierEntryDraft()");
     expect(source).toContain("getGmCombatStepActionLabel");
     expect(source).toContain("getPlayerCombatStepLabel");
-    expect(source).toContain("buttonLabel={inspectorEffectiveActionButtonLabel}");
+    expect(source).toContain("labelCurrentActionAsDeclarationEdit");
+    expect(source).toContain("presentation: currentActionPresentation");
+    expect(source).not.toContain("buttonLabel={inspectorEffectiveActionButtonLabel}");
     expect(source).not.toContain("GM can save or revise this declaration at any round step.");
     expect(source).toContain("inspectorStatusSuffix");
     expect(source).toContain('" Declared."');
@@ -304,8 +457,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("Modifiers declared");
     expect(source).not.toContain("Phase 2 modifiers declared");
     expect(source).toContain('" Initiative rolled."');
-    expect(source).toContain("Historical step:");
-    expect(source).toContain("inspectorHistoricalStepOutcome?.message ??");
+    expect(source).toContain("PlayerCombatHistoricalContextPanel");
+    expect(source).toContain("context={inspectorHistoricalStatusLabel}");
     expect(source).toContain(": `Current step: ${getPlayerCombatStepLabel(");
     expect(source).toContain("rollInspectorInitiative");
     expect(source).toContain("rollCombatInitiativeOnServer");
@@ -313,12 +466,22 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("rollCombatAttackOnServer");
     expect(source).toContain("rollInspectorParry");
     expect(source).toContain("rollCombatParryCommandOnServer");
+    expect(source).toContain("async function rollInspectorParry(descriptor:");
+    expect(source).toContain('descriptor.commandType !== "roll_parry"');
+    expect(source).toContain("taskId: descriptor.taskId");
+    expect(source).toContain("expectedRevision: descriptor.expectedRevision");
+    expect(source).toContain("getCombatRoundRenderedInspectorSelection");
+    expect(source).not.toContain("? rollInspectorParry()");
     expect(source).not.toContain("rollOpenEndedD20");
     expect(source).not.toContain("resolveCombatParry");
     expect(source).not.toContain("recordCombatRoundParryResult");
-    expect(source).toContain("recordCombatRoundDamageResult");
-    expect(source).toContain("advanceCurrentCombatPhaseResolutionOnServer");
-    expect(source).toContain("completeCurrentCombatPhaseResolutionOnServer");
+    expect(source).not.toContain("recordCombatRoundDamageResult");
+    expect(source).not.toContain("recordCombatRoundHitLocationRoll");
+    expect(source).not.toContain("recordCombatRoundCriticalRoll");
+    expect(source).toContain("invokeGmDownstreamCombatTask(descriptor)");
+    expect(source).toContain("resolveCurrentCombatPhaseDamageOnServer");
+    expect(source).not.toContain("advanceCurrentCombatPhaseResolutionOnServer");
+    expect(source).not.toContain("completeCurrentCombatPhaseResolutionOnServer");
     expect(source).not.toContain("recordCombatRoundNoAttackPhaseReview");
     expect(source).toContain("formatOpenEndedD20RollBreakdown");
     expect(source).toContain("formatCombatDefenseResultMainLine");
@@ -339,9 +502,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getCombatResolutionButtonLabel");
     expect(source).toContain("formatCombatPhaseResolutionResultLines");
     expect(source).toContain("getCombatRoundDamageSubstate");
-    expect(source).toContain("recordCombatRoundHitLocationRoll");
-    expect(source).toContain("recordCombatRoundCriticalRoll");
-    expect(source).toContain("formatCombatToHitCalculationLine");
+    expect(source).toContain("rollCombatHitLocationOnServer");
+    expect(source).toContain("rollCombatCriticalOnServer");
+    expect(source).toContain("buildCombatCalculationPresentationFromSnapshot");
+    expect(source).not.toContain("formatCombatToHitCalculationLine");
     expect(source).toContain("Parry: ${formatResolutionStatusLabel");
     expect(source).toContain("sourcePrefix");
     expect(source).toContain("modifiedParryBeforeRoll");
@@ -352,7 +516,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("extraRawModifiers: inspectorParryExtraRawModifiers");
     expect(source).toContain("loadoutModel: baseLoadoutModel");
     expect(source).toContain("parrySourceLabel");
-    expect(source).toContain("dbParryRaw: getMergedCombatDbParryModifierTotal({");
+    expect(source).toContain("buildGmCombatParryModifierRequest({");
+    expect(source).not.toContain("dbParryRaw: modifierRequest.dbParryRaw");
     expect(source).not.toContain("modifierBreakdown: rawModifiers");
     expect(source).toContain('Roll hit location for ${inspectorDamageAttackerLabel ?? "attacker"}');
     expect(source).toContain('Roll critical for ${inspectorDamageAttackerLabel ?? "attacker"}');
@@ -399,24 +564,26 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Commit readiness");
     expect(source).toContain("Commit readiness appears after required damage rolls are resolved.");
     expect(source).toContain("Save review");
-    expect(source).toContain("Skip current action");
-    expect(source).toContain("skipCombatRoundCurrentActionOnServer");
-    expect(source).not.toContain("skipCombatRoundCurrentPhaseAction");
+    expect(source).toContain("Skip this participant");
+    expect(source).toContain("skipCurrentCombatPhaseActionOnServer");
+    expect(source).toContain("runGmCombatStepWorkflowOnServer");
     expect(source).toContain("inspectorCanSkipCurrentPhaseAction");
     expect(source).toContain("InspectorCurrentActionOutcomeSelection");
-    expect(source).toContain('useState<InspectorCurrentActionOutcomeSelection>("normal")');
+    expect(source).toContain('useState<InspectorCurrentActionOutcomeSelection>("perform")');
     expect(source).toContain("inspectorSkipActionOutcomeSelectorAvailable");
     expect(source).toContain("inspectorCurrentActionOutcomeControls");
     expect(source).toContain("inspectorSkipActionSelected");
-    expect(source).toContain(">Action outcome</span>");
-    expect(source).toContain('<option value="normal">{inspectorActionButtonLabel}</option>');
-    expect(source).toContain('<option value="skip">Skip current action</option>');
-    expect(source).toContain("buttonLabel={inspectorEffectiveActionButtonLabel}");
+    expect(source).toContain(">Workflow</span>");
+    expect(source).toContain('<option value="perform">Perform current action</option>');
+    expect(source).toContain("Accept remaining NPC reviews");
+    expect(source).toContain("Accept remaining NPC declarations");
+    expect(source).toContain('aria-label="Previous declaration proposal"');
+    expect(source).toContain("Roll remaining GM initiative");
+    expect(source).toContain("Roll remaining GM Combat Experience");
+    expect(source).not.toContain("buttonLabel={inspectorEffectiveActionButtonLabel}");
     expect(source).toContain("disabled={inspectorEffectiveActionButtonDisabled}");
-    expect(source).toContain("? skipInspectorCurrentPhaseAction()");
-    expect(source).not.toContain(
-      "onSecondaryAction={() => void skipInspectorCurrentPhaseAction()}",
-    );
+    expect(source).toContain("skipInspectorCurrentPhaseAction");
+    expect(source).toContain("completeRemainingInspectorStep");
     expect(source).not.toContain("secondaryButtonLabel={");
     expect(source).not.toContain("Edit character-sheet rows");
     expect(source).toContain("Add manual row");
@@ -427,8 +594,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Save review");
     expect(source).toContain("reviewCombatRoundDamageResult");
     expect(source).toContain("commitCurrentCombatPhaseDamageOnServer");
-    expect(source).toContain("updateScenarioParticipantStateOnServer");
-    expect(source).toContain("combatEffects: committed.combatEffects");
+    expect(source).toContain("commitCurrentCombatPhaseDamageOnServer");
+    expect(source).not.toContain("updateScenarioParticipantStateOnServer");
     expect(source).toContain(
       "selectedHitLocationOverride: effectiveDamage?.effectiveSelectedHitLocation",
     );
@@ -452,7 +619,8 @@ describe("CombatRoundManagerPanel", () => {
       "finalCriticalRollOverride: effectiveCritical.finalCriticalRoll?.toString()",
     );
     expect(source).toContain("Critical roll / effect index");
-    expect(source).toContain("} - armor crit mod ${");
+    expect(source).toContain('calculationType: "critical"');
+    expect(source).not.toContain("} - armor crit mod ${");
     expect(source).toContain(
       "totalDamageOverride: effectiveDamage?.effectiveTotalDamage.toString()",
     );
@@ -477,17 +645,16 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('title: "Location"');
     expect(source).toContain('title: "Damage"');
     expect(source).toContain('title: "Critical"');
-    expect(source).toContain("Critical roll required");
+    expect(source).not.toContain("Critical roll required");
+    expect(source).toContain('return "Result: Pending"');
     expect(source).toContain("Result: No critical effect");
     expect(source).toContain("Result: critical roll");
-    expect(source).toContain("sections: inspectorPhaseResolutionLines.sections");
+    expect(source).not.toContain("inspectorPhaseResolutionLines");
     expect(source).toContain("resultLine: `Result: ${formatCombatAttackTableResultLabel");
     expect(source).toContain("damage${formatCombatDamageResultLocationSuffix(damageResult)}");
-    expect(source).toContain("targetLocation:");
-    expect(source).toContain(
+    expect(source).not.toContain(
       "attackerRoundParticipant?.declaration?.phaseContexts?.[phase]?.targetLocation",
     );
-    expect(source).toContain("damageProposal,");
     expect(source).toContain("Damage roll: ${formatResolutionStatusLabel");
     expect(source).toContain("Proposal: ${formatResolutionStatusLabel");
     expect(source).toContain("Effects: ${damageResult.review.additionalEffects");
@@ -497,50 +664,58 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("onScenarioParticipantsUpdated?.([participant])");
     expect(source).toContain("defenderParticipantId: targetIdentity.encounterParticipantId");
     expect(source).toContain("scenarioParticipantId: selectedScenarioParticipant.id");
-    expect(source).toContain("weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode");
-    expect(source).toContain("weaponDamageClass: phaseModel.attackStats.weaponDamageClass");
-    expect(source).toContain("obSkillRaw: getMergedCombatSkillObModifierTotal({");
-    expect(source).toContain(
-      "weaponArmorClass: normalizeCombatArmorModifierClass(attackStats.weaponArmorClass)",
+    expect(source).toContain("attackModeId: descriptor.attackModeId!");
+    expect(source).toContain("opportunityId: descriptor.opportunityId!");
+    expect(source).toContain("weaponSourceId: descriptor.weaponSourceId!");
+    expect(source).not.toContain("weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode");
+    expect(source).not.toContain("weaponDamageClass: phaseModel.attackStats.weaponDamageClass");
+    expect(source).toContain("buildGmCombatAttackModifierRequest({");
+    expect(source).not.toContain("obSkillRaw: modifierRequest.obSkillRaw");
+    expect(source).toContain("buildTargetAwareEncounterLiveCombatModifierSummary");
+    expect(source).toContain("resolveEncounterLiveCombatModifierContext");
+    expect(source).toContain("requestAttackStats");
+    expect(source).not.toContain(
+      "attackerModifierFingerprint: modifierRequest.attackerModifierFingerprint",
     );
-    expect(source).toContain("armorCoverage: inspectorParryDefenderPhaseSummary?.armorCoverage");
-    expect(source).toContain("completeInspectorPhaseResolution");
+    expect(source).toContain("initiativeGroupId: modifierRequest.initiativeGroupId");
+    expect(source).toContain("modifierValidationTaskId: modifierRequest.modifierValidationTaskId");
+    expect(source).toContain("resolveCurrentCombatPhaseDamageOnServer");
+    expect(source).not.toContain("completeInspectorPhaseResolution");
     expect(source).toContain("getCombatRoundInitiativeRanks");
     expect(source).toContain("getCombatRoundInitiativeTotal");
     expect(source).toContain("formatCombatInitiativeFormula");
     expect(source).toContain("formatCombatAttackResultMainLine");
     expect(source).toContain("formatCombatAttackResultLine");
-    expect(source).toContain("getLatestRelevantPlayerCombatAttackResult");
-    expect(source).toContain("inspectorCanShowLatestRelevantAttackResult");
-    expect(source).toContain("inspectorLatestRelevantAttackResult");
-    expect(source).toContain(
-      "!inspectorIsHistorical && inspectorCanShowLatestRelevantAttackResult",
-    );
+    expect(source).not.toContain("getLatestRelevantPlayerCombatAttackResult");
+    expect(source).not.toContain("inspectorCanShowLatestRelevantAttackResult");
+    expect(source).not.toContain("inspectorLatestRelevantAttackResult");
     expect(source).toContain("buildHistoricalCombatActionResult");
     expect(source).toContain('interpretedResult: "No recorded result for this step."');
     expect(source).toContain('snapshot.actionResultStatus === "skipped"');
     expect(source).toContain('snapshot.actionResultStatus === "no_attack"');
-    expect(source).toContain("const inspectorActionResult = inspectorIsHistorical");
+    expect(source).toContain("createDefaultCombatLogSelection(combatLogProjection)");
+    expect(source).toContain("reconcileCombatLogSelection({ current, projection:");
+    expect(source).toContain("selectCombatLogEvent({");
+    expect(source).toContain("buildCombatStepResultPresentation({");
     expect(source).toContain("!selectedRoundIsActive || !inspectorSelectionIsCurrentProgression");
     expect(source).toContain("readOnly={inspectorIsHistorical}");
-    expect(source).toContain("? inspectorHistoricalActionResult");
+    expect(source).toContain("inspectorIsHistorical && inspectorHistoricalActionResult");
     expect(source).toContain("buildCombatAttackResultPanel");
     expect(source).toContain("Result: ${input.result.tableResult}");
     expect(source).toContain("selectCombatEventsForTrackerCell");
     expect(source).toContain("projectGmCombatEvents");
     expect(source).toContain("inspectorCanonicalActionResultEvents");
     expect(source).toContain("inspectorHasCanonicalActionResult");
-    expect(source).toContain(
-      "<CombatEventResultList events={inspectorCanonicalActionResultEvents} />",
-    );
+    expect(source).toContain("events={inspectorCanonicalActionResultEvents}");
+    expect(source).toContain("Historical result — Round");
     expect(source).not.toContain("Legacy result · canonical event history unavailable");
     expect(source).toContain("Some historical result details are unavailable.");
     expect(source).toContain("deriveCombatHistoryStepOutcome");
-    expect(source).toContain(") : inspectorActionResult ? (");
     expect(source).toContain("<PlayerCombatActionResultPanel result={null} />");
-    expect(source.indexOf("inspectorLatestRelevantAttackResult")).toBeLessThan(
-      source.indexOf("No ${formatCombatPhaseLabel(inspectorResolutionPhase)} attack result."),
-    );
+    expect(source).toContain("gmCurrentStepResultPresentation");
+    expect(source).toContain("presentation={gmCurrentStepResultPresentation}");
+    expect(source).toContain("recentPresentation={recentResultPresentation}");
+    expect(source).not.toContain("selectedCombatLogActionOutcomeEvents");
     expect(source).toContain("inspectorDisplayPhaseResolutionResult");
     expect(source).toContain("inspectorPhaseResolutionCursor");
     expect(source).toContain("inspectorPhaseResolutionStatus");
@@ -560,7 +735,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Inspecting step - use Current task to resume");
     expect(source).toContain('"Attack already rolled"');
     expect(source).toContain("inspectorActionButtonLabel");
-    expect(source).toContain("advanceInspectorPhaseResolutionSubstep");
+    expect(source).not.toContain("advanceInspectorPhaseResolutionSubstep");
     expect(source).toContain("Current actor:");
     expect(source).toContain("Next:");
     expect(source).toContain("${phaseLabel} attack roll");
@@ -590,13 +765,13 @@ describe("CombatRoundManagerPanel", () => {
     );
     expect(source).toContain('step === "phase_2_actions"');
     expect(source).not.toContain("phaseLabel: formatCombatInitiativeRoll");
-    expect(source).toContain("formatInitiativeRankLabel");
+    expect(source).toContain("formatSnapshotInitiativeRankLabel");
     expect(source).toContain("rankLabel");
     expect(source).toContain("rank.tiedCount > 1");
     expect(source).toContain("tied with ${rank.tiedCount}");
     expect(source).toContain("buildEncounterInitiativeModifierCalculation");
     expect(source).toContain("inspectorInitiativeCalculation");
-    expect(source).toContain(
+    expect(source).not.toContain(
       "initiativeModifierAdjustment: inspectorInitiativeCalculation.modifierAdjustment",
     );
     expect(source).toContain("movementIntent: inspectorDraft.movementIntent");
@@ -607,7 +782,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(
       "const historicalPhasePanel = inspectorPanelSnapshot?.phasePanels?.[phaseKey]",
     );
-    expect(source).toContain("inspectorNormalizedFeintPhaseContexts[phaseKey]");
+    expect(source).toContain("inspectorRenderedDeclarationAttackSelection.phaseContexts[phaseKey]");
     expect(source).not.toContain("formatCombatInitiativeRoll(inspector");
     expect(source).not.toContain("Action status:");
     expect(source).not.toContain("Damage review:");
@@ -620,8 +795,8 @@ describe("CombatRoundManagerPanel", () => {
     );
     expect(source).toContain("phaseKey: input.phaseKey");
     expect(source).toContain("inspectorTargetOptions");
-    expect(source).toContain("getPlayerEncounterOpponentParticipants");
-    expect(source).toContain("allowedParticipantIds: encounterScenarioParticipantIds");
+    expect(source).toContain("buildCombatParticipantCandidates");
+    expect(source).toContain("allowedParticipantIds");
     expect(source).toContain("getEncounterScenarioParticipantIds");
     expect(source).toContain("historicalPhasePanel?.targetOptions ?? inspectorTargetOptions");
     expect(source).toContain("phaseModel.showDefenseContext");
@@ -629,7 +804,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("secondaryActionId: inspectorDisplayDraft.secondaryActionId");
     expect(source).not.toContain("inspectorOpponentOptions");
     expect(source).not.toContain("moveSelectedParticipantDown");
-    expect(source).toContain("const actedParticipantId = selectedEncounterParticipant.id");
+    expect(source).toContain("const actedParticipantId = taskEncounterParticipant.id");
     expect(source).toContain("fromParticipantId: actedParticipantId");
     expect(source).toContain("pendingSelectionRef");
     expect(source).toContain("manualSelectionRef");
@@ -644,7 +819,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("pendingSelectionRef.current = undefined");
     expect(source).toContain("manualSelectionRef.current = undefined");
     expect(source).toContain(
-      "isSequentialResolutionStep(roundState.currentStep) && !projectedBoundaryTransitionTask",
+      "isSequentialResolutionStep(roundState.currentStep) && !projectedBoundaryTransitionAction",
     );
     expect(source).toContain("isSequentialResolutionStep(inspector.step)");
     expect(source).toContain('task.kind === "gm_advance_boundary"');
@@ -657,15 +832,20 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Roll health check");
     expect(source).toContain("CombatRoundEndParticipantReviewPanel");
     expect(source).toContain("CombatRoundEndDistanceControlPanel");
-    expect(source).toContain("ensureCombatRoundEndReviewPrepared");
-    expect(source).toContain("commitCombatRoundEndParticipantReview");
-    expect(source).toContain("commitCombatRoundEndDistanceControl");
-    expect(source).toContain("rollCombatRoundEndHealthCheck");
+    expect(source).toContain("commitRoundEndParticipantReviewOnServer");
+    expect(source).toContain("commitRoundEndDistanceControlOnServer");
+    expect(source).toContain("rollRoundEndHealthCheckOnServer");
+    expect(source).toContain('"Roll remaining GM Health checks"');
+    expect(source).toContain('descriptor.commandType === "roll_round_end_health_check"');
+    expect(source).toContain('"Roll remaining GM Observe checks"');
+    expect(source).toContain('descriptor.commandType === "roll_observation"');
     expect(source).toContain("rollCurrentRoundEndDistanceControlOnServer");
-    expect(source).toContain('kinds.has("health_review")');
+    expect(source).toContain('case "health_review"');
+    expect(source).toContain("Health check required for");
     expect(source).toContain("getRoundEndDistancePendingRollOptions");
     expect(source).toContain("isRoundEndDistanceCommitReady");
-    expect(source).toContain("getNextCombatRoundEndTask");
+    expect(source).not.toContain("getNextCombatRoundEndTask");
+    expect(source).toContain("projectedRoundEndTasks");
     expect(source).toContain("rollRoundEndDistanceControlFromPrimaryAction");
     expect(source).toContain("inspectorRoundEndDistanceControls");
     expect(source).toContain("Round-end distance control");
@@ -673,13 +853,13 @@ describe("CombatRoundManagerPanel", () => {
       "Shared round-level pair review. These controls are not part of the current attack/parry",
     );
     expect(source).toContain("Participant review");
-    expect(source).toContain("Participant round-end review");
-    expect(source).toContain("Health check review");
+    expect(source).not.toContain("Participant round-end review");
+    expect(source).not.toContain("Health check review");
     expect(source).toContain("No participant-owned round-end changes proposed.");
     expect(source).not.toContain("Roll for {participantALabel}");
     expect(source).not.toContain("Roll for {participantBLabel}");
-    expect(source).toContain('kinds.has("distance_roll")');
-    expect(source).toContain("distance-control roll pending.");
+    expect(source).toContain('case "distance_roll"');
+    expect(source).toContain("must roll distance control");
     expect(source).toContain(
       "Roll distance control for ${inspectorRoundEndDistanceAction.option.participantLabel}",
     );
@@ -687,12 +867,21 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Distance roll");
     expect(source).toContain("Distance pair");
     expect(source).toContain("GM override");
+    expect(source).toContain('aria-label="Distance-control decision context"');
+    expect(source).toContain("Current distance {proposal.currentDistance}");
+    expect(source).toContain("proposed next-round distance");
+    expect(source).toContain("buildCombatCalculationPresentationLines(calculation)");
+    expect(source).toContain('"Engagement distance"');
+    expect(source).toContain('"Choose engagement distance."');
+    expect(source).toContain("chosenDistance: controlledByContinuedContact");
+    expect(source).toContain("scenarioParticipantId: controlledByContinuedContact");
     expect(source).toContain("roundEndDistanceOverrideDrafts");
     expect(source).toContain("advanceCombatRoundCurrentStepOnServer({");
     expect(source).toContain("stepSnapshots,");
-    expect(source).toContain("inspectorSelectedAttackAlreadyRolled ||");
-    expect(source).toContain("inspectorDamageCommitted ||");
-    expect(source).toContain("Select a participant step to inspect combat details.");
+    expect(source).toContain(
+      "const inspectorActionButtonDisabled = saving || Boolean(inspectorActionValidationMessage)",
+    );
+    expect(source).toContain("Phase-wide task");
     expect(source).toContain("Previous participant");
     expect(source).toContain("Next participant");
     expect(source).toContain("Previous step");
@@ -700,7 +889,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getAdjacentCombatRoundTimelineStepSelection");
     expect(source).toContain("getAdjacentCombatRoundTimelineParticipantSelection");
     expect(source).toContain("getParticipantIdsForTimelineRound");
-    expect(source).toContain("roundNumbers: timelineRoundNumbers");
+    expect(source).toContain("roundNumbers: [...timelineRoundNumbers]");
     expect(source).toContain("selectedRoundNumber");
   });
 
@@ -726,12 +915,15 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("snapshotAttackStats: historicalPhasePanel?.attackSummary");
     expect(source).toContain("snapshotDefenseStats: historicalPhasePanel?.defenseSummary");
     expect(source).toContain("liveModifiers: inspectorIsHistorical");
-    expect(source).toContain("? undefined\n                        : phaseKey");
-    expect(source).toContain(
-      "attackStats: inspectorIsHistorical ? null : phaseLoadoutSummary.attackStats",
+    expect(source).toMatch(
+      /liveModifiers:\s*inspectorIsHistorical\s*\?\s*undefined\s*:\s*phaseKey/,
+    );
+    expect(source).toMatch(
+      /attackStats:\s*inspectorIsHistorical\s*\?\s*null\s*:\s*phaseLoadoutSummary\.attackStats/,
     );
     expect(source).toContain("phaseDefenseStats: inspectorIsHistorical ? null : phaseDefenseStats");
-    expect(source).toContain("inspectorPanelSnapshot?.modifierSummary?.rows ?? []");
+    expect(source).toContain("archivedInspectorPresentation?.modifierRows ??");
+    expect(source).toContain("inspectorPanelSnapshot?.modifierSummary?.rows");
     expect(source).toContain("const recordedModifierRows = buildRecordedCombatModifierRows({");
     expect(source).toContain(
       "Phase filtering belongs to calculation totals, not historical visibility.",
@@ -776,16 +968,21 @@ describe("CombatRoundManagerPanel", () => {
     expect(distancePanelSource).not.toContain("<select");
     expect(distancePanelSource).not.toContain("<label");
     expect(distancePanelSource).not.toContain("onClick");
-    expect(source).toContain("preActionControls={inspectorPreActionControls}");
+    expect(source).toContain("inspectorSelectionIsCurrentProgression");
+    expect(source).toContain("? inspectorPreActionControls");
     expect(source).toContain('inspectorRoundEndDistanceAction?.kind === "roll"');
     expect(source).toContain('inspectorRoundEndDistanceAction?.kind === "commit"');
     expect(source).toContain('inspectorRoundEndTask?.kind === "distance_roll"');
     expect(source).toContain('inspectorRoundEndTask?.kind === "distance_commit"');
+    expect(source).toContain("task.id === combatPresentation.active.currentAction?.taskId");
+    expect(source).not.toContain(
+      "task.trackerFacet.owner?.participantId === roundState.currentCursor?.participantId",
+    );
     expect(source).toContain("inspectorRoundEndDistanceControlComplete ? (");
     expect(source).toContain("getCombatRoundEndDistanceProposalLifecycle");
-    expect(source).toContain("projectedBoundaryTransitionTask?.transition");
-    expect(source).toContain('latestCombatEventSummary.shortTitle === "Distance control rolled"');
-    expect(source).toContain('latestCombatEventSummary.shortTitle === "Distance control applied"');
+    expect(source).toContain("projectedBoundaryTransitionAction");
+    expect(source).not.toContain("latestCombatEventSummary");
+    expect(source).toContain("gmCurrentStepResultPresentation");
     expect(source).toContain("commitRoundEndDistanceControl(");
     expect(source).toContain("inspectorRoundEndDistanceAction.proposal.id");
   });
@@ -794,16 +991,16 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("const projectedCurrentTasks = getCombatProgressionPresentationTasks");
-    expect(source).toContain(
-      "const currentTaskSelection = projectedCurrentTask?.trackerFacet.owner",
-    );
+    expect(source).toContain("buildCombatRoundLiveInspectorContext(currentTask)");
+    expect(source).toContain("getCombatRoundLiveInspectorSelection({");
     expect(source).toContain("function selectCurrentTask()");
     expect(source).toContain("manualSelectionRef.current = undefined");
     expect(source).toContain("pendingSelectionRef.current = undefined");
     expect(source).toContain("setInspectionSelection(");
     expect(source).toContain("resolveCombatRoundInspectionSelection({");
-    expect(source).toContain("scrollToCurrent: true");
-    expect(source).toContain('scrollMode: "center"');
+    expect(source).toContain("manualSelection: currentTaskSelection");
+    expect(source).toContain("participantId: currentTaskSelection.participantId");
+    expect(source).toContain('"center"');
     expect(source).toContain("disabled={saving || !currentTaskSelection}");
     expect(source).toContain("onClick={selectCurrentTask}");
     expect(source).not.toContain("selectCurrentTaskOnServer");
@@ -826,22 +1023,23 @@ describe("CombatRoundManagerPanel", () => {
   it("routes current-step advance through a narrow encounter command", () => {
     const source = readSource();
 
-    expect(source).toContain("updateEncounterOnServer");
+    expect(source).not.toContain("updateEncounterOnServer");
     expect(source).toContain("buildCombatRoundStepSnapshots");
     expect(source).toContain("advanceCombatRoundCurrentStepOnServer");
-    expect(source).toContain("prepareCombatRoundEndReviewOnServer");
+    expect(source).toContain("advanceDeterministicCombatOnServer");
+    expect(source).toContain("projectedDeterministicTask");
     expect(source).toContain("await advanceCombatRoundCurrentStepOnServer({");
+    expect(source).toContain("commandType: boundaryTransitionAction.commandType");
+    expect(source).toContain("executionGroupId: boundaryTransitionAction.executionGroupId");
     expect(source).toContain("stepSnapshots,");
     expect(source).toContain("getCombatRoundManagerStateFromCommandEnvelope({");
     expect(source).not.toContain("advanceCombatRoundStep(");
     expect(source).toContain("attackResult");
-    expect(source).toContain("autoPrepareRoundEndReviewState(nextRoundState)");
-    expect(source).toContain("combatRoundState: stateToPersist");
-    expect(source).toContain("currentRound: stateToPersist.roundNumber");
+    expect(source).not.toContain("autoPrepareRoundEndReviewState(nextRoundState)");
     expect(source).toContain("submitCombatDeclarationOnServer");
     expect(source).toContain("phaseWeaponNames: {");
     expect(source).toContain("clearCurrentCombatRoundStepOnServer");
-    expect(source).toContain("updateScenarioParticipantStateOnServer");
+    expect(source).toContain("commitRoundEndParticipantReviewOnServer");
     expect(source).toContain(
       "const currentSelection = getCurrentCombatRoundTaskSelection(roundState)",
     );
@@ -851,6 +1049,27 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("participantId: clearedSelection.participantId");
     expect(source).toContain("step: clearedSelection.step");
     expect(source).not.toContain("actionLog:");
+  });
+
+  it("submits Start next round from one revision-bound projected action", () => {
+    const source = readPanelSource();
+
+    expect(source).toContain("buildCombatBoundaryTransitionAction({");
+    expect(source).toContain("encounterRevision: descriptorRevision");
+    expect(source).toContain("getCombatRoundDescriptorRevision({");
+    expect(source).toContain("resolveCombatTaskCommandContext({");
+    expect(source).toContain('case "complete_round"');
+    expect(source).toContain("commitCurrentStep(descriptor)");
+    expect(source).toContain("expectedRevision: boundaryTransitionAction.expectedRevision");
+    expect(source).toContain("taskId: boundaryTransitionAction.taskId");
+    expect(source).not.toContain("expectedRevision: encounter.updatedAt");
+    expect(source).toContain("boundaryTransitionInFlightRef.current");
+    expect(source).toContain("canAcceptCombatRoundViewRevision({");
+    expect(source).toContain("acceptedEncounterRevisionRef.current = {");
+    expect(source).toContain("getCombatMutationConflictCode(caughtError)");
+    expect(source).toContain("await refreshCanonicalCombatAfterConflict(caughtError)");
+    expect(source).toContain("loadEncounterById(roundView.encounterId)");
+    expect(source).toContain("The current action was refreshed; review it before retrying.");
   });
 
   it("routes phase damage commit through a narrow command instead of browser mutation", () => {
@@ -878,7 +1097,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(saveHandler).toContain("await saveCurrentCombatDamageReviewOnServer({");
     expect(saveHandler).toContain("review: buildCombatDamageReviewFromDraft({");
     expect(saveHandler).toContain("getCombatRoundManagerStateFromCommandEnvelope({");
-    expect(saveHandler).toContain("setRoundState(nextRoundState)");
+    expect(saveHandler).toContain("setRoundState(nextRoundState, nextEncounter.updatedAt)");
     expect(saveHandler).toContain("onEncounterUpdated?.(nextEncounter)");
     expect(saveHandler).not.toContain("reviewCombatRoundDamageResult({");
     expect(saveHandler).not.toContain("persistRoundState(");
@@ -888,18 +1107,15 @@ describe("CombatRoundManagerPanel", () => {
   it("routes the GM current distance-control roll through a narrow command", () => {
     const source = readSource();
     const rollStart = source.indexOf(
-      "async function rollRoundEndDistanceControlFromPrimaryAction()",
+      "async function rollRoundEndDistanceControlFromPrimaryAction(",
     );
-    const rollEnd = source.indexOf(
-      "async function advanceInspectorPhaseResolutionSubstep",
-      rollStart,
-    );
+    const rollEnd = source.indexOf("function invokeGmCurrentAction", rollStart);
     const rollHandler = source.slice(rollStart, rollEnd);
 
     expect(rollStart).toBeGreaterThan(-1);
     expect(rollHandler).toContain("await rollCurrentRoundEndDistanceControlOnServer({");
     expect(rollHandler).toContain("getCombatRoundManagerStateFromCommandEnvelope({");
-    expect(rollHandler).toContain("setRoundState(nextRoundState)");
+    expect(rollHandler).toContain("acceptCanonicalEncounterState(nextEncounter, nextRoundState)");
     expect(rollHandler).toContain("onEncounterUpdated?.(nextEncounter)");
     expect(rollHandler).not.toContain("rollCombatRoundEndDistanceControl({");
     expect(rollHandler).not.toContain("persistRoundState(");
@@ -925,8 +1141,8 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("function focusRoundTable(");
-    expect(source).toContain("scrollMode?: CombatRoundTimelineScrollMode");
     expect(source).toContain("input.scrollIntoView !== false");
+    expect(source).toContain("setTrackerPositionRequest((current) => current + 1)");
     expect(source).toContain(
       "focusRoundTable({ scrollIntoView: false, scrollToCurrent: true, state: nextRoundState })",
     );
@@ -937,7 +1153,7 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("const [inspectionSelection, setInspectionSelection]");
-    expect(source).toContain("combatProgressionTrackerIndex.byCellKey");
+    expect(source).toContain("input.progressionTrackerIndex?.byCellKey[cellKey]");
     expect(source).toContain("inspectorSelectionIsCurrentProgression");
     expect(source).toContain(
       'inspector.step === "initiative_phase_1" || inspector.step === "initiative_phase_2"',
@@ -954,9 +1170,8 @@ describe("CombatRoundManagerPanel", () => {
       "const currentTaskStep = currentTaskSelection?.step ?? roundState.currentStep",
     );
     expect(source).toContain("getBoundaryTransitionButtonLabel(");
-    expect(source).toContain("projectedBoundaryTransitionTask.transition.targetBoundary");
-    expect(source).toContain("Historical step:");
-    expect(source).toContain("inspectorHistoricalStepOutcome?.message ??");
+    expect(source).toContain("projectedBoundaryTransitionAction.targetBoundary");
+    expect(source).toContain("context={inspectorHistoricalStatusLabel}");
     expect(source).toContain(": `Current step: ${getPlayerCombatStepLabel(");
     expect(source).toContain("inspector.step,");
     expect(source).not.toContain("inspectorSnapshot ? inspector.step : roundState.currentStep");
@@ -967,16 +1182,13 @@ describe("CombatRoundManagerPanel", () => {
   it("uses the GM initiative commit action once phase initiative is complete", () => {
     const source = readSource();
 
-    expect(source).toContain("const inspectorPhaseInitiativeCommitLabel =");
-    expect(source).toContain("`Commit ${formatCombatPhaseLabel");
-    expect(source).toContain("initiative`");
-    expect(source).toMatch(
-      /inspectorPhaseInitiativeCommitLabel\s+\? inspectorPhaseInitiativeCommitLabel/,
+    expect(source).toContain('case "commit_phase_initiative_resolution"');
+    expect(source).toContain("commitCurrentStep(descriptor)");
+    expect(source).toContain('expectedCommandTypes: ["commit_phase_initiative_resolution"]');
+    expect(source).toContain(
+      'requiredFields: ["executionGroupId", "expectedRevision", "phase", "taskId"]',
     );
-    expect(source).toMatch(/inspectorPhaseInitiativeCommitLabel\s+\? commitCurrentStep\(\)/);
-    expect(source.indexOf("inspectorPhaseInitiativeCommitLabel")).toBeLessThan(
-      source.search(/inspectorCurrentStepIsInitiative\s+\? rollInspectorInitiative\(\)/),
-    );
+    expect(source).toContain("commitPhaseInitiativeResolutionOnServer({");
   });
 
   it("uses canonical command envelopes for initiative commit and attack roll state selection", () => {
@@ -997,12 +1209,32 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("setInspectionSelection(nextInspectionSelection)");
     expect(source).not.toContain("commandEnvelope.commands");
     expect(source).not.toContain("commandEnvelope.state");
-    expect(source.indexOf("await commitPhaseInitiativeResolutionOnServer({")).toBeLessThan(
-      source.indexOf("getCombatRoundManagerStateFromCommandEnvelope({"),
+    const initiativeMutationIndex = source.indexOf(
+      "await commitPhaseInitiativeResolutionOnServer({",
+    );
+    expect(initiativeMutationIndex).toBeLessThan(
+      source.indexOf("getCombatRoundManagerStateFromCommandEnvelope({", initiativeMutationIndex),
     );
     expect(source.indexOf("await rollCombatAttackOnServer({")).toBeLessThan(
       source.lastIndexOf("getCombatRoundManagerStateFromCommandEnvelope({"),
     );
+  });
+
+  it("adopts the final SU command envelope instead of retaining the completed review selection", () => {
+    const source = readSource();
+    const mutationIndex = source.indexOf("await commitRoundEndParticipantReviewOnServer({");
+    const nextHandlerIndex = source.indexOf(
+      'if (descriptor.commandType === "roll_round_end_health_check")',
+      mutationIndex,
+    );
+    const handler = source.slice(mutationIndex, nextHandlerIndex);
+
+    expect(handler).toContain("commandEnvelope,");
+    expect(handler).toContain("getCombatRoundManagerStateFromCommandEnvelope({");
+    expect(handler).toContain("pendingSelectionRef.current = undefined");
+    expect(handler).toContain("manualSelectionRef.current = undefined");
+    expect(handler).toContain("setInspectionSelection(nextInspectionSelection)");
+    expect(handler).not.toContain('step: "round_summary"');
   });
 
   it("guards recorded attack results against accidental re-rolls", () => {
@@ -1010,7 +1242,7 @@ describe("CombatRoundManagerPanel", () => {
 
     expect(source).toContain("const inspectorSelectedAttackAlreadyRolled = Boolean(");
     expect(source).toContain(
-      "const inspectorActionButtonLabel = projectedBoundaryTransitionTask?.transition",
+      "const inspectorActionButtonLabel = projectedBoundaryTransitionAction",
     );
     expect(source).toContain(": inspectorSelectedAttackAlreadyRolled");
     expect(source).toContain('? "Attack already rolled"');
@@ -1033,10 +1265,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("setCombatExperienceDifficultyOnServer");
     expect(source).toContain("getParticipantCombatExperienceSkillTotalLookup");
     expect(source).toContain("formatCombatExperienceStatus");
-    expect(source).toContain("formatCombatExperienceCalculation");
+    expect(source).not.toContain("formatCombatExperienceCalculation");
     expect(source).not.toContain("formatCombatExperienceEffectiveTableLine");
     expect(source).not.toContain("Effective CE table result");
-    expect(source).toContain("formatCombatExperienceEffectLine");
+    expect(source).not.toContain("formatCombatExperienceEffectLine");
     expect(source).toContain("const inspectorCombatExperienceRequired =");
     expect(source).toContain("const inspectorCombatExperienceIsCombatStart =");
     expect(source).toContain("visibility: encounter.roleplayState?.visibility");
@@ -1054,7 +1286,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(
       "inspectorCombatExperienceSkillTotal >= activeCombatExperienceDifficulty",
     );
-    expect(source).toContain("const inspectorCombatExperienceDifficultyCommandPending =");
+    expect(source).toContain('inspectorCurrentCommandType === "set_combat_experience_difficulty"');
     expect(source).toContain("const inspectorCombatExperienceActionLabel =");
     expect(source).toContain("const combatExperienceDifficultyControlsDisabled =");
     expect(source).toContain("Start Combat Experience rolls");
@@ -1082,15 +1314,18 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Pending rolls: {inspectorInitiativeRollCounts.pending} of");
     expect(source).toContain("Effective CE {inspectorCombatExperienceSkillTotal}");
     expect(source).toContain("showInspectorModifierReviewContextPanel");
-    expect(source).toContain("Review generated and manual modifiers before advancing.");
+    expect(source).toContain("Current effects:");
+    expect(source).toContain("Proposed:");
+    expect(source).toContain("GM changes:");
+    expect(source).toContain("Ready to commit");
     expect(source).not.toContain("Selected choice:");
     expect(source).not.toContain(">Status:");
     expect(source).not.toContain("inspectorPhaseInitiativeChoiceStatuses");
     expect(source).not.toContain("Phase initiative choices");
     expect(source).toContain("inspectorCombatExperienceRequired");
-    expect(source).toContain("rollInspectorCombatExperience()");
+    expect(source).toContain("rollInspectorCombatExperience(descriptor)");
     expect(source).toContain("backOutPhaseAttackOnServer");
-    expect(source).toContain("backOutInspectorPhaseAttack()");
+    expect(source).toContain("backOutInspectorPhaseAttack(descriptor)");
     expect(source).toContain("continuePhaseAttackOnServer");
     expect(source).toContain("commitPhaseInitiativeResolutionOnServer");
     expect(source).toContain("inspectorPhaseAttackBackOutOpportunity");
@@ -1107,15 +1342,16 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('"Continue and roll CE"');
     expect(source).toContain('"Back out of attack (-2 DB/Parry penalty)"');
     expect(source).toContain('"Back out of attack (no CE roll)"');
-    expect(source).toContain("inspectorPhaseInitiativeChoiceResultPanel");
-    expect(source).toContain("buildPhaseInitiativeChoiceResultPanel");
+    expect(source).not.toContain("inspectorPhaseInitiativeChoiceResultPanel");
+    expect(source).not.toContain("buildPhaseInitiativeChoiceResultPanel");
     expect(source).toContain('<option value="continue">');
-    expect(source).toContain("preActionControls={inspectorPreActionControls}");
-    expect(source).toContain("? saveCombatExperienceDifficultyDraft()");
-    expect(source).toContain("? backOutInspectorPhaseAttack()");
+    expect(source).toContain("inspectorSelectionIsCurrentProgression");
+    expect(source).toContain("? inspectorPreActionControls");
+    expect(source).toContain("saveCombatExperienceDifficultyDraft(descriptor)");
+    expect(source).toContain("backOutInspectorPhaseAttack(descriptor)");
     expect(source).toContain("inspectorSkipActionOutcomeSelectorAvailable");
     expect(source).toContain("inspectorCurrentActionOutcomeControls");
-    expect(source).toContain("inspectorEffectiveActionButtonLabel");
+    expect(source).not.toContain("inspectorEffectiveActionButtonLabel");
     expect(source).toContain("inspectorEffectiveActionButtonDisabled");
     expect(source).toContain("inspectorSkipActionSelected");
     expect(source).not.toMatch(/secondaryButtonLabel=\{[^}]*Back out of attack/s);
@@ -1123,14 +1359,10 @@ describe("CombatRoundManagerPanel", () => {
       "onSecondaryAction={() => void skipInspectorCurrentPhaseAction()}",
     );
     expect(source).toContain("Back out of attack");
-    expect(source.indexOf("? rollInspectorCombatExperience()")).toBeLessThan(
-      source.indexOf(": inspectorCurrentStepIsInitiative"),
-    );
-    expect(source.indexOf("? rollInspectorCombatExperience()")).toBeLessThan(
-      source.search(/rollInspectorPhaseAttack\(\s*inspectorCurrentAttackPhase/s),
-    );
+    expect(source).toContain('case "roll_combat_experience"');
+    expect(source).toContain("rollInspectorCombatExperience(descriptor)");
     expect(source).toContain("Combat Experience");
-    expect(source).toContain("Latest combat event");
+    expect(source).toContain("<CombatLog");
   });
 
   it("uses stable unique keys for repeated warning rows", () => {
@@ -1142,5 +1374,29 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("damage-commit-readiness-warning");
     expect(source).toContain("end-review-health-roll-warning");
     expect(source).toContain("end-review-warning");
+  });
+
+  it("routes a projected phase Combat Experience task through the CE mutation", () => {
+    const source = readSource();
+    const dispatchStart = source.indexOf('case "submit_phase_initiative_choice"');
+    const dispatchEnd = source.indexOf('case "set_combat_experience_difficulty"', dispatchStart);
+    const phaseChoiceDispatch = source.slice(dispatchStart, dispatchEnd);
+
+    expect(source).toContain('currentActionPresentation?.taskKind === "combat_experience"');
+    expect(phaseChoiceDispatch).toContain("inspectorPhaseCombatExperienceRequirement");
+    expect(phaseChoiceDispatch).toContain("rollInspectorCombatExperience(descriptor)");
+  });
+
+  it("keeps accepted SU health calculations out of unresolved review context", () => {
+    const source = readSource();
+    const panelStart = source.indexOf("function CombatRoundEndParticipantReviewPanel");
+    const panelEnd = source.indexOf("function CombatRoundEndDistanceControlPanel", panelStart);
+    const panelSource = source.slice(panelStart, panelEnd);
+
+    expect(panelSource).toContain('proposal.status === "pending"');
+    expect(panelSource).toContain("Pending Health check");
+    expect(panelSource).toContain("review?.canonicalReview?.requirements");
+    expect(panelSource).not.toContain("result.finalTotal");
+    expect(panelSource).not.toContain("Bleed reduced");
   });
 });

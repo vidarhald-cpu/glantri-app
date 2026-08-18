@@ -4,7 +4,12 @@ import type {
   ScenarioParticipantCombatContext,
   ScenarioParticipantState,
 } from "../campaign/scenario";
-import type { CombatEffect, CombatEffectEvent, CombatEffectsState } from "./combatEffects";
+import {
+  getCombatEffectEffectiveStatus,
+  type CombatEffect,
+  type CombatEffectEvent,
+  type CombatEffectsState,
+} from "./combatEffects";
 import {
   isCombatModifierContributionActive,
   normalizeScenarioCombatModifierEntry,
@@ -15,12 +20,14 @@ export const PERSISTENT_COMBAT_MODIFIER_SOURCE_TYPE = "character_effect" as cons
 
 export interface ProjectPersistentCombatEffectModifiersInput {
   combatEffects?: CombatEffectsState;
+  currentInitiativeGroupId?: string;
   currentRound?: number;
 }
 
 export interface PersistentCombatEffectModifierProjection {
   importedEffectIds: string[];
   modifierBuckets: ScenarioParticipantCombatContext["modifierBuckets"];
+  pendingModifierEntries: ScenarioCombatModifierEntry[];
   specialEffectIds: string[];
   specialEffectCount: number;
 }
@@ -35,6 +42,7 @@ export interface MergedCombatModifierTotals {
 export interface LiveCombatModifierContributionProjectionInput {
   combatContext?: ScenarioParticipantCombatContext;
   combatEffects?: CombatEffectsState;
+  currentInitiativeGroupId?: string;
   currentRound?: number;
   encounterId?: string;
   ownerParticipantId?: string;
@@ -49,6 +57,7 @@ export interface LiveCombatModifierContributionProjectionInput {
  */
 export interface LiveCombatModifierContributionProjection {
   contributions: CombatModifierContribution[];
+  pendingModifierEntries: ScenarioCombatModifierEntry[];
   sourceEntries: ReadonlyMap<string, ScenarioCombatModifierEntry>;
   specialEffectIds: string[];
   specialEffectCount: number;
@@ -115,18 +124,20 @@ export function normalizeCombatModifierRowsForEncounter(
   };
 }
 
-function isEffectActiveForRound(effect: CombatEffect, currentRound?: number): boolean {
+function isEffectActiveForRound(
+  effect: CombatEffect,
+  currentRound?: number,
+  currentInitiativeGroupId?: string,
+): boolean {
   return (
-    effect.status === "active" &&
+    getCombatEffectEffectiveStatus(effect, { currentInitiativeGroupId }) === "active" &&
     (currentRound === undefined ||
       effect.expiresAtRound === undefined ||
       effect.expiresAtRound >= currentRound)
   );
 }
 
-function getScenarioBucket(
-  effect: CombatEffect,
-): ScenarioCombatModifierBucket | undefined {
+function getScenarioBucket(effect: CombatEffect): ScenarioCombatModifierBucket | undefined {
   // Damage, bleed, and healing facts are physical/special effects. Even malformed legacy rows
   // carrying a bucket must not turn those facts into generic numeric combat modifiers.
   if (
@@ -161,34 +172,53 @@ function getImportedModifierLabel(effect: CombatEffect, event?: CombatEffectEven
   }
 
   return (
-    effect.description?.trim() ||
-    event?.description.trim() ||
-    effect.type.replaceAll("_", " ")
+    effect.description?.trim() || event?.description.trim() || effect.type.replaceAll("_", " ")
   );
 }
 
-export function isPersistentCombatModifierEntry(
-  entry: ScenarioCombatModifierEntry,
-): boolean {
+export function isPersistentCombatModifierEntry(entry: ScenarioCombatModifierEntry): boolean {
   return entry.sourceType === PERSISTENT_COMBAT_MODIFIER_SOURCE_TYPE;
 }
 
 function buildImportedEntry(input: {
+  canonicalLifecycle?: CombatEffect["canonicalLifecycle"];
   effect: CombatEffect;
   event?: CombatEffectEvent;
 }): ScenarioCombatModifierEntry {
+  const canonical = input.canonicalLifecycle ?? input.effect.canonicalLifecycle;
+  const canonicalNumeric = canonical?.payload.kind === "numeric" ? canonical.payload : undefined;
+  const canonicalDuration = canonical?.lifecycle.duration;
   return {
+    application:
+      canonicalNumeric?.unit === "percentage"
+        ? "percentage"
+        : canonicalNumeric?.unit === "flat_db"
+          ? "flat_db"
+          : undefined,
+    canonicalLifecycle: canonical,
+    canonicalTransitions: input.effect.canonicalTransitions ?? [],
+    combatWide:
+      canonical?.applicability.combatWide ??
+      input.effect.combatWide ??
+      (input.event?.sourceLabel === "Combat Experience" && !input.effect.initiativePhase
+        ? true
+        : undefined),
+    durationRounds: canonicalDuration?.kind === "rounds" ? canonicalDuration.remaining : undefined,
     expiresAtRound: input.effect.expiresAtRound,
+    excludedRollPurposes: input.effect.excludedRollPurposes,
     generated: false,
     id: `import:character_effect:${input.effect.id}:${input.effect.combatModifierBucket}`,
     imported: true,
     notes: getImportedModifierLabel(input.effect, input.event),
     readOnly: true,
     scope: "until",
-    sourceDuration: input.effect.duration?.trim() || undefined,
+    sourceDuration:
+      canonicalDuration?.kind === "rounds"
+        ? `${canonicalDuration.remaining} ${canonicalDuration.remaining === 1 ? "round" : "rounds"}`
+        : input.effect.duration?.trim() || undefined,
     sourceEffectId: input.effect.id,
     sourceType: PERSISTENT_COMBAT_MODIFIER_SOURCE_TYPE,
-    value: input.effect.modifierValue ?? 0,
+    value: canonicalNumeric?.value ?? input.effect.modifierValue ?? 0,
   };
 }
 
@@ -201,6 +231,7 @@ export function projectPersistentCombatEffectModifiers(
 ): PersistentCombatEffectModifierProjection {
   const modifierBuckets = emptyModifierBuckets();
   const importedEffectIds: string[] = [];
+  const pendingModifierEntries: ScenarioCombatModifierEntry[] = [];
   const specialEffectIds: string[] = [];
   const eventsById = new Map(
     (input.combatEffects?.events ?? []).map((event) => [event.id, event] as const),
@@ -210,7 +241,23 @@ export function projectPersistentCombatEffectModifiers(
   );
 
   for (const effect of effects) {
-    if (!isEffectActiveForRound(effect, input.currentRound)) {
+    if (
+      getCombatEffectEffectiveStatus(effect, {
+        currentInitiativeGroupId: input.currentInitiativeGroupId,
+      }) === "pending"
+    ) {
+      if (
+        getScenarioBucket(effect) &&
+        effect.modifierValue !== undefined &&
+        Number.isFinite(effect.modifierValue)
+      ) {
+        pendingModifierEntries.push(
+          buildImportedEntry({ effect, event: eventsById.get(effect.sourceEventId) }),
+        );
+      }
+      continue;
+    }
+    if (!isEffectActiveForRound(effect, input.currentRound, input.currentInitiativeGroupId)) {
       continue;
     }
 
@@ -223,7 +270,15 @@ export function projectPersistentCombatEffectModifiers(
       continue;
     }
 
+    const canonicalLifecycle =
+      effect.canonicalLifecycle?.lifecycle.state === "pending_activation"
+        ? {
+            ...effect.canonicalLifecycle,
+            lifecycle: { ...effect.canonicalLifecycle.lifecycle, state: "active" as const },
+          }
+        : effect.canonicalLifecycle;
     const entry = buildImportedEntry({
+      canonicalLifecycle,
       effect,
       event: eventsById.get(effect.sourceEventId),
     });
@@ -242,6 +297,7 @@ export function projectPersistentCombatEffectModifiers(
   return {
     importedEffectIds,
     modifierBuckets,
+    pendingModifierEntries,
     specialEffectCount: specialEffectIds.length,
     specialEffectIds,
   };
@@ -262,6 +318,7 @@ function replaceImportedEntries(
 export function mergePersistentCombatEffectModifiers(input: {
   combatContext?: ScenarioParticipantCombatContext;
   combatEffects?: CombatEffectsState;
+  currentInitiativeGroupId?: string;
   currentRound?: number;
 }): ScenarioParticipantCombatContext {
   const current = input.combatContext ?? { modifierBuckets: emptyModifierBuckets() };
@@ -320,10 +377,12 @@ export function buildLiveCombatModifierContributionProjection(
   const combatContext = mergePersistentCombatEffectModifiers({
     combatContext: input.combatContext,
     combatEffects: input.combatEffects,
+    currentInitiativeGroupId: input.currentInitiativeGroupId,
     currentRound: input.currentRound,
   });
   const persistentProjection = projectPersistentCombatEffectModifiers({
     combatEffects: input.combatEffects,
+    currentInitiativeGroupId: input.currentInitiativeGroupId,
     currentRound: input.currentRound,
   });
   const resolutionContext = {
@@ -341,6 +400,10 @@ export function buildLiveCombatModifierContributionProjection(
     const entries = combatContext.modifierBuckets[bucketKey];
 
     for (const entry of entries) {
+      // Explicit source-defined or legacy flat DB points are composed directly into DB after
+      // percentage adjustment. They must never affect Parry merely because legacy storage shares
+      // the situationDb bucket.
+      if (entry.application === "flat_db") continue;
       if (seenIds.has(entry.id)) continue;
 
       const contribution = normalizeScenarioCombatModifierEntry({
@@ -361,10 +424,45 @@ export function buildLiveCombatModifierContributionProjection(
 
   return {
     contributions,
+    pendingModifierEntries: persistentProjection.pendingModifierEntries,
     sourceEntries,
     specialEffectCount: persistentProjection.specialEffectCount,
     specialEffectIds: persistentProjection.specialEffectIds,
   };
+}
+
+/**
+ * Projects the bounded direct-point DB compatibility rows separately from percentage DB/Parry.
+ * Callers must still resolve these contributions against their exact calculation context.
+ */
+export function buildLiveCombatFlatDbModifierContributions(
+  input: LiveCombatModifierContributionProjectionInput,
+): CombatModifierContribution[] {
+  const ownerParticipantId = input.ownerParticipantId ?? "unknown-participant";
+  const combatContext = mergePersistentCombatEffectModifiers({
+    combatContext: input.combatContext,
+    combatEffects: input.combatEffects,
+    currentInitiativeGroupId: input.currentInitiativeGroupId,
+    currentRound: input.currentRound,
+  });
+  const context = {
+    ownerParticipantId,
+    ...(input.encounterId ? { encounterId: input.encounterId } : {}),
+    ...(input.currentRound !== undefined ? { roundNumber: input.currentRound } : {}),
+  };
+
+  return combatContext.modifierBuckets.situationDb.flatMap((entry) => {
+    if (entry.application !== "flat_db") return [];
+    const contribution = normalizeScenarioCombatModifierEntry({
+      bucket: "situation_db",
+      currentRound: input.currentRound,
+      entry,
+      ownerParticipantId,
+    });
+    return contribution && isCombatModifierContributionActive(contribution, context)
+      ? [contribution]
+      : [];
+  });
 }
 
 /**
@@ -389,8 +487,13 @@ export function refreshScenarioParticipantPersistentCombatModifiers(input: {
   };
 }
 
-function sum(entries: readonly ScenarioCombatModifierEntry[]): number {
-  return entries.reduce((total, entry) => total + entry.value, 0);
+function sum(
+  entries: readonly ScenarioCombatModifierEntry[],
+  application: ScenarioCombatModifierEntry["application"] = "percentage",
+): number {
+  return entries
+    .filter((entry) => (entry.application ?? "percentage") === application)
+    .reduce((total, entry) => total + entry.value, 0);
 }
 
 export function getMergedCombatModifierTotals(
@@ -464,4 +567,18 @@ export function getMergedCombatDbParryModifierTotal(input: {
       ),
     },
   }).dbParry;
+}
+
+/** Explicit source-defined or legacy flat DB points apply after adjustment and never affect Parry. */
+export function getMergedCombatDbFlatAdjustmentTotal(input: {
+  combatContext?: ScenarioParticipantCombatContext;
+  phase?: "phase1" | "phase2";
+}): number {
+  const entries = input.combatContext?.modifierBuckets.situationDb ?? [];
+  return sum(
+    entries.filter(
+      (entry) => !input.phase || !entry.sourcePhase || entry.sourcePhase === input.phase,
+    ),
+    "flat_db",
+  );
 }

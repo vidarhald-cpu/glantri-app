@@ -1,21 +1,22 @@
-import type {
-  CharacterLoadout,
-  EquipmentItem,
-} from "./types";
+import type { CanonicalEquipmentItem, CharacterLoadout, EquipmentItem } from "./types";
 import { isStoredCarryMode } from "./derived";
 
-export function validateEquipmentItem(item: EquipmentItem): string[] {
+export function validateEquipmentItem(item: CanonicalEquipmentItem): string[] {
   const errors: string[] = [];
 
-  if (!item.characterId) {
-    errors.push("characterId is required");
+  if (item.characterId !== item.holderCharacterId) {
+    errors.push("characterId must be derived from holderCharacterId");
   }
 
   if (!item.templateId) {
     errors.push("templateId is required");
   }
 
-  if (!item.storageAssignment.locationId) {
+  if (item.holderCharacterId === null && item.storageAssignment !== null) {
+    errors.push("an unheld item cannot use a Character storage assignment");
+  }
+
+  if (item.storageAssignment && !item.storageAssignment.locationId) {
     errors.push("storageAssignment.locationId is required");
   }
 
@@ -25,22 +26,16 @@ export function validateEquipmentItem(item: EquipmentItem): string[] {
 
   if (
     item.isEquipped != null &&
-    item.isEquipped !== (item.storageAssignment.carryMode === "equipped")
+    item.isEquipped !== (item.storageAssignment?.carryMode === "equipped")
   ) {
     errors.push("isEquipped must match storageAssignment.carryMode");
   }
 
-  if (
-    item.conditionState === "broken" &&
-    item.storageAssignment.carryMode === "equipped"
-  ) {
+  if (item.conditionState === "broken" && item.storageAssignment?.carryMode === "equipped") {
     errors.push("broken items cannot be equipped");
   }
 
-  if (
-    item.conditionState === "lost" &&
-    item.storageAssignment.carryMode !== "stored"
-  ) {
+  if (item.conditionState === "lost" && item.storageAssignment?.carryMode !== "stored") {
     errors.push("lost items cannot remain in an active carry mode");
   }
 
@@ -105,27 +100,25 @@ export function validateLoadout(
       continue;
     }
 
+    if (!item.storageAssignment) {
+      errors.push(`Unassigned item cannot be part of active loadout: ${itemId}`);
+      continue;
+    }
+
     if (isStoredCarryMode(item.storageAssignment.carryMode)) {
       errors.push(`Stored item cannot be part of active loadout: ${itemId}`);
     }
 
     if (item.conditionState === "broken" || item.conditionState === "lost") {
-      errors.push(
-        `Broken or lost item cannot be part of active loadout: ${itemId}`,
-      );
+      errors.push(`Broken or lost item cannot be part of active loadout: ${itemId}`);
     }
 
     if (item.category !== category) {
-      errors.push(
-        `${label} must reference a ${category} item: ${itemId}`,
-      );
+      errors.push(`${label} must reference a ${category} item: ${itemId}`);
     }
   }
 
-  const ancillaryItemIds = [
-    ...loadout.activeAmmoItemIds,
-    ...loadout.quickAccessItemIds,
-  ];
+  const ancillaryItemIds = [...loadout.activeAmmoItemIds, ...loadout.quickAccessItemIds];
 
   for (const itemId of ancillaryItemIds) {
     const item = ctx.itemsById[itemId];
@@ -135,14 +128,17 @@ export function validateLoadout(
       continue;
     }
 
+    if (!item.storageAssignment) {
+      errors.push(`Unassigned item cannot be part of active loadout: ${itemId}`);
+      continue;
+    }
+
     if (isStoredCarryMode(item.storageAssignment.carryMode)) {
       errors.push(`Stored item cannot be part of active loadout: ${itemId}`);
     }
 
     if (item.conditionState === "broken" || item.conditionState === "lost") {
-      errors.push(
-        `Broken or lost item cannot be part of active loadout: ${itemId}`,
-      );
+      errors.push(`Broken or lost item cannot be part of active loadout: ${itemId}`);
     }
   }
 

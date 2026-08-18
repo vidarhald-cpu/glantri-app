@@ -5,7 +5,20 @@ import type {
   CombatRoundCursorStep,
   CombatRoundPhase,
   CombatRoundPhaseResolutionCursor,
+  CombatRoundStep,
 } from "../combatRoundManager";
+import type { CombatParryPurpose, OffensiveParryRollPurpose } from "../combatOffensiveParry";
+import type {
+  CombatParticipationCompleteness,
+  CombatParticipationOrdering,
+  CombatParticipationReason,
+  CombatParticipationStatus,
+  CombatParticipationWorkClass,
+} from "../combatParticipation";
+import type {
+  CombatAutomationEligibilityFact,
+  PlayerSafeCombatAutomationEligibilityFact,
+} from "../combatAutomationEligibility";
 
 export const COMBAT_PROGRESSION_BOUNDARIES = [
   "declaration",
@@ -21,18 +34,49 @@ export const COMBAT_PROGRESSION_BOUNDARIES = [
 
 export type CombatProgressionBoundaryKind = (typeof COMBAT_PROGRESSION_BOUNDARIES)[number];
 
+/** Shared visible tracker step for a boundary when its exact current task is ownerless or hidden. */
+export function getCombatRoundStepForProgressionBoundary(
+  boundary: CombatProgressionBoundaryKind,
+): CombatRoundStep {
+  switch (boundary) {
+    case "declaration":
+      return "select_actions";
+    case "phase1_modifier_review":
+      return "review_action_modifiers";
+    case "phase1_initiative":
+      return "initiative_phase_1";
+    case "phase1_resolution":
+      return "phase_1_actions";
+    case "phase2_modifier_review":
+      return "review_phase_2_modifiers";
+    case "phase2_initiative":
+      return "initiative_phase_2";
+    case "phase2_resolution":
+      return "phase_2_actions";
+    case "round_end":
+    case "round_boundary":
+      return "round_summary";
+  }
+}
+
 export type CombatProgressionProcessKind =
   | "adjust_distance"
+  | "break_off"
+  | "disarm"
   | "attack_decision"
   | "attack"
   | "combat_experience"
+  | "continued_contact_maintenance"
   | "boundary_transition"
   | "declaration"
   | "distance"
+  | "effect_review"
   | "feint"
   | "health_review"
   | "initiative"
   | "modifier_review"
+  | "observation"
+  | "offensive_parry"
   | "participant_review"
   | "round_end";
 
@@ -40,15 +84,19 @@ export type CombatProgressionStageKind =
   | "attack"
   | "boundary"
   | "commit"
+  | "contest"
   | "critical"
   | "damage"
   | "defense"
   | "difficulty"
+  | "effect"
   | "decision"
   | "feasibility"
   | "health"
   | "hit_location"
   | "gm_adjustment"
+  | "opposed_rolls"
+  | "offensive_parry_contest"
   | "input"
   | "attacker_roll"
   | "defender_roll"
@@ -68,6 +116,7 @@ export type CombatProgressionExecutionStrategy =
   | "single_task";
 
 export type CombatProgressionStageState = "active" | "complete" | "pending";
+export type CombatProgressionExecutionGroupCompletionState = "complete" | "incomplete";
 export type CombatProgressionTaskState = "executable" | "waiting";
 
 export type CombatProgressionTaskKind =
@@ -77,8 +126,17 @@ export type CombatProgressionTaskKind =
   | "adjust_distance_defender_roll"
   | "adjust_distance_response"
   | "attack"
+  | "break_off_review"
+  | "break_off_escapee_roll"
+  | "break_off_attacker_roll"
+  | "break_off_commit"
+  | "disarm_actor_roll"
+  | "disarm_holder_roll"
+  | "disarm_commit"
   | "combat_experience"
+  | "continued_contact_maintenance_roll"
   | "critical"
+  | "damage_roll"
   | "damage_review"
   | "distance_commit"
   | "distance_roll"
@@ -86,12 +144,16 @@ export type CombatProgressionTaskKind =
   | "feint_attacker_roll"
   | "feint_commit"
   | "feint_defender_roll"
+  | "effect_review"
   | "gm_advance_boundary"
   | "health_review"
   | "hit_location"
   | "modifier_review"
+  | "offensive_parry_brawling_roll"
+  | "observation_roll"
   | "parry"
   | "participant_review"
+  | "round_end_prepare"
   | "roll_initiative"
   | "commit_initiative"
   | "submit_declaration";
@@ -140,13 +202,70 @@ export interface CombatProgressionTrackerFacet {
 
 /** Stable facts used to identify projected work without relying on a runtime cursor cell. */
 export interface CombatProgressionTaskIdentity {
+  readonly actionId?: string;
+  readonly attackIndex?: number;
+  readonly attackModeId?: string;
   readonly attackResultId?: string;
+  readonly attackerParticipantId?: string;
+  readonly criticalResultId?: string;
+  readonly contestId?: string;
+  readonly continuedContactId?: string;
+  readonly damageRollExpression?: string;
+  readonly damageReviewId?: string;
+  readonly declarationId?: string;
+  readonly disarmAttemptId?: string;
+  readonly declaredOpponentParticipantId?: string;
+  readonly defenderParticipantId?: string;
   readonly executionGroupId: string;
+  readonly healthRollId?: string;
+  readonly hitLocationResultId?: string;
+  readonly initiativeGroupId?: string;
+  readonly initiativeValue?: number;
   readonly opportunityId?: string;
+  readonly offensiveParryAttemptId?: string;
+  readonly observationAttemptId?: string;
+  readonly parryPurpose?: CombatParryPurpose;
+  readonly parryResultId?: string;
+  readonly parrySourceId?: string;
+  readonly rollPurpose?: OffensiveParryRollPurpose;
   readonly opponentParticipantId?: string;
   readonly pairId?: string;
+  readonly participantId?: string;
   readonly phase?: CombatRoundPhase;
   readonly proposalId?: string;
+  readonly relationshipId?: string;
+  readonly weaponInstanceId?: string;
+  readonly weaponSourceId?: string;
+  readonly weaponSourceSlot?: string;
+  readonly weaponTemplateId?: string;
+}
+
+export interface CombatProgressionPresentationReference {
+  readonly id?: string;
+  readonly label?: string;
+}
+
+/**
+ * Viewer-sanitizable facts used to explain a projected task. These facts describe the task's
+ * process context only; calculations, dice, proposal notes, and blockers deliberately stay out.
+ */
+export interface CombatProgressionTaskPresentationContext {
+  readonly actionKind?: string;
+  readonly attackOutcome?: "hit" | "miss";
+  readonly actor?: CombatantIdentity;
+  readonly distance?: {
+    readonly current?: number;
+    readonly direction?: string;
+    readonly requested?: number;
+  };
+  readonly difficulty?: number;
+  readonly damageRollExpression?: string;
+  readonly reason?: string;
+  readonly opponentRollRecorded?: boolean;
+  readonly responder?: CombatantIdentity;
+  readonly skill?: CombatProgressionPresentationReference;
+  readonly target?: CombatantIdentity;
+  readonly weapon?: CombatProgressionPresentationReference;
 }
 
 export interface CombatProgressionBoundaryTransition {
@@ -157,12 +276,26 @@ export interface CombatProgressionBoundaryTransition {
 
 export interface CombatProgressionTask {
   readonly allowedActors: readonly CombatProgressionAllowedActor[];
+  readonly automation: CombatAutomationEligibilityFact;
   readonly blockerIds: readonly string[];
   readonly expectedCommand: CombatProgressionExpectedCommand;
+  readonly executionGroupId: string;
   readonly id: string;
   readonly identity: CombatProgressionTaskIdentity;
   readonly kind: CombatProgressionTaskKind;
+  /** Visible combatant on the other side of this task, when the task has pair/target context. */
+  readonly opponent?: CombatantIdentity;
   readonly owner?: CombatProgressionTaskOwner;
+  readonly presentationContext?: CombatProgressionTaskPresentationContext;
+  readonly participation?: {
+    readonly completeness: CombatParticipationCompleteness;
+    readonly factId: string;
+    readonly ordering: CombatParticipationOrdering;
+    readonly reason: CombatParticipationReason;
+    readonly status: CombatParticipationStatus;
+    readonly workClass: CombatParticipationWorkClass;
+    readonly ownership: import("../combatParticipation").CombatParticipationOwnership;
+  };
   readonly processId: string;
   readonly stageId: string;
   readonly state: CombatProgressionTaskState;
@@ -170,12 +303,46 @@ export interface CombatProgressionTask {
   readonly transition?: CombatProgressionBoundaryTransition;
 }
 
+export interface CombatProgressionExecutionGroupBoundaryMetadata {
+  readonly id: string;
+  readonly kind: CombatProgressionBoundaryKind;
+  readonly roundNumber: number;
+}
+
+export interface CombatProgressionExecutionGroupDiagnostic {
+  readonly code: "task_count_mismatch" | "task_identity_mismatch";
+  readonly message: string;
+  readonly relatedIds: readonly string[];
+  readonly severity: "warning";
+}
+
+/**
+ * The scheduling unit between a stage and its tasks. Most groups contain one task; explicitly
+ * parallel mini-processes may place multiple independently executable tasks in one stable group.
+ */
+export interface CombatProgressionExecutionGroup {
+  readonly activationBoundary: CombatProgressionExecutionGroupBoundaryMetadata;
+  readonly blockerIds: readonly string[];
+  readonly completionState: CombatProgressionExecutionGroupCompletionState;
+  readonly diagnostics: readonly CombatProgressionExecutionGroupDiagnostic[];
+  readonly executionStrategy: CombatProgressionExecutionStrategy;
+  /** Reserved for a later activation slice; absent groups are eligible only in activationBoundary. */
+  readonly futureActivationBoundary: CombatProgressionExecutionGroupBoundaryMetadata | undefined;
+  readonly id: string;
+  readonly position: number;
+  readonly stageId: string;
+  readonly tasks: readonly CombatProgressionTask[];
+}
+
 export interface CombatProgressionStage {
+  readonly executionGroups: readonly CombatProgressionExecutionGroup[];
+  /** Compatibility adapter; execution strategy is canonically owned by each execution group. */
   readonly executionStrategy: CombatProgressionExecutionStrategy;
   readonly id: string;
   readonly kind: CombatProgressionStageKind;
   readonly processId: string;
   readonly state: CombatProgressionStageState;
+  /** Flattened compatibility adapter retained for existing task consumers. */
   readonly tasks: readonly CombatProgressionTask[];
 }
 
@@ -224,6 +391,15 @@ export interface CombatProgressionProjection {
 }
 
 export interface CombatProgressionExecutionOrder {
+  readonly currentInitiativeGroupId?: string;
+  readonly currentInitiativeValue?: number;
+  readonly initiativeGroups?: readonly {
+    readonly id: string;
+    readonly initiativeValue: number;
+    readonly opportunityIds: readonly string[];
+    readonly participantIds: readonly string[];
+    readonly status: "complete" | "current" | "waiting";
+  }[];
   readonly participantIds: readonly string[];
   readonly phase: CombatRoundPhase;
 }
@@ -233,14 +409,18 @@ export interface CombatProgressionPresentationTask {
     readonly combatant: boolean;
     readonly gm: boolean;
   };
+  readonly automation: PlayerSafeCombatAutomationEligibilityFact;
   readonly contributesToProgression: boolean;
+  readonly executionGroupId: string;
   readonly id: string;
-  readonly identity: {
-    readonly executionGroupId: string;
-    readonly phase?: CombatRoundPhase;
-  };
+  /** Immutable command identity retained without raw proposal or calculation contents. */
+  readonly identity: CombatProgressionTaskIdentity;
+  readonly expectedCommand: CombatProgressionExpectedCommand;
   readonly kind: CombatProgressionTaskKind;
+  /** Sanitized opponent context for shared tracker presentation. */
+  readonly opponent?: CombatantIdentity;
   readonly owner?: CombatProgressionTaskOwner;
+  readonly presentationContext?: CombatProgressionTaskPresentationContext;
   readonly processId: string;
   readonly stageId: string;
   readonly state: CombatProgressionTaskState;
@@ -248,12 +428,27 @@ export interface CombatProgressionPresentationTask {
   readonly transition?: CombatProgressionBoundaryTransition;
 }
 
+export interface CombatProgressionPresentationExecutionGroup {
+  readonly activationBoundary: CombatProgressionExecutionGroupBoundaryMetadata;
+  readonly blocked: boolean;
+  readonly completionState: CombatProgressionExecutionGroupCompletionState;
+  readonly executionStrategy: CombatProgressionExecutionStrategy;
+  readonly futureActivationBoundary: CombatProgressionExecutionGroupBoundaryMetadata | undefined;
+  readonly id: string;
+  readonly position: number;
+  readonly stageId: string;
+  readonly tasks: readonly CombatProgressionPresentationTask[];
+}
+
 export interface CombatProgressionPresentationStage {
+  readonly executionGroups: readonly CombatProgressionPresentationExecutionGroup[];
+  /** Compatibility adapter; execution strategy is canonically owned by each execution group. */
   readonly executionStrategy: CombatProgressionExecutionStrategy;
   readonly id: string;
   readonly kind: CombatProgressionStageKind;
   readonly processId: string;
   readonly state: CombatProgressionStageState;
+  /** Flattened compatibility adapter retained for existing presentation consumers. */
   readonly tasks: readonly CombatProgressionPresentationTask[];
 }
 
@@ -261,6 +456,26 @@ export interface CombatProgressionPresentationProcess {
   readonly id: string;
   readonly kind: CombatProgressionProcessKind;
   readonly stages: readonly CombatProgressionPresentationStage[];
+}
+
+/**
+ * One revision-bound board position shared by every presentation perspective. The full task is
+ * present only when that task is safe for the viewer; redaction may remove task/owner detail but
+ * never the round and tracker step.
+ */
+export interface CombatProgressionCanonicalOperationalPosition {
+  readonly executionGroupId?: string;
+  readonly executionStrategy?: CombatProgressionExecutionStrategy;
+  readonly processId?: string;
+  readonly roundNumber: number;
+  readonly stageId?: string;
+  readonly task?: CombatProgressionPresentationTask;
+  readonly taskVisibility: "redacted" | "unavailable" | "visible";
+  readonly trackerFacet: {
+    readonly owner?: CombatantIdentity;
+    readonly step: CombatRoundCursorStep;
+  };
+  readonly waitingFor: "combatant" | "gm" | "unknown";
 }
 
 /** Sanitized live progression facts suitable for shared GM/player presentation. */
@@ -272,6 +487,7 @@ export interface CombatProgressionPresentationProjection {
     readonly kind: CombatProgressionBoundaryKind;
     readonly roundNumber: number;
   };
+  readonly canonicalOperationalPosition?: CombatProgressionCanonicalOperationalPosition;
   readonly executionOrder?: CombatProgressionExecutionOrder;
   readonly processes: readonly CombatProgressionPresentationProcess[];
   readonly roundNumber: number;

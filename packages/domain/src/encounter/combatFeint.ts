@@ -7,6 +7,12 @@ import {
   type ScenarioParticipantCombatContext,
 } from "../campaign/scenario";
 import type { SkillDefinition, SkillSpecialization } from "../content/skills";
+import { combatSkillContestCalculationSchema } from "./combatSkillContest";
+import type { CombatSkillContestCalculation } from "./combatSkillContest";
+import {
+  attachCanonicalLifecycleToModifierBucketRow,
+  type CanonicalCombatModifierCompatibilityContext,
+} from "./combatModifierLifecycleCompatibility";
 
 const idSchema = z.string().min(1);
 
@@ -54,6 +60,52 @@ export const combatFeintStatusSchema = z.enum([
 ]);
 export type CombatFeintStatus = z.infer<typeof combatFeintStatusSchema>;
 
+export const COMBAT_FEINT_OUTCOME_TABLE = [
+  {
+    attackerPhase1DbParryModifier: -4,
+    band: "defender_strong",
+    defenderPhase2ObDbModifier: 2,
+    differenceLabel: "≤ -16",
+    maximumDifference: -16,
+  },
+  {
+    attackerPhase1DbParryModifier: -2,
+    band: "defender_edge",
+    defenderPhase2ObDbModifier: 0,
+    differenceLabel: "-15 to -6",
+    maximumDifference: -6,
+  },
+  {
+    attackerPhase1DbParryModifier: -1,
+    band: "balanced",
+    defenderPhase2ObDbModifier: 0,
+    differenceLabel: "-5 to 0",
+    maximumDifference: 0,
+  },
+  {
+    attackerPhase1DbParryModifier: 0,
+    band: "attacker_edge",
+    defenderPhase2ObDbModifier: -2,
+    differenceLabel: "1 to 10",
+    maximumDifference: 10,
+  },
+  {
+    attackerPhase1DbParryModifier: 0,
+    band: "attacker_strong",
+    defenderPhase2ObDbModifier: -4,
+    differenceLabel: "≥ 11",
+    maximumDifference: null,
+  },
+] as const;
+
+export type CombatFeintOutcomeTableRow = (typeof COMBAT_FEINT_OUTCOME_TABLE)[number];
+
+const combatFeintSkillContestCalculationSchema: z.ZodType<
+  CombatSkillContestCalculation,
+  z.ZodTypeDef,
+  z.input<typeof combatSkillContestCalculationSchema>
+> = combatSkillContestCalculationSchema;
+
 export const combatFeintRollResultSchema = z.object({
   adjustment: z.number().int().default(0),
   characteristic: z.enum(["dex", "int"]),
@@ -69,6 +121,7 @@ export const combatFeintRollResultSchema = z.object({
   skillId: idSchema,
   skillLabel: z.string().min(1),
   skillXp: z.number().int(),
+  skillContestCalculation: combatFeintSkillContestCalculationSchema.optional(),
 });
 export type CombatFeintRollResult = z.infer<typeof combatFeintRollResultSchema>;
 
@@ -168,13 +221,16 @@ export function removeCombatFeintGeneratedModifiers(
 function buildFeintModifier(input: {
   bucket: "db-parry" | "ob-skill";
   encounterId?: string;
+  ownerParticipantId: string;
   participantId: string;
   phase: "phase1" | "phase2";
   proposalId: string;
   value: number;
+  lifecycleContext?: CanonicalCombatModifierCompatibilityContext;
 }): ScenarioCombatModifierEntry {
   const sourceRound = input.proposalId.match(/:round:(\d+):/)?.[1];
-  return scenarioCombatModifierEntrySchema.parse({
+  const entry = scenarioCombatModifierEntrySchema.parse({
+    application: "percentage",
     durationRounds: 1,
     ...(sourceRound ? { expiresAtRound: Number(sourceRound) } : {}),
     generated: true,
@@ -193,6 +249,16 @@ function buildFeintModifier(input: {
       : {}),
     value: input.value,
   });
+  return input.lifecycleContext
+    ? scenarioCombatModifierEntrySchema.parse(
+        attachCanonicalLifecycleToModifierBucketRow({
+          bucket: input.bucket === "ob-skill" ? "situation_ob_skill" : "situation_db",
+          context: input.lifecycleContext,
+          entry,
+          ownerParticipantId: input.ownerParticipantId,
+        }),
+      )
+    : entry;
 }
 
 function getCombatFeintModifierRound(entry: ScenarioCombatModifierEntry): number | undefined {
@@ -228,8 +294,11 @@ export function expireCombatFeintGeneratedModifiersBeforeRound(
 
 export function applyCommittedCombatFeintModifiers(input: {
   attackerCombatContext?: ScenarioParticipantCombatContext;
+  attackerEffectOwnerParticipantId?: string;
   defenderCombatContext?: ScenarioParticipantCombatContext;
+  defenderEffectOwnerParticipantId?: string;
   encounterId?: string;
+  lifecycleContext?: CanonicalCombatModifierCompatibilityContext;
   proposal: CombatFeintProposal;
 }): {
   attackerCombatContext: ScenarioParticipantCombatContext;
@@ -261,43 +330,58 @@ export function applyCommittedCombatFeintModifiers(input: {
   const attackerDb = buildFeintModifier({
     bucket: "db-parry",
     encounterId: input.encounterId,
+    ownerParticipantId:
+      input.attackerEffectOwnerParticipantId ?? input.proposal.attackerParticipantId,
     participantId: input.proposal.attackerParticipantId,
     phase: "phase1",
     proposalId: input.proposal.id,
     value: attackerValue,
+    lifecycleContext: input.lifecycleContext,
   });
   const defenderOb = buildFeintModifier({
     bucket: "ob-skill",
     encounterId: input.encounterId,
+    ownerParticipantId:
+      input.defenderEffectOwnerParticipantId ?? input.proposal.defenderParticipantId,
     participantId: input.proposal.defenderParticipantId,
     phase: "phase2",
     proposalId: input.proposal.id,
     value: defenderObValue,
+    lifecycleContext: input.lifecycleContext,
   });
   const defenderDb = buildFeintModifier({
     bucket: "db-parry",
     encounterId: input.encounterId,
+    ownerParticipantId:
+      input.defenderEffectOwnerParticipantId ?? input.proposal.defenderParticipantId,
     participantId: input.proposal.defenderParticipantId,
     phase: "phase2",
     proposalId: input.proposal.id,
     value: defenderDbValue,
+    lifecycleContext: input.lifecycleContext,
   });
+  const attackerRows = attackerValue === 0 ? [] : [attackerDb];
+  const defenderObRows = defenderObValue === 0 ? [] : [defenderOb];
+  const defenderDbRows = defenderDbValue === 0 ? [] : [defenderDb];
   return {
     attackerCombatContext: scenarioParticipantCombatContextSchema.parse({
       ...attackerContext,
       modifierBuckets: {
         ...attackerContext.modifierBuckets,
-        situationDb: [...attackerContext.modifierBuckets.situationDb, attackerDb],
+        situationDb: [...attackerContext.modifierBuckets.situationDb, ...attackerRows],
       },
     }),
     defenderCombatContext: scenarioParticipantCombatContextSchema.parse({
       ...defenderContext,
       modifierBuckets: {
         ...defenderContext.modifierBuckets,
-        situationDb: [...defenderContext.modifierBuckets.situationDb, defenderDb],
-        situationObSkill: [...defenderContext.modifierBuckets.situationObSkill, defenderOb],
+        situationDb: [...defenderContext.modifierBuckets.situationDb, ...defenderDbRows],
+        situationObSkill: [
+          ...defenderContext.modifierBuckets.situationObSkill,
+          ...defenderObRows,
+        ],
       },
     }),
-    modifierIds: [attackerDb.id, defenderOb.id, defenderDb.id],
+    modifierIds: [...attackerRows, ...defenderObRows, ...defenderDbRows].map((entry) => entry.id),
   };
 }

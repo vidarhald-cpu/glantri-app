@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  canonicalCombatModifierEffectSchema,
+  canonicalCombatModifierLifecycleTransitionSchema,
+} from "./combatModifierLifecycle";
+
 const idSchema = z.string().min(1);
 const timestampSchema = z.string().min(1);
 
@@ -42,6 +47,7 @@ export const combatEffectGroupSchema = z.enum([
 ]);
 
 export const combatEffectStatusSchema = z.enum([
+  "pending",
   "active",
   "resolved",
   "expired",
@@ -76,28 +82,58 @@ export const combatEffectEventSchema = z.object({
   targetParticipantId: idSchema,
 });
 
-export const combatEffectSchema = z.object({
-  checkRequired: z.boolean().optional(),
-  checkSkillOrStat: z.string().optional(),
-  combatModifierBucket: combatEffectModifierBucketSchema.optional(),
-  createdAt: timestampSchema,
-  damage: z.number().default(0),
-  description: z.string().optional(),
-  duration: z.string().optional(),
-  effectGroup: combatEffectGroupSchema,
-  expiresAtRound: z.number().int().positive().optional(),
-  generalDamage: z.number().default(0),
-  id: idSchema,
-  location: z.string().optional(),
-  modifierValue: z.number().optional(),
-  bleedState: combatEffectBleedStateSchema.optional(),
-  roundNumber: z.number().int().positive().optional(),
-  sourceEventId: idSchema,
-  status: combatEffectStatusSchema.default("active"),
-  targetParticipantId: idSchema,
-  type: combatEffectTypeSchema,
-  updatedAt: timestampSchema,
-});
+export const combatEffectSchema = z
+  .object({
+    canonicalLifecycle: canonicalCombatModifierEffectSchema.optional(),
+    canonicalTransitions: z.array(canonicalCombatModifierLifecycleTransitionSchema).optional(),
+    checkRequired: z.boolean().optional(),
+    checkSkillOrStat: z.string().optional(),
+    combatWide: z.boolean().optional(),
+    combatModifierBucket: combatEffectModifierBucketSchema.optional(),
+    createdInInitiativeGroupId: idSchema.optional(),
+    createdAt: timestampSchema,
+    damage: z.number().default(0),
+    description: z.string().optional(),
+    duration: z.string().optional(),
+    excludedRollPurposes: z.array(z.string().min(1)).optional(),
+    effectGroup: combatEffectGroupSchema,
+    effectiveAfterInitiativeGroupId: idSchema.optional(),
+    expiresAtRound: z.number().int().positive().optional(),
+    generalDamage: z.number().default(0),
+    id: idSchema,
+    initiativePhase: z.enum(["phase1", "phase2"]).optional(),
+    initiativeValue: z.number().int().optional(),
+    location: z.string().optional(),
+    modifierValue: z.number().optional(),
+    bleedState: combatEffectBleedStateSchema.optional(),
+    roundNumber: z.number().int().positive().optional(),
+    sourceAttackResultId: idSchema.optional(),
+    sourceEventId: idSchema,
+    sourceOpportunityId: idSchema.optional(),
+    status: combatEffectStatusSchema.default("active"),
+    targetParticipantId: idSchema,
+    type: combatEffectTypeSchema,
+    updatedAt: timestampSchema,
+  })
+  .superRefine((effect, context) => {
+    if (effect.canonicalLifecycle && effect.canonicalLifecycle.id !== effect.id) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Canonical lifecycle identity must match the durable combat effect.",
+        path: ["canonicalLifecycle", "id"],
+      });
+    }
+    if (
+      effect.canonicalLifecycle &&
+      effect.canonicalLifecycle.ownerParticipantId !== effect.targetParticipantId
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Canonical lifecycle owner must match the durable combat effect target.",
+        path: ["canonicalLifecycle", "ownerParticipantId"],
+      });
+    }
+  });
 
 export const combatEffectsStateSchema = z
   .object({
@@ -118,3 +154,32 @@ export type CombatEffectBleedState = z.infer<typeof combatEffectBleedStateSchema
 export type CombatEffectEvent = z.infer<typeof combatEffectEventSchema>;
 export type CombatEffect = z.infer<typeof combatEffectSchema>;
 export type CombatEffectsState = z.infer<typeof combatEffectsStateSchema>;
+
+export interface CombatEffectInitiativeTimingContext {
+  currentInitiativeGroupId?: string;
+}
+
+/**
+ * Pending initiative effects are committed facts. They become effective as soon as their
+ * creating simultaneous group is no longer current; this derived boundary makes reload and undo
+ * deterministic without a second manual activation command.
+ */
+export function getCombatEffectEffectiveStatus(
+  effect: CombatEffect,
+  context: CombatEffectInitiativeTimingContext = {},
+): CombatEffectStatus {
+  if (
+    effect.effectiveAfterInitiativeGroupId &&
+    context.currentInitiativeGroupId === effect.effectiveAfterInitiativeGroupId
+  ) {
+    return "pending";
+  }
+  if (
+    effect.status === "pending" &&
+    effect.effectiveAfterInitiativeGroupId &&
+    context.currentInitiativeGroupId !== effect.effectiveAfterInitiativeGroupId
+  ) {
+    return "active";
+  }
+  return effect.status;
+}

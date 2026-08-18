@@ -22,6 +22,7 @@ import {
   getMergedCombatDbParryModifierTotal,
   getMergedCombatSkillObModifierTotal,
 } from "./combatModifierProjection";
+import { canonicalCombatModifierEffectSchema } from "./combatModifierLifecycle";
 
 const createdAt = "2026-07-15T12:00:00.000Z";
 
@@ -73,6 +74,7 @@ function state() {
     submittedBy: "gm",
   } as const;
   return combatRoundStateSchema.parse({
+    encounterId: "encounter-1",
     currentCursor: { participantId: "attacker", roundNumber: 1, step: "A1" },
     currentStep: "phase_1_actions",
     feintProposals: [proposal()],
@@ -97,6 +99,45 @@ function state() {
 }
 
 describe("combat feint modifiers", () => {
+  it("attaches separate canonical lifecycle identities to equal Feint consequence categories", () => {
+    const applied = applyCommittedCombatFeintModifiers({
+      attackerEffectOwnerParticipantId: "scenario-attacker",
+      defenderEffectOwnerParticipantId: "scenario-defender",
+      lifecycleContext: {
+        createdAt,
+        createdRevision: "revision-20",
+        createdSequence: 20,
+        encounterId: "encounter-1",
+      },
+      proposal: proposal("committed"),
+    });
+    const skillOb = applied.defenderCombatContext.modifierBuckets.situationObSkill[0];
+    const dbParry = applied.defenderCombatContext.modifierBuckets.situationDb[0];
+
+    expect(skillOb.canonicalLifecycle).toMatchObject({
+      applicability: { phase: "phase2" },
+      ownerParticipantId: "scenario-defender",
+      payload: { category: "skill_ob", unit: "percentage", value: -2 },
+      sourceFamily: "feint",
+    });
+    expect(dbParry.canonicalLifecycle).toMatchObject({
+      applicability: { phase: "phase2" },
+      ownerParticipantId: "scenario-defender",
+      payload: { category: "db_parry", unit: "percentage", value: -2 },
+      sourceFamily: "feint",
+    });
+    expect(canonicalCombatModifierEffectSchema.parse(skillOb.canonicalLifecycle).id).not.toBe(
+      canonicalCombatModifierEffectSchema.parse(dbParry.canonicalLifecycle).id,
+    );
+    expect(
+      applied.attackerCombatContext.modifierBuckets.situationDb[0]?.canonicalLifecycle,
+    ).toMatchObject({
+      applicability: { phase: "phase1" },
+      ownerParticipantId: "scenario-attacker",
+      payload: { category: "db_parry" },
+    });
+  });
+
   it("creates separate phase-scoped rows and replaces only the proposal rows", () => {
     const committed = proposal("committed");
     const existing = scenarioParticipantCombatContextSchema.parse({
@@ -149,6 +190,30 @@ describe("combat feint modifiers", () => {
         phase: "phase2",
       }),
     ).toBe(0);
+  });
+
+  it("retains zero table consequences without creating zero-valued live modifiers", () => {
+    const committed = combatFeintProposalSchema.parse({
+      ...proposal("committed"),
+      review: {
+        proposedAttackerDbParryModifier: 0,
+        proposedDefenderObDbModifier: -2,
+      },
+    });
+    const applied = applyCommittedCombatFeintModifiers({ proposal: committed });
+
+    expect(applied.attackerCombatContext.modifierBuckets.situationDb).toEqual([]);
+    expect(applied.defenderCombatContext.modifierBuckets.situationObSkill).toEqual([
+      expect.objectContaining({ value: -2 }),
+    ]);
+    expect(applied.defenderCombatContext.modifierBuckets.situationDb).toEqual([
+      expect.objectContaining({ value: -2 }),
+    ]);
+    expect(applied.modifierIds).toHaveLength(2);
+    expect(committed.review).toEqual({
+      proposedAttackerDbParryModifier: 0,
+      proposedDefenderObDbModifier: -2,
+    });
   });
 
   it("expires prior-round Feint rows without removing unrelated rows", () => {
@@ -287,6 +352,25 @@ describe("combat feint lifecycle", () => {
         skillId: "dodge",
         skillLabel: "Dodge",
         skillXp: 3,
+        skillContestCalculation: {
+          baseSkill: 7,
+          calculationId: "attacker-roll",
+          completeness: "partial",
+          contestType: "movement_feint",
+          derivedIntegerAdjustment: 0,
+          finalResult: 17,
+          governingStat: { id: "dex", label: "Dexterity", value: 4 },
+          missingContributionPoints: ["withdrawal_backout"],
+          openEndedDie: { openEndedD10s: [], rollD20: 10, rollTotal: 10 },
+          opponentParticipantId: "defender",
+          participantId: "attacker",
+          percentageContributions: [],
+          preDieTotal: 7,
+          role: "movement_feint_initiator",
+          skill: { id: "dodge", label: "Dodge", totalXp: 3 },
+          totalPercentageAdjustment: 0,
+          visibility: "roller_and_gm",
+        },
       },
       state: feasible,
     });
@@ -331,6 +415,10 @@ describe("combat feint lifecycle", () => {
           status: "committed",
         }),
       }).defenderCombatContext,
+      gmAttackerDbParryModifier: -1,
+      gmDefenderDbParryModifier: -3,
+      gmDefenderSkillObModifier: -4,
+      notes: "The defender follows the false opening.",
       proposalId: proposal().id,
       state: resolved,
     });
@@ -349,9 +437,82 @@ describe("combat feint lifecycle", () => {
       phase2AttackOpportunityId: "attack-2",
       status: "committed",
     });
+    expect(reloaded.feintProposals[0]?.attackerRoll?.skillContestCalculation).toMatchObject({
+      baseSkill: 7,
+      finalResult: 17,
+      role: "movement_feint_initiator",
+    });
     expect(getCombatRoundPhaseAttackCandidates({ phase: "phase2", state: reloaded })).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: "attack-2" })]),
     );
+    const committedEvent = reloaded.events.find((event) => event.type === "feint_committed");
+    const attackerRollEvent = reloaded.events.find(
+      (event) => event.type === "feint_roll" && event.ownerParticipantId === "attacker",
+    );
+    expect(attackerRollEvent?.facts.rollerPrivate).toMatchObject({
+      skillContestCalculation: {
+        baseSkill: 7,
+        finalResult: 17,
+        role: "movement_feint_initiator",
+      },
+    });
+    expect(committedEvent?.facts.resultPresentation).toMatchObject({
+      actionInstanceId: proposal().id,
+      adjustment: {
+        adjustedBy: "gm",
+        entries: expect.arrayContaining([
+          expect.objectContaining({
+            committedValue: -4,
+            consequenceKey: "defenderPhase2SkillObModifier",
+            standardValue: -2,
+          }),
+          expect.objectContaining({
+            committedValue: -3,
+            consequenceKey: "defenderPhase2DbParryModifier",
+            standardValue: -2,
+          }),
+          expect.objectContaining({
+            committedValue: -1,
+            consequenceKey: "attackerPhase1DbParryModifier",
+            standardValue: 0,
+          }),
+        ]),
+      },
+      committedConsequences: expect.arrayContaining([
+        expect.objectContaining({
+          key: "attackerPhase1DbParryModifier",
+          value: -1,
+        }),
+        expect.objectContaining({
+          key: "defenderPhase2SkillObModifier",
+          value: -4,
+        }),
+        expect.objectContaining({
+          key: "defenderPhase2DbParryModifier",
+          value: -3,
+        }),
+      ]),
+      conciseOutcome: {
+        details: ["Margin 7", "Band attacker edge"],
+        label: "Feint committed",
+      },
+      publicCombatNote: "The defender follows the false opening.",
+      standardConsequences: expect.arrayContaining([
+        expect.objectContaining({
+          key: "attackerPhase1DbParryModifier",
+          value: 0,
+        }),
+        expect.objectContaining({
+          key: "defenderPhase2SkillObModifier",
+          value: -2,
+        }),
+        expect.objectContaining({
+          key: "defenderPhase2DbParryModifier",
+          value: -2,
+        }),
+      ]),
+    });
+    expect(committedEvent?.facts.gmReview).not.toHaveProperty("notes");
     const undone = undoLatestCombatRoundCommand({ state: committed });
     expect(undone?.feintProposals[0]?.status).toBe("awaiting_review");
     expect(undone?.feintProposals[0]?.attackerRoll?.id).toBe("attacker-roll");

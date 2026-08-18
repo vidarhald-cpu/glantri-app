@@ -8,6 +8,34 @@ vi.mock("./lib/readiness", () => ({
 }));
 
 describe("api app health contract", () => {
+  it("permits the active combat response header on the exact CE mutation preflight", async () => {
+    vi.stubEnv("LOG_LEVEL", "silent");
+    vi.stubEnv("WEB_ORIGIN", "http://localhost:3000");
+    const app = buildApiServer();
+
+    const response = await app.inject({
+      headers: {
+        "access-control-request-headers": "content-type,x-glantri-combat-response",
+        "access-control-request-method": "POST",
+        origin: "http://localhost:3000",
+      },
+      method: "OPTIONS",
+      url: "/encounters/encounter-1/combat-round/combat-experience-difficulty",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(204);
+    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:3000");
+    expect(response.headers["access-control-allow-credentials"]).toBe("true");
+    expect(response.headers["access-control-allow-methods"]).toContain("POST");
+    expect(response.headers["access-control-allow-headers"]).toBe(
+      "content-type,x-glantri-combat-command,x-glantri-combat-correlation-id,x-glantri-combat-response",
+    );
+    expect(response.headers.vary).toBe("origin");
+    vi.unstubAllEnvs();
+  });
+
   it("reports process liveness on /health", async () => {
     vi.stubEnv("LOG_LEVEL", "silent");
     const app = buildApiServer();

@@ -1,13 +1,6 @@
-export type EquipmentCategory =
-  | "weapon"
-  | "shield"
-  | "armor"
-  | "gear"
-  | "valuables";
+export type EquipmentCategory = "weapon" | "shield" | "armor" | "gear" | "valuables";
 
-export type SpecificityType =
-  | "generic"
-  | "specific";
+export type SpecificityType = "generic" | "specific";
 
 export type MaterialType =
   | "steel"
@@ -21,23 +14,11 @@ export type MaterialType =
   | "gold"
   | "other";
 
-export type QualityType =
-  | "standard"
-  | "extraordinary";
+export type QualityType = "standard" | "extraordinary";
 
-export type CarryMode =
-  | "equipped"
-  | "on_person"
-  | "backpack"
-  | "mount"
-  | "stored";
+export type CarryMode = "equipped" | "on_person" | "backpack" | "mount" | "stored";
 
-export type ItemConditionState =
-  | "intact"
-  | "worn"
-  | "damaged"
-  | "broken"
-  | "lost";
+export type ItemConditionState = "intact" | "worn" | "damaged" | "broken" | "lost";
 
 export type StorageLocationType =
   | "equipped_system"
@@ -52,16 +33,9 @@ export type StorageLocationType =
   | "building"
   | "other";
 
-export type LocationAvailabilityClass =
-  | "with_you"
-  | "elsewhere";
+export type LocationAvailabilityClass = "with_you" | "elsewhere";
 
-export type AccessTier =
-  | "immediate"
-  | "fast"
-  | "slow"
-  | "situational"
-  | "unavailable";
+export type AccessTier = "immediate" | "fast" | "slow" | "situational" | "unavailable";
 
 export type WeaponHandlingClass =
   | "one_handed"
@@ -73,20 +47,19 @@ export type WeaponHandlingClass =
   | "polearm"
   | "other";
 
-export type WeaponDamageClass =
-  | "blunt"
-  | "edged"
-  | "pointed";
+export type WeaponDamageClass = "blunt" | "edged" | "pointed";
 
-export type CanonicalMeleeMode =
-  | "slash"
-  | "strike"
-  | "thrust";
+export type CanonicalMeleeMode = "slash" | "strike" | "thrust";
 
-export type WeaponAttackModeProvenance =
-  | "imported"
-  | "manual"
-  | "derived";
+export type WeaponAttackModeProvenance = "imported" | "manual" | "derived";
+
+export type WeaponAttackModeType = "melee" | "missile" | "thrown";
+
+/** Explicit specialist capability; absence is conservatively treated as none. */
+export type WeaponDisarmCapability = "none" | "trap";
+
+/** Normalized grip used only for weapon-control calculations. */
+export type WeaponDisarmGripClass = "one_handed" | "two_handed";
 
 export interface EquipmentTemplateBase {
   id: string;
@@ -113,6 +86,8 @@ export interface WeaponDurabilityProfile {
 
 export interface WeaponAttackMode {
   id: string;
+  /** Explicit delivery family; live declarations must not infer thrown use from a missing melee mode. */
+  attackType?: WeaponAttackModeType | null;
   label?: string | null;
   /** Canonical display/default resolution order; legacy data falls back to array order. */
   order?: number | null;
@@ -129,7 +104,13 @@ export interface WeaponAttackMode {
   crit?: string | null;
   secondCrit?: string | null;
   armorModifier?: string | null;
+  /** Mode-specific initiative from the source row; never fall back to melee initiative for throws. */
+  initiative?: number | null;
+  /** Mode-specific source range/reach. V1 preserves this without imposing a maximum-distance rule. */
+  range?: string | null;
   provenance: WeaponAttackModeProvenance;
+  /** Typed row-level provenance when this mode originates from a different source row/template. */
+  sourceMetadata?: ImportedWeaponSourceMetadata | null;
   notes?: string | null;
 }
 
@@ -285,6 +266,12 @@ export interface WeaponTemplate extends EquipmentTemplateBase {
   manualEnrichment?: WeaponTemplateManualEnrichment | null;
   formulaNormalization?: WeaponTemplateFormulaNormalization | null;
   durabilityProfile?: WeaponDurabilityProfile | null;
+  /** First-class specialist capability. Resolution must never infer this from the weapon name. */
+  disarmCapability?: WeaponDisarmCapability | null;
+  /** Explicit normalization for source handling labels such as one-handed polearms. */
+  disarmGripClass?: WeaponDisarmGripClass | null;
+  /** Optional rules/content override for the derived 1-6 weapon-control rating. */
+  disarmControlOverride?: number | null;
 }
 
 export interface ShieldTemplate extends EquipmentTemplateBase {
@@ -357,14 +344,107 @@ export interface EquipmentSpecialProperties {
   customNotes?: string | null;
 }
 
+export type ItemFactVisibility = "gm_only" | "revealed";
+
+export interface ItemFactProvenance {
+  factId: string;
+  itemId: string;
+}
+
+export interface WeaponInitiativeOverrideFact {
+  id: string;
+  kind: "weapon_initiative_override";
+  scope: "all_attack_modes";
+  unit: "initiative_points";
+  value: number;
+  visibility: ItemFactVisibility;
+}
+
+export interface WeaponDisarmCapabilityOverrideFact {
+  id: string;
+  kind: "weapon_disarm_capability_override";
+  scope: "all_attack_modes";
+  value: WeaponDisarmCapability;
+  visibility: ItemFactVisibility;
+}
+
+export interface WeaponDisarmControlOverrideFact {
+  id: string;
+  kind: "weapon_disarm_control_override";
+  scope: "all_attack_modes";
+  unit: "control_rating";
+  value: number;
+  visibility: ItemFactVisibility;
+}
+
+export type EquipmentTemplateOverrideFact =
+  | WeaponInitiativeOverrideFact
+  | WeaponDisarmCapabilityOverrideFact
+  | WeaponDisarmControlOverrideFact;
+
+export interface FinalAttackObDeltaFact {
+  id: string;
+  kind: "final_attack_ob_delta";
+  calculationStage: "final_attack_ob";
+  scope: "all_attack_modes";
+  unit: "ob_points";
+  value: number;
+  visibility: ItemFactVisibility;
+}
+
+export type DescriptiveItemTraitCategory =
+  | "engraving"
+  | "maker_mark"
+  | "appearance"
+  | "provenance"
+  | "craftsmanship"
+  | "history"
+  | "material"
+  | "inscription"
+  | "other";
+
+export interface DescriptiveItemTrait {
+  category: DescriptiveItemTraitCategory;
+  id: string;
+  text: string;
+  visibility: ItemFactVisibility;
+}
+
+export interface UnsupportedItemCapability {
+  id: string;
+  name: string;
+  rulesText: string;
+  usageText?: string | null;
+  visibility: ItemFactVisibility;
+}
+
+export interface EquipmentItemFactsV1 {
+  version: 1;
+  templateOverrides: EquipmentTemplateOverrideFact[];
+  activeMechanics: FinalAttackObDeltaFact[];
+  descriptiveTraits: DescriptiveItemTrait[];
+  unsupportedCapabilities: UnsupportedItemCapability[];
+}
+
 export interface ItemStorageAssignment {
   locationId: string;
   carryMode: CarryMode;
 }
 
-export interface EquipmentItem {
+/**
+ * One durable item authority. The generic defaults preserve the assigned-item
+ * compatibility view used by the current Character inventory workflow, while
+ * `CanonicalEquipmentItem` represents the full holder/assignment-nullable domain.
+ */
+export interface EquipmentItem<
+  THolderCharacterId extends string | null = string,
+  TStorageAssignment extends ItemStorageAssignment | null = ItemStorageAssignment,
+> {
   id: string;
-  characterId: string;
+  holderCharacterId?: THolderCharacterId;
+  /** @deprecated Compatibility view, always derived from holderCharacterId. */
+  characterId: THolderCharacterId;
+  campaignContextId?: string | null;
   templateId: string;
   category: EquipmentCategory;
   displayName?: string | null;
@@ -373,13 +453,17 @@ export interface EquipmentItem {
   isStackable: boolean;
   material: MaterialType;
   quality: QualityType;
-  storageAssignment: ItemStorageAssignment;
+  /** Canonical optimistic-concurrency revision; supplied by persistent Item authority. */
+  revision?: string;
+  storageAssignment: TStorageAssignment;
   previousStorageAssignment?: ItemStorageAssignment | null;
   conditionState: ItemConditionState;
   durabilityCurrent?: number | null;
   durabilityMax?: number | null;
   encumbranceOverride?: number | null;
   valueOverride?: number | null;
+  itemFacts?: EquipmentItemFactsV1;
+  /** @deprecated Accepted only as a legacy input and converted to itemFacts. */
   specialProperties?: EquipmentSpecialProperties | null;
   notes?: string | null;
   isEquipped?: boolean | null;
@@ -387,6 +471,24 @@ export interface EquipmentItem {
   acquiredFrom?: string | null;
   statusTags?: string[] | null;
 }
+
+export type CanonicalEquipmentItem = Omit<
+  EquipmentItem<string | null, ItemStorageAssignment | null>,
+  "campaignContextId" | "holderCharacterId" | "itemFacts"
+> & {
+  campaignContextId: string | null;
+  holderCharacterId: string | null;
+  itemFacts: EquipmentItemFactsV1;
+};
+
+export type AssignedEquipmentItem = Omit<
+  EquipmentItem<string, ItemStorageAssignment>,
+  "campaignContextId" | "holderCharacterId" | "itemFacts"
+> & {
+  campaignContextId: string | null;
+  holderCharacterId: string;
+  itemFacts: EquipmentItemFactsV1;
+};
 
 export interface StorageLocation {
   id: string;

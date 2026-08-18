@@ -1,6 +1,7 @@
 import type {
   CombatRoundAttackRollResult,
   CombatRoundCommand,
+  CombatRoundInitiativeResult,
   CombatRoundPhaseResolutionResult,
   CombatRoundStep,
   CombatRoundStepSnapshot,
@@ -17,6 +18,42 @@ export type CombatTrackerMarkerKind =
   | "required"
   | "roll_result"
   | "not_reached";
+
+export type CombatTrackerAttention = "ordinary" | "exceptional";
+
+export type CombatTrackerFacetStatus =
+  | "unopened"
+  | "open"
+  | "waiting"
+  | "completed"
+  | "unsuccessful"
+  | "historical";
+
+export interface CombatTrackerHoverPresentation {
+  actionLabel: string;
+  actorLabel?: string;
+  gmActionRequired: boolean;
+  phaseLabel?: string;
+  requiredActorLabel?: string;
+  targetLabel?: string;
+  text: string;
+  waiting: boolean;
+}
+
+export interface CombatTrackerFacetPresentation {
+  attention: CombatTrackerAttention;
+  completed: boolean;
+  current: boolean;
+  executable: boolean;
+  executionGroupIds: readonly string[];
+  historical: boolean;
+  hover: CombatTrackerHoverPresentation;
+  marker: "·" | "?" | "✓" | "–" | "H" | "M" | `${number}`;
+  status: CombatTrackerFacetStatus;
+  taskIds: readonly string[];
+  taskKinds: readonly CombatProgressionTaskKind[];
+  waiting: boolean;
+}
 
 export interface CombatTrackerLegendItem {
   kind: CombatTrackerMarkerKind;
@@ -56,7 +93,11 @@ export interface CombatTrackerCellFacts {
     defenderLabel?: string;
     status: "pending" | "committed";
   };
+  adjustDistanceRollRecorded?: boolean;
   inspectable: boolean;
+  initiativeCommitted?: boolean;
+  initiativeResolutionType?: CombatRoundInitiativeResult["resolutionType"];
+  initiativeRollRecorded?: boolean;
   initiativeTotal?: number;
   participantId: string;
   participantLabel: string;
@@ -69,37 +110,30 @@ export interface CombatTrackerCellFacts {
   stepOutcome?: CombatHistoryStepOutcome;
 }
 
-export interface CombatTrackerCellView {
+export interface CombatTrackerCellView extends CombatTrackerFacetPresentation {
   cellKey: string;
-  current: boolean;
-  completed: boolean;
-  executable: boolean;
-  executionGroupIds: readonly string[];
   gmProxyAvailable: boolean;
-  historical: boolean;
+  /** Compatibility text consumed by the existing button/title rendering. */
   hoverText: string;
   initiativeValue: boolean;
   inspectable: boolean;
-  marker: string;
   markerKind: CombatTrackerMarkerKind;
   participantId: string;
   ownerParticipantIds: readonly string[];
   processIds: readonly string[];
   roundNumber: number;
   selected: boolean;
-  status: "completed" | "executable" | "historical" | "not_reached" | "waiting";
   stageIds: readonly string[];
   step: CombatRoundStep;
-  taskIds: readonly string[];
-  taskKinds: readonly CombatProgressionTaskKind[];
-  waiting: boolean;
 }
 
 export interface CombatTrackerLiveFacet {
+  attention: CombatTrackerAttention;
   current: boolean;
   executable: boolean;
   executionGroupIds: readonly string[];
   gmProxyAvailable: boolean;
+  hover: CombatTrackerHoverPresentation;
   ownerParticipantIds: readonly string[];
   processIds: readonly string[];
   stageIds: readonly string[];
@@ -111,7 +145,9 @@ export interface CombatTrackerLiveFacet {
 export interface CombatTrackerModel {
   cells: Record<string, CombatTrackerCellView>;
   currentTaskCellKey?: string;
-  legend: CombatTrackerLegendItem[];
+  legend: readonly CombatTrackerLegendItem[];
+  /** Cell used by operational auto-follow. It may be viewer-safe when the exact owner is hidden. */
+  operationalCursorCellKey?: string;
   rounds: CombatTrackerRoundView[];
   rows: CombatTrackerRowView[];
   selectedCellKey?: string;

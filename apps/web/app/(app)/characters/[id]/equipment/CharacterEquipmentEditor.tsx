@@ -3,27 +3,23 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import type {
-  CharacterEquipmentItem,
-  EquipmentItemType,
-  EquipmentSlot
-} from "@glantri/domain";
+import type { CharacterEquipmentItem, EquipmentItemType, EquipmentSlot } from "@glantri/domain";
 import {
   buildCharacterSheetSummary,
   createCharacterEquipmentItem,
   removeCharacterEquipmentItem,
   setCharacterEquipmentEquipped,
-  upsertCharacterEquipmentItem
+  upsertCharacterEquipmentItem,
 } from "@glantri/rules-engine";
 
-import { saveCharacterToServer } from "@/lib/api/localServiceClient";
+import { updateServerCharacter } from "@/lib/api/localServiceClient";
 import { loadLocalCharacterAdvancementContext } from "@/lib/characters/loadLocalCharacterAdvancementContext";
-import type {
-  LocalCharacterDraft,
-  LocalCharacterRecord
-} from "@/lib/offline/glantriDexie";
+import type { LocalCharacterDraft, LocalCharacterRecord } from "@/lib/offline/glantriDexie";
 import { CharacterDraftRepository } from "@/lib/offline/repositories/characterDraftRepository";
-import { LocalCharacterRepository } from "@/lib/offline/repositories/localCharacterRepository";
+import {
+  LocalCharacterRepository,
+  requireServerCharacterRevision,
+} from "@/lib/offline/repositories/localCharacterRepository";
 
 interface CharacterEquipmentEditorProps {
   id: string;
@@ -67,7 +63,7 @@ function createEmptyFormState(): EquipmentFormState {
     shieldBonus: "0",
     slot: "main-hand",
     weaponBonus: "0",
-    weaponSkillId: ""
+    weaponSkillId: "",
   };
 }
 
@@ -82,7 +78,7 @@ function createFormStateFromItem(item: CharacterEquipmentItem): EquipmentFormSta
     shieldBonus: String(item.shieldBonus ?? 0),
     slot: item.slot,
     weaponBonus: String(item.weaponBonus ?? 0),
-    weaponSkillId: item.weaponSkillId ?? ""
+    weaponSkillId: item.weaponSkillId ?? "",
   };
 }
 
@@ -143,7 +139,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
 
     return buildCharacterSheetSummary({
       build: draft.build,
-      content
+      content,
     });
   }, [content, draft]);
 
@@ -155,7 +151,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
       characterId: nextDraft.characterId,
       id: nextDraft.id,
       syncStatus: nextDraft.syncStatus,
-      updatedAt: nextDraft.updatedAt
+      updatedAt: nextDraft.updatedAt,
     });
 
     setDraft(savedDraft);
@@ -196,7 +192,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
             shieldBonus: parseInteger(formState.shieldBonus),
             slot: formState.slot,
             weaponBonus: parseInteger(formState.weaponBonus),
-            weaponSkillId: formState.weaponSkillId.trim() || undefined
+            weaponSkillId: formState.weaponSkillId.trim() || undefined,
           }
         : createCharacterEquipmentItem({
             armorLabel: formState.armorLabel.trim() || undefined,
@@ -208,20 +204,22 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
             shieldBonus: parseInteger(formState.shieldBonus),
             slot: formState.slot,
             weaponBonus: parseInteger(formState.weaponBonus),
-            weaponSkillId: formState.weaponSkillId.trim() || undefined
+            weaponSkillId: formState.weaponSkillId.trim() || undefined,
           });
     const nextBuild = upsertCharacterEquipmentItem({
       build: draft.build,
-      item
+      item,
     });
 
     await persistDraft(
       {
         ...draft,
         build: nextBuild,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       },
-      existingItem ? "Equipment item updated in local draft." : "Equipment item added to local draft."
+      existingItem
+        ? "Equipment item updated in local draft."
+        : "Equipment item added to local draft.",
     );
     resetForm();
   }
@@ -233,16 +231,16 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
 
     const nextBuild = removeCharacterEquipmentItem({
       build: draft.build,
-      itemId
+      itemId,
     });
 
     await persistDraft(
       {
         ...draft,
         build: nextBuild,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       },
-      "Equipment item removed from local draft."
+      "Equipment item removed from local draft.",
     );
 
     if (editingItemId === itemId) {
@@ -258,16 +256,16 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
     const nextBuild = setCharacterEquipmentEquipped({
       build: draft.build,
       equipped,
-      itemId
+      itemId,
     });
 
     await persistDraft(
       {
         ...draft,
         build: nextBuild,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       },
-      equipped ? "Item equipped in local draft." : "Item unequipped in local draft."
+      equipped ? "Item equipped in local draft." : "Item unequipped in local draft.",
     );
   }
 
@@ -280,7 +278,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
       build: draft.build,
       createdAt: record.createdAt,
       finalizedAt: record.finalizedAt,
-      syncStatus: "local"
+      syncStatus: "local",
     });
 
     setRecord(savedRecord);
@@ -289,9 +287,9 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
       {
         ...draft,
         syncStatus: "local",
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       },
-      "Equipment saved locally."
+      "Equipment saved locally.",
     );
   }
 
@@ -304,17 +302,22 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
       build: draft.build,
       createdAt: record.createdAt,
       finalizedAt: record.finalizedAt,
-      syncStatus: "local"
+      syncStatus: "local",
     });
 
     try {
-      const serverRecord = await saveCharacterToServer(savedLocalRecord.build);
+      const serverRecord = await updateServerCharacter({
+        build: savedLocalRecord.build,
+        characterId: id,
+        expectedUpdatedAt: requireServerCharacterRevision(savedLocalRecord),
+      });
       const syncedRecord = await localCharacterRepository.save({
         build: serverRecord.build,
         createdAt: savedLocalRecord.createdAt,
         finalizedAt: savedLocalRecord.finalizedAt,
+        serverUpdatedAt: serverRecord.updatedAt,
         syncStatus: "synced",
-        updatedAt: serverRecord.updatedAt
+        updatedAt: serverRecord.updatedAt,
       });
 
       setRecord(syncedRecord);
@@ -324,12 +327,14 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
           ...draft,
           build: serverRecord.build,
           syncStatus: "synced",
-          updatedAt: serverRecord.updatedAt
+          updatedAt: serverRecord.updatedAt,
         },
-        "Equipment saved locally and pushed to the local service."
+        "Equipment saved locally and pushed to the local service.",
       );
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Equipment could not be saved to the server.");
+      setFeedback(
+        error instanceof Error ? error.message : "Equipment could not be saved to the server.",
+      );
     }
   }
 
@@ -351,8 +356,8 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
       <div>
         <h1 style={{ marginBottom: "0.5rem" }}>Inventory</h1>
         <p style={{ margin: 0 }}>
-          This edits the local-first character draft. Save locally to apply the loadout to the
-          saved character, or push explicitly to the local service when ready.
+          This edits the local-first character draft. Save locally to apply the loadout to the saved
+          character, or push explicitly to the local service when ready.
         </p>
       </div>
 
@@ -362,7 +367,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
             background: "#f6f5ef",
             border: "1px solid #d9ddd8",
             borderRadius: 12,
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           {feedback}
@@ -376,14 +381,16 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
           borderRadius: 12,
           display: "grid",
           gap: "0.75rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <h2 style={{ margin: 0 }}>{editingItemId ? "Edit item" : "Add item"}</h2>
         <label style={{ display: "grid", gap: "0.25rem" }}>
           Name
           <input
-            onChange={(event) => setFormState((current) => ({ ...current, name: event.target.value }))}
+            onChange={(event) =>
+              setFormState((current) => ({ ...current, name: event.target.value }))
+            }
             style={{ padding: "0.5rem" }}
             type="text"
             value={formState.name}
@@ -393,7 +400,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
           style={{
             display: "grid",
             gap: "0.75rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))"
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
           }}
         >
           <label style={{ display: "grid", gap: "0.25rem" }}>
@@ -404,7 +411,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
                 setFormState((current) => ({
                   ...current,
                   itemType,
-                  slot: getDefaultSlot(itemType)
+                  slot: getDefaultSlot(itemType),
                 }));
               }}
               style={{ padding: "0.5rem" }}
@@ -422,7 +429,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
               onChange={(event) =>
                 setFormState((current) => ({
                   ...current,
-                  slot: event.target.value as EquipmentSlot
+                  slot: event.target.value as EquipmentSlot,
                 }))
               }
               style={{ padding: "0.5rem" }}
@@ -442,7 +449,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
               onChange={(event) =>
                 setFormState((current) => ({
                   ...current,
-                  equipped: event.target.checked
+                  equipped: event.target.checked,
                 }))
               }
               type="checkbox"
@@ -455,7 +462,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
             style={{
               display: "grid",
               gap: "0.75rem",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))"
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
             }}
           >
             <label style={{ display: "grid", gap: "0.25rem" }}>
@@ -464,7 +471,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
                 onChange={(event) =>
                   setFormState((current) => ({
                     ...current,
-                    weaponSkillId: event.target.value
+                    weaponSkillId: event.target.value,
                   }))
                 }
                 style={{ padding: "0.5rem" }}
@@ -485,7 +492,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
                 onChange={(event) =>
                   setFormState((current) => ({
                     ...current,
-                    weaponBonus: event.target.value
+                    weaponBonus: event.target.value,
                   }))
                 }
                 style={{ padding: "0.5rem" }}
@@ -503,7 +510,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
               onChange={(event) =>
                 setFormState((current) => ({
                   ...current,
-                  shieldBonus: event.target.value
+                  shieldBonus: event.target.value,
                 }))
               }
               style={{ padding: "0.5rem", width: 180 }}
@@ -518,7 +525,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
             style={{
               display: "grid",
               gap: "0.75rem",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))"
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
             }}
           >
             <label style={{ display: "grid", gap: "0.25rem" }}>
@@ -527,7 +534,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
                 onChange={(event) =>
                   setFormState((current) => ({
                     ...current,
-                    armorLabel: event.target.value
+                    armorLabel: event.target.value,
                   }))
                 }
                 style={{ padding: "0.5rem" }}
@@ -541,7 +548,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
                 onChange={(event) =>
                   setFormState((current) => ({
                     ...current,
-                    armorValue: event.target.value
+                    armorValue: event.target.value,
                   }))
                 }
                 style={{ padding: "0.5rem" }}
@@ -555,7 +562,9 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
         <label style={{ display: "grid", gap: "0.25rem" }}>
           Notes
           <input
-            onChange={(event) => setFormState((current) => ({ ...current, notes: event.target.value }))}
+            onChange={(event) =>
+              setFormState((current) => ({ ...current, notes: event.target.value }))
+            }
             style={{ padding: "0.5rem" }}
             type="text"
             value={formState.notes}
@@ -581,7 +590,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
           borderRadius: 12,
           display: "grid",
           gap: "0.5rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <h2 style={{ margin: 0 }}>Loadout summary</h2>
@@ -599,7 +608,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
           borderRadius: 12,
           display: "grid",
           gap: "1rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <h2 style={{ margin: 0 }}>Current items</h2>
@@ -626,7 +635,10 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
                 >
                   Edit
                 </button>
-                <button onClick={() => void handleToggleEquip(item.id, !item.equipped)} type="button">
+                <button
+                  onClick={() => void handleToggleEquip(item.id, !item.equipped)}
+                  type="button"
+                >
                   {item.equipped ? "Unequip" : "Equip"}
                 </button>
                 <button onClick={() => void handleRemoveItem(item.id)} type="button">
@@ -648,7 +660,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
           display: "flex",
           flexWrap: "wrap",
           gap: "0.75rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <button onClick={() => void handleSaveLocally()} type="button">

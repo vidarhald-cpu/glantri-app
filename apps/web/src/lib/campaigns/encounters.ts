@@ -1,10 +1,10 @@
-import type { EncounterSession } from "@glantri/domain";
+import type { EncounterSessionSummary } from "@glantri/domain";
 
 export function getCampaignWorkspaceVisibleEncounters(input: {
   campaignId: string;
-  encounters: EncounterSession[];
+  encounters: EncounterSessionSummary[];
   scenarioIds: string[];
-}): EncounterSession[] {
+}): EncounterSessionSummary[] {
   const scenarioIds = new Set(input.scenarioIds);
 
   return input.encounters.filter((encounter) => {
@@ -21,13 +21,12 @@ export function getCampaignWorkspaceVisibleEncounters(input: {
 }
 
 export function getScenarioVisibleEncounters(input: {
-  encounters: EncounterSession[];
+  encounters: EncounterSessionSummary[];
   scenarioId?: string;
-}): EncounterSession[] {
+}): EncounterSessionSummary[] {
   if (!input.scenarioId) {
     return [];
   }
 
   return input.encounters.filter((encounter) => encounter.scenarioId === input.scenarioId);
 }
-

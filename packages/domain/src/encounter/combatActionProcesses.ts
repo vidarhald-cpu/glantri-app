@@ -2,14 +2,20 @@ import {
   combatRoundStateSchema,
   buildCombatRoundDeclaredAttackOpportunities,
   getCombatRoundAttackResultId,
+  getCombatRoundAttackResultForOpportunity,
   getCombatRoundDamageSubstate,
   getCombatRoundDoubleAttackPhase2Decision,
+  getCombatRoundOffensiveParryAttemptIdentity,
+  getCombatRoundParryDisarmAttemptIdentity,
+  getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundParticipantAttackResults,
   type CombatRoundAttackOpportunity,
   type CombatRoundCommandType,
   type CombatRoundPhase,
   type CombatRoundState,
 } from "./combatRoundManager";
 import { buildCombatAdjustDistanceProposalId } from "./combatAdjustDistance";
+import { validateCombatDeclarationCompatibility } from "./combatDeclarationCompatibility";
 import { buildCombatFeintProposalId } from "./combatFeint";
 
 export const COMBAT_ACTION_PROCESS_ACTION_KINDS = [
@@ -25,6 +31,7 @@ export type CombatActionProcessActionKind = (typeof COMBAT_ACTION_PROCESS_ACTION
 export type CombatActionProcessStageKind =
   | "attack"
   | "defense"
+  | "offensive_parry_contest"
   | "hit_location"
   | "damage"
   | "critical"
@@ -51,6 +58,7 @@ export type CombatManeuverStageKind =
   | "gm_adjustment"
   | "attacker_roll"
   | "defender_roll"
+  | "opposed_rolls"
   | "proposal_review"
   | "proposal_commit";
 
@@ -74,11 +82,12 @@ export interface CombatManeuverTaskDescriptor {
 }
 
 export interface CombatManeuverProcessStagePlan {
-  readonly executionStrategy: "gm_review" | "ordered_all" | "single_task";
+  readonly executionStrategy: "gm_review" | "ordered_all" | "parallel_all" | "single_task";
   readonly id: string;
   readonly kind: CombatManeuverStageKind;
   readonly state: CombatActionProcessStageState;
   readonly task?: CombatManeuverTaskDescriptor;
+  readonly tasks?: readonly CombatManeuverTaskDescriptor[];
   readonly trackerFacet: "attack";
 }
 
@@ -103,9 +112,21 @@ export interface CombatManeuverProcessPlan {
 
 export interface CombatActionProcessTaskDescriptor {
   readonly attackResultId?: string;
+  readonly contestId?: string;
+  readonly declarationId?: string;
+  readonly declaredOpponentParticipantId?: string;
   readonly expectedCommand: CombatRoundCommandType;
   readonly opportunityId: string;
-  readonly owner: "attacker" | "defender" | "gm";
+  readonly offensiveParryAttemptId?: string;
+  readonly owner:
+    | "attacker"
+    | "defender"
+    | "gm"
+    | "offensive_parry_controller"
+    | "offensive_parry_responder";
+  readonly parryPurpose?: "ordinary_defense" | "offensive_parry" | "parry_disarm";
+  readonly parryResultId?: string;
+  readonly parrySourceId?: string;
   readonly phase: CombatRoundPhase;
 }
 
@@ -114,6 +135,7 @@ export interface CombatActionProcessStage {
   readonly kind: CombatActionProcessStageKind;
   readonly state: CombatActionProcessStageState;
   readonly task?: CombatActionProcessTaskDescriptor;
+  readonly tasks?: readonly CombatActionProcessTaskDescriptor[];
   readonly trackerFacet: "attack" | "damage" | "parry";
 }
 
@@ -179,6 +201,7 @@ export interface CombatActionProcessAdapter {
 const STAGE_ORDER: readonly CombatActionProcessStageKind[] = [
   "attack",
   "defense",
+  "offensive_parry_contest",
   "hit_location",
   "damage",
   "critical",
@@ -195,11 +218,13 @@ function deepFreeze<T>(value: T): T {
 function stageTrackerFacet(kind: CombatActionProcessStageKind): "attack" | "damage" | "parry" {
   if (kind === "attack") return "attack";
   if (kind === "defense") return "parry";
+  if (kind === "offensive_parry_contest") return "parry";
   return "damage";
 }
 
 function taskForStage(input: {
   attackResultId?: string;
+  grazing: boolean;
   kind: CombatActionProcessStageKind;
   opportunityId: string;
   phase: CombatRoundPhase;
@@ -214,10 +239,16 @@ function taskForStage(input: {
       return { ...shared, expectedCommand: "roll_attack", owner: "attacker" };
     case "defense":
       return { ...shared, expectedCommand: "roll_parry", owner: "defender" };
+    case "offensive_parry_contest":
+      return undefined;
     case "hit_location":
       return { ...shared, expectedCommand: "roll_hit_location", owner: "attacker" };
     case "damage":
-      return { ...shared, expectedCommand: "resolve_damage", owner: "gm" };
+      return {
+        ...shared,
+        expectedCommand: "resolve_damage",
+        owner: input.grazing ? "attacker" : "gm",
+      };
     case "critical":
       return { ...shared, expectedCommand: "roll_critical", owner: "attacker" };
     case "commit":
@@ -249,15 +280,24 @@ function stageStates(input: {
   }
   if (!input.prerequisitesSatisfied) return { completion: { complete: false }, states: pending };
 
-  const attack = input.state.participants.find(
-    (participant) => participant.participantId === input.ownerParticipantId,
-  )?.attackResults[input.opportunity.phase];
+  const attack = getCombatRoundAttackResultForOpportunity({
+    opportunityId: input.opportunity.id,
+    state: input.state,
+  });
   if (!attack) {
     pending.attack = "ready";
     return { completion: { complete: false }, states: pending };
   }
   pending.attack = "complete";
-  if (!attack.hit) {
+  const offensiveParryAttempt = getCombatRoundOffensiveParryAttemptIdentity({
+    attackResult: attack,
+    state: input.state,
+  });
+  const parryDisarmAttempt = getCombatRoundParryDisarmAttemptIdentity({
+    attackResult: attack,
+    state: input.state,
+  });
+  if (!attack.hit && !offensiveParryAttempt && !parryDisarmAttempt) {
     for (const kind of STAGE_ORDER.slice(1)) pending[kind] = "skipped";
     return { completion: { complete: true, reason: "miss" }, states: pending };
   }
@@ -275,8 +315,25 @@ function stageStates(input: {
   }
   pending.defense = "complete";
   if (resolution.parryResolution.status === "resolved" && resolution.parryResolution.success) {
-    for (const kind of STAGE_ORDER.slice(2)) pending[kind] = "skipped";
+    const contest = input.state.offensiveParryContests.find(
+      (entry) =>
+        entry.attackResultId === attackResultId &&
+        entry.opportunityId === input.opportunity.id &&
+        entry.status !== "cancelled",
+    );
+    if (contest?.status === "awaiting_rolls") {
+      pending.offensive_parry_contest = "ready";
+      for (const kind of STAGE_ORDER.slice(3)) pending[kind] = "skipped";
+      return { completion: { complete: false }, states: pending };
+    }
+    pending.offensive_parry_contest = contest ? "complete" : "skipped";
+    for (const kind of STAGE_ORDER.slice(3)) pending[kind] = "skipped";
     return { completion: { complete: true, reason: "parried" }, states: pending };
+  }
+  pending.offensive_parry_contest = "skipped";
+  if (!attack.hit) {
+    for (const kind of STAGE_ORDER.slice(3)) pending[kind] = "skipped";
+    return { completion: { complete: true, reason: "miss" }, states: pending };
   }
 
   const damageSubstate = getCombatRoundDamageSubstate(resolution);
@@ -314,9 +371,10 @@ function buildStandardAttackProcess(input: {
   prerequisites: readonly CombatActionProcessPrerequisite[];
   state: CombatRoundState;
 }): StandardAttackProcessPlan {
-  const attack = input.state.participants.find(
-    (participant) => participant.participantId === input.ownerParticipantId,
-  )?.attackResults[input.opportunity.phase];
+  const attack = getCombatRoundAttackResultForOpportunity({
+    opportunityId: input.opportunity.id,
+    state: input.state,
+  });
   const attackResultId = attack
     ? getCombatRoundAttackResultId({ result: attack, roundNumber: input.state.roundNumber })
     : undefined;
@@ -343,21 +401,69 @@ function buildStandardAttackProcess(input: {
     ownerParticipantId: input.ownerParticipantId,
     phase: input.opportunity.phase,
     prerequisites: input.prerequisites,
-    stages: STAGE_ORDER.map((kind) => ({
-      id: `${processId}:stage:${kind}`,
-      kind,
-      state: states[kind],
-      task:
-        states[kind] === "ready"
-          ? taskForStage({
-              attackResultId,
-              kind,
-              opportunityId: input.opportunity.id,
-              phase: input.opportunity.phase,
-            })
-          : undefined,
-      trackerFacet: stageTrackerFacet(kind),
-    })),
+    stages: STAGE_ORDER.map((kind) => {
+      const contest =
+        kind === "offensive_parry_contest"
+          ? input.state.offensiveParryContests.find(
+              (entry) =>
+                entry.attackResultId === attackResultId &&
+                entry.opportunityId === input.opportunity.id &&
+                entry.status === "awaiting_rolls",
+            )
+          : undefined;
+      const contestShared = contest
+        ? {
+            attackResultId,
+            contestId: contest.id,
+            declarationId: contest.declarationId,
+            declaredOpponentParticipantId: contest.declaredOpponentParticipantId,
+            offensiveParryAttemptId: contest.offensiveParryAttemptId,
+            opportunityId: contest.opportunityId,
+            parryPurpose: "offensive_parry" as const,
+            parryResultId: contest.parryResultId,
+            phase: contest.phase,
+          }
+        : undefined;
+      return {
+        id: `${processId}:stage:${kind}`,
+        kind,
+        state: states[kind],
+        task:
+          states[kind] === "ready" && kind !== "offensive_parry_contest"
+            ? taskForStage({
+                attackResultId,
+                grazing: attack?.grazing === true,
+                kind,
+                opportunityId: input.opportunity.id,
+                phase: input.opportunity.phase,
+              })
+            : undefined,
+        tasks:
+          states[kind] === "ready" && contest && contestShared
+            ? [
+                ...(contest.initiatorRollRecorded
+                  ? []
+                  : [
+                      {
+                        ...contestShared,
+                        expectedCommand: "roll_offensive_parry_brawling" as const,
+                        owner: "offensive_parry_controller" as const,
+                      },
+                    ]),
+                ...(contest.responderRollRecorded
+                  ? []
+                  : [
+                      {
+                        ...contestShared,
+                        expectedCommand: "roll_offensive_parry_brawling" as const,
+                        owner: "offensive_parry_responder" as const,
+                      },
+                    ]),
+              ]
+            : undefined,
+        trackerFacet: stageTrackerFacet(kind),
+      };
+    }),
     targetParticipantId: input.opportunity.targetParticipantId,
   };
 }
@@ -397,7 +503,13 @@ function buildStandardAdapter(input: {
       const allOpportunities = contextualOpportunities.filter(
         (entry) => entry.participantId === context.participantId,
       );
-      const firstAttackComplete = Boolean(participant.attackResults.phase1);
+      const firstAttackComplete = Boolean(
+        getCombatRoundOutgoingAttackResultForParticipantPhase({
+          participantId: context.participantId,
+          phase: "phase1",
+          state,
+        }),
+      );
       const decision =
         input.actionKind === "double_attack"
           ? getCombatRoundDoubleAttackPhase2Decision({
@@ -425,7 +537,12 @@ function buildStandardAdapter(input: {
         ];
         if (input.actionKind === "reactive_attack") {
           const trigger = state.participants
-            .flatMap((entry) => entry.attackResults.phase1 ?? [])
+            .flatMap((entry) =>
+              getCombatRoundParticipantAttackResults({
+                participant: entry,
+                roundNumber: state.roundNumber,
+              }).filter((attackResult) => attackResult.phase === "phase1"),
+            )
             .filter((attackResult) => attackResult.defenderParticipantId === context.participantId)
             .some(
               (attackResult) =>
@@ -528,6 +645,7 @@ function maneuverStage(input: {
   state: CombatActionProcessStageState;
   strategy?: CombatManeuverProcessStagePlan["executionStrategy"];
   task?: CombatManeuverTaskDescriptor;
+  tasks?: readonly CombatManeuverTaskDescriptor[];
 }): CombatManeuverProcessStagePlan {
   return {
     executionStrategy: input.strategy ?? "single_task",
@@ -535,6 +653,7 @@ function maneuverStage(input: {
     kind: input.kind,
     state: input.state,
     task: input.task,
+    tasks: input.tasks,
     trackerFacet: "attack",
   };
 }
@@ -763,18 +882,11 @@ function buildAdjustDistanceManeuver(input: {
       : proposal?.status === "awaiting_gm_adjustment"
         ? "ready"
         : "pending";
-  const attackerState: CombatActionProcessStageState = allowed
+  const opposedRollsState: CombatActionProcessStageState = allowed
     ? "skipped"
-    : complete || proposal?.attackerRoll
+    : complete || (proposal?.attackerRoll && proposal.defenderRoll)
       ? "complete"
       : proposal?.status === "awaiting_rolls"
-        ? "ready"
-        : "pending";
-  const defenderState: CombatActionProcessStageState = allowed
-    ? "skipped"
-    : complete || proposal?.defenderRoll
-      ? "complete"
-      : proposal?.status === "awaiting_rolls" && proposal.attackerRoll
         ? "ready"
         : "pending";
   const reviewState: CombatActionProcessStageState =
@@ -841,38 +953,35 @@ function buildAdjustDistanceManeuver(input: {
             : undefined,
       }),
       maneuverStage({
-        kind: "attacker_roll",
+        kind: "opposed_rolls",
         processId,
-        state: attackerState,
-        strategy: "ordered_all",
-        task:
-          attackerState === "ready"
-            ? maneuverTask({
-                expectedCommand: "roll_adjust_distance",
-                kind: "adjust_distance_attacker_roll",
-                opportunityId,
-                ownerParticipantId: input.ownerParticipantId,
-                pairId,
-                proposalId,
-              })
-            : undefined,
-      }),
-      maneuverStage({
-        kind: "defender_roll",
-        processId,
-        state: defenderState,
-        strategy: "ordered_all",
-        task:
-          defenderState === "ready"
-            ? maneuverTask({
-                expectedCommand: "roll_adjust_distance",
-                kind: "adjust_distance_defender_roll",
-                opportunityId,
-                ownerParticipantId: targetParticipantId,
-                pairId,
-                proposalId,
-              })
-            : undefined,
+        state: opposedRollsState,
+        strategy: "parallel_all",
+        tasks:
+          opposedRollsState === "ready"
+            ? [
+                !proposal?.attackerRoll
+                  ? maneuverTask({
+                      expectedCommand: "roll_adjust_distance",
+                      kind: "adjust_distance_attacker_roll",
+                      opportunityId,
+                      ownerParticipantId: input.ownerParticipantId,
+                      pairId,
+                      proposalId,
+                    })
+                  : undefined,
+                !proposal?.defenderRoll
+                  ? maneuverTask({
+                      expectedCommand: "roll_adjust_distance",
+                      kind: "adjust_distance_defender_roll",
+                      opportunityId,
+                      ownerParticipantId: targetParticipantId,
+                      pairId,
+                      proposalId,
+                    })
+                  : undefined,
+              ].filter((task): task is CombatManeuverTaskDescriptor => Boolean(task))
+            : [],
       }),
       maneuverStage({
         kind: "proposal_review",
@@ -1034,6 +1143,12 @@ export function buildCombatActionProcessPlans(
   const attackOpportunities = normalized.participants.flatMap((participant) => {
     const declaration = participant.declaration;
     if (!declaration) return [];
+    const compatibility = validateCombatDeclarationCompatibility({
+      movementKind: declaration.movementIntent?.mode,
+      primaryAction: declaration.actionId,
+      secondaryAction: declaration.secondaryActionId,
+    });
+    if (!compatibility.valid) return [];
     const opportunities =
       (declaration.attackOpportunities?.length ?? 0) > 0
         ? (declaration.attackOpportunities ?? [])
@@ -1054,7 +1169,14 @@ export function buildCombatActionProcessPlans(
   );
   return deepFreeze(
     normalized.participants.flatMap((participant) => {
-      const actionId = participant.declaration?.actionId;
+      const declaration = participant.declaration;
+      const compatibility = validateCombatDeclarationCompatibility({
+        movementKind: declaration?.movementIntent?.mode,
+        primaryAction: declaration?.actionId,
+        secondaryAction: declaration?.secondaryActionId,
+      });
+      if (!compatibility.valid) return [];
+      const actionId = declaration?.actionId;
       const adapter = actionId ? adapterByActionId.get(actionId) : undefined;
       return adapter
         ? [

@@ -81,6 +81,61 @@ describe("themistogenes weapon enrichments", () => {
     ).not.toBe(true);
   });
 
+  it("marks Broad sword's explicit secondary Thrust profile as repeat eligible", () => {
+    const broadSword = enrichedById["weapon-template-broad-sword"];
+
+    expect(broadSword?.sourceMetadata).toMatchObject({
+      row: 7,
+      sheet: "Weapon1",
+      sourceRange: "Weapon1!A7:Q7",
+    });
+    expect(broadSword?.attackModes).toEqual([
+      expect.objectContaining({
+        canonicalMeleeMode: "slash",
+        crit: "FS",
+        dmb: 4,
+        id: "mode-1",
+        label: "Slash",
+        ob: 2,
+      }),
+      expect.objectContaining({
+        allowsRepeatedRoundAttack: true,
+        canonicalMeleeMode: "thrust",
+        crit: "EP",
+        dmb: 3,
+        id: "mode-2",
+        label: "Thrust",
+        ob: 1,
+      }),
+    ]);
+    expect(broadSword?.attackModes?.[0]?.allowsRepeatedRoundAttack).not.toBe(true);
+  });
+
+  it("authors only the accepted default Disarm capability and one-handed polearm overrides", () => {
+    const capable = [
+      "weapon-template-main-gauche",
+      "weapon-template-swordbreaker",
+      "weapon-template-rapier",
+      "weapon-template-fencing-sword",
+    ];
+    for (const id of capable) expect(enrichedById[id]?.disarmCapability).toBe("trap");
+    for (const id of [
+      "weapon-template-broad-sword",
+      "weapon-template-sabre",
+      "weapon-template-dagger",
+      "weapon-template-maul",
+      "weapon-template-1-h-spear",
+    ]) {
+      expect(enrichedById[id]?.disarmCapability).toBe("none");
+    }
+    expect(enrichedById["weapon-template-1-h-javelin"]?.disarmGripClass).toBe("one_handed");
+    expect(enrichedById["weapon-template-1-h-spear"]?.disarmGripClass).toBe("one_handed");
+    expect(enrichedById["weapon-template-maul"]?.disarmGripClass).toBeNull();
+    expect(enrichedById["weapon-template-rapier"]?.attackModes?.[0]).toMatchObject({
+      allowsRepeatedRoundAttack: true,
+    });
+  });
+
   it("preserves Lance primary Charge attack explicitly while keeping Second crit. on that primary mode", () => {
     const lance = enrichedById["weapon-template-lance"];
 

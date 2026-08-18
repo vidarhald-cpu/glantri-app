@@ -19,6 +19,7 @@ describe("session auth HTTP contract", () => {
       method: "OPTIONS",
       url: "/health",
       headers: {
+        "access-control-request-headers": "content-type,x-glantri-combat-response",
         "access-control-request-method": "PATCH",
         origin: "https://web.example.test",
       },
@@ -30,7 +31,9 @@ describe("session auth HTTP contract", () => {
     expect(response.headers["access-control-allow-origin"]).toBe("https://web.example.test");
     expect(response.headers["access-control-allow-credentials"]).toBe("true");
     expect(response.headers["access-control-allow-methods"]).toBe("GET,POST,PUT,PATCH,DELETE,OPTIONS");
-    expect(response.headers["access-control-allow-headers"]).toBe("content-type");
+    expect(response.headers["access-control-allow-headers"]).toBe(
+      "content-type,x-glantri-combat-command,x-glantri-combat-correlation-id,x-glantri-combat-response",
+    );
     expect(response.headers.vary).toBe("origin");
   });
 

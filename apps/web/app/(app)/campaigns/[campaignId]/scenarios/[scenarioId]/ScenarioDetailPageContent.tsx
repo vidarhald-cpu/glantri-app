@@ -13,6 +13,7 @@ import type {
   ReusableEntity,
   Scenario,
   ScenarioEventLog,
+  ScenarioEncounterManagementProjection,
   ScenarioParticipant,
 } from "@glantri/domain";
 import { createEncounterSession } from "@glantri/rules-engine";
@@ -24,8 +25,9 @@ import {
   loadAuthUsers,
   loadCampaignEntities,
   loadCampaignRoster,
+  loadEncounterById,
   loadServerCharacters,
-  loadScenarioEncounters,
+  loadScenarioEncounterManagementProjections,
   loadTemplates,
   loadScenarioById,
   loadScenarioEventLogs,
@@ -33,7 +35,7 @@ import {
   updateEncounterParticipantsOnServer,
   updateEncounterStatusOnServer,
   updateScenarioParticipantMetadataOnServer,
-  updateScenarioOnServer
+  updateScenarioOnServer,
 } from "@/lib/api/localServiceClient";
 import { refreshScenarioParticipantEquipmentOnServer } from "@/lib/api/scenarioClient";
 import {
@@ -55,28 +57,29 @@ import {
   formatEntityKind,
   getCivilizationDisplayName,
   getConcreteParticipantMetadata,
-  readSnapshotMetadata
+  readSnapshotMetadata,
 } from "./components/scenarioScreenHelpers";
 import type {
   ScenarioControllerFilter,
   ScenarioParticipantTypeFilter,
   ScenarioRosterCandidate,
-  TemplateSource
+  TemplateSource,
 } from "./components/scenarioScreenTypes";
 
 interface ScenarioDetailPageContentProps {
   campaignId: string;
   embedded?: boolean;
+  onWorkspaceEncountersChanged?: () => void;
   scenarioId: string;
 }
-
 export default function ScenarioDetailPageContent({
   campaignId,
   embedded = false,
-  scenarioId
+  onWorkspaceEncountersChanged,
+  scenarioId,
 }: ScenarioDetailPageContentProps) {
   const [assignableUsers, setAssignableUsers] = useState<AuthUser[]>([]);
-  const [encounters, setEncounters] = useState<EncounterSession[]>([]);
+  const [encounters, setEncounters] = useState<ScenarioEncounterManagementProjection[]>([]);
   const [entities, setEntities] = useState<ReusableEntity[]>([]);
   const [error, setError] = useState<string>();
   const [eventLogs, setEventLogs] = useState<ScenarioEventLog[]>([]);
@@ -97,8 +100,7 @@ export default function ScenarioDetailPageContent({
   const [temporaryActorName, setTemporaryActorName] = useState("");
   const [temporaryActorRole, setTemporaryActorRole] = useState<ScenarioParticipant["role"]>("npc");
 
-  const [rosterTypeFilter, setRosterTypeFilter] =
-    useState<ScenarioParticipantTypeFilter>("all");
+  const [rosterTypeFilter, setRosterTypeFilter] = useState<ScenarioParticipantTypeFilter>("all");
   const [rosterControllerFilter, setRosterControllerFilter] =
     useState<ScenarioControllerFilter>("all");
   const [rosterCivilizationFilter, setRosterCivilizationFilter] = useState("");
@@ -113,9 +115,14 @@ export default function ScenarioDetailPageContent({
   const [participantSkillGroupFilter, setParticipantSkillGroupFilter] = useState("");
   const [participantSearch, setParticipantSearch] = useState("");
   const [bulkEncounterId, setBulkEncounterId] = useState("");
-  const [expandedAssignmentParticipantIds, setExpandedAssignmentParticipantIds] = useState<string[]>([]);
-  const [selectedAssignmentParticipantIds, setSelectedAssignmentParticipantIds] = useState<string[]>([]);
-  const [refreshingEquipmentParticipantId, setRefreshingEquipmentParticipantId] = useState<string>();
+  const [expandedAssignmentParticipantIds, setExpandedAssignmentParticipantIds] = useState<
+    string[]
+  >([]);
+  const [selectedAssignmentParticipantIds, setSelectedAssignmentParticipantIds] = useState<
+    string[]
+  >([]);
+  const [refreshingEquipmentParticipantId, setRefreshingEquipmentParticipantId] =
+    useState<string>();
   const [equipmentRefreshResult, setEquipmentRefreshResult] = useState<{
     kind: "error" | "success";
     message: string;
@@ -127,15 +134,15 @@ export default function ScenarioDetailPageContent({
   const [scenarioStatus, setScenarioStatus] = useState<Scenario["status"]>("draft");
   const usersById = useMemo(
     () => new Map(assignableUsers.map((user) => [user.id, user])),
-    [assignableUsers]
+    [assignableUsers],
   );
   const charactersById = useMemo(
     () => new Map(playerCharacters.map((character) => [character.id, character])),
-    [playerCharacters]
+    [playerCharacters],
   );
   const entitiesById = useMemo(
     () => new Map([...entities, ...templates].map((entity) => [entity.id, entity])),
-    [entities, templates]
+    [entities, templates],
   );
   const participantsByRosterSource = useMemo(() => {
     const entries = new Map<string, ScenarioParticipant>();
@@ -158,14 +165,19 @@ export default function ScenarioDetailPageContent({
       roster
         .filter((entry) => entry.category !== "template")
         .map((entry) => {
-          const character = entry.sourceType === "character" ? charactersById.get(entry.sourceId) : undefined;
-          const entity = entry.sourceType === "reusableEntity" || entry.sourceType === "template"
-            ? entitiesById.get(entry.sourceId)
-            : undefined;
-          const existingParticipant = participantsByRosterSource.get(`${entry.sourceType}:${entry.sourceId}`);
+          const character =
+            entry.sourceType === "character" ? charactersById.get(entry.sourceId) : undefined;
+          const entity =
+            entry.sourceType === "reusableEntity" || entry.sourceType === "template"
+              ? entitiesById.get(entry.sourceId)
+              : undefined;
+          const existingParticipant = participantsByRosterSource.get(
+            `${entry.sourceType}:${entry.sourceId}`,
+          );
           const entityMetadata = entity ? getCampaignActorMetadata(entity) : undefined;
           const entitySnapshotMetadata = readSnapshotMetadata(entity?.snapshot);
-          const name = character?.name ?? entity?.name ?? entry.labelSnapshot ?? "Unknown roster member";
+          const name =
+            character?.name ?? entity?.name ?? entry.labelSnapshot ?? "Unknown roster member";
           const sourceKind =
             entry.sourceType === "character"
               ? "Character"
@@ -178,7 +190,8 @@ export default function ScenarioDetailPageContent({
               : entity?.kind === "monster"
                 ? { label: "Monster", typeFilter: "monster" as const }
                 : { label: "NPC", typeFilter: "npc" as const };
-          const controllerUserId = existingParticipant?.controlledByUserId ?? character?.ownerId ?? undefined;
+          const controllerUserId =
+            existingParticipant?.controlledByUserId ?? character?.ownerId ?? undefined;
           const controllerUser = controllerUserId ? usersById.get(controllerUserId) : undefined;
           const controllerFilter: ScenarioControllerFilter =
             controllerUser?.roles.some((role) => role === "admin" || role === "game_master") ||
@@ -187,10 +200,9 @@ export default function ScenarioDetailPageContent({
               : "players";
 
           return {
-            civilizationLabel:
-              character
-                ? getCivilizationDisplayName(character.build.societyId)
-                : getCivilizationDisplayName(entitySnapshotMetadata.civilizationLabel),
+            civilizationLabel: character
+              ? getCivilizationDisplayName(character.build.societyId)
+              : getCivilizationDisplayName(entitySnapshotMetadata.civilizationLabel),
             controllerFilter,
             controllerLabel: formatUserLabel(controllerUserId),
             existingParticipant,
@@ -206,11 +218,11 @@ export default function ScenarioDetailPageContent({
               entitySnapshotMetadata.skillGroups,
             sourceKind,
             typeFilter: participantType.typeFilter,
-            typeLabel: participantType.label
+            typeLabel: participantType.label,
           };
         })
         .sort((left, right) => left.name.localeCompare(right.name)),
-    [charactersById, entitiesById, participantsByRosterSource, roster, usersById]
+    [charactersById, entitiesById, participantsByRosterSource, roster, usersById],
   );
   const orderedEncounters = useMemo(
     () =>
@@ -219,19 +231,22 @@ export default function ScenarioDetailPageContent({
         const rightTimeline = right.timelineLabel?.trim() ?? "";
 
         if (leftTimeline || rightTimeline) {
-          return leftTimeline.localeCompare(rightTimeline) || left.createdAt.localeCompare(right.createdAt);
+          return (
+            leftTimeline.localeCompare(rightTimeline) ||
+            left.createdAt.localeCompare(right.createdAt)
+          );
         }
 
         return left.createdAt.localeCompare(right.createdAt);
       }),
-    [encounters]
+    [encounters],
   );
   const nonArchivedEncounters = useMemo(
     () =>
       orderedEncounters.filter(
-        (encounter) => encounter.status !== "archived" && encounter.status !== "complete"
+        (encounter) => encounter.status !== "archived" && encounter.status !== "complete",
       ),
-    [orderedEncounters]
+    [orderedEncounters],
   );
   const templateSources = useMemo<TemplateSource[]>(() => {
     const sourcesById = new Map<string, TemplateSource>();
@@ -239,7 +254,7 @@ export default function ScenarioDetailPageContent({
     for (const template of templates) {
       sourcesById.set(template.id, {
         entity: template,
-        label: `${template.name} (template library)`
+        label: `${template.name} (template library)`,
       });
     }
 
@@ -256,7 +271,7 @@ export default function ScenarioDetailPageContent({
 
       sourcesById.set(entity.id, {
         entity,
-        label: `${entity.name} (campaign roster)`
+        label: `${entity.name} (campaign roster)`,
       });
     }
 
@@ -267,13 +282,15 @@ export default function ScenarioDetailPageContent({
 
     return participants.filter(
       (participant) =>
-        participant.isActive && !(participant.entityId && templateIds.has(participant.entityId))
+        participant.isActive && !(participant.entityId && templateIds.has(participant.entityId)),
     );
   }, [participants, templateSources]);
   const participantTypeFilterOptions = useMemo(() => {
     const participantTypes = new Set<ScenarioParticipantTypeFilter>([
       ...scenarioRosterCandidates.map((candidate) => candidate.typeFilter),
-      ...concreteParticipants.map((participant) => getConcreteParticipantMetadata(participant).typeFilter)
+      ...concreteParticipants.map(
+        (participant) => getConcreteParticipantMetadata(participant).typeFilter,
+      ),
     ]);
 
     return [
@@ -282,32 +299,36 @@ export default function ScenarioDetailPageContent({
       { id: "npc" as const, label: "NPCs" },
       { id: "temporary" as const, label: "Temporary actors" },
       { id: "monster" as const, label: "Monsters" },
-      { id: "other" as const, label: "Other" }
+      { id: "other" as const, label: "Other" },
     ].filter((option) => option.id === "all" || participantTypes.has(option.id));
   }, [concreteParticipants, scenarioRosterCandidates]);
   const participantCivilizationOptions = useMemo(
     () =>
       [
-        ...new Set([
-          ...scenarioRosterCandidates.map((candidate) => candidate.civilizationLabel),
-          ...concreteParticipants.map(
-            (participant) => getConcreteParticipantMetadata(participant).civilizationLabel
-          )
-        ].filter((value) => value !== "—"))
+        ...new Set(
+          [
+            ...scenarioRosterCandidates.map((candidate) => candidate.civilizationLabel),
+            ...concreteParticipants.map(
+              (participant) => getConcreteParticipantMetadata(participant).civilizationLabel,
+            ),
+          ].filter((value) => value !== "—"),
+        ),
       ].sort(),
-    [concreteParticipants, scenarioRosterCandidates]
+    [concreteParticipants, scenarioRosterCandidates],
   );
   const participantProfessionOptions = useMemo(
     () =>
       [
-        ...new Set([
-          ...scenarioRosterCandidates.map((candidate) => candidate.professionLabel),
-          ...concreteParticipants.map(
-            (participant) => getConcreteParticipantMetadata(participant).professionLabel
-          )
-        ].filter((value) => value !== "—"))
+        ...new Set(
+          [
+            ...scenarioRosterCandidates.map((candidate) => candidate.professionLabel),
+            ...concreteParticipants.map(
+              (participant) => getConcreteParticipantMetadata(participant).professionLabel,
+            ),
+          ].filter((value) => value !== "—"),
+        ),
       ].sort(),
-    [concreteParticipants, scenarioRosterCandidates]
+    [concreteParticipants, scenarioRosterCandidates],
   );
   const participantSkillGroupOptions = useMemo(
     () =>
@@ -315,17 +336,17 @@ export default function ScenarioDetailPageContent({
         ...new Set([
           ...scenarioRosterCandidates.flatMap((candidate) => candidate.skillGroups),
           ...concreteParticipants.flatMap(
-            (participant) => getConcreteParticipantMetadata(participant).skillGroups
-          )
-        ])
+            (participant) => getConcreteParticipantMetadata(participant).skillGroups,
+          ),
+        ]),
       ].sort(),
-    [concreteParticipants, scenarioRosterCandidates]
+    [concreteParticipants, scenarioRosterCandidates],
   );
   const rosterTypeFilterOptions = useMemo(() => {
     const rosterTypes = new Set(
       scenarioRosterCandidates
         .filter((candidate) => !candidate.existingParticipant?.isActive)
-        .map((candidate) => candidate.typeFilter)
+        .map((candidate) => candidate.typeFilter),
     );
 
     return [
@@ -333,7 +354,7 @@ export default function ScenarioDetailPageContent({
       { id: "pc" as const, label: "PCs" },
       { id: "npc" as const, label: "NPCs" },
       { id: "monster" as const, label: "Monsters" },
-      { id: "other" as const, label: "Other" }
+      { id: "other" as const, label: "Other" },
     ].filter((option) => option.id === "all" || rosterTypes.has(option.id));
   }, [scenarioRosterCandidates]);
   const filteredScenarioRosterCandidates = useMemo(() => {
@@ -377,16 +398,18 @@ export default function ScenarioDetailPageContent({
     rosterSearch,
     rosterSkillGroupFilter,
     rosterTypeFilter,
-    scenarioRosterCandidates
+    scenarioRosterCandidates,
   ]);
   const filteredConcreteParticipants = useMemo(() => {
     const search = participantSearch.trim().toLowerCase();
 
     return concreteParticipants.filter((participant) => {
       const metadata = getConcreteParticipantMetadata(participant);
-      const matchesType = participantTypeFilter === "all" || metadata.typeFilter === participantTypeFilter;
+      const matchesType =
+        participantTypeFilter === "all" || metadata.typeFilter === participantTypeFilter;
       const matchesCivilization =
-        !participantCivilizationFilter || metadata.civilizationLabel === participantCivilizationFilter;
+        !participantCivilizationFilter ||
+        metadata.civilizationLabel === participantCivilizationFilter;
       const matchesProfession =
         !participantProfessionFilter || metadata.professionLabel === participantProfessionFilter;
       const matchesSkillGroup =
@@ -414,11 +437,11 @@ export default function ScenarioDetailPageContent({
     participantProfessionFilter,
     participantSearch,
     participantSkillGroupFilter,
-    participantTypeFilter
+    participantTypeFilter,
   ]);
   const assignmentParticipants = useMemo(
     () => filteredConcreteParticipants,
-    [filteredConcreteParticipants]
+    [filteredConcreteParticipants],
   );
   const selectedBulkEncounterId = bulkEncounterId || nonArchivedEncounters[0]?.id || "";
 
@@ -441,7 +464,7 @@ export default function ScenarioDetailPageContent({
 
   function buildEncounterParticipant(
     encounter: EncounterSession,
-    participant: ScenarioParticipant
+    participant: ScenarioParticipant,
   ): EncounterParticipant {
     const participantId = `scenario-${participant.id}`;
 
@@ -450,7 +473,7 @@ export default function ScenarioDetailPageContent({
         actionType: "none",
         defenseFocus: "none",
         defensePosture: "none",
-        targetLocation: "any"
+        targetLocation: "any",
       },
       facing: "north",
       id: participantId,
@@ -462,20 +485,20 @@ export default function ScenarioDetailPageContent({
       position: {
         x: 0,
         y: 0,
-        zone: "center"
+        zone: "center",
       },
-      scenarioParticipantId: participant.id
+      scenarioParticipantId: participant.id,
     };
   }
 
   function isParticipantInEncounter(
-    encounter: EncounterSession,
-    participant: ScenarioParticipant
+    encounter: ScenarioEncounterManagementProjection,
+    participant: ScenarioParticipant,
   ): boolean {
     const participantId = `scenario-${participant.id}`;
 
-    return encounter.participants.some(
-      (entry) => entry.scenarioParticipantId === participant.id || entry.id === participantId
+    return encounter.participantMemberships.some(
+      (entry) => entry.scenarioParticipantId === participant.id || entry.id === participantId,
     );
   }
 
@@ -487,22 +510,12 @@ export default function ScenarioDetailPageContent({
     await updateEncounterParticipantsOnServer({
       encounterId: input.encounter.id,
       participantMembershipMode: "explicit",
-      participants: input.participants
+      participants: input.participants,
     });
 
     setFeedback(input.feedbackMessage);
-    setEncounters((current) =>
-      current.map((entry) =>
-        entry.id === input.encounter.id
-          ? {
-              ...input.encounter,
-              participantMembershipMode: "explicit",
-              participants: input.participants,
-            }
-          : entry
-      )
-    );
     await refreshScenario();
+    onWorkspaceEncountersChanged?.();
   }
 
   async function refreshScenario() {
@@ -522,14 +535,14 @@ export default function ScenarioDetailPageContent({
       loadCampaignEntities(campaignId),
       loadTemplates(),
       loadScenarioEventLogs(scenarioId),
-      loadScenarioEncounters(scenarioId),
+      loadScenarioEncounterManagementProjections(scenarioId),
       loadAuthUsers(),
       loadServerCharacters(),
       loadCampaignRoster(campaignId),
     ]);
 
     const globalTemplates = nextTemplates.filter(
-      (entity) => getCampaignActorMetadata(entity).actorClass === "template"
+      (entity) => getCampaignActorMetadata(entity).actorClass === "template",
     );
 
     setScenario(nextScenario);
@@ -544,6 +557,7 @@ export default function ScenarioDetailPageContent({
     setScenarioName(nextScenario.name);
     setScenarioDescription(nextScenario.description);
     setScenarioStatus(nextScenario.status);
+    setError(undefined);
   }
 
   async function handleCreateEncounter() {
@@ -569,10 +583,9 @@ export default function ScenarioDetailPageContent({
       setEncounterTimelineLabel("");
       setFeedback(`Created encounter ${encounter.title}.`);
       await refreshScenario();
+      onWorkspaceEncountersChanged?.();
     } catch (caughtError) {
-      setError(
-        caughtError instanceof Error ? caughtError.message : "Unable to create encounter.",
-      );
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to create encounter.");
     }
   }
 
@@ -592,7 +605,7 @@ export default function ScenarioDetailPageContent({
         description: scenarioDescription,
         name: scenarioName,
         scenarioId,
-        status: scenarioStatus
+        status: scenarioStatus,
       });
 
       setFeedback(`Updated scenario ${updatedScenario.name}.`);
@@ -602,7 +615,10 @@ export default function ScenarioDetailPageContent({
     }
   }
 
-  async function handleRosterParticipantToggle(candidate: ScenarioRosterCandidate, member: boolean) {
+  async function handleRosterParticipantToggle(
+    candidate: ScenarioRosterCandidate,
+    member: boolean,
+  ) {
     try {
       setError(undefined);
       setFeedback(undefined);
@@ -612,11 +628,11 @@ export default function ScenarioDetailPageContent({
           const participant = await updateScenarioParticipantMetadataOnServer({
             isActive: false,
             participantId: candidate.existingParticipant.id,
-            scenarioId
+            scenarioId,
           });
 
           setParticipants((current) =>
-            current.map((entry) => (entry.id === participant.id ? participant : entry))
+            current.map((entry) => (entry.id === participant.id ? participant : entry)),
           );
         }
 
@@ -629,10 +645,10 @@ export default function ScenarioDetailPageContent({
         const participant = await updateScenarioParticipantMetadataOnServer({
           isActive: true,
           participantId: candidate.existingParticipant.id,
-          scenarioId
+          scenarioId,
         });
         setParticipants((current) =>
-          current.map((entry) => (entry.id === participant.id ? participant : entry))
+          current.map((entry) => (entry.id === participant.id ? participant : entry)),
         );
         setFeedback(`Reactivated ${candidate.name} in this scenario.`);
         await refreshScenario();
@@ -660,7 +676,7 @@ export default function ScenarioDetailPageContent({
 
       setFeedback(`Added ${participant.snapshot.displayName} to the scenario.`);
       setParticipants((current) =>
-        current.some((entry) => entry.id === participant.id) ? current : [...current, participant]
+        current.some((entry) => entry.id === participant.id) ? current : [...current, participant],
       );
       await refreshScenario();
     } catch (caughtError) {
@@ -690,71 +706,79 @@ export default function ScenarioDetailPageContent({
       const participant = await addScenarioParticipantFromEntityOnServer({
         entityInput: buildScenarioActorInputFromTemplate({
           name: temporaryActorName.trim() || template.name,
-          template
+          template,
         }),
         isTemporary: true,
         joinSource: "gm_added",
         role: temporaryActorRole,
-        scenarioId
+        scenarioId,
       });
 
       setFeedback(`Created temporary actor ${participant.snapshot.displayName}.`);
       setTemporaryActorName("");
       setParticipants((current) =>
-        current.some((entry) => entry.id === participant.id) ? current : [...current, participant]
+        current.some((entry) => entry.id === participant.id) ? current : [...current, participant],
       );
       await refreshScenario();
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Unable to create temporary actor.");
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to create temporary actor.",
+      );
     }
   }
 
   async function handleUpdateEncounterStatus(
-    encounter: EncounterSession,
-    status: EncounterStatus
+    encounter: ScenarioEncounterManagementProjection,
+    status: EncounterStatus,
   ) {
     try {
       setError(undefined);
       setFeedback(undefined);
       const updated = await updateEncounterStatusOnServer({
         encounterId: encounter.id,
-        status
+        status,
       });
 
       setFeedback(`Updated encounter ${updated.title}.`);
       await refreshScenario();
+      onWorkspaceEncountersChanged?.();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to update encounter.");
     }
   }
 
   async function handleEncounterParticipantToggle(
-    encounter: EncounterSession,
+    encounter: ScenarioEncounterManagementProjection,
     participant: ScenarioParticipant,
-    member: boolean
+    member: boolean,
   ) {
     try {
       setError(undefined);
       setFeedback(undefined);
 
+      const fullEncounter = await loadEncounterById(encounter.id);
       const participantId = `scenario-${participant.id}`;
-      const existing = isParticipantInEncounter(encounter, participant);
+      const existing = fullEncounter.participants.some(
+        (entry) => entry.scenarioParticipantId === participant.id || entry.id === participantId,
+      );
       const nextParticipants = member
         ? existing
-          ? encounter.participants
-          : [...encounter.participants, buildEncounterParticipant(encounter, participant)]
-        : encounter.participants.filter(
-            (entry) => entry.scenarioParticipantId !== participant.id && entry.id !== participantId
+          ? fullEncounter.participants
+          : [...fullEncounter.participants, buildEncounterParticipant(fullEncounter, participant)]
+        : fullEncounter.participants.filter(
+            (entry) => entry.scenarioParticipantId !== participant.id && entry.id !== participantId,
           );
 
       await saveEncounterParticipants({
-        encounter,
+        encounter: fullEncounter,
         feedbackMessage: `Updated participants for ${encounter.title}.`,
-        participants: nextParticipants
+        participants: nextParticipants,
       });
     } catch (caughtError) {
       setError(
-        caughtError instanceof Error ? caughtError.message : "Unable to update encounter participants."
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to update encounter participants.",
       );
     }
   }
@@ -762,7 +786,7 @@ export default function ScenarioDetailPageContent({
   async function handleBulkEncounterAssignment(member: boolean) {
     const encounter = encounters.find((entry) => entry.id === selectedBulkEncounterId);
     const selectedParticipants = assignmentParticipants.filter((participant) =>
-      selectedAssignmentParticipantIds.includes(participant.id)
+      selectedAssignmentParticipantIds.includes(participant.id),
     );
 
     if (!encounter || selectedParticipants.length === 0) {
@@ -773,6 +797,7 @@ export default function ScenarioDetailPageContent({
       setError(undefined);
       setFeedback(undefined);
 
+      const fullEncounter = await loadEncounterById(encounter.id);
       const selectedIds = new Set(selectedParticipants.map((participant) => participant.id));
       const nextParticipants = member
         ? selectedParticipants.reduce<EncounterParticipant[]>((current, participant) => {
@@ -780,7 +805,7 @@ export default function ScenarioDetailPageContent({
               current.some(
                 (entry) =>
                   entry.scenarioParticipantId === participant.id ||
-                  entry.id === `scenario-${participant.id}`
+                  entry.id === `scenario-${participant.id}`,
               )
             ) {
               return current;
@@ -790,14 +815,14 @@ export default function ScenarioDetailPageContent({
               ...current,
               buildEncounterParticipant(
                 {
-                  ...encounter,
-                  participants: current
+                  ...fullEncounter,
+                  participants: current,
                 },
-                participant
-              )
+                participant,
+              ),
             ];
-          }, encounter.participants)
-        : encounter.participants.filter((entry) => {
+          }, fullEncounter.participants)
+        : fullEncounter.participants.filter((entry) => {
             const scenarioParticipantId =
               entry.scenarioParticipantId ??
               (entry.id.startsWith("scenario-") ? entry.id.slice("scenario-".length) : undefined);
@@ -806,23 +831,26 @@ export default function ScenarioDetailPageContent({
           });
 
       await saveEncounterParticipants({
-        encounter,
+        encounter: fullEncounter,
         feedbackMessage: `${member ? "Assigned" : "Withdrew"} ${selectedParticipants.length} participant${
           selectedParticipants.length === 1 ? "" : "s"
         } ${member ? "to" : "from"} ${encounter.title}.`,
-        participants: nextParticipants
+        participants: nextParticipants,
       });
       setSelectedAssignmentParticipantIds([]);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Unable to update bulk encounter assignment."
+          : "Unable to update bulk encounter assignment.",
       );
     }
   }
 
-  async function handleParticipantActiveToggle(participant: ScenarioParticipant, isActive: boolean) {
+  async function handleParticipantActiveToggle(
+    participant: ScenarioParticipant,
+    isActive: boolean,
+  ) {
     try {
       setError(undefined);
       setFeedback(undefined);
@@ -830,17 +858,19 @@ export default function ScenarioDetailPageContent({
       const updatedParticipant = await updateScenarioParticipantMetadataOnServer({
         isActive,
         participantId: participant.id,
-        scenarioId
+        scenarioId,
       });
 
       setParticipants((current) =>
-        current.map((entry) => (entry.id === updatedParticipant.id ? updatedParticipant : entry))
+        current.map((entry) => (entry.id === updatedParticipant.id ? updatedParticipant : entry)),
       );
-      setFeedback(`${updatedParticipant.snapshot.displayName} is now ${isActive ? "active" : "inactive"}.`);
+      setFeedback(
+        `${updatedParticipant.snapshot.displayName} is now ${isActive ? "active" : "inactive"}.`,
+      );
       await refreshScenario();
     } catch (caughtError) {
       setError(
-        caughtError instanceof Error ? caughtError.message : "Unable to update participant status."
+        caughtError instanceof Error ? caughtError.message : "Unable to update participant status.",
       );
     }
   }
@@ -888,9 +918,9 @@ export default function ScenarioDetailPageContent({
     return <section>{error ?? "Scenario not found."}</section>;
   }
 
-  const selectedTemplateSource = templateSources.find(
-    (source) => source.entity.id === selectedTemplateSourceId
-  ) ?? templateSources[0];
+  const selectedTemplateSource =
+    templateSources.find((source) => source.entity.id === selectedTemplateSourceId) ??
+    templateSources[0];
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>

@@ -27,12 +27,12 @@ export const equipmentItemRoutes: FastifyPluginAsync = async (app) => {
     const id = parseCharacterId(request.params);
 
     try {
-      await requireAccessibleCharacter(user, id);
+      const viewer = await requireAccessibleCharacter(user, id);
       await equipmentWriteService.ensureCharacterEquipmentInitialized(id);
 
       return {
         state: toEquipmentFeatureState(
-          await equipmentReadModelService.getCharacterEquipmentState(id)
+          await equipmentReadModelService.getCharacterEquipmentState(id, viewer),
         ),
       };
     } catch (error) {
@@ -48,17 +48,17 @@ export const equipmentItemRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseMoveItemBody(request.body);
-      await requireAccessibleCharacter(user, id);
+      const viewer = await requireAccessibleCharacter(user, id);
       await equipmentWriteService.moveCharacterEquipmentItem(
         id,
         body.itemId,
         body.locationId,
-        body.carryMode
+        body.carryMode,
       );
 
       return {
         state: toEquipmentFeatureState(
-          await equipmentReadModelService.getCharacterEquipmentState(id)
+          await equipmentReadModelService.getCharacterEquipmentState(id, viewer),
         ),
       };
     } catch (error) {
@@ -74,12 +74,12 @@ export const equipmentItemRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseAddItemBody(request.body);
-      await requireAccessibleCharacter(user, id);
+      const viewer = await requireAccessibleCharacter(user, id);
       await equipmentWriteService.addCharacterEquipmentItem(id, body);
 
       return {
         state: toEquipmentFeatureState(
-          await equipmentReadModelService.getCharacterEquipmentState(id)
+          await equipmentReadModelService.getCharacterEquipmentState(id, viewer),
         ),
       };
     } catch (error) {
@@ -95,12 +95,12 @@ export const equipmentItemRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseRemoveItemBody(request.body);
-      await requireAccessibleCharacter(user, id);
+      const viewer = await requireAccessibleCharacter(user, id);
       await equipmentWriteService.removeCharacterEquipmentItem(id, body.itemId);
 
       return {
         state: toEquipmentFeatureState(
-          await equipmentReadModelService.getCharacterEquipmentState(id)
+          await equipmentReadModelService.getCharacterEquipmentState(id, viewer),
         ),
       };
     } catch (error) {
@@ -116,12 +116,12 @@ export const equipmentItemRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseUpdateQuantityBody(request.body);
-      await requireAccessibleCharacter(user, id);
+      const viewer = await requireAccessibleCharacter(user, id);
       await equipmentWriteService.updateCharacterEquipmentQuantity(id, body.itemId, body.quantity);
 
       return {
         state: toEquipmentFeatureState(
-          await equipmentReadModelService.getCharacterEquipmentState(id)
+          await equipmentReadModelService.getCharacterEquipmentState(id, viewer),
         ),
       };
     } catch (error) {
@@ -137,7 +137,7 @@ export const equipmentItemRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseUpdateMetadataBody(request.body);
-      await requireAccessibleCharacter(user, id);
+      const viewer = await requireAccessibleCharacter(user, id);
       await equipmentWriteService.updateCharacterEquipmentMetadata(id, body.itemId, {
         conditionState: body.conditionState,
         displayName: body.displayName,
@@ -147,7 +147,7 @@ export const equipmentItemRoutes: FastifyPluginAsync = async (app) => {
 
       return {
         state: toEquipmentFeatureState(
-          await equipmentReadModelService.getCharacterEquipmentState(id)
+          await equipmentReadModelService.getCharacterEquipmentState(id, viewer),
         ),
       };
     } catch (error) {

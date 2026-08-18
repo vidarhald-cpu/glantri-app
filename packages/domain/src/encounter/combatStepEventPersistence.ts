@@ -8,11 +8,7 @@ import {
   type CombatStepEventOutcomeScope,
   type CombatStepEventType,
 } from "./combatStepEventSchema";
-import type {
-  CombatRoundCommand,
-  CombatRoundPhase,
-  CombatRoundStep,
-} from "./combatRoundManager";
+import type { CombatRoundCommand, CombatRoundPhase, CombatRoundStep } from "./combatRoundManager";
 
 export type CanonicalCombatStepEventDraft = Omit<
   CombatStepEvent,
@@ -49,7 +45,10 @@ function identityRefs(input: CanonicalCombatStepEventDraft): CombatStepEventIden
     role: CombatStepEventIdentityRole,
     hiddenIdentityFallback: CombatStepEventHiddenIdentityFallback,
   ) => {
-    if (participantId && !refs.some((ref) => ref.participantId === participantId && ref.role === role)) {
+    if (
+      participantId &&
+      !refs.some((ref) => ref.participantId === participantId && ref.role === role)
+    ) {
       refs.push({ hiddenIdentityFallback, participantId, role });
     }
   };
@@ -96,10 +95,8 @@ export function appendCanonicalCombatStepEventForCommand(input: {
     return [...input.events];
   }
 
-  const sequence = input.events.reduce(
-    (highest, event) => Math.max(highest, event.sequence),
-    -1,
-  ) + 1;
+  const sequence =
+    input.events.reduce((highest, event) => Math.max(highest, event.sequence), -1) + 1;
   const involvedParticipantIds = unique(
     input.draft.involvedParticipantIds ?? [
       input.draft.actorParticipantId,
@@ -116,6 +113,7 @@ export function appendCanonicalCombatStepEventForCommand(input: {
     facts: {
       gmReview: input.draft.facts?.gmReview ?? {},
       involvedOutcome: input.draft.facts?.involvedOutcome ?? {},
+      resultPresentation: input.draft.facts?.resultPresentation,
       publicOutcome: input.draft.facts?.publicOutcome ?? {},
       rollerPrivate: input.draft.facts?.rollerPrivate ?? {},
     },

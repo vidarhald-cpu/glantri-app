@@ -1,13 +1,16 @@
 import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
   COMBAT_ROUND_STEPS,
+  getCombatRoundStepForProgressionBoundary,
   type CombatHistoryProjection,
+  type CombatProgressionPresentationProjection,
   type CombatRoundStep,
   type ProjectedCombatHistoryEvent,
 } from "@glantri/domain";
 
 import type {
   CombatTrackerCellView,
+  CombatTrackerFacetPresentation,
   CombatTrackerLiveFacet,
   CombatTrackerMarkerKind,
   CombatTrackerModel,
@@ -17,6 +20,11 @@ import {
   COMBAT_TRACKER_MARKER_MEANINGS,
 } from "./buildCombatTrackerModel";
 import { buildCombatProgressionTrackerIndex } from "./buildCombatProgressionTrackerModel";
+import {
+  getCombatTrackerFacetStatus,
+  getCombatTrackerPendingMarkerKind,
+} from "./combatTrackerTaskPresentation";
+import { hasProjectedCombatTrackerCompletionEvidence } from "./combatTrackerCompletionEvidence";
 
 export interface CombatHistoryInspectionSelection {
   participantId: string;
@@ -33,18 +41,28 @@ function outcomeBoolean(
 
 function markerForEvents(input: {
   events: readonly ProjectedCombatHistoryEvent[];
-  hasSnapshot: boolean;
   historical: boolean;
+  initiativeCommitted: boolean;
   liveFacet?: CombatTrackerLiveFacet;
+  stageReached: boolean;
+  step: CombatRoundStep;
   stepOutcome?: CombatHistoryProjection["activeRound"]["snapshots"][number]["stepOutcome"];
 }): { kind: CombatTrackerMarkerKind; marker: string } {
+  if (!input.stageReached) return { kind: "not_reached", marker: "·" };
+
   const initiative = input.events.find((event) => event.type === "initiative");
   const initiativeTotal =
     initiative?.facts.privateCalculation?.total ??
     initiative?.facts.involvedOutcome?.total ??
     initiative?.facts.publicOutcome.total;
-  if (typeof initiativeTotal === "number") {
+  if (initiative?.status === "skipped") {
+    return { kind: "skipped", marker: "–" };
+  }
+  if (input.initiativeCommitted && typeof initiativeTotal === "number") {
     return { kind: "roll_result", marker: String(initiativeTotal) };
+  }
+  if (initiative) {
+    return { kind: "complete", marker: "✓" };
   }
 
   const attack = input.events.find((event) => event.type === "attack");
@@ -64,29 +82,64 @@ function markerForEvents(input: {
   if (feintEvent?.type === "feint_impossible") {
     return { kind: "skipped", marker: "–" };
   }
-  if (feintEvent && !input.liveFacet?.current)
-    return input.historical
-      ? { kind: "complete", marker: "✓" }
-      : { kind: "not_reached", marker: "·" };
+  if (feintEvent && !input.liveFacet?.current) return { kind: "not_reached", marker: "·" };
   const adjustDistanceEvent = [...input.events]
     .reverse()
     .find((event) => event.type.startsWith("adjust_distance_"));
   if (adjustDistanceEvent?.type === "adjust_distance_committed") {
     return { kind: "complete", marker: "✓" };
   }
-  if (adjustDistanceEvent && !input.liveFacet?.current)
-    return input.historical
-      ? { kind: "complete", marker: "✓" }
-      : { kind: "not_reached", marker: "·" };
+  if (adjustDistanceEvent?.type === "adjust_distance_roll" && !input.liveFacet?.current) {
+    return { kind: "complete", marker: "✓" };
+  }
+  if (adjustDistanceEvent && !input.liveFacet?.current) return { kind: "not_reached", marker: "·" };
 
   const skipped = input.events.some(
     (event) => event.status === "skipped" || event.status === "not_applicable",
   );
   if (skipped) return { kind: "skipped", marker: "–" };
   if (input.stepOutcome) return { kind: "skipped", marker: "–" };
-  if (input.liveFacet?.current) return { kind: "required", marker: "?" };
-  if (input.events.length || input.hasSnapshot) return { kind: "complete", marker: "✓" };
+  if (
+    input.liveFacet?.current &&
+    input.liveFacet.taskKinds.includes("gm_advance_boundary") &&
+    hasProjectedCombatTrackerCompletionEvidence({ events: input.events, step: input.step })
+  ) {
+    return { kind: "complete", marker: "✓" };
+  }
+  if (input.liveFacet?.current) {
+    const kind = getCombatTrackerPendingMarkerKind(input.liveFacet);
+    return { kind, marker: kind === "required" ? "?" : "·" };
+  }
+  const hasRecordedCompletion = initiative
+    ? input.initiativeCommitted
+    : hasProjectedCombatTrackerCompletionEvidence({ events: input.events, step: input.step });
+  if (hasRecordedCompletion) return { kind: "complete", marker: "✓" };
   return { kind: "not_reached", marker: "·" };
+}
+
+function initiativeIsCommitted(input: {
+  historical: boolean;
+  progression?: CombatProgressionPresentationProjection;
+  step: CombatRoundStep;
+}): boolean {
+  if (input.historical) return true;
+  if (input.step !== "initiative_phase_1" && input.step !== "initiative_phase_2") return false;
+  const boundary = input.progression?.boundary.kind;
+  if (!boundary) return false;
+  const boundaryOrder: readonly CombatProgressionPresentationProjection["boundary"]["kind"][] = [
+    "declaration",
+    "phase1_modifier_review",
+    "phase1_initiative",
+    "phase1_resolution",
+    "phase2_modifier_review",
+    "phase2_initiative",
+    "phase2_resolution",
+    "round_end",
+    "round_boundary",
+  ];
+  const committedAfter =
+    input.step === "initiative_phase_1" ? "phase1_initiative" : "phase2_initiative";
+  return boundaryOrder.indexOf(boundary) > boundaryOrder.indexOf(committedAfter);
 }
 
 function projectedFact(event: ProjectedCombatHistoryEvent, key: string): unknown {
@@ -95,19 +148,31 @@ function projectedFact(event: ProjectedCombatHistoryEvent, key: string): unknown
 
 export function formatProjectedCombatTrackerHoverDetail(
   events: readonly ProjectedCombatHistoryEvent[],
+  options: { revealInitiativeTotal?: boolean } = {},
 ): string | undefined {
   if (events.some((event) => event.type === "feint_impossible")) {
     return "feint ruled impossible; no roll required.";
+  }
+  const initiative = events.find((event) => event.type === "initiative");
+  const initiativeResolutionType =
+    initiative &&
+    (projectedFact(initiative, "resolutionType") ??
+      initiative.facts.privateCalculation?.resolutionType);
+  if (initiativeResolutionType === "bulk_skipped") {
+    return "initiative bulk skipped by GM; effective initiative 0.";
+  }
+  if (initiativeResolutionType === "gm_skipped") {
+    return "initiative skipped by GM; effective initiative 0.";
   }
   const skipped = events.find(
     (event) => event.status === "skipped" || event.status === "not_applicable",
   );
   if (skipped) return skipped.status === "skipped" ? "skipped." : "not applicable.";
 
-  const initiative = events.find((event) => event.type === "initiative");
   const initiativeTotal =
     initiative &&
     (projectedFact(initiative, "total") ?? initiative.facts.privateCalculation?.total);
+  if (initiative && !options.revealInitiativeTotal) return "initiative roll recorded.";
   if (typeof initiativeTotal === "number") return `initiative total ${initiativeTotal}.`;
 
   const attack = events.find((event) => event.type === "attack");
@@ -223,22 +288,21 @@ export function getProjectedCombatHistoryCellEvents(input: {
 
 export function buildProjectedCombatTrackerModel(input: {
   history: CombatHistoryProjection;
+  operationalParticipantId?: string;
   selected?: CombatHistoryInspectionSelection;
 }): CombatTrackerModel {
   const progressionIndex = buildCombatProgressionTrackerIndex(input.history.progression);
   const activeRoundNumber = input.history.activeRound.roundNumber;
-  const currentCells = Object.entries(progressionIndex.byCellKey).filter(
-    ([, facet]) => facet.current,
-  );
-  const currentStep = currentCells[0]?.[0].split(":").slice(2).join(":") as
-    | CombatRoundStep
-    | undefined;
+  const currentStep =
+    progressionIndex.currentStep ??
+    (input.history.progression
+      ? getCombatRoundStepForProgressionBoundary(input.history.progression.boundary.kind)
+      : undefined);
   const rounds = [...input.history.archivedRounds, input.history.activeRound].map((round) => ({
     currentStep: round.roundNumber === activeRoundNumber ? currentStep : undefined,
     roundNumber: round.roundNumber,
   }));
   const cells: Record<string, CombatTrackerCellView> = {};
-  const markerKinds = new Set<CombatTrackerMarkerKind>();
   const cellEventsByKey = new Map<string, ProjectedCombatHistoryEvent[]>();
   const snapshotByKey = new Map<
     string,
@@ -278,6 +342,53 @@ export function buildProjectedCombatTrackerModel(input: {
       (orderIndex.get(right.participantId) ?? Number.MAX_SAFE_INTEGER)
     );
   });
+  const currentTaskCellKey = rows
+    .map((row) =>
+      currentStep
+        ? buildCombatTrackerCellKey({
+            participantId: row.participantId,
+            roundNumber: activeRoundNumber,
+            step: currentStep,
+          })
+        : undefined,
+    )
+    .find((cellKey) => cellKey !== undefined && progressionIndex.byCellKey[cellKey]?.current);
+  const canonicalOwnerParticipantId = rows.find((row) => {
+    if (!currentStep) return false;
+    const cellKey = buildCombatTrackerCellKey({
+      participantId: row.participantId,
+      roundNumber: activeRoundNumber,
+      step: currentStep,
+    });
+    return progressionIndex.byCellKey[cellKey]?.current;
+  })?.participantId;
+  const requestedOperationalParticipantId = input.operationalParticipantId;
+  const requestedOperationalParticipantIsVisible = rows.some(
+    (row) => row.participantId === requestedOperationalParticipantId,
+  );
+  const operationalParticipantId =
+    canonicalOwnerParticipantId ??
+    (requestedOperationalParticipantId && requestedOperationalParticipantIsVisible
+      ? requestedOperationalParticipantId
+      : undefined);
+  const operationalSelection =
+    currentStep && operationalParticipantId
+      ? {
+          participantId: operationalParticipantId,
+          roundNumber: activeRoundNumber,
+          step: currentStep,
+        }
+      : undefined;
+  const selectedRoundIsActive = input.selected?.roundNumber === activeRoundNumber;
+  const selectedStepIndex = input.selected ? COMBAT_ROUND_STEPS.indexOf(input.selected.step) : -1;
+  const currentStepIndex = currentStep ? COMBAT_ROUND_STEPS.indexOf(currentStep) : -1;
+  const selectedStageReached =
+    input.selected !== undefined &&
+    (!selectedRoundIsActive || currentStepIndex < 0 || selectedStepIndex <= currentStepIndex);
+  const cursorSelection = selectedStageReached ? input.selected : operationalSelection;
+  const operationalCursorCellKey = operationalSelection
+    ? buildCombatTrackerCellKey(operationalSelection)
+    : undefined;
 
   for (const row of rows) {
     for (const round of [...input.history.archivedRounds, input.history.activeRound]) {
@@ -289,60 +400,77 @@ export function buildProjectedCombatTrackerModel(input: {
         };
         const cellKey = buildCombatTrackerCellKey(selection);
         const cellEvents = cellEventsByKey.get(cellKey) ?? [];
+        const participantResultEvents = cellEvents.filter(
+          (event) => event.type !== "round_boundary",
+        );
         const snapshot = snapshotByKey.get(cellKey);
         const liveFacet =
           round.roundNumber === activeRoundNumber ? progressionIndex.byCellKey[cellKey] : undefined;
         const current = Boolean(liveFacet?.current);
         const selected =
-          input.selected?.participantId === row.participantId &&
-          input.selected.roundNumber === round.roundNumber &&
-          input.selected.step === step;
-        const marker = markerForEvents({
-          events: cellEvents,
-          hasSnapshot: Boolean(snapshot),
+          cursorSelection?.participantId === row.participantId &&
+          cursorSelection.roundNumber === round.roundNumber &&
+          cursorSelection.step === step;
+        const historical = round.roundNumber !== activeRoundNumber;
+        const stageReached =
+          historical ||
+          currentStepIndex < 0 ||
+          COMBAT_ROUND_STEPS.indexOf(step) <= currentStepIndex;
+        const initiativeCommitted = initiativeIsCommitted({
           historical: round.roundNumber !== activeRoundNumber,
+          progression: input.history.progression,
+          step,
+        });
+        const marker = markerForEvents({
+          events: participantResultEvents,
+          historical: round.roundNumber !== activeRoundNumber,
+          initiativeCommitted,
           liveFacet,
+          stageReached,
+          step,
           stepOutcome: snapshot?.stepOutcome,
         });
-        const inspectable = current || Boolean(snapshot) || cellEvents.length > 0;
+        const inspectable =
+          stageReached &&
+          (current || selected || Boolean(snapshot) || participantResultEvents.length > 0);
         const hoverDetail =
-          snapshot?.stepOutcome?.message ?? formatProjectedCombatTrackerHoverDetail(cellEvents);
-        markerKinds.add(marker.kind);
+          liveFacet?.hover.text ??
+          snapshot?.stepOutcome?.message ??
+          formatProjectedCombatTrackerHoverDetail(participantResultEvents, {
+            revealInitiativeTotal: initiativeCommitted,
+          });
+        const fallbackHoverText = inspectable ? "Recorded history is incomplete." : "Not opened.";
+        const hover =
+          liveFacet?.hover ??
+          ({
+            actionLabel: COMBAT_ROUND_STEP_ABBREVIATIONS[step],
+            gmActionRequired: false,
+            text: hoverDetail ?? fallbackHoverText,
+            waiting: false,
+          } as const);
         cells[cellKey] = {
+          attention: liveFacet?.attention ?? "ordinary",
           cellKey,
           completed: !["not_reached", "required"].includes(marker.kind),
           current,
           executable: Boolean(liveFacet?.executable),
           executionGroupIds: liveFacet?.executionGroupIds ?? [],
           gmProxyAvailable: Boolean(liveFacet?.gmProxyAvailable),
-          historical: round.roundNumber !== activeRoundNumber,
+          historical,
+          hover,
           hoverText: `${row.displayName} · Round ${round.roundNumber} · ${COMBAT_ROUND_STEP_ABBREVIATIONS[step]}: ${
-            hoverDetail ??
-            (inspectable
-              ? current
-                ? "current task."
-                : "incomplete legacy history."
-              : "not reached.")
+            hover.text
           }`,
           initiativeValue: marker.kind === "roll_result",
           inspectable,
-          marker: marker.marker,
+          marker: marker.marker as CombatTrackerFacetPresentation["marker"],
           markerKind: marker.kind,
           participantId: row.participantId,
           ownerParticipantIds: liveFacet?.ownerParticipantIds ?? [],
           processIds: liveFacet?.processIds ?? [],
           roundNumber: round.roundNumber,
           selected,
-          status:
-            round.roundNumber !== activeRoundNumber
-              ? "historical"
-              : liveFacet?.executable
-                ? "executable"
-                : liveFacet?.waiting
-                  ? "waiting"
-                  : !["not_reached", "required"].includes(marker.kind)
-                    ? "completed"
-                    : "not_reached",
+          status: getCombatTrackerFacetStatus({ historical, liveFacet, markerKind: marker.kind }),
           stageIds: liveFacet?.stageIds ?? [],
           step,
           taskIds: liveFacet?.taskIds ?? [],
@@ -355,15 +483,16 @@ export function buildProjectedCombatTrackerModel(input: {
 
   return {
     cells,
-    currentTaskCellKey: currentCells[0]?.[0],
-    legend: COMBAT_TRACKER_MARKER_MEANINGS.filter((meaning) => markerKinds.has(meaning.kind)),
+    currentTaskCellKey,
+    legend: COMBAT_TRACKER_MARKER_MEANINGS,
+    operationalCursorCellKey,
     rounds,
     rows: rows.map((row) => ({
       label: row.displayName,
       participantId: row.participantId,
-      selected: input.selected?.participantId === row.participantId,
+      selected: cursorSelection?.participantId === row.participantId,
     })),
-    selectedCellKey: input.selected ? buildCombatTrackerCellKey(input.selected) : undefined,
+    selectedCellKey: cursorSelection ? buildCombatTrackerCellKey(cursorSelection) : undefined,
     steps: COMBAT_ROUND_STEPS,
   };
 }

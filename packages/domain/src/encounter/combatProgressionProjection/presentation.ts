@@ -1,6 +1,8 @@
 import { deepFreeze } from "./internal";
+import { projectPlayerSafeCombatAutomationEligibility } from "../combatAutomationEligibility";
 import type {
   CombatantIdentity,
+  CombatProgressionCanonicalOperationalPosition,
   CombatProgressionPresentationProjection,
   CombatProgressionPresentationTask,
   CombatProgressionProjection,
@@ -39,18 +41,36 @@ function taskIsVisible(
   if (task.kind === "submit_declaration" && !task.allowedActors.includes("combatant")) {
     return false;
   }
-  if (!facetOwner) return false;
+  if (!facetOwner) {
+    // The resolved Adjust Distance commit is intentionally process-owned rather than attached to
+    // either participant's tracker row. Both involved participants still need its safe situation
+    // and completion state so their Current Action can say that the GM is resolving the contest.
+    if (task.kind !== "adjust_distance_commit" && task.kind !== "damage_review") return false;
+    return [task.presentationContext?.actor, task.presentationContext?.target].some(
+      (identity) =>
+        identity !== undefined && viewer.controlledParticipantIds.has(identity.participantId),
+    );
+  }
   if (facetOwner && !viewer.visibleParticipantIds.has(facetOwner.participantId)) return false;
 
   // Initiative choices and later private participant workflows remain visible only to their owner.
   if (
     task.expectedCommand === "submit_phase_initiative_choice" ||
     task.kind === "combat_experience" ||
-    task.kind === "health_review"
+    task.kind === "health_review" ||
+    task.kind === "observation_roll"
   ) {
     return Boolean(owner && viewer.controlledParticipantIds.has(owner.participantId));
   }
   return true;
+}
+
+function contributesToProgression(task: CombatProgressionTask): boolean {
+  return !(
+    task.kind === "submit_declaration" &&
+    !task.allowedActors.includes("combatant") &&
+    task.owner?.kind === "combatant"
+  );
 }
 
 function presentationTask(task: CombatProgressionTask): CombatProgressionPresentationTask {
@@ -60,24 +80,96 @@ function presentationTask(task: CombatProgressionTask): CombatProgressionPresent
       combatant: combatantMayAct,
       gm: task.allowedActors.includes("gm"),
     },
-    // A submitted declaration remains GM-editable, but that optional edit is not blocking work.
-    contributesToProgression: !(
-      task.kind === "submit_declaration" &&
-      !combatantMayAct &&
-      task.owner?.kind === "combatant"
-    ),
-    id: task.id,
-    identity: {
-      executionGroupId: task.identity.executionGroupId,
-      phase: task.identity.phase,
+    automation: {
+      ...task.automation,
+      authority: {
+        kind: task.automation.authority.kind,
+        participantId: task.automation.authority.participantId,
+      },
     },
+    // A submitted declaration remains GM-editable, but that optional edit is not blocking work.
+    contributesToProgression: contributesToProgression(task),
+    executionGroupId: task.executionGroupId,
+    expectedCommand: task.expectedCommand,
+    id: task.id,
+    identity: task.identity,
     kind: task.kind,
+    opponent: task.opponent,
     owner: task.owner,
+    presentationContext: task.presentationContext,
     processId: task.processId,
     stageId: task.stageId,
     state: task.state,
     trackerFacet: task.trackerFacet,
     transition: task.transition,
+  };
+}
+
+function visibleAutomation(
+  task: CombatProgressionPresentationTask,
+  viewer: CombatProgressionPresentationViewer,
+): CombatProgressionPresentationTask["automation"] {
+  if (viewer.kind === "gm") return task.automation;
+  return projectPlayerSafeCombatAutomationEligibility({
+    controlledParticipantIds: viewer.controlledParticipantIds,
+    fact: task.automation,
+  });
+}
+
+function visibleTaskIdentity(
+  task: CombatProgressionPresentationTask,
+  viewer: CombatProgressionPresentationViewer,
+): CombatProgressionPresentationTask["identity"] {
+  if (viewer.kind === "gm") return task.identity;
+  const participantVisible = (participantId: string | undefined) =>
+    participantId !== undefined && viewer.visibleParticipantIds.has(participantId);
+  return {
+    actionId: task.identity.actionId,
+    attackIndex: task.identity.attackIndex,
+    attackModeId: task.identity.attackModeId,
+    attackResultId: task.identity.attackResultId,
+    attackerParticipantId: participantVisible(task.identity.attackerParticipantId)
+      ? task.identity.attackerParticipantId
+      : undefined,
+    contestId: task.identity.contestId,
+    criticalResultId: task.identity.criticalResultId,
+    damageRollExpression: task.identity.damageRollExpression,
+    damageReviewId: task.identity.damageReviewId,
+    declarationId: task.identity.declarationId,
+    declaredOpponentParticipantId: participantVisible(task.identity.declaredOpponentParticipantId)
+      ? task.identity.declaredOpponentParticipantId
+      : undefined,
+    defenderParticipantId: participantVisible(task.identity.defenderParticipantId)
+      ? task.identity.defenderParticipantId
+      : undefined,
+    disarmAttemptId: task.identity.disarmAttemptId,
+    executionGroupId: task.identity.executionGroupId,
+    healthRollId: task.identity.healthRollId,
+    hitLocationResultId: task.identity.hitLocationResultId,
+    opportunityId: task.identity.opportunityId,
+    offensiveParryAttemptId: task.identity.offensiveParryAttemptId,
+    observationAttemptId: task.identity.observationAttemptId,
+    opponentParticipantId: participantVisible(task.identity.opponentParticipantId)
+      ? task.identity.opponentParticipantId
+      : undefined,
+    parryPurpose: task.identity.parryPurpose,
+    parryResultId: task.identity.parryResultId,
+    parrySourceId: task.identity.parrySourceId,
+    pairId:
+      participantVisible(task.identity.participantId) &&
+      participantVisible(task.identity.opponentParticipantId)
+        ? task.identity.pairId
+        : undefined,
+    participantId: participantVisible(task.identity.participantId)
+      ? task.identity.participantId
+      : undefined,
+    phase: task.identity.phase,
+    proposalId: task.identity.proposalId,
+    relationshipId: task.identity.relationshipId,
+    weaponInstanceId: task.identity.weaponInstanceId,
+    weaponSourceId: task.identity.weaponSourceId,
+    weaponSourceSlot: task.identity.weaponSourceSlot,
+    weaponTemplateId: task.identity.weaponTemplateId,
   };
 }
 
@@ -107,36 +199,139 @@ function hasRelevantConflict(
   });
 }
 
-/** Removes authorization, blocker, diagnostic, command, proposal, and calculation details. */
+function isInternalDeterministicTask(task: CombatProgressionTask): boolean {
+  return Boolean(
+    task.participation?.status === "required" &&
+    task.participation.workClass === "deterministic_transition" &&
+    task.participation.completeness === "complete",
+  );
+}
+
+function canonicalOperationalTask(projection: CombatProgressionProjection):
+  | {
+      executionStrategy: CombatProgressionCanonicalOperationalPosition["executionStrategy"];
+      task: CombatProgressionTask;
+    }
+  | undefined {
+  for (const process of projection.boundary.processes) {
+    for (const stage of process.stages) {
+      if (stage.state !== "active") continue;
+      for (const group of stage.executionGroups) {
+        if (group.completionState === "complete") continue;
+        const tasks = group.tasks.filter(
+          (task) => !isInternalDeterministicTask(task) && contributesToProgression(task),
+        );
+        const task = tasks.find((candidate) => candidate.state === "executable") ?? tasks[0];
+        if (task) return { executionStrategy: group.executionStrategy, task };
+      }
+    }
+  }
+  return undefined;
+}
+
+function waitingFor(
+  task: CombatProgressionTask | undefined,
+): CombatProgressionCanonicalOperationalPosition["waitingFor"] {
+  if (!task) return "unknown";
+  if (task.allowedActors.length === 1 && task.allowedActors[0] === "gm") return "gm";
+  if (task.owner?.kind === "combatant" || task.allowedActors.includes("combatant")) {
+    return "combatant";
+  }
+  return task.allowedActors.includes("gm") ? "gm" : "unknown";
+}
+
+/** Removes private authorization, blocker, diagnostic, proposal contents, and calculations. */
 export function projectCombatProgressionPresentation(input: {
   projection: CombatProgressionProjection;
   viewer: CombatProgressionPresentationViewer;
 }): CombatProgressionPresentationProjection {
+  const canonical = canonicalOperationalTask(input.projection);
   const processes = input.projection.boundary.processes.flatMap((process) => {
     const stages = process.stages.flatMap((stage) => {
-      const tasks = stage.tasks
-        .filter((task) => taskIsVisible(task, input.viewer))
-        .map(presentationTask)
-        .map((task) => ({
-          ...task,
-          owner:
-            task.owner?.kind === "combatant"
-              ? visibleIdentity(task.owner, input.viewer)
-              : task.owner,
-          trackerFacet: {
-            ...task.trackerFacet,
-            owner: visibleIdentity(task.trackerFacet.owner, input.viewer),
+      const executionGroups = stage.executionGroups.flatMap((group) => {
+        const tasks = group.tasks
+          .filter((task) => taskIsVisible(task, input.viewer) && !isInternalDeterministicTask(task))
+          .map(presentationTask)
+          .map((task) => ({
+            ...task,
+            automation: visibleAutomation(task, input.viewer),
+            identity: visibleTaskIdentity(task, input.viewer),
+            owner:
+              task.owner?.kind === "combatant"
+                ? visibleIdentity(task.owner, input.viewer)
+                : task.owner,
+            opponent: visibleIdentity(task.opponent, input.viewer),
+            presentationContext: task.presentationContext
+              ? {
+                  ...task.presentationContext,
+                  actor: visibleIdentity(task.presentationContext.actor, input.viewer),
+                  responder: visibleIdentity(task.presentationContext.responder, input.viewer),
+                  target: visibleIdentity(task.presentationContext.target, input.viewer),
+                }
+              : undefined,
+            trackerFacet: {
+              ...task.trackerFacet,
+              owner: visibleIdentity(task.trackerFacet.owner, input.viewer),
+            },
+          }));
+        if (input.viewer.kind === "player" && tasks.length === 0) return [];
+        return [
+          {
+            activationBoundary: group.activationBoundary,
+            blocked: group.blockerIds.length > 0,
+            completionState: group.completionState,
+            executionStrategy: group.executionStrategy,
+            futureActivationBoundary: group.futureActivationBoundary,
+            id: group.id,
+            position: group.position,
+            stageId: group.stageId,
+            tasks,
           },
-        }));
+        ];
+      });
+      const tasks = executionGroups.flatMap((group) => group.tasks);
       if (input.viewer.kind === "player" && tasks.length === 0) return [];
-      return [{ ...stage, tasks }];
+      return [
+        {
+          executionGroups,
+          executionStrategy: stage.executionStrategy,
+          id: stage.id,
+          kind: stage.kind,
+          processId: stage.processId,
+          state: stage.state,
+          tasks,
+        },
+      ];
     });
     if (input.viewer.kind === "player" && stages.length === 0) return [];
     return [{ id: process.id, kind: process.kind, stages }];
   });
   const visibleTaskIds = new Set(
     processes.flatMap((process) =>
-      process.stages.flatMap((stage) => stage.tasks.map((task) => task.id)),
+      process.stages.flatMap((stage) =>
+        stage.executionGroups.flatMap((group) => group.tasks.map((task) => task.id)),
+      ),
+    ),
+  );
+  const canonicalTask = canonical
+    ? processes
+        .flatMap((process) => process.stages)
+        .flatMap((stage) => stage.executionGroups)
+        .flatMap((group) => group.tasks)
+        .find((task) => task.id === canonical.task.id)
+    : undefined;
+  const canonicalGroupVisible = Boolean(
+    canonical &&
+    processes.some((process) =>
+      process.stages.some((stage) =>
+        stage.executionGroups.some((group) => group.id === canonical.task.executionGroupId),
+      ),
+    ),
+  );
+  const canonicalStageVisible = Boolean(
+    canonical &&
+    processes.some((process) =>
+      process.stages.some((stage) => stage.id === canonical.task.stageId),
     ),
   );
   const visibleParticipantIds =
@@ -144,6 +339,15 @@ export function projectCombatProgressionPresentation(input: {
   const executionOrder = input.projection.executionOrder
     ? {
         ...input.projection.executionOrder,
+        initiativeGroups: input.projection.executionOrder.initiativeGroups?.map((group) => ({
+          ...group,
+          opportunityIds: input.viewer.kind === "gm" ? group.opportunityIds : [],
+          participantIds: !visibleParticipantIds
+            ? group.participantIds
+            : group.participantIds.filter((participantId) =>
+                visibleParticipantIds.has(participantId),
+              ),
+        })),
         participantIds: !visibleParticipantIds
           ? input.projection.executionOrder.participantIds
           : input.projection.executionOrder.participantIds.filter((participantId) =>
@@ -153,12 +357,15 @@ export function projectCombatProgressionPresentation(input: {
     : undefined;
   const awaitingGmTransition = input.projection.boundary.processes.some((process) =>
     process.stages.some((stage) =>
-      stage.tasks.some(
-        (task) =>
-          task.kind === "gm_advance_boundary" &&
-          task.state === "executable" &&
-          task.allowedActors.length === 1 &&
-          task.allowedActors[0] === "gm",
+      stage.executionGroups.some((group) =>
+        group.tasks.some(
+          (task) =>
+            task.kind === "gm_advance_boundary" &&
+            !isInternalDeterministicTask(task) &&
+            task.state === "executable" &&
+            task.allowedActors.length === 1 &&
+            task.allowedActors[0] === "gm",
+        ),
       ),
     ),
   );
@@ -169,6 +376,34 @@ export function projectCombatProgressionPresentation(input: {
       id: input.projection.boundary.id,
       kind: input.projection.boundary.kind,
       roundNumber: input.projection.boundary.roundNumber,
+    },
+    canonicalOperationalPosition: {
+      executionGroupId: canonicalGroupVisible ? canonical?.task.executionGroupId : undefined,
+      executionStrategy: canonical?.executionStrategy,
+      processId: canonicalStageVisible ? canonical?.task.processId : undefined,
+      roundNumber: input.projection.roundNumber,
+      stageId: canonicalStageVisible ? canonical?.task.stageId : undefined,
+      task: canonicalTask,
+      taskVisibility: canonicalTask ? "visible" : canonical ? "redacted" : "unavailable",
+      trackerFacet: {
+        owner: canonicalTask?.trackerFacet.owner,
+        step:
+          canonical?.task.trackerFacet.step ??
+          (
+            {
+              declaration: "DE",
+              phase1_modifier_review: "M1",
+              phase1_initiative: "i1",
+              phase1_resolution: "A1",
+              phase2_modifier_review: "M2",
+              phase2_initiative: "i2",
+              phase2_resolution: "A2",
+              round_end: "SU",
+              round_boundary: "SU",
+            } as const
+          )[input.projection.boundary.kind],
+      },
+      waitingFor: waitingFor(canonical?.task),
     },
     executionOrder,
     processes,

@@ -17,6 +17,10 @@ import type { EquipmentFeatureState } from "@/features/equipment/types";
 
 import { projectCombatActionGeneratedModifiers } from "./combatDistanceModifierProjection";
 
+function emptyModifierBuckets() {
+  return scenarioParticipantCombatContextSchema.parse({}).modifierBuckets;
+}
+
 const attackParryDistanceRow: ScenarioCombatModifierEntry = {
   durationRounds: 1,
   generated: true,
@@ -121,6 +125,131 @@ function buildCommittedContext(): ScenarioParticipantCombatContext {
 }
 
 describe("projectCombatActionGeneratedModifiers", () => {
+  it("projects Parry's Dodge-derived percentage modifier into declaration and review rows", () => {
+    const roundState = buildRoundStateWithDistance(3);
+    const projectedContext = projectCombatActionGeneratedModifiers({
+      actionId: "parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      dodgeSkillValue: 17,
+      encounterParticipant: buildEncounter().participants[0],
+      roundState,
+    });
+    const modifierRows = buildPlayerCombatModifierRows({
+      combatContext: projectedContext,
+      currentRound: roundState.roundNumber,
+      encounterId: roundState.encounterId,
+      phaseKey: "phase1",
+    });
+    const dbRow = modifierRows.find((row) => row.bucketKey === "situation_db");
+
+    expect(dbRow).toMatchObject({
+      entries: [
+        expect.objectContaining({
+          application: "percentage",
+          id: "generated:parry:round:db-parry-percentage",
+          notes: expect.stringContaining("Dodge 17"),
+          sourceActionId: "parry",
+          value: 3,
+        }),
+      ],
+      total: 3,
+    });
+  });
+
+  it("preserves the committed Parry row at M1 while Dodge hydration is unavailable", () => {
+    const roundState = buildRoundStateWithDistance(3);
+    const committedContext = projectCombatActionGeneratedModifiers({
+      actionId: "parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      dodgeSkillValue: 7,
+      encounterParticipant: buildEncounter().participants[0],
+      roundState,
+    });
+    const m1Context = projectCombatActionGeneratedModifiers({
+      actionId: "parry",
+      combatContext: committedContext,
+      encounterParticipant: buildEncounter().participants[0],
+      roundState,
+    });
+    const phase1Rows = buildPlayerCombatModifierRows({
+      combatContext: m1Context,
+      currentRound: roundState.roundNumber,
+      encounterId: roundState.encounterId,
+      phaseKey: "phase1",
+    });
+    const phase2Rows = buildPlayerCombatModifierRows({
+      combatContext: m1Context,
+      currentRound: roundState.roundNumber,
+      encounterId: roundState.encounterId,
+      phaseKey: "phase2",
+    });
+
+    expect(m1Context.modifierBuckets.situationDb).toEqual([
+      expect.objectContaining({
+        application: "percentage",
+        id: "generated:parry:round:db-parry-percentage",
+        sourceRoundNumber: roundState.roundNumber,
+        value: 1,
+      }),
+    ]);
+    expect(phase1Rows.find((row) => row.bucketKey === "situation_db")).toMatchObject({
+      entries: [expect.objectContaining({ value: 1 })],
+      total: 1,
+    });
+    expect(phase2Rows.find((row) => row.bucketKey === "situation_db")).toMatchObject({
+      entries: [expect.objectContaining({ value: 1 })],
+      total: 1,
+    });
+  });
+
+  it("does not preserve the committed Parry row after the action changes", () => {
+    const roundState = buildRoundStateWithDistance(3);
+    const committedContext = projectCombatActionGeneratedModifiers({
+      actionId: "parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      dodgeSkillValue: 7,
+      roundState,
+    });
+    const changedContext = projectCombatActionGeneratedModifiers({
+      actionId: "full_defense",
+      combatContext: committedContext,
+      roundState,
+    });
+
+    expect(changedContext.modifierBuckets.situationDb).toEqual([]);
+  });
+
+  it("projects the Offensive Parry round DB/Parry percentage drawback", () => {
+    const roundState = buildRoundStateWithDistance(3);
+    const projectedContext = projectCombatActionGeneratedModifiers({
+      actionId: "offensive_parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      encounterParticipant: buildEncounter().participants[0],
+      roundState,
+    });
+    const modifierRows = buildPlayerCombatModifierRows({
+      combatContext: projectedContext,
+      currentRound: roundState.roundNumber,
+      encounterId: roundState.encounterId,
+      phaseKey: "phase1",
+    });
+    const dbRow = modifierRows.find((row) => row.bucketKey === "situation_db");
+
+    expect(dbRow).toMatchObject({
+      entries: [
+        expect.objectContaining({
+          application: "percentage",
+          expiresAtRound: roundState.roundNumber,
+          id: "generated:offensive-parry:round:percentage-db",
+          sourceActionId: "offensive_parry",
+          sourceRoundNumber: roundState.roundNumber,
+          value: -2,
+        }),
+      ],
+      total: -2,
+    });
+  });
+
   it("uses a Single attack declared farther distance for the visible Skill/OB penalty", () => {
     const encounter = buildEncounter();
     const projectedContext = projectCombatActionGeneratedModifiers({
@@ -138,6 +267,7 @@ describe("projectCombatActionGeneratedModifiers", () => {
         mode: "set_distance_preferences",
       },
       phaseContexts,
+      phaseWeaponNames: { phase1: "Broad sword" },
       resolvedEquipmentState: buildWeaponEquipmentState() as unknown as EquipmentFeatureState,
       roundState: buildRoundStateWithDistance(2),
     });
@@ -148,6 +278,37 @@ describe("projectCombatActionGeneratedModifiers", () => {
         notes: expect.stringContaining("declared 4"),
         sourcePhase: "phase1",
         value: -4,
+      }),
+    ]);
+  });
+
+  it("applies attack-distance modifiers to Feint's Phase 2 attack, not its Phase 1 contest", () => {
+    const encounter = buildEncounter();
+    const projectedContext = projectCombatActionGeneratedModifiers({
+      actionId: "feint_attack",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      encounterParticipant: encounter.participants[0],
+      phaseContexts: {
+        phase1: {
+          modifierBuckets: emptyModifierBuckets(),
+          targetParticipantId: "scenario-gladiator",
+        },
+        phase2: {
+          modifierBuckets: emptyModifierBuckets(),
+          targetParticipantId: "scenario-gladiator",
+        },
+      },
+      phaseWeaponNames: { phase2: "Broad sword" },
+      resolvedEquipmentState: buildWeaponEquipmentState() as unknown as EquipmentFeatureState,
+      roundState: buildRoundStateWithDistance(3),
+    });
+
+    expect(projectedContext.modifierBuckets.situationObSkill).toEqual([
+      expect.objectContaining({
+        id: "generated:distance:phase2:ob-skill",
+        sourceActionId: "feint_attack",
+        sourcePhase: "phase2",
+        value: -2,
       }),
     ]);
   });
@@ -320,8 +481,7 @@ describe("projectCombatActionGeneratedModifiers", () => {
     const browserVisibleTrace = {
       currentRoundNumber: 1,
       declarationExists: true,
-      declarationSituationObSkill:
-        declarationCombatContext.modifierBuckets.situationObSkill,
+      declarationSituationObSkill: declarationCombatContext.modifierBuckets.situationObSkill,
       finalCombatContext: projectedContext,
       finalRenderedModifierRows: modifierRows,
       finalRenderedSkillObSummary: skillObRow?.total,
@@ -335,7 +495,10 @@ describe("projectCombatActionGeneratedModifiers", () => {
 
     expect(projectedContext.modifierBuckets.situationDb).toEqual([
       expect.objectContaining({
-        id: "generated:attack-parry:phase1:db-parry",
+        provisional: true,
+        sourceActionId: "attack_parry",
+        sourcePhase: "phase1",
+        sourceRule: "attack-phase-defensive-penalty:ordinary_committed_attack",
         value: -4,
       }),
     ]);
@@ -370,5 +533,75 @@ describe("projectCombatActionGeneratedModifiers", () => {
     });
 
     expect(projectedContext.modifierBuckets.situationObSkill).toEqual([]);
+  });
+
+  it.each([
+    ["feint_attack", "phase2"],
+    ["adjust_range_attack", "phase2"],
+  ] as const)("projects %s attack risk as provisional opportunity state", (actionId, phase) => {
+    const projectedContext = projectCombatActionGeneratedModifiers({
+      actionId,
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      phaseContexts: {
+        phase1: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target" },
+        phase2: { modifierBuckets: emptyModifierBuckets(), targetParticipantId: "target" },
+      },
+    });
+
+    expect(projectedContext.modifierBuckets.situationDb).toEqual([
+      expect.objectContaining({
+        application: "percentage",
+        provisional: true,
+        sourceActionId: actionId,
+        sourcePhase: phase,
+        value: -4,
+      }),
+    ]);
+  });
+
+  it("reuses committed opportunity facts without a provisional marker", () => {
+    const encounter = buildEncounter();
+    const baseRoundState = initializeCombatRoundState({ encounter });
+    const roundState = combatRoundStateSchema.parse({
+      ...baseRoundState,
+      participants: baseRoundState.participants.map((participant) =>
+        participant.participantId === "scyrian"
+          ? {
+              ...participant,
+              declaration: {
+                actionId: "attack_parry",
+                attackOpportunities: [
+                  {
+                    actionId: "attack_parry",
+                    id: "round:1:participant:scyrian:phase1:attack_1",
+                    origin: "declared",
+                    phase: "phase1",
+                    slot: "attack_1",
+                    status: "committed",
+                    targetParticipantId: "gladiator",
+                  },
+                ],
+                roundNumber: baseRoundState.roundNumber,
+                submittedBy: "gm",
+              },
+            }
+          : participant,
+      ),
+    });
+    const projectedContext = projectCombatActionGeneratedModifiers({
+      actionId: "attack_parry",
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      encounterParticipant: encounter.participants[0],
+      phaseContexts,
+      roundState,
+    });
+
+    expect(projectedContext.modifierBuckets.situationDb).toEqual([
+      expect.objectContaining({
+        provisional: false,
+        sourceOpportunityId: "round:1:participant:scyrian:phase1:attack_1",
+        value: -4,
+      }),
+    ]);
   });
 });

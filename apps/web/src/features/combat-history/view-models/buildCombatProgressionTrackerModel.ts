@@ -3,14 +3,20 @@ import {
   type CombatProgressionPresentationProjection,
   type CombatProgressionPresentationTask,
   type CombatProgressionTaskKind,
+  type CombatRoundStep,
 } from "@glantri/domain";
 
 import type { CombatTrackerLiveFacet } from "../types";
 import { buildCombatTrackerCellKey } from "./buildCombatTrackerModel";
+import {
+  buildCombatTrackerTaskHover,
+  classifyCombatTrackerTaskAttention,
+} from "./combatTrackerTaskPresentation";
 
 export interface CombatProgressionTrackerIndex {
   readonly byCellKey: Readonly<Record<string, CombatTrackerLiveFacet>>;
   readonly conflicted: boolean;
+  readonly currentStep?: CombatRoundStep;
   readonly currentTaskIds: readonly string[];
 }
 
@@ -23,8 +29,9 @@ export function getCombatProgressionPresentationTasks(
 ): CombatProgressionPresentationTask[] {
   if (progression?.taskVisibility !== "available") return [];
   return (
-    progression?.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks)) ??
-    []
+    progression?.processes.flatMap((process) =>
+      process.stages.flatMap((stage) => stage.executionGroups.flatMap((group) => group.tasks)),
+    ) ?? []
   );
 }
 
@@ -36,35 +43,72 @@ export function buildCombatProgressionTrackerIndex(
     return {
       byCellKey: {},
       conflicted: progression?.taskVisibility === "conflicted",
+      currentStep: undefined,
       currentTaskIds: [],
     };
   }
 
   const tasksByCellKey = new Map<string, CombatProgressionPresentationTask[]>();
+  const currentTasks: CombatProgressionPresentationTask[] = [];
   for (const process of progression.processes) {
     for (const stage of process.stages) {
       if (stage.state !== "active") continue;
-      for (const task of stage.tasks) {
-        const participantId = task.trackerFacet.owner?.participantId;
-        if (!participantId) continue;
-        const key = buildCombatTrackerCellKey({
-          participantId,
-          roundNumber: progression.roundNumber,
-          step: getCombatRoundStepForCursorStep(task.trackerFacet.step),
-        });
-        tasksByCellKey.set(key, [...(tasksByCellKey.get(key) ?? []), task]);
+      for (const group of stage.executionGroups) {
+        for (const task of group.tasks) {
+          if (!task.contributesToProgression) continue;
+          currentTasks.push(task);
+          const participantId = task.trackerFacet.owner?.participantId;
+          if (!participantId) continue;
+          const key = buildCombatTrackerCellKey({
+            participantId,
+            roundNumber: progression.roundNumber,
+            step: getCombatRoundStepForCursorStep(task.trackerFacet.step),
+          });
+          tasksByCellKey.set(key, [...(tasksByCellKey.get(key) ?? []), task]);
+        }
       }
     }
   }
 
+  const canonicalPosition = progression.canonicalOperationalPosition;
+  const canonicalStep = canonicalPosition
+    ? getCombatRoundStepForCursorStep(canonicalPosition.trackerFacet.step)
+    : currentTasks[0]
+      ? getCombatRoundStepForCursorStep(currentTasks[0].trackerFacet.step)
+      : undefined;
+  const canonicalParticipantId = canonicalPosition?.trackerFacet.owner?.participantId;
+  const canonicalCellKey =
+    canonicalStep && canonicalParticipantId
+      ? buildCombatTrackerCellKey({
+          participantId: canonicalParticipantId,
+          roundNumber: progression.roundNumber,
+          step: canonicalStep,
+        })
+      : undefined;
+
   const byCellKey: Record<string, CombatTrackerLiveFacet> = {};
   for (const [cellKey, tasks] of tasksByCellKey) {
-    const progressionTasks = tasks.filter((task) => task.contributesToProgression);
+    const attention = tasks.some(
+      (task) => classifyCombatTrackerTaskAttention(task) === "exceptional",
+    )
+      ? "exceptional"
+      : "ordinary";
+    const primaryTask = [...tasks].sort(
+      (left, right) => {
+        const attentionDifference =
+          Number(classifyCombatTrackerTaskAttention(right) === "exceptional") -
+          Number(classifyCombatTrackerTaskAttention(left) === "exceptional");
+        if (attentionDifference !== 0) return attentionDifference;
+        return Number(right.state === "executable") - Number(left.state === "executable");
+      },
+    )[0]!;
     byCellKey[cellKey] = {
-      current: progressionTasks.length > 0,
-      executable: progressionTasks.some((task) => task.state === "executable"),
-      executionGroupIds: unique(tasks.map((task) => task.identity.executionGroupId)),
+      attention,
+      current: canonicalPosition ? cellKey === canonicalCellKey : true,
+      executable: tasks.some((task) => task.state === "executable"),
+      executionGroupIds: unique(tasks.map((task) => task.executionGroupId)),
       gmProxyAvailable: tasks.some((task) => task.actorAccess.gm),
+      hover: buildCombatTrackerTaskHover(primaryTask),
       ownerParticipantIds: unique(
         tasks.flatMap((task) =>
           task.owner?.kind === "combatant" ? [task.owner.participantId] : [],
@@ -74,16 +118,19 @@ export function buildCombatProgressionTrackerIndex(
       stageIds: unique(tasks.map((task) => task.stageId)),
       taskIds: tasks.map((task) => task.id),
       taskKinds: unique(tasks.map((task) => task.kind)) as CombatProgressionTaskKind[],
-      waiting: progressionTasks.some((task) => task.state === "waiting"),
+      waiting: tasks.some((task) => task.state === "waiting"),
     };
   }
 
   return {
     byCellKey,
     conflicted: false,
-    currentTaskIds: getCombatProgressionPresentationTasks(progression)
-      .filter((task) => task.contributesToProgression)
-      .map((task) => task.id),
+    currentStep: canonicalStep,
+    currentTaskIds: canonicalPosition
+      ? canonicalPosition.task
+        ? [canonicalPosition.task.id]
+        : []
+      : currentTasks.map((task) => task.id),
   };
 }
 

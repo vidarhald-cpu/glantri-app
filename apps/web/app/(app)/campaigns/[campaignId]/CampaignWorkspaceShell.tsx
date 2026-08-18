@@ -2,15 +2,27 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
-
-import type { Campaign, EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  loadScenarioEncounters,
+  buildEncounterSessionSummary,
+  type Campaign,
+  type EncounterSession,
+  type EncounterSessionSummary,
+  type PlayerAccessibleCampaign,
+  type PlayerAccessibleScenario,
+  type Scenario,
+  type ScenarioParticipant,
+} from "@glantri/domain";
+
+import {
+  loadEncounterById,
+  loadEncounterRevision,
+  loadScenarioEncounterSummaries,
   loadScenarioMyParticipant,
   loadScenarioParticipants,
 } from "@/lib/api/localServiceClient";
+import { ApiRequestError } from "@/lib/api/apiClient";
 import {
   REMEMBERED_SELECTION_KEYS,
   useRememberedSelection,
@@ -41,10 +53,16 @@ import ScenarioPlayerPageContent from "./scenarios/[scenarioId]/player/ScenarioP
 import ScenarioPlayerCombatPageContent from "./scenarios/[scenarioId]/player/combat/ScenarioPlayerCombatPageContent";
 import { PlayerRoleplayingEncounterScreen } from "@/features/roleplay/RoleplayEncounterScreens";
 import CombatRoundManagerPanel from "@/features/combat-round-manager/CombatRoundManagerPanel";
+import { selectLatestCombatViewRevision } from "@/features/combat-history";
+import { loadCampaignWorkspaceInitialData } from "@/lib/campaigns/campaignWorkspaceLoading";
+import { pollGmCombatSnapshot } from "@/lib/campaigns/gmCombatRefresh";
+import CampaignItemsWorkspace from "@/features/equipment/campaign-items/CampaignItemsWorkspace";
 
 interface CampaignWorkspaceShellProps {
   campaignId: string;
 }
+
+const GM_COMBAT_REFRESH_INTERVAL_MS = 5_000;
 
 const panelStyle = {
   border: "1px solid #d9ddd8",
@@ -54,7 +72,7 @@ const panelStyle = {
   padding: "1rem",
 } as const;
 
-function getEncounterStatusRank(status: EncounterSession["status"]): number {
+function getEncounterStatusRank(status: EncounterSessionSummary["status"]): number {
   switch (status) {
     case "active":
       return 0;
@@ -79,13 +97,19 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   const searchParams = useSearchParams();
   const searchParamString = searchParams.toString();
   const { currentUser, loading: sessionLoading } = useSessionUser();
-  const [accessibleCampaign, setAccessibleCampaign] = useState<Campaign | null>(null);
+  const [accessibleCampaign, setAccessibleCampaign] = useState<
+    Campaign | PlayerAccessibleCampaign | null
+  >(null);
   const [accessMode, setAccessMode] = useState<"gm" | "player" | "none">("gm");
-  const [encounters, setEncounters] = useState<EncounterSession[]>([]);
+  const [activeEncounter, setActiveEncounter] = useState<EncounterSession>();
+  const [encounterSummaries, setEncounterSummaries] = useState<EncounterSessionSummary[]>([]);
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [scenarioParticipants, setScenarioParticipants] = useState<ScenarioParticipant[]>([]);
-  const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [scenarios, setScenarios] = useState<Array<Scenario | PlayerAccessibleScenario>>([]);
+  const activeEncounterIdRef = useRef<string | undefined>(undefined);
+  const activeEncounterRef = useRef<EncounterSession | undefined>(undefined);
+  const activeEncounterRequestIdRef = useRef(0);
   const canAccessGmEncounter = canManageCampaignWorkspace(currentUser);
   const rememberedCampaignSelection = useRememberedSelection(REMEMBERED_SELECTION_KEYS.campaignId);
   const workspaceSelectionKeys = useMemo(
@@ -96,94 +120,98 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   const rememberedEncounterSelection = useRememberedSelection(workspaceSelectionKeys.encounterId);
   const rememberedWorkspaceTab = useRememberedSelection(workspaceSelectionKeys.workspaceTab);
 
-  const refreshWorkspaceContext = useCallback(async () => {
-    const workspaceAccess = await loadCampaignWorkspaceAccessForUser({
-      campaignId,
-      user: currentUser,
-    });
-    const scenarioIds = workspaceAccess.scenarios.map((scenario) => scenario.id);
-    const encounterGroups = await Promise.all(
-      workspaceAccess.scenarios.map((scenario) => loadScenarioEncounters(scenario.id)),
+  const acceptActiveEncounter = useCallback((candidate: EncounterSession) => {
+    setActiveEncounter((accepted) =>
+      accepted?.id === candidate.id
+        ? selectLatestCombatViewRevision({ accepted, candidate })
+        : candidate,
     );
-    const participantGroups = await Promise.all(
-      workspaceAccess.scenarios.map((scenario) =>
-        workspaceAccess.accessMode === "player"
-          ? loadScenarioMyParticipant(scenario.id).then((participant) =>
-              participant ? [participant] : [],
-            )
-          : loadScenarioParticipants(scenario.id),
+    setEncounterSummaries((current) =>
+      current.map((summary) =>
+        summary.id === candidate.id
+          ? {
+              ...buildEncounterSessionSummary(candidate),
+              viewerAssigned: summary.viewerAssigned,
+            }
+          : summary,
       ),
     );
-    const nextEncounters = encounterGroups.flat();
-    const nextScenarioParticipants = participantGroups.flat();
+  }, []);
 
-    setAccessibleCampaign(workspaceAccess.campaign ?? null);
-    setAccessMode(workspaceAccess.accessMode);
-    setScenarios(workspaceAccess.scenarios);
-    setScenarioParticipants(nextScenarioParticipants);
-    setEncounters(
-      getCampaignWorkspaceVisibleEncounters({
-        campaignId,
-        encounters: nextEncounters,
-        scenarioIds,
-      }),
+  const refreshEncounterSummaries = useCallback(async () => {
+    const scenarioIds = scenarios.map((scenario) => scenario.id);
+    const encounterGroups = await Promise.all(
+      scenarioIds.map((scenarioId) => loadScenarioEncounterSummaries(scenarioId)),
     );
-  }, [campaignId, currentUser]);
+    const visibleEncounters = getCampaignWorkspaceVisibleEncounters({
+      campaignId,
+      encounters: encounterGroups.flat(),
+      scenarioIds,
+    });
 
-  const refreshWorkspaceContextWithErrorHandling = useCallback(async () => {
-    try {
-      await refreshWorkspaceContext();
-      setError(undefined);
-    } catch (caughtError) {
-      setError(
-        caughtError instanceof Error ? caughtError.message : "Unable to load campaign workspace.",
-      );
-      setAccessMode("none");
-      setAccessibleCampaign(null);
-      setScenarios([]);
-      setScenarioParticipants([]);
-      setEncounters([]);
-    }
-  }, [refreshWorkspaceContext]);
+    setEncounterSummaries(visibleEncounters);
+  }, [campaignId, scenarios]);
 
   useEffect(() => {
     if (sessionLoading) {
       return;
     }
 
+    let cancelled = false;
     setLoading(true);
-    refreshWorkspaceContextWithErrorHandling().finally(() => setLoading(false));
-  }, [refreshWorkspaceContextWithErrorHandling, sessionLoading]);
 
-  useEffect(() => {
-    if (sessionLoading || loading) {
-      return;
-    }
+    async function initializeWorkspace() {
+      try {
+        const initialData = await loadCampaignWorkspaceInitialData({
+          loadAccess: () =>
+            loadCampaignWorkspaceAccessForUser({
+              campaignId,
+              user: currentUser,
+            }),
+          loadEncounterSummaries: loadScenarioEncounterSummaries,
+          loadMyParticipant: loadScenarioMyParticipant,
+          loadParticipants: loadScenarioParticipants,
+        });
+        const workspaceAccess = initialData.access;
+        const scenarioIds = workspaceAccess.scenarios.map((scenario) => scenario.id);
 
-    void refreshWorkspaceContextWithErrorHandling();
-  }, [loading, refreshWorkspaceContextWithErrorHandling, searchParams, sessionLoading]);
+        if (cancelled) return;
 
-  useEffect(() => {
-    if (sessionLoading) {
-      return;
-    }
+        setAccessibleCampaign(workspaceAccess.campaign ?? null);
+        setAccessMode(workspaceAccess.accessMode);
+        setScenarios(workspaceAccess.scenarios);
+        setScenarioParticipants(initialData.participants);
+        setEncounterSummaries(
+          getCampaignWorkspaceVisibleEncounters({
+            campaignId,
+            encounters: initialData.encounterSummaries,
+            scenarioIds,
+          }),
+        );
+        setError(undefined);
+      } catch (caughtError) {
+        if (cancelled) return;
 
-    function refreshVisibleWorkspace() {
-      if (document.visibilityState === "hidden") {
-        return;
+        setError(
+          caughtError instanceof Error ? caughtError.message : "Unable to load campaign workspace.",
+        );
+        setAccessMode("none");
+        setAccessibleCampaign(null);
+        setScenarios([]);
+        setScenarioParticipants([]);
+        setEncounterSummaries([]);
+        setActiveEncounter(undefined);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      void refreshWorkspaceContextWithErrorHandling();
     }
 
-    window.addEventListener("focus", refreshVisibleWorkspace);
-    document.addEventListener("visibilitychange", refreshVisibleWorkspace);
+    void initializeWorkspace();
 
     return () => {
-      window.removeEventListener("focus", refreshVisibleWorkspace);
-      document.removeEventListener("visibilitychange", refreshVisibleWorkspace);
+      cancelled = true;
     };
-  }, [refreshWorkspaceContextWithErrorHandling, sessionLoading]);
+  }, [campaignId, currentUser, sessionLoading]);
 
   const workspaceState = useMemo(
     () =>
@@ -191,7 +219,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         activeCampaignId: campaignId,
         canAccessGmEncounter,
         currentUserId: currentUser?.id,
-        encounters,
+        encounters: encounterSummaries,
         rememberedEncounterId: rememberedEncounterSelection.value,
         rememberedScenarioId: rememberedScenarioSelection.value,
         rememberedTab: rememberedWorkspaceTab.value,
@@ -205,7 +233,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       campaignId,
       canAccessGmEncounter,
       currentUser?.id,
-      encounters,
+      encounterSummaries,
       rememberedEncounterSelection.value,
       rememberedScenarioSelection.value,
       rememberedWorkspaceTab.value,
@@ -220,7 +248,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
     [canAccessGmEncounter],
   );
   const activeScenarioEncounters = getScenarioVisibleEncounters({
-    encounters,
+    encounters: encounterSummaries,
     scenarioId: workspaceState.activeScenarioId,
   });
   const sortedActiveScenarioEncounters = [...activeScenarioEncounters]
@@ -233,17 +261,182 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   const activeScenario = scenarios.find(
     (scenario) => scenario.id === workspaceState.activeScenarioId,
   );
-  const activeEncounter = activeScenarioEncounters.find(
-    (encounter) => encounter.id === workspaceState.activeEncounterId,
+  const activeScenarioRoundNumber =
+    activeScenario && "liveState" in activeScenario
+      ? activeScenario.liveState?.roundNumber
+      : undefined;
+  const activeEncounterSummary = activeScenarioEncounters.find(
+    (summary) => summary.id === workspaceState.activeEncounterId,
   );
+  const activeEncounterId = activeEncounterSummary?.id;
+  const shouldLoadActiveEncounter =
+    canAccessGmEncounter &&
+    (
+      ["character", "combat", "player-combat", "player-skill-rolls"] as CampaignWorkspaceTabId[]
+    ).includes(workspaceState.activeTab);
+  const selectedActiveEncounter =
+    shouldLoadActiveEncounter && activeEncounter?.id === activeEncounterId
+      ? activeEncounter
+      : undefined;
+  activeEncounterIdRef.current = shouldLoadActiveEncounter ? activeEncounterId : undefined;
+  activeEncounterRef.current = activeEncounter;
+
+  useEffect(() => {
+    const encounterId = shouldLoadActiveEncounter ? activeEncounterId : undefined;
+    const summaryRevision = activeEncounterSummary?.updatedAt;
+
+    if (!encounterId || !summaryRevision) {
+      activeEncounterRequestIdRef.current += 1;
+      setActiveEncounter(undefined);
+      return;
+    }
+
+    if (activeEncounter?.id === encounterId && activeEncounter.updatedAt >= summaryRevision) {
+      return;
+    }
+
+    const requestId = activeEncounterRequestIdRef.current + 1;
+    activeEncounterRequestIdRef.current = requestId;
+    setActiveEncounter((current) => (current?.id === encounterId ? current : undefined));
+
+    loadEncounterById(encounterId)
+      .then((candidate) => {
+        if (
+          activeEncounterRequestIdRef.current !== requestId ||
+          activeEncounterIdRef.current !== encounterId
+        ) {
+          return;
+        }
+
+        acceptActiveEncounter(candidate);
+        setError(undefined);
+      })
+      .catch((caughtError) => {
+        if (
+          activeEncounterRequestIdRef.current !== requestId ||
+          activeEncounterIdRef.current !== encounterId
+        ) {
+          return;
+        }
+
+        if (caughtError instanceof ApiRequestError && caughtError.status === 404) {
+          setEncounterSummaries((current) =>
+            current.filter((summary) => summary.id !== encounterId),
+          );
+          setActiveEncounter(undefined);
+          return;
+        }
+
+        setError(caughtError instanceof Error ? caughtError.message : "Unable to load encounter.");
+      });
+  }, [
+    acceptActiveEncounter,
+    activeEncounter?.id,
+    activeEncounter?.updatedAt,
+    activeEncounterId,
+    activeEncounterSummary?.updatedAt,
+    shouldLoadActiveEncounter,
+  ]);
+
+  useEffect(() => {
+    if (
+      sessionLoading ||
+      !canAccessGmEncounter ||
+      workspaceState.activeTab !== "combat" ||
+      !activeEncounterId ||
+      activeEncounter?.id !== activeEncounterId
+    ) {
+      return;
+    }
+
+    const polledEncounterId = activeEncounterId;
+    let refreshInFlight = false;
+    let disposed = false;
+    async function refreshActiveCombatRevision() {
+      if (refreshInFlight) return;
+      refreshInFlight = true;
+      try {
+        const accepted = activeEncounterRef.current;
+        const result = await pollGmCombatSnapshot({
+          acceptedRevision: accepted?.id === polledEncounterId ? accepted.updatedAt : undefined,
+          encounterId: polledEncounterId,
+          loadEncounter: loadEncounterById,
+          loadParticipants: loadScenarioParticipants,
+          loadRevision: loadEncounterRevision,
+        });
+
+        if (
+          disposed ||
+          activeEncounterIdRef.current !== polledEncounterId ||
+          result.kind !== "updated"
+        ) {
+          return;
+        }
+
+        setScenarioParticipants((current) => [
+          ...current.filter(
+            (participant) => participant.scenarioId !== result.encounter.scenarioId,
+          ),
+          ...result.participants,
+        ]);
+        acceptActiveEncounter(result.encounter);
+        setError(undefined);
+      } catch (caughtError) {
+        if (disposed || activeEncounterIdRef.current !== polledEncounterId) {
+          return;
+        }
+
+        if (caughtError instanceof ApiRequestError && caughtError.status === 404) {
+          setEncounterSummaries((current) =>
+            current.filter((summary) => summary.id !== polledEncounterId),
+          );
+          setActiveEncounter(undefined);
+          return;
+        }
+
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to refresh active encounter.",
+        );
+      } finally {
+        refreshInFlight = false;
+      }
+    }
+
+    function refreshVisibleCombat() {
+      if (document.visibilityState !== "hidden") {
+        void refreshActiveCombatRevision();
+      }
+    }
+
+    refreshVisibleCombat();
+    const intervalId = window.setInterval(refreshVisibleCombat, GM_COMBAT_REFRESH_INTERVAL_MS);
+    window.addEventListener("focus", refreshVisibleCombat);
+    document.addEventListener("visibilitychange", refreshVisibleCombat);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshVisibleCombat);
+      document.removeEventListener("visibilitychange", refreshVisibleCombat);
+    };
+  }, [
+    acceptActiveEncounter,
+    activeEncounter?.id,
+    activeEncounterId,
+    canAccessGmEncounter,
+    sessionLoading,
+    workspaceState.activeTab,
+  ]);
   const gmInspectableCandidates = useMemo(
     () =>
       buildGmCharacterWorkspaceCandidates({
-        activeEncounter,
+        activeEncounter: selectedActiveEncounter,
         scenarioId: workspaceState.activeScenarioId,
         scenarioParticipants,
       }),
-    [activeEncounter, scenarioParticipants, workspaceState.activeScenarioId],
+    [scenarioParticipants, selectedActiveEncounter, workspaceState.activeScenarioId],
   );
   const selectedGmInspectableCandidate =
     gmInspectableCandidates.find(
@@ -264,53 +457,53 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       ? "You are in this scenario, but not assigned to this encounter."
       : "Waiting for GM to add you to an encounter.";
 
-  const buildWorkspaceHref = useCallback((partial: {
-    encounterId?: string | null;
-    participantId?: string | null;
-    scenarioId?: string | null;
-    tab?: CampaignWorkspaceTabId | null;
-  }): string => {
-    const nextParams = new URLSearchParams(searchParamString);
+  const buildWorkspaceHref = useCallback(
+    (partial: {
+      encounterId?: string | null;
+      participantId?: string | null;
+      scenarioId?: string | null;
+      tab?: CampaignWorkspaceTabId | null;
+    }): string => {
+      const nextParams = new URLSearchParams(searchParamString);
 
-    if (partial.scenarioId === null) {
-      nextParams.delete("scenarioId");
-    } else if (partial.scenarioId !== undefined) {
-      nextParams.set("scenarioId", partial.scenarioId);
-    }
+      if (partial.scenarioId === null) {
+        nextParams.delete("scenarioId");
+      } else if (partial.scenarioId !== undefined) {
+        nextParams.set("scenarioId", partial.scenarioId);
+      }
 
-    if (partial.encounterId === null) {
-      nextParams.delete("encounterId");
-    } else if (partial.encounterId !== undefined) {
-      nextParams.set("encounterId", partial.encounterId);
-    }
+      if (partial.encounterId === null) {
+        nextParams.delete("encounterId");
+      } else if (partial.encounterId !== undefined) {
+        nextParams.set("encounterId", partial.encounterId);
+      }
 
-    if (partial.tab === null) {
-      nextParams.delete("tab");
-    } else if (partial.tab !== undefined) {
-      nextParams.set("tab", partial.tab);
-    }
+      if (partial.tab === null) {
+        nextParams.delete("tab");
+      } else if (partial.tab !== undefined) {
+        nextParams.set("tab", partial.tab);
+      }
 
-    if (partial.participantId === null) {
-      nextParams.delete("participantId");
-    } else if (partial.participantId !== undefined) {
-      nextParams.set("participantId", partial.participantId);
-    }
+      if (partial.participantId === null) {
+        nextParams.delete("participantId");
+      } else if (partial.participantId !== undefined) {
+        nextParams.set("participantId", partial.participantId);
+      }
 
-    return buildCampaignWorkspaceHref({
-      campaignId,
-      encounterId: nextParams.get("encounterId"),
-      participantId: nextParams.get("participantId"),
-      scenarioId: nextParams.get("scenarioId"),
-      tab: (nextParams.get("tab") as CampaignWorkspaceTabId | null) ?? undefined,
-    });
-  }, [campaignId, searchParamString]);
+      return buildCampaignWorkspaceHref({
+        campaignId,
+        encounterId: nextParams.get("encounterId"),
+        participantId: nextParams.get("participantId"),
+        scenarioId: nextParams.get("scenarioId"),
+        tab: (nextParams.get("tab") as CampaignWorkspaceTabId | null) ?? undefined,
+      });
+    },
+    [campaignId, searchParamString],
+  );
 
   function selectInspectableParticipant(input: {
     participantId: string;
-    tab: Extract<
-      CampaignWorkspaceTabId,
-      "character" | "player-combat" | "player-skill-rolls"
-    >;
+    tab: Extract<CampaignWorkspaceTabId, "character" | "player-combat" | "player-skill-rolls">;
   }) {
     const nextHref = buildWorkspaceHref({
       participantId: input.participantId,
@@ -332,6 +525,10 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   }, [accessMode, campaignId, rememberedCampaignSelection]);
 
   useEffect(() => {
+    if (sessionLoading || loading) {
+      return;
+    }
+
     if (
       !rememberedScenarioSelection.hydrated ||
       !rememberedEncounterSelection.hydrated ||
@@ -390,9 +587,11 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
     rememberedEncounterSelection,
     rememberedScenarioSelection,
     rememberedWorkspaceTab.hydrated,
+    loading,
     router,
     searchParams,
     searchParamString,
+    sessionLoading,
     tabs,
     workspaceState.activeEncounterId,
     workspaceState.activeScenarioId,
@@ -508,6 +707,12 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         </section>
       ) : null}
 
+      {accessMode !== "none" && workspaceState.activeTab === "items" ? (
+        canAccessGmEncounter ? (
+          <CampaignItemsWorkspace campaignId={campaignId} />
+        ) : null
+      ) : null}
+
       {accessMode !== "none" && workspaceState.activeTab === "scenario" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
           {workspaceState.activeScenarioId ? (
@@ -515,6 +720,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
               <ScenarioDetailPageContent
                 campaignId={campaignId}
                 embedded
+                onWorkspaceEncountersChanged={() => void refreshEncounterSummaries()}
                 scenarioId={workspaceState.activeScenarioId}
               />
             ) : (
@@ -710,8 +916,8 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
 
       {accessMode !== "none" && workspaceState.activeTab === "character" ? (
         <CharacterWorkspacePanel
-          activeEncounter={activeEncounter}
-          currentRoundNumber={activeScenario?.liveState?.roundNumber}
+          activeEncounter={selectedActiveEncounter}
+          currentRoundNumber={activeScenarioRoundNumber}
           currentUserId={currentUser?.id}
           isGameMaster={canAccessGmEncounter}
           onSelectParticipantId={(participantId) => {
@@ -730,7 +936,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
 
       {accessMode !== "none" && workspaceState.activeTab === "combat" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
-          {canAccessGmEncounter && activeEncounter ? (
+          {canAccessGmEncounter && selectedActiveEncounter ? (
             <>
               {sortedActiveScenarioEncounters.length > 1 ? (
                 <section style={panelStyle}>
@@ -752,15 +958,9 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                 </section>
               ) : null}
               <CombatRoundManagerPanel
-                encounter={activeEncounter}
-                key={activeEncounter.id}
-                onEncounterUpdated={(nextEncounter) => {
-                  setEncounters((current) =>
-                    current.map((encounter) =>
-                      encounter.id === nextEncounter.id ? nextEncounter : encounter,
-                    ),
-                  );
-                }}
+                encounter={selectedActiveEncounter}
+                key={selectedActiveEncounter.id}
+                onEncounterUpdated={acceptActiveEncounter}
                 onScenarioParticipantsUpdated={(nextParticipants) => {
                   setScenarioParticipants((current) =>
                     current.map(
@@ -826,7 +1026,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
 
       {accessMode !== "none" && workspaceState.activeTab === "player-combat" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
-          {canAccessGmEncounter && workspaceState.activeScenarioId && activeEncounter ? (
+          {canAccessGmEncounter && workspaceState.activeScenarioId && selectedActiveEncounter ? (
             <>
               <WorkspaceParticipantInspectionHeader
                 candidates={gmInspectableCandidates}
@@ -842,8 +1042,8 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                   campaignId={campaignId}
                   encounterId={workspaceState.activeEncounterId}
                   embedded
-                  encounterTitle={activeEncounter.title}
-                  key={`${activeEncounter.id}:${selectedGmInspectableCandidate.id}`}
+                  encounterTitle={selectedActiveEncounter.title}
+                  key={`${selectedActiveEncounter.id}:${selectedGmInspectableCandidate.id}`}
                   participantId={selectedGmInspectableCandidate.id}
                   scenarioId={workspaceState.activeScenarioId}
                   showParticipantSelector={false}
@@ -883,7 +1083,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
               campaignId={campaignId}
               encounterId={workspaceState.activeEncounterId}
               embedded
-              encounterTitle={activeEncounter?.title}
+              encounterTitle={activeEncounterSummary?.title}
               participantId={searchParams.get("participantId") ?? undefined}
               scenarioId={workspaceState.activeScenarioId}
               showParticipantSelector={false}

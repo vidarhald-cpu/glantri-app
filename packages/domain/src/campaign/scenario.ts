@@ -1,12 +1,29 @@
 import { z } from "zod";
 
 import { characterBuildSchema, type CharacterBuild } from "../character/build";
+import { deriveCharacterStatLayers } from "../character/statLayers";
 import { combatEffectsStateSchema } from "../encounter/combatEffects";
+import {
+  canonicalCombatModifierEffectSchema,
+  canonicalCombatModifierLifecycleTransitionSchema,
+} from "../encounter/combatModifierLifecycle";
 import { movementIntentSchema } from "../encounter/combatMovementIntent";
 import { hitLocationTargetSchema } from "../encounter/hitLocation";
 
 const idSchema = z.string().min(1);
 const timestampSchema = z.string().min(1);
+const scenarioCanonicalCombatModifierEffectSchema = z
+  .unknown()
+  .refine(
+    (value) => canonicalCombatModifierEffectSchema.safeParse(value).success,
+    "Invalid canonical combat modifier lifecycle.",
+  );
+const scenarioCanonicalCombatModifierTransitionSchema = z
+  .unknown()
+  .refine(
+    (value) => canonicalCombatModifierLifecycleTransitionSchema.safeParse(value).success,
+    "Invalid canonical combat modifier transition.",
+  );
 
 export const scenarioVisibilitySchema = z.enum(["hidden", "visible_to_all", "gm_only"]);
 export const campaignStatusSchema = z.enum(["draft", "active", "archived"]);
@@ -127,7 +144,13 @@ export const scenarioParticipantParryDirectionSchema = z.enum([
 ]);
 
 export const scenarioCombatModifierEntrySchema = z.object({
+  // `flat_db` is compatibility/explicit-source-only; new combat modifiers default to percentage.
+  application: z.enum(["percentage", "flat_db"]).optional(),
+  canonicalLifecycle: scenarioCanonicalCombatModifierEffectSchema.optional(),
+  canonicalTransitions: z.array(scenarioCanonicalCombatModifierTransitionSchema).optional(),
+  combatWide: z.boolean().optional(),
   durationRounds: z.number().int().positive().optional(),
+  excludedRollPurposes: z.array(z.string().min(1)).optional(),
   expiresAtRound: z.number().int().positive().optional(),
   generated: z.boolean().optional(),
   id: idSchema,
@@ -142,11 +165,14 @@ export const scenarioCombatModifierEntrySchema = z.object({
   sourceDuration: z.string().optional(),
   sourceEncounterId: idSchema.optional(),
   sourceEffectId: idSchema.optional(),
+  sourceOpportunityId: idSchema.optional(),
   sourcePhase: z.enum(["phase1", "phase2"]).optional(),
+  sourceProcessId: idSchema.optional(),
   sourceProposalId: idSchema.optional(),
   sourceRoundNumber: z.number().int().positive().optional(),
   sourceRule: z.string().optional(),
   sourceType: scenarioCombatModifierSourceTypeSchema.optional(),
+  provisional: z.boolean().optional(),
   value: z.number().default(0),
 });
 
@@ -173,6 +199,13 @@ export const scenarioParticipantCombatContextSchema = z.object({
   targetLocation: hitLocationTargetSchema.optional(),
   targetParticipantId: idSchema.optional(),
 });
+
+export const scenarioParticipantSecondaryActionContextSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("observe_opponent"),
+    targetParticipantId: idSchema,
+  }),
+]);
 
 export const scenarioParticipantStateSchema = z.object({
   combat: z.object({
@@ -412,6 +445,9 @@ export type ScenarioCombatModifierEntry = z.infer<typeof scenarioCombatModifierE
 export type ScenarioParticipantCombatContext = z.infer<
   typeof scenarioParticipantCombatContextSchema
 >;
+export type ScenarioParticipantSecondaryActionContext = z.infer<
+  typeof scenarioParticipantSecondaryActionContextSchema
+>;
 export type ScenarioParticipantState = z.infer<typeof scenarioParticipantStateSchema>;
 export type ScenarioParticipantSnapshot = z.infer<typeof scenarioParticipantSnapshotSchema>;
 export type ScenarioParticipant = z.infer<typeof scenarioParticipantSchema>;
@@ -433,8 +469,9 @@ function clampHealth(value: number, max: number): number {
 }
 
 export function calculateCharacterGeneralHitpoints(build: CharacterBuild): number {
-  const con = build.profile.rolledStats.con ?? 0;
-  const siz = build.profile.rolledStats.siz ?? 0;
+  const { current } = deriveCharacterStatLayers(build);
+  const con = current.con ?? 0;
+  const siz = current.siz ?? 0;
   return Math.max(1, Math.round((con + siz) / 2));
 }
 
@@ -642,8 +679,12 @@ export function createParticipantSnapshotFromEntity(input: {
   snapshot: ScenarioParticipantSnapshot;
   state: ScenarioParticipantState;
 } {
-  const maxHp = Math.max(1, input.maxHp ?? 10);
   const build = readEntitySnapshotBuild(input.entity.snapshot);
+  const characterBuild = looksLikeCharacterBuild(build) ? build : undefined;
+  const maxHp = Math.max(
+    1,
+    input.maxHp ?? (characterBuild ? calculateCharacterGeneralHitpoints(characterBuild) : 10),
+  );
   const equipmentState = readEntitySnapshotField(input.entity.snapshot, "equipmentState");
   const sheetSummary = readEntitySnapshotField(input.entity.snapshot, "sheetSummary");
 
@@ -712,6 +753,29 @@ export function buildScenarioPlayerVisibleParticipants(input: {
     );
 }
 
+function stripPrivateModifierLifecycleFromPlayerCombatContext(
+  combatContext: ScenarioParticipantCombatContext | undefined,
+): ScenarioParticipantCombatContext | undefined {
+  if (!combatContext) return undefined;
+  const strip = (entry: ScenarioCombatModifierEntry): ScenarioCombatModifierEntry => {
+    const {
+      canonicalLifecycle: _canonicalLifecycle,
+      canonicalTransitions: _transitions,
+      ...safe
+    } = entry;
+    return safe;
+  };
+  return {
+    ...combatContext,
+    modifierBuckets: {
+      general: combatContext.modifierBuckets.general.map(strip),
+      situationDb: combatContext.modifierBuckets.situationDb.map(strip),
+      situationInitiative: combatContext.modifierBuckets.situationInitiative.map(strip),
+      situationObSkill: combatContext.modifierBuckets.situationObSkill.map(strip),
+    },
+  };
+}
+
 export function buildScenarioPlayerProjection(input: {
   participants: ScenarioParticipant[];
   scenario: Scenario;
@@ -742,7 +806,9 @@ export function buildScenarioPlayerProjection(input: {
       ? {
           build: controlledParticipant.snapshot.build as CharacterBuild | undefined,
           characterId: controlledParticipant.characterId,
-          combatContext: controlledParticipant.state.combat.combatContext,
+          combatContext: stripPrivateModifierLifecycleFromPlayerCombatContext(
+            controlledParticipant.state.combat.combatContext,
+          ),
           conditionCount: controlledParticipant.state.conditions.length,
           currentHp: controlledParticipant.state.health.currentHp,
           displayName: controlledParticipant.snapshot.displayName,

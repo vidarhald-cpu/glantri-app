@@ -1,7 +1,9 @@
-import type { CombatRoundCommandType, CombatRoundPhase } from "../combatRoundManager";
+import type { CombatRoundPhase } from "../combatRoundManager";
+import type { CombatParryPurpose, OffensiveParryRollPurpose } from "../combatOffensiveParry";
 import type {
   CombatProgressionBoundaryKind,
   CombatProgressionDiagnostic,
+  CombatProgressionExpectedCommand,
   CombatProgressionProcessKind,
   CombatProgressionProjection,
   CombatProgressionStageKind,
@@ -10,11 +12,15 @@ import type {
 } from "./types";
 
 export type CombatProgressionAuthorizationFailureCode =
+  | "boundary_mismatch"
   | "boundary_closed"
+  | "execution_group_mismatch"
   | "gm_only"
+  | "identity_mismatch"
   | "stale_opportunity"
   | "stale_proposal"
   | "stale_boundary"
+  | "task_mismatch"
   | "task_not_found"
   | "task_not_ready"
   | "wrong_target"
@@ -26,19 +32,49 @@ export type CombatProgressionAuthorizationActor =
   | { readonly kind: "combatant"; readonly participantId: string };
 
 export interface AuthorizeCombatProgressionTaskInput {
+  readonly actionId?: string;
+  readonly attackIndex?: number;
+  readonly attackModeId?: string;
   readonly actor: CombatProgressionAuthorizationActor;
   readonly attackResultId?: string;
-  readonly commandType: CombatRoundCommandType;
+  readonly attackerParticipantId?: string;
+  readonly commandType: CombatProgressionExpectedCommand;
+  readonly criticalResultId?: string;
+  readonly contestId?: string;
+  readonly continuedContactId?: string;
   readonly currentBoundary?: CombatProgressionBoundaryKind;
+  readonly damageReviewId?: string;
+  readonly declarationId?: string;
+  readonly disarmAttemptId?: string;
+  readonly declaredOpponentParticipantId?: string;
+  readonly defenderParticipantId?: string;
   readonly executionGroupId?: string;
+  readonly healthRollId?: string;
+  readonly hitLocationResultId?: string;
+  readonly initiativeGroupId?: string;
+  readonly initiativeValue?: number;
   readonly opportunityId?: string;
+  readonly offensiveParryAttemptId?: string;
+  readonly observationAttemptId?: string;
+  readonly parryPurpose?: CombatParryPurpose;
+  readonly parryResultId?: string;
+  readonly parrySourceId?: string;
+  readonly rollPurpose?: OffensiveParryRollPurpose;
   readonly opponentParticipantId?: string;
   readonly pairId?: string;
   readonly participantId?: string;
   readonly phase?: CombatRoundPhase;
+  readonly processId?: string;
   readonly projection: CombatProgressionProjection;
   readonly proposalId?: string;
+  readonly relationshipId?: string;
+  readonly taskId?: string;
+  readonly stageId?: string;
   readonly targetBoundary?: CombatProgressionBoundaryKind;
+  readonly weaponInstanceId?: string;
+  readonly weaponSourceId?: string;
+  readonly weaponSourceSlot?: string;
+  readonly weaponTemplateId?: string;
 }
 
 export type CombatProgressionAuthorizationResult =
@@ -52,13 +88,17 @@ export type CombatProgressionAuthorizationResult =
 interface CommandTaskRule {
   boundary?:
     | CombatProgressionBoundaryKind
-    | ((phase?: CombatRoundPhase) => CombatProgressionBoundaryKind | undefined);
+    | readonly CombatProgressionBoundaryKind[]
+    | ((
+        phase?: CombatRoundPhase,
+      ) => CombatProgressionBoundaryKind | readonly CombatProgressionBoundaryKind[] | undefined);
   kind: CombatProgressionTaskKind | readonly CombatProgressionTaskKind[];
+  expectedCommand?: CombatProgressionExpectedCommand | readonly CombatProgressionExpectedCommand[];
   process?: CombatProgressionProcessKind;
   stage: CombatProgressionStageKind | readonly CombatProgressionStageKind[];
 }
 
-const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule>> = {
+const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, CommandTaskRule>> = {
   advance_combat_boundary: {
     kind: "gm_advance_boundary",
     stage: "boundary",
@@ -68,6 +108,12 @@ const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule
     kind: "commit_initiative",
     process: "initiative",
     stage: "commit",
+  },
+  commit_feint_result: {
+    boundary: "phase1_resolution",
+    kind: "feint_commit",
+    process: "feint",
+    stage: "proposal_commit",
   },
   declare_action: {
     boundary: "declaration",
@@ -86,6 +132,34 @@ const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule
     kind: "gm_advance_boundary",
     process: "round_end",
     stage: "boundary",
+  },
+  complete_remaining_step: {
+    boundary: [
+      "phase1_modifier_review",
+      "phase1_initiative",
+      "phase2_modifier_review",
+      "phase2_initiative",
+    ],
+    expectedCommand: [
+      "review_modifiers_phase1",
+      "roll_initiative_phase1",
+      "review_modifiers_phase2",
+      "roll_initiative_phase2",
+    ],
+    kind: ["modifier_review", "roll_initiative"],
+    stage: ["review", "roll"],
+  },
+  commit_round_end_distance_control: {
+    boundary: "round_end",
+    kind: "distance_commit",
+    process: "distance",
+    stage: "proposal_commit",
+  },
+  commit_round_end_participant_review: {
+    boundary: "round_end",
+    kind: "effect_review",
+    process: "effect_review",
+    stage: "effect",
   },
   roll_attack: {
     boundary: resolutionBoundary,
@@ -111,6 +185,88 @@ const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule
     process: "attack",
     stage: "defense",
   },
+  roll_offensive_parry_brawling: {
+    boundary: resolutionBoundary,
+    kind: "offensive_parry_brawling_roll",
+    process: "attack",
+    stage: "offensive_parry_contest",
+  },
+  roll_continued_contact_maintenance: {
+    boundary: "round_end",
+    kind: "continued_contact_maintenance_roll",
+    process: "continued_contact_maintenance",
+    stage: "contest",
+  },
+  roll_observation: {
+    // Participant/effect reviews are complete before observation becomes executable, so the
+    // canonical cursor may already identify the explicit round boundary while SU remains open.
+    boundary: ["round_end", "round_boundary"],
+    kind: "observation_roll",
+    process: "observation",
+    stage: "contest",
+  },
+  roll_hit_location: {
+    boundary: resolutionBoundary,
+    kind: "hit_location",
+    process: "attack",
+    // Adapter-backed attacks expose a dedicated stage. Persisted legacy attack
+    // chains represent all post-defense rolls in their shared damage stage.
+    stage: ["hit_location", "damage"],
+  },
+  roll_critical: {
+    boundary: resolutionBoundary,
+    kind: "critical",
+    process: "attack",
+    stage: ["critical", "damage"],
+  },
+  resolve_damage: {
+    boundary: resolutionBoundary,
+    kind: ["damage_roll", "damage_review"],
+    process: "attack",
+    stage: "damage",
+  },
+  commit_phase_damage: {
+    boundary: resolutionBoundary,
+    kind: "damage_review",
+    process: "attack",
+    stage: "commit",
+  },
+  prepare_round_end_review: {
+    boundary: "round_end",
+    kind: "round_end_prepare",
+    process: "distance",
+    stage: "review",
+  },
+  review_modifiers_phase1: {
+    boundary: "phase1_modifier_review",
+    kind: "modifier_review",
+    process: "modifier_review",
+    stage: "review",
+  },
+  review_modifiers_phase2: {
+    boundary: "phase2_modifier_review",
+    kind: "modifier_review",
+    process: "modifier_review",
+    stage: "review",
+  },
+  roll_combat_experience: {
+    boundary: combatExperienceBoundary,
+    kind: "combat_experience",
+    process: "combat_experience",
+    stage: "input",
+  },
+  roll_round_end_distance_control: {
+    boundary: "round_end",
+    kind: "distance_roll",
+    process: "distance",
+    stage: "roll",
+  },
+  roll_round_end_health_check: {
+    boundary: "round_end",
+    kind: "health_review",
+    process: "health_review",
+    stage: "health",
+  },
   respond_adjust_distance: {
     boundary: "phase1_resolution",
     kind: "adjust_distance_response",
@@ -127,12 +283,48 @@ const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule
     boundary: "phase1_resolution",
     kind: ["adjust_distance_attacker_roll", "adjust_distance_defender_roll"],
     process: "adjust_distance",
-    stage: ["attacker_roll", "defender_roll"],
+    stage: "opposed_rolls",
   },
   commit_adjust_distance: {
     boundary: "phase1_resolution",
     kind: "adjust_distance_commit",
     process: "adjust_distance",
+    stage: "proposal_commit",
+  },
+  review_break_off: {
+    boundary: "phase1_resolution",
+    kind: "break_off_review",
+    process: "break_off",
+    stage: "proposal_review",
+  },
+  roll_break_off: {
+    boundary: "phase1_resolution",
+    kind: ["break_off_escapee_roll", "break_off_attacker_roll"],
+    process: "break_off",
+    stage: "opposed_rolls",
+  },
+  commit_break_off: {
+    boundary: "phase1_resolution",
+    kind: "break_off_commit",
+    process: "break_off",
+    stage: "proposal_commit",
+  },
+  open_disarm: {
+    boundary: ["phase1_resolution", "phase2_resolution"],
+    kind: ["attack", "parry"],
+    process: "attack",
+    stage: ["attack", "defense"],
+  },
+  roll_disarm: {
+    boundary: ["phase1_resolution", "phase2_resolution"],
+    kind: ["disarm_actor_roll", "disarm_holder_roll"],
+    process: "disarm",
+    stage: "opposed_rolls",
+  },
+  commit_disarm: {
+    boundary: ["phase1_resolution", "phase2_resolution"],
+    kind: "disarm_commit",
+    process: "disarm",
     stage: "proposal_commit",
   },
   roll_feint: {
@@ -141,11 +333,24 @@ const COMMAND_TASK_RULES: Partial<Record<CombatRoundCommandType, CommandTaskRule
     process: "feint",
     stage: ["attacker_roll", "defender_roll"],
   },
-  commit_feint_result: {
-    boundary: "phase1_resolution",
-    kind: "feint_commit",
-    process: "feint",
-    stage: "proposal_commit",
+  set_combat_experience_difficulty: {
+    boundary: "declaration",
+    kind: "combat_experience",
+    process: "combat_experience",
+    stage: "difficulty",
+  },
+  skip_phase_action: {
+    boundary: resolutionBoundary,
+    expectedCommand: "roll_attack",
+    kind: "attack",
+    process: "attack",
+    stage: "attack",
+  },
+  submit_phase_initiative_choice: {
+    boundary: resolutionBoundary,
+    kind: "combat_experience",
+    process: "combat_experience",
+    stage: "input",
   },
 };
 
@@ -171,6 +376,12 @@ function resolutionBoundary(phase?: CombatRoundPhase): CombatProgressionBoundary
     : phase === "phase2"
       ? "phase2_resolution"
       : undefined;
+}
+
+function combatExperienceBoundary(
+  phase?: CombatRoundPhase,
+): CombatProgressionBoundaryKind | undefined {
+  return phase ? resolutionBoundary(phase) : "declaration";
 }
 
 function failure(
@@ -217,7 +428,7 @@ export function authorizeCombatProgressionTask(
       : typeof rule.boundary === "function"
         ? rule.boundary(input.phase)
         : rule.boundary;
-  if (!expectedBoundary || input.projection.boundary.kind !== expectedBoundary) {
+  if (!expectedBoundary || !ruleMatches(input.projection.boundary.kind, expectedBoundary)) {
     return failure(
       input.currentBoundary ? "stale_boundary" : "boundary_closed",
       "The projected combat boundary is closed for this command.",
@@ -229,9 +440,12 @@ export function authorizeCombatProgressionTask(
     .flatMap((process) => process.stages)
     .filter((candidate) => ruleMatches(candidate.kind, rule.stage));
   const commandTasks = candidateStages
-    .flatMap((stage) => stage.tasks)
+    .flatMap((stage) => stage.executionGroups)
+    .flatMap((group) => group.tasks)
     .filter(
-      (task) => ruleMatches(task.kind, rule.kind) && task.expectedCommand === input.commandType,
+      (task) =>
+        ruleMatches(task.kind, rule.kind) &&
+        ruleMatches(task.expectedCommand, rule.expectedCommand ?? input.commandType),
     );
 
   if (commandTasks.length === 0) {
@@ -252,7 +466,8 @@ export function authorizeCombatProgressionTask(
   const participantTasks = input.participantId
     ? transitionTasks.filter(
         (task) =>
-          task.owner?.kind === "combatant" && task.owner.participantId === input.participantId,
+          (task.owner?.kind === "combatant" && task.owner.participantId === input.participantId) ||
+          task.identity.participantId === input.participantId,
       )
     : transitionTasks;
   if (input.participantId && participantTasks.length === 0) {
@@ -273,16 +488,69 @@ export function authorizeCombatProgressionTask(
     return failure("stale_opportunity", "The combat opportunity is stale or not executable.");
   }
 
+  const lineageChecks: ReadonlyArray<readonly [unknown, keyof CombatProgressionTask["identity"]]> =
+    [
+      [input.actionId, "actionId"],
+      [input.attackIndex, "attackIndex"],
+      [input.attackModeId, "attackModeId"],
+      [input.declarationId, "declarationId"],
+      [input.disarmAttemptId, "disarmAttemptId"],
+      [input.continuedContactId, "continuedContactId"],
+      [input.initiativeGroupId, "initiativeGroupId"],
+      [input.initiativeValue, "initiativeValue"],
+      [input.declaredOpponentParticipantId, "declaredOpponentParticipantId"],
+      [input.offensiveParryAttemptId, "offensiveParryAttemptId"],
+      [input.observationAttemptId, "observationAttemptId"],
+      [input.parryPurpose, "parryPurpose"],
+      [input.parrySourceId, "parrySourceId"],
+      [input.rollPurpose, "rollPurpose"],
+      [input.relationshipId, "relationshipId"],
+      [input.weaponInstanceId, "weaponInstanceId"],
+      [input.weaponSourceId, "weaponSourceId"],
+      [input.weaponSourceSlot, "weaponSourceSlot"],
+      [input.weaponTemplateId, "weaponTemplateId"],
+    ];
+  const lineageTasks = opportunityTasks.filter((task) =>
+    lineageChecks.every(([value, key]) => value === undefined || task.identity[key] === value),
+  );
+  if (lineageTasks.length === 0 && lineageChecks.some(([value]) => value !== undefined)) {
+    return failure(
+      "identity_mismatch",
+      "The attack source or mode identity does not match the projected task.",
+    );
+  }
+
   const proposalTasks = input.proposalId
-    ? opportunityTasks.filter((task) => task.identity.proposalId === input.proposalId)
-    : opportunityTasks;
+    ? lineageTasks.filter((task) => task.identity.proposalId === input.proposalId)
+    : lineageTasks;
   if (input.proposalId && proposalTasks.length === 0) {
     return failure("stale_proposal", "The combat proposal is stale or not executable.");
   }
 
-  const pairTasks = input.pairId
-    ? proposalTasks.filter((task) => task.identity.pairId === input.pairId)
+  const contestTasks = input.contestId
+    ? proposalTasks.filter((task) => task.identity.contestId === input.contestId)
     : proposalTasks;
+  if (input.contestId && contestTasks.length === 0) {
+    return failure("stale_proposal", "The contested roll is stale or not executable.");
+  }
+
+  const parryResultTasks = input.parryResultId
+    ? contestTasks.filter((task) => task.identity.parryResultId === input.parryResultId)
+    : contestTasks;
+  if (input.parryResultId && parryResultTasks.length === 0) {
+    return failure("stale_opportunity", "The parry result is stale or not executable.");
+  }
+
+  const healthRollTasks = input.healthRollId
+    ? parryResultTasks.filter((task) => task.identity.healthRollId === input.healthRollId)
+    : parryResultTasks;
+  if (input.healthRollId && healthRollTasks.length === 0) {
+    return failure("stale_proposal", "The Health roll is stale or not executable.");
+  }
+
+  const pairTasks = input.pairId
+    ? healthRollTasks.filter((task) => task.identity.pairId === input.pairId)
+    : healthRollTasks;
   if (input.pairId && pairTasks.length === 0) {
     return failure("stale_proposal", "The combat participant pair is stale or not executable.");
   }
@@ -303,11 +571,76 @@ export function authorizeCombatProgressionTask(
     return failure("stale_opportunity", "The attack result is stale or not executable.");
   }
 
-  const matchingTasks = input.executionGroupId
-    ? attackTasks.filter((task) => task.identity.executionGroupId === input.executionGroupId)
+  const attackerTasks = input.attackerParticipantId
+    ? attackTasks.filter(
+        (task) => task.identity.attackerParticipantId === input.attackerParticipantId,
+      )
     : attackTasks;
-  if (input.executionGroupId && matchingTasks.length === 0) {
-    return failure("task_not_found", "No task is executable in this execution group.");
+  if (input.attackerParticipantId && attackerTasks.length === 0) {
+    return failure("wrong_participant", "The projected task belongs to another attacker.");
+  }
+
+  const defenderTasks = input.defenderParticipantId
+    ? attackerTasks.filter(
+        (task) => task.identity.defenderParticipantId === input.defenderParticipantId,
+      )
+    : attackerTasks;
+  if (input.defenderParticipantId && defenderTasks.length === 0) {
+    return failure("wrong_participant", "The projected task belongs to another defender.");
+  }
+
+  const hitLocationTasks = input.hitLocationResultId
+    ? defenderTasks.filter(
+        (task) => task.identity.hitLocationResultId === input.hitLocationResultId,
+      )
+    : defenderTasks;
+  if (input.hitLocationResultId && hitLocationTasks.length === 0) {
+    return failure("stale_opportunity", "The hit-location result is stale or not executable.");
+  }
+
+  const criticalTasks = input.criticalResultId
+    ? hitLocationTasks.filter((task) => task.identity.criticalResultId === input.criticalResultId)
+    : hitLocationTasks;
+  if (input.criticalResultId && criticalTasks.length === 0) {
+    return failure("stale_opportunity", "The critical result is stale or not executable.");
+  }
+
+  const damageReviewTasks = input.damageReviewId
+    ? criticalTasks.filter((task) => task.identity.damageReviewId === input.damageReviewId)
+    : criticalTasks;
+  if (input.damageReviewId && damageReviewTasks.length === 0) {
+    return failure("stale_proposal", "The damage review is stale or not executable.");
+  }
+
+  const executionGroupTasks = input.executionGroupId
+    ? damageReviewTasks.filter((task) => task.executionGroupId === input.executionGroupId)
+    : damageReviewTasks;
+  if (input.executionGroupId && executionGroupTasks.length === 0) {
+    return failure(
+      "execution_group_mismatch",
+      "The projected combat execution group is stale or no longer executable.",
+    );
+  }
+
+  const processTasks = input.processId
+    ? executionGroupTasks.filter((task) => task.processId === input.processId)
+    : executionGroupTasks;
+  if (input.processId && processTasks.length === 0) {
+    return failure("identity_mismatch", "The combat process identity does not match the task.");
+  }
+
+  const stageTasks = input.stageId
+    ? processTasks.filter((task) => task.stageId === input.stageId)
+    : processTasks;
+  if (input.stageId && stageTasks.length === 0) {
+    return failure("identity_mismatch", "The combat stage identity does not match the task.");
+  }
+
+  const matchingTasks = input.taskId
+    ? stageTasks.filter((task) => task.id === input.taskId)
+    : stageTasks;
+  if (input.taskId && matchingTasks.length === 0) {
+    return failure("task_mismatch", "The projected combat task is stale or no longer executable.");
   }
 
   if (matchingTasks.length !== 1 || hasRelevantDiagnostic(input.projection, matchingTasks)) {

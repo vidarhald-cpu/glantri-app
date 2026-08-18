@@ -5,10 +5,12 @@ import {
   combatRoundEndReviewSchema,
   combatRoundParticipantStateSchema,
   combatRoundPhaseResolutionResultSchema,
+  combatRoundStepSnapshotSchema,
   combatStepEventSchema,
   combatStepEventStatusSchema,
   combatStepEventTypeSchema,
   deriveLegacyCombatStepEvents,
+  resolveCombatAttackPhaseDefensivePenalty,
   type CombatRoundCommand,
 } from "../index";
 
@@ -23,7 +25,7 @@ function command(input: {
   id: string;
   participantId: string;
   phase?: "phase1" | "phase2";
-  step?: "DE" | "i1" | "A1" | "P1" | "D1" | "SU";
+  step?: "DE" | "M2" | "i1" | "A1" | "P1" | "D1" | "SU";
   type: CombatRoundCommand["type"];
 }): CombatRoundCommand {
   const step = input.step ?? "DE";
@@ -401,10 +403,12 @@ describe("deriveLegacyCombatStepEvents", () => {
   });
 
   it("uses command order and stable source indexes when timestamps tie", () => {
-    const tiedCommands = attackCommands().slice(0, 3).map((entry) => ({
-      ...entry,
-      createdAt: "2026-01-01T00:00:00.000Z",
-    }));
+    const tiedCommands = attackCommands()
+      .slice(0, 3)
+      .map((entry) => ({
+        ...entry,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }));
     const tiedParticipants = participants();
     tiedParticipants[0] = combatRoundParticipantStateSchema.parse({
       ...tiedParticipants[0],
@@ -448,6 +452,437 @@ describe("deriveLegacyCombatStepEvents", () => {
     expect(proposal?.facts.involvedOutcome).not.toHaveProperty("notes");
   });
 
+  it("derives Combat Experience as an involved result without making its roll public", () => {
+    const events = deriveLegacyCombatStepEvents({
+      commands: [
+        command({
+          createdAt: "2026-01-01T00:01:00.000Z",
+          facts: {
+            difficulty: 26,
+            finalTotal: 27,
+            openEndedD10s: [],
+            resultBand: "active",
+            resultLabel: "Active",
+            rollD20: 17,
+            rollTotal: 17,
+            skillTotal: 10,
+          },
+          id: "command-combat-experience",
+          participantId: ATTACKER_ID,
+          type: "roll_combat_experience",
+        }),
+      ],
+      encounterId: ENCOUNTER_ID,
+      roundNumber: 1,
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      actorParticipantId: ATTACKER_ID,
+      completeness: "legacy_derived",
+      facts: {
+        involvedOutcome: {
+          resultBand: "active",
+          resultLabel: "Active",
+          success: true,
+        },
+        publicOutcome: {},
+        rollerPrivate: {
+          difficulty: 26,
+          finalTotal: 27,
+          rollD20: 17,
+          rollTotal: 17,
+          skillTotal: 10,
+        },
+      },
+      ownerParticipantId: ATTACKER_ID,
+      rollerParticipantId: ATTACKER_ID,
+      step: "select_actions",
+      type: "combat_experience",
+      visibility: {
+        involvedParticipantIds: [ATTACKER_ID],
+        outcomeScope: "involved",
+        rollerParticipantId: ATTACKER_ID,
+      },
+    });
+  });
+
+  it("places phase Combat Experience in its action facet with opportunity and threat identity", () => {
+    const events = deriveLegacyCombatStepEvents({
+      commands: [
+        command({
+          createdAt: "2026-01-01T00:02:00.000Z",
+          facts: {
+            difficulty: 26,
+            finalTotal: 18,
+            modifierValue: -2,
+            opportunityId: "phase2-opportunity",
+            phaseAttackCancelled: false,
+            phaseCombatExperienceThreats: [{ attackerParticipantId: DEFENDER_ID }],
+            resultBand: "active_penalty",
+            resultLabel: "Attack continues",
+            rollD20: 8,
+            rollTotal: 8,
+            skillTotal: 10,
+          },
+          id: "command-phase2-combat-experience",
+          participantId: ATTACKER_ID,
+          phase: "phase2",
+          step: "A1",
+          type: "roll_combat_experience",
+        }),
+      ],
+      encounterId: ENCOUNTER_ID,
+      roundNumber: 1,
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      opportunityId: "phase2-opportunity",
+      phase: "phase2",
+      step: "phase_2_actions",
+      targetParticipantId: DEFENDER_ID,
+      visibility: {
+        involvedParticipantIds: [ATTACKER_ID, DEFENDER_ID],
+      },
+    });
+  });
+
+  it("publishes the selected declaration facts and public note without unselected options", () => {
+    const declaredParticipant = combatRoundParticipantStateSchema.parse({
+      declaration: {
+        actionId: "parry",
+        additionalActionNotes: "Hold the doorway.",
+        movementIntent: { distancePreferences: [], mode: "hold_position" },
+        roundNumber: 1,
+        secondaryActionContext: {
+          action: "observe_opponent",
+          targetParticipantId: DEFENDER_ID,
+        },
+        secondaryActionId: "observe_opponent",
+        submittedAt: "2026-01-01T00:01:00.000Z",
+        submittedBy: "gm",
+      },
+      label: "Observer",
+      participantId: ATTACKER_ID,
+    });
+    const events = deriveLegacyCombatStepEvents({
+      commands: [
+        command({
+          createdAt: "2026-01-01T00:01:00.000Z",
+          id: "declaration-command",
+          participantId: ATTACKER_ID,
+          type: "declare_action",
+        }),
+      ],
+      encounterId: ENCOUNTER_ID,
+      participants: [declaredParticipant],
+      roundNumber: 1,
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      facts: {
+        involvedOutcome: {
+          actionId: "parry",
+          actionLabel: "Parry",
+          additionalActionNotes: "Hold the doorway.",
+          movementLabel: "Hold position",
+          secondaryActionLabel: "Observe Opponent",
+          submittedBy: "gm",
+          targetParticipantId: DEFENDER_ID,
+        },
+        resultPresentation: {
+          publicCombatNote: "Hold the doorway.",
+        },
+      },
+      targetParticipantId: DEFENDER_ID,
+      type: "declaration",
+    });
+    expect(events[0]?.facts.involvedOutcome).not.toHaveProperty("attackModeId");
+  });
+
+  it("publishes accepted reviews, skips, effect review, and round boundary as bounded results", () => {
+    const skippedPenalty = resolveCombatAttackPhaseDefensivePenalty({
+      commitment: "committed",
+      executionState: "skipped",
+      opportunity: {
+        actionId: "attack_parry",
+        id: "round:1:participant:attacker-1:phase1:attack_1",
+        phase: "phase1",
+        slot: "attack_1",
+        status: "committed",
+      },
+      participantId: ATTACKER_ID,
+      reason: "skipped_after_commitment",
+      roundNumber: 1,
+    });
+    const backOutPenalty = resolveCombatAttackPhaseDefensivePenalty({
+      commitment: "committed",
+      executionState: "backed_out",
+      opportunity: {
+        actionId: "attack_parry",
+        id: "round:1:participant:defender-1:phase1:attack_1",
+        phase: "phase1",
+        slot: "attack_1",
+        status: "cancelled",
+      },
+      participantId: DEFENDER_ID,
+      reason: "simultaneous_attack_backout",
+      roundNumber: 1,
+      sourceException: "simultaneous_attack_backout",
+    });
+    const doubleCancelPenalty = resolveCombatAttackPhaseDefensivePenalty({
+      commitment: "committed",
+      executionState: "cancelled",
+      opportunity: {
+        actionId: "double_attack",
+        attackIndex: 2,
+        id: "round:1:participant:attacker-1:phase2:attack_2",
+        phase: "phase2",
+        slot: "attack_2",
+        status: "cancelled",
+      },
+      participantId: ATTACKER_ID,
+      reason: "double_attack_second_cancelled",
+      roundNumber: 1,
+      sourceException: "double_attack_second_cancelled",
+    });
+    const events = deriveLegacyCombatStepEvents({
+      commands: [
+        command({
+          createdAt: "2026-01-01T00:01:00.000Z",
+          id: "modifier-review",
+          participantId: ATTACKER_ID,
+          type: "review_modifiers_phase1",
+        }),
+        command({
+          createdAt: "2026-01-01T00:02:00.000Z",
+          facts: { attackPhaseDefensivePenalty: skippedPenalty, reason: "gm_skip" },
+          id: "action-skip",
+          participantId: ATTACKER_ID,
+          phase: "phase1",
+          step: "A1",
+          type: "skip_phase_action",
+        }),
+        command({
+          createdAt: "2026-01-01T00:03:00.000Z",
+          facts: { attackPhaseDefensivePenalty: backOutPenalty, choice: "back_out" },
+          id: "choice-back-out",
+          participantId: DEFENDER_ID,
+          phase: "phase1",
+          step: "A1",
+          type: "submit_phase_initiative_choice",
+        }),
+        command({
+          createdAt: "2026-01-01T00:03:30.000Z",
+          facts: { attackPhaseDefensivePenalty: doubleCancelPenalty, decision: "cancel" },
+          id: "double-attack-cancel",
+          participantId: ATTACKER_ID,
+          phase: "phase2",
+          step: "M2",
+          type: "decide_double_attack_phase2",
+        }),
+        command({
+          createdAt: "2026-01-01T00:04:00.000Z",
+          facts: {
+            attackResultId: ATTACK_RESULT_ID,
+            attackerParticipantId: ATTACKER_ID,
+            defenderParticipantId: DEFENDER_ID,
+          },
+          id: "effect-review",
+          participantId: DEFENDER_ID,
+          phase: "phase1",
+          step: "D1",
+          type: "complete_damage_review_phase1",
+        }),
+        command({
+          createdAt: "2026-01-01T00:05:00.000Z",
+          id: "round-complete",
+          participantId: ATTACKER_ID,
+          step: "SU",
+          type: "complete_round",
+        }),
+      ],
+      encounterId: ENCOUNTER_ID,
+      roundNumber: 1,
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      "modifier_review",
+      "action_skipped",
+      "action_skipped",
+      "action_skipped",
+      "effect_review",
+      "round_boundary",
+    ]);
+    expect(events[0]?.facts.involvedOutcome).toMatchObject({
+      acceptedModifiers: [],
+      resultLabel: "Modifier state accepted",
+    });
+    expect(events[1]).toMatchObject({ status: "skipped", step: "phase_1_actions" });
+    expect(events[1]?.facts.resultPresentation).toMatchObject({
+      committedConsequences: [expect.objectContaining({ value: -4 })],
+      standardConsequences: [expect.objectContaining({ value: -4 })],
+    });
+    expect(events[2]?.facts.involvedOutcome).toMatchObject({
+      reason: "Attack backed out",
+      resolutionType: "skipped",
+    });
+    expect(events[2]?.facts.resultPresentation).toMatchObject({
+      committedConsequences: [expect.objectContaining({ value: -2 })],
+      standardConsequences: [expect.objectContaining({ value: -4 })],
+    });
+    expect(events[3]).toMatchObject({
+      status: "skipped",
+      step: "phase_2_actions",
+    });
+    expect(events[3]?.facts.involvedOutcome).toMatchObject({
+      reason: "Double Attack phase 2 cancelled",
+    });
+    expect(events[3]?.facts.resultPresentation).toMatchObject({
+      committedConsequences: [expect.objectContaining({ value: -2 })],
+      standardConsequences: [expect.objectContaining({ value: -4 })],
+    });
+    expect(events[4]).toMatchObject({
+      attackResultId: ATTACK_RESULT_ID,
+      ownerParticipantId: DEFENDER_ID,
+      step: "phase_1_damage",
+    });
+    expect(events[5]?.facts.involvedOutcome).toMatchObject({
+      resolutionType: "round_completed",
+    });
+  });
+
+  it("does not fabricate a no-change result when an empty restored review is continued", () => {
+    const events = deriveLegacyCombatStepEvents({
+      commands: [
+        command({
+          createdAt: "2026-01-01T00:01:00.000Z",
+          facts: { suppressNoChangeResult: true },
+          id: "restored-empty-review",
+          participantId: ATTACKER_ID,
+          type: "review_modifiers_phase1",
+        }),
+      ],
+      encounterId: ENCOUNTER_ID,
+      roundNumber: 1,
+    });
+
+    expect(events).toEqual([]);
+  });
+
+  it("records only accepted modifier-review changes against the preceding snapshot", () => {
+    const snapshots = [
+      combatRoundStepSnapshotSchema.parse({
+        committedAt: "2026-01-01T00:00:30.000Z",
+        id: "declaration-snapshot",
+        modifierSummary: {
+          dbRaw: -1,
+          generalFatigueRaw: 0,
+          initiativeRaw: 0,
+          obSkillRaw: 0,
+          rows: [
+            {
+              bucketKey: "situation_db",
+              entries: [
+                {
+                  durationRounds: 1,
+                  id: "prior-db",
+                  notes: "Old stance",
+                  scope: "until",
+                  value: -1,
+                },
+              ],
+              label: "DB/Parry",
+              total: -1,
+            },
+          ],
+        },
+        participantId: ATTACKER_ID,
+        participantLabel: "Observer",
+        roundNumber: 1,
+        step: "select_actions",
+      }),
+      combatRoundStepSnapshotSchema.parse({
+        committedAt: "2026-01-01T00:01:30.000Z",
+        id: "review-snapshot",
+        modifierSummary: {
+          dbRaw: -2,
+          generalFatigueRaw: 0,
+          initiativeRaw: 0,
+          obSkillRaw: 2,
+          rows: [
+            {
+              bucketKey: "situation_db",
+              entries: [
+                {
+                  durationRounds: 1,
+                  id: "prior-db",
+                  notes: "Old stance",
+                  scope: "until",
+                  value: -2,
+                },
+              ],
+              label: "DB/Parry",
+              total: -2,
+            },
+            {
+              bucketKey: "situation_ob_skill",
+              entries: [
+                {
+                  durationRounds: 1,
+                  id: "new-ob",
+                  notes: "Tactical edge",
+                  scope: "until",
+                  value: 2,
+                },
+              ],
+              label: "Skill/OB",
+              total: 2,
+            },
+          ],
+        },
+        participantId: ATTACKER_ID,
+        participantLabel: "Observer",
+        roundNumber: 1,
+        step: "review_action_modifiers",
+      }),
+    ];
+    const events = deriveLegacyCombatStepEvents({
+      commands: [
+        command({
+          createdAt: "2026-01-01T00:01:30.000Z",
+          id: "modifier-review",
+          participantId: ATTACKER_ID,
+          type: "review_modifiers_phase1",
+        }),
+      ],
+      encounterId: ENCOUNTER_ID,
+      roundNumber: 1,
+      stepSnapshots: snapshots,
+    });
+
+    expect(events[0]?.facts.involvedOutcome).toMatchObject({
+      changed: true,
+      changes: [
+        {
+          category: "DB/Parry",
+          changeType: "changed",
+          id: "prior-db",
+          previousValue: -1,
+          value: -2,
+        },
+        {
+          category: "Skill/OB",
+          changeType: "added",
+          id: "new-ob",
+          value: 2,
+        },
+      ],
+    });
+  });
+
   it("marks absent dice and linkage as incomplete without inventing values", () => {
     const incompleteInitiative = combatRoundParticipantStateSchema.parse({
       initiatives: { phase1: 7 },
@@ -483,6 +918,60 @@ describe("deriveLegacyCombatStepEvents", () => {
     expect(attack?.defenderParticipantId).toBeUndefined();
   });
 
+  it("projects bulk-skipped initiative as a complete skipped resolution without dice", () => {
+    const bulkSkipped = combatRoundParticipantStateSchema.parse({
+      initiatives: {
+        phase1: {
+          baseInitiative: 0,
+          modifierAdjustment: 0,
+          resolutionType: "bulk_skipped",
+          rolls: [],
+          rollTotal: 0,
+          total: 0,
+        },
+      },
+      label: "Bulk skipped",
+      participantId: ATTACKER_ID,
+    });
+    const initiative = deriveLegacyCombatStepEvents({
+      commands: [
+        command({
+          createdAt: "2026-01-01T00:02:00.000Z",
+          facts: {
+            completedParticipantIds: [ATTACKER_ID],
+            phase: "phase1",
+            resolutionType: "bulk_skipped",
+          },
+          id: "bulk-initiative",
+          participantId: ATTACKER_ID,
+          phase: "phase1",
+          step: "i1",
+          type: "complete_remaining_step",
+        }),
+      ],
+      encounterId: ENCOUNTER_ID,
+      participants: [bulkSkipped],
+      roundNumber: 1,
+    }).find((event) => event.type === "initiative");
+
+    expect(initiative).toMatchObject({
+      completeness: "legacy_derived",
+      facts: {
+        publicOutcome: {
+          resolutionType: "bulk_skipped",
+          total: 0,
+        },
+        rollerPrivate: {
+          resolutionType: "bulk_skipped",
+          rolls: [],
+          total: 0,
+        },
+      },
+      missingFacts: [],
+      status: "skipped",
+    });
+  });
+
   it("fails safely for malformed source rows and uses incomplete snapshot fallback", () => {
     const events = deriveLegacyCombatStepEvents({
       commands: [{ type: "roll_attack" }],
@@ -510,6 +999,36 @@ describe("deriveLegacyCombatStepEvents", () => {
       source: { kind: "legacy_snapshot", sourceIds: ["legacy-snapshot"] },
     });
     expect(JSON.stringify(events)).not.toContain("Display name must not be copied");
+  });
+
+  it("classifies legacy snapshot fallback by its exact step rather than carried initiative", () => {
+    const events = deriveLegacyCombatStepEvents({
+      encounterId: ENCOUNTER_ID,
+      roundNumber: 1,
+      stepSnapshots: [
+        {
+          actionResultStatus: "recorded",
+          actionResultSummary: "Legacy attack summary",
+          committedAt: "2026-01-01T00:08:00.000Z",
+          id: "legacy-attack-snapshot",
+          initiativeResult: {
+            baseInitiative: 3,
+            modifierAdjustment: 0,
+            rollTotal: 6,
+            rolls: [6],
+            total: 9,
+          },
+          participantId: ATTACKER_ID,
+          participantLabel: "Attacker",
+          roundNumber: 1,
+          step: "phase_1_actions",
+        },
+      ],
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type).toBe("attack");
+    expect(events[0]?.step).toBe("phase_1_actions");
   });
 
   it("derives distance rolls before result/apply and preserves health/SU ownership", () => {

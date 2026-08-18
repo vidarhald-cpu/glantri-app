@@ -21,6 +21,21 @@ function readSource(): string {
 }
 
 describe("PlayerCombatPanels", () => {
+  it("labels percentage-applied Parry modifier rows as percentages", () => {
+    expect(
+      formatCombatModifierDisplayLine({
+        bucketLabel: "DB/Parry",
+        entry: {
+          application: "percentage",
+          id: "generated:parry:round:db-parry-percentage",
+          notes: "Parry: Dodge 17; one fifth, rounded down; Parry +3%",
+          scope: "until",
+          value: 3,
+        },
+      }),
+    ).toContain("DB/Parry +3%");
+  });
+
   it("formats recorded initiative modifier facts without recalculating current context", () => {
     expect(
       formatCombatInitiativeFormula({
@@ -54,12 +69,14 @@ describe("PlayerCombatPanels", () => {
   it("renders structured distance preference movement controls instead of placeholder-only options", () => {
     const source = readSource();
 
-    expect(source).toContain("Maintain distance to opponent");
-    expect(source).toContain("Set preferred distance");
+    expect(source).toContain("Change distance to participant");
+    expect(source).toContain("Move in environment");
     expect(source).toContain("distancePreferenceOptions");
     expect(source).toContain("No preference");
-    expect(source).toContain("Melee zones");
-    expect(source).toContain("Extended");
+    expect(source).toContain("Maintain · Distance");
+    expect(source).toContain("Close · Distance");
+    expect(source).toContain("Open · Distance");
+    expect(source).toContain("Retreat · Distance");
     expect(source).toContain("onMovementIntentChange");
     expect(source).not.toContain("PLAYER_ENCOUNTER_MOVEMENT_OPTIONS.map");
   });
@@ -471,7 +488,7 @@ describe("PlayerCombatPanels", () => {
     expect(formatCombatModifierScopeLabel(dbEntry)).toBe("P1");
   });
 
-  it("groups linked equal Feint OB and DB rows without merging their calculation buckets", () => {
+  it("keeps linked equal Feint OB and DB rows independently identifiable", () => {
     const rows = buildPlayerCombatModifierRows({
       combatContext: {
         modifierBuckets: {
@@ -504,16 +521,7 @@ describe("PlayerCombatPanels", () => {
       phaseKey: "phase2",
     });
 
-    expect(buildGroupedFeintModifierDisplays(rows)).toEqual([
-      {
-        entryIds: [
-          "generated:feint:proposal:target:phase2:ob-skill",
-          "generated:feint:proposal:target:phase2:db-parry",
-        ],
-        resultGroupId: "proposal",
-        value: -4,
-      },
-    ]);
+    expect(buildGroupedFeintModifierDisplays(rows)).toEqual([]);
     expect(rows.find((row) => row.bucketKey === "situation_ob_skill")?.total).toBe(-4);
     expect(rows.find((row) => row.bucketKey === "situation_db")?.total).toBe(-4);
   });
@@ -554,6 +562,77 @@ describe("PlayerCombatPanels", () => {
     expect(buildGroupedFeintModifierDisplays(rows)).toEqual([]);
   });
 
+  it("includes target-aware contributions exactly once in category totals and rows", () => {
+    const rows = buildPlayerCombatModifierRows({
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [{ id: "base-db", scope: "until", value: -1 }],
+          situationInitiative: [],
+          situationObSkill: [{ id: "base-ob", scope: "until", value: 2 }],
+        },
+      },
+      liveModifiers: {
+        dbRaw: 2,
+        generalFatigueRaw: 0,
+        initiativeRaw: 0,
+        modifierNoteLabels: [],
+        obSkillRaw: 5,
+        opponentLabel: "Target B",
+        opponentSpecificContributions: [
+          {
+            applicability: {
+              opponentParticipantId: "participant-b",
+              participantId: "participant-a",
+            },
+            bucket: "skill_ob",
+            editPolicy: "source_only",
+            id: "observe:a:b:modifier:skill_ob",
+            label: "Observe Opponent",
+            lifetime: { kind: "encounter", status: "active" },
+            ownerParticipantId: "participant-a",
+            readOnly: true,
+            schemaVersion: 1,
+            sourceId: "observe:a:b",
+            sourceKind: "system_derived",
+            value: 3,
+          },
+          {
+            applicability: {
+              opponentParticipantId: "participant-b",
+              participantId: "participant-a",
+            },
+            bucket: "db_parry",
+            editPolicy: "source_only",
+            id: "observe:a:b:modifier:db_parry",
+            label: "Observe Opponent",
+            lifetime: { kind: "encounter", status: "active" },
+            ownerParticipantId: "participant-a",
+            readOnly: true,
+            schemaVersion: 1,
+            sourceId: "observe:a:b",
+            sourceKind: "system_derived",
+            value: 3,
+          },
+        ],
+      },
+      ownerParticipantId: "participant-a",
+    });
+    const skillOb = rows.find((row) => row.bucketKey === "situation_ob_skill");
+    const dbParry = rows.find((row) => row.bucketKey === "situation_db");
+
+    expect(skillOb?.total).toBe(5);
+    expect(skillOb?.derivedEntries).toEqual([
+      expect.objectContaining({
+        id: "observe:a:b:modifier:skill_ob",
+        sourceLabel: "Observe Opponent · Target B",
+        value: 3,
+      }),
+    ]);
+    expect(dbParry?.total).toBe(2);
+    expect(dbParry?.derivedEntries).toHaveLength(1);
+  });
+
   it("keeps player combat modifiers editable while allowing read-only inspector use", () => {
     const source = readSource();
 
@@ -587,7 +666,8 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("characterStateEntries");
     expect(source).toContain("Character/state");
     expect(source).toContain("Situational");
-    expect(source).toContain("Situational · {scopeLabel}");
+    expect(source).toContain('entry.sourceActionId === "parry" ? "Parry" : "Situational"');
+    expect(source).toContain("{entry.sourceActionId ===");
     expect(source).toContain("ModifierDisplayEntryRow");
     expect(source).toContain("ModifierEditableEntryRow");
     expect(source).toContain("createModifierEntryDraft");
@@ -639,7 +719,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("phaseCard.stats");
     expect(source).toContain("playerCombatTopPanelRowStyle");
     expect(source).toContain(
-      'gridTemplateColumns: "minmax(12rem, 0.7fr) minmax(14rem, 1fr) minmax(14rem, 1fr)"',
+      'gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 14rem), 1fr))"',
     );
     expect(source).toContain("gridTemplateColumns: playerCombatPanelRowStyle.gridTemplateColumns");
     expect(source).toContain("PlayerCombatAttackStatsTable");
@@ -719,8 +799,11 @@ describe("PlayerCombatPanels", () => {
     expect(source).not.toContain('itemLabel={mainHandItemLabel || "Unarmed"}');
     expect(source).not.toContain('itemLabel={offHandItemLabel || "Unarmed"}');
     expect(source).not.toContain("PLAYER_ENCOUNTER_INCOMING_ATTACK_SIDE_OPTIONS");
-    expect(source).not.toContain("Choose opponent");
-    expect(source).not.toContain("selectedOpponentId");
+    expect(source).toContain("PlayerCombatOpponentSelector");
+    expect(source).toContain("Opponent to counter");
+    expect(source).toContain("Choose opponent");
+    expect(source).toContain("selectedOpponentId");
+    expect(source).toContain("onSelectedOpponentChange");
     expect(source).toContain("PlayerCombatActionButtonPanel");
     expect(source).toContain("Current action");
     expect(source).not.toContain("Action button");
@@ -754,7 +837,8 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("interface PlayerCombatActionResultSection");
     expect(source).toContain("sections?: readonly PlayerCombatActionResultSection[]");
     expect(source).toContain("result?.sections?.length");
-    expect(source).toContain("section.calculationLines.map");
+    expect(source).toContain("section.calculations.map");
+    expect(source).toContain("<CombatCalculationPanel");
     expect(source).toContain("<strong>{section.resultLine}</strong>");
     expect(source).toContain("fontWeight: 400");
     expect(source.indexOf("result.rankLabel")).toBeLessThan(
@@ -774,7 +858,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).not.toContain("result?.phaseLabel");
     expect(source).not.toContain("No result recorded.");
     expect(source).not.toContain("Description: {detailText}");
-    expect(source).not.toContain("Movement:");
+    expect(source).not.toContain("<span>Movement:</span>");
     expect(source).toContain("Mod");
     expect(source).toContain("Dur");
     expect(source).toContain("Details");

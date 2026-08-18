@@ -27,16 +27,16 @@ export const equipmentDevRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseBootstrapSampleBody(request.body);
-      await requireAccessibleCharacter(user, id);
+      const viewer = await requireAccessibleCharacter(user, id);
       await equipmentWriteService.bootstrapSampleCharacterEquipment(
         id,
         await loadDevSampleCharacterEquipment(),
-        { overwrite: body.overwrite }
+        { overwrite: body.overwrite },
       );
 
       return {
         state: toEquipmentFeatureState(
-          await equipmentReadModelService.getCharacterEquipmentState(id)
+          await equipmentReadModelService.getCharacterEquipmentState(id, viewer),
         ),
       };
     } catch (error) {

@@ -472,6 +472,7 @@ describe("workbookCombatMath", () => {
       { baseValue: 5, rawModifier: 1, expectedFinal: 6 },
       { baseValue: 14, rawModifier: 1, expectedFinal: 15 },
       { baseValue: 15, rawModifier: 1, expectedFinal: 17 },
+      { baseValue: 15, rawModifier: 2, expectedFinal: 18 },
       { baseValue: 25, rawModifier: 1, expectedFinal: 28 },
     ];
 

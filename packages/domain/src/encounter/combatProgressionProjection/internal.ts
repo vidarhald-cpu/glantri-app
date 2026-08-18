@@ -1,5 +1,7 @@
 import {
-  getNextCombatRoundEndTask,
+  type CombatRoundInitiativeExecutionGroup,
+  getPendingCombatObservationAttempts,
+  isCombatRoundEndReviewComplete,
   type CombatRoundCursorStep,
   type CombatRoundPhase,
   type CombatRoundState,
@@ -7,12 +9,15 @@ import {
   type CombatRoundStepStatus,
 } from "../combatRoundManager";
 import type { CombatActionProcessPlan } from "../combatActionProcesses";
+import type { CombatParticipationProjection } from "../combatParticipation";
+import { projectCombatTaskAutomationEligibility } from "../combatAutomationEligibility";
 import type {
   CombatantIdentity,
   CombatProgressionBlocker,
   CombatProgressionBlockerType,
   CombatProgressionBoundaryKind,
   CombatProgressionDiagnostic,
+  CombatProgressionExecutionGroup,
   CombatProgressionExecutionStrategy,
   CombatProgressionExpectedCommand,
   CombatProgressionGmIdentity,
@@ -24,6 +29,7 @@ import type {
   CombatProgressionTaskOwner,
   CombatProgressionTask,
   CombatProgressionTaskIdentity,
+  CombatProgressionTaskPresentationContext,
   CombatProgressionAllowedActor,
   CombatProgressionBoundaryTransition,
 } from "./types";
@@ -52,18 +58,24 @@ export interface TaskSpec {
   allowedActors?: readonly CombatProgressionAllowedActor[];
   dependencies?: readonly TaskDependency[];
   expectedCommand: CombatProgressionExpectedCommand;
-  identity?: Omit<CombatProgressionTaskIdentity, "executionGroupId"> & {
-    executionGroupId?: string;
-  };
+  identity?: Omit<CombatProgressionTaskIdentity, "executionGroupId">;
   key?: string;
   kind: CombatProgressionTaskKind;
   owner?: CombatProgressionTaskOwner;
+  presentationContext?: CombatProgressionTaskPresentationContext;
   trackerOwner?: CombatantIdentity;
   trackerStep: CombatRoundCursorStep;
   transition?: CombatProgressionBoundaryTransition;
 }
 
 export interface StageSpec {
+  executionGroups?: readonly {
+    key?: string;
+    position?: number;
+    strategy?: CombatProgressionExecutionStrategy;
+    tasks: readonly TaskSpec[];
+  }[];
+  key?: string;
   kind: CombatProgressionStageKind;
   state: CombatProgressionStageState;
   strategy: CombatProgressionExecutionStrategy;
@@ -77,8 +89,221 @@ export interface ProjectionBuildContext {
   boundaryKind: CombatProgressionBoundaryKind;
   diagnostics: CombatProgressionDiagnostic[];
   identities: Map<string, CombatantIdentity>;
+  initiativeGroup?: CombatRoundInitiativeExecutionGroup;
+  participation?: CombatParticipationProjection;
   roundNumber: number;
   state: CombatRoundState;
+}
+
+function taskParticipationFact(
+  context: ProjectionBuildContext,
+  spec: TaskSpec,
+  processKind: CombatProgressionProcessKind,
+) {
+  const participantId =
+    spec.identity?.participantId ??
+    (spec.owner?.kind === "combatant" ? spec.owner.participantId : undefined);
+  const phase = spec.identity?.phase;
+  const target = (() => {
+    switch (spec.kind) {
+      case "submit_declaration":
+        return { family: "declaration", participantId } as const;
+      case "combat_experience":
+        return spec.expectedCommand === "roll_combat_experience"
+          ? ({ family: "combat_start_experience", participantId, step: "roll" } as const)
+          : spec.expectedCommand === "set_combat_experience_difficulty"
+            ? ({ family: "combat_start_experience", step: "difficulty" } as const)
+            : ({ family: "phase_combat_experience", participantId, phase } as const);
+      case "modifier_review":
+        return { family: "modifier_review", participantId, phase } as const;
+      case "double_attack_decision":
+        return {
+          family: "double_attack_decision",
+          participantId,
+          phase,
+          opportunityId: spec.identity?.opportunityId,
+        } as const;
+      case "roll_initiative":
+        return { family: "initiative", participantId, phase } as const;
+      case "commit_initiative":
+        return {
+          family: "boundary",
+          phase,
+          step: phase === "phase1" ? "commit_i1" : "commit_i2",
+        } as const;
+      case "round_end_prepare":
+        return { family: "boundary", step: "prepare_round_end" } as const;
+      case "feint_attacker_roll":
+      case "feint_defender_roll":
+      case "feint_commit":
+        return {
+          family: "feint",
+          participantId,
+          phase,
+          proposalId: spec.identity?.proposalId,
+          step: spec.kind,
+        } as const;
+      case "adjust_distance_response":
+      case "adjust_distance_adjustment":
+      case "adjust_distance_attacker_roll":
+      case "adjust_distance_defender_roll":
+      case "adjust_distance_commit":
+        return {
+          family: "adjust_distance",
+          participantId,
+          phase,
+          proposalId: spec.identity?.proposalId,
+          step: spec.kind,
+        } as const;
+      case "attack":
+        return {
+          family: "phase_action",
+          participantId,
+          phase,
+          opportunityId: spec.identity?.opportunityId,
+          step: "attack",
+        } as const;
+      case "parry":
+        return {
+          family: "phase_response",
+          participantId,
+          phase,
+          opportunityId: spec.identity?.opportunityId,
+          step: "defense",
+        } as const;
+      case "offensive_parry_brawling_roll":
+        return {
+          family: "offensive_parry",
+          participantId,
+          phase,
+          opportunityId: spec.identity?.opportunityId,
+        } as const;
+      case "hit_location":
+        return {
+          family: "damage_chain",
+          participantId,
+          phase,
+          opportunityId: spec.identity?.opportunityId,
+          step: "hit_location",
+        } as const;
+      case "critical":
+        return {
+          family: "damage_chain",
+          participantId,
+          phase,
+          opportunityId: spec.identity?.opportunityId,
+          step: "critical",
+        } as const;
+      case "damage_roll":
+        return {
+          family: "damage_chain",
+          participantId,
+          phase,
+          opportunityId: spec.identity?.opportunityId,
+          step: "damage",
+        } as const;
+      case "damage_review":
+        return {
+          family: "damage_chain",
+          phase,
+          opportunityId: spec.identity?.opportunityId,
+          step: spec.expectedCommand === "commit_phase_damage" ? "damage" : "commit",
+        } as const;
+      case "continued_contact_maintenance_roll":
+        return {
+          family: "continued_contact",
+          participantId,
+          pairId: spec.identity?.continuedContactId,
+          step: "maintenance_roll",
+        } as const;
+      case "distance_roll":
+      case "distance_commit":
+        return {
+          family: "distance_control",
+          participantId,
+          pairId: spec.identity?.pairId,
+          proposalId: spec.identity?.proposalId,
+          step: spec.kind,
+        } as const;
+      case "health_review":
+        return {
+          family: "health_bleed",
+          participantId,
+          proposalId: spec.identity?.proposalId,
+          step: "health_check",
+        } as const;
+      case "observation_roll":
+        return {
+          family: "observation",
+          participantId,
+          proposalId: spec.identity?.observationAttemptId,
+          step: "observation_roll",
+        } as const;
+      case "participant_review":
+        return { family: "participant_completion", participantId } as const;
+      case "effect_review": {
+        const effect = context.participation?.facts.find(
+          (fact) =>
+            fact.identity.processFamily === "effect_review" &&
+            fact.identity.participantId === participantId,
+        );
+        if (effect && !(effect.status === "not_required" && effect.workClass === "no_work")) {
+          return { family: "effect_review", participantId } as const;
+        }
+        return { family: "participant_completion", participantId } as const;
+      }
+      case "gm_advance_boundary": {
+        const stepByBoundary = {
+          declaration: "declaration_boundary",
+          phase1_modifier_review: "M1_boundary",
+          phase1_resolution: "phase1_boundary",
+          phase2_modifier_review: "M2_boundary",
+          phase2_resolution: "phase2_boundary",
+          round_boundary: "round_boundary",
+          round_end: "round_boundary",
+        } as const;
+        return {
+          family: "boundary",
+          step: stepByBoundary[context.boundaryKind as keyof typeof stepByBoundary],
+        } as const;
+      }
+      default:
+        return processKind === "round_end"
+          ? ({ family: "boundary", step: "round_boundary" } as const)
+          : undefined;
+    }
+  })();
+  if (!target || !context.participation) return undefined;
+  const fact = context.participation.facts.find(
+    (candidate) =>
+      candidate.identity.processFamily === target.family &&
+      (target.participantId === undefined ||
+        candidate.identity.participantId === target.participantId) &&
+      (target.phase === undefined || candidate.identity.phase === target.phase) &&
+      (!("step" in target) ||
+        target.step === undefined ||
+        candidate.identity.step === target.step) &&
+      (!("opportunityId" in target) ||
+        target.opportunityId === undefined ||
+        candidate.identity.opportunityId === target.opportunityId) &&
+      (!("proposalId" in target) ||
+        target.proposalId === undefined ||
+        candidate.identity.proposalId === target.proposalId) &&
+      (!("pairId" in target) ||
+        target.pairId === undefined ||
+        candidate.identity.pairId === target.pairId),
+  );
+  return fact
+    ? {
+        completeness: fact.completeness,
+        factId: fact.id,
+        ordering: fact.ordering,
+        ownership: fact.ownership,
+        reason: fact.reason,
+        status: fact.status,
+        workClass: fact.workClass,
+      }
+    : undefined;
 }
 
 export function deepFreeze<T>(value: T): T {
@@ -121,7 +346,8 @@ export function boundaryForStep(
   if (step === "phase_2_actions" || step === "review_phase_2_damage" || step === "phase_2_damage") {
     return "phase2_resolution";
   }
-  return getNextCombatRoundEndTask({ state })?.kind === "round_boundary"
+  return isCombatRoundEndReviewComplete(state) &&
+    getPendingCombatObservationAttempts(state).length === 0
     ? "round_boundary"
     : "round_end";
 }
@@ -139,8 +365,9 @@ function stageId(
   processKind: CombatProgressionProcessKind,
   kind: CombatProgressionStageKind,
   processKey?: string,
+  stageKey?: string,
 ): string {
-  return `${getCombatProgressionProcessId(context, processKind, processKey)}:stage:${kind}`;
+  return `${getCombatProgressionProcessId(context, processKind, processKey)}:stage:${kind}${stageKey ? `:${stageKey}` : ""}`;
 }
 
 function registerBlocker(
@@ -164,7 +391,9 @@ function buildTask(
   processKind: CombatProgressionProcessKind,
   stageKind: CombatProgressionStageKind,
   spec: TaskSpec,
+  executionGroupId: string,
   processKey?: string,
+  stageKey?: string,
 ): CombatProgressionTask {
   const ownerKey =
     spec.owner?.kind === "combatant"
@@ -172,7 +401,7 @@ function buildTask(
       : spec.owner?.kind === "gm"
         ? "gm"
         : "unowned";
-  const id = `${stageId(context, processKind, stageKind, processKey)}:task:${spec.kind}:${spec.key ?? ownerKey}`;
+  const id = `${stageId(context, processKind, stageKind, processKey, stageKey)}:task:${spec.kind}:${spec.key ?? ownerKey}`;
   const dependencies = [...(spec.dependencies ?? [])];
   if (!spec.owner) {
     dependencies.push({
@@ -209,24 +438,93 @@ function buildTask(
     type: pendingType,
   });
 
+  const participation = taskParticipationFact(context, spec, processKind);
+  const state = blockerIds.length === 0 ? "executable" : "waiting";
+  const identity = {
+    executionGroupId,
+    ...(context.initiativeGroup
+      ? {
+          initiativeGroupId: context.initiativeGroup.id,
+          initiativeValue: context.initiativeGroup.initiativeValue,
+        }
+      : {}),
+    ...spec.identity,
+  };
   return {
     allowedActors,
+    automation: projectCombatTaskAutomationEligibility({
+      participation,
+      task: {
+        blockerCount: blockerIds.length,
+        expectedCommand: spec.expectedCommand,
+        identity,
+        kind: spec.kind,
+        ownerParticipantId:
+          spec.owner?.kind === "combatant"
+            ? spec.owner.participantId
+            : spec.identity?.participantId,
+        presentationContext: spec.presentationContext,
+        state,
+        taskId: id,
+      },
+    }),
     blockerIds,
     expectedCommand: spec.expectedCommand,
+    executionGroupId,
     id,
-    identity: {
-      executionGroupId:
-        spec.identity?.executionGroupId ??
-        `${stageId(context, processKind, stageKind, processKey)}:group`,
-      ...spec.identity,
-    },
+    identity,
     kind: spec.kind,
+    opponent: spec.identity?.opponentParticipantId
+      ? context.identities.get(spec.identity.opponentParticipantId)
+      : undefined,
     owner: spec.owner,
+    participation,
+    presentationContext: spec.presentationContext,
     processId: getCombatProgressionProcessId(context, processKind, processKey),
-    stageId: stageId(context, processKind, stageKind, processKey),
-    state: blockerIds.length === 0 ? "executable" : "waiting",
+    stageId: stageId(context, processKind, stageKind, processKey, stageKey),
+    state,
     trackerFacet: { owner: spec.trackerOwner, step: spec.trackerStep },
     transition: spec.transition,
+  };
+}
+
+function buildExecutionGroup(
+  context: ProjectionBuildContext,
+  processKind: CombatProgressionProcessKind,
+  stage: StageSpec,
+  groupSpec: NonNullable<StageSpec["executionGroups"]>[number],
+  position: number,
+  processKey?: string,
+): CombatProgressionExecutionGroup {
+  const currentStageId = stageId(context, processKind, stage.kind, processKey, stage.key);
+  const firstTask = groupSpec.tasks[0];
+  const ownerKey =
+    firstTask?.owner?.kind === "combatant"
+      ? firstTask.owner.participantId
+      : firstTask?.owner?.kind === "gm"
+        ? "gm"
+        : "unowned";
+  const taskKey = groupSpec.key ?? firstTask?.key ?? ownerKey;
+  const groupKey = groupSpec.key ?? `${firstTask?.kind ?? "task"}:${taskKey}`;
+  const id = `${currentStageId}:execution-group:${position}:${groupKey}`;
+  const tasks = groupSpec.tasks.map((taskSpec) =>
+    buildTask(context, processKind, stage.kind, taskSpec, id, processKey, stage.key),
+  );
+  return {
+    activationBoundary: {
+      id: context.boundaryId,
+      kind: context.boundaryKind,
+      roundNumber: context.roundNumber,
+    },
+    blockerIds: [...new Set(tasks.flatMap((task) => task.blockerIds))],
+    completionState: stage.state === "complete" ? "complete" : "incomplete",
+    diagnostics: [],
+    executionStrategy: groupSpec.strategy ?? stage.strategy,
+    futureActivationBoundary: undefined,
+    id,
+    position,
+    stageId: currentStageId,
+    tasks,
   };
 }
 
@@ -267,16 +565,27 @@ export function buildProcess(
     id,
     kind,
     ...(options.planId ? { planId: options.planId } : {}),
-    stages: stages.map((stage) => ({
-      executionStrategy: stage.strategy,
-      id: stageId(context, kind, stage.kind, options.key),
-      kind: stage.kind,
-      processId: id,
-      state: stage.state,
-      tasks: (stage.tasks ?? []).map((task) =>
-        buildTask(context, kind, stage.kind, task, options.key),
-      ),
-    })),
+    stages: stages.map((stage) => {
+      const groupSpecs =
+        stage.executionGroups ??
+        (stage.tasks ?? []).map((task) => ({
+          position: undefined,
+          strategy: stage.strategy,
+          tasks: [task],
+        }));
+      const executionGroups = groupSpecs.map((group, position) =>
+        buildExecutionGroup(context, kind, stage, group, group.position ?? position, options.key),
+      );
+      return {
+        executionGroups,
+        executionStrategy: stage.strategy,
+        id: stageId(context, kind, stage.kind, options.key, stage.key),
+        kind: stage.kind,
+        processId: id,
+        state: stage.state,
+        tasks: executionGroups.flatMap((group) => group.tasks),
+      };
+    }),
   };
 }
 

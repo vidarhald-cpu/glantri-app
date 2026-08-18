@@ -1,11 +1,15 @@
 import {
   combatRoundStateSchema,
+  getCombatRoundCurrentInitiativeExecutionGroup,
+  getCombatRoundInitiativeExecutionGroups,
   getCombatRoundStepForCursorStep,
   sortCombatRoundParticipantsByInitiative,
   type CombatRoundCommandCurrentTask,
   type CombatRoundState,
 } from "../combatRoundManager";
 import { buildCombatActionProcessPlans } from "../combatActionProcesses";
+import type { CombatParticipationProjection } from "../combatParticipation";
+import { validateCombatDeclarationCompatibility } from "../combatDeclarationCompatibility";
 import {
   boundaryForCursorStep,
   boundaryForStep,
@@ -44,7 +48,22 @@ function committedExecutionOrder(
         : undefined;
   if (!phase) return undefined;
 
+  const initiativeGroups = getCombatRoundInitiativeExecutionGroups({ phase, state });
+  const currentGroup = initiativeGroups.find((group) => group.status === "current");
   return {
+    ...(initiativeGroups.length > 0
+      ? {
+          currentInitiativeGroupId: currentGroup?.id,
+          currentInitiativeValue: currentGroup?.initiativeValue,
+          initiativeGroups: initiativeGroups.map((group) => ({
+            id: group.id,
+            initiativeValue: group.initiativeValue,
+            opportunityIds: group.opportunityIds,
+            participantIds: group.participantIds,
+            status: group.status,
+          })),
+        }
+      : {}),
     participantIds: sortCombatRoundParticipantsByInitiative({ phase, state }).map(
       (participant) => participant.participantId,
     ),
@@ -58,6 +77,7 @@ function committedExecutionOrder(
  */
 export function buildCombatProgressionProjection(
   state: CombatRoundState,
+  options: { readonly participation?: CombatParticipationProjection } = {},
 ): CombatProgressionProjection {
   const normalized = combatRoundStateSchema.parse(state);
   const cursor = normalized.currentCursor;
@@ -80,17 +100,58 @@ export function buildCombatProgressionProjection(
     if (participant.characterId) identities.set(participant.characterId, identity);
   }
   const context: ProjectionBuildContext = {
-    actionProcessPlans: buildCombatActionProcessPlans(normalized),
+    actionProcessPlans:
+      boundaryKind === "round_end" || boundaryKind === "round_boundary"
+        ? []
+        : buildCombatActionProcessPlans(normalized),
     blockers: new Map(),
     boundaryId,
     boundaryKind,
     diagnostics: [],
     identities,
+    initiativeGroup:
+      boundaryKind === "phase1_resolution"
+        ? getCombatRoundCurrentInitiativeExecutionGroup({ phase: "phase1", state: normalized })
+        : boundaryKind === "phase2_resolution"
+          ? getCombatRoundCurrentInitiativeExecutionGroup({ phase: "phase2", state: normalized })
+          : undefined,
+    participation: options.participation,
     roundNumber: normalized.roundNumber,
     state: normalized,
   };
+  const unavailableDeclaration =
+    boundaryKind === "declaration"
+      ? undefined
+      : normalized.participants
+          .map((participant) => {
+            const actionId = participant.declaration?.actionId;
+            const secondaryActionId = participant.declaration?.secondaryActionId;
+            const availability = validateCombatDeclarationCompatibility({
+              movementKind: participant.declaration?.movementIntent?.mode,
+              primaryAction: actionId,
+              secondaryAction: secondaryActionId,
+            });
+            return availability.valid ? undefined : { availability, participant };
+          })
+          .find((entry) => entry !== undefined);
   let processes: CombatProgressionProcess[];
-  if (boundaryKind === "declaration") processes = buildDeclarationProcesses(context);
+  if (unavailableDeclaration) {
+    const blockerId = `${boundaryId}:blocker:invalid_source:unavailable-declaration:${unavailableDeclaration.participant.participantId}`;
+    context.blockers.set(blockerId, {
+      id: blockerId,
+      message: unavailableDeclaration.availability.message ?? "Combat action is not yet available.",
+      owner: identities.get(unavailableDeclaration.participant.participantId),
+      taskIds: [],
+      type: "invalid_source",
+    });
+    context.diagnostics.push({
+      code: "repair_required",
+      message: "An active legacy declaration cannot enter canonical execution.",
+      relatedIds: [blockerId, unavailableDeclaration.participant.participantId],
+      severity: "warning",
+    });
+    processes = [];
+  } else if (boundaryKind === "declaration") processes = buildDeclarationProcesses(context);
   else if (boundaryKind === "phase1_modifier_review")
     processes = [buildModifierReviewProcess(context, "phase1")];
   else if (boundaryKind === "phase2_modifier_review")

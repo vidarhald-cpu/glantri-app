@@ -1,19 +1,21 @@
 import React from "react";
 import type {
+  CombatObservationRelationship,
   ProjectedCombatHistoryEvent,
   ProjectedCombatHistoryPhasePanel,
   ProjectedCombatHistorySnapshot,
 } from "@glantri/domain";
 
 import {
-  PlayerCombatActionSelectorPanel,
-  PlayerCombatActionButtonPanel,
   PlayerCombatAttackLocationSelector,
   PlayerCombatAttackModeSelector,
   PlayerCombatAttackStatsTable,
   PlayerCombatAttackTargetSelector,
   PlayerCombatDefenseStatsTable,
+  PlayerCombatHistoricalActionSelectorPanel,
+  PlayerCombatHistoricalContextPanel,
   PlayerCombatModifierPanel,
+  PlayerCombatObservationProgress,
   PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
   playerCombatPanelCardStyle,
@@ -23,14 +25,19 @@ import {
 } from "@/features/player-combat/PlayerCombatPanels";
 import {
   createEmptyPlayerEncounterCombatContext,
-  type PlayerEncounterActionId,
-  type PlayerEncounterMovementId,
+  getPlayerEncounterActionLabel,
+  PLAYER_ENCOUNTER_MOVEMENT_OPTIONS,
 } from "@/lib/campaigns/playerEncounter";
 
 import { CombatEventResultList } from "./CombatEventResultList";
 
 const noop = () => undefined;
 const historicalDataMissingMessage = "No information available for this panel.";
+
+function historicalActionLabel(actionId?: string): string | undefined {
+  if (!actionId) return undefined;
+  return getPlayerEncounterActionLabel(actionId);
+}
 
 function MissingHistoricalPanel(input: { title: string }) {
   return (
@@ -43,8 +50,11 @@ function MissingHistoricalPanel(input: { title: string }) {
 
 function HistoricalPhasePanel(input: {
   actionId?: string;
+  observationRelationships: readonly CombatObservationRelationship[];
+  observationTargetLabels: Readonly<Record<string, string>>;
   panel: ProjectedCombatHistoryPhasePanel;
   phaseLabel: "Phase 1" | "Phase 2";
+  secondaryActionId?: string;
 }) {
   const recorded = Object.keys(input.panel).length > 0;
   if (!recorded) return <MissingHistoricalPanel title={input.phaseLabel} />;
@@ -68,13 +78,14 @@ function HistoricalPhasePanel(input: {
             controlsDisabled
             distanceLabel={input.panel.distanceLabel}
             onCombatContextChange={noop}
-            readOnly={input.actionId === "feint_attack" && input.phaseLabel === "Phase 2"}
+            readOnly
             targetOptions={targets}
           />
           <PlayerCombatAttackLocationSelector
             combatContext={context}
             controlsDisabled
             onCombatContextChange={noop}
+            readOnly
           />
           <PlayerCombatAttackModeSelector
             controlsDisabled
@@ -90,10 +101,19 @@ function HistoricalPhasePanel(input: {
                 : []
             }
             selectedAttackModeId={context.attackModeId}
+            readOnly
           />
         </>
       ) : null}
       <>
+        {input.phaseLabel === "Phase 1" &&
+        input.actionId === "parry" &&
+        input.secondaryActionId === "observe_opponent" ? (
+          <PlayerCombatObservationProgress
+            relationships={input.observationRelationships}
+            targetLabels={input.observationTargetLabels}
+          />
+        ) : null}
         {input.panel.defenseSummary ? (
           <PlayerCombatDefenseStatsTable stats={input.panel.defenseSummary} />
         ) : (
@@ -107,6 +127,7 @@ function HistoricalPhasePanel(input: {
           mainHandItemLabel={input.panel.mainHandParryItemLabel}
           offHandItemLabel={input.panel.offHandParryItemLabel}
           onCombatContextChange={noop}
+          readOnly
         />
       </>
     </PlayerCombatPhasePanel>
@@ -115,26 +136,12 @@ function HistoricalPhasePanel(input: {
 
 export function PlayerCombatHistoryInspector(input: {
   events: readonly ProjectedCombatHistoryEvent[];
+  observationRelationships?: readonly CombatObservationRelationship[];
+  observationTargetLabels?: Readonly<Record<string, string>>;
   snapshot?: ProjectedCombatHistorySnapshot;
 }) {
   const selector = input.snapshot?.panels.actionSelector;
   const selectorRecorded = Boolean(selector && Object.keys(selector).length > 0);
-  const actionOptions = selector
-    ? [
-        selector.actionId
-          ? {
-              label: selector.actionLabel ?? selector.actionId,
-              value: selector.actionId as PlayerEncounterActionId,
-            }
-          : undefined,
-        selector.secondaryActionId && selector.secondaryActionId !== selector.actionId
-          ? {
-              label: selector.secondaryActionLabel ?? selector.secondaryActionId,
-              value: selector.secondaryActionId as PlayerEncounterActionId,
-            }
-          : undefined,
-      ].filter((option): option is NonNullable<typeof option> => Boolean(option))
-    : [];
   const distancePreferenceOptions: PlayerCombatDistancePreferenceOption[] = (
     selector?.movementPreferenceTargets ?? []
   ).map((target) => ({
@@ -148,6 +155,18 @@ export function PlayerCombatHistoryInspector(input: {
     "rows" in (input.snapshot?.panels.modifiers ?? {})
       ? input.snapshot?.panels.modifiers.rows
       : undefined;
+  const modifierEffects =
+    "effects" in (input.snapshot?.panels.modifiers ?? {})
+      ? input.snapshot?.panels.modifiers.effects
+      : undefined;
+  const historicalPhase = input.snapshot?.phase;
+  const historicalPhasePanel = historicalPhase
+    ? input.snapshot?.panels[historicalPhase]
+    : undefined;
+  const historicalOpponentId =
+    historicalPhasePanel?.phaseContext?.targetParticipantId ??
+    historicalPhasePanel?.phaseContext?.selectedOpponentId ??
+    selector?.secondaryActionTargetParticipantId;
 
   return (
     <section
@@ -156,56 +175,81 @@ export function PlayerCombatHistoryInspector(input: {
     >
       <div style={playerCombatTopPanelRowStyle}>
         {selectorRecorded && selector ? (
-          <PlayerCombatActionSelectorPanel
-            actionId={(selector.actionId ?? "") as PlayerEncounterActionId | ""}
-            actionOptions={actionOptions}
+          <PlayerCombatHistoricalActionSelectorPanel
+            actionLabel={
+              selector.actionLabel ??
+              historicalActionLabel(selector.actionId)
+            }
             additionalActionNotes={selector.additionalActionNotes ?? ""}
-            controlsDisabled
-            distancePreferenceOptions={distancePreferenceOptions}
-            movementId={(selector.movementId ?? "") as PlayerEncounterMovementId | ""}
-            movementIntent={selector.movementIntent}
-            onActionChange={noop}
-            onAdditionalActionNotesChange={noop}
-            onMovementChange={noop}
-            onMovementIntentChange={noop}
-            onSecondaryActionChange={noop}
+            declarationRecorded
+            distancePreferences={distancePreferenceOptions.map((preference) => ({
+              desiredDistance: preference.defaultDistance,
+              displayName: preference.displayName,
+            }))}
+            movementLabel={
+              selector.movementLabel ??
+              PLAYER_ENCOUNTER_MOVEMENT_OPTIONS.find(
+                (option) => option.value === selector.movementId,
+              )?.label ??
+              selector.movementId
+            }
             roundNumber={input.snapshot?.roundNumber}
-            secondaryActionId={(selector.secondaryActionId ?? "") as PlayerEncounterActionId | ""}
-            sourceLabel="History"
+            secondaryActionLabel={
+              selector.secondaryActionLabel ??
+              historicalActionLabel(selector.secondaryActionId)
+            }
           />
         ) : (
           <MissingHistoricalPanel title="Action selector" />
         )}
         <HistoricalPhasePanel
           actionId={selector?.actionId}
+          observationRelationships={input.observationRelationships ?? []}
+          observationTargetLabels={input.observationTargetLabels ?? {}}
           panel={input.snapshot?.panels.phase1 ?? {}}
           phaseLabel="Phase 1"
+          secondaryActionId={selector?.secondaryActionId}
         />
         <HistoricalPhasePanel
           actionId={selector?.actionId}
+          observationRelationships={input.observationRelationships ?? []}
+          observationTargetLabels={input.observationTargetLabels ?? {}}
           panel={input.snapshot?.panels.phase2 ?? {}}
           phaseLabel="Phase 2"
+          secondaryActionId={selector?.secondaryActionId}
         />
       </div>
       <div style={playerCombatPanelRowStyle}>
         {modifierRows ? (
           <PlayerCombatModifierPanel
+            context={{
+              opponentParticipantId: historicalOpponentId,
+              participantLabels: input.observationTargetLabels,
+              phase: historicalPhase,
+              roundNumber: input.snapshot?.roundNumber,
+              step: input.snapshot?.step,
+            }}
             controlsDisabled
+            lifecycleEffects={modifierEffects}
             readOnly
             rows={modifierRows}
             sourceLabel="History"
           />
         ) : (
-          <MissingHistoricalPanel title="Combat modifiers" />
+          <MissingHistoricalPanel title="Combat situation" />
         )}
-        <PlayerCombatActionButtonPanel
-          buttonLabel="Historical inspection"
-          disabled
-          statusText="No historical action control recorded."
+        <PlayerCombatHistoricalContextPanel
+          roundNumber={input.snapshot?.roundNumber}
+          stepLabel={input.snapshot?.step.replaceAll("_", " ")}
         />
         <CombatEventResultList
           emptyMessage={input.snapshot?.stepOutcome?.message ?? historicalDataMissingMessage}
           events={input.events}
+          title={
+            input.snapshot
+              ? `Historical result — Round ${input.snapshot.roundNumber} · ${input.snapshot.step.replaceAll("_", " ")}`
+              : "Historical result"
+          }
         />
       </div>
     </section>

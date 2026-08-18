@@ -25,7 +25,8 @@ describe("critical effects table helpers", () => {
 
   it("looks up sharp arm index 01 with title and full body text", () => {
     expect(getCriticalResult("sharp", "arm", 1)).toMatchObject({
-      bodyText: "Your blow grazes your opponent's arm, causing them to drop anything held in that hand.",
+      bodyText:
+        "Your blow grazes your opponent's arm, causing them to drop anything held in that hand.",
       critBand: "minor",
       critIndex: 1,
       critKey: "sharp|arm|01",
@@ -44,7 +45,8 @@ describe("critical effects table helpers", () => {
       critKey: "sharp|arm|13",
       hasExternalBleed: true,
       hasStun: true,
-      title: "Amputation; lower_arm unusable; no action / unconscious; external bleed 1d4 hp / round",
+      title:
+        "Amputation; lower_arm unusable; no action / unconscious; external bleed 1d4 hp / round",
     });
     expect(result?.effects.map((effect) => effect.effectKey)).toEqual([
       "sharp|arm|13|01",
@@ -64,6 +66,43 @@ describe("critical effects table helpers", () => {
       "Special",
       "Special",
     ]);
+  });
+
+  it("preserves representative blunt and whole-body outcomes without flattening them", () => {
+    expect(getCriticalResult("blunt", "head", 16)).toMatchObject({
+      critKey: "blunt|head|16",
+      mortalityState: "instant_death",
+      title: "Fatal blunt head critical",
+    });
+    expect(getCriticalResultWithEffects("fire_energy", "whole_body", 8)).toMatchObject({
+      effects: expect.arrayContaining([
+        expect.objectContaining({ effectKey: "fire_energy|whole_body|08|05" }),
+      ]),
+      result: expect.objectContaining({
+        critIndex: 8,
+        location: "whole_body",
+      }),
+    });
+  });
+
+  it("preserves fractional rates and unresolved stateful source mappings", () => {
+    expect(getCriticalEffectsForCrit("sharp|chest|09")).toContainEqual(
+      expect.objectContaining({
+        effectKey: "sharp|chest|09|03",
+        rateMode: "fixed_fraction",
+        rateRaw: "1 HP / 2 rounds",
+        rateValuePerRound: 0.5,
+      }),
+    );
+    expect(getCriticalEffectsForCrit("blunt|lower_leg|01")).toContainEqual(
+      expect.objectContaining({
+        durationMode: "special",
+        durationRaw: "instant stumble",
+        effectKey: "blunt|lower_leg|01|01",
+        sourceField: "balance_penalty",
+        sourceValue: "-1",
+      }),
+    );
   });
 
   it("returns effect rows sorted by effectOrder", () => {
@@ -167,7 +206,9 @@ describe("critical effects table helpers", () => {
     const coverage = validateCriticalTableCoverage();
 
     expect(coverage.complete).toBe(true);
-    expect(coverage.expectedIndexes).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+    expect(coverage.expectedIndexes).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+    ]);
     expect(coverage.missingCombinations).toEqual([]);
     expect(coverage.duplicateCritKeys).toEqual([]);
     expect(coverage.orphanEffectCritKeys).toEqual([]);

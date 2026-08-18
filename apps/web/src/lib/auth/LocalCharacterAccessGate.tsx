@@ -3,16 +3,15 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 
+import { loadServerCharacterById } from "../api/characterClient";
+import { canPresentRetainedLocalCharacter } from "../characters/localCharacterAccess";
 import { LocalCharacterRepository } from "../offline/repositories/localCharacterRepository";
 import { useSessionUser } from "./SessionUserContext";
 import styles from "./accessGate.module.css";
 
 const localCharacterRepository = new LocalCharacterRepository();
 
-export function RequireOwnedLocalCharacter(props: {
-  characterId: string;
-  children: ReactNode;
-}) {
+export function RequireOwnedLocalCharacter(props: { characterId: string; children: ReactNode }) {
   const { currentUser, loading: sessionLoading } = useSessionUser();
   const [loading, setLoading] = useState(true);
   const [isAllowed, setIsAllowed] = useState(false);
@@ -27,19 +26,23 @@ export function RequireOwnedLocalCharacter(props: {
         return;
       }
 
-      if (currentUser.roles.includes("game_master")) {
-        setIsAllowed(true);
-        setLoading(false);
-        return;
-      }
-
-      const record = await localCharacterRepository.get(props.characterId);
+      const [record, hasServerAccess] = await Promise.all([
+        localCharacterRepository.get(props.characterId),
+        loadServerCharacterById(props.characterId).then(
+          () => true,
+          () => false,
+        ),
+      ]);
 
       if (cancelled) {
         return;
       }
 
-      setIsAllowed(record?.creatorId === currentUser.id);
+      setIsAllowed(
+        record
+          ? canPresentRetainedLocalCharacter({ currentUser, hasServerAccess, record })
+          : hasServerAccess,
+      );
       setLoading(false);
     }
 
@@ -64,9 +67,7 @@ export function RequireOwnedLocalCharacter(props: {
     return (
       <section className={styles.section}>
         <h1 className={styles.heading}>Character access restricted</h1>
-        <p className={styles.message}>
-          This character is not available to the current account.
-        </p>
+        <p className={styles.message}>This character is not available to the current account.</p>
         <div>
           <Link href="/characters">Back to characters</Link>
         </div>

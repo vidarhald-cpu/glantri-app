@@ -7,6 +7,8 @@ import {
   getSingleAttackDeclaredDistanceForPenalty,
   getWeaponPreferredDistances,
   isDistanceGeneratedObSkillModifier,
+  isParryGeneratedPercentageModifier,
+  resolveCombatAttackPhaseDefensivePenalties,
   type CombatActionGeneratedDistanceModifierInput,
   type CombatRoundPhaseContexts,
   type CombatRoundState,
@@ -17,6 +19,7 @@ import {
   type ScenarioParticipantCombatContext,
   type WeaponTemplate,
 } from "@glantri/domain";
+import { deriveParryPrimaryActionModifier } from "@glantri/rules-engine";
 
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 
@@ -109,7 +112,7 @@ function findAttackWeaponTemplate(input: {
   ];
 
   if (!weaponName) {
-    return candidates[0];
+    return undefined;
   }
 
   return (
@@ -121,8 +124,7 @@ function findAttackWeaponTemplate(input: {
         Boolean(templateName) &&
         (weaponName.startsWith(`${templateName} `) || weaponName.startsWith(`${templateName}+`))
       );
-    }) ??
-    candidates[0]
+    })
   );
 }
 
@@ -161,11 +163,10 @@ function buildDistanceModifierInput(input: {
     return undefined;
   }
 
-  const targetParticipant =
-    findRoundParticipantByAlias({
-      id: targetParticipantId,
-      roundState: input.roundState,
-    }) ?? { participantId: targetParticipantId };
+  const targetParticipant = findRoundParticipantByAlias({
+    id: targetParticipantId,
+    roundState: input.roundState,
+  }) ?? { participantId: targetParticipantId };
   const distanceEdge = getDistanceEdgeBetweenParticipantAliases({
     participantA: input.encounterParticipant,
     participantB: targetParticipant,
@@ -215,6 +216,7 @@ function getDistanceModifierPhase(entry: ScenarioCombatModifierEntry): PhaseKey 
 function getCommittedDistanceRowsToPreserve(input: {
   attackPhases: readonly PhaseKey[];
   combatContext: ScenarioParticipantCombatContext;
+  dodgeSkillValue?: number;
   distanceModifiers: readonly CombatActionGeneratedDistanceModifierInput[];
   phaseContexts?: CombatRoundPhaseContexts;
   phaseWeaponNames?: Partial<Record<PhaseKey, string | undefined>>;
@@ -232,17 +234,37 @@ function getCommittedDistanceRowsToPreserve(input: {
 
     return Boolean(
       phase &&
-        input.attackPhases.includes(phase) &&
-        input.phaseContexts?.[phase]?.targetParticipantId &&
-        !input.phaseWeaponNames?.[phase] &&
-        !recomputedDistancePhases.has(phase),
+      input.attackPhases.includes(phase) &&
+      input.phaseContexts?.[phase]?.targetParticipantId &&
+      !input.phaseWeaponNames?.[phase] &&
+      !recomputedDistancePhases.has(phase),
     );
   });
+}
+
+function getCommittedParryRowsToPreserve(input: {
+  actionId?: string;
+  combatContext: ScenarioParticipantCombatContext;
+  dodgeSkillValue?: number;
+  roundState?: CombatRoundState;
+}): ScenarioCombatModifierEntry[] {
+  if (input.actionId !== "parry" || input.dodgeSkillValue !== undefined) {
+    return [];
+  }
+
+  return input.combatContext.modifierBuckets.situationDb.filter(
+    (entry) =>
+      isParryGeneratedPercentageModifier(entry) &&
+      (input.roundState === undefined ||
+        entry.sourceRoundNumber === undefined ||
+        entry.sourceRoundNumber === input.roundState.roundNumber),
+  );
 }
 
 export function projectCombatActionGeneratedModifiers(input: {
   actionId?: string;
   combatContext: ScenarioParticipantCombatContext;
+  dodgeSkillValue?: number;
   encounterParticipant?: EncounterSession["participants"][number];
   movementIntent?: MovementIntent;
   phaseContexts?: CombatRoundPhaseContexts;
@@ -270,9 +292,7 @@ export function projectCombatActionGeneratedModifiers(input: {
         scenarioParticipant: input.scenarioParticipant,
       }),
     )
-    .filter(
-      (entry): entry is CombatActionGeneratedDistanceModifierInput => entry !== undefined,
-    );
+    .filter((entry): entry is CombatActionGeneratedDistanceModifierInput => entry !== undefined);
   const committedDistanceRowsToPreserve = getCommittedDistanceRowsToPreserve({
     attackPhases,
     combatContext: input.combatContext,
@@ -280,6 +300,7 @@ export function projectCombatActionGeneratedModifiers(input: {
     phaseContexts: input.phaseContexts,
     phaseWeaponNames: input.phaseWeaponNames,
   });
+  const committedParryRowsToPreserve = getCommittedParryRowsToPreserve(input);
   const roundParticipantId =
     input.roundState && input.encounterParticipant
       ? (findRoundParticipantByAlias({
@@ -287,8 +308,43 @@ export function projectCombatActionGeneratedModifiers(input: {
           roundState: input.roundState,
         })?.participantId ?? input.encounterParticipant.id)
       : undefined;
+  const roundParticipant =
+    input.roundState && input.encounterParticipant
+      ? findRoundParticipantByAlias({
+          id: input.encounterParticipant.id,
+          roundState: input.roundState,
+        })
+      : undefined;
+  const committedAttackPhaseDefensivePenalties =
+    roundParticipant?.declaration !== undefined &&
+    roundParticipant.declaration.actionId === input.actionId
+      ? (roundParticipant.declaration.attackPhaseDefensivePenalties ??
+        (roundParticipant.declaration.attackOpportunities
+          ? resolveCombatAttackPhaseDefensivePenalties({
+              commitment: "committed",
+              opportunities: roundParticipant.declaration.attackOpportunities,
+              participantId: roundParticipant.participantId,
+              roundNumber: input.roundState?.roundNumber ?? 1,
+            })
+          : undefined))
+      : undefined;
   const projectedContext = applyCombatActionGeneratedModifiers({
     actionId: input.actionId,
+    attackPhaseDefensivePenalties:
+      committedAttackPhaseDefensivePenalties ??
+      resolveCombatAttackPhaseDefensivePenalties({
+        commitment: "provisional",
+        opportunities: attackPhases.map((phase) => ({
+          actionId: input.actionId,
+          id: `provisional:${input.roundState?.roundNumber ?? 1}:${roundParticipantId ?? "participant"}:${phase}`,
+          phase,
+          slot: phase === "phase1" ? "attack_1" : "attack_2",
+          status: "committed",
+          targetParticipantId: input.phaseContexts?.[phase]?.targetParticipantId,
+        })),
+        participantId: roundParticipantId ?? "provisional-participant",
+        roundNumber: input.roundState?.roundNumber ?? 1,
+      }),
     combatContext: input.combatContext,
     distanceModifiers,
     initiativeModifiers:
@@ -301,9 +357,15 @@ export function projectCombatActionGeneratedModifiers(input: {
             }),
           ].filter((entry): entry is ScenarioCombatModifierEntry => Boolean(entry))
         : [],
+    parryModifier:
+      input.actionId === "parry" && input.dodgeSkillValue !== undefined
+        ? deriveParryPrimaryActionModifier(input.dodgeSkillValue)
+        : undefined,
+    sourceEncounterId: input.roundState?.encounterId,
+    sourceRoundNumber: input.roundState?.roundNumber,
   });
 
-  if (committedDistanceRowsToPreserve.length === 0) {
+  if (committedDistanceRowsToPreserve.length === 0 && committedParryRowsToPreserve.length === 0) {
     return projectedContext;
   }
 
@@ -312,11 +374,20 @@ export function projectCombatActionGeneratedModifiers(input: {
       .filter(isDistanceGeneratedObSkillModifier)
       .map((entry) => entry.id),
   );
+  const projectedParryRowIds = new Set(
+    projectedContext.modifierBuckets.situationDb
+      .filter(isParryGeneratedPercentageModifier)
+      .map((entry) => entry.id),
+  );
 
   return {
     ...projectedContext,
     modifierBuckets: {
       ...projectedContext.modifierBuckets,
+      situationDb: [
+        ...projectedContext.modifierBuckets.situationDb,
+        ...committedParryRowsToPreserve.filter((entry) => !projectedParryRowIds.has(entry.id)),
+      ],
       situationObSkill: [
         ...projectedContext.modifierBuckets.situationObSkill,
         ...committedDistanceRowsToPreserve.filter(

@@ -2,6 +2,12 @@ import type {
   ScenarioCombatModifierBucket,
   ScenarioCombatModifierEntry,
 } from "../campaign/scenario";
+import {
+  canonicalCombatModifierEffectSchema,
+  type CanonicalCombatModifierEffect,
+  type CanonicalCombatModifierLifecycleState,
+  type CanonicalCombatModifierUnit,
+} from "./combatModifierLifecycle";
 import type { CombatRoundStep } from "./combatRoundManager";
 
 /**
@@ -48,6 +54,8 @@ export type CombatModifierContributionBucket =
   | "db_parry";
 
 export interface CombatModifierApplicability {
+  combatWide?: boolean;
+  excludedRollPurposes?: readonly string[];
   participantId?: string;
   opponentParticipantId?: string;
   pairKey?: string;
@@ -94,8 +102,13 @@ export interface CombatModifierContribution {
   bucket: CombatModifierContributionBucket;
 
   value: number;
+  unit?: CanonicalCombatModifierUnit;
   label: string;
   notes?: string;
+
+  /** Immutable lifecycle facts retained from the canonical producer projection. */
+  canonicalLifecycle?: CanonicalCombatModifierEffect;
+  lifecycleState?: CanonicalCombatModifierLifecycleState;
 
   applicability: CombatModifierApplicability;
   lifetime: CombatModifierLifetime;
@@ -125,6 +138,7 @@ export interface CombatCalculationContext {
   proposalId?: string;
 
   rollType?: string;
+  rollPurpose?: string;
   skillId?: string;
   skillGroupId?: string;
 
@@ -282,16 +296,63 @@ export function normalizeScenarioCombatModifierEntry(
 ): CombatModifierContribution | undefined {
   if (!Number.isFinite(input.entry.value)) return undefined;
 
-  const sourceKind = inferSourceKind(input.entry);
+  const canonicalLifecycle = canonicalCombatModifierEffectSchema.safeParse(
+    input.entry.canonicalLifecycle,
+  ).data;
+  if (
+    canonicalLifecycle &&
+    (canonicalLifecycle.payload.kind !== "numeric" ||
+      canonicalLifecycle.payload.category !== mapBucket(input.bucket))
+  ) {
+    return undefined;
+  }
+  const sourceKind = canonicalLifecycle
+    ? canonicalLifecycle.sourceFamily === "attack_opportunity" ||
+      canonicalLifecycle.sourceFamily === "observe_relationship"
+      ? "system_derived"
+      : canonicalLifecycle.sourceFamily === "persistent_effect"
+        ? "persistent_effect"
+        : "action_generated"
+    : inferSourceKind(input.entry);
   const readOnly = input.entry.readOnly ?? sourceKind === "persistent_effect";
-  const status: CombatModifierContributionStatus =
+  const status: CombatModifierContributionStatus = canonicalLifecycle
+    ? canonicalLifecycle.lifecycle.state === "expired"
+      ? "expired"
+      : canonicalLifecycle.lifecycle.state === "resolved" ||
+          canonicalLifecycle.lifecycle.state === "consumed" ||
+          canonicalLifecycle.lifecycle.state === "superseded"
+        ? "resolved"
+        : canonicalLifecycle.lifecycle.state === "removed" ||
+            canonicalLifecycle.lifecycle.state === "rejected"
+          ? "removed"
+          : canonicalLifecycle.lifecycle.state === "active"
+            ? "active"
+            : "pending"
+    :
     input.currentRound !== undefined &&
     input.entry.expiresAtRound !== undefined &&
     input.entry.expiresAtRound < input.currentRound
       ? "expired"
       : "active";
-  const inferredApplicability = inferApplicability(input.entry);
+  const inferredApplicability = canonicalLifecycle
+    ? {
+        actionId: canonicalLifecycle.applicability.actionId,
+        activatesAfterSequence:
+          canonicalLifecycle.applicability.activationCutoff?.kind === "sequence"
+            ? canonicalLifecycle.applicability.activationCutoff.afterSequence
+            : undefined,
+        combatWide: canonicalLifecycle.applicability.combatWide,
+        opponentParticipantId: canonicalLifecycle.applicability.opponentParticipantId,
+        opportunityId: canonicalLifecycle.applicability.opportunityId,
+        pairKey: canonicalLifecycle.applicability.pairKey,
+        phase: canonicalLifecycle.applicability.phase,
+        participantId: canonicalLifecycle.ownerParticipantId,
+        step: canonicalLifecycle.applicability.step,
+      }
+    : inferApplicability(input.entry);
   const applicability = {
+    combatWide: input.entry.combatWide,
+    excludedRollPurposes: input.entry.excludedRollPurposes,
     ...inferredApplicability,
     ...input.applicability,
   };
@@ -307,13 +368,22 @@ export function normalizeScenarioCombatModifierEntry(
     sourceRoundNumber: input.entry.sourceRoundNumber,
     sourceProposalId: input.entry.sourceProposalId,
     bucket: mapBucket(input.bucket),
-    value: input.entry.value,
+    value:
+      canonicalLifecycle?.payload.kind === "numeric"
+        ? canonicalLifecycle.payload.value
+        : input.entry.value,
+    unit:
+      canonicalLifecycle?.payload.kind === "numeric"
+        ? canonicalLifecycle.payload.unit
+        : input.entry.application,
     label:
       input.entry.notes?.trim() ||
       input.entry.sourceRule?.trim() ||
       input.entry.sourceActionId?.trim() ||
       "Combat modifier",
     notes: input.entry.notes,
+    canonicalLifecycle,
+    lifecycleState: canonicalLifecycle?.lifecycle.state,
     applicability,
     lifetime: {
       kind: lifetimeKind,
@@ -416,6 +486,12 @@ export function doesCombatModifierContributionApply(
   if (!matchesDimension(applicability.opportunityId, context.opportunityId)) return false;
   if (!matchesDimension(applicability.proposalId, context.proposalId)) return false;
   if (!matchesDimension(applicability.rollType, context.rollType)) return false;
+  if (
+    context.rollPurpose &&
+    applicability.excludedRollPurposes?.includes(context.rollPurpose)
+  ) {
+    return false;
+  }
   if (!matchesDimension(applicability.skillId, context.skillId)) return false;
   if (!matchesDimension(applicability.skillGroupId, context.skillGroupId)) return false;
 
@@ -465,6 +541,35 @@ export function resolveCombatModifierContributions(input: {
     bucket: input.bucket,
     rows,
     total: sumCombatModifierContributions(rows),
+  };
+}
+
+/**
+ * Resolves only general modifiers explicitly declared to apply across combat calculation types.
+ * Legacy general/fatigue rows retain their established consumers; a caller cannot accidentally
+ * broaden them merely by asking for a different roll type.
+ */
+export function resolveCombatWideGeneralModifiers(input: {
+  context: CombatCalculationContext;
+  contributions: readonly CombatModifierContribution[];
+}): CombatModifierResolution {
+  return resolveCombatModifierContributions({
+    bucket: "general_fatigue",
+    context: input.context,
+    contributions: input.contributions.filter(
+      (contribution) => contribution.applicability.combatWide === true,
+    ),
+  });
+}
+
+export function combineCombatModifierResolutions(input: {
+  additional: CombatModifierResolution;
+  primary: CombatModifierResolution;
+}): CombatModifierResolution {
+  return {
+    bucket: input.primary.bucket,
+    rows: [...input.primary.rows, ...input.additional.rows],
+    total: input.primary.total + input.additional.total,
   };
 }
 

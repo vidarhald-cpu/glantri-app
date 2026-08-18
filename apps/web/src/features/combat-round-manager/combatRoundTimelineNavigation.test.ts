@@ -4,10 +4,23 @@ import {
   getAdjacentCombatRoundTimelineParticipantSelection,
   getAdjacentCombatRoundTimelineStepSelection,
   getCombatRoundTimelineCellKey,
+  getCombatRoundTimelineArrowMove,
   getParticipantIdsForTimelineRound,
 } from "./combatRoundTimelineNavigation";
 
 describe("combat round timeline navigation", () => {
+  it("owns arrow keys on the tracker grid and its cell buttons, but not form controls", () => {
+    expect(getCombatRoundTimelineArrowMove({ key: "ArrowRight", targetTagName: "DIV" })).toEqual({
+      stepOffset: 1,
+    });
+    expect(getCombatRoundTimelineArrowMove({ key: "ArrowDown", targetTagName: "BUTTON" })).toEqual({
+      participantOffset: 1,
+    });
+    expect(
+      getCombatRoundTimelineArrowMove({ key: "ArrowLeft", targetTagName: "INPUT" }),
+    ).toBeUndefined();
+    expect(getCombatRoundTimelineArrowMove({ key: "PageDown" })).toBeUndefined();
+  });
   it("moves next step across a round boundary", () => {
     expect(
       getAdjacentCombatRoundTimelineStepSelection({

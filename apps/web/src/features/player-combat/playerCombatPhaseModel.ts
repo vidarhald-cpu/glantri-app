@@ -8,6 +8,7 @@ import type {
 } from "@glantri/domain";
 import {
   getCombatDeclarationAttackPhases,
+  resolveCombatDeclarationParticipantIdentity,
   resolveCombatFeintWeaponSkillDefinition,
   resolvePreferredAttackMode,
   scenarioParticipantCombatContextSchema,
@@ -75,6 +76,7 @@ export function buildCanonicalCombatTargetOptions(input: {
 
 export function resolveCanonicalCombatTargetIdentity(input: {
   encounterParticipants: EncounterSession["participants"];
+  fallbackParticipantIds?: readonly string[];
   targetParticipantId?: string;
 }):
   | {
@@ -83,12 +85,16 @@ export function resolveCanonicalCombatTargetIdentity(input: {
     }
   | undefined {
   if (!input.targetParticipantId) return undefined;
-  const participant = input.encounterParticipants.find(
-    (candidate) =>
-      candidate.id === input.targetParticipantId ||
-      candidate.scenarioParticipantId === input.targetParticipantId ||
-      candidate.characterId === input.targetParticipantId,
-  );
+  const participant = resolveCombatDeclarationParticipantIdentity({
+    participantId: input.targetParticipantId,
+    participants: input.encounterParticipants,
+  })?.participant;
+  if (!participant && input.fallbackParticipantIds?.includes(input.targetParticipantId)) {
+    return {
+      encounterParticipantId: input.targetParticipantId,
+      scenarioParticipantId: input.targetParticipantId,
+    };
+  }
   return participant?.scenarioParticipantId
     ? {
         encounterParticipantId: participant.id,
@@ -105,6 +111,7 @@ export function resolveCanonicalCombatTargetIdentity(input: {
 export function resolveCombatFeintDeclarationRequestTarget(input: {
   encounterParticipants: EncounterSession["participants"];
   phaseContexts: CombatRoundPhaseContexts;
+  fallbackParticipantIds?: readonly string[];
 }): CombatFeintDeclarationTargetResolution {
   const phase1Target = input.phaseContexts.phase1?.targetParticipantId;
   const phase2Target = input.phaseContexts.phase2?.targetParticipantId;
@@ -124,6 +131,23 @@ export function resolveCombatFeintDeclarationRequestTarget(input: {
       : undefined;
   const targetParticipant = resolveTarget(selectedTarget);
   if (!targetParticipant) {
+    if (input.fallbackParticipantIds?.includes(selectedTarget)) {
+      return {
+        ok: true,
+        phaseContexts: {
+          ...input.phaseContexts,
+          phase1: scenarioParticipantCombatContextSchema.parse({
+            ...input.phaseContexts.phase1,
+            targetParticipantId: selectedTarget,
+          }),
+          phase2: scenarioParticipantCombatContextSchema.parse({
+            ...input.phaseContexts.phase2,
+            targetParticipantId: selectedTarget,
+          }),
+        },
+        targetParticipantId: selectedTarget,
+      };
+    }
     return {
       message: "The Feint target is no longer in this encounter.",
       ok: false,
@@ -177,6 +201,7 @@ export interface PlayerCombatLoadoutReference {
 }
 
 export interface PlayerCombatLoadoutSummary {
+  attackModeUnavailableMessage?: string;
   attackModeOptions: PlayerCombatAttackModeOption[];
   attackStats: PlayerCombatAttackStatsView | null;
   mainHandParryItemLabel: string;
@@ -191,6 +216,11 @@ export interface PlayerCombatAttackModeOption {
   allowsRepeatedRoundAttack: boolean;
   id: string;
   label: string;
+}
+
+export interface CombatDeclarationAttackSelection {
+  phaseAttackSources: Partial<Record<PlayerCombatPhaseKey, CombatAttackSourceRef>>;
+  phaseContexts: CombatRoundPhaseContexts;
 }
 
 export interface PlayerCombatPhasePanelModel {
@@ -240,14 +270,29 @@ function getRelevantLoadoutFieldId(
     case "adjust_range_attack":
     case "counterattack":
     case "offensive_parry":
+    case "parry":
     case "parry_disarm":
     case "disarm":
-    case "observe_opponent":
     case "break_off_engagement":
     case "other":
       return "primary";
     default:
       return null;
+  }
+}
+
+function getLoadoutFieldWeaponModeLabel(
+  fieldId: "missile" | "primary" | "secondary" | "throwing",
+): string {
+  switch (fieldId) {
+    case "missile":
+      return "Missile";
+    case "primary":
+      return "Primary";
+    case "secondary":
+      return "Secondary";
+    case "throwing":
+      return "Thrown";
   }
 }
 
@@ -447,6 +492,19 @@ export function buildCombatAttackSourceRef(input: {
   unarmedTemplateId: string;
 }): CombatAttackSourceRef | undefined {
   const opportunitySlot = input.phaseKey === "phase1" ? "attack_1" : "attack_2";
+  const isExplicitUnarmedSelection =
+    !input.reference?.sourceItemId &&
+    (input.reference?.selectedWeapon === "Punch" || input.reference?.selectedWeapon === "Kick");
+  if (isExplicitUnarmedSelection) {
+    return {
+      attackModeId: input.reference?.sourceAttackModeId ?? "mode-1",
+      opportunitySlot,
+      slot: "virtual",
+      sourceKind: "unarmed",
+      templateId: input.unarmedTemplateId,
+    };
+  }
+
   if (
     input.reference?.sourceItemId &&
     input.reference.sourceTemplateId &&
@@ -464,6 +522,7 @@ export function buildCombatAttackSourceRef(input: {
   }
 
   if (
+    !input.reference ||
     input.reference?.sourceItemId ||
     input.reference?.sourceTemplateId ||
     input.reference?.sourceAttackModeId
@@ -471,13 +530,56 @@ export function buildCombatAttackSourceRef(input: {
     return undefined;
   }
 
-  return {
-    attackModeId: "mode-1",
-    opportunitySlot,
-    slot: "virtual",
-    sourceKind: "unarmed",
-    templateId: input.unarmedTemplateId,
-  };
+  return undefined;
+}
+
+/**
+ * Converts the explicit declaration-editor selections into canonical source references.
+ * This is the only pre-commit normalization boundary: live combat execution consumes the
+ * persisted opportunity identity and never calls this helper.
+ */
+export function buildCombatDeclarationAttackSelection(input: {
+  actionId?: string;
+  disarmPhase?: PlayerCombatPhaseKey;
+  feintMethod?: "movement" | "weapon";
+  phaseContexts: CombatRoundPhaseContexts;
+  phaseLoadoutSummaries: Record<
+    PlayerCombatPhaseKey,
+    Pick<PlayerCombatLoadoutSummary, "reference" | "selectedAttackModeId">
+  >;
+  secondaryActionId?: string;
+}): CombatDeclarationAttackSelection {
+  const attackPhases = new Set<PlayerCombatPhaseKey>(
+    getCombatDeclarationAttackPhases({
+      actionId: input.actionId,
+      disarmPhase: input.disarmPhase,
+      secondaryActionId: input.secondaryActionId,
+    }),
+  );
+  if (input.actionId === "feint_attack" && input.feintMethod === "weapon") {
+    attackPhases.add("phase1");
+  }
+
+  const phaseAttackSources: Partial<Record<PlayerCombatPhaseKey, CombatAttackSourceRef>> = {};
+  const phaseContexts: CombatRoundPhaseContexts = { ...input.phaseContexts };
+  for (const phaseKey of attackPhases) {
+    const source = buildCombatAttackSourceRef({
+      phaseKey,
+      reference: input.phaseLoadoutSummaries[phaseKey].reference,
+      unarmedTemplateId:
+        phaseKey === "phase1" ? "virtual-weapon-template-punch" : "virtual-weapon-template-kick",
+    });
+    if (!source) continue;
+
+    phaseAttackSources[phaseKey] = source;
+    phaseContexts[phaseKey] = scenarioParticipantCombatContextSchema.parse({
+      ...phaseContexts[phaseKey],
+      attackModeId:
+        input.phaseLoadoutSummaries[phaseKey].selectedAttackModeId ?? source.attackModeId,
+    });
+  }
+
+  return { phaseAttackSources, phaseContexts };
 }
 
 export function buildPlayerCombatLoadoutSummary(input: {
@@ -526,9 +628,11 @@ export function buildPlayerCombatLoadoutSummary(input: {
     doubleAttackFieldId ?? getRelevantLoadoutFieldId(input.actionId),
     getRelevantLoadoutFieldId(input.secondaryActionId),
   ].filter((value): value is "missile" | "primary" | "secondary" | "throwing" => value !== null);
-  const preferredItemIds = preferredFieldIds
-    .map((fieldId) => loadoutFieldDisplayMap.get(fieldId)?.value)
-    .filter((value): value is string => Boolean(value));
+  const preferredItemSources = preferredFieldIds.flatMap((fieldId) => {
+    const itemId = loadoutFieldDisplayMap.get(fieldId)?.value;
+    return itemId ? [{ fieldId, itemId }] : [];
+  });
+  const preferredItemIds = preferredItemSources.map(({ itemId }) => itemId);
   const preferredWeaponLabels = preferredFieldIds
     .map((fieldId) => loadoutFieldDisplayMap.get(fieldId)?.valueLabel)
     .filter((value): value is string => Boolean(value) && value !== "None");
@@ -550,27 +654,42 @@ export function buildPlayerCombatLoadoutSummary(input: {
       selectedAttackModeUsedFallback: false,
     };
   }
+  const preferredRawReferenceRow = preferredItemSources
+    .map(({ fieldId, itemId }) => {
+      const candidateRows =
+        combatPanelModel.weaponRows?.filter((row) => row.itemId === itemId) ?? [];
+      const selectedModeRow = input.selectedAttackModeId
+        ? candidateRows.find((row) =>
+            row.attackModes?.some((mode) => mode.id === input.selectedAttackModeId),
+          )
+        : undefined;
+      return (
+        selectedModeRow ??
+        candidateRows.find((row) => row.modeLabel === getLoadoutFieldWeaponModeLabel(fieldId)) ??
+        candidateRows[0] ??
+        null
+      );
+    })
+    .find((row) => row !== null);
   const referenceRow =
-    preferredItemIds
-      .map((itemId) => combatPanelModel.weaponRows?.find((row) => row.itemId === itemId) ?? null)
-      .map((rawRow) =>
-        rawRow
-          ? (combatPanelModel.weaponModeTable.rows.find((row) => {
-              const weaponLabel = getCombatTableCell({
-                columns: combatPanelModel.weaponModeTable.columns,
-                label: "Weapon",
-                row,
-              });
-              const modeLabel = getCombatTableCell({
-                columns: combatPanelModel.weaponModeTable.columns,
-                label: "Mode",
-                row,
-              });
-              return weaponLabel === rawRow.currentItemLabel && modeLabel === rawRow.modeLabel;
-            }) ?? null)
-          : null,
-      )
-      .find((row) => row !== null) ??
+    (preferredRawReferenceRow
+      ? (combatPanelModel.weaponModeTable.rows.find((row) => {
+          const weaponLabel = getCombatTableCell({
+            columns: combatPanelModel.weaponModeTable.columns,
+            label: "Weapon",
+            row,
+          });
+          const modeLabel = getCombatTableCell({
+            columns: combatPanelModel.weaponModeTable.columns,
+            label: "Mode",
+            row,
+          });
+          return (
+            weaponLabel === preferredRawReferenceRow.currentItemLabel &&
+            modeLabel === preferredRawReferenceRow.modeLabel
+          );
+        }) ?? null)
+      : null) ??
     preferredWeaponLabels
       .map(
         (weaponLabel) =>
@@ -584,7 +703,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
           ) ?? null,
       )
       .find((row) => row !== null) ??
-    combatPanelModel.weaponModeTable.rows[0] ??
+    (preferredFieldIds.length === 0 ? combatPanelModel.weaponModeTable.rows[0] : undefined) ??
     null;
   const combinedRow =
     combatPanelModel.weaponModeTable.rows.find(
@@ -597,6 +716,17 @@ export function buildPlayerCombatLoadoutSummary(input: {
     ) ?? null;
 
   if (!referenceRow) {
+    if (input.allowUnarmedFallback === false) {
+      return {
+        attackStats: null,
+        attackModeOptions: [],
+        mainHandParryItemLabel,
+        offHandParryItemLabel,
+        passiveInitiative: 0,
+        reference: null,
+        selectedAttackModeUsedFallback: false,
+      };
+    }
     const reference = {
       am: "—",
       am2: "—",
@@ -646,9 +776,12 @@ export function buildPlayerCombatLoadoutSummary(input: {
     label: "Mode",
     row: referenceRow,
   });
-  const rawReferenceRow = combatPanelModel.weaponRows?.find(
-    (row) => row.currentItemLabel === referenceWeaponLabel && row.modeLabel === referenceModeLabel,
-  );
+  const rawReferenceRow =
+    preferredRawReferenceRow ??
+    combatPanelModel.weaponRows?.find(
+      (row) =>
+        row.currentItemLabel === referenceWeaponLabel && row.modeLabel === referenceModeLabel,
+    );
   if (input.allowUnarmedFallback === false && !rawReferenceRow?.itemId) {
     return {
       attackStats: null,
@@ -661,9 +794,31 @@ export function buildPlayerCombatLoadoutSummary(input: {
     };
   }
   const primaryItemId = loadoutFieldDisplayMap.get("primary")?.value;
-  const selectedSourceItemId = rawReferenceRow?.itemId;
-  const sourceSlot = (["primary", "secondary", "missile", "throwing"] as const).find(
-    (fieldId) => loadoutFieldDisplayMap.get(fieldId)?.value === selectedSourceItemId,
+  const sourceSlot = (["primary", "secondary", "missile", "throwing"] as const).find((fieldId) => {
+    const field = loadoutFieldDisplayMap.get(fieldId);
+    if (!field?.value) return false;
+    if (field.value === rawReferenceRow?.itemId) return true;
+    const matchingRows = combatPanelModel.weaponRows?.filter(
+      (row) => row.currentItemLabel === field.valueLabel,
+    );
+    return (
+      field.valueLabel === referenceWeaponLabel &&
+      matchingRows?.length === 1 &&
+      matchingRows[0] === rawReferenceRow
+    );
+  });
+  const selectedSourceItemId =
+    (sourceSlot ? loadoutFieldDisplayMap.get(sourceSlot)?.value : undefined) ??
+    rawReferenceRow?.itemId;
+  const availableAttackModes = Array.from(
+    new Map(
+      (selectedSourceItemId
+        ? (combatPanelModel.weaponRows ?? [])
+            .filter((row) => row.itemId === selectedSourceItemId)
+            .flatMap((row) => row.attackModes ?? [])
+        : (rawReferenceRow?.attackModes ?? [])
+      ).map((mode) => [mode.id, mode]),
+    ).values(),
   );
   const requireRepeatedRoundAttack = Boolean(
     input.actionId === "double_attack" &&
@@ -672,13 +827,15 @@ export function buildPlayerCombatLoadoutSummary(input: {
     selectedSourceItemId === primaryItemId,
   );
   const modeResolution = resolvePreferredAttackMode({
+    allowThrownAttack: Boolean(rawReferenceRow?.itemId),
     requireRepeatedRoundAttack,
     selectedModeId: input.selectedAttackModeId,
     weapon: {
-      attackModes: rawReferenceRow?.attackModes ?? [],
+      attackModes: availableAttackModes,
     },
   });
   const selectedDerivedMode = modeResolution.mode;
+  const selectedIsThrownMode = selectedDerivedMode?.attackType === "thrown";
   const reference = {
     am: selectedDerivedMode
       ? String(selectedDerivedMode.armorModifier)
@@ -768,11 +925,14 @@ export function buildPlayerCombatLoadoutSummary(input: {
       label: "DM",
       row: referenceRow,
     }),
-    initiative: getCombatTableCell({
-      columns: combatPanelModel.weaponModeTable.columns,
-      label: "I",
-      row: referenceRow,
-    }),
+    initiative:
+      selectedDerivedMode?.initiative != null
+        ? String(selectedDerivedMode.initiative)
+        : getCombatTableCell({
+            columns: combatPanelModel.weaponModeTable.columns,
+            label: "I",
+            row: referenceRow,
+          }),
     ob: selectedDerivedMode
       ? String(selectedDerivedMode.ob)
       : getCombatTableCell({
@@ -791,20 +951,29 @@ export function buildPlayerCombatLoadoutSummary(input: {
       row: referenceRow,
     }),
     secondCrit: selectedDerivedMode
-      ? String(selectedDerivedMode.secondCrit)
+      ? String(selectedDerivedMode.secondCrit ?? "—")
       : getCombatTableCell({
           columns: combatPanelModel.weaponModeTable.columns,
           label: "Sec",
           row: referenceRow,
         }),
     selectedWeapon: referenceWeaponLabel,
-    sourceAttackModeId: modeResolution.mode?.id ?? rawReferenceRow?.attackMode1Id,
-    sourceItemId: rawReferenceRow?.itemId,
-    sourceSlot: sourceSlot === "missile" ? "throwing" : sourceSlot,
+    sourceAttackModeId:
+      modeResolution.mode?.id ??
+      input.selectedAttackModeId ??
+      (requireRepeatedRoundAttack ? undefined : rawReferenceRow?.attackMode1Id),
+    sourceItemId: selectedSourceItemId,
+    sourceSlot: selectedIsThrownMode || sourceSlot === "missile" ? "throwing" : sourceSlot,
     sourceTemplateId: rawReferenceRow?.templateId,
   };
 
   return {
+    attackModeUnavailableMessage:
+      modeResolution.reason === "no_legal_modes"
+        ? requireRepeatedRoundAttack
+          ? `The selected Phase 2 attack mode for ${referenceWeaponLabel} is not eligible for same-weapon Double Attack.`
+          : `${referenceWeaponLabel} has no legal attack mode.`
+        : undefined,
     attackModeOptions: modeResolution.legalModes.map((mode) => ({
       allowsRepeatedRoundAttack: mode.allowsRepeatedRoundAttack === true,
       id: mode.id,
@@ -964,6 +1133,7 @@ export function buildPlayerCombatPhasePanelModel(input: {
   });
   const isAdjustRangePhase =
     input.actionId === "adjust_range_attack" && input.phaseKey === "phase1";
+  const isFeintContestPhase = input.actionId === "feint_attack" && input.phaseKey === "phase1";
 
   return {
     attackStats: input.attackStats,
@@ -978,9 +1148,9 @@ export function buildPlayerCombatPhasePanelModel(input: {
     phaseKey: input.phaseKey,
     showAttackLocationSelector: flags.attack,
     showAttackStats: Boolean(input.attackStats && flags.attack),
-    // Defensive state belongs to the participant and phase, not to the offensive
-    // action selected for that phase. Render the shared defense/parry projection
-    // even when there is no attack opportunity.
-    showDefenseContext: true,
+    // Phase 1 Feint is a Skill Contest, not a weapon attack or defensive exchange. Its
+    // declaration preview is limited to the canonical contest profile. Phase 2 remains the
+    // ordinary committed attack and keeps the existing attack/defense context.
+    showDefenseContext: !isFeintContestPhase,
   };
 }

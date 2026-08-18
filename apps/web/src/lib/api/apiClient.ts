@@ -1,4 +1,9 @@
 import { API_BASE_URL } from "./apiConfig";
+import {
+  combatPerformanceNow,
+  recordCombatPerformanceRequestEnd,
+  recordCombatPerformanceRequestStart,
+} from "../performance/combatPerformance";
 
 export interface ApiErrorPayload {
   error?: string;
@@ -42,16 +47,36 @@ export async function sendJson<TResponse>(
   init?: Omit<RequestInit, "credentials">
 ): Promise<TResponse> {
   const headers = new Headers(init?.headers);
+  const method = init?.method ?? "GET";
+  const requestStartedAt = recordCombatPerformanceRequestStart({ method, path });
 
   if (init?.body != null && !headers.has("content-type")) {
     headers.set("content-type", "application/json");
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    credentials: "include",
-    headers
+  let response: Response | undefined;
+  const parseStartedAt = { value: 0 };
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      credentials: "include",
+      headers
   });
-
-  return parseResponse<TResponse>(response);
+    parseStartedAt.value = combatPerformanceNow();
+    return await parseResponse<TResponse>(response);
+  } finally {
+    const parseDurationMs =
+      parseStartedAt.value === 0 ? 0 : combatPerformanceNow() - parseStartedAt.value;
+    const contentLength = response?.headers.get("content-length");
+    recordCombatPerformanceRequestEnd({
+      parseDurationMs,
+      path,
+      requestStartedAt,
+      responseBytes:
+        contentLength && Number.isFinite(Number(contentLength))
+          ? Number(contentLength)
+          : undefined,
+      status: response?.status,
+    });
+  }
 }

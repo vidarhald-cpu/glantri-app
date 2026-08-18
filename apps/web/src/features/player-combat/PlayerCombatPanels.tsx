@@ -4,6 +4,8 @@ import React, { useState, type ReactNode } from "react";
 
 import {
   HIT_LOCATIONS,
+  isCombatDeclarationActionAvailable,
+  projectCombatDeclarationCompatibility,
   type CombatEffectsState,
   type CombatDistance,
   type CombatRoundInitiativeResult,
@@ -11,24 +13,35 @@ import {
   type MovementIntent,
   type ScenarioCombatModifierBucket,
   type ScenarioCombatModifierEntry,
+  type CombatObservationRelationship,
   type ScenarioParticipantCombatContext,
   type ScenarioParticipantParryDirection,
   type ScenarioParticipantTargetLocation,
   getHitLocationFullLabel,
   buildLiveCombatModifierContributionProjection,
   type CombatModifierContributionBucket,
+  isCombatModifierContributionActive,
   isPersistentCombatModifierEntry,
+  normalizeScenarioCombatModifierEntry,
 } from "@glantri/domain";
 
 import {
+  CombatCalculationPanel,
   formatSignedCombatModifier,
+  type CombatCalculationPresentation,
+  type CurrentActionCommandDescriptor,
+  type CurrentActionPresentation,
 } from "@/features/combat-history";
 import {
   createEmptyPlayerEncounterCombatContext,
   PLAYER_ENCOUNTER_ACTION_OPTIONS,
   PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS,
+  getPlayerEncounterActionLabel,
+  getPlayerEncounterDeclarationCompatibilityMessage,
   getPlayerEncounterParryCoverageDirection,
   getPlayerEncounterParryDirectionLabel,
+  getPlayerEncounterPrimaryActionOptions,
+  getPlayerEncounterSecondaryActionOptions,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
   type PlayerEncounterOpponentOption,
@@ -40,10 +53,17 @@ import {
   type EncounterCombatPhaseKey,
   type EncounterLiveCombatModifierSummary,
 } from "@/lib/campaigns/liveCombatModifiers";
+import {
+  buildCombatSituationAwarenessModel,
+  type CombatSituationContext,
+  type CombatSituationDisplayRow,
+  type CombatSituationLifecycleEffect,
+} from "./combatSituationAwareness";
 
 export interface PlayerCombatModifierBucketView {
   bucketKey: ScenarioCombatModifierBucket;
   characterStateEntries?: PlayerCombatModifierDisplayEntry[];
+  derivedEntries?: PlayerCombatModifierDisplayEntry[];
   entries: ScenarioCombatModifierEntry[];
   fatigueTotal?: number;
   label: string;
@@ -52,10 +72,12 @@ export interface PlayerCombatModifierBucketView {
 }
 
 export interface PlayerCombatModifierDisplayEntry {
+  application?: ScenarioCombatModifierEntry["application"];
+  canonicalLifecycle?: CombatSituationLifecycleEffect;
   details?: string;
   id: string;
   scopeLabel: string;
-  sourceLabel: "Character/state" | "Feint · OB/DB" | "Situational";
+  sourceLabel: string;
   value: number;
 }
 
@@ -66,30 +88,11 @@ export interface GroupedFeintModifierDisplay {
 }
 
 export function buildGroupedFeintModifierDisplays(
-  rows: readonly PlayerCombatModifierBucketView[],
+  _rows: readonly PlayerCombatModifierBucketView[],
 ): GroupedFeintModifierDisplay[] {
-  const entries = rows.flatMap((row) => row.entries);
-  const groups = new Map<string, ScenarioCombatModifierEntry[]>();
-
-  for (const entry of entries) {
-    if (
-      entry.sourceType !== "feint" ||
-      entry.resultGroupKind !== "ob_db" ||
-      !entry.resultGroupId ||
-      entry.sourcePhase !== "phase2"
-    ) {
-      continue;
-    }
-    groups.set(entry.resultGroupId, [...(groups.get(entry.resultGroupId) ?? []), entry]);
-  }
-
-  return [...groups.entries()].flatMap(([resultGroupId, groupedEntries]) => {
-    const obEntry = groupedEntries.find((entry) => entry.id.endsWith(":ob-skill"));
-    const dbEntry = groupedEntries.find((entry) => entry.id.endsWith(":db-parry"));
-    return obEntry && dbEntry && obEntry.value === dbEntry.value
-      ? [{ entryIds: [obEntry.id, dbEntry.id], resultGroupId, value: obEntry.value }]
-      : [];
-  });
+  // Equal Feint consequences remain separate canonical Skill/OB and DB/Parry effects. Collapsing
+  // them loses category provenance and can hide a non-zero row when its category total is zero.
+  return [];
 }
 
 export interface PlayerCombatPhaseCardView {
@@ -105,6 +108,7 @@ export interface PlayerCombatAttackStatsView {
   initiative: string;
   maxCrits: string;
   ob: string;
+  provisional?: boolean;
   weaponArmorClass?: string;
   weaponCriticalCode?: string;
   weaponDamageClass?: string;
@@ -115,10 +119,13 @@ export interface PlayerCombatDefenseStatsView {
   db: string;
   dm: string;
   parry: string;
+  provisional?: boolean;
   sourceName: string;
 }
 
 interface PlayerCombatModifierPanelProps {
+  activeSpecialEffectCount?: number;
+  context?: CombatSituationContext;
   controlsDisabled?: boolean;
   onAddEntry?: (
     bucketKey: ScenarioCombatModifierBucket,
@@ -133,8 +140,22 @@ interface PlayerCombatModifierPanelProps {
     >,
   ) => void;
   readOnly?: boolean;
+  pendingActivationLabel?: string;
+  pendingEntries?: readonly ScenarioCombatModifierEntry[];
+  pendingRows?: readonly CombatSituationDisplayRow[];
+  provisional?: boolean;
+  lifecycleEffects?: readonly CombatSituationLifecycleEffect[];
   rows: readonly PlayerCombatModifierBucketView[];
   sourceLabel?: string;
+  showEmptyCategories?: boolean;
+  /** Bounded archived-snapshot compatibility; live observation rows use derivedEntries. */
+  observationRelationships?: readonly CombatObservationRelationship[];
+  observationTargetLabels?: Readonly<Record<string, string>>;
+}
+
+interface PlayerCombatObservationProgressProps {
+  relationships: readonly CombatObservationRelationship[];
+  targetLabels: Readonly<Record<string, string>>;
 }
 
 interface PlayerCombatPhasePanelProps {
@@ -148,6 +169,7 @@ interface PlayerCombatActionSelectorPanelProps {
   actionOptions?: readonly PlayerEncounterOption<PlayerEncounterActionId>[];
   additionalActionNotes: string;
   controlsDisabled?: boolean;
+  declarationRecorded?: boolean;
   distancePreferenceOptions?: readonly PlayerCombatDistancePreferenceOption[];
   movementId: PlayerEncounterMovementId | "";
   movementIntent?: MovementIntent;
@@ -161,7 +183,31 @@ interface PlayerCombatActionSelectorPanelProps {
   sourceLabel?: string;
 }
 
+export interface PlayerCombatHistoricalActionSelectorPanelProps {
+  actionLabel?: string;
+  additionalActionNotes?: string;
+  declarationRecorded?: boolean;
+  distancePreferences?: readonly {
+    desiredDistance?: CombatDistance;
+    displayName: string;
+  }[];
+  movementLabel?: string;
+  roundNumber?: number;
+  secondaryActionLabel?: string;
+}
+
+interface PlayerCombatOpponentSelectorProps {
+  controlsDisabled?: boolean;
+  emptyLabel?: string;
+  label?: string;
+  onSelectedOpponentChange: (participantId: string) => void;
+  opponentOptions: readonly PlayerEncounterOpponentOption[];
+  readOnly?: boolean;
+  selectedOpponentId?: string;
+}
+
 export interface PlayerCombatDistancePreferenceOption {
+  currentDistance?: CombatDistance;
   defaultDistance?: CombatDistance;
   displayName: string;
   id: string;
@@ -181,19 +227,23 @@ interface PlayerCombatParryContextPanelProps {
   mainHandItemLabel?: string;
   offHandItemLabel?: string;
   onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
+  readOnly?: boolean;
 }
 
 interface PlayerCombatAttackLocationSelectorProps {
   combatContext: ScenarioParticipantCombatContext;
   controlsDisabled?: boolean;
   onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
+  readOnly?: boolean;
 }
 
 interface PlayerCombatAttackModeSelectorProps {
   controlsDisabled?: boolean;
+  emptyState?: string;
   onChange: (attackModeId: string) => void;
   options: readonly { id: string; label: string }[];
   selectedAttackModeId?: string;
+  readOnly?: boolean;
 }
 
 interface PlayerCombatAttackTargetSelectorProps {
@@ -206,9 +256,8 @@ interface PlayerCombatAttackTargetSelectorProps {
 }
 
 interface PlayerCombatActionButtonPanelProps {
-  buttonLabel?: string;
   disabled?: boolean;
-  onDeclareAction?: () => void;
+  onDeclareAction?: (descriptor?: CurrentActionCommandDescriptor) => void;
   preActionControls?: ReactNode;
   /**
    * Reserved for non-primary utility commands. Alternative outcomes for the same pending
@@ -218,12 +267,14 @@ interface PlayerCombatActionButtonPanelProps {
   secondaryButtonDisabled?: boolean;
   secondaryButtonLabel?: string;
   saving?: boolean;
-  statusText: string;
+  statusText?: string;
+  presentation?: CurrentActionPresentation | null;
   validationMessage?: string;
+  validationMessageTone?: "error" | "neutral";
 }
 
 interface PlayerCombatActionResultSection {
-  calculationLines: readonly string[];
+  calculations: readonly CombatCalculationPresentation[];
   resultLine?: string;
   title: string;
 }
@@ -236,6 +287,7 @@ interface PlayerCombatActionResultPanelProps {
     resultLabel?: string;
     sections?: readonly PlayerCombatActionResultSection[];
   } | null;
+  title?: string;
 }
 
 export const playerCombatPanelCardStyle = {
@@ -256,7 +308,7 @@ export const playerCombatPanelsGridStyle = {
 export const playerCombatPanelRowStyle = {
   display: "grid",
   gap: "0.75rem",
-  gridTemplateColumns: "minmax(12rem, 0.7fr) minmax(14rem, 1fr) minmax(14rem, 1fr)",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 14rem), 1fr))",
 } as const;
 
 export const playerCombatTopPanelRowStyle = {
@@ -547,6 +599,11 @@ export function formatCombatModifierDetailsLabel(
     return "reactive attack";
   }
 
+  if (entry.sourceActionId === "parry") {
+    const dodge = entry.notes?.match(/\bDodge\s+(-?\d+)\b/i)?.[1];
+    return dodge ? `Parry ${dodge}` : "Parry";
+  }
+
   return entry.notes?.trim() || undefined;
 }
 
@@ -557,7 +614,9 @@ export function formatCombatModifierDisplayLine(input: {
   const details = formatCombatModifierDetailsLabel(input.entry);
 
   return [
-    `${input.bucketLabel} ${formatSignedCombatModifier(input.entry.value)}`,
+    `${input.bucketLabel} ${formatSignedCombatModifier(input.entry.value)}${
+      input.entry.application === "percentage" ? "%" : ""
+    }`,
     formatCombatModifierScopeLabel(input.entry),
     details,
   ]
@@ -596,6 +655,7 @@ export function sanitizePlayerCombatModifierContext(
 
 function createModifierEntryDraft(): ScenarioCombatModifierEntry {
   return {
+    application: "percentage",
     id: `modifier-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     notes: "",
     scope: "until",
@@ -686,6 +746,7 @@ export function getPlayerCombatActionButtonLabel(input: {
 export function buildPlayerCombatModifierRows(input: {
   combatContext?: ScenarioParticipantCombatContext;
   combatEffects?: CombatEffectsState;
+  currentInitiativeGroupId?: string;
   currentRound?: number;
   encounterId?: string;
   includeAllPhases?: boolean;
@@ -697,6 +758,7 @@ export function buildPlayerCombatModifierRows(input: {
   const projection = buildLiveCombatModifierContributionProjection({
     combatContext: input.combatContext ?? createEmptyPlayerEncounterCombatContext(),
     combatEffects: input.combatEffects,
+    currentInitiativeGroupId: input.currentInitiativeGroupId,
     currentRound: input.currentRound,
     encounterId: input.encounterId,
     ownerParticipantId: input.ownerParticipantId,
@@ -712,13 +774,34 @@ export function buildPlayerCombatModifierRows(input: {
       : input.visibleAtStep
         ? getCombatModifierRowsVisibleAtStep(entries, input.visibleAtStep)
         : filterCombatModifierEntriesForPhase(entries, input.phaseKey);
+  const activeFlatDbEntries = (input.combatContext?.modifierBuckets.situationDb ?? []).filter(
+    (entry) => {
+      if (entry.application !== "flat_db") return false;
+      const contribution = normalizeScenarioCombatModifierEntry({
+        bucket: "situation_db",
+        currentRound: input.currentRound,
+        entry,
+        ownerParticipantId: input.ownerParticipantId ?? "unknown-participant",
+      });
+      return Boolean(
+        contribution &&
+        isCombatModifierContributionActive(contribution, {
+          ...(input.encounterId ? { encounterId: input.encounterId } : {}),
+          ...(input.currentRound !== undefined ? { roundNumber: input.currentRound } : {}),
+          ownerParticipantId: input.ownerParticipantId ?? "unknown-participant",
+        }),
+      );
+    },
+  );
+  const visibleFlatDbEntries = entriesForDisplay(activeFlatDbEntries);
   const displayModifierBuckets = {
     general: sanitizeCombatModifierEntries(
       entriesForDisplay(entriesForContributions("general_fatigue")),
     ),
-    situationDb: sanitizeCombatModifierEntries(
-      entriesForDisplay(entriesForContributions("db_parry")),
-    ),
+    situationDb: sanitizeCombatModifierEntries([
+      ...entriesForDisplay(entriesForContributions("db_parry")),
+      ...visibleFlatDbEntries,
+    ]),
     situationInitiative: sanitizeCombatModifierEntries(
       entriesForDisplay(entriesForContributions("initiative")),
     ),
@@ -731,24 +814,64 @@ export function buildPlayerCombatModifierRows(input: {
       !contribution.applicability.phase ||
       (input.phaseKey !== undefined && contribution.applicability.phase === input.phaseKey),
   );
+  const opponentSpecificContributions = input.liveModifiers?.opponentSpecificContributions ?? [];
+  const derivedEntriesByBucket = new Map<
+    CombatModifierContributionBucket,
+    PlayerCombatModifierDisplayEntry[]
+  >();
+  for (const contribution of opponentSpecificContributions) {
+    const entries = derivedEntriesByBucket.get(contribution.bucket) ?? [];
+    entries.push({
+      application: "percentage",
+      canonicalLifecycle: contribution.canonicalLifecycle,
+      id: contribution.id,
+      scopeLabel: "Opponent",
+      sourceLabel: `${contribution.label}${
+        input.liveModifiers?.opponentLabel ? ` · ${input.liveModifiers.opponentLabel}` : ""
+      }`,
+      value: contribution.value,
+    });
+    derivedEntriesByBucket.set(contribution.bucket, entries);
+  }
+  const legacyGeneralEntries = (input.liveModifiers?.legacyGeneralEffectEntries ?? []).map(
+    (entry): PlayerCombatModifierDisplayEntry => ({
+      application: "percentage",
+      id: `legacy-effect:${entry.id}`,
+      scopeLabel: "Active",
+      sourceLabel: entry.label,
+      value: entry.value,
+    }),
+  );
   const totals = {
-    dbParry: applicableContributions
-      .filter((contribution) => contribution.bucket === "db_parry")
-      .reduce((total, contribution) => total + contribution.value, 0),
-    generalFatigue: applicableContributions
-      .filter((contribution) => contribution.bucket === "general_fatigue")
-      .reduce((total, contribution) => total + contribution.value, 0),
+    dbParry:
+      applicableContributions
+        .filter((contribution) => contribution.bucket === "db_parry")
+        .reduce((total, contribution) => total + contribution.value, 0) +
+      visibleFlatDbEntries.reduce((total, entry) => total + entry.value, 0) +
+      opponentSpecificContributions
+        .filter((contribution) => contribution.bucket === "db_parry")
+        .reduce((total, contribution) => total + contribution.value, 0),
+    generalFatigue:
+      applicableContributions
+        .filter((contribution) => contribution.bucket === "general_fatigue")
+        .reduce((total, contribution) => total + contribution.value, 0) +
+      legacyGeneralEntries.reduce((total, entry) => total + entry.value, 0),
     initiative: applicableContributions
       .filter((contribution) => contribution.bucket === "initiative")
       .reduce((total, contribution) => total + contribution.value, 0),
-    skillOb: applicableContributions
-      .filter((contribution) => contribution.bucket === "skill_ob")
-      .reduce((total, contribution) => total + contribution.value, 0),
+    skillOb:
+      applicableContributions
+        .filter((contribution) => contribution.bucket === "skill_ob")
+        .reduce((total, contribution) => total + contribution.value, 0) +
+      opponentSpecificContributions
+        .filter((contribution) => contribution.bucket === "skill_ob")
+        .reduce((total, contribution) => total + contribution.value, 0),
   };
 
   return [
     {
       bucketKey: "general",
+      derivedEntries: legacyGeneralEntries,
       entries: displayModifierBuckets.general,
       label: "General/Fatigue",
       locked: true,
@@ -763,22 +886,141 @@ export function buildPlayerCombatModifierRows(input: {
     {
       bucketKey: "situation_ob_skill",
       entries: displayModifierBuckets.situationObSkill,
+      derivedEntries: derivedEntriesByBucket.get("skill_ob"),
       label: "Skill/OB",
       total: totals.skillOb,
     },
     {
       bucketKey: "situation_db",
       entries: displayModifierBuckets.situationDb,
+      derivedEntries: derivedEntriesByBucket.get("db_parry"),
       label: "DB/Parry",
       total: totals.dbParry,
     },
   ];
 }
 
+function CombatSituationRow({ row }: { row: CombatSituationDisplayRow }) {
+  return (
+    <div
+      style={{
+        alignItems: "start",
+        display: "grid",
+        fontSize: "0.84rem",
+        gap: "0.15rem 0.5rem",
+        gridTemplateColumns: "minmax(0, 1fr) auto",
+      }}
+    >
+      <span style={{ fontWeight: 600 }}>{row.label}</span>
+      {row.valueLabel ? <span style={{ fontWeight: 700 }}>{row.valueLabel}</span> : null}
+      {row.scopeLabel || row.durationLabel ? (
+        <span
+          style={{
+            color: "#5e5a50",
+            fontSize: "0.78rem",
+            gridColumn: "1 / -1",
+          }}
+        >
+          {[row.scopeLabel, row.durationLabel].filter(Boolean).join(" · ")}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function CombatSituationSummary(input: {
+  context?: CombatSituationContext;
+  embedded?: boolean;
+  hideCalculationGroups?: boolean;
+  lifecycleEffects?: readonly CombatSituationLifecycleEffect[];
+  pendingActivationLabel?: string;
+  pendingEntries: readonly ScenarioCombatModifierEntry[];
+  pendingRows?: readonly CombatSituationDisplayRow[];
+  provisional: boolean;
+  rows: readonly PlayerCombatModifierBucketView[];
+  sourceLabel?: string;
+}) {
+  const model = buildCombatSituationAwarenessModel({
+    context: input.context,
+    lifecycleEffects: input.lifecycleEffects,
+    pendingEntries: input.pendingEntries,
+    pendingRows: input.pendingRows,
+    provisional: input.provisional,
+    rows: input.rows,
+  });
+  const semanticGroups = [
+    { id: "conditions", label: "Persistent conditions", rows: model.conditions },
+    { id: "restrictions", label: "Restrictions", rows: model.restrictions },
+    { id: "pending", label: "Pending / expiring", rows: model.pending },
+  ].filter((group) => group.rows.length > 0);
+
+  const content = (
+    <>
+      {!input.embedded ? (
+        <PanelTitleWithSource label="Combat situation" sourceLabel={input.sourceLabel} />
+      ) : null}
+      {model.provisional ? (
+        <span style={{ color: "#5e5a50", fontSize: "0.78rem", fontWeight: 700 }}>Provisional</span>
+      ) : null}
+      {!input.hideCalculationGroups && model.calculationGroups.length > 0 ? (
+        <div style={{ display: "grid", gap: "0.65rem" }}>
+          <strong style={{ fontSize: "0.9rem" }}>Current</strong>
+          {model.calculationGroups.map((group) => (
+            <div key={group.id} style={{ display: "grid", gap: "0.3rem" }}>
+              <div style={compactModifierGroupHeaderStyle}>
+                <span style={{ fontSize: "0.86rem", fontWeight: 700 }}>{group.label}</span>
+                <span style={{ color: "#5e5a50", fontSize: "0.86rem" }}>
+                  Total {group.totalLabel}
+                </span>
+              </div>
+              <div style={{ display: "grid", gap: "0.35rem" }}>
+                {group.rows.map((row) => (
+                  <CombatSituationRow key={row.id} row={row} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {semanticGroups.map((group) => (
+        <div
+          key={group.id}
+          style={{
+            borderTop: "1px solid #d7d1c2",
+            display: "grid",
+            gap: "0.4rem",
+            paddingTop: "0.55rem",
+          }}
+        >
+          <strong style={{ fontSize: "0.9rem" }}>{group.label}</strong>
+          {group.rows.map((row) => (
+            <CombatSituationRow key={row.id} row={row} />
+          ))}
+          {group.id === "pending" && input.pendingActivationLabel ? (
+            <span style={{ color: "#5e5a50", fontSize: "0.78rem" }}>
+              {input.pendingActivationLabel}
+            </span>
+          ) : null}
+        </div>
+      ))}
+      {model.empty ? (
+        <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>No active modifiers.</span>
+      ) : null}
+    </>
+  );
+
+  return input.embedded ? (
+    <div style={{ display: "grid", gap: "0.65rem" }}>{content}</div>
+  ) : (
+    <section style={playerCombatPanelCardStyle}>{content}</section>
+  );
+}
+
 function buildImportedModifierDisplayEntry(
   entry: ScenarioCombatModifierEntry,
 ): PlayerCombatModifierDisplayEntry {
   return {
+    application: entry.application,
     details: entry.notes,
     id: entry.id,
     scopeLabel:
@@ -793,10 +1035,11 @@ function buildSituationalModifierDisplayEntry(
   entry: ScenarioCombatModifierEntry,
 ): PlayerCombatModifierDisplayEntry {
   return {
+    application: entry.application,
     details: formatCombatModifierDetailsLabel(entry),
     id: entry.id,
     scopeLabel: formatCombatModifierScopeLabel(entry),
-    sourceLabel: "Situational",
+    sourceLabel: entry.sourceActionId === "parry" ? "Parry" : "Situational",
     value: entry.value,
   };
 }
@@ -808,17 +1051,21 @@ function ModifierDisplayEntryRow({
   bucketLabel: string;
   entry: PlayerCombatModifierDisplayEntry;
 }) {
+  const formattedValue = `${formatSignedCombatModifier(entry.value)}${
+    entry.application === "percentage" ? "%" : ""
+  }`;
+
   return (
     <div
       key={`${entry.sourceLabel}:${entry.id}`}
       style={compactModifierDisplayRowStyle}
-      title={`${bucketLabel} ${formatSignedCombatModifier(entry.value)} · ${entry.scopeLabel}${
+      title={`${bucketLabel} ${formattedValue} · ${entry.scopeLabel}${
         entry.details ? ` · ${entry.details}` : ""
       }`}
     >
       <div style={compactModifierDisplayTopRowStyle}>
         <span>{entry.sourceLabel}</span>
-        <span>{formatSignedCombatModifier(entry.value)}</span>
+        <span>{formattedValue}</span>
         <span>{entry.scopeLabel}</span>
       </div>
       <div style={compactModifierDetailsRowStyle}>
@@ -859,7 +1106,9 @@ function ModifierEditableEntryRow({
   return (
     <div style={compactModifierMiniTableEntryRowStyle}>
       <div style={compactModifierEntryTopRowStyle}>
-        <span style={{ color: "#5e5a50", fontSize: "0.84rem" }}>Situational · {scopeLabel}</span>
+        <span style={{ color: "#5e5a50", fontSize: "0.84rem" }}>
+          {entry.sourceActionId === "parry" ? "Parry" : "Situational"} · {scopeLabel}
+        </span>
         <input
           aria-label={`${bucketLabel} modifier value`}
           disabled={controlsDisabled}
@@ -918,13 +1167,23 @@ function ModifierEditableEntryRow({
 }
 
 export function PlayerCombatModifierPanel({
+  activeSpecialEffectCount = 0,
+  context,
   controlsDisabled = false,
   onAddEntry,
   onRemoveEntry,
   onUpdateEntry,
+  pendingActivationLabel,
+  pendingEntries = [],
+  pendingRows = [],
+  provisional = false,
+  lifecycleEffects,
   readOnly = false,
   rows,
+  showEmptyCategories = false,
   sourceLabel,
+  observationRelationships = [],
+  observationTargetLabels = {},
 }: PlayerCombatModifierPanelProps) {
   const editable = !readOnly && onAddEntry && onRemoveEntry && onUpdateEntry;
   const groupedFeintDisplays = buildGroupedFeintModifierDisplays(rows);
@@ -932,6 +1191,21 @@ export function PlayerCombatModifierPanel({
   const [draftEntries, setDraftEntries] = useState<
     Partial<Record<ScenarioCombatModifierBucket, ScenarioCombatModifierEntry>>
   >({});
+
+  if (!editable) {
+    return (
+      <CombatSituationSummary
+        context={context}
+        lifecycleEffects={lifecycleEffects}
+        pendingActivationLabel={pendingActivationLabel}
+        pendingEntries={pendingEntries}
+        pendingRows={pendingRows}
+        provisional={provisional}
+        rows={rows}
+        sourceLabel={sourceLabel}
+      />
+    );
+  }
 
   const setDraftEntry = (
     bucketKey: ScenarioCombatModifierBucket,
@@ -952,147 +1226,282 @@ export function PlayerCombatModifierPanel({
 
   return (
     <section style={playerCombatPanelCardStyle}>
-      <PanelTitleWithSource label="Combat modifiers" sourceLabel={sourceLabel} />
-      {rows.map((row) => {
-        const draftEntry = draftEntries[row.bucketKey];
-        const importedEntries = row.entries.filter(isPersistentCombatModifierEntry);
-        const situationalEntries = row.entries.filter(
-          (entry) => !isPersistentCombatModifierEntry(entry) && !groupedFeintEntryIds.has(entry.id),
-        );
-        const groupedFeintDisplayEntries =
-          row.bucketKey === "situation_ob_skill"
-            ? groupedFeintDisplays.map(
-                (group): PlayerCombatModifierDisplayEntry => ({
-                  details: "feint result",
-                  id: `grouped-feint:${group.resultGroupId}`,
-                  scopeLabel: "P2",
-                  sourceLabel: "Feint · OB/DB",
-                  value: group.value,
-                }),
-              )
-            : [];
-        const persistentDisplayEntries = [
-          ...(row.characterStateEntries ?? []),
-          ...importedEntries.map(buildImportedModifierDisplayEntry),
-          ...groupedFeintDisplayEntries,
-        ];
-        const hasVisibleRows =
-          persistentDisplayEntries.length > 0 ||
-          situationalEntries.length > 0 ||
-          Boolean(draftEntry);
+      <PanelTitleWithSource label="Combat situation" sourceLabel={sourceLabel} />
+      <CombatSituationSummary
+        context={context}
+        embedded
+        hideCalculationGroups
+        lifecycleEffects={lifecycleEffects}
+        pendingActivationLabel={pendingActivationLabel}
+        pendingEntries={pendingEntries}
+        provisional={provisional}
+        rows={rows}
+        sourceLabel={sourceLabel}
+      />
+      <strong style={{ fontSize: "0.9rem" }}>Current / GM changes / resulting</strong>
+      {rows
+        .filter(
+          (row) =>
+            showEmptyCategories ||
+            row.total !== 0 ||
+            row.entries.length > 0 ||
+            (row.characterStateEntries?.length ?? 0) > 0 ||
+            (row.derivedEntries?.length ?? 0) > 0,
+        )
+        .map((row) => {
+          const draftEntry = draftEntries[row.bucketKey];
+          const displayEntries = [
+            ...row.entries,
+            ...(row.characterStateEntries ?? []),
+            ...(row.derivedEntries ?? []),
+          ];
+          const totalIsPercentage =
+            displayEntries.length > 0 &&
+            displayEntries.every((entry) => entry.application === "percentage");
+          const importedEntries = row.entries.filter(isPersistentCombatModifierEntry);
+          const situationalEntries = row.entries.filter(
+            (entry) =>
+              !isPersistentCombatModifierEntry(entry) && !groupedFeintEntryIds.has(entry.id),
+          );
+          const groupedFeintDisplayEntries =
+            row.bucketKey === "situation_ob_skill"
+              ? groupedFeintDisplays.map(
+                  (group): PlayerCombatModifierDisplayEntry => ({
+                    details: "feint result",
+                    id: `grouped-feint:${group.resultGroupId}`,
+                    scopeLabel: "P2",
+                    sourceLabel: "Feint · OB/DB",
+                    value: group.value,
+                  }),
+                )
+              : [];
+          const persistentDisplayEntries = [
+            ...(row.characterStateEntries ?? []),
+            ...importedEntries.map(buildImportedModifierDisplayEntry),
+            ...groupedFeintDisplayEntries,
+            ...(row.derivedEntries ?? []),
+          ];
+          const hasVisibleRows =
+            persistentDisplayEntries.length > 0 ||
+            situationalEntries.length > 0 ||
+            Boolean(draftEntry);
 
-        return (
-          <div key={row.bucketKey} style={{ display: "grid", gap: "0.35rem" }}>
-            <div style={compactModifierGroupHeaderStyle}>
-              <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-                <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>{row.label}</span>
-                <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                  {getDisplayTotal(row) >= 0 ? "+" : ""}
-                  {getDisplayTotal(row)}
-                </span>
-              </div>
-              {editable && !row.locked ? (
-                <button
-                  disabled={controlsDisabled || Boolean(draftEntry)}
-                  onClick={() => setDraftEntry(row.bucketKey, createModifierEntryDraft())}
-                  style={{ justifySelf: "end" }}
-                  type="button"
-                >
-                  Add
-                </button>
-              ) : null}
-            </div>
-
-            {hasVisibleRows ? (
-              <div style={compactModifierMiniTableStyle}>
-                {persistentDisplayEntries.length > 0 ||
-                (!editable && situationalEntries.length > 0) ? (
-                  <div style={compactModifierDisplayHeaderStyle}>
-                    {["Source/scope", "Mod", "Dur"].map((heading) => (
-                      <span
-                        key={heading}
-                        style={{
-                          color: "#1f1b14",
-                          fontSize: "0.78rem",
-                          fontWeight: 700,
-                        }}
-                      >
-                        {heading}
-                      </span>
-                    ))}
-                  </div>
+          return (
+            <div key={row.bucketKey} style={{ display: "grid", gap: "0.35rem" }}>
+              <div style={compactModifierGroupHeaderStyle}>
+                <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                  <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>{row.label}</span>
+                  <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                    {getDisplayTotal(row) >= 0 ? "+" : ""}
+                    {getDisplayTotal(row)}
+                    {totalIsPercentage ? "%" : ""}
+                  </span>
+                </div>
+                {!row.locked ? (
+                  <button
+                    disabled={controlsDisabled || Boolean(draftEntry)}
+                    onClick={() => setDraftEntry(row.bucketKey, createModifierEntryDraft())}
+                    style={{ justifySelf: "end" }}
+                    type="button"
+                  >
+                    Add
+                  </button>
                 ) : null}
-                {persistentDisplayEntries.map((entry) => (
-                  <ModifierDisplayEntryRow
-                    bucketLabel={row.label}
-                    entry={entry}
-                    key={`${entry.sourceLabel}:${entry.id}`}
-                  />
-                ))}
-                {editable && !row.locked ? (
-                  <>
-                    {situationalEntries.length > 0 || draftEntry ? (
-                      <div style={compactModifierMiniTableHeaderStyle}>
-                        {["Source/scope", "Mod", "Dur"].map((heading) => (
-                          <span key={heading} style={{ fontSize: "0.78rem", fontWeight: 700 }}>
-                            {heading}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                    {situationalEntries.map((entry) => (
-                      <ModifierEditableEntryRow
-                        bucketLabel={row.label}
-                        controlsDisabled={controlsDisabled}
-                        entry={entry}
-                        key={entry.id}
-                        onRemove={() => onRemoveEntry(row.bucketKey, entry.id)}
-                        onUpdate={(patch) => {
-                          const nextEntry = { ...entry, ...patch };
+              </div>
 
-                          if (isMeaningfulCombatModifierEntry(nextEntry)) {
-                            onUpdateEntry(row.bucketKey, entry.id, patch);
-                          } else {
-                            onRemoveEntry(row.bucketKey, entry.id);
-                          }
-                        }}
-                      />
-                    ))}
-                    {draftEntry ? (
-                      <ModifierEditableEntryRow
-                        bucketLabel={row.label}
-                        controlsDisabled={controlsDisabled}
-                        entry={draftEntry}
-                        key={draftEntry.id}
-                        onRemove={() => setDraftEntry(row.bucketKey)}
-                        onUpdate={(patch) => {
-                          const nextEntry = { ...draftEntry, ...patch };
-
-                          if (isMeaningfulCombatModifierEntry(nextEntry)) {
-                            onAddEntry(row.bucketKey, nextEntry);
-                            setDraftEntry(row.bucketKey);
-                          } else {
-                            setDraftEntry(row.bucketKey, nextEntry);
-                          }
-                        }}
-                      />
-                    ) : null}
-                  </>
-                ) : (
-                  situationalEntries.map((entry) => (
+              {hasVisibleRows ? (
+                <div style={compactModifierMiniTableStyle}>
+                  {persistentDisplayEntries.length > 0 ? (
+                    <div style={compactModifierDisplayHeaderStyle}>
+                      {["Source/scope", "Mod", "Dur"].map((heading) => (
+                        <span
+                          key={heading}
+                          style={{
+                            color: "#1f1b14",
+                            fontSize: "0.78rem",
+                            fontWeight: 700,
+                          }}
+                        >
+                          {heading}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {persistentDisplayEntries.map((entry) => (
                     <ModifierDisplayEntryRow
                       bucketLabel={row.label}
-                      entry={buildSituationalModifierDisplayEntry(entry)}
-                      key={`Situational:${entry.id}`}
+                      entry={entry}
+                      key={`${entry.sourceLabel}:${entry.id}`}
                     />
-                  ))
-                )}
+                  ))}
+                  {!row.locked ? (
+                    <>
+                      {situationalEntries.length > 0 || draftEntry ? (
+                        <div style={compactModifierMiniTableHeaderStyle}>
+                          {["Source/scope", "Mod", "Dur"].map((heading) => (
+                            <span key={heading} style={{ fontSize: "0.78rem", fontWeight: 700 }}>
+                              {heading}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      {situationalEntries.map((entry) => (
+                        <ModifierEditableEntryRow
+                          bucketLabel={row.label}
+                          controlsDisabled={controlsDisabled}
+                          entry={entry}
+                          key={entry.id}
+                          onRemove={() => onRemoveEntry(row.bucketKey, entry.id)}
+                          onUpdate={(patch) => {
+                            const nextEntry = { ...entry, ...patch };
+
+                            if (isMeaningfulCombatModifierEntry(nextEntry)) {
+                              onUpdateEntry(row.bucketKey, entry.id, patch);
+                            } else {
+                              onRemoveEntry(row.bucketKey, entry.id);
+                            }
+                          }}
+                        />
+                      ))}
+                      {draftEntry ? (
+                        <ModifierEditableEntryRow
+                          bucketLabel={row.label}
+                          controlsDisabled={controlsDisabled}
+                          entry={draftEntry}
+                          key={draftEntry.id}
+                          onRemove={() => setDraftEntry(row.bucketKey)}
+                          onUpdate={(patch) => {
+                            const nextEntry = { ...draftEntry, ...patch };
+
+                            if (isMeaningfulCombatModifierEntry(nextEntry)) {
+                              onAddEntry(row.bucketKey, nextEntry);
+                              setDraftEntry(row.bucketKey);
+                            } else {
+                              setDraftEntry(row.bucketKey, nextEntry);
+                            }
+                          }}
+                        />
+                      ) : null}
+                    </>
+                  ) : (
+                    situationalEntries.map((entry) => (
+                      <ModifierDisplayEntryRow
+                        bucketLabel={row.label}
+                        entry={buildSituationalModifierDisplayEntry(entry)}
+                        key={`Situational:${entry.id}`}
+                      />
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      {pendingEntries.length > 0 ? (
+        <div
+          style={{
+            borderTop: "1px solid #d7d1c2",
+            display: "grid",
+            gap: "0.35rem",
+            paddingTop: "0.55rem",
+          }}
+        >
+          <strong style={{ fontSize: "0.9rem" }}>Proposed</strong>
+          {pendingEntries.map((entry) => (
+            <div key={entry.id} style={{ fontSize: "0.82rem" }}>
+              {entry.notes?.trim() || "Combat effect"} {entry.value >= 0 ? "+" : ""}
+              {entry.value}
+              <div style={{ color: "#5e5a50" }}>
+                {pendingActivationLabel ?? "Effective from the next initiative group"}
               </div>
-            ) : null}
-          </div>
-        );
-      })}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {activeSpecialEffectCount > 0 ? (
+        <div
+          style={{
+            borderTop: "1px solid #d7d1c2",
+            display: "grid",
+            gap: "0.3rem",
+            paddingTop: "0.55rem",
+          }}
+        >
+          <strong style={{ fontSize: "0.9rem" }}>Active special effects</strong>
+          <span style={{ color: "#5e5a50", fontSize: "0.82rem" }}>{activeSpecialEffectCount}</span>
+        </div>
+      ) : null}
+      {observationRelationships.some((relationship) => relationship.bestBonus > 0) ? (
+        <div
+          style={{
+            borderTop: "1px solid #d7d1c2",
+            display: "grid",
+            gap: "0.3rem",
+            paddingTop: "0.55rem",
+          }}
+        >
+          {observationRelationships
+            .filter((relationship) => relationship.bestBonus > 0)
+            .map((relationship) => (
+              <div
+                key={`observation-modifier:${relationship.id}`}
+                style={{
+                  alignItems: "center",
+                  display: "grid",
+                  fontSize: "0.84rem",
+                  gap: "0.5rem",
+                  gridTemplateColumns: "1fr auto",
+                }}
+              >
+                <span>
+                  Observe Opponent ·{" "}
+                  {observationTargetLabels[relationship.targetParticipantId] ??
+                    relationship.targetParticipantId}
+                </span>
+                <strong>+{relationship.bestBonus}%</strong>
+              </div>
+            ))}
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+export function PlayerCombatObservationProgress({
+  relationships,
+  targetLabels,
+}: PlayerCombatObservationProgressProps) {
+  if (relationships.length === 0) return null;
+
+  return (
+    <div style={{ display: "grid", gap: "0.35rem" }}>
+      <strong style={{ fontSize: "0.88rem" }}>Observation progress</strong>
+      <div style={{ display: "grid", gap: "0.55rem" }}>
+        {relationships.map((relationship) => {
+          const required =
+            relationship.completedAttempts === 0
+              ? 3
+              : relationship.completedAttempts === 1
+                ? 6
+                : 10;
+          return (
+            <div key={relationship.id} style={{ fontSize: "0.84rem" }}>
+              <span>
+                {targetLabels[relationship.targetParticipantId] ?? relationship.targetParticipantId}
+                : {relationship.roundsTowardNextAttempt} / {required}
+                {relationship.bestBonus > 0 ? ` · best +${relationship.bestBonus}%` : ""}
+                {relationship.completedAttempts > 0
+                  ? ` · attempts ${relationship.completedAttempts}`
+                  : ""}
+                {relationship.lastAttempt
+                  ? ` · last margin ${relationship.lastAttempt.difference >= 0 ? "+" : ""}${relationship.lastAttempt.difference} / candidate +${relationship.lastAttempt.candidateBonus}%`
+                  : ""}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -1101,6 +1510,7 @@ export function PlayerCombatActionSelectorPanel({
   actionOptions = PLAYER_ENCOUNTER_ACTION_OPTIONS,
   additionalActionNotes,
   controlsDisabled = false,
+  declarationRecorded = false,
   distancePreferenceOptions = [],
   movementId,
   movementIntent,
@@ -1113,36 +1523,74 @@ export function PlayerCombatActionSelectorPanel({
   secondaryActionId,
   sourceLabel,
 }: PlayerCombatActionSelectorPanelProps) {
+  const compatiblePrimaryActionIds = new Set(
+    getPlayerEncounterPrimaryActionOptions(secondaryActionId).map((option) => option.value),
+  );
+  const primaryActionOptions = actionOptions.filter((option) =>
+    compatiblePrimaryActionIds.has(option.value),
+  );
+  const secondaryActionOptions = getPlayerEncounterSecondaryActionOptions(actionId);
+  const selectedActionIsListed = primaryActionOptions.some((option) => option.value === actionId);
+  const selectedSecondaryActionIsListed = secondaryActionOptions.some(
+    (option) => option.value === secondaryActionId,
+  );
   const effectiveMovementIntent =
     movementIntent ??
     ({
       distancePreferences: [],
       mode: movementId && movementId !== "hold" ? "set_distance_preferences" : "hold_position",
     } satisfies MovementIntent);
+  const compatibilityProjection = projectCombatDeclarationCompatibility({
+    movementKind: effectiveMovementIntent.mode,
+    primaryAction: actionId || undefined,
+    secondaryAction: secondaryActionId || undefined,
+  });
+  const allowedMovementKinds = new Set(compatibilityProjection.allowedMovementKinds);
+  const compatibilityMessage = getPlayerEncounterDeclarationCompatibilityMessage({
+    actionId,
+    movementKind: effectiveMovementIntent.mode,
+    secondaryActionId,
+  });
   const updateMovementMode = (mode: MovementIntent["mode"]) => {
     onMovementChange(mode === "hold_position" ? "hold" : "step");
     onMovementIntentChange?.({
-      distancePreferences:
-        mode === "set_distance_preferences"
-          ? distancePreferenceOptions
-              .filter((option) => option.defaultDistance !== undefined)
-              .map((option) => ({
-                desiredDistance: option.defaultDistance as CombatDistance,
-                source: "player_declared" as const,
-                targetParticipantId: option.id,
-              }))
-          : [],
+      distancePreferences: [],
+      environmentalMovement:
+        mode === "move_in_environment"
+          ? {
+              destination: { description: "", kind: "description" },
+              duration: { kind: "round" },
+              pace: "walk",
+            }
+          : undefined,
       mode,
     });
   };
-  const updateDistancePreference = (targetParticipantId: string, desiredDistance: string) => {
+  const updateDistancePreference = (
+    targetParticipantId: string,
+    operation: "" | "maintain" | "close" | "open" | "retreat",
+  ) => {
     const nextPreferences = effectiveMovementIntent.distancePreferences.filter(
       (preference) => preference.targetParticipantId !== targetParticipantId,
     );
+    const currentDistance = distancePreferenceOptions.find(
+      (option) => option.id === targetParticipantId,
+    )?.currentDistance;
+    const desiredDistance =
+      currentDistance === undefined || operation === ""
+        ? undefined
+        : operation === "maintain"
+          ? currentDistance
+          : operation === "close"
+            ? Math.max(0, currentDistance - 1)
+            : operation === "open"
+              ? Math.min(8, currentDistance + 1)
+              : Math.min(8, currentDistance + 2);
 
-    if (desiredDistance !== "") {
+    if (desiredDistance !== undefined) {
       nextPreferences.push({
-        desiredDistance: Number(desiredDistance) as CombatDistance,
+        desiredDistance: desiredDistance as CombatDistance,
+        operation: operation || undefined,
         source: "player_declared",
         targetParticipantId,
       });
@@ -1153,6 +1601,20 @@ export function PlayerCombatActionSelectorPanel({
       mode: "set_distance_preferences",
     });
   };
+  const updateEnvironmentalMovement = (
+    patch: Partial<NonNullable<MovementIntent["environmentalMovement"]>>,
+  ) => {
+    const current = effectiveMovementIntent.environmentalMovement ?? {
+      destination: { description: "", kind: "description" as const },
+      duration: { kind: "round" as const },
+      pace: "walk" as const,
+    };
+    onMovementIntentChange?.({
+      distancePreferences: [],
+      environmentalMovement: { ...current, ...patch },
+      mode: "move_in_environment",
+    });
+  };
 
   return (
     <section style={playerCombatPanelCardStyle}>
@@ -1160,22 +1622,48 @@ export function PlayerCombatActionSelectorPanel({
         label={`Action selector${roundNumber ? ` · Round ${roundNumber}` : ""}`}
         sourceLabel={sourceLabel}
       />
+      {declarationRecorded ? (
+        <div style={{ color: "#3f5f46", fontSize: "0.88rem", fontWeight: 650 }}>
+          Action declared.
+        </div>
+      ) : null}
+      {compatibilityMessage ? (
+        <div
+          aria-live="polite"
+          role="status"
+          style={{ color: "#7a321f", fontSize: "0.86rem", fontWeight: 600 }}
+        >
+          {compatibilityMessage}
+        </div>
+      ) : null}
       <label style={compactFieldLabelStyle}>
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Action</span>
         <select
           disabled={controlsDisabled}
           onChange={(event) => onActionChange(event.target.value as PlayerEncounterActionId | "")}
+          style={{ maxWidth: "100%", width: "100%" }}
           value={actionId}
         >
           <option value="">Choose action</option>
-          {actionOptions.map((option) => (
+          {actionId && !selectedActionIsListed ? (
+            <option disabled value={actionId}>
+              {getPlayerEncounterActionLabel(actionId)}
+              {isCombatDeclarationActionAvailable({ actionId, kind: "primary" })
+                ? ""
+                : " · Unavailable"}
+              {isCombatDeclarationActionAvailable({ actionId, kind: "primary" }) &&
+              secondaryActionId
+                ? ` · Not compatible with ${getPlayerEncounterActionLabel(secondaryActionId)}`
+                : ""}
+            </option>
+          ) : null}
+          {primaryActionOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
         </select>
       </label>
-
       <label style={compactFieldLabelStyle}>
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Secondary action</span>
         <select
@@ -1183,86 +1671,239 @@ export function PlayerCombatActionSelectorPanel({
           onChange={(event) =>
             onSecondaryActionChange(event.target.value as PlayerEncounterActionId | "")
           }
+          style={{ maxWidth: "100%", width: "100%" }}
           value={secondaryActionId}
         >
-          <option value="">Open</option>
-          {actionOptions.map((option) => (
+          <option value="">{actionId === "parry" ? "None" : "Open"}</option>
+          {secondaryActionId && !selectedSecondaryActionIsListed ? (
+            <option disabled value={secondaryActionId}>
+              {getPlayerEncounterActionLabel(secondaryActionId)}
+              {isCombatDeclarationActionAvailable({
+                actionId: secondaryActionId,
+                kind: "secondary",
+              })
+                ? ""
+                : " · Unavailable"}
+              {isCombatDeclarationActionAvailable({
+                actionId: secondaryActionId,
+                kind: "secondary",
+              }) && actionId
+                ? ` · Not compatible with ${getPlayerEncounterActionLabel(actionId)}`
+                : ""}
+            </option>
+          ) : null}
+          {secondaryActionOptions.map((option) => (
             <option key={option.value} value={option.value}>
-              {option.label}
+              {option.value === "observe_opponent" ? "Observe opponent" : option.label}
             </option>
           ))}
         </select>
       </label>
 
-      <label style={compactFieldLabelStyle}>
-        <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Movement</span>
-        <select
-          disabled={controlsDisabled}
-          onChange={(event) => updateMovementMode(event.target.value as MovementIntent["mode"])}
-          value={effectiveMovementIntent.mode}
-        >
-          <option value="hold_position">Maintain distance to opponent</option>
-          <option value="set_distance_preferences">Set preferred distance</option>
-        </select>
-      </label>
+      <fieldset
+        style={{
+          border: "1px solid #d9ddd8",
+          borderRadius: 8,
+          display: "grid",
+          gap: "0.65rem",
+          margin: 0,
+          minWidth: 0,
+          padding: "0.75rem",
+        }}
+      >
+        <legend style={{ fontSize: "0.88rem", fontWeight: 700, padding: "0 0.25rem" }}>
+          Movement
+        </legend>
+        <label style={compactFieldLabelStyle}>
+          <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Movement intent</span>
+          <select
+            aria-label="Movement"
+            disabled={controlsDisabled}
+            onChange={(event) => updateMovementMode(event.target.value as MovementIntent["mode"])}
+            value={effectiveMovementIntent.mode}
+          >
+            {!allowedMovementKinds.has(effectiveMovementIntent.mode) ? (
+              <option disabled value={effectiveMovementIntent.mode}>
+                Selected movement · Not compatible
+              </option>
+            ) : null}
+            {allowedMovementKinds.has("hold_position") ? (
+              <option value="hold_position">Hold position</option>
+            ) : null}
+            {allowedMovementKinds.has("set_distance_preferences") ? (
+              <option value="set_distance_preferences">Change distance to participant</option>
+            ) : null}
+            {allowedMovementKinds.has("move_in_environment") ? (
+              <option value="move_in_environment">Move in environment</option>
+            ) : null}
+          </select>
+        </label>
 
-      {effectiveMovementIntent.mode === "set_distance_preferences" ? (
-        <section style={compactDistancePreferenceGridStyle}>
-          {distancePreferenceOptions.length === 0 ? (
-            <div style={{ color: "#5e5a50", fontSize: "0.84rem" }}>
-              No visible opponents available.
+        {effectiveMovementIntent.mode === "set_distance_preferences" ? (
+          <section
+            aria-label="Change distance to participant"
+            style={compactDistancePreferenceGridStyle}
+          >
+            <h3 style={{ fontSize: "0.84rem", margin: 0 }}>Change distance to participant</h3>
+            {distancePreferenceOptions.length === 0 ? (
+              <div style={{ color: "#5e5a50", fontSize: "0.84rem" }}>
+                No visible opponents available.
+              </div>
+            ) : (
+              distancePreferenceOptions.map((option) => {
+                const preference = effectiveMovementIntent.distancePreferences.find(
+                  (entry) => entry.targetParticipantId === option.id,
+                );
+                const selectedOperation =
+                  preference?.operation ??
+                  (preference && option.currentDistance !== undefined
+                    ? preference.desiredDistance === option.currentDistance
+                      ? "maintain"
+                      : preference.desiredDistance < option.currentDistance
+                        ? "close"
+                        : "open"
+                    : "");
+
+                return (
+                  <label key={option.id} style={compactDistancePreferenceRowStyle}>
+                    <span
+                      style={{
+                        fontSize: "0.84rem",
+                        minWidth: 0,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={option.displayName}
+                    >
+                      {option.displayName}
+                    </span>
+                    <select
+                      disabled={controlsDisabled}
+                      onChange={(event) =>
+                        updateDistancePreference(
+                          option.id,
+                          event.target.value as "" | "maintain" | "close" | "open" | "retreat",
+                        )
+                      }
+                      value={selectedOperation}
+                    >
+                      <option value="">No preference</option>
+                      {option.currentDistance === undefined ? (
+                        <option disabled value="unavailable">
+                          Current distance unavailable
+                        </option>
+                      ) : (
+                        <>
+                          <option value="maintain">
+                            Maintain · Distance {option.currentDistance}
+                          </option>
+                          {option.currentDistance > 0 ? (
+                            <option value="close">
+                              Close · Distance {option.currentDistance - 1}
+                            </option>
+                          ) : null}
+                          {option.currentDistance < 8 ? (
+                            <option value="open">
+                              Open · Distance {option.currentDistance + 1}
+                            </option>
+                          ) : null}
+                          {option.currentDistance < 7 ? (
+                            <option value="retreat">
+                              Retreat · Distance {option.currentDistance + 2}
+                            </option>
+                          ) : null}
+                        </>
+                      )}
+                    </select>
+                  </label>
+                );
+              })
+            )}
+          </section>
+        ) : null}
+
+        {effectiveMovementIntent.mode === "move_in_environment" ? (
+          <section aria-label="Move in environment" style={{ display: "grid", gap: "0.55rem" }}>
+            <h3 style={{ fontSize: "0.84rem", margin: 0 }}>Move in environment</h3>
+            <label style={compactFieldLabelStyle}>
+              <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>How</span>
+              <select
+                disabled={controlsDisabled}
+                onChange={(event) =>
+                  updateEnvironmentalMovement({
+                    pace: event.target.value as "walk" | "run" | "reposition",
+                  })
+                }
+                value={effectiveMovementIntent.environmentalMovement?.pace ?? "walk"}
+              >
+                <option value="walk">Walk</option>
+                <option value="run">Run</option>
+                <option value="reposition">Reposition</option>
+              </select>
+            </label>
+            <label style={compactWideFieldLabelStyle}>
+              <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Destination</span>
+              <input
+                disabled={controlsDisabled}
+                maxLength={500}
+                onChange={(event) =>
+                  updateEnvironmentalMovement({
+                    destination: { description: event.target.value, kind: "description" },
+                  })
+                }
+                placeholder="Doorway, courtyard, wounded ally…"
+                type="text"
+                value={effectiveMovementIntent.environmentalMovement?.destination.description ?? ""}
+              />
+            </label>
+            <label style={compactFieldLabelStyle}>
+              <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Expected time</span>
+              <select
+                disabled={controlsDisabled}
+                onChange={(event) =>
+                  updateEnvironmentalMovement({
+                    duration:
+                      event.target.value === "rounds"
+                        ? { kind: "rounds", rounds: 2 }
+                        : event.target.value === "gm_decided"
+                          ? { kind: "gm_decided" }
+                          : { kind: "round" },
+                  })
+                }
+                value={effectiveMovementIntent.environmentalMovement?.duration.kind ?? "round"}
+              >
+                <option value="round">One round</option>
+                <option value="rounds">Multiple rounds</option>
+                <option value="gm_decided">GM decides</option>
+              </select>
+            </label>
+            {effectiveMovementIntent.environmentalMovement?.duration.kind === "rounds" ? (
+              <label style={compactFieldLabelStyle}>
+                <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Rounds</span>
+                <input
+                  disabled={controlsDisabled}
+                  max={100}
+                  min={2}
+                  onChange={(event) =>
+                    updateEnvironmentalMovement({
+                      duration: {
+                        kind: "rounds",
+                        rounds: Math.max(2, Math.min(100, Number(event.target.value) || 2)),
+                      },
+                    })
+                  }
+                  type="number"
+                  value={effectiveMovementIntent.environmentalMovement.duration.rounds}
+                />
+              </label>
+            ) : null}
+            <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+              The GM reviews timing and any roll. This does not change distance to an opponent.
             </div>
-          ) : (
-            distancePreferenceOptions.map((option) => {
-              const preference = effectiveMovementIntent.distancePreferences.find(
-                (entry) => entry.targetParticipantId === option.id,
-              );
-
-              return (
-                <label key={option.id} style={compactDistancePreferenceRowStyle}>
-                  <span
-                    style={{
-                      fontSize: "0.84rem",
-                      minWidth: 0,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                    title={option.displayName}
-                  >
-                    {option.displayName}
-                  </span>
-                  <select
-                    disabled={controlsDisabled}
-                    onChange={(event) => updateDistancePreference(option.id, event.target.value)}
-                    value={
-                      preference?.desiredDistance !== undefined
-                        ? String(preference.desiredDistance)
-                        : ""
-                    }
-                  >
-                    <option value="">No preference</option>
-                    <optgroup label="Melee zones">
-                      {[0, 1, 2, 3, 4].map((distance) => (
-                        <option key={distance} value={distance}>
-                          Distance {distance}
-                        </option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Extended">
-                      {[5, 6, 7, 8].map((distance) => (
-                        <option key={distance} value={distance}>
-                          Distance {distance}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
-                </label>
-              );
-            })
-          )}
-        </section>
-      ) : null}
+          </section>
+        ) : null}
+      </fieldset>
 
       <label style={compactWideFieldLabelStyle}>
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Description</span>
@@ -1278,8 +1919,74 @@ export function PlayerCombatActionSelectorPanel({
   );
 }
 
+export function PlayerCombatHistoricalActionSelectorPanel({
+  actionLabel,
+  additionalActionNotes,
+  declarationRecorded = false,
+  distancePreferences = [],
+  movementLabel,
+  roundNumber,
+  secondaryActionLabel,
+}: PlayerCombatHistoricalActionSelectorPanelProps) {
+  return (
+    <section style={playerCombatPanelCardStyle}>
+      <PanelTitleWithSource
+        label={`Action selector${roundNumber ? ` · Round ${roundNumber}` : ""}`}
+        sourceLabel="History"
+      />
+      {declarationRecorded ? (
+        <div style={{ color: "#3f5f46", fontSize: "0.88rem", fontWeight: 650 }}>
+          Action declared.
+        </div>
+      ) : null}
+      <HistoricalField label="Action" value={actionLabel} />
+      <HistoricalField label="Secondary action" value={secondaryActionLabel ?? "None"} />
+      <HistoricalField label="Movement" value={movementLabel} />
+      {distancePreferences.map((preference) => (
+        <HistoricalField
+          key={preference.displayName}
+          label={preference.displayName}
+          value={
+            preference.desiredDistance === undefined
+              ? "No preference"
+              : `Distance ${preference.desiredDistance}`
+          }
+        />
+      ))}
+      <HistoricalField label="Description" value={additionalActionNotes || "None"} />
+    </section>
+  );
+}
+
+function HistoricalField(input: { label: string; value?: string }) {
+  return (
+    <div style={{ display: "grid", gap: "0.15rem" }}>
+      <strong style={{ fontSize: "0.88rem" }}>{input.label}</strong>
+      <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+        {input.value || "No recorded information"}
+      </span>
+    </div>
+  );
+}
+
+export function PlayerCombatHistoricalContextPanel(input: {
+  context?: string;
+  roundNumber?: number;
+  stepLabel?: string;
+}) {
+  return (
+    <section aria-label="Historical context" style={playerCombatPanelCardStyle}>
+      <strong>Historical context</strong>
+      {input.roundNumber ? <div>Round {input.roundNumber}</div> : null}
+      {input.stepLabel ? <div>{input.stepLabel}</div> : null}
+      {input.context ? (
+        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>{input.context}</div>
+      ) : null}
+    </section>
+  );
+}
+
 export function PlayerCombatActionButtonPanel({
-  buttonLabel = "Declare action",
   disabled = false,
   onDeclareAction,
   preActionControls,
@@ -1288,46 +1995,108 @@ export function PlayerCombatActionButtonPanel({
   secondaryButtonLabel,
   saving = false,
   statusText,
+  presentation,
   validationMessage,
+  validationMessageTone = "error",
 }: PlayerCombatActionButtonPanelProps) {
+  const primaryAction = presentation?.primaryAction;
+  const actionDisabled =
+    disabled ||
+    saving ||
+    Boolean(primaryAction && (!primaryAction.enabled || !primaryAction.viewerMayInvoke));
+  const primaryActionAvailable = Boolean(
+    presentation?.taskId && primaryAction?.descriptor && primaryAction.viewerMayInvoke,
+  );
   return (
     <section style={playerCombatPanelCardStyle}>
       <strong>Current action</strong>
+      {presentation ? (
+        <div style={{ display: "grid", gap: "0.35rem" }}>
+          <strong>{presentation.heading}</strong>
+          <div>{presentation.summary}</div>
+          {presentation.weapon ||
+          presentation.distance ||
+          presentation.damageRollExpression ||
+          presentation.difficulty !== undefined ? (
+            <div
+              style={{
+                color: "#4f5f57",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "0.25rem 0.8rem",
+              }}
+            >
+              {presentation.weapon ? <span>Weapon: {presentation.weapon.label}</span> : null}
+              {presentation.distance?.current !== undefined ? (
+                <span>
+                  Distance: {presentation.distance.current}
+                  {presentation.distance.requested !== undefined
+                    ? ` → ${presentation.distance.requested}`
+                    : ""}
+                </span>
+              ) : null}
+              {presentation.difficulty !== undefined ? (
+                <span>Difficulty: {presentation.difficulty}</span>
+              ) : null}
+              {presentation.damageRollExpression ? (
+                <span>Die: {presentation.damageRollExpression}</span>
+              ) : null}
+            </div>
+          ) : null}
+          <div style={{ fontWeight: 650 }}>{presentation.requiredNow}</div>
+        </div>
+      ) : null}
       {preActionControls ? (
         <div style={{ display: "grid", gap: "0.35rem" }}>{preActionControls}</div>
       ) : null}
-      <button
-        disabled={disabled || saving}
-        onClick={onDeclareAction}
-        style={{
-          background: disabled ? "#e4e0d6" : "#ded4b1",
-          border: "1px solid #bdb39a",
-          borderRadius: 10,
-          color: disabled ? "#8a8477" : "#2f2415",
-          cursor: disabled ? "not-allowed" : "pointer",
-          justifySelf: "center",
-          minHeight: 70,
-          padding: "0.75rem 0.9rem",
-          textAlign: "center",
-          width: "80%",
-        }}
-        type="button"
-      >
-        <strong>{saving ? "Saving..." : buttonLabel}</strong>
-      </button>
+      {primaryActionAvailable ? (
+        <button
+          disabled={actionDisabled}
+          onClick={(event) => {
+            event.preventDefault();
+            onDeclareAction?.(primaryAction?.descriptor);
+          }}
+          style={{
+            background: actionDisabled ? "#e4e0d6" : "#ded4b1",
+            border: "1px solid #bdb39a",
+            borderRadius: 10,
+            color: actionDisabled ? "#8a8477" : "#2f2415",
+            cursor: actionDisabled ? "not-allowed" : "pointer",
+            justifySelf: "center",
+            minHeight: 70,
+            padding: "0.75rem 0.9rem",
+            textAlign: "center",
+            width: "80%",
+          }}
+          type="button"
+        >
+          <strong>{saving ? "Saving..." : primaryAction?.label}</strong>
+        </button>
+      ) : null}
       {secondaryButtonLabel ? (
         <button
           disabled={secondaryButtonDisabled || saving}
-          onClick={onSecondaryAction}
+          onClick={(event) => {
+            event.preventDefault();
+            onSecondaryAction?.();
+          }}
           style={{ justifySelf: "center", width: "80%" }}
           type="button"
         >
           {secondaryButtonLabel}
         </button>
       ) : null}
-      <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>{statusText}</div>
+      {statusText && !presentation ? (
+        <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>{statusText}</div>
+      ) : null}
       {validationMessage ? (
-        <div style={{ color: "#8b3a1a", fontSize: "0.9rem", fontWeight: 600 }}>
+        <div
+          style={{
+            color: validationMessageTone === "neutral" ? "#5e5a50" : "#8b3a1a",
+            fontSize: "0.9rem",
+            fontWeight: 600,
+          }}
+        >
           {validationMessage}
         </div>
       ) : null}
@@ -1335,15 +2104,19 @@ export function PlayerCombatActionButtonPanel({
   );
 }
 
-export function PlayerCombatActionResultPanel({ result }: PlayerCombatActionResultPanelProps) {
+export function PlayerCombatActionResultPanel({
+  result,
+  title = "Action result",
+}: PlayerCombatActionResultPanelProps) {
   return (
     <section
+      aria-label={title}
       style={{
         ...playerCombatPanelCardStyle,
         alignContent: "start",
       }}
     >
-      <strong>Action result</strong>
+      <strong>{title}</strong>
       <div
         style={{
           alignItems: "center",
@@ -1377,10 +2150,11 @@ export function PlayerCombatActionResultPanel({ result }: PlayerCombatActionResu
             {result.sections.map((section) => (
               <section key={section.title} style={{ display: "grid", gap: "0.16rem" }}>
                 <div>{section.title}</div>
-                {section.calculationLines.map((line) => (
-                  <div key={line} style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
-                    {line}
-                  </div>
+                {section.calculations.map((calculation) => (
+                  <CombatCalculationPanel
+                    key={calculation.calculationId}
+                    presentation={calculation}
+                  />
                 ))}
                 {section.resultLine ? <strong>{section.resultLine}</strong> : null}
               </section>
@@ -1435,7 +2209,14 @@ export function formatCombatInitiativeFormula(initiative?: CombatRoundInitiative
 export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsTableProps) {
   return (
     <div style={compactStatsRowStyle}>
-      <strong style={{ fontSize: "0.95rem" }}>{stats.weaponName}</strong>
+      <div style={{ alignItems: "center", display: "flex", gap: "0.45rem" }}>
+        <strong style={{ fontSize: "0.95rem" }}>{stats.weaponName}</strong>
+        {stats.provisional ? (
+          <span style={{ color: "#5e5a50", fontSize: "0.75rem", fontWeight: 700 }}>
+            Provisional
+          </span>
+        ) : null}
+      </div>
       <table style={compactStatsTableStyle}>
         <thead>
           <tr>
@@ -1478,7 +2259,14 @@ export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsT
 export function PlayerCombatDefenseStatsTable({ stats }: PlayerCombatDefenseStatsTableProps) {
   return (
     <div style={compactStatsRowStyle}>
-      <strong style={{ fontSize: "0.9rem" }}>{stats.sourceName}</strong>
+      <div style={{ alignItems: "center", display: "flex", gap: "0.45rem" }}>
+        <strong style={{ fontSize: "0.9rem" }}>{stats.sourceName}</strong>
+        {stats.provisional ? (
+          <span style={{ color: "#5e5a50", fontSize: "0.75rem", fontWeight: 700 }}>
+            Provisional
+          </span>
+        ) : null}
+      </div>
       <table style={compactStatsTableStyle}>
         <thead>
           <tr>
@@ -1516,6 +2304,56 @@ export function PlayerCombatDefenseStatsTable({ stats }: PlayerCombatDefenseStat
   );
 }
 
+export function PlayerCombatOpponentSelector({
+  controlsDisabled = false,
+  emptyLabel = "Choose opponent",
+  label = "Opponent to counter",
+  onSelectedOpponentChange,
+  opponentOptions,
+  readOnly = false,
+  selectedOpponentId,
+}: PlayerCombatOpponentSelectorProps) {
+  const selectedOpponentUnavailable = Boolean(
+    selectedOpponentId && !opponentOptions.some((option) => option.id === selectedOpponentId),
+  );
+  const selectedOpponent = opponentOptions.find((option) => option.id === selectedOpponentId);
+
+  if (readOnly) {
+    const opponentLabel = selectedOpponentId
+      ? (selectedOpponent?.displayName ?? "Opponent unavailable")
+      : "No opponent";
+    return (
+      <div className="combatPhaseTargetRow" style={compactPhaseTargetRowStyle}>
+        <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>{label}</span>
+        <span style={compactPhaseTargetSelectStyle}>{opponentLabel}</span>
+      </div>
+    );
+  }
+
+  return (
+    <label className="combatPhaseTargetRow" style={compactPhaseTargetRowStyle}>
+      <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>{label}</span>
+      <select
+        aria-label={label}
+        disabled={controlsDisabled}
+        onChange={(event) => onSelectedOpponentChange(event.target.value)}
+        style={compactPhaseTargetSelectStyle}
+        value={selectedOpponentId ?? ""}
+      >
+        <option value="">{emptyLabel}</option>
+        {selectedOpponentUnavailable ? (
+          <option value={selectedOpponentId}>Opponent unavailable</option>
+        ) : null}
+        {opponentOptions.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.displayName}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export function PlayerCombatAttackTargetSelector({
   combatContext,
   controlsDisabled = false,
@@ -1533,12 +2371,13 @@ export function PlayerCombatAttackTargetSelector({
   );
 
   if (readOnly) {
+    const targetLabel = combatContext.targetParticipantId
+      ? (selectedTarget?.displayName ?? "Target unavailable")
+      : "No target";
     return (
       <div className="combatPhaseTargetRow" style={compactPhaseTargetRowStyle}>
         <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Target</span>
-        <span style={compactPhaseTargetSelectStyle}>
-          {selectedTarget?.displayName ?? "Target unavailable"}
-        </span>
+        <span style={compactPhaseTargetSelectStyle}>{targetLabel}</span>
         {distanceLabel ? (
           <span className="combatPhaseTargetMeta" style={compactPhaseTargetMetaStyle}>
             {distanceLabel}
@@ -1585,7 +2424,21 @@ export function PlayerCombatAttackLocationSelector({
   combatContext,
   controlsDisabled = false,
   onCombatContextChange,
+  readOnly = false,
 }: PlayerCombatAttackLocationSelectorProps) {
+  if (readOnly) {
+    return (
+      <HistoricalField
+        label="Attack location"
+        value={
+          combatContext.targetLocation && combatContext.targetLocation !== "none"
+            ? getHitLocationFullLabel(combatContext.targetLocation)
+            : "No target"
+        }
+      />
+    );
+  }
+
   return (
     <div
       style={{
@@ -1629,12 +2482,36 @@ export function PlayerCombatAttackLocationSelector({
 
 export function PlayerCombatAttackModeSelector({
   controlsDisabled = false,
+  emptyState,
   onChange,
   options,
   selectedAttackModeId,
+  readOnly = false,
 }: PlayerCombatAttackModeSelectorProps) {
   if (options.length === 0) {
-    return null;
+    return emptyState ? (
+      <div
+        role="status"
+        style={{
+          color: "#8a3b1f",
+          display: "grid",
+          fontSize: "0.82rem",
+          gap: "0.2rem",
+        }}
+      >
+        <strong>Attack mode</strong>
+        <span>{emptyState}</span>
+      </div>
+    ) : null;
+  }
+
+  if (readOnly) {
+    return (
+      <HistoricalField
+        label="Attack mode"
+        value={options.find((option) => option.id === selectedAttackModeId)?.label}
+      />
+    );
   }
 
   return (
@@ -1730,6 +2607,7 @@ export function PlayerCombatParryContextPanel({
   combatContext,
   controlsDisabled = false,
   onCombatContextChange,
+  readOnly = false,
 }: PlayerCombatParryContextPanelProps) {
   return (
     <div
@@ -1747,28 +2625,51 @@ export function PlayerCombatParryContextPanel({
           gap: "0.3rem",
         }}
       >
-        <ParryDirectionSelector
-          controlsDisabled={controlsDisabled}
-          direction={combatContext.mainHandParryDirection}
-          itemLabel="Main hand"
-          onChange={(mainHandParryDirection) =>
-            onCombatContextChange({
-              ...combatContext,
-              mainHandParryDirection,
-            })
-          }
-        />
-        <ParryDirectionSelector
-          controlsDisabled={controlsDisabled}
-          direction={combatContext.offHandParryDirection}
-          itemLabel="Off hand"
-          onChange={(offHandParryDirection) =>
-            onCombatContextChange({
-              ...combatContext,
-              offHandParryDirection,
-            })
-          }
-        />
+        {readOnly ? (
+          <>
+            <HistoricalField
+              label="Main hand"
+              value={
+                combatContext.mainHandParryDirection
+                  ? getPlayerEncounterParryDirectionLabel(combatContext.mainHandParryDirection)
+                  : "No recorded information"
+              }
+            />
+            <HistoricalField
+              label="Off hand"
+              value={
+                combatContext.offHandParryDirection
+                  ? getPlayerEncounterParryDirectionLabel(combatContext.offHandParryDirection)
+                  : "No recorded information"
+              }
+            />
+          </>
+        ) : (
+          <>
+            <ParryDirectionSelector
+              controlsDisabled={controlsDisabled}
+              direction={combatContext.mainHandParryDirection}
+              itemLabel="Main hand"
+              onChange={(mainHandParryDirection) =>
+                onCombatContextChange({
+                  ...combatContext,
+                  mainHandParryDirection,
+                })
+              }
+            />
+            <ParryDirectionSelector
+              controlsDisabled={controlsDisabled}
+              direction={combatContext.offHandParryDirection}
+              itemLabel="Off hand"
+              onChange={(offHandParryDirection) =>
+                onCombatContextChange({
+                  ...combatContext,
+                  offHandParryDirection,
+                })
+              }
+            />
+          </>
+        )}
       </div>
     </div>
   );

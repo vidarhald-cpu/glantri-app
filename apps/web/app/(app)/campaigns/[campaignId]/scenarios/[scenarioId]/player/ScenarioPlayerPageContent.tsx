@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import type {
   EncounterSession,
+  EncounterSessionSummary,
   ScenarioParticipant,
   ScenarioPlayerProjection,
 } from "@glantri/domain";
@@ -19,7 +20,7 @@ import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 
 interface ScenarioPlayerPageContentProps {
   campaignId?: string;
-  encounters?: EncounterSession[];
+  encounters?: Array<EncounterSessionSummary | EncounterSession>;
   scenarioId: string;
 }
 
@@ -127,13 +128,22 @@ export default function ScenarioPlayerPageContent({
     );
   }
 
-  const playerAvailableEncounters = encounters.filter((encounter) =>
-    isUserAssignedToEffectiveEncounter({
-      encounter,
-      scenarioParticipants,
-      userId: currentUser.id,
-    })
-  );
+  const playerAvailableEncounters = encounters.filter((encounter) => {
+    if (
+      "viewerAssigned" in encounter &&
+      encounter.viewerAssigned !== undefined
+    ) {
+      return encounter.viewerAssigned;
+    }
+
+    return "participants" in encounter
+      ? isUserAssignedToEffectiveEncounter({
+          encounter,
+          scenarioParticipants,
+          userId: currentUser.id,
+        })
+      : false;
+  });
   const hasUnavailableEncounters = encounters.length > 0 && playerAvailableEncounters.length === 0;
 
   return (

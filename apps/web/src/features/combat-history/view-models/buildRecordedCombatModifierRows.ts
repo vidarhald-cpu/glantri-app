@@ -5,7 +5,10 @@ import type {
 } from "@glantri/domain";
 
 import { buildPlayerCombatModifierRows } from "@/features/player-combat/PlayerCombatPanels";
-import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
+import {
+  buildEncounterLiveCombatModifierSummary,
+  type EncounterLiveCombatModifierSummary,
+} from "@/lib/campaigns/liveCombatModifiers";
 
 /**
  * Historical rows are the complete modifier set recorded at a step. Phase
@@ -14,12 +17,15 @@ import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCom
 export function buildRecordedCombatModifierRows(input: {
   combatContext: ScenarioParticipantCombatContext;
   combatEffects?: CombatEffectsState;
+  currentRound: number;
+  liveModifiers?: EncounterLiveCombatModifierSummary;
   step: CombatRoundStep;
 }) {
   return buildPlayerCombatModifierRows({
     combatContext: input.combatContext,
     combatEffects: input.combatEffects,
-    liveModifiers: buildEncounterLiveCombatModifierSummary(input),
+    currentRound: input.currentRound,
+    liveModifiers: input.liveModifiers ?? buildEncounterLiveCombatModifierSummary(input),
     phaseKey:
       input.step === "review_phase_2_modifiers" ||
       input.step === "initiative_phase_2" ||

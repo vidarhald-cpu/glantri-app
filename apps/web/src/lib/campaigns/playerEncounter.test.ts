@@ -3,16 +3,23 @@ import type { ScenarioParticipant } from "@glantri/domain";
 import { describe, expect, it } from "vitest";
 
 import {
+  PLAYER_ENCOUNTER_ACTION_OPTIONS,
+  PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS,
   buildPlayerEncounterPhaseSummary,
   createEmptyPlayerEncounterCombatContext,
   evaluatePlayerEncounterParryLegality,
+  getPlayerEncounterActionLabel,
   getPlayerEncounterAccessibleParticipants,
   getPlayerEncounterCombatModifierTotals,
+  getPlayerEncounterDeclarationCompatibilityMessage,
   getPlayerEncounterMovementLabel,
   getPlayerEncounterOpponentParticipants,
   getPlayerEncounterParryCoverageDirection,
   getPlayerEncounterParryDirectionLabel,
+  getPlayerEncounterPrimaryActionOptions,
+  getPlayerEncounterSecondaryActionOptions,
   isPlayerEncounterAttackAction,
+  isPlayerEncounterActionId,
   isPlayerEncounterDefenseAction,
   mergeCombatContextWithCurrentModifierBuckets,
 } from "./playerEncounter";
@@ -64,6 +71,83 @@ function createScenarioParticipant(
 }
 
 describe("playerEncounter", () => {
+  it("separates primary Parry from secondary Observe Opponent options", () => {
+    expect(PLAYER_ENCOUNTER_ACTION_OPTIONS).toContainEqual({
+      label: "Parry",
+      value: "parry",
+    });
+    expect(PLAYER_ENCOUNTER_ACTION_OPTIONS.map((option) => option.value)).not.toContain(
+      "observe_opponent",
+    );
+    expect(PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS).toContainEqual({
+      label: "Observe Opponent",
+      value: "observe_opponent",
+    });
+  });
+
+  it("derives executable selector options from the domain capability gate", () => {
+    expect(PLAYER_ENCOUNTER_ACTION_OPTIONS.map((option) => option.value)).toEqual([
+      "attack_parry",
+      "parry_attack",
+      "double_attack",
+      "feint_attack",
+      "adjust_range_attack",
+      "offensive_parry",
+      "parry",
+      "parry_disarm",
+      "disarm",
+      "break_off_engagement",
+      "move_only",
+    ]);
+    expect(PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS.map((option) => option.value)).toEqual([
+      "observe_opponent",
+    ]);
+  });
+
+  it("adapts canonical compatibility in both selector directions", () => {
+    expect(getPlayerEncounterSecondaryActionOptions("").map((option) => option.value)).toEqual([
+      "observe_opponent",
+    ]);
+    expect(
+      getPlayerEncounterSecondaryActionOptions("attack_parry").map((option) => option.value),
+    ).toEqual([]);
+    expect(getPlayerEncounterSecondaryActionOptions("parry").map((option) => option.value)).toEqual(
+      ["observe_opponent"],
+    );
+    expect(
+      getPlayerEncounterPrimaryActionOptions("observe_opponent").map((option) => option.value),
+    ).toEqual(["parry"]);
+  });
+
+  it("presents incomplete, incompatible, and stale unsupported selections precisely", () => {
+    expect(
+      getPlayerEncounterDeclarationCompatibilityMessage({
+        secondaryActionId: "observe_opponent",
+      }),
+    ).toBe("Choose a compatible primary action for Observe Opponent.");
+    expect(
+      getPlayerEncounterDeclarationCompatibilityMessage({
+        actionId: "attack_parry",
+        secondaryActionId: "observe_opponent",
+      }),
+    ).toBe(
+      "Single attack cannot be combined with Observe Opponent. Choose a compatible primary action or remove the secondary action.",
+    );
+    expect(
+      getPlayerEncounterDeclarationCompatibilityMessage({
+        actionId: "counterattack",
+      }),
+    ).toBe("Counterattack is unavailable and cannot be declared.");
+  });
+
+  it("keeps unsupported legacy action identities and labels readable", () => {
+    expect(isPlayerEncounterActionId("counterattack")).toBe(true);
+    expect(isPlayerEncounterActionId("disarm")).toBe(true);
+    expect(isPlayerEncounterActionId("arbitrary_action")).toBe(false);
+    expect(getPlayerEncounterActionLabel("counterattack")).toBe("Counterattack");
+    expect(getPlayerEncounterActionLabel("parry_disarm")).toBe("Parry - Disarm");
+  });
+
   it("maps primary and secondary actions into round phases", () => {
     expect(
       buildPlayerEncounterPhaseSummary({
@@ -102,9 +186,12 @@ describe("playerEncounter", () => {
     expect(isPlayerEncounterAttackAction("attack_parry")).toBe(true);
     expect(isPlayerEncounterAttackAction("parry_attack")).toBe(true);
     expect(isPlayerEncounterAttackAction("observe_opponent")).toBe(false);
+    expect(isPlayerEncounterAttackAction("counterattack")).toBe(false);
+    expect(isPlayerEncounterAttackAction("disarm")).toBe(false);
     expect(isPlayerEncounterDefenseAction("attack_parry")).toBe(true);
     expect(isPlayerEncounterDefenseAction("parry_attack")).toBe(true);
     expect(isPlayerEncounterDefenseAction("double_attack")).toBe(false);
+    expect(isPlayerEncounterDefenseAction("parry_disarm")).toBe(false);
   });
 
   it("returns a stable movement label fallback", () => {

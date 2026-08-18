@@ -1,5 +1,6 @@
 import type {
   CombatProgressionPresentationProjection,
+  CombatProgressionPresentationTask,
   CombatRoundState,
   CombatRoundStep,
 } from "@glantri/domain";
@@ -8,6 +9,71 @@ import { getCombatRoundStepForCursorStep, isGlobalCombatRoundCursorStep } from "
 export interface CombatRoundSelectionTarget {
   participantId?: string;
   step: CombatRoundStep;
+}
+
+export interface CombatRoundLiveInspectorContext {
+  participantId?: string;
+  scope: "participant" | "phase";
+  step: CombatRoundStep;
+  taskId: string;
+}
+
+/**
+ * Maps a canonical projected task to inspector context without fabricating ownership for
+ * ownerless GM work. Phase-wide tasks remain attached to their step, not a participant row.
+ */
+export function buildCombatRoundLiveInspectorContext(
+  task: CombatProgressionPresentationTask | undefined,
+): CombatRoundLiveInspectorContext | undefined {
+  if (!task) return undefined;
+  const participantId = task.trackerFacet.owner?.participantId;
+  return {
+    participantId,
+    scope: participantId ? "participant" : "phase",
+    step: getCombatRoundStepForCursorStep(task.trackerFacet.step),
+    taskId: task.id,
+  };
+}
+
+export function getCombatRoundLiveInspectorSelection(input: {
+  context?: CombatRoundLiveInspectorContext;
+  state: CombatRoundState;
+}): CombatRoundSelectionTarget | undefined {
+  const context = input.context;
+  if (!context) return undefined;
+  if (context.participantId) {
+    return { participantId: context.participantId, step: context.step };
+  }
+  return { step: context.step };
+}
+
+/**
+ * Keeps the rendered live inspector on the canonical task during the render in which a command
+ * replaces the task. Local selection remains authoritative only for explicit or pending
+ * inspection. This avoids briefly classifying the newly opened participant task as History while
+ * the synchronization effect catches up.
+ */
+export function getCombatRoundRenderedInspectorSelection(input: {
+  currentTaskSelection?: CombatRoundSelectionTarget;
+  localSelection: CombatRoundSelectionTarget;
+  manualSelection?: CombatRoundSelectionTarget;
+  pendingSelection?: CombatRoundSelectionTarget;
+}): CombatRoundSelectionTarget {
+  return !input.manualSelection && !input.pendingSelection && input.currentTaskSelection
+    ? input.currentTaskSelection
+    : input.localSelection;
+}
+
+export function isCombatRoundInspectionSelectionLive(input: {
+  context?: CombatRoundLiveInspectorContext;
+  selectedRoundIsActive: boolean;
+  selection?: CombatRoundSelectionTarget;
+}): boolean {
+  if (!input.selectedRoundIsActive || !input.context || !input.selection) return false;
+  if (input.selection.step !== input.context.step) return false;
+  return input.context.scope === "phase"
+    ? input.selection.participantId === undefined
+    : input.selection.participantId === input.context.participantId;
 }
 
 export function getCurrentCombatRoundTaskSelection(
@@ -152,6 +218,18 @@ export function getCombatRoundManagerInspectionSelection(input: {
           step: cursorStep,
         }
       : undefined;
+
+  if (
+    pendingSelection &&
+    pendingSelection.participantId === undefined &&
+    pendingSelection.step === input.state.currentStep
+  ) {
+    return pendingSelection;
+  }
+
+  if (manualSelection && manualSelection.participantId === undefined) {
+    return manualSelection;
+  }
 
   if (
     isValidSelection({

@@ -6,6 +6,7 @@ import {
   applyDefaultPlayerCombatPhaseContext,
   buildCanonicalCombatTargetOptions,
   buildCombatAttackSourceRef,
+  buildCombatDeclarationAttackSelection,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
@@ -64,6 +65,13 @@ const reference: PlayerCombatLoadoutReference = {
 };
 
 function buildLoadoutModel(input: {
+  fields?: Array<{
+    id: "missile" | "primary" | "secondary" | "throwing";
+    label: string;
+    options: [];
+    value: string;
+    valueLabel: string;
+  }>;
   rows: Array<Array<string | number>>;
   sourceItemId?: string;
   valueLabel?: string;
@@ -103,7 +111,7 @@ function buildLoadoutModel(input: {
       },
     },
     encumbranceSkillsTable: null,
-    fields: [
+    fields: input.fields ?? [
       {
         id: "primary",
         label: "Primary weapon",
@@ -282,6 +290,526 @@ describe("player combat phase model", () => {
       sourceKind: "weapon",
       templateId: "weapon-template-fencing-sword",
     });
+  });
+
+  it("serializes the visible Single Attack source and hydrates its selected mode", () => {
+    const sourceReference: PlayerCombatLoadoutReference = {
+      ...reference,
+      sourceAttackModeId: "slash",
+      sourceItemId: "scenario-long-sword",
+      sourceSlot: "primary",
+      sourceTemplateId: "weapon-template-long-sword",
+    };
+
+    const selection = buildCombatDeclarationAttackSelection({
+      actionId: "attack_parry",
+      phaseContexts: {
+        phase1: createEmptyPlayerEncounterCombatContext(),
+        phase2: createEmptyPlayerEncounterCombatContext(),
+      },
+      phaseLoadoutSummaries: {
+        phase1: {
+          reference: sourceReference,
+          selectedAttackModeId: "slash",
+        },
+        phase2: {
+          reference: null,
+          selectedAttackModeId: undefined,
+        },
+      },
+    });
+
+    expect(selection.phaseAttackSources).toEqual({
+      phase1: {
+        attackModeId: "slash",
+        opportunitySlot: "attack_1",
+        scenarioItemId: "scenario-long-sword",
+        slot: "primary",
+        sourceKind: "weapon",
+        templateId: "weapon-template-long-sword",
+      },
+    });
+    expect(selection.phaseContexts.phase1?.attackModeId).toBe("slash");
+  });
+
+  it("serializes two explicit Double Attack opportunities for the same weapon", () => {
+    const phase1Reference: PlayerCombatLoadoutReference = {
+      ...reference,
+      sourceAttackModeId: "slash",
+      sourceItemId: "scenario-broad-sword",
+      sourceSlot: "primary",
+      sourceTemplateId: "weapon-template-broad-sword",
+    };
+    const phase2Reference: PlayerCombatLoadoutReference = {
+      ...phase1Reference,
+      sourceAttackModeId: "thrust",
+    };
+
+    const selection = buildCombatDeclarationAttackSelection({
+      actionId: "double_attack",
+      phaseContexts: {
+        phase1: createEmptyPlayerEncounterCombatContext(),
+        phase2: createEmptyPlayerEncounterCombatContext(),
+      },
+      phaseLoadoutSummaries: {
+        phase1: {
+          reference: phase1Reference,
+          selectedAttackModeId: "slash",
+        },
+        phase2: {
+          reference: phase2Reference,
+          selectedAttackModeId: "thrust",
+        },
+      },
+    });
+
+    expect(selection.phaseAttackSources.phase1).toMatchObject({
+      attackModeId: "slash",
+      opportunitySlot: "attack_1",
+      scenarioItemId: "scenario-broad-sword",
+    });
+    expect(selection.phaseAttackSources.phase2).toMatchObject({
+      attackModeId: "thrust",
+      opportunitySlot: "attack_2",
+      scenarioItemId: "scenario-broad-sword",
+    });
+    expect(selection.phaseContexts).toMatchObject({
+      phase1: { attackModeId: "slash" },
+      phase2: { attackModeId: "thrust" },
+    });
+  });
+
+  it("keeps two same-named weapon instances distinct in the rendered Double Attack phases", () => {
+    const attackModes = [
+      {
+        canonicalMeleeMode: "slash" as const,
+        id: "mode-1",
+        isPrimaryAttack: true,
+        label: "Slash",
+        order: 0,
+      },
+      {
+        canonicalMeleeMode: "thrust" as const,
+        id: "mode-2",
+        isPrimaryAttack: false,
+        label: "Thrust",
+        order: 1,
+      },
+    ];
+    const loadoutModel = buildLoadoutModel({
+      fields: [
+        {
+          id: "primary",
+          label: "Primary weapon",
+          options: [],
+          value: "long-sword-primary",
+          valueLabel: "Long sword",
+        },
+        {
+          id: "secondary",
+          label: "Secondary weapon",
+          options: [],
+          value: "long-sword-secondary",
+          valueLabel: "Long sword",
+        },
+      ],
+      rows: [["Primary", "Long sword", "2", "Slash", "10", "8", "FS", "—", "C"]],
+      weaponRows: [
+        {
+          attackModes,
+          attackMode1Id: "mode-1",
+          currentItemLabel: "Long sword",
+          itemId: "long-sword-primary",
+          modeLabel: "Primary",
+          templateId: "weapon-template-longsword",
+        },
+        {
+          attackModes,
+          attackMode1Id: "mode-1",
+          currentItemLabel: "Long sword",
+          itemId: "long-sword-secondary",
+          modeLabel: "Primary",
+          templateId: "weapon-template-longsword",
+        },
+      ],
+    });
+
+    const phase1 = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      loadoutModel,
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+    const phase2 = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      loadoutModel,
+      phaseKey: "phase2",
+      secondaryActionId: "",
+    });
+    const selection = buildCombatDeclarationAttackSelection({
+      actionId: "double_attack",
+      phaseContexts: {
+        phase1: createEmptyPlayerEncounterCombatContext(),
+        phase2: createEmptyPlayerEncounterCombatContext(),
+      },
+      phaseLoadoutSummaries: { phase1, phase2 },
+    });
+
+    expect(phase1.reference).toMatchObject({
+      sourceItemId: "long-sword-primary",
+      sourceSlot: "primary",
+    });
+    expect(phase2.attackModeOptions.map((mode) => mode.id)).toEqual(["mode-1", "mode-2"]);
+    expect(phase2.selectedAttackModeId).toBe("mode-1");
+    expect(phase2.reference).toMatchObject({
+      sourceAttackModeId: "mode-1",
+      sourceItemId: "long-sword-secondary",
+      sourceSlot: "secondary",
+    });
+    expect(selection.phaseContexts.phase2?.attackModeId).toBe("mode-1");
+    expect(selection.phaseAttackSources.phase2).toMatchObject({
+      attackModeId: "mode-1",
+      scenarioItemId: "long-sword-secondary",
+      slot: "secondary",
+    });
+  });
+
+  it("projects a selected dagger throw only through its Throwing row and keeps melee modes ordinary", () => {
+    const loadoutModel = buildLoadoutModel({
+      fields: [
+        {
+          id: "primary",
+          label: "Primary weapon",
+          options: [],
+          value: "scenario-dagger",
+          valueLabel: "Dagger",
+        },
+        {
+          id: "throwing",
+          label: "Throwing weapon",
+          options: [],
+          value: "scenario-dagger",
+          valueLabel: "Dagger",
+        },
+      ],
+      rows: [
+        ["Primary", "Dagger", "2", "Thrust", "8", "3", "DP", "—", "A"],
+        ["Thrown", "Dagger", "-1", "Throw", "5", "1", "DP", "—", "A"],
+      ],
+      weaponRows: [
+        {
+          attackModes: [
+            {
+              attackType: "melee",
+              canonicalMeleeMode: "thrust",
+              crit: "DP",
+              dmb: 3,
+              id: "mode-1",
+              initiative: 2,
+              isPrimaryAttack: true,
+              label: "Thrust",
+              ob: 8,
+              order: 0,
+            },
+            {
+              attackType: "melee",
+              canonicalMeleeMode: "slash",
+              crit: "E",
+              dmb: 2,
+              id: "mode-2",
+              initiative: 2,
+              label: "Slash",
+              ob: 7,
+              order: 1,
+            },
+          ],
+          attackMode1Id: "mode-1",
+          currentItemLabel: "Dagger",
+          itemId: "scenario-dagger",
+          modeLabel: "Primary",
+          templateId: "weapon-template-dagger",
+        },
+        {
+          attackModes: [
+            {
+              allowsRepeatedRoundAttack: false,
+              armorModifier: "A",
+              attackType: "thrown",
+              canonicalMeleeMode: null,
+              crit: "DP",
+              damageClass: "pointed",
+              dmb: 1,
+              id: "mode-3",
+              initiative: -1,
+              isPrimaryAttack: true,
+              label: "Throw",
+              ob: 5,
+              order: 2,
+            },
+          ],
+          attackMode1Id: "mode-3",
+          currentItemLabel: "Dagger",
+          itemId: "scenario-dagger",
+          modeLabel: "Thrown",
+          templateId: "weapon-template-dagger",
+        },
+      ],
+    });
+    const summary = buildPlayerCombatLoadoutSummary({
+      actionId: "attack_parry",
+      loadoutModel,
+      phaseKey: "phase1",
+      secondaryActionId: "",
+      selectedAttackModeId: "mode-3",
+    });
+
+    expect(summary.selectedAttackModeId).toBe("mode-3");
+    expect(summary.reference).toMatchObject({
+      am: "A",
+      attackMode: "Throw",
+      crit: "DP",
+      dmb: "1",
+      initiative: "-1",
+      ob: "5",
+      sourceAttackModeId: "mode-3",
+      sourceItemId: "scenario-dagger",
+      sourceSlot: "throwing",
+      sourceTemplateId: "weapon-template-dagger",
+    });
+    expect(
+      buildCombatAttackSourceRef({
+        phaseKey: "phase1",
+        reference: summary.reference,
+        unarmedTemplateId: "virtual-weapon-template-punch",
+      }),
+    ).toMatchObject({
+      attackModeId: "mode-3",
+      scenarioItemId: "scenario-dagger",
+      slot: "throwing",
+      templateId: "weapon-template-dagger",
+    });
+
+    const meleeSummary = buildPlayerCombatLoadoutSummary({
+      actionId: "attack_parry",
+      loadoutModel,
+      phaseKey: "phase1",
+      secondaryActionId: "",
+      selectedAttackModeId: "mode-1",
+    });
+    expect(meleeSummary.reference).toMatchObject({
+      attackMode: "Thrust",
+      dmb: "3",
+      initiative: "2",
+      ob: "8",
+      sourceAttackModeId: "mode-1",
+      sourceItemId: "scenario-dagger",
+      sourceSlot: "primary",
+    });
+    expect(loadoutModel.combatStatePanelModel?.weaponRows?.[0]?.attackModes).toEqual(
+      expect.not.arrayContaining([expect.objectContaining({ attackType: "thrown" })]),
+    );
+  });
+
+  it("surfaces an explicit unavailable Phase 2 mode for an ineligible same-source weapon", () => {
+    const phase2 = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      loadoutModel: buildLoadoutModel({
+        rows: [["Primary", "Long sword", "2", "Slash", "10", "8", "FS", "—", "C"]],
+        sourceItemId: "long-sword-primary",
+        valueLabel: "Long sword",
+        weaponRows: [
+          {
+            attackModes: [
+              {
+                canonicalMeleeMode: "slash",
+                id: "mode-1",
+                isPrimaryAttack: true,
+                label: "Slash",
+                order: 0,
+              },
+              {
+                canonicalMeleeMode: "thrust",
+                id: "mode-2",
+                isPrimaryAttack: false,
+                label: "Thrust",
+                order: 1,
+              },
+            ],
+            attackMode1Id: "mode-1",
+            currentItemLabel: "Long sword",
+            itemId: "long-sword-primary",
+            modeLabel: "Primary",
+            templateId: "weapon-template-longsword",
+          },
+        ],
+      }),
+      phaseKey: "phase2",
+      secondaryActionId: "",
+    });
+
+    expect(phase2.attackModeOptions).toEqual([]);
+    expect(phase2.selectedAttackModeId).toBeUndefined();
+    expect(phase2.attackModeUnavailableMessage).toBe(
+      "The selected Phase 2 attack mode for Long sword is not eligible for same-weapon Double Attack.",
+    );
+  });
+
+  it("uses the canonical action-phase mapping without affecting Offensive Parry", () => {
+    const phase2Reference: PlayerCombatLoadoutReference = {
+      ...reference,
+      sourceAttackModeId: "slash",
+      sourceItemId: "scenario-long-sword",
+      sourceSlot: "primary",
+      sourceTemplateId: "weapon-template-long-sword",
+    };
+    const summaries = {
+      phase1: { reference: null, selectedAttackModeId: undefined },
+      phase2: { reference: phase2Reference, selectedAttackModeId: "slash" },
+    };
+    const contexts = {
+      phase1: createEmptyPlayerEncounterCombatContext(),
+      phase2: createEmptyPlayerEncounterCombatContext(),
+    };
+
+    expect(
+      buildCombatDeclarationAttackSelection({
+        actionId: "parry_attack",
+        phaseContexts: contexts,
+        phaseLoadoutSummaries: summaries,
+      }).phaseAttackSources,
+    ).toMatchObject({ phase2: { opportunitySlot: "attack_2" } });
+    expect(
+      buildCombatDeclarationAttackSelection({
+        actionId: "offensive_parry",
+        phaseContexts: contexts,
+        phaseLoadoutSummaries: summaries,
+      }).phaseAttackSources,
+    ).toEqual({});
+    expect(
+      buildCombatDeclarationAttackSelection({
+        actionId: "disarm",
+        disarmPhase: "phase2",
+        phaseContexts: contexts,
+        phaseLoadoutSummaries: summaries,
+      }).phaseAttackSources,
+    ).toMatchObject({
+      phase2: { opportunitySlot: "attack_2", scenarioItemId: "scenario-long-sword" },
+    });
+    expect(
+      buildCombatDeclarationAttackSelection({
+        actionId: "parry_disarm",
+        phaseContexts: contexts,
+        phaseLoadoutSummaries: summaries,
+      }).phaseAttackSources,
+    ).toEqual({});
+  });
+
+  it("retains the committed loadout slot when an enriched row uses an item alias", () => {
+    const summary = buildPlayerCombatLoadoutSummary({
+      actionId: "attack_parry",
+      loadoutModel: buildLoadoutModel({
+        rows: [["Primary", "Long sword", "3", "Slash", "10", "8", "FS", "—", "C"]],
+        sourceItemId: "scenario-long-sword",
+        valueLabel: "Long sword",
+        weaponRows: [
+          {
+            attackModes: [
+              {
+                canonicalMeleeMode: "slash",
+                id: "mode-1",
+                isPrimaryAttack: true,
+                label: "Slash",
+                order: 0,
+              },
+            ],
+            attackMode1Id: "mode-1",
+            currentItemLabel: "Long sword",
+            itemId: "hydrated-long-sword-alias",
+            modeLabel: "Primary",
+            templateId: "weapon-template-long-sword",
+          },
+        ],
+      }),
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+
+    expect(summary.reference).toMatchObject({
+      sourceAttackModeId: "mode-1",
+      sourceItemId: "scenario-long-sword",
+      sourceSlot: "primary",
+      sourceTemplateId: "weapon-template-long-sword",
+    });
+  });
+
+  it("does not display an unrelated first weapon row as the selected declaration source", () => {
+    const summary = buildPlayerCombatLoadoutSummary({
+      actionId: "attack_parry",
+      loadoutModel: buildLoadoutModel({
+        rows: [["Primary", "Mace", "3", "Strike", "8", "5", "C", "—", "B"]],
+        sourceItemId: "scenario-long-sword",
+        valueLabel: "Long sword",
+        weaponRows: [
+          {
+            attackModes: [
+              {
+                canonicalMeleeMode: "strike",
+                id: "mode-1",
+                isPrimaryAttack: true,
+                label: "Strike",
+                order: 0,
+              },
+            ],
+            attackMode1Id: "mode-1",
+            currentItemLabel: "Mace",
+            itemId: "scenario-mace",
+            modeLabel: "Primary",
+            templateId: "weapon-template-mace",
+          },
+        ],
+      }),
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+
+    expect(summary.reference?.selectedWeapon).toBe("No ready weapon");
+    expect(
+      buildCombatAttackSourceRef({
+        phaseKey: "phase1",
+        reference: summary.reference,
+        unarmedTemplateId: "virtual-weapon-template-punch",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("serializes only an explicitly displayed unarmed declaration source", () => {
+    expect(
+      buildCombatAttackSourceRef({
+        phaseKey: "phase1",
+        reference: {
+          ...reference,
+          selectedWeapon: "Punch",
+          sourceAttackModeId: "mode-1",
+          sourceItemId: undefined,
+          sourceSlot: undefined,
+          sourceTemplateId: "virtual-weapon-template-punch",
+        },
+        unarmedTemplateId: "virtual-weapon-template-punch",
+      }),
+    ).toEqual({
+      attackModeId: "mode-1",
+      opportunitySlot: "attack_1",
+      slot: "virtual",
+      sourceKind: "unarmed",
+      templateId: "virtual-weapon-template-punch",
+    });
+    expect(
+      buildCombatAttackSourceRef({
+        phaseKey: "phase1",
+        reference: null,
+        unarmedTemplateId: "virtual-weapon-template-punch",
+      }),
+    ).toBeUndefined();
   });
 
   it("normalizes flat legacy snapshots and resolves their sole committed loadout owner", () => {
@@ -529,6 +1057,197 @@ describe("player combat phase model", () => {
     expect(phase2.selectedAttackModeUsedFallback).toBe(true);
     expect(phase2.attackModeOptions.map((mode) => mode.id)).toEqual(["thrust"]);
     expect(phase2.attackStats).toMatchObject({ ob: "8", weaponDamageClass: "pointed" });
+  });
+
+  it("keeps Broad sword Thrust canonical for both Double Attack display and submission", () => {
+    const loadoutModel = buildLoadoutModel({
+      rows: [
+        [
+          "Primary",
+          "Broad sword",
+          "2",
+          "Slash",
+          "10",
+          "8",
+          "FS",
+          "—",
+          "C",
+          "11",
+          "0",
+          "7",
+          "Thrust",
+          "10",
+          "7",
+          "EP",
+          "C",
+        ],
+      ],
+      sourceItemId: "scenario-broad-sword",
+      valueLabel: "Broad sword",
+      weaponRows: [
+        {
+          attackModes: [
+            {
+              armorModifier: "C",
+              canonicalMeleeMode: "slash",
+              crit: "FS",
+              damageClass: "edged",
+              dmb: 4,
+              id: "mode-1",
+              isPrimaryAttack: true,
+              label: "Slash",
+              ob: 2,
+              order: 0,
+              secondCrit: null,
+            },
+            {
+              allowsRepeatedRoundAttack: true,
+              armorModifier: "C",
+              canonicalMeleeMode: "thrust",
+              crit: "EP",
+              damageClass: "pointed",
+              dmb: 3,
+              id: "mode-2",
+              isPrimaryAttack: false,
+              label: "Thrust",
+              ob: 1,
+              order: 1,
+              secondCrit: null,
+            },
+          ],
+          attackMode1Id: "mode-1",
+          currentItemLabel: "Broad sword",
+          itemId: "scenario-broad-sword",
+          modeLabel: "Primary",
+          templateId: "weapon-template-broad-sword",
+        },
+      ],
+    });
+
+    const phase1 = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      loadoutModel,
+      phaseKey: "phase1",
+      secondaryActionId: "",
+      selectedAttackModeId: "mode-2",
+    });
+    const phase2 = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      loadoutModel,
+      phaseKey: "phase2",
+      secondaryActionId: "",
+      selectedAttackModeId: "mode-1",
+    });
+
+    expect(phase1.selectedAttackModeId).toBe("mode-2");
+    expect(phase1.reference).toMatchObject({
+      attackMode: "Thrust",
+      sourceAttackModeId: "mode-2",
+    });
+    expect(phase1.attackStats).toMatchObject({
+      weaponCriticalCode: "EP",
+      weaponDamageClass: "pointed",
+    });
+    expect(phase2.selectedAttackModeId).toBe("mode-2");
+    expect(phase2.selectedAttackModeUsedFallback).toBe(true);
+    expect(
+      buildCombatAttackSourceRef({
+        phaseKey: "phase2",
+        reference: phase2.reference,
+        unarmedTemplateId: "virtual-weapon-template-kick",
+      }),
+    ).toMatchObject({
+      attackModeId: "mode-2",
+      opportunitySlot: "attack_2",
+      scenarioItemId: "scenario-broad-sword",
+      templateId: "weapon-template-broad-sword",
+    });
+  });
+
+  it("preserves an explicitly selected phase-2 source for authoritative repeat validation", () => {
+    const loadoutModel = buildLoadoutModel({
+      rows: [["Primary", "Mace", "2", "Strike", "8", "5", "C", "—", "B"]],
+      sourceItemId: "scenario-mace",
+      valueLabel: "Mace",
+      weaponRows: [
+        {
+          attackModes: [
+            {
+              canonicalMeleeMode: "strike",
+              id: "mode-1",
+              isPrimaryAttack: true,
+              label: "Strike",
+              order: 0,
+            },
+          ],
+          attackMode1Id: "mode-1",
+          currentItemLabel: "Mace",
+          itemId: "scenario-mace",
+          modeLabel: "Primary",
+          templateId: "weapon-template-mace",
+        },
+      ],
+    });
+    const phase2 = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      loadoutModel,
+      phaseKey: "phase2",
+      secondaryActionId: "",
+      selectedAttackModeId: "mode-1",
+    });
+
+    expect(phase2.selectedAttackModeId).toBeUndefined();
+    expect(
+      buildCombatAttackSourceRef({
+        phaseKey: "phase2",
+        reference: phase2.reference,
+        unarmedTemplateId: "virtual-weapon-template-kick",
+      }),
+    ).toMatchObject({
+      attackModeId: "mode-1",
+      opportunitySlot: "attack_2",
+      scenarioItemId: "scenario-mace",
+      sourceKind: "weapon",
+    });
+  });
+
+  it("does not invent a phase-2 mode when no mode was selected or eligible", () => {
+    const phase2 = buildPlayerCombatLoadoutSummary({
+      actionId: "double_attack",
+      loadoutModel: buildLoadoutModel({
+        rows: [["Primary", "Mace", "2", "Strike", "8", "5", "C", "—", "B"]],
+        sourceItemId: "scenario-mace",
+        valueLabel: "Mace",
+        weaponRows: [
+          {
+            attackModes: [
+              {
+                canonicalMeleeMode: "strike",
+                id: "mode-1",
+                isPrimaryAttack: true,
+                label: "Strike",
+                order: 0,
+              },
+            ],
+            attackMode1Id: "mode-1",
+            currentItemLabel: "Mace",
+            itemId: "scenario-mace",
+            modeLabel: "Primary",
+            templateId: "weapon-template-mace",
+          },
+        ],
+      }),
+      phaseKey: "phase2",
+      secondaryActionId: "",
+    });
+
+    expect(
+      buildCombatAttackSourceRef({
+        phaseKey: "phase2",
+        reference: phase2.reference,
+        unarmedTemplateId: "virtual-weapon-template-kick",
+      }),
+    ).toBeUndefined();
   });
 
   it("maps Double Attack into phase 1 and phase 2 attacks", () => {
@@ -868,7 +1587,43 @@ describe("player combat phase model", () => {
     });
   });
 
-  it("always exposes defense context for both Feint phases", () => {
+  it("does not let a legacy character alias shadow an exact encounter target", () => {
+    expect(
+      resolveCanonicalCombatTargetIdentity({
+        encounterParticipants: [
+          {
+            characterId: "encounter-defender",
+            id: "encounter-attacker",
+            scenarioParticipantId: "scenario-attacker",
+          },
+          {
+            characterId: "character-defender",
+            id: "encounter-defender",
+            scenarioParticipantId: "scenario-defender",
+          },
+        ] as Parameters<typeof resolveCanonicalCombatTargetIdentity>[0]["encounterParticipants"],
+        targetParticipantId: "encounter-defender",
+      }),
+    ).toEqual({
+      encounterParticipantId: "encounter-defender",
+      scenarioParticipantId: "scenario-defender",
+    });
+  });
+
+  it("resolves a fallback scenario-roster target when encounter membership is implicit", () => {
+    expect(
+      resolveCanonicalCombatTargetIdentity({
+        encounterParticipants: [],
+        fallbackParticipantIds: ["scenario-defender"],
+        targetParticipantId: "scenario-defender",
+      }),
+    ).toEqual({
+      encounterParticipantId: "scenario-defender",
+      scenarioParticipantId: "scenario-defender",
+    });
+  });
+
+  it("treats Phase 1 Feint as a contest and Phase 2 as the committed attack", () => {
     const phaseContext = createEmptyPlayerEncounterCombatContext();
     const defenseStats = buildPlayerCombatDefenseStats({
       mainHandParryItemLabel: "Broad sword",
@@ -877,19 +1632,35 @@ describe("player combat phase model", () => {
       reference,
     });
 
-    for (const phaseKey of ["phase1", "phase2"] as const) {
-      expect(
-        buildPlayerCombatPhasePanelModel({
-          actionId: "feint_attack",
-          attackStats,
-          defenseStats,
-          phaseCard: { ...phaseCard, phaseLabel: phaseKey === "phase1" ? "Phase 1" : "Phase 2" },
-          phaseContext,
-          phaseKey,
-          secondaryActionId: "",
-        }).showDefenseContext,
-      ).toBe(true);
-    }
+    const phase1 = buildPlayerCombatPhasePanelModel({
+      actionId: "feint_attack",
+      attackStats,
+      defenseStats,
+      phaseCard,
+      phaseContext,
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+    const phase2 = buildPlayerCombatPhasePanelModel({
+      actionId: "feint_attack",
+      attackStats,
+      defenseStats,
+      phaseCard: { ...phaseCard, phaseLabel: "Phase 2" },
+      phaseContext,
+      phaseKey: "phase2",
+      secondaryActionId: "",
+    });
+
+    expect(phase1).toMatchObject({
+      showAttackLocationSelector: false,
+      showAttackStats: false,
+      showDefenseContext: false,
+    });
+    expect(phase2).toMatchObject({
+      showAttackLocationSelector: true,
+      showAttackStats: true,
+      showDefenseContext: true,
+    });
   });
 
   it("lets the current visible Feint target fill an older empty paired phase", () => {

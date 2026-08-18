@@ -94,6 +94,20 @@ function feintRoll(participantId: string, side: "attacker" | "defender") {
 }
 
 describe("combat action process adapters", () => {
+  it("creates no executable plan for a stale incompatible primary-secondary pair", () => {
+    const stale = stateFor("attack_parry");
+    stale.participants[0]!.declaration = {
+      ...stale.participants[0]!.declaration!,
+      secondaryActionContext: {
+        action: "observe_opponent",
+        targetParticipantId: "guard",
+      },
+      secondaryActionId: "observe_opponent",
+    };
+
+    expect(buildCombatActionProcessPlans(stale)).toEqual([]);
+  });
+
   it("builds a pure, immutable, deterministic Single Attack plan with stable shared stages", () => {
     const state = stateFor("attack_parry");
     const before = structuredClone(state);
@@ -117,6 +131,7 @@ describe("combat action process adapters", () => {
     expect(standardAttack?.stages.map(({ kind, state }) => ({ kind, state }))).toEqual([
       { kind: "attack", state: "ready" },
       { kind: "defense", state: "pending" },
+      { kind: "offensive_parry_contest", state: "pending" },
       { kind: "hit_location", state: "pending" },
       { kind: "damage", state: "pending" },
       { kind: "critical", state: "pending" },
@@ -424,8 +439,7 @@ describe("combat action process adapters", () => {
     expect(plan?.maneuver?.stages.map(({ kind, state }) => ({ kind, state }))).toEqual([
       { kind: "participant_response", state: "complete" },
       { kind: "gm_adjustment", state: "skipped" },
-      { kind: "attacker_roll", state: "skipped" },
-      { kind: "defender_roll", state: "skipped" },
+      { kind: "opposed_rolls", state: "skipped" },
       { kind: "proposal_review", state: "complete" },
       { kind: "proposal_commit", state: "ready" },
     ]);
@@ -557,7 +571,7 @@ describe("combat action process adapters", () => {
     expect(committed?.standardAttacks[0]?.stages[0]?.state).toBe("ready");
   });
 
-  it("advances opposed Adjust Distance through adjustment and ordered Dodge stages", () => {
+  it("opens opposed Adjust Distance Dodge inputs in one parallel stage", () => {
     const base = stateFor("attack_parry");
     const declaration = {
       actionId: "adjust_range_attack" as const,
@@ -610,17 +624,25 @@ describe("combat action process adapters", () => {
       adjustment?.maneuver?.stages.find((stage) => stage.kind === "gm_adjustment"),
     ).toMatchObject({ state: "ready", task: { kind: "adjust_distance_adjustment" } });
 
-    const attacker = buildCombatActionProcessPlans(
+    const bothPending = buildCombatActionProcessPlans(
       buildState({
         gmRollAdjustment: { participantId: "hero", value: 2 },
         status: "awaiting_rolls",
       }),
     )[0];
-    expect(
-      attacker?.maneuver?.stages.find((stage) => stage.kind === "attacker_roll"),
-    ).toMatchObject({ state: "ready", task: { kind: "adjust_distance_attacker_roll" } });
+    const parallelStage = bothPending?.maneuver?.stages.find(
+      (stage) => stage.kind === "opposed_rolls",
+    );
+    expect(parallelStage).toMatchObject({
+      executionStrategy: "parallel_all",
+      state: "ready",
+      tasks: [
+        { kind: "adjust_distance_attacker_roll", ownerParticipantId: "hero" },
+        { kind: "adjust_distance_defender_roll", ownerParticipantId: "guard" },
+      ],
+    });
 
-    const defender = buildCombatActionProcessPlans(
+    const defenderOnly = buildCombatActionProcessPlans(
       buildState({
         attackerRoll: {
           dodgeSkillTotal: 6,
@@ -637,10 +659,35 @@ describe("combat action process adapters", () => {
       }),
     )[0];
     expect(
-      defender?.maneuver?.stages.find((stage) => stage.kind === "defender_roll"),
+      defenderOnly?.maneuver?.stages.find((stage) => stage.kind === "opposed_rolls"),
     ).toMatchObject({
+      executionStrategy: "parallel_all",
       state: "ready",
-      task: { kind: "adjust_distance_defender_roll", ownerParticipantId: "guard" },
+      tasks: [{ kind: "adjust_distance_defender_roll", ownerParticipantId: "guard" }],
+    });
+
+    const attackerOnly = buildCombatActionProcessPlans(
+      buildState({
+        defenderRoll: {
+          dodgeSkillTotal: 5,
+          finalTotal: 18,
+          id: "distance-defender-roll",
+          participantId: "guard",
+          rollD20: 9,
+          rollTotal: 9,
+          rolledAt: NOW,
+        },
+        defenderRollRecorded: true,
+        gmRollAdjustment: { participantId: "hero", value: 2 },
+        status: "awaiting_rolls",
+      }),
+    )[0];
+    expect(
+      attackerOnly?.maneuver?.stages.find((stage) => stage.kind === "opposed_rolls"),
+    ).toMatchObject({
+      executionStrategy: "parallel_all",
+      state: "ready",
+      tasks: [{ kind: "adjust_distance_attacker_roll", ownerParticipantId: "hero" }],
     });
   });
 });

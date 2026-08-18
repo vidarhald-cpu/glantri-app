@@ -1,7 +1,4 @@
-import {
-  getCombatRoundEndDistanceProposalLifecycle,
-  getNextCombatRoundEndTask,
-} from "../combatRoundManager";
+import { buildCombatRoundEndProcessPlan } from "../combatRoundEndProcesses";
 import {
   GM_IDENTITY,
   boundaryForCursorStep,
@@ -10,177 +7,157 @@ import {
   getCombatProgressionBoundaryTarget,
   getCombatProgressionProcessId,
   type ProjectionBuildContext,
-  type TaskSpec,
 } from "./internal";
 import type { CombatProgressionProcess } from "./types";
 
 export function buildRoundEndProcesses(
   context: ProjectionBuildContext,
 ): CombatProgressionProcess[] {
-  const review = context.state.roundEndReview;
-  if (!review || review.roundNumber !== context.state.roundNumber) {
-    return [
-      buildProcess(context, "round_end", [
-        {
-          kind: "review",
-          state: "active",
-          strategy: "gm_review",
-          tasks: [
-            {
-              allowedActors: ["gm"],
-              expectedCommand: "prepare_round_end_review",
-              kind: "participant_review",
-              owner: GM_IDENTITY,
-              trackerOwner: context.identities.get(
-                context.state.currentCursor?.participantId ?? "",
-              ),
-              trackerStep: "SU",
-            },
-          ],
-        },
-      ]),
-    ];
-  }
-  const processes: CombatProgressionProcess[] = [];
-  const distanceRolls = review.proposedDistances.flatMap<TaskSpec>((proposal) => {
-    if (!proposal.accepted || proposal.status !== "pending_rolls") return [];
-    return [
-      ...(proposal.participantA.status === "pending"
-        ? [
-            {
-              expectedCommand: "roll_round_end_distance_control" as const,
-              key: `${proposal.id}:${proposal.participantAId}`,
-              kind: "distance_roll" as const,
-              owner: context.identities.get(proposal.participantAId),
-              trackerOwner: context.identities.get(proposal.participantAId),
-              trackerStep: "SU" as const,
-            },
-          ]
-        : []),
-      ...(proposal.participantB.status === "pending"
-        ? [
-            {
-              expectedCommand: "roll_round_end_distance_control" as const,
-              key: `${proposal.id}:${proposal.participantBId}`,
-              kind: "distance_roll" as const,
-              owner: context.identities.get(proposal.participantBId),
-              trackerOwner: context.identities.get(proposal.participantBId),
-              trackerStep: "SU" as const,
-            },
-          ]
-        : []),
-    ];
-  });
-  const distanceCommit = review.proposedDistances.find(
-    (proposal) =>
-      proposal.accepted && getCombatRoundEndDistanceProposalLifecycle(proposal) === "resolved",
-  );
-  if (distanceRolls.length > 0 || distanceCommit) {
-    processes.push(
-      buildProcess(context, "distance", [
-        {
-          kind: "roll",
-          state: distanceRolls.length > 0 ? "active" : "complete",
-          strategy: "parallel_all",
-          tasks: distanceRolls,
-        },
-        {
-          kind: "commit",
-          state: distanceRolls.length > 0 ? "pending" : "active",
-          strategy: "gm_review",
-          tasks:
-            distanceCommit && distanceRolls.length === 0
-              ? [
-                  {
-                    allowedActors: ["gm"],
-                    expectedCommand: "commit_round_end_distance_control",
-                    key: distanceCommit.id,
-                    kind: "distance_commit",
-                    owner: GM_IDENTITY,
-                    trackerOwner: context.identities.get(distanceCommit.participantAId),
-                    trackerStep: "SU",
-                  },
-                ]
-              : [],
-        },
-      ]),
-    );
-    return processes;
-  }
-  const nextTask = getNextCombatRoundEndTask({ state: context.state });
-  if (nextTask?.kind === "participant_review") {
-    const owner = context.identities.get(nextTask.participantId);
-    const participantReview = review.participantReviews[nextTask.participantId];
-    const healthTasks: TaskSpec[] = (participantReview?.proposedHealthRolls ?? [])
-      .filter((proposal) => proposal.accepted && proposal.status === "pending")
-      .map((proposal) => ({
-        expectedCommand: "roll_round_end_health_check",
-        key: proposal.id,
-        kind: "health_review",
-        owner,
-        trackerOwner: owner,
-        trackerStep: "SU",
-      }));
-    if (healthTasks.length > 0)
-      processes.push(
-        buildProcess(context, "health_review", [
-          { kind: "health", state: "active", strategy: "ordered_all", tasks: healthTasks },
-        ]),
-      );
-    processes.push(
-      buildProcess(context, "participant_review", [
-        {
-          kind: "participant",
-          state: healthTasks.length > 0 ? "pending" : "active",
-          strategy: "gm_review",
-          tasks: [
-            {
-              allowedActors: ["gm"],
-              dependencies:
-                healthTasks.length > 0
-                  ? [
-                      {
-                        message: "Accepted Health checks must be resolved first.",
-                        owner,
-                        type: "participant_input_pending",
-                      },
-                    ]
+  const plan = buildCombatRoundEndProcessPlan(context.state);
+  const requiredCompletedProcessIds = plan.processes
+    .filter((process) => process.kind !== "round_end")
+    .map((process) => getCombatProgressionProcessId(context, process.kind, process.key));
+
+  return plan.processes.map((process) =>
+    buildProcess(
+      context,
+      process.kind,
+      process.stages.map((stage) => {
+        const tasks = stage.tasks.map((task) => {
+          const participantOwner = task.ownerParticipantId
+            ? context.identities.get(task.ownerParticipantId)
+            : undefined;
+          const maintenanceContest = task.contestId
+            ? context.state.roundEndReview?.continuedContactMaintenanceContests.find(
+                (contest) => contest.id === task.contestId,
+              )
+            : undefined;
+          const maintenanceController = maintenanceContest
+            ? context.identities.get(maintenanceContest.controllerParticipantId)
+            : undefined;
+          const maintenanceAffected = maintenanceContest
+            ? context.identities.get(maintenanceContest.affectedParticipantId)
+            : undefined;
+          const distanceProposal = task.proposalId
+            ? context.state.roundEndReview?.proposedDistances.find(
+                (proposal) => proposal.id === task.proposalId,
+              )
+            : undefined;
+          const participantReview = task.ownerParticipantId
+            ? context.state.roundEndReview?.participantReviews[task.ownerParticipantId]
+            : undefined;
+          const healthProposal = task.healthRollId
+            ? participantReview?.proposedHealthRolls.find(
+                (proposal) => proposal.id === task.healthRollId,
+              )
+            : undefined;
+          return {
+            allowedActors: task.allowedActors,
+            expectedCommand: task.expectedCommand,
+            identity: {
+              contestId: task.contestId,
+              continuedContactId: task.continuedContactId,
+              healthRollId: task.healthRollId,
+              observationAttemptId: task.observationAttemptId,
+              opponentParticipantId: task.opponentParticipantId,
+              pairId: task.pairId,
+              participantId: task.ownerParticipantId,
+              proposalId: task.proposalId,
+              relationshipId: task.relationshipId,
+              rollPurpose:
+                task.kind === "continued_contact_maintenance_roll"
+                  ? ("escape_continued_contact" as const)
                   : undefined,
-              expectedCommand: "commit_round_end_participant_review",
-              kind: "participant_review",
-              owner,
-              trackerOwner: owner,
-              trackerStep: "SU",
             },
-          ],
-        },
-      ]),
-    );
-    return processes;
-  }
-  return [
-    buildProcess(context, "round_end", [
-      {
-        kind: "boundary",
-        state: "active",
-        strategy: "gm_review",
-        tasks: [
-          {
-            allowedActors: ["gm"],
-            expectedCommand: "complete_round",
-            kind: "gm_advance_boundary",
-            owner: GM_IDENTITY,
-            trackerStep: "SU",
-            transition: {
-              currentBoundary: context.boundaryKind,
-              requiredCompletedProcessIds: [getCombatProgressionProcessId(context, "round_end")],
-              targetBoundary: getCombatProgressionBoundaryTarget(context.boundaryKind)!,
+            key: task.key,
+            kind: task.kind,
+            owner: task.ownerRole === "gm" ? GM_IDENTITY : participantOwner,
+            presentationContext: {
+              actionKind:
+                task.kind === "continued_contact_maintenance_roll"
+                  ? task.ownerParticipantId === maintenanceContest?.controllerParticipantId
+                    ? "continued_contact_maintenance_controller"
+                    : "continued_contact_maintenance_escape"
+                  : distanceProposal?.controlMode === "continued_contact"
+                    ? "continued_contact_distance_control"
+                    : task.kind === "observation_roll"
+                      ? "observe_opponent_contest"
+                    : process.kind,
+              actor:
+                maintenanceController ??
+                (task.ownerRole === "gm" && task.trackerParticipantId
+                  ? context.identities.get(task.trackerParticipantId)
+                  : participantOwner),
+              distance: distanceProposal
+                ? {
+                    current: distanceProposal.currentDistance,
+                    requested: distanceProposal.chosenDistance ?? distanceProposal.proposedDistance,
+                  }
+                : undefined,
+              reason:
+                task.kind === "continued_contact_maintenance_roll"
+                  ? maintenanceContest?.reviewRequiredReason
+                    ? "Continued Contact requires GM review."
+                    : "Continued Contact is active."
+                  : distanceProposal?.controlMode === "continued_contact"
+                    ? "Continued Contact is active."
+                    : healthProposal?.label,
+              opponentRollRecorded:
+                task.kind === "continued_contact_maintenance_roll"
+                  ? task.ownerParticipantId === maintenanceContest?.controllerParticipantId
+                    ? maintenanceContest?.affectedRollRecorded
+                    : maintenanceContest?.controllerRollRecorded
+                  : undefined,
+              responder: task.ownerRole === "participant" ? participantOwner : undefined,
+              skill:
+                task.kind === "continued_contact_maintenance_roll"
+                  ? { id: "brawling", label: "Brawling" }
+                  : task.kind === "observation_roll"
+                    ? { label: "Observation" }
+                  : task.kind === "health_review"
+                    ? { label: "Health" }
+                    : undefined,
+              target:
+                maintenanceAffected ??
+                (task.opponentParticipantId
+                  ? context.identities.get(task.opponentParticipantId)
+                  : undefined),
             },
-          },
-        ],
-      },
-    ]),
-  ];
+            trackerOwner: task.trackerParticipantId
+              ? context.identities.get(task.trackerParticipantId)
+              : undefined,
+            trackerStep: "SU" as const,
+            transition:
+              task.kind === "gm_advance_boundary"
+                ? {
+                    currentBoundary: context.boundaryKind,
+                    requiredCompletedProcessIds,
+                    targetBoundary: getCombatProgressionBoundaryTarget(context.boundaryKind)!,
+                  }
+                : undefined,
+          };
+        });
+        return {
+          key: stage.key,
+          kind: stage.kind,
+          state: stage.state,
+          strategy: stage.executionStrategy,
+          ...(stage.groupTasksTogether && tasks.length > 0
+            ? {
+                executionGroups: [
+                  {
+                    key: process.key ?? process.id,
+                    strategy: stage.executionStrategy,
+                    tasks,
+                  },
+                ],
+              }
+            : { tasks }),
+        };
+      }),
+      { key: process.key, planId: process.id },
+    ),
+  );
 }
 
 export function addDiagnostics(
@@ -217,7 +194,9 @@ export function addDiagnostics(
   }
   for (const process of processes) {
     for (const stage of process.stages) {
-      const executable = stage.tasks.filter((task) => task.state === "executable");
+      const executable = stage.executionGroups
+        .flatMap((group) => group.tasks)
+        .filter((task) => task.state === "executable");
       if (
         executable.length > 1 &&
         stage.executionStrategy !== "parallel_all" &&
@@ -230,7 +209,7 @@ export function addDiagnostics(
           severity: "warning",
         });
       }
-      for (const task of stage.tasks) {
+      for (const task of stage.executionGroups.flatMap((group) => group.tasks)) {
         if (!task.owner)
           context.diagnostics.push({
             code: "missing_owner",

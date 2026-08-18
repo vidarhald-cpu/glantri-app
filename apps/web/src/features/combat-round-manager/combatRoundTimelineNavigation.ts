@@ -7,6 +7,34 @@ export interface CombatRoundTimelineSelection {
   step: CombatRoundStep;
 }
 
+export type CombatRoundTimelineArrowMove = { participantOffset: number } | { stepOffset: number };
+
+/** Shared tracker-local keyboard ownership used by GM, GM Player, and Player surfaces. */
+export function getCombatRoundTimelineArrowMove(input: {
+  key: string;
+  targetIsContentEditable?: boolean;
+  targetTagName?: string;
+}): CombatRoundTimelineArrowMove | undefined {
+  if (
+    input.targetIsContentEditable ||
+    (input.targetTagName && ["INPUT", "SELECT", "TEXTAREA"].includes(input.targetTagName))
+  ) {
+    return undefined;
+  }
+  switch (input.key) {
+    case "ArrowRight":
+      return { stepOffset: 1 };
+    case "ArrowLeft":
+      return { stepOffset: -1 };
+    case "ArrowDown":
+      return { participantOffset: 1 };
+    case "ArrowUp":
+      return { participantOffset: -1 };
+    default:
+      return undefined;
+  }
+}
+
 export function getCombatRoundTimelineCellKey(
   selection: CombatRoundTimelineSelection,
 ): string {

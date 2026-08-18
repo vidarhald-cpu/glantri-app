@@ -9,13 +9,56 @@ import type {
 import { encounterSessionSchema, initializeCombatRoundState } from "@glantri/domain";
 
 import {
+  buildCombatRoundLiveInspectorContext,
   getCurrentCombatRoundTaskSelection,
   getCombatRoundManagerDisplayParticipantIds,
   getCombatRoundManagerInspectionSelection,
+  getCombatRoundLiveInspectorSelection,
+  getCombatRoundRenderedInspectorSelection,
   getNextCombatRoundParticipantSelection,
+  isCombatRoundInspectionSelectionLive,
   isSelectedCombatRoundStepCurrentForGm,
   isSelectedCombatRoundStepExecutable,
 } from "./combatRoundSelection";
+
+function presentationTask(input: {
+  id: string;
+  ownerParticipantId?: string;
+  step: "M1" | "M2" | "A1";
+}): CombatProgressionPresentationProjection["processes"][number]["stages"][number]["tasks"][number] {
+  const owner = input.ownerParticipantId
+    ? ({
+        kind: "combatant",
+        label: input.ownerParticipantId,
+        participantId: input.ownerParticipantId,
+      } as const)
+    : ({ id: "gm", kind: "gm", label: "Game Master" } as const);
+  return {
+    actorAccess: { combatant: false, gm: true },
+    automation: {
+      authority: { kind: "unknown" },
+      eligibility: "unsupported",
+      schemaVersion: 1,
+      taskId: input.id,
+      warnings: [],
+      workClass: "not_applicable",
+    },
+    contributesToProgression: true,
+    executionGroupId: `group:${input.id}`,
+    expectedCommand: input.step === "M1" ? "review_modifiers_phase1" : "commit_adjust_distance",
+    id: input.id,
+    identity: { executionGroupId: `group:${input.id}` },
+    kind: input.step === "A1" ? "adjust_distance_commit" : "modifier_review",
+    owner,
+    processId: `process:${input.id}`,
+    stageId: `stage:${input.id}`,
+    state: "executable",
+    trackerFacet: {
+      owner: owner.kind === "combatant" ? owner : undefined,
+      step: input.step,
+    },
+  };
+}
 
 function participant(input: { id: string; label: string }): EncounterParticipant {
   return {
@@ -75,6 +118,25 @@ function committedOrder(
 }
 
 describe("combat round manager selection", () => {
+  it("renders a replacement participant task live before local selection synchronization", () => {
+    const previous = { participantId: "top", step: "phase_1_actions" as const };
+    const parry = { participantId: "bottom", step: "review_phase_2_actions" as const };
+
+    expect(
+      getCombatRoundRenderedInspectorSelection({
+        currentTaskSelection: parry,
+        localSelection: previous,
+      }),
+    ).toEqual(parry);
+    expect(
+      getCombatRoundRenderedInspectorSelection({
+        currentTaskSelection: parry,
+        localSelection: previous,
+        manualSelection: previous,
+      }),
+    ).toEqual(previous);
+  });
+
   it("keeps participant order stable until the GM commits phase initiative", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const partialPhase2 = {
@@ -227,6 +289,109 @@ describe("combat round manager selection", () => {
     });
     expect(state.selectedParticipantId).toBe("top");
     expect(state.selectedStep).toBe("initiative_phase_1");
+  });
+
+  it("selects the canonical participant-owned review instead of a completed cursor row", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const context = buildCombatRoundLiveInspectorContext(
+      presentationTask({ id: "review-bottom", ownerParticipantId: "bottom", step: "M2" }),
+    );
+
+    expect(getCombatRoundLiveInspectorSelection({ context, state: existing })).toEqual({
+      participantId: "bottom",
+      step: "review_phase_2_modifiers",
+    });
+    expect(
+      isCombatRoundInspectionSelectionLive({
+        context,
+        selectedRoundIsActive: true,
+        selection: { participantId: "bottom", step: "review_phase_2_modifiers" },
+      }),
+    ).toBe(true);
+    expect(
+      isCombatRoundInspectionSelectionLive({
+        context,
+        selectedRoundIsActive: true,
+        selection: { participantId: "top", step: "review_phase_2_modifiers" },
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps ownerless GM work on its phase facet without borrowing a participant row", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const context = buildCombatRoundLiveInspectorContext(
+      presentationTask({ id: "distance-commit", step: "A1" }),
+    );
+
+    expect(context).toMatchObject({ scope: "phase", step: "phase_1_actions" });
+    expect(getCombatRoundLiveInspectorSelection({ context, state: existing })).toEqual({
+      step: "phase_1_actions",
+    });
+    expect(
+      isCombatRoundInspectionSelectionLive({
+        context,
+        selectedRoundIsActive: true,
+        selection: { step: "phase_1_actions" },
+      }),
+    ).toBe(true);
+    expect(
+      isCombatRoundInspectionSelectionLive({
+        context,
+        selectedRoundIsActive: true,
+        selection: { participantId: "bottom", step: "phase_1_actions" },
+      }),
+    ).toBe(false);
+    expect(
+      isCombatRoundInspectionSelectionLive({
+        context,
+        selectedRoundIsActive: true,
+        selection: { participantId: "bottom", step: "phase_1_damage" },
+      }),
+    ).toBe(false);
+    expect(
+      getCombatRoundManagerInspectionSelection({
+        manualSelection: { step: "phase_1_actions" },
+        state: { ...existing, currentStep: "phase_1_actions" },
+      }),
+    ).toEqual({ step: "phase_1_actions" });
+  });
+
+  it("maps downstream participant and ownerless damage tasks to live D1 context", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const participantTask = presentationTask({
+      id: "hit-location-bottom",
+      ownerParticipantId: "bottom",
+      step: "A1",
+    });
+    const participantContext = buildCombatRoundLiveInspectorContext({
+      ...participantTask,
+      kind: "hit_location",
+      trackerFacet: { ...participantTask.trackerFacet, step: "D1" },
+    });
+    expect(
+      getCombatRoundLiveInspectorSelection({ context: participantContext, state: existing }),
+    ).toEqual({ participantId: "bottom", step: "phase_1_damage" });
+    expect(
+      isCombatRoundInspectionSelectionLive({
+        context: participantContext,
+        selectedRoundIsActive: true,
+        selection: { participantId: "bottom", step: "phase_1_damage" },
+      }),
+    ).toBe(true);
+
+    const gmTask = presentationTask({ id: "damage-review", step: "A1" });
+    const gmContext = buildCombatRoundLiveInspectorContext({
+      ...gmTask,
+      kind: "damage_review",
+      trackerFacet: { ...gmTask.trackerFacet, step: "D1" },
+    });
+    expect(
+      isCombatRoundInspectionSelectionLive({
+        context: gmContext,
+        selectedRoundIsActive: true,
+        selection: { step: "phase_1_damage" },
+      }),
+    ).toBe(true);
   });
 
   it("treats non-current inspected phase cells as inspection-only", () => {
@@ -459,10 +624,19 @@ describe("combat round manager selection", () => {
 
   it("does not guess a current task when the cursor is missing or stale", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
+    const playerSafeState = {
+      ...existing,
+      activeParticipantId: undefined,
+      currentCursor: undefined,
+      phaseResolutionCursor: undefined,
+      selectedParticipantId: undefined,
+    };
 
-    expect(getCurrentCombatRoundTaskSelection({ ...existing, currentCursor: undefined })).toBe(
-      undefined,
-    );
+    expect(getCurrentCombatRoundTaskSelection(playerSafeState)).toBe(undefined);
+    expect(getCombatRoundManagerInspectionSelection({ state: playerSafeState })).toEqual({
+      participantId: "top",
+      step: "select_actions",
+    });
     expect(
       getCurrentCombatRoundTaskSelection({
         ...existing,

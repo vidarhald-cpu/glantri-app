@@ -1,10 +1,25 @@
-import type { ProjectedCombatHistoryEvent } from "@glantri/domain";
+import type { CombatResultEnvelope, ProjectedCombatHistoryEvent } from "@glantri/domain";
 
-import { formatSignedCombatModifier } from "./formatCombatModifier";
+import { measureCombatPerformanceStage } from "@/lib/performance/combatPerformance";
+
+import { buildCombatCalculationPresentations } from "./buildCombatCalculationPresentations";
+import {
+  buildCombatCalculationPresentationRows,
+  type CombatCalculationPresentation,
+} from "./combatCalculationPresentation";
+import {
+  buildCombatResultGroups,
+  type CombatResultGroupPresentation,
+  type CombatResultLedgerFragmentInput,
+} from "./combatResultLedgerPresentation";
+import { formatObservationContestDifference } from "./formatObservationContestDifference";
 
 export interface CombatEventResultItemModel {
+  calculations: readonly CombatCalculationPresentation[];
+  /** Compatibility rows derived from `calculations`; no renderer consumes arbitrary fact bags. */
   calculationRows: CombatEventResultFactRow[];
   completenessLabel?: string;
+  envelope?: CombatResultEnvelope;
   id: string;
   outcomeRows: CombatEventResultFactRow[];
   sequence: number;
@@ -19,11 +34,17 @@ export interface CombatEventResultFactRow {
 }
 
 export interface CombatEventResultModel {
+  /** Atomic top-level ledger entries. Built with the immutable archived presentation. */
+  groups?: readonly CombatResultGroupPresentation[];
+  /** Compatibility access to the canonical event fragments contained by `groups`. */
   items: CombatEventResultItemModel[];
 }
 
 const EVENT_TITLES: Record<ProjectedCombatHistoryEvent["type"], string> = {
   attack: "Attack",
+  action_skipped: "Skipped",
+  combat_experience: "Combat Experience",
+  continued_contact_maintenance: "Continued Contact — Maintenance",
   critical: "Critical",
   damage_committed: "Damage committed",
   damage_proposed: "Damage proposed",
@@ -34,8 +55,13 @@ const EVENT_TITLES: Record<ProjectedCombatHistoryEvent["type"], string> = {
   health_check: "Health check",
   hit_location: "Hit location",
   initiative: "Initiative",
+  modifier_review: "Modifier review",
   parry: "Parry",
+  offensive_parry_brawling: "Offensive Parry — Brawling",
+  observation: "Observe Opponent",
   participant_su_review: "Participant SU review",
+  effect_review: "Damage/effects review",
+  round_boundary: "Round boundary",
   feint_feasibility: "Feint ruling",
   feint_roll: "Feint roll",
   feint_result: "Opposed result",
@@ -46,6 +72,14 @@ const EVENT_TITLES: Record<ProjectedCombatHistoryEvent["type"], string> = {
   adjust_distance_roll: "Dodge roll",
   adjust_distance_result: "Distance proposal",
   adjust_distance_committed: "Distance adjustment committed",
+  break_off_review: "Break Off review",
+  break_off_roll: "Break Off Dodge roll",
+  break_off_result: "Break Off result",
+  break_off_committed: "Break Off committed",
+  disarm_opened: "Disarm contact",
+  disarm_roll: "Disarm roll",
+  disarm_result: "Disarm result",
+  disarm_committed: "Disarm committed",
 };
 
 function humanize(key: string): string {
@@ -53,46 +87,6 @@ function humanize(key: string): string {
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replaceAll("_", " ")
     .replace(/^./, (character) => character.toUpperCase());
-}
-
-function formatValue(value: unknown, identityById: ReadonlyMap<string, string>): string {
-  if (Array.isArray(value))
-    return value.map((entry) => formatValue(entry, identityById)).join(", ");
-  if (value && typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>)
-      .map(([key, nested]) => `${humanize(key)} ${formatValue(nested, identityById)}`)
-      .join(" · ");
-  }
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (value === undefined || value === null || value === "") return "—";
-  return typeof value === "string"
-    ? (identityById.get(value) ?? (value.includes("_") ? humanize(value) : value))
-    : String(value);
-}
-
-function isMeaningfulCalculationValue(value: unknown): boolean {
-  if (value === undefined || value === null || value === "" || value === false) return false;
-  if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === "object") return Object.keys(value as Record<string, unknown>).length > 0;
-  return true;
-}
-
-function calculationFactRows(
-  eventId: string,
-  facts: Record<string, unknown> | undefined,
-  identityById: ReadonlyMap<string, string>,
-): CombatEventResultFactRow[] {
-  if (!facts) return [];
-  return Object.entries(facts).flatMap(([fieldKey, value], index) =>
-    isMeaningfulCalculationValue(value)
-      ? [
-          {
-            key: `${eventId}:calculation:${fieldKey}:${index}`,
-            text: `${humanize(fieldKey)}: ${formatValue(value, identityById)}`,
-          },
-        ]
-      : [],
-  );
 }
 
 function identity(event: ProjectedCombatHistoryEvent, role: string): string | undefined {
@@ -106,98 +100,6 @@ function attackOutcome(event: ProjectedCombatHistoryEvent): string {
   if (grazing === true) return "Grazing hit";
   const hit = involved?.hit ?? event.facts.publicOutcome.hit;
   return hit === true ? "Hit" : "Miss";
-}
-
-function attackCalculationRows(event: ProjectedCombatHistoryEvent): CombatEventResultFactRow[] {
-  const calculation = event.facts.privateCalculation;
-  if (!calculation) return [];
-  const ob = calculation.ob;
-  const roll = calculation.rollTotal;
-  const db = calculation.defenderDb;
-  const total = calculation.lookupTotal;
-  if (
-    typeof ob === "number" &&
-    typeof roll === "number" &&
-    typeof db === "number" &&
-    typeof total === "number"
-  ) {
-    return [
-      {
-        key: `${event.id}:calculation:attack-total`,
-        text: `OB ${ob} + roll ${roll} - DB ${db} = ${total}`,
-      },
-    ];
-  }
-
-  return [
-    ["ob", "OB"],
-    ["rollTotal", "Roll"],
-    ["defenderDb", "DB"],
-    ["lookupTotal", "Total"],
-  ].flatMap(([field, label]) => {
-    const value = calculation[field];
-    return typeof value === "number"
-      ? [{ key: `${event.id}:calculation:attack:${field}`, text: `${label}: ${value}` }]
-      : [];
-  });
-}
-
-export function buildConciseDodgeCalculationRows(input: {
-  calculation?: Record<string, unknown>;
-  detailRows?: readonly string[];
-  eventId: string;
-  outcome?: string;
-}): CombatEventResultFactRow[] {
-  const calculation = input.calculation;
-  if (!calculation) return [];
-  const skill = calculation.dodgeSkillTotal;
-  const die = calculation.rollD20;
-  const rollTotal = calculation.rollTotal;
-  const result = calculation.finalTotal;
-  if (
-    typeof skill !== "number" ||
-    typeof die !== "number" ||
-    typeof rollTotal !== "number" ||
-    typeof result !== "number"
-  ) {
-    return calculationFactRows(input.eventId, calculation, new Map());
-  }
-  const general = typeof calculation.generalFatigueModifier === "number" ? calculation.generalFatigueModifier : 0;
-  const adjustment = typeof calculation.situationalAdjustment === "number" ? calculation.situationalAdjustment : 0;
-  const modifier = general + adjustment;
-  const openEnded = Array.isArray(calculation.openEndedD10s) ? calculation.openEndedD10s : [];
-  const dieText = openEnded.length
-    ? `${die} (${openEnded.join(" + ")})`
-    : String(die);
-  const standardOutcome = input.outcome;
-  const rows: CombatEventResultFactRow[] = [
-    { key: `${input.eventId}:calculation:skill`, text: `Skill: Dodge ${skill}` },
-    { key: `${input.eventId}:calculation:modifier`, text: `Modifier: ${formatSignedCombatModifier(modifier)}` },
-    { key: `${input.eventId}:calculation:die`, text: `Die roll: ${dieText}` },
-    { key: `${input.eventId}:calculation:result`, text: `Result: ${result}` },
-    {
-      key: `${input.eventId}:calculation:outcome`,
-      text: `Outcome: ${standardOutcome ?? "Awaiting opponent roll"}`,
-    },
-  ];
-  for (const [index, detail] of (input.detailRows ?? []).entries()) {
-    rows.push({ key: `${input.eventId}:calculation:detail:${index}`, text: detail });
-  }
-  return rows;
-}
-
-function dodgeCalculationRows(event: ProjectedCombatHistoryEvent): CombatEventResultFactRow[] {
-  const standardOutcome = factLabel(factValue(event, "standardOutcome"));
-  const situationalAdjustment = event.facts.privateCalculation?.situationalAdjustment;
-  return buildConciseDodgeCalculationRows({
-    calculation: event.facts.privateCalculation,
-    detailRows:
-      event.type === "adjust_distance_roll" && typeof situationalAdjustment === "number"
-        ? [`Maneuver adjustment: ${formatSignedCombatModifier(situationalAdjustment)}`]
-        : undefined,
-    eventId: event.id,
-    outcome: standardOutcome,
-  });
 }
 
 function factValue(event: ProjectedCombatHistoryEvent, ...keys: string[]): unknown {
@@ -229,11 +131,29 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
   outcomeRows: CombatEventResultFactRow[];
   summary: string;
 } {
+  const actor = identity(event, "actor");
   const attacker = identity(event, "attacker") ?? identity(event, "actor");
   const defender = identity(event, "defender") ?? identity(event, "target");
   const roller = identity(event, "roller") ?? identity(event, "actor");
 
   switch (event.type) {
+    case "combat_experience": {
+      const success = factValue(event, "success");
+      const finalTotal = factLabel(factValue(event, "finalTotal"));
+      const difficulty = factLabel(factValue(event, "difficulty"));
+      return {
+        outcomeRows: resultRow(
+          event,
+          finalTotal && difficulty ? `Result: ${finalTotal} vs ${difficulty}` : undefined,
+        ),
+        summary:
+          success === true
+            ? `${roller ?? "Participant"} succeeded the Combat Experience roll.`
+            : success === false
+              ? `${roller ?? "Participant"} failed the Combat Experience roll.`
+              : `${roller ?? "Participant"} completed the Combat Experience roll.`,
+      };
+    }
     case "attack": {
       const weapon = event.facts.involvedOutcome?.weaponName;
       return {
@@ -258,6 +178,167 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
             : `${roller ?? "Defender"} attempted to parry.`,
       };
     }
+    case "offensive_parry_brawling": {
+      const resolved = factValue(event, "resolved") === true;
+      const contactEstablished = factValue(event, "contactEstablished") === true;
+      const winnerParticipantId = factValue(event, "winnerParticipantId");
+      const winner =
+        typeof winnerParticipantId === "string"
+          ? event.identities.find((candidate) => candidate.participantId === winnerParticipantId)
+              ?.displayName
+          : undefined;
+      return {
+        outcomeRows: resolved
+          ? resultRow(
+              event,
+              contactEstablished
+                ? `${winner ?? defender ?? "The defender"} won the Brawling contest.`
+                : winner
+                  ? `${winner} won the Brawling contest.`
+                  : "The Brawling contest was tied.",
+            )
+          : [],
+        summary: resolved
+          ? contactEstablished
+            ? "Continued contact was established and the attacker became Unbalanced."
+            : "Continued contact was not established."
+          : `${roller ?? "Participant"} rolled Brawling.`,
+      };
+    }
+    case "continued_contact_maintenance": {
+      const resolved = factValue(event, "resolved") === true;
+      const maintained = factValue(event, "contactMaintained") === true;
+      const outcome = factValue(event, "outcome");
+      return {
+        outcomeRows: resolved
+          ? resultRow(
+              event,
+              maintained
+                ? "Continued Contact maintained."
+                : outcome === "tie"
+                  ? "Tie — Continued Contact broken."
+                  : "Continued Contact broken.",
+            )
+          : [],
+        summary: resolved
+          ? maintained
+            ? "The defender remains Unbalanced. The controller chooses engagement distance for the next round."
+            : "Unbalanced was removed. Ordinary distance control resumes."
+          : `${roller ?? "Participant"} rolled Brawling.`,
+      };
+    }
+    case "observation": {
+      const status = factValue(event, "observationStatus");
+      const noProgressReason = factValue(event, "observationNoProgressReason");
+      const progress = factValue(event, "roundsTowardNextAttempt");
+      const required = factValue(event, "requiredQualifyingRounds");
+      if (status === "no_progress" || status === "progress" || status === "period_complete") {
+        return {
+          outcomeRows: [],
+          summary:
+            status === "no_progress"
+              ? noProgressReason === "observer_hit"
+                ? "No progress · observer was hit"
+                : "No progress"
+              : status === "period_complete"
+                ? "Observation period complete · roll pending"
+                : typeof progress === "number" && typeof required === "number"
+                  ? `Progress ${progress} / ${required}`
+                  : "Observation progress recorded",
+        };
+      }
+      const candidate = factValue(event, "candidateBonus");
+      const best = factValue(event, "bestBonusAfter");
+      const difference = factValue(event, "difference");
+      return {
+        outcomeRows: [
+          ...(typeof difference === "number"
+            ? [
+                {
+                  key: `${event.id}:outcome:margin`,
+                  text: formatObservationContestDifference(difference),
+                },
+              ]
+            : []),
+          ...(typeof candidate === "number"
+            ? [
+                {
+                  key: `${event.id}:outcome:result`,
+                  text: `Result +${candidate}%`,
+                },
+              ]
+            : []),
+          ...(typeof best === "number"
+            ? [{ key: `${event.id}:outcome:best`, text: `Best +${best}%` }]
+            : []),
+        ],
+        summary: `Observe Opponent${event.identities.find((identity) => identity.role === "target")?.displayName ? ` — ${event.identities.find((identity) => identity.role === "target")?.displayName}` : ""}.`,
+      };
+    }
+    case "break_off_review":
+      return {
+        outcomeRows: [],
+        summary: `The GM reviewed ${actor ? `${actor}'s ` : "the "}Break Off contest.`,
+      };
+    case "break_off_roll": {
+      const finalTotal = factLabel(factValue(event, "finalTotal"));
+      return {
+        outcomeRows: resultRow(event, finalTotal ? `Dodge result: ${finalTotal}` : undefined),
+        summary: `${roller ?? "Participant"} rolled Dodge for Break Off.`,
+      };
+    }
+    case "break_off_result": {
+      const difference = factLabel(factValue(event, "difference"));
+      const escaped = factValue(event, "escaped");
+      return {
+        outcomeRows: resultRow(event, difference ? `Difference: ${difference}` : undefined),
+        summary:
+          escaped === true
+            ? `${defender ?? "The escapee"} won the Break Off contest.`
+            : `${attacker ?? "The attacker"} maintained the engagement.`,
+      };
+    }
+    case "break_off_committed":
+      return {
+        outcomeRows: [],
+        summary:
+          factValue(event, "escaped") === true
+            ? "Break Off committed; the pair disengaged."
+            : "Break Off committed; the pair remains engaged.",
+      };
+    case "disarm_opened":
+      return {
+        outcomeRows: [],
+        summary: `${actor ?? "The acting combatant"} established weapon contact for Disarm.`,
+      };
+    case "disarm_roll": {
+      const total = factLabel(factValue(event, "finalTotal"));
+      return {
+        outcomeRows: resultRow(event, total ? `Result: ${total}` : undefined),
+        summary: `${roller ?? "Participant"} rolled for Disarm.`,
+      };
+    }
+    case "disarm_result": {
+      const difference = factLabel(factValue(event, "difference"));
+      const result = factLabel(factValue(event, "tableRowId", "result"));
+      return {
+        outcomeRows: resultRow(
+          event,
+          [result, difference ? `difference ${difference}` : undefined].filter(Boolean).join(" · "),
+        ),
+        summary: result ? `Disarm result: ${result}.` : "Disarm produced no effect.",
+      };
+    }
+    case "disarm_committed":
+      return {
+        outcomeRows: [],
+        summary:
+          factValue(event, "disarmed") === true
+            ? "Disarm committed; the exact weapon was dropped."
+            : factValue(event, "unbalanced") === true
+              ? "Disarm committed; the holder is Unbalanced."
+              : "Disarm committed with no direct damage.",
+      };
     case "hit_location": {
       const location = factLabel(factValue(event, "selectedHitLocation", "hitLocation"));
       return {
@@ -322,19 +403,32 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
     case "distance_control_result": {
       const result = factLabel(factValue(event, "resultLabel", "outcome"));
       const distance = factLabel(factValue(event, "proposedDistance"));
+      const winnerParticipantId = factValue(event, "winnerParticipantId");
+      const winner =
+        typeof winnerParticipantId === "string"
+          ? event.identities.find((candidate) => candidate.participantId === winnerParticipantId)
+              ?.displayName
+          : undefined;
+      const safeResult = result && /participant[_ ]?[ab]/i.test(result) ? undefined : result;
       return {
         outcomeRows: [
-          ...resultRow(event, result ? `Result: ${result}` : undefined),
+          ...resultRow(
+            event,
+            winner ? `Winner: ${winner}` : safeResult ? `Result: ${safeResult}` : undefined,
+          ),
           ...(distance
             ? [{ key: `${event.id}:outcome:distance`, text: `Proposed distance: ${distance}` }]
             : []),
         ],
-        summary: "Distance-control pair result resolved.",
+        summary: winner
+          ? `${winner} won the distance-control contest.`
+          : "The distance-control contest was resolved.",
       };
     }
     case "distance_control_applied": {
       const applied = factLabel(factValue(event, "appliedDistance"));
       const previous = factLabel(factValue(event, "previousDistance"));
+      const continuedContact = factValue(event, "reason") === "continued_contact";
       return {
         outcomeRows: [
           ...(applied
@@ -343,8 +437,13 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
           ...(previous
             ? [{ key: `${event.id}:outcome:previous`, text: `Previous distance: ${previous}` }]
             : []),
+          ...(continuedContact
+            ? [{ key: `${event.id}:outcome:reason`, text: "Reason: Continued Contact" }]
+            : []),
         ],
-        summary: "The next-round distance was applied.",
+        summary: continuedContact
+          ? `${attacker ?? "The controller"} chose the next-round engagement distance.`
+          : "The next-round distance was applied.",
       };
     }
     case "health_check": {
@@ -354,10 +453,163 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
         summary: `${roller ?? "Participant"} made a health check.`,
       };
     }
-    case "participant_su_review":
-      return { outcomeRows: [], summary: `${attacker ?? "Participant"} completed SU review.` };
+    case "participant_su_review": {
+      const changeSummaries = factValue(event, "changeSummaries");
+      return {
+        outcomeRows: Array.isArray(changeSummaries)
+          ? changeSummaries.length
+            ? changeSummaries.flatMap((change, index) =>
+                typeof change === "string"
+                  ? [{ key: `${event.id}:outcome:change:${index}`, text: change }]
+                  : [],
+              )
+            : resultRow(event, "No changes")
+          : factValue(event, "changed") === false
+            ? resultRow(event, "No changes")
+            : [],
+        summary: `${actor ?? "Participant"} completed SU review.`,
+      };
+    }
+    case "modifier_review": {
+      const changes = factValue(event, "changes");
+      const changeRows = Array.isArray(changes)
+        ? changes.flatMap((candidate, index) => {
+            if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
+            const change = candidate as Record<string, unknown>;
+            const supportedChangeTypes = new Set([
+              "added",
+              "changed",
+              "edited",
+              "replaced",
+              "removed",
+              "expired",
+              "consumed",
+              "resolved",
+              "retained",
+              "rejected_proposal",
+            ]);
+            const changeType =
+              typeof change.changeType === "string" && supportedChangeTypes.has(change.changeType)
+                ? change.changeType
+                : undefined;
+            const category = typeof change.category === "string" ? change.category : "Modifier";
+            const label = typeof change.label === "string" ? change.label : category;
+            const value = typeof change.value === "number" ? change.value : undefined;
+            const previousValue =
+              typeof change.previousValue === "number" ? change.previousValue : undefined;
+            const duration = typeof change.duration === "string" ? change.duration : undefined;
+            const previousDuration =
+              typeof change.previousDuration === "string" ? change.previousDuration : undefined;
+            const unit = typeof change.unit === "string" ? change.unit : undefined;
+            if (!changeType) return [];
+            const formattedValue = (candidateValue: number) => {
+              const signed = `${candidateValue >= 0 ? "+" : ""}${candidateValue}`;
+              if (unit === "percentage") return `${signed}%`;
+              if (unit === "flat_db") return `${signed} DB`;
+              if (unit === "damage") return `${signed} damage`;
+              if (unit === "bleed_rate") return `${signed} HP/round`;
+              return signed;
+            };
+            const valueChange =
+              previousValue !== undefined && value !== undefined && previousValue !== value
+                ? `${formattedValue(previousValue)} → ${formattedValue(value)}`
+                : value !== undefined
+                  ? formattedValue(value)
+                  : undefined;
+            const durationChange =
+              previousDuration && duration && previousDuration !== duration
+                ? `${previousDuration} → ${duration}`
+                : duration;
+            const detail =
+              changeType === "removed"
+                ? "removed"
+                : changeType === "expired"
+                  ? "expired"
+                  : changeType === "consumed"
+                    ? "consumed"
+                    : changeType === "resolved"
+                      ? "resolved"
+                      : changeType === "retained"
+                        ? "retained by GM"
+                        : changeType === "rejected_proposal"
+                          ? "automatic change rejected"
+                          : changeType === "replaced"
+                            ? "replaced"
+                            : [valueChange, durationChange].filter(Boolean).join(" · ") ||
+                              changeType;
+            return [
+              {
+                key: `${event.id}:outcome:change:${index}`,
+                text: `${label}${label === category ? "" : ` (${category})`}: ${detail}`,
+              },
+            ];
+          })
+        : [];
+      const acceptedModifiers = factValue(event, "acceptedModifiers");
+      const rows = Array.isArray(acceptedModifiers)
+        ? acceptedModifiers.flatMap((candidate, index) => {
+            if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
+            const modifier = candidate as Record<string, unknown>;
+            const category = typeof modifier.category === "string" ? modifier.category : "Modifier";
+            const total = typeof modifier.total === "number" ? modifier.total : undefined;
+            return total === undefined
+              ? []
+              : [
+                  {
+                    key: `${event.id}:outcome:modifier:${index}`,
+                    text: `${category}: ${total >= 0 ? "+" : ""}${total}`,
+                  },
+                ];
+          })
+        : [];
+      return {
+        outcomeRows: changeRows.length
+          ? changeRows
+          : factValue(event, "changed") === false
+            ? resultRow(event, "No changes")
+            : rows.length
+              ? rows
+              : resultRow(event, factLabel(factValue(event, "resultLabel"))),
+        summary: `${actor ?? "Participant"} completed modifier review.`,
+      };
+    }
+    case "action_skipped": {
+      const reason = factLabel(factValue(event, "reason"));
+      return {
+        outcomeRows: resultRow(event, reason ? `Reason: ${reason}` : "No action"),
+        summary: `${actor ?? "Participant"} was skipped.`,
+      };
+    }
+    case "effect_review":
+      return {
+        outcomeRows: resultRow(event, "Review completed"),
+        summary: `${actor ?? defender ?? "Participant"} completed damage/effects review.`,
+      };
+    case "round_boundary": {
+      const resolutionType = factValue(event, "resolutionType");
+      return {
+        outcomeRows: [],
+        summary:
+          resolutionType === "round_completed"
+            ? `Round ${event.roundNumber} completed.`
+            : "Combat boundary advanced.",
+      };
+    }
     case "initiative": {
       const total = factLabel(factValue(event, "total"));
+      const resolutionType = factValue(event, "resolutionType");
+      if (resolutionType === "bulk_skipped") {
+        return {
+          outcomeRows: resultRow(event, "Effective initiative: 0"),
+          summary: `${roller ?? "Participant"} initiative was bulk skipped by GM.`,
+        };
+      }
+      if (resolutionType === "gm_skipped") {
+        return {
+          outcomeRows: resultRow(event, "Effective initiative: 0"),
+          summary: `${roller ?? "Participant"} initiative was skipped by GM.`,
+        };
+      }
       return {
         outcomeRows: resultRow(event, total ? `Total: ${total}` : undefined),
         summary: `${roller ?? "Participant"} rolled initiative.`,
@@ -365,9 +617,30 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
     }
     case "declaration": {
       const action = factLabel(factValue(event, "actionLabel"));
+      const secondary = factLabel(factValue(event, "secondaryActionLabel"));
+      const movement = factLabel(factValue(event, "movementLabel"));
+      const submittedBy = factValue(event, "submittedBy");
+      const target = identity(event, "target");
       return {
-        outcomeRows: resultRow(event, action ? `Action: ${action}` : undefined),
-        summary: `${attacker ?? "Participant"} declared an action.`,
+        outcomeRows: [
+          ...resultRow(event, action ? `Action: ${action}` : undefined),
+          ...(secondary
+            ? [{ key: `${event.id}:outcome:secondary`, text: `Secondary action: ${secondary}` }]
+            : []),
+          ...(movement
+            ? [{ key: `${event.id}:outcome:movement`, text: `Movement: ${movement}` }]
+            : []),
+          ...(target ? [{ key: `${event.id}:outcome:target`, text: `Target: ${target}` }] : []),
+          ...(submittedBy === "gm" || submittedBy === "player"
+            ? [
+                {
+                  key: `${event.id}:outcome:submitted-by`,
+                  text: `Declared by: ${submittedBy === "gm" ? "GM" : "Player"}`,
+                },
+              ]
+            : []),
+        ],
+        summary: `${actor ?? attacker ?? "Participant"} declared an action.`,
       };
     }
     case "feint_feasibility":
@@ -453,60 +726,196 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
     }
     case "adjust_distance_response": {
       const response = factValue(event, "response");
-      return { outcomeRows: resultRow(event, response === "allow" ? `${defender ?? "Defender"} allowed the distance adjustment.` : `${defender ?? "Defender"} opposed the distance adjustment.`), summary: "The defender responded to the maneuver." };
+      return {
+        outcomeRows: resultRow(
+          event,
+          response === "allow"
+            ? `${defender ?? "Defender"} allowed the distance adjustment.`
+            : `${defender ?? "Defender"} opposed the distance adjustment.`,
+        ),
+        summary: "The defender responded to the maneuver.",
+      };
     }
     case "adjust_distance_adjustment":
       return { outcomeRows: [], summary: "The GM confirmed the maneuver adjustment." };
     case "adjust_distance_roll": {
       const side = factLabel(factValue(event, "side"));
-      const outcome = side?.toLowerCase() === "defender" ? "to resist the distance adjustment" : "to adjust distance";
-      return { outcomeRows: [], summary: `${roller ?? attacker ?? defender ?? "Participant"} rolled Dodge ${outcome}.` };
+      const outcome =
+        side?.toLowerCase() === "defender"
+          ? "to resist the distance adjustment"
+          : "to adjust distance";
+      return {
+        outcomeRows: [],
+        summary: `${roller ?? attacker ?? defender ?? "Participant"} rolled Dodge ${outcome}.`,
+      };
     }
     case "adjust_distance_result": {
       const proposed = factValue(event, "standardProposedDistance");
-      return { outcomeRows: typeof proposed === "number" ? resultRow(event, `Proposed distance: ${proposed}.`) : [], summary: "The maneuver proposal was resolved." };
+      return {
+        outcomeRows:
+          typeof proposed === "number" ? resultRow(event, `Proposed distance: ${proposed}.`) : [],
+        summary: "The maneuver proposal was resolved.",
+      };
     }
     case "adjust_distance_committed": {
       const previous = factValue(event, "previousDistance");
       const committed = factValue(event, "committedDistance");
-      return { outcomeRows: typeof committed === "number" ? resultRow(event, previous === committed ? `Distance remained ${committed}.` : `Distance changed from ${previous} to ${committed}.`) : [], summary: "The GM committed the distance adjustment." };
+      return {
+        outcomeRows:
+          typeof committed === "number"
+            ? resultRow(
+                event,
+                previous === committed
+                  ? `Distance remained ${committed}.`
+                  : `Distance changed from ${previous} to ${committed}.`,
+              )
+            : [],
+        summary: "The GM committed the distance adjustment.",
+      };
     }
   }
 }
 
 export function buildCombatEventResultModel(
-  events: readonly ProjectedCombatHistoryEvent[],
+  sourceEvents: readonly ProjectedCombatHistoryEvent[],
+  instrumentation?: {
+    calculationStage?: string;
+    resultStage?: string;
+  },
 ): CombatEventResultModel {
+  // Boundary advancement is workflow provenance, not a participant combat result. Keep the
+  // projected event available to history/Combat Log consumers without rendering it in Results.
+  const events = sourceEvents.filter((event) => event.type !== "round_boundary");
+  const canonicalResolvedObservationEventByAttemptId = new Map<string, string>();
+  const resolvedObservationAttemptIds = new Set(
+    events.flatMap((event) => {
+      const attemptId = factValue(event, "observationAttemptId");
+      const resolved =
+        event.type === "observation" &&
+        typeof attemptId === "string" &&
+        factValue(event, "difference") !== undefined;
+      if (resolved) {
+        const existingId = canonicalResolvedObservationEventByAttemptId.get(attemptId);
+        const existing = existingId
+          ? events.find((candidate) => candidate.id === existingId)
+          : undefined;
+        const eventDetail =
+          Number(event.facts.privateCalculation !== undefined) +
+          Number(event.facts.gmReview?.targetCalculation !== undefined);
+        const existingDetail = existing
+          ? Number(existing.facts.privateCalculation !== undefined) +
+            Number(existing.facts.gmReview?.targetCalculation !== undefined)
+          : -1;
+        if (!existing || eventDetail >= existingDetail) {
+          canonicalResolvedObservationEventByAttemptId.set(attemptId, event.id);
+        }
+      }
+      return resolved ? [attemptId] : [];
+    }),
+  );
+  const items = [...events]
+    .filter((event) => {
+      if (
+        event.type === "participant_su_review" &&
+        (event.status === "proposed" ||
+          factValue(event, "workflowOnly") === true ||
+          factValue(event, "changed") === false)
+      ) {
+        return false;
+      }
+      const attemptId = factValue(event, "observationAttemptId");
+      if (
+        event.type === "observation" &&
+        typeof attemptId === "string" &&
+        factValue(event, "difference") !== undefined &&
+        canonicalResolvedObservationEventByAttemptId.get(attemptId) !== event.id
+      ) {
+        return false;
+      }
+      return !(
+        event.type === "observation" &&
+        factValue(event, "observationStatus") === "period_complete" &&
+        typeof attemptId === "string" &&
+        resolvedObservationAttemptIds.has(attemptId)
+      );
+    })
+    .sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id))
+    .map((event) => {
+      const presentation = instrumentation?.resultStage
+        ? measureCombatPerformanceStage(
+            instrumentation.resultStage,
+            () => eventPresentation(event),
+            { eventType: event.type },
+          )
+        : eventPresentation(event);
+      const calculations = instrumentation?.calculationStage
+        ? measureCombatPerformanceStage(
+            instrumentation.calculationStage,
+            () => buildCombatCalculationPresentations(event),
+            { eventType: event.type },
+          )
+        : buildCombatCalculationPresentations(event);
+      const calculationRows = calculations.flatMap((calculation) =>
+        buildCombatCalculationPresentationRows(calculation).map((row) => ({
+          key: row.key,
+          text: row.text,
+        })),
+      );
+      return {
+        calculations,
+        calculationRows,
+        completenessLabel:
+          event.completeness === "complete"
+            ? undefined
+            : event.completeness === "legacy_derived"
+              ? "Legacy-derived history"
+              : "Incomplete history",
+        envelope: event.resultEnvelope,
+        id: event.id,
+        outcomeRows: presentation.outcomeRows,
+        sequence: event.sequence,
+        summary: presentation.summary,
+        title: EVENT_TITLES[event.type],
+        type: event.type,
+      };
+    });
+  const eventById = new Map(events.map((event) => [event.id, event]));
+  const fragments: CombatResultLedgerFragmentInput[] = items.map((item) => {
+    const event = eventById.get(item.id);
+    const actor = item.envelope?.actor;
+    const target = item.envelope?.targets[0];
+    return {
+      actionInstanceId: item.envelope?.actionInstanceId,
+      result: {
+        actor: actor
+          ? {
+              hidden: actor.visibility === "unseen",
+              id: actor.participantId,
+              label: actor.displayName,
+            }
+          : undefined,
+        calculations: item.calculations,
+        completenessLabel: item.completenessLabel,
+        heading: item.title,
+        id: item.id,
+        outcomeRows: item.outcomeRows,
+        resultEnvelopes: item.envelope ? [item.envelope] : [],
+        sequence: item.sequence,
+        sourceEventIds: [item.id],
+        state: event?.status === "proposed" ? "pending" : "final",
+        summary: item.summary,
+        target: target
+          ? {
+              hidden: target.visibility === "unseen",
+              id: target.participantId,
+              label: target.displayName,
+            }
+          : undefined,
+      },
+    };
+  });
   return {
-    items: [...events]
-      .sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id))
-      .map((event) => {
-        const identityById = new Map(
-          event.identities.flatMap((entry) =>
-            entry.participantId ? [[entry.participantId, entry.displayName] as const] : [],
-          ),
-        );
-        const attack = event.type === "attack";
-        const presentation = eventPresentation(event);
-        return {
-          calculationRows: attack
-            ? attackCalculationRows(event)
-            : event.type === "adjust_distance_roll" || event.type === "distance_control_roll"
-              ? dodgeCalculationRows(event)
-              : calculationFactRows(event.id, event.facts.privateCalculation, identityById),
-          completenessLabel:
-            event.completeness === "complete"
-              ? undefined
-              : event.completeness === "legacy_derived"
-                ? "Legacy-derived history"
-                : "Incomplete history",
-          id: event.id,
-          outcomeRows: presentation.outcomeRows,
-          sequence: event.sequence,
-          summary: presentation.summary,
-          title: EVENT_TITLES[event.type],
-          type: event.type,
-        };
-      }),
+    groups: buildCombatResultGroups(fragments),
+    items,
   };
 }

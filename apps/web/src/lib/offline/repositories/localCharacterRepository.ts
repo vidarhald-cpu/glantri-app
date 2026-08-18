@@ -1,4 +1,4 @@
-import { characterBuildSchema, type CharacterBuild } from "@glantri/domain";
+import { characterBuildSchema, type CharacterBuild, type CharacterRecord } from "@glantri/domain";
 
 import { localDb, type LocalCharacterRecord } from "../glantriDexie";
 
@@ -9,6 +9,7 @@ export interface SaveLocalCharacterInput {
   creatorId?: string;
   createdAt?: string;
   finalizedAt?: string;
+  serverUpdatedAt?: string;
   syncStatus?: LocalCharacterRecord["syncStatus"];
   updatedAt?: string;
 }
@@ -18,6 +19,40 @@ export const UNNAMED_CHARACTER_PLACEHOLDER = "Unnamed Character";
 function normalizeCharacterName(name: string): string {
   const trimmed = name.trim();
   return trimmed.length > 0 ? trimmed : UNNAMED_CHARACTER_PLACEHOLDER;
+}
+
+export function getServerCharacterRevision(record: LocalCharacterRecord): string | undefined {
+  return record.serverUpdatedAt ?? (record.syncStatus === "synced" ? record.updatedAt : undefined);
+}
+
+export function requireServerCharacterRevision(record: LocalCharacterRecord): string {
+  const revision = getServerCharacterRevision(record);
+
+  if (!revision) {
+    throw new Error(
+      "This local character has no server revision. Reload the server character before saving.",
+    );
+  }
+
+  return revision;
+}
+
+export function buildServerBackedLocalCharacterRecord(
+  serverRecord: CharacterRecord,
+  existing?: LocalCharacterRecord,
+): LocalCharacterRecord {
+  return {
+    build: serverRecord.build,
+    createdAt: existing?.createdAt ?? serverRecord.createdAt,
+    creatorDisplayName: serverRecord.owner?.displayName ?? existing?.creatorDisplayName,
+    creatorEmail: serverRecord.owner?.email ?? existing?.creatorEmail,
+    creatorId: serverRecord.ownerId ?? serverRecord.owner?.id ?? existing?.creatorId,
+    finalizedAt: existing?.finalizedAt ?? serverRecord.createdAt,
+    id: serverRecord.id,
+    serverUpdatedAt: serverRecord.updatedAt,
+    syncStatus: "synced",
+    updatedAt: serverRecord.updatedAt,
+  };
 }
 
 export class LocalCharacterRepository {
@@ -30,7 +65,7 @@ export class LocalCharacterRepository {
 
     return {
       ...record,
-      build: characterBuildSchema.parse(record.build)
+      build: characterBuildSchema.parse(record.build),
     };
   }
 
@@ -39,7 +74,7 @@ export class LocalCharacterRepository {
 
     return records.map((record) => ({
       ...record,
-      build: characterBuildSchema.parse(record.build)
+      build: characterBuildSchema.parse(record.build),
     }));
   }
 
@@ -69,11 +104,18 @@ export class LocalCharacterRepository {
     const now = input.updatedAt ?? new Date().toISOString();
     const existing = await localDb.localCharacters.get(input.build.id);
     const build = characterBuildSchema.parse(input.build);
+    const syncStatus = input.syncStatus ?? existing?.syncStatus ?? "local";
+    const inheritedServerRevision = existing ? getServerCharacterRevision(existing) : undefined;
+    const serverUpdatedAt =
+      input.serverUpdatedAt ??
+      (input.syncStatus === "synced" && input.updatedAt ? input.updatedAt : undefined) ??
+      inheritedServerRevision ??
+      (syncStatus === "synced" ? (input.updatedAt ?? now) : undefined);
 
     const record: LocalCharacterRecord = {
       build: {
         ...build,
-        name: normalizeCharacterName(build.name)
+        name: normalizeCharacterName(build.name),
       },
       creatorDisplayName: input.creatorDisplayName ?? existing?.creatorDisplayName,
       creatorEmail: input.creatorEmail ?? existing?.creatorEmail,
@@ -81,8 +123,9 @@ export class LocalCharacterRepository {
       createdAt: input.createdAt ?? existing?.createdAt ?? now,
       finalizedAt: input.finalizedAt ?? existing?.finalizedAt ?? now,
       id: input.build.id,
-      syncStatus: input.syncStatus ?? existing?.syncStatus ?? "local",
-      updatedAt: now
+      serverUpdatedAt,
+      syncStatus,
+      updatedAt: now,
     };
 
     await localDb.localCharacters.put(record);
@@ -100,9 +143,11 @@ export class LocalCharacterRepository {
       ...existing,
       build: {
         ...characterBuildSchema.parse(existing.build),
-        name: normalizeCharacterName(name)
+        name: normalizeCharacterName(name),
       },
-      updatedAt: new Date().toISOString()
+      serverUpdatedAt: getServerCharacterRevision(existing),
+      syncStatus: "local",
+      updatedAt: new Date().toISOString(),
     };
 
     await localDb.localCharacters.put(updated);

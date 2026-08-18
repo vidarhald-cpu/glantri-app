@@ -4,12 +4,12 @@ import type {
   PlayerFacingSkillCategoryId,
   ProfessionDefinition,
   ReusableEntity,
-  SkillDefinition
+  SkillDefinition,
 } from "@glantri/domain";
 import {
   getPlayerFacingSkillCategoryId,
   getSkillGroupIds,
-  glantriCharacteristicOrder
+  glantriCharacteristicOrder,
 } from "@glantri/domain";
 import { resolveGlantriCharacterStats } from "@glantri/rules-engine";
 import type { EquipmentTemplate } from "@glantri/domain/equipment";
@@ -128,15 +128,19 @@ export interface GeneratedHumanoidNpcSkill {
 }
 
 export interface GeneratedHumanoidNpc {
+  actorId: string;
   actorClass: "generated_npc";
   description?: string;
   displayName: string;
   gearNames: string[];
+  gearTemplateIds: string[];
   kind: ReusableEntity["kind"];
+  professionId: string;
   professionName: string;
   roleLabel?: string;
   seniority: NpcArchetypeSeniority;
   skills: GeneratedHumanoidNpcSkill[];
+  societyId: string;
   societyName: string;
   sourceTemplateId: string;
   sourceTemplateName: string;
@@ -164,6 +168,14 @@ export interface ParsedGeneratedHumanoidNpcSummary {
   tags?: string[];
 }
 
+function createGeneratedNpcActorId(): string {
+  if (globalThis.crypto && "randomUUID" in globalThis.crypto) {
+    return `generated-npc-${globalThis.crypto.randomUUID()}`;
+  }
+
+  return `generated-npc-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+}
+
 const DEFAULT_BASE_STAT = 10;
 const DEFAULT_SENIORITY: NpcArchetypeSeniority = "fully_trained";
 
@@ -178,7 +190,7 @@ export const NPC_ARCHETYPE_SENIORITY_OPTIONS: Array<{
   { defaultSkillLevel: 8, id: "under_training", label: "Under training", rangeLabel: "6-10" },
   { defaultSkillLevel: 13, id: "fully_trained", label: "Fully trained", rangeLabel: "11-15" },
   { defaultSkillLevel: 17, id: "veteran", label: "Veteran / Senior", rangeLabel: "16-19" },
-  { defaultSkillLevel: 21, id: "expert", label: "Expert / Guru", rangeLabel: "20+" }
+  { defaultSkillLevel: 21, id: "expert", label: "Expert / Guru", rangeLabel: "20+" },
 ];
 
 export function createEmptyHumanoidNpcArchetypeDraft(): HumanoidNpcArchetypeDraft {
@@ -194,21 +206,22 @@ export function createEmptyHumanoidNpcArchetypeDraft(): HumanoidNpcArchetypeDraf
     skillSelections: [],
     societyId: "",
     stats: Object.fromEntries(
-      glantriCharacteristicOrder.map((stat) => [stat, DEFAULT_BASE_STAT])
+      glantriCharacteristicOrder.map((stat) => [stat, DEFAULT_BASE_STAT]),
     ) as GlantriCharacteristicBlock,
     tags: "",
     variability: {
       gearSubstitutionNotes: "",
       notes: "",
       skillVariance: 2,
-      statVariance: 1
-    }
+      statVariance: 1,
+    },
   };
 }
 
 export function getDefaultSkillLevelForSeniority(seniority: NpcArchetypeSeniority): number {
   return (
-    NPC_ARCHETYPE_SENIORITY_OPTIONS.find((option) => option.id === seniority)?.defaultSkillLevel ?? 0
+    NPC_ARCHETYPE_SENIORITY_OPTIONS.find((option) => option.id === seniority)?.defaultSkillLevel ??
+    0
   );
 }
 
@@ -271,12 +284,9 @@ function createRandomDelta(variance: number): number {
   return Math.floor(Math.random() * (span * 2 + 1)) - span;
 }
 
-function listProfessionGrants(input: {
-  content: CanonicalContent;
-  professionId: string;
-}) {
+function listProfessionGrants(input: { content: CanonicalContent; professionId: string }) {
   const profession = input.content.professions.find(
-    (candidate) => candidate.id === input.professionId
+    (candidate) => candidate.id === input.professionId,
   );
 
   return input.content.professionSkills.filter((entry) => {
@@ -314,10 +324,7 @@ function listProfessionSkillIds(input: {
     .filter((skillId): skillId is string => typeof skillId === "string");
 }
 
-function listSkillIdsForGroups(input: {
-  content: CanonicalContent;
-  groupIds: string[];
-}): string[] {
+function listSkillIdsForGroups(input: { content: CanonicalContent; groupIds: string[] }): string[] {
   const selectedGroupIds = new Set(input.groupIds);
   const groupSkillIds = input.content.skillGroups
     .filter((group) => selectedGroupIds.has(group.id))
@@ -326,7 +333,7 @@ function listSkillIdsForGroups(input: {
         ? (group.skillMemberships ?? []).map((membership) => membership.skillId)
         : input.content.skills
             .filter((skill) => getSkillGroupIds(skill).includes(group.id))
-            .map((skill) => skill.id)
+            .map((skill) => skill.id),
     );
 
   return [...new Set(groupSkillIds)];
@@ -349,23 +356,24 @@ function listCoreProfessionGroupIds(input: {
   return listProfessionGroupIds({
     content: input.content,
     isCore: true,
-    professionId: input.professionId
+    professionId: input.professionId,
   });
 }
 
 export function listSocietyOptions(content: CanonicalContent): SocietyOption[] {
   const societyDefinitionsById = new Map(
-    (content.societies ?? []).map((society) => [society.id, society])
+    (content.societies ?? []).map((society) => [society.id, society]),
   );
   const civilizationNamesBySocietyLevel = new Map<number, string[]>();
 
   for (const civilization of content.civilizations ?? []) {
-    const existingNames = civilizationNamesBySocietyLevel.get(civilization.linkedSocietyLevel) ?? [];
+    const existingNames =
+      civilizationNamesBySocietyLevel.get(civilization.linkedSocietyLevel) ?? [];
 
     if (!existingNames.includes(civilization.name)) {
       civilizationNamesBySocietyLevel.set(civilization.linkedSocietyLevel, [
         ...existingNames,
-        civilization.name
+        civilization.name,
       ]);
     }
   }
@@ -388,7 +396,7 @@ export function listSocietyOptions(content: CanonicalContent): SocietyOption[] {
         shortDescription: societyDefinition?.shortDescription,
         societyId: access.societyId,
         societyLevel,
-        societyName: access.societyName
+        societyName: access.societyName,
       });
       continue;
     }
@@ -399,7 +407,7 @@ export function listSocietyOptions(content: CanonicalContent): SocietyOption[] {
   }
 
   return [...societies.values()].sort((left, right) =>
-    left.societyName.localeCompare(right.societyName)
+    left.societyName.localeCompare(right.societyName),
   );
 }
 
@@ -408,7 +416,7 @@ export function listProfessionsForSociety(input: {
   societyId: string;
 }): ProfessionDefinition[] {
   const society = listSocietyOptions(input.content).find(
-    (option) => option.societyId === input.societyId
+    (option) => option.societyId === input.societyId,
   );
 
   if (!society) {
@@ -426,26 +434,20 @@ export function listSuggestedSkillGroupIds(input: {
   societyId: string;
 }): string[] {
   const society = listSocietyOptions(input.content).find(
-    (option) => option.societyId === input.societyId
+    (option) => option.societyId === input.societyId,
   );
   const coreGroupIds = listProfessionGroupIds({
     content: input.content,
     isCore: true,
-    professionId: input.professionId
+    professionId: input.professionId,
   });
   const optionalGroupIds = listProfessionGroupIds({
     content: input.content,
     isCore: false,
-    professionId: input.professionId
+    professionId: input.professionId,
   });
 
-  return [
-    ...new Set([
-      ...coreGroupIds,
-      ...optionalGroupIds,
-      ...(society?.skillGroupIds ?? [])
-    ])
-  ];
+  return [...new Set([...coreGroupIds, ...optionalGroupIds, ...(society?.skillGroupIds ?? [])])];
 }
 
 export function listAvailableSkills(input: {
@@ -458,25 +460,25 @@ export function listAvailableSkills(input: {
     listSuggestedSkillGroupIds({
       content: input.content,
       professionId: input.professionId,
-      societyId: input.societyId
-    })
+      societyId: input.societyId,
+    }),
   );
   const society = listSocietyOptions(input.content).find(
-    (option) => option.societyId === input.societyId
+    (option) => option.societyId === input.societyId,
   );
   const directSkillIds = new Set(
     listProfessionSkillIds({
       content: input.content,
-      professionId: input.professionId
-    })
+      professionId: input.professionId,
+    }),
   );
   const selectedGroupIds = new Set(input.selectedSkillGroupIds);
   const societySkillIds = new Set(society?.skillIds ?? []);
   const groupDerivedSkillIds = new Set(
     listSkillIdsForGroups({
       content: input.content,
-      groupIds: [...new Set([...input.selectedSkillGroupIds, ...suggestedSkillGroupIds])]
-    })
+      groupIds: [...new Set([...input.selectedSkillGroupIds, ...suggestedSkillGroupIds])],
+    }),
   );
 
   return input.content.skills
@@ -498,28 +500,28 @@ export function listSuggestedSkills(input: {
   societyId: string;
 }): SkillDefinition[] {
   const society = listSocietyOptions(input.content).find(
-    (option) => option.societyId === input.societyId
+    (option) => option.societyId === input.societyId,
   );
   const selectedGroupIds = new Set(input.selectedSkillGroupIds);
   const directSkillIds = new Set(
     listProfessionSkillIds({
       content: input.content,
-      professionId: input.professionId
-    })
+      professionId: input.professionId,
+    }),
   );
   const societySkillIds = new Set(society?.skillIds ?? []);
   const suggestedGroupIds = new Set(
     listSuggestedSkillGroupIds({
       content: input.content,
       professionId: input.professionId,
-      societyId: input.societyId
-    })
+      societyId: input.societyId,
+    }),
   );
   const groupedSkillIds = new Set(
     listSkillIdsForGroups({
       content: input.content,
-      groupIds: [...selectedGroupIds, ...suggestedGroupIds]
-    })
+      groupIds: [...selectedGroupIds, ...suggestedGroupIds],
+    }),
   );
 
   return input.content.skills
@@ -542,13 +544,13 @@ export function buildHumanoidNpcArchetypeSnapshot(input: {
   const societies = listSocietyOptions(input.content);
   const society = societies.find((option) => option.societyId === input.draft.societyId);
   const profession = input.content.professions.find(
-    (candidate) => candidate.id === input.draft.professionId
+    (candidate) => candidate.id === input.draft.professionId,
   );
   const family = profession
     ? input.content.professionFamilies.find((entry) => entry.id === profession.familyId)
     : undefined;
   const gearTemplates = input.equipmentTemplates.filter((template) =>
-    input.draft.selectedGearTemplateIds.includes(template.id)
+    input.draft.selectedGearTemplateIds.includes(template.id),
   );
   const skillRows = input.draft.skillSelections
     .map((selection) => {
@@ -561,7 +563,7 @@ export function buildHumanoidNpcArchetypeSnapshot(input: {
       return {
         skillId: selection.skillId,
         skillName: skill.name,
-        targetLevel: selection.targetLevel
+        targetLevel: selection.targetLevel,
       };
     })
     .filter((row): row is NonNullable<typeof row> => row !== null);
@@ -572,7 +574,9 @@ export function buildHumanoidNpcArchetypeSnapshot(input: {
   const baseStats = input.draft.stats;
   const finalStats = resolveGlantriCharacterStats(baseStats);
   const equipmentProfile =
-    gearTemplates.length > 0 ? gearTemplates.map((template) => template.name).join(", ") : undefined;
+    gearTemplates.length > 0
+      ? gearTemplates.map((template) => template.name).join(", ")
+      : undefined;
 
   const archetype: HumanoidNpcArchetypeSnapshot = {
     generationHints: {
@@ -582,24 +586,24 @@ export function buildHumanoidNpcArchetypeSnapshot(input: {
         { label: "under_training", max: 10, min: 6 },
         { label: "fully_trained", max: 15, min: 11 },
         { label: "veteran", max: 19, min: 16 },
-        { label: "expert", max: 99, min: 20 }
+        { label: "expert", max: 99, min: 20 },
       ],
       suitabilityScale: [
         { bonus: 0, label: "ordinary" },
         { bonus: 1, label: "suitable" },
-        { bonus: 2, label: "gifted" }
-      ]
+        { bonus: 2, label: "gifted" },
+      ],
     },
     gear: {
       notes: toNonEmptyString(input.draft.gearNotes),
       templateIds: gearTemplates.map((template) => template.id),
-      templateNames: gearTemplates.map((template) => template.name)
+      templateNames: gearTemplates.map((template) => template.name),
     },
     profession: {
       familyId: family?.id,
       familyName: family?.name,
       id: profession?.id ?? input.draft.professionId,
-      name: profession?.name ?? input.draft.professionId
+      name: profession?.name ?? input.draft.professionId,
     },
     schemaVersion: 1,
     skillGroupIds: input.draft.selectedSkillGroupIds,
@@ -607,18 +611,18 @@ export function buildHumanoidNpcArchetypeSnapshot(input: {
     seniority: input.draft.seniority,
     society: {
       societyId: society?.societyId ?? input.draft.societyId,
-      societyName: society?.societyName ?? input.draft.societyId
+      societyName: society?.societyName ?? input.draft.societyId,
     },
     stats: {
       base: baseStats,
-      final: finalStats
+      final: finalStats,
     },
     variability: {
       gearSubstitutionNotes: toNonEmptyString(input.draft.variability.gearSubstitutionNotes),
       notes: toNonEmptyString(input.draft.variability.notes),
       skillVariance: input.draft.variability.skillVariance,
-      statVariance: input.draft.variability.statVariance
-    }
+      statVariance: input.draft.variability.statVariance,
+    },
   };
 
   return {
@@ -629,7 +633,7 @@ export function buildHumanoidNpcArchetypeSnapshot(input: {
     profession: archetype.profession.name,
     roleLabel: toNonEmptyString(input.draft.roleLabel) ?? archetype.profession.name,
     tags: tags.length > 0 ? tags : undefined,
-    templateKind: "humanoid_npc_archetype"
+    templateKind: "humanoid_npc_archetype",
   };
 }
 
@@ -642,14 +646,14 @@ function getTemplateSkillRelevance(input: {
   const coreSkillIds = new Set(
     listCoreProfessionSkillIds({
       content: input.content,
-      professionId: input.professionId
-    })
+      professionId: input.professionId,
+    }),
   );
   const coreGroupIds = new Set(
     listCoreProfessionGroupIds({
       content: input.content,
-      professionId: input.professionId
-    })
+      professionId: input.professionId,
+    }),
   );
   const selectedGroupIds = new Set(input.selectedSkillGroupIds);
 
@@ -681,20 +685,20 @@ export function generateHumanoidNpcFromTemplate(input: {
   }
 
   const society = listSocietyOptions(input.content).find(
-    (option) => option.societyId === draft.societyId
+    (option) => option.societyId === draft.societyId,
   );
   const profession = input.content.professions.find(
-    (candidate) => candidate.id === draft.professionId
+    (candidate) => candidate.id === draft.professionId,
   );
   const availableEquipmentTemplates = input.equipmentTemplates ?? equipmentTemplates ?? [];
   const gearTemplates = availableEquipmentTemplates.filter((template) =>
-    draft.selectedGearTemplateIds.includes(template.id)
+    draft.selectedGearTemplateIds.includes(template.id),
   );
   const variedBaseStats = Object.fromEntries(
     glantriCharacteristicOrder.map((stat) => [
       stat,
-      clampStatValue(draft.stats[stat] + createRandomDelta(draft.variability.statVariance))
-    ])
+      clampStatValue(draft.stats[stat] + createRandomDelta(draft.variability.statVariance)),
+    ]),
   ) as GlantriCharacteristicBlock;
   const resolvedStats = resolveGlantriCharacterStats(variedBaseStats);
   const generatedSkills = draft.skillSelections
@@ -709,14 +713,14 @@ export function generateHumanoidNpcFromTemplate(input: {
         content: input.content,
         professionId: draft.professionId,
         selectedSkillGroupIds: draft.selectedSkillGroupIds,
-        skill
+        skill,
       });
       const baseline =
         relevance === "other"
           ? selection.targetLevel
           : getDefaultSkillLevelForRelevance({
               relevance,
-              seniority: input.seniority
+              seniority: input.seniority,
             });
 
       return {
@@ -725,9 +729,7 @@ export function generateHumanoidNpcFromTemplate(input: {
         isCore: relevance === "core",
         skillId: skill.id,
         skillName: skill.name,
-        targetLevel: clampSkillLevel(
-          baseline + createRandomDelta(draft.variability.skillVariance)
-        )
+        targetLevel: clampSkillLevel(baseline + createRandomDelta(draft.variability.skillVariance)),
       } satisfies GeneratedHumanoidNpcSkill;
     })
     .filter((skill): skill is GeneratedHumanoidNpcSkill => skill !== null)
@@ -740,51 +742,59 @@ export function generateHumanoidNpcFromTemplate(input: {
   const nameSeed = roleLabel ?? profession?.name ?? input.template.name;
 
   return {
+    actorId: createGeneratedNpcActorId(),
     actorClass: "generated_npc",
     description: toNonEmptyString(draft.description) ?? input.template.description,
     displayName: `${nameSeed} ${Math.floor(Math.random() * 900) + 100}`,
     gearNames: gearTemplates.map((template) => template.name),
+    gearTemplateIds: gearTemplates.map((template) => template.id),
     kind: input.template.kind,
+    professionId: profession?.id ?? draft.professionId,
     professionName: profession?.name ?? draft.professionId,
     roleLabel,
     seniority: input.seniority,
     skills: generatedSkills,
+    societyId: society?.societyId ?? draft.societyId,
     societyName: society?.societyName ?? draft.societyId,
     sourceTemplateId: input.template.id,
     sourceTemplateName: input.template.name,
     stats: {
       base: variedBaseStats,
-      final: resolvedStats
+      final: resolvedStats,
     },
-    tags
+    tags,
   };
 }
 
 export function buildGeneratedHumanoidNpcSnapshot(
-  npc: GeneratedHumanoidNpc
+  npc: GeneratedHumanoidNpc,
 ): Record<string, unknown> {
   return {
     actorClass: "generated_npc",
     generatedHumanoidNpc: {
+      actorId: npc.actorId,
       gearNames: npc.gearNames,
+      gearTemplateIds: npc.gearTemplateIds,
+      professionId: npc.professionId,
       professionName: npc.professionName,
       seniority: npc.seniority,
       skills: npc.skills,
+      societyId: npc.societyId,
       societyName: npc.societyName,
       sourceTemplateId: npc.sourceTemplateId,
       sourceTemplateName: npc.sourceTemplateName,
-      stats: npc.stats
+      stats: npc.stats,
     },
     profession: npc.professionName,
     roleLabel: npc.roleLabel,
     tags: npc.tags,
     templateId: npc.sourceTemplateId,
-    templateName: npc.sourceTemplateName
+    templateName: npc.sourceTemplateName,
   };
 }
 
 export function parseGeneratedHumanoidNpcEntity(
-  entity: ReusableEntity
+  entity: ReusableEntity,
 ): ParsedGeneratedHumanoidNpcSummary {
   const snapshot = entity.snapshot;
 
@@ -793,14 +803,16 @@ export function parseGeneratedHumanoidNpcEntity(
       actorClass: "generated_npc",
       gearNames: [],
       isGeneratedHumanoidNpc: false,
-      skillCount: 0
+      skillCount: 0,
     };
   }
 
   const generated = snapshot.generatedHumanoidNpc as Record<string, unknown>;
   const stats = isObject(generated.stats) ? generated.stats : undefined;
   const baseStats = isObject(stats?.base) ? (stats?.base as GlantriCharacteristicBlock) : undefined;
-  const finalStats = isObject(stats?.final) ? (stats?.final as GlantriCharacteristicBlock) : undefined;
+  const finalStats = isObject(stats?.final)
+    ? (stats?.final as GlantriCharacteristicBlock)
+    : undefined;
   const skills = Array.isArray(generated.skills) ? generated.skills : [];
 
   return {
@@ -821,22 +833,24 @@ export function parseGeneratedHumanoidNpcEntity(
       baseStats && finalStats
         ? {
             base: baseStats,
-            final: finalStats
+            final: finalStats,
           }
         : undefined,
-    tags: parseStringArray(snapshot.tags)
+    tags: parseStringArray(snapshot.tags),
   };
 }
 
 export function parseHumanoidNpcArchetypeTemplate(
-  entity: ReusableEntity
+  entity: ReusableEntity,
 ): ParsedHumanoidNpcTemplateSummary {
   const snapshot = entity.snapshot;
 
   if (!isObject(snapshot) || !isObject(snapshot.humanoidNpcArchetype)) {
     return {
       actorClass: "template",
-      equipmentProfile: toNonEmptyString(isObject(snapshot) ? snapshot.equipmentProfile : undefined),
+      equipmentProfile: toNonEmptyString(
+        isObject(snapshot) ? snapshot.equipmentProfile : undefined,
+      ),
       gearNames: [],
       isHumanoidNpcArchetype: false,
       profession: toNonEmptyString(isObject(snapshot) ? snapshot.profession : undefined),
@@ -844,7 +858,7 @@ export function parseHumanoidNpcArchetypeTemplate(
       seniority: DEFAULT_SENIORITY,
       skillCount: 0,
       skillGroupCount: 0,
-      tags: parseStringArray(isObject(snapshot) ? snapshot.tags : undefined)
+      tags: parseStringArray(isObject(snapshot) ? snapshot.tags : undefined),
     };
   }
 
@@ -854,7 +868,9 @@ export function parseHumanoidNpcArchetypeTemplate(
   const gear = isObject(archetype.gear) ? archetype.gear : undefined;
   const stats = isObject(archetype.stats) ? archetype.stats : undefined;
   const baseStats = isObject(stats?.base) ? (stats?.base as GlantriCharacteristicBlock) : undefined;
-  const finalStats = isObject(stats?.final) ? (stats?.final as GlantriCharacteristicBlock) : undefined;
+  const finalStats = isObject(stats?.final)
+    ? (stats?.final as GlantriCharacteristicBlock)
+    : undefined;
   const skills = Array.isArray(archetype.skills) ? archetype.skills : [];
   const skillGroupIds = parseStringArray(archetype.skillGroupIds) ?? [];
   const variability = isObject(archetype.variability)
@@ -868,7 +884,7 @@ export function parseHumanoidNpcArchetypeTemplate(
         statVariance:
           typeof archetype.variability.statVariance === "number"
             ? archetype.variability.statVariance
-            : 0
+            : 0,
       }
     : undefined;
 
@@ -890,16 +906,16 @@ export function parseHumanoidNpcArchetypeTemplate(
       baseStats && finalStats
         ? {
             base: baseStats,
-            final: finalStats
+            final: finalStats,
           }
         : undefined,
     tags: parseStringArray(snapshot.tags),
-    variability
+    variability,
   };
 }
 
 export function loadHumanoidNpcArchetypeDraft(
-  entity: ReusableEntity
+  entity: ReusableEntity,
 ): LoadedHumanoidNpcArchetypeDraft {
   const emptyDraft = createEmptyHumanoidNpcArchetypeDraft();
   const snapshot = entity.snapshot;
@@ -911,9 +927,9 @@ export function loadHumanoidNpcArchetypeDraft(
         description: entity.description ?? "",
         name: entity.name,
         roleLabel: toNonEmptyString(isObject(snapshot) ? snapshot.roleLabel : undefined) ?? "",
-        tags: (parseStringArray(isObject(snapshot) ? snapshot.tags : undefined) ?? []).join(", ")
+        tags: (parseStringArray(isObject(snapshot) ? snapshot.tags : undefined) ?? []).join(", "),
       },
-      isHumanoidNpcArchetype: false
+      isHumanoidNpcArchetype: false,
     };
   }
 
@@ -947,7 +963,9 @@ export function loadHumanoidNpcArchetypeDraft(
           return {
             skillId: entry.skillId,
             targetLevel:
-              typeof entry.targetLevel === "number" ? Math.max(0, Math.trunc(entry.targetLevel)) : 0
+              typeof entry.targetLevel === "number"
+                ? Math.max(0, Math.trunc(entry.targetLevel))
+                : 0,
           };
         })
         .filter((entry): entry is NpcArchetypeSkillSelection => entry !== null),
@@ -964,9 +982,9 @@ export function loadHumanoidNpcArchetypeDraft(
         statVariance:
           typeof variability?.statVariance === "number"
             ? Math.max(0, Math.trunc(variability.statVariance))
-            : emptyDraft.variability.statVariance
-      }
+            : emptyDraft.variability.statVariance,
+      },
     },
-    isHumanoidNpcArchetype: true
+    isHumanoidNpcArchetype: true,
   };
 }

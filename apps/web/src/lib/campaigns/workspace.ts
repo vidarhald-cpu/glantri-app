@@ -1,9 +1,16 @@
-import type { EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
+import type {
+  EncounterSession,
+  EncounterSessionSummary,
+  PlayerAccessibleScenario,
+  Scenario,
+  ScenarioParticipant,
+} from "@glantri/domain";
 
 import { isUserAssignedToEffectiveEncounter } from "./encounterParticipantFallback";
 
 export type CampaignWorkspaceTabId =
   | "campaign"
+  | "items"
   | "scenario"
   | "encounter"
   | "gm-encounter"
@@ -36,13 +43,14 @@ export interface CampaignWorkspaceHrefInput {
 
 const orderedTabs: CampaignWorkspaceTab[] = [
   { id: "campaign", label: "Campaign" },
+  { id: "items", label: "Items" },
   { id: "scenario", label: "Scenario" },
   { id: "encounter", label: "Encounter" },
   { id: "skill-rolls", label: "Skill rolls" },
   { id: "player-skill-rolls", label: "Player skill rolls" },
   { id: "character", label: "Character" },
   { id: "combat", label: "Combat" },
-  { id: "player-combat", label: "Player combat" }
+  { id: "player-combat", label: "Player combat" },
 ];
 
 export function buildCampaignWorkspaceHref(input: CampaignWorkspaceHrefInput): string {
@@ -73,7 +81,7 @@ export function buildCampaignWorkspaceTabs(input: {
 }): CampaignWorkspaceTab[] {
   return input.canAccessGmEncounter
     ? orderedTabs
-    : orderedTabs.filter((tab) => tab.id !== "combat");
+    : orderedTabs.filter((tab) => tab.id !== "combat" && tab.id !== "items");
 }
 
 function resolveFallbackCampaignWorkspaceTab(input: {
@@ -105,6 +113,8 @@ function resolveRequestedCampaignWorkspaceTab(input: {
   switch (input.requestedTab) {
     case "campaign":
       return "campaign";
+    case "items":
+      return input.canAccessGmEncounter ? "items" : fallbackTab;
     case "scenario":
       return input.activeScenarioId || !input.canAccessGmEncounter ? "scenario" : "campaign";
     case "encounter":
@@ -147,7 +157,9 @@ function resolveRequestedCampaignWorkspaceTab(input: {
   }
 }
 
-function getEncounterStatusRank(status: EncounterSession["status"]): number {
+type WorkspaceEncounterSummary = EncounterSessionSummary | EncounterSession;
+
+function getEncounterStatusRank(status: EncounterSessionSummary["status"]): number {
   switch (status) {
     case "active":
       return 0;
@@ -166,15 +178,23 @@ function getEncounterStatusRank(status: EncounterSession["status"]): number {
   }
 }
 
-function isSelectableWorkspaceEncounter(encounter: EncounterSession): boolean {
+function isSelectableWorkspaceEncounter(encounter: WorkspaceEncounterSummary): boolean {
   return encounter.status !== "archived" && encounter.status !== "complete";
 }
 
 function isPlayerAssignedToEncounter(input: {
-  encounter: EncounterSession;
+  encounter: WorkspaceEncounterSummary;
   scenarioParticipants: ScenarioParticipant[];
   userId?: string | null;
 }): boolean {
+  if ("viewerAssigned" in input.encounter && input.encounter.viewerAssigned !== undefined) {
+    return input.encounter.viewerAssigned;
+  }
+
+  if (!("participants" in input.encounter)) {
+    return false;
+  }
+
   return isUserAssignedToEffectiveEncounter({
     encounter: input.encounter,
     scenarioParticipants: input.scenarioParticipants,
@@ -184,25 +204,27 @@ function isPlayerAssignedToEncounter(input: {
 
 function resolvePlayerEncounterSelection(input: {
   activeScenarioId?: string;
-  encounters: EncounterSession[];
+  encounters: WorkspaceEncounterSummary[];
   requestedEncounterId?: string | null;
   scenarioParticipants: ScenarioParticipant[];
   userId?: string | null;
-}): EncounterSession | undefined {
+}): WorkspaceEncounterSummary | undefined {
   const candidateEncounters = input.encounters
-    .filter((encounter) => !input.activeScenarioId || encounter.scenarioId === input.activeScenarioId)
+    .filter(
+      (encounter) => !input.activeScenarioId || encounter.scenarioId === input.activeScenarioId,
+    )
     .filter(isSelectableWorkspaceEncounter)
     .filter((encounter) =>
       isPlayerAssignedToEncounter({
         encounter,
         scenarioParticipants: input.scenarioParticipants,
         userId: input.userId,
-      })
+      }),
     );
 
   if (input.requestedEncounterId) {
     const requestedEncounter = candidateEncounters.find(
-      (encounter) => encounter.id === input.requestedEncounterId
+      (encounter) => encounter.id === input.requestedEncounterId,
     );
 
     if (requestedEncounter) {
@@ -213,17 +235,19 @@ function resolvePlayerEncounterSelection(input: {
   return [...candidateEncounters].sort(
     (left, right) =>
       getEncounterStatusRank(left.status) - getEncounterStatusRank(right.status) ||
-      left.title.localeCompare(right.title)
+      left.title.localeCompare(right.title),
   )[0];
 }
 
 function resolveGmCombatEncounterSelection(input: {
   activeScenarioId?: string;
-  encounters: EncounterSession[];
+  encounters: WorkspaceEncounterSummary[];
   requestedEncounterId?: string | null;
-}): EncounterSession | undefined {
+}): WorkspaceEncounterSummary | undefined {
   const candidateEncounters = input.encounters
-    .filter((encounter) => !input.activeScenarioId || encounter.scenarioId === input.activeScenarioId)
+    .filter(
+      (encounter) => !input.activeScenarioId || encounter.scenarioId === input.activeScenarioId,
+    )
     .filter(isSelectableWorkspaceEncounter);
 
   if (input.requestedEncounterId) {
@@ -240,7 +264,7 @@ function resolveGmCombatEncounterSelection(input: {
 export function resolveCampaignWorkspaceState(input: {
   activeCampaignId: string;
   canAccessGmEncounter: boolean;
-  encounters: EncounterSession[];
+  encounters: WorkspaceEncounterSummary[];
   currentUserId?: string | null;
   rememberedEncounterId?: string | null;
   rememberedScenarioId?: string | null;
@@ -249,38 +273,34 @@ export function resolveCampaignWorkspaceState(input: {
   requestedScenarioId?: string | null;
   requestedTab?: string | null;
   scenarioParticipants?: ScenarioParticipant[];
-  scenarios: Scenario[];
+  scenarios: Array<Scenario | PlayerAccessibleScenario>;
 }): CampaignWorkspaceState {
   const requestedScenarioId = input.requestedScenarioId ?? input.rememberedScenarioId;
   const requestedEncounterId = input.requestedEncounterId ?? input.rememberedEncounterId;
   const requestedTab = input.requestedTab ?? input.rememberedTab;
-  let activeScenarioId = input.scenarios.some(
-    (scenario) => scenario.id === requestedScenarioId
-  )
-    ? requestedScenarioId ?? undefined
+  let activeScenarioId = input.scenarios.some((scenario) => scenario.id === requestedScenarioId)
+    ? (requestedScenarioId ?? undefined)
     : undefined;
   let activeEncounterId = input.encounters.some(
     (encounter) =>
       Boolean(activeScenarioId) &&
       encounter.id === requestedEncounterId &&
       encounter.scenarioId === activeScenarioId &&
-      isSelectableWorkspaceEncounter(encounter)
+      isSelectableWorkspaceEncounter(encounter),
   )
-    ? requestedEncounterId ?? undefined
+    ? (requestedEncounterId ?? undefined)
     : undefined;
 
   if (!input.canAccessGmEncounter) {
     if (
       !activeScenarioId &&
-      (
-        requestedTab === "scenario" ||
+      (requestedTab === "scenario" ||
         requestedTab === "character" ||
         requestedTab === "combat" ||
         requestedTab === "player-combat" ||
         requestedTab === "encounter" ||
         requestedTab === "skill-rolls" ||
-        requestedTab === "player-skill-rolls"
-      ) &&
+        requestedTab === "player-skill-rolls") &&
       input.scenarios.length === 1
     ) {
       activeScenarioId = input.scenarios[0]?.id;
@@ -288,13 +308,11 @@ export function resolveCampaignWorkspaceState(input: {
 
     if (
       !activeScenarioId &&
-      (
-        requestedTab === "player-encounter" ||
+      (requestedTab === "player-encounter" ||
         requestedTab === "encounter" ||
         requestedTab === "skill-rolls" ||
         requestedTab === "player-skill-rolls" ||
-        requestedTab === "player-combat"
-      ) &&
+        requestedTab === "player-combat") &&
       input.scenarios.length === 1
     ) {
       activeScenarioId = input.scenarios[0]?.id;
@@ -333,7 +351,7 @@ export function resolveCampaignWorkspaceState(input: {
           (encounter) =>
             encounter.id === input.requestedEncounterId &&
             (!activeScenarioId || encounter.scenarioId === activeScenarioId) &&
-            isSelectableWorkspaceEncounter(encounter)
+            isSelectableWorkspaceEncounter(encounter),
         )
       : undefined;
 
@@ -358,6 +376,6 @@ export function resolveCampaignWorkspaceState(input: {
       activeScenarioId,
       canAccessGmEncounter: input.canAccessGmEncounter,
       requestedTab,
-    })
+    }),
   };
 }

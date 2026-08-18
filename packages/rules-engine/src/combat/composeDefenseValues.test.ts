@@ -56,4 +56,27 @@ describe("composeCombatDefenseValues", () => {
     expect(result.db).toBe(13);
     expect(result.parry).toBe(16);
   });
+
+  it("applies a flat DB drawback after percentage DB composition without changing parry", () => {
+    const result = composeCombatDefenseValues({
+      allocationState: {
+        ...defaultCombatAllocationState,
+        situationalModifiers: {
+          ...defaultCombatAllocationState.situationalModifiers,
+          defenseFlat: -2,
+        },
+      },
+      availableOb: 35,
+      canUseShield: true,
+      dexterity: 11,
+      shieldBonus: 2,
+      shieldDefensiveValue: 2,
+      usesSelectedParrySource: false,
+      weaponDefensiveValue: 1,
+      weaponParryModifier: 0,
+    });
+
+    expect(result.db).toBe(11);
+    expect(result.parry).toBe("35 (allocation pending)");
+  });
 });

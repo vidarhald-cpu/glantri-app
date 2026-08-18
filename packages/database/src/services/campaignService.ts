@@ -22,6 +22,22 @@ function slugify(value: string): string {
     .slice(0, 60);
 }
 
+function normalizeCampaignNpcSnapshot(input: {
+  campaignId: string;
+  snapshot?: unknown;
+}): Record<string, unknown> {
+  const snapshot =
+    input.snapshot && typeof input.snapshot === "object" && !Array.isArray(input.snapshot)
+      ? (input.snapshot as Record<string, unknown>)
+      : {};
+
+  return {
+    ...snapshot,
+    actorClass: "campaign_npc",
+    campaignId: input.campaignId,
+  };
+}
+
 export class CampaignService {
   constructor(
     private readonly repository: ScenarioRepository = createPrismaScenarioRepository(),
@@ -64,6 +80,46 @@ export class CampaignService {
     return this.repository.listCampaignsByPlayerAccess(userId);
   }
 
+  async listCampaignsByUserAccess(userId: string): Promise<Campaign[]> {
+    const ownedCharacters = await this.characterService.listCharacters(userId);
+    const [liveScenarioCampaigns, ...rosterCampaignGroups] = await Promise.all([
+      this.repository.listCampaignsByPlayerAccess(userId),
+      ...ownedCharacters.map((character) =>
+        this.repository.listCampaignsByCharacterRosterAccess(character.id),
+      ),
+    ]);
+    const accessibleById = new Map(
+      [...liveScenarioCampaigns, ...rosterCampaignGroups.flat()]
+        .filter((campaign) => campaign.status === "active")
+        .map((campaign) => [campaign.id, campaign]),
+    );
+
+    return [...accessibleById.values()].sort(
+      (left, right) =>
+        Date.parse(right.updatedAt) - Date.parse(left.updatedAt) ||
+        left.name.localeCompare(right.name),
+    );
+  }
+
+  async listPlayerCampaignCharacters(input: {
+    campaignId: string;
+    userId: string;
+  }): Promise<Array<{ id: string; name: string }>> {
+    const [ownedCharacters, rosterEntries] = await Promise.all([
+      this.characterService.listCharacters(input.userId),
+      this.repository.listCampaignRosterEntries(input.campaignId),
+    ]);
+    const rosterCharacterIds = new Set(
+      rosterEntries
+        .filter((entry) => entry.sourceType === "character")
+        .map((entry) => entry.sourceId),
+    );
+
+    return ownedCharacters
+      .filter((character) => rosterCharacterIds.has(character.id))
+      .map((character) => ({ id: character.id, name: character.name }));
+  }
+
   async getCampaignById(campaignId: string): Promise<Campaign | null> {
     return this.repository.getCampaignById(campaignId);
   }
@@ -73,6 +129,8 @@ export class CampaignService {
   }
 
   async addCampaignRosterEntry(input: {
+    actorIsAdmin?: boolean;
+    actorUserId?: string;
     campaignId: string;
     category: CampaignRosterCategory;
     createdByUserId?: string | null;
@@ -140,6 +198,31 @@ export class CampaignService {
     });
   }
 
+  async createCampaignNpc(input: {
+    campaignId: string;
+    createdByUserId?: string;
+    description?: string;
+    gmUserId: string;
+    kind: ReusableEntity["kind"];
+    name: string;
+    notes?: string;
+    snapshot?: unknown;
+  }): Promise<{ entity: ReusableEntity; rosterEntry: CampaignRosterEntry }> {
+    return this.repository.createCampaignNpcWithRosterEntry({
+      campaignId: input.campaignId,
+      createdByUserId: input.createdByUserId ?? input.gmUserId,
+      description: input.description ?? null,
+      gmUserId: input.gmUserId,
+      kind: input.kind,
+      name: input.name.trim(),
+      notes: input.notes ?? null,
+      snapshot: normalizeCampaignNpcSnapshot({
+        campaignId: input.campaignId,
+        snapshot: input.snapshot,
+      }),
+    });
+  }
+
   async listReusableEntitiesByGameMaster(gmUserId: string): Promise<ReusableEntity[]> {
     return this.repository.listReusableEntitiesByGameMaster(gmUserId);
   }
@@ -204,6 +287,9 @@ export class CampaignService {
   }
 
   private async resolveCampaignRosterLabel(input: {
+    actorIsAdmin?: boolean;
+    actorUserId?: string;
+    campaignId: string;
     category: CampaignRosterCategory;
     sourceId: string;
     sourceType: CampaignRosterSourceType;
@@ -218,18 +304,37 @@ export class CampaignService {
       return character.name;
     }
 
-    const entity = await this.repository.getReusableEntityById(input.sourceId);
-
-    if (!entity) {
-      throw new Error("Reusable entity not found.");
-    }
-
     if (input.sourceType === "template" && input.category !== "template") {
       throw new Error("Template roster entries must use the template category.");
     }
 
     if (input.sourceType === "reusableEntity" && input.category === "template") {
       throw new Error("Reusable entity roster entries cannot use the template category.");
+    }
+
+    const entity = await this.repository.getReusableEntityById(input.sourceId);
+
+    if (!entity) {
+      throw new Error("Reusable entity not found.");
+    }
+
+    if (input.sourceType === "reusableEntity") {
+      const campaign = await this.repository.getCampaignById(input.campaignId);
+      const isOwnedRequest =
+        campaign?.gmUserId === input.actorUserId && entity.gmUserId === input.actorUserId;
+
+      if (!campaign || (!input.actorIsAdmin && !isOwnedRequest)) {
+        throw new Error("Reusable entity not found.");
+      }
+
+      const snapshot =
+        entity.snapshot && typeof entity.snapshot === "object" && !Array.isArray(entity.snapshot)
+          ? (entity.snapshot as Record<string, unknown>)
+          : undefined;
+
+      if (snapshot?.actorClass === "campaign_npc" && snapshot.campaignId !== input.campaignId) {
+        throw new Error("Reusable entity not found.");
+      }
     }
 
     return entity.name;

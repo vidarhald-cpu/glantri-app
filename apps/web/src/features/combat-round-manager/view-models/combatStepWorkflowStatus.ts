@@ -1,0 +1,197 @@
+import type { CombatStepAutomationRunResult } from "@glantri/domain";
+
+export interface CombatStepWorkflowStatusPresentation {
+  completion?: string;
+  operationLabel: string;
+  processedSummary: string;
+  stopMessage?: string;
+  stopParticipantLabel?: string;
+}
+
+function isCombatExperienceRun(result: CombatStepAutomationRunResult): boolean {
+  if (result.identity.operationFamily !== "roll_remaining") return false;
+  return result.identity.startProcessId
+    ? result.identity.startProcessId.includes(":process:combat_experience")
+    : result.identity.startingStep === "select_actions";
+}
+
+function isHealthRun(result: CombatStepAutomationRunResult): boolean {
+  return (
+    result.identity.operationFamily === "roll_remaining" &&
+    result.identity.startProcessFamily === "health_bleed"
+  );
+}
+
+function isObservationRun(result: CombatStepAutomationRunResult): boolean {
+  return (
+    result.identity.operationFamily === "roll_remaining" &&
+    result.identity.startProcessFamily === "observation"
+  );
+}
+
+function isContinuedContactRun(result: CombatStepAutomationRunResult): boolean {
+  return (
+    result.identity.operationFamily === "roll_remaining" &&
+    result.identity.startProcessFamily === "continued_contact"
+  );
+}
+
+function isDistanceRun(result: CombatStepAutomationRunResult): boolean {
+  return (
+    result.identity.operationFamily === "roll_remaining" &&
+    result.identity.startProcessFamily === "ordinary_distance_roll"
+  );
+}
+
+function operationLabel(result: CombatStepAutomationRunResult): string {
+  if (result.identity.operationFamily === "roll_remaining") {
+    if (isHealthRun(result)) {
+      return "Roll remaining GM Health checks";
+    }
+    if (isObservationRun(result)) {
+      return "Roll remaining GM Observe checks";
+    }
+    if (isContinuedContactRun(result)) {
+      return "Roll remaining GM Continued Contact checks";
+    }
+    if (isDistanceRun(result)) {
+      return "Roll remaining GM distance-control checks";
+    }
+    if (isCombatExperienceRun(result)) {
+      return "Roll remaining GM Combat Experience";
+    }
+    return result.identity.startingStep === "initiative_phase_2"
+      ? "Roll remaining GM Phase 2 initiative"
+      : "Roll remaining GM Phase 1 initiative";
+  }
+  if (result.identity.operationFamily === "accept_remaining") {
+    if (result.identity.startingStep === "select_actions") {
+      return "Accept remaining NPC declarations";
+    }
+    return result.identity.startingStep === "review_phase_2_modifiers"
+      ? "Accept remaining NPC M2 reviews"
+      : "Accept remaining NPC M1 reviews";
+  }
+  return "Complete remaining GM work";
+}
+
+function stopMessage(result: CombatStepAutomationRunResult): string | undefined {
+  switch (result.stopReason) {
+    case "end_of_step":
+      return undefined;
+    case "player_action_required":
+      return isCombatExperienceRun(result) ||
+        isHealthRun(result) ||
+        isObservationRun(result) ||
+        isContinuedContactRun(result) ||
+        isDistanceRun(result)
+        ? "Player roll required."
+        : "Player action required.";
+    case "gm_decision_required":
+      return "GM decision required.";
+    case "warning_requires_acknowledgement":
+      return "Review the warning before continuing.";
+    case "invalid_proposal":
+      return "Previous declaration is no longer valid. GM declaration required.";
+    case "target_invalid":
+      return "Previous target is no longer valid. GM declaration required.";
+    case "participant_not_gm_controlled":
+      return "This participant is not GM controlled.";
+    case "stale_revision":
+    case "task_changed":
+      return "Combat state changed.";
+    case "unsupported_task":
+      return "This task is not supported by the workflow.";
+    case "incomplete_legacy_state":
+      return "This combat state requires manual review.";
+    case "hidden_choice":
+      return "A hidden choice requires attention.";
+    case "modifier_review_required":
+      return "Modifier review required.";
+    case "declaration_review_required":
+      return "Declaration review required.";
+    case "combat_experience_review_required":
+      return "Combat Experience requires GM review.";
+    case "effect_review_required":
+      return "Effect review required.";
+    case "observation_review_required":
+      return "Observe relationship requires review.";
+    case "continued_contact_review_required":
+      return "Continued Contact requires GM review.";
+    case "distance_decision_required":
+      return "Distance decision required.";
+    case "distance_calculation_review_required":
+      return "Distance calculation requires review.";
+    case "distance_review_required":
+      return "GM distance review required.";
+    case "roll_not_eligible":
+      return "This roll requires manual attention.";
+    case "safety_limit_reached":
+      return "The workflow reached its safe task limit.";
+    case "persistence_failure":
+      return "Could not continue.";
+  }
+}
+
+export function buildCombatStepWorkflowStatusPresentation(input: {
+  participantLabelsById: ReadonlyMap<string, string>;
+  result: CombatStepAutomationRunResult;
+}): CombatStepWorkflowStatusPresentation {
+  const { result } = input;
+  const initiative = result.identity.operationFamily === "roll_remaining";
+  const combatExperience = isCombatExperienceRun(result);
+  const health = isHealthRun(result);
+  const observation = isObservationRun(result);
+  const continuedContact = isContinuedContactRun(result);
+  const distance = isDistanceRun(result);
+  const declarations =
+    result.identity.operationFamily === "accept_remaining" &&
+    result.identity.startingStep === "select_actions";
+  const processedSummary = distance
+    ? `Rolled ${result.processedCount} NPC distance check${result.processedCount === 1 ? "" : "s"}.`
+    : continuedContact
+      ? `Rolled ${result.processedCount} Continued Contact check${result.processedCount === 1 ? "" : "s"}.`
+      : observation
+        ? `Rolled ${result.processedCount} NPC Observe check${result.processedCount === 1 ? "" : "s"}.`
+        : health
+          ? `Rolled ${result.processedCount} NPC Health check${result.processedCount === 1 ? "" : "s"}.`
+          : combatExperience
+            ? `Rolled ${result.processedCount} NPC Combat Experience check${result.processedCount === 1 ? "" : "s"}.`
+            : initiative
+              ? `Rolled ${result.processedCount} NPC initiative${result.processedCount === 1 ? "" : "s"}.`
+              : declarations
+                ? `Accepted ${result.processedCount} NPC declaration${result.processedCount === 1 ? "" : "s"}.`
+                : `Accepted ${result.processedCount} NPC review${result.processedCount === 1 ? "" : "s"}.`;
+  const completion = result.stepComplete
+    ? distance
+      ? "Completed distance rolls."
+      : continuedContact
+        ? "Completed Continued Contact maintenance."
+        : observation
+          ? "Completed Observe work."
+          : health
+            ? "Completed Health/Bleed work."
+            : combatExperience
+              ? "Completed Combat Experience."
+              : result.identity.startingStep === "initiative_phase_1"
+                ? "Completed Phase 1 initiative."
+                : result.identity.startingStep === "initiative_phase_2"
+                  ? "Completed Phase 2 initiative."
+                  : result.identity.startingStep === "review_action_modifiers"
+                    ? "Completed M1."
+                    : result.identity.startingStep === "select_actions"
+                      ? "Completed DE."
+                      : result.identity.startingStep === "review_phase_2_modifiers"
+                        ? "Completed M2."
+                        : "Completed the step."
+    : undefined;
+  return {
+    completion,
+    operationLabel: operationLabel(result),
+    processedSummary,
+    stopMessage: stopMessage(result),
+    stopParticipantLabel: result.stopParticipantId
+      ? (input.participantLabelsById.get(result.stopParticipantId) ?? "Participant")
+      : undefined,
+  };
+}

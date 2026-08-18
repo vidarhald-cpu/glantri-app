@@ -1,5 +1,9 @@
 import {
+  COMBAT_PRIMARY_ACTION_IDS,
+  COMBAT_SECONDARY_ACTION_IDS,
   getCombatDeclarationActionLabel,
+  isCombatDeclarationActionAvailable,
+  projectCombatDeclarationCompatibility,
   type ScenarioCombatModifierEntry,
   type ScenarioParticipantCombatContext,
   type ScenarioParticipantIncomingAttackSide,
@@ -18,9 +22,11 @@ export type PlayerEncounterActionId =
   | "counterattack"
   | "observe_opponent"
   | "offensive_parry"
+  | "parry"
   | "parry_disarm"
   | "disarm"
   | "break_off_engagement"
+  | "move_only"
   | "other";
 
 export type PlayerEncounterMovementId =
@@ -70,27 +76,122 @@ export interface PlayerEncounterOpponentOption {
   id: string;
 }
 
-export const PLAYER_ENCOUNTER_ACTION_OPTIONS: PlayerEncounterOption<PlayerEncounterActionId>[] = [
+const ALL_PLAYER_ENCOUNTER_ACTION_OPTIONS: PlayerEncounterOption<PlayerEncounterActionId>[] = [
   { label: getCombatDeclarationActionLabel("attack_parry"), value: "attack_parry" },
   { label: getCombatDeclarationActionLabel("parry_attack"), value: "parry_attack" },
   { label: "Double Attack", value: "double_attack" },
   { label: "Feint - Attack", value: "feint_attack" },
   { label: "Adjust Distance-Attack", value: "adjust_range_attack" },
   { label: "Counterattack", value: "counterattack" },
-  { label: "Observe Opponent", value: "observe_opponent" },
   { label: "Offensive Parry", value: "offensive_parry" },
+  { label: getCombatDeclarationActionLabel("parry"), value: "parry" },
   { label: "Parry - Disarm", value: "parry_disarm" },
   { label: "Disarm", value: "disarm" },
   { label: "Break Off Engagement", value: "break_off_engagement" },
+  { label: "Move only", value: "move_only" },
   { label: "Other", value: "other" },
 ];
+
+const ALL_PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS: PlayerEncounterOption<PlayerEncounterActionId>[] =
+  [
+    { label: getCombatDeclarationActionLabel("attack_parry"), value: "attack_parry" },
+    { label: getCombatDeclarationActionLabel("parry_attack"), value: "parry_attack" },
+    { label: "Double Attack", value: "double_attack" },
+    { label: "Feint - Attack", value: "feint_attack" },
+    { label: "Adjust Distance-Attack", value: "adjust_range_attack" },
+    { label: "Counterattack", value: "counterattack" },
+    { label: getCombatDeclarationActionLabel("observe_opponent"), value: "observe_opponent" },
+    { label: "Offensive Parry", value: "offensive_parry" },
+    { label: "Parry - Disarm", value: "parry_disarm" },
+    { label: "Disarm", value: "disarm" },
+    { label: "Break Off Engagement", value: "break_off_engagement" },
+    { label: "Other", value: "other" },
+  ];
+
+export const PLAYER_ENCOUNTER_ACTION_OPTIONS = ALL_PLAYER_ENCOUNTER_ACTION_OPTIONS.filter(
+  (option) => isCombatDeclarationActionAvailable({ actionId: option.value, kind: "primary" }),
+);
+
+export const PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS =
+  ALL_PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS.filter((option) =>
+    isCombatDeclarationActionAvailable({ actionId: option.value, kind: "secondary" }),
+  );
+
+export function getPlayerEncounterPrimaryActionOptions(
+  secondaryActionId?: PlayerEncounterActionId | "",
+): readonly PlayerEncounterOption<PlayerEncounterActionId>[] {
+  const compatibleActionIds = new Set(
+    projectCombatDeclarationCompatibility({ secondaryAction: secondaryActionId || undefined })
+      .compatiblePrimaryActions,
+  );
+  return PLAYER_ENCOUNTER_ACTION_OPTIONS.filter((option) =>
+    compatibleActionIds.has(
+      option.value as "move_only" | (typeof COMBAT_PRIMARY_ACTION_IDS)[number],
+    ),
+  );
+}
+
+export function getPlayerEncounterSecondaryActionOptions(
+  actionId?: PlayerEncounterActionId | "",
+): readonly PlayerEncounterOption<PlayerEncounterActionId>[] {
+  const compatibleActionIds = new Set(
+    projectCombatDeclarationCompatibility({ primaryAction: actionId || undefined })
+      .compatibleSecondaryActions,
+  );
+  return PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS.filter((option) =>
+    compatibleActionIds.has(option.value as (typeof COMBAT_SECONDARY_ACTION_IDS)[number]),
+  );
+}
+
+export function getPlayerEncounterDeclarationCompatibilityMessage(input: {
+  actionId?: PlayerEncounterActionId | "";
+  movementKind?: string;
+  secondaryActionId?: PlayerEncounterActionId | "";
+}): string | undefined {
+  const actionId = input.actionId || undefined;
+  const secondaryActionId = input.secondaryActionId || undefined;
+  const projection = projectCombatDeclarationCompatibility({
+    movementKind: input.movementKind,
+    primaryAction: actionId,
+    secondaryAction: secondaryActionId,
+  });
+  if (projection.valid) return undefined;
+
+  if (projection.status === "unsupported") {
+    const unsupportedAction = [
+      actionId ? { actionId, kind: "primary" as const } : undefined,
+      secondaryActionId ? { actionId: secondaryActionId, kind: "secondary" as const } : undefined,
+    ].find((selection) => selection && !isCombatDeclarationActionAvailable(selection));
+    return unsupportedAction
+      ? `${getPlayerEncounterActionLabel(unsupportedAction.actionId)} is unavailable and cannot be declared.`
+      : "This action selection is unavailable and cannot be declared.";
+  }
+
+  if (secondaryActionId && !actionId) {
+    return `Choose a compatible primary action for ${getPlayerEncounterActionLabel(secondaryActionId)}.`;
+  }
+
+  if (actionId && secondaryActionId) {
+    return `${getPlayerEncounterActionLabel(actionId)} cannot be combined with ${getPlayerEncounterActionLabel(secondaryActionId)}. Choose a compatible primary action or remove the secondary action.`;
+  }
+
+  if (actionId && input.movementKind) {
+    return `${getPlayerEncounterActionLabel(actionId)} cannot be combined with that movement. Choose another movement intent.`;
+  }
+
+  return projection.message;
+}
 
 export function isPlayerEncounterActionId(value: unknown): value is PlayerEncounterActionId {
   if (typeof value !== "string") {
     return false;
   }
 
-  return PLAYER_ENCOUNTER_ACTION_OPTIONS.some((option) => option.value === value);
+  return (
+    (COMBAT_PRIMARY_ACTION_IDS as readonly string[]).includes(value) ||
+    (COMBAT_SECONDARY_ACTION_IDS as readonly string[]).includes(value) ||
+    value === "move_only"
+  );
 }
 
 export const PLAYER_ENCOUNTER_MOVEMENT_OPTIONS: PlayerEncounterOption<PlayerEncounterMovementId>[] =
@@ -283,13 +384,15 @@ export function evaluatePlayerEncounterParryLegality(input: {
   };
 }
 
-export function getPlayerEncounterActionLabel(actionId: PlayerEncounterActionId | ""): string {
+export function getPlayerEncounterActionLabel(actionId: string): string {
   if (!actionId) {
     return "Open";
   }
 
   return (
-    PLAYER_ENCOUNTER_ACTION_OPTIONS.find((option) => option.value === actionId)?.label ?? "Open"
+    [...ALL_PLAYER_ENCOUNTER_ACTION_OPTIONS, ...ALL_PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS].find(
+      (option) => option.value === actionId,
+    )?.label ?? "Open"
   );
 }
 
@@ -312,9 +415,7 @@ export function isPlayerEncounterAttackAction(actionId: PlayerEncounterActionId 
     actionId === "parry_attack" ||
     actionId === "double_attack" ||
     actionId === "feint_attack" ||
-    actionId === "adjust_range_attack" ||
-    actionId === "counterattack" ||
-    actionId === "disarm"
+    actionId === "adjust_range_attack"
   );
 }
 
@@ -323,7 +424,7 @@ export function isPlayerEncounterDefenseAction(actionId: PlayerEncounterActionId
     actionId === "attack_parry" ||
     actionId === "parry_attack" ||
     actionId === "offensive_parry" ||
-    actionId === "parry_disarm"
+    actionId === "parry"
   );
 }
 

@@ -3,6 +3,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import { AuthService } from "@glantri/database";
 
+import { recordCombatPerformanceCheckpoint } from "./combatPerformance";
+
 export const SESSION_COOKIE_NAME = "glantri_session";
 
 const DEFAULT_WEB_ORIGIN = "http://localhost:3000";
@@ -34,7 +36,10 @@ export function applyLocalCors(app: FastifyInstance): void {
       reply.header("access-control-allow-origin", allowedOrigin);
       reply.header("access-control-allow-credentials", "true");
       reply.header("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-      reply.header("access-control-allow-headers", "content-type");
+      reply.header(
+        "access-control-allow-headers",
+        "content-type,x-glantri-combat-command,x-glantri-combat-correlation-id,x-glantri-combat-response",
+      );
       reply.header("vary", "origin");
     }
 
@@ -107,6 +112,7 @@ export async function requireAuthenticatedUser(
   authService = new AuthService()
 ): Promise<AuthUser | null> {
   const user = await getAuthenticatedUser(request, authService);
+  recordCombatPerformanceCheckpoint("authentication_complete");
 
   if (!user) {
     await reply.code(401).send({

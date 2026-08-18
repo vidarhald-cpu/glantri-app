@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { createPrismaCharacterRepository } from "../repositories/characterRepository";
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
-import { createTestUser, createTestCharacter } from "../testing/factories";
+import { createTestCampaign, createTestCharacter, createTestUser } from "../testing/factories";
 import { CharacterService } from "./characterService";
 
 const prisma = getTestPrismaClient();
@@ -62,6 +62,45 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(forB[0].name).toBe("Character B");
     });
 
+    it("limits a GM list to owned characters and characters rostered in that GM's campaigns", async () => {
+      const repository = createPrismaCharacterRepository(prisma!);
+      const service = new CharacterService(repository);
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const otherGm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const player = await createTestUser(prisma!);
+      const ownedByGm = await createTestCharacter(prisma!, gm.id, { name: "GM-owned" });
+      const rostered = await createTestCharacter(prisma!, player.id, { name: "Rostered" });
+      const outside = await createTestCharacter(prisma!, player.id, { name: "Outside" });
+      const campaign = await createTestCampaign(prisma!, gm.id);
+      const otherCampaign = await createTestCampaign(prisma!, otherGm.id);
+      await prisma!.campaignRosterEntry.createMany({
+        data: [
+          {
+            campaignId: campaign.id,
+            category: "pc",
+            sourceId: rostered.id,
+            sourceType: "character",
+          },
+          {
+            campaignId: otherCampaign.id,
+            category: "pc",
+            sourceId: outside.id,
+            sourceType: "character",
+          },
+        ],
+      });
+
+      const accessible = await service.listAccessibleCharacters({
+        isAdmin: false,
+        isGameMaster: true,
+        userId: gm.id,
+      });
+
+      expect(accessible.map((character) => character.id).sort()).toEqual(
+        [ownedByGm.id, rostered.id].sort(),
+      );
+    });
+
     it("getOwnedCharacter returns the character when the ownerId matches", async () => {
       const repository = createPrismaCharacterRepository(prisma!);
       const service = new CharacterService(repository);
@@ -81,7 +120,10 @@ if (!process.env.DATABASE_URL_TEST) {
       const service = new CharacterService(repository);
 
       const user = await createTestUser(prisma!);
-      const character = await createTestCharacter(prisma!, user.id, { level: 2, name: "Serialized Hero" });
+      const character = await createTestCharacter(prisma!, user.id, {
+        level: 2,
+        name: "Serialized Hero",
+      });
 
       const result = await service.getCharacterById(character.id);
 
@@ -103,7 +145,8 @@ if (!process.env.DATABASE_URL_TEST) {
 
       const result = await service.saveExistingCharacter({
         build: existing!.build,
-        characterId: "nonexistent-character-id-xyz"
+        characterId: "nonexistent-character-id-xyz",
+        expectedUpdatedAt: existing!.updatedAt,
       });
 
       expect(result).toBeNull();
@@ -123,7 +166,8 @@ if (!process.env.DATABASE_URL_TEST) {
 
       const result = await service.saveExistingCharacter({
         build: updatedBuild,
-        characterId: character.id
+        characterId: character.id,
+        expectedUpdatedAt: existing!.updatedAt,
       });
 
       expect(result).not.toBeNull();
@@ -132,6 +176,123 @@ if (!process.env.DATABASE_URL_TEST) {
 
       const refetched = await service.getCharacterById(character.id);
       expect(refetched!.name).toBe("After Update");
+    });
+
+    it("rejects divergent finalization under an existing id and leaves the canonical row unchanged", async () => {
+      const repository = createPrismaCharacterRepository(prisma!);
+      const service = new CharacterService(repository);
+      const owner = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, owner.id, { name: "Canonical" });
+      const canonical = await service.getCharacterById(character.id);
+
+      await expect(
+        service.saveCharacter({
+          build: { ...canonical!.build, name: "Divergent retry" },
+          id: character.id,
+          name: "Divergent retry",
+          ownerId: owner.id,
+        }),
+      ).rejects.toMatchObject({ code: "character_already_exists" });
+
+      await expect(service.getCharacterById(character.id)).resolves.toMatchObject({
+        build: canonical!.build,
+        name: "Canonical",
+        ownerId: owner.id,
+        updatedAt: canonical!.updatedAt,
+      });
+      await expect(prisma!.character.count({ where: { id: character.id } })).resolves.toBe(1);
+    });
+
+    it("rejects a stale second update and preserves the newer server build", async () => {
+      const repository = createPrismaCharacterRepository(prisma!);
+      const service = new CharacterService(repository);
+      const user = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, user.id, { name: "Original" });
+      await prisma!.character.update({
+        data: { updatedAt: new Date("2026-01-01T00:00:00.000Z") },
+        where: { id: character.id },
+      });
+      const original = await service.getCharacterById(character.id);
+
+      const first = await service.saveExistingCharacter({
+        build: { ...original!.build, name: "First writer" },
+        characterId: character.id,
+        expectedUpdatedAt: original!.updatedAt,
+      });
+
+      await expect(
+        service.saveExistingCharacter({
+          build: { ...original!.build, name: "Stale writer" },
+          characterId: character.id,
+          expectedUpdatedAt: original!.updatedAt,
+        }),
+      ).rejects.toMatchObject({ code: "stale_character" });
+      expect(first?.name).toBe("First writer");
+      await expect(service.getCharacterById(character.id)).resolves.toMatchObject({
+        name: "First writer",
+      });
+    });
+
+    it("deletes the canonical character while preserving an immutable scenario snapshot", async () => {
+      const repository = createPrismaCharacterRepository(prisma!);
+      const service = new CharacterService(repository);
+      const owner = await createTestUser(prisma!);
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const campaign = await createTestCampaign(prisma!, gm.id);
+      const character = await createTestCharacter(prisma!, owner.id, { name: "Snapshotted Hero" });
+      await prisma!.campaignRosterEntry.create({
+        data: {
+          campaignId: campaign.id,
+          category: "pc",
+          sourceId: character.id,
+          sourceType: "character",
+        },
+      });
+      const scenario = await prisma!.scenario.create({
+        data: {
+          campaignId: campaign.id,
+          description: "Snapshot boundary",
+          kind: "mixed",
+          name: "Recorded scene",
+          status: "draft",
+        },
+      });
+      const snapshot = {
+        build: { id: character.id, name: character.name },
+        displayName: character.name,
+        sourceUpdatedAt: "2026-08-13T00:00:00.000Z",
+      };
+      const participant = await prisma!.scenarioParticipant.create({
+        data: {
+          characterId: character.id,
+          joinSource: "gm_added",
+          role: "player_character",
+          scenarioId: scenario.id,
+          snapshotJson: snapshot,
+          sourceType: "character",
+          stateJson: { health: { currentHp: 8 } },
+        },
+      });
+      const existing = await service.getCharacterById(character.id);
+
+      await service.deleteExistingCharacter({
+        characterId: character.id,
+        expectedUpdatedAt: existing!.updatedAt,
+      });
+
+      await expect(service.getCharacterById(character.id)).resolves.toBeNull();
+      await expect(
+        prisma!.campaignRosterEntry.count({
+          where: { sourceId: character.id, sourceType: "character" },
+        }),
+      ).resolves.toBe(0);
+      await expect(
+        prisma!.scenarioParticipant.findUnique({ where: { id: participant.id } }),
+      ).resolves.toMatchObject({
+        characterId: null,
+        snapshotJson: snapshot,
+        stateJson: { health: { currentHp: 8 } },
+      });
     });
   });
 }

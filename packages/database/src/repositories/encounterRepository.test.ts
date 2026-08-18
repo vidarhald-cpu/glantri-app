@@ -4,10 +4,12 @@ import type { EncounterSession } from "@glantri/domain";
 
 const mocks = vi.hoisted(() => ({
   prisma: {
+    $transaction: vi.fn(),
     encounter: {
       create: vi.fn(),
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
       update: vi.fn(),
     },
   },
@@ -78,6 +80,22 @@ describe("encounterRepository trusted identifiers", () => {
 
   it("updates the trusted encounter id instead of the body id", async () => {
     const repository = createPrismaEncounterRepository();
+    const persistedUpdatedAt = "2026-01-01T00:00:01.000Z";
+    mocks.prisma.$transaction.mockImplementation(async (callback) => callback(mocks.prisma));
+    mocks.prisma.encounter.findUniqueOrThrow.mockResolvedValue({
+      activeCombatState: null,
+      archivedCombatRounds: [],
+      campaignId: "campaign-1",
+      combatArchiveCount: 0,
+      combatStorageMode: "legacy",
+      createdAt: new Date(baseSession.createdAt),
+      id: baseSession.id,
+      name: baseSession.title,
+      scenarioId: "scenario-1",
+      sessionJson: baseSession,
+      status: baseSession.status,
+      updatedAt: new Date(baseSession.updatedAt),
+    });
     mocks.prisma.encounter.update.mockImplementation(async ({ data, where }) => ({
       campaignId: data.campaignId,
       createdAt: new Date(baseSession.createdAt),
@@ -86,7 +104,7 @@ describe("encounterRepository trusted identifiers", () => {
       scenarioId: data.scenarioId,
       sessionJson: data.sessionJson,
       status: data.status,
-      updatedAt: new Date(baseSession.updatedAt),
+      updatedAt: new Date(persistedUpdatedAt),
     }));
 
     const encounter = await repository.updateEncounter({
@@ -117,6 +135,52 @@ describe("encounterRepository trusted identifiers", () => {
       campaignId: "campaign-1",
       id: "encounter-1",
       scenarioId: "scenario-1",
+      updatedAt: persistedUpdatedAt,
+    });
+    expect(mocks.prisma.encounter.update.mock.calls[0]?.[0].data.sessionJson).toMatchObject({
+      updatedAt: baseSession.updatedAt,
+    });
+  });
+
+  it("loads scenario summaries without selecting the full session JSON", async () => {
+    const repository = createPrismaEncounterRepository();
+    mocks.prisma.encounter.findMany.mockResolvedValue([
+      {
+        campaignId: "campaign-1",
+        createdAt: new Date(baseSession.createdAt),
+        id: baseSession.id,
+        name: baseSession.title,
+        scenarioId: "scenario-1",
+        status: baseSession.status,
+        updatedAt: new Date(baseSession.updatedAt),
+      },
+    ]);
+
+    await expect(
+      repository.listEncounterSummariesByScenario("scenario-1"),
+    ).resolves.toEqual([
+      {
+        campaignId: "campaign-1",
+        createdAt: baseSession.createdAt,
+        id: baseSession.id,
+        scenarioId: "scenario-1",
+        status: baseSession.status,
+        title: baseSession.title,
+        updatedAt: baseSession.updatedAt,
+      },
+    ]);
+    expect(mocks.prisma.encounter.findMany).toHaveBeenCalledWith({
+      orderBy: { updatedAt: "desc" },
+      select: {
+        campaignId: true,
+        createdAt: true,
+        id: true,
+        name: true,
+        scenarioId: true,
+        status: true,
+        updatedAt: true,
+      },
+      where: { scenarioId: "scenario-1" },
     });
   });
 });

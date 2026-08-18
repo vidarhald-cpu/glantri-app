@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCombatAdjustDistanceProposalId,
+  COMBAT_ADJUST_DISTANCE_RESULT_TABLE,
   combatAdjustDistanceProposalSchema,
   getCombatAdjustDistanceDirection,
   resolveCombatAdjustDistanceStandardProposal,
@@ -16,7 +17,12 @@ describe("Adjust Distance-Attack proposal rules", () => {
         defenderTotal: 18,
         requestedDistance: 2,
       }),
-    ).toEqual({ difference: 0, outcome: "unsuccessful", proposedDistance: 3 });
+    ).toEqual({
+      difference: 0,
+      outcome: "unsuccessful",
+      proposedDistance: 3,
+      tableRowId: "tie_or_opponent_wins",
+    });
     expect(
       resolveCombatAdjustDistanceStandardProposal({
         attackerTotal: 19,
@@ -24,7 +30,12 @@ describe("Adjust Distance-Attack proposal rules", () => {
         defenderTotal: 18,
         requestedDistance: 2,
       }),
-    ).toEqual({ difference: 1, outcome: "successful", proposedDistance: 2 });
+    ).toEqual({
+      difference: 1,
+      outcome: "successful",
+      proposedDistance: 2,
+      tableRowId: "initiator_wins",
+    });
   });
 
   it("allows the defender to grant the requested distance without rolls", () => {
@@ -34,7 +45,15 @@ describe("Adjust Distance-Attack proposal rules", () => {
         defenderAllowed: true,
         requestedDistance: 2,
       }),
-    ).toEqual({ outcome: "allowed", proposedDistance: 2 });
+    ).toEqual({ outcome: "allowed", proposedDistance: 2, tableRowId: "defender_allows" });
+  });
+
+  it("uses one structured canonical table for all standard outcomes", () => {
+    expect(COMBAT_ADJUST_DISTANCE_RESULT_TABLE).toEqual([
+      expect.objectContaining({ id: "defender_allows", outcome: "allowed" }),
+      expect.objectContaining({ id: "initiator_wins", outcome: "successful" }),
+      expect.objectContaining({ id: "tie_or_opponent_wins", outcome: "unsuccessful" }),
+    ]);
   });
 
   it("derives direction and a deterministic proposal identity", () => {

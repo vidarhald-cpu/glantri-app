@@ -1,17 +1,10 @@
 import { z } from "zod";
 
-export const EquipmentCategorySchema = z.enum([
-  "weapon",
-  "shield",
-  "armor",
-  "gear",
-  "valuables",
-]);
+import { createEmptyEquipmentItemFacts, migrateLegacySpecialProperties } from "./itemFacts";
 
-export const SpecificityTypeSchema = z.enum([
-  "generic",
-  "specific",
-]);
+export const EquipmentCategorySchema = z.enum(["weapon", "shield", "armor", "gear", "valuables"]);
+
+export const SpecificityTypeSchema = z.enum(["generic", "specific"]);
 
 export const MaterialTypeSchema = z.enum([
   "steel",
@@ -26,26 +19,11 @@ export const MaterialTypeSchema = z.enum([
   "other",
 ]);
 
-export const QualityTypeSchema = z.enum([
-  "standard",
-  "extraordinary",
-]);
+export const QualityTypeSchema = z.enum(["standard", "extraordinary"]);
 
-export const CarryModeSchema = z.enum([
-  "equipped",
-  "on_person",
-  "backpack",
-  "mount",
-  "stored",
-]);
+export const CarryModeSchema = z.enum(["equipped", "on_person", "backpack", "mount", "stored"]);
 
-export const ItemConditionStateSchema = z.enum([
-  "intact",
-  "worn",
-  "damaged",
-  "broken",
-  "lost",
-]);
+export const ItemConditionStateSchema = z.enum(["intact", "worn", "damaged", "broken", "lost"]);
 
 export const StorageLocationTypeSchema = z.enum([
   "equipped_system",
@@ -61,10 +39,7 @@ export const StorageLocationTypeSchema = z.enum([
   "other",
 ]);
 
-export const LocationAvailabilityClassSchema = z.enum([
-  "with_you",
-  "elsewhere",
-]);
+export const LocationAvailabilityClassSchema = z.enum(["with_you", "elsewhere"]);
 
 export const WeaponHandlingClassSchema = z.enum([
   "one_handed",
@@ -77,23 +52,17 @@ export const WeaponHandlingClassSchema = z.enum([
   "other",
 ]);
 
-export const WeaponDamageClassSchema = z.enum([
-  "blunt",
-  "edged",
-  "pointed",
-]);
+export const WeaponDamageClassSchema = z.enum(["blunt", "edged", "pointed"]);
 
-export const CanonicalMeleeModeSchema = z.enum([
-  "slash",
-  "strike",
-  "thrust",
-]);
+export const CanonicalMeleeModeSchema = z.enum(["slash", "strike", "thrust"]);
 
-export const WeaponAttackModeProvenanceSchema = z.enum([
-  "imported",
-  "manual",
-  "derived",
-]);
+export const WeaponAttackModeProvenanceSchema = z.enum(["imported", "manual", "derived"]);
+
+export const WeaponAttackModeTypeSchema = z.enum(["melee", "missile", "thrown"]);
+
+export const WeaponDisarmCapabilitySchema = z.enum(["none", "trap"]);
+
+export const WeaponDisarmGripClassSchema = z.enum(["one_handed", "two_handed"]);
 
 export const EquipmentSpecialPropertiesSchema = z.object({
   magicEffects: z.array(z.string()).optional(),
@@ -103,6 +72,121 @@ export const EquipmentSpecialPropertiesSchema = z.object({
   roleplayTraits: z.array(z.string()).optional(),
   customNotes: z.string().nullable().optional(),
 });
+
+export const ItemFactVisibilitySchema = z.preprocess(
+  (value) => (value === "revealed" ? "revealed" : "gm_only"),
+  z.enum(["gm_only", "revealed"]),
+);
+
+export const WeaponInitiativeOverrideFactSchema = z.object({
+  id: z.string().trim().min(1),
+  kind: z.literal("weapon_initiative_override"),
+  scope: z.literal("all_attack_modes").default("all_attack_modes"),
+  unit: z.literal("initiative_points").default("initiative_points"),
+  value: z.number().int(),
+  visibility: ItemFactVisibilitySchema.default("gm_only"),
+});
+
+export const WeaponDisarmCapabilityOverrideFactSchema = z.object({
+  id: z.string().trim().min(1),
+  kind: z.literal("weapon_disarm_capability_override"),
+  scope: z.literal("all_attack_modes").default("all_attack_modes"),
+  value: WeaponDisarmCapabilitySchema,
+  visibility: ItemFactVisibilitySchema.default("gm_only"),
+});
+
+export const WeaponDisarmControlOverrideFactSchema = z.object({
+  id: z.string().trim().min(1),
+  kind: z.literal("weapon_disarm_control_override"),
+  scope: z.literal("all_attack_modes").default("all_attack_modes"),
+  unit: z.literal("control_rating").default("control_rating"),
+  value: z.number().int().min(1).max(6),
+  visibility: ItemFactVisibilitySchema.default("gm_only"),
+});
+
+export const EquipmentTemplateOverrideFactSchema = z.discriminatedUnion("kind", [
+  WeaponInitiativeOverrideFactSchema,
+  WeaponDisarmCapabilityOverrideFactSchema,
+  WeaponDisarmControlOverrideFactSchema,
+]);
+
+export const FinalAttackObDeltaFactSchema = z.object({
+  calculationStage: z.literal("final_attack_ob").default("final_attack_ob"),
+  id: z.string().trim().min(1),
+  kind: z.literal("final_attack_ob_delta"),
+  scope: z.literal("all_attack_modes").default("all_attack_modes"),
+  unit: z.literal("ob_points").default("ob_points"),
+  value: z.number().int(),
+  visibility: ItemFactVisibilitySchema.default("gm_only"),
+});
+
+export const DescriptiveItemTraitCategorySchema = z.enum([
+  "engraving",
+  "maker_mark",
+  "appearance",
+  "provenance",
+  "craftsmanship",
+  "history",
+  "material",
+  "inscription",
+  "other",
+]);
+
+export const DescriptiveItemTraitSchema = z.object({
+  category: DescriptiveItemTraitCategorySchema,
+  id: z.string().trim().min(1),
+  text: z.string().trim().min(1),
+  visibility: ItemFactVisibilitySchema.default("gm_only"),
+});
+
+export const UnsupportedItemCapabilitySchema = z.object({
+  id: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+  rulesText: z.string().trim().min(1),
+  usageText: z.string().trim().min(1).nullable().optional(),
+  visibility: ItemFactVisibilitySchema.default("gm_only"),
+});
+
+export const EquipmentItemFactsV1Schema = z
+  .object({
+    activeMechanics: z.array(FinalAttackObDeltaFactSchema).default([]),
+    descriptiveTraits: z.array(DescriptiveItemTraitSchema).default([]),
+    templateOverrides: z.array(EquipmentTemplateOverrideFactSchema).default([]),
+    unsupportedCapabilities: z.array(UnsupportedItemCapabilitySchema).default([]),
+    version: z.literal(1),
+  })
+  .superRefine((facts, ctx) => {
+    const ids = [
+      ...facts.templateOverrides,
+      ...facts.activeMechanics,
+      ...facts.descriptiveTraits,
+      ...facts.unsupportedCapabilities,
+    ].map((fact) => fact.id);
+
+    if (new Set(ids).size !== ids.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Item fact IDs must be unique.",
+      });
+    }
+
+    const overrideKinds = facts.templateOverrides.map((fact) => fact.kind);
+    if (new Set(overrideKinds).size !== overrideKinds.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Equipment template overrides do not stack by kind.",
+        path: ["templateOverrides"],
+      });
+    }
+
+    if (facts.activeMechanics.length > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "final_attack_ob_delta does not stack.",
+        path: ["activeMechanics"],
+      });
+    }
+  });
 
 export const ItemStorageAssignmentSchema = z.object({
   locationId: z.string(),
@@ -134,8 +218,18 @@ export const WeaponDurabilityProfileSchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
+export const ImportedWeaponSourceMetadataSchema = z.object({
+  workbook: z.string(),
+  sheet: z.string(),
+  row: z.number().int().positive(),
+  sourceRange: z.string(),
+  sourceColumns: z.record(z.string()),
+  rawRow: z.record(z.string()),
+});
+
 export const WeaponAttackModeSchema = z.object({
   id: z.string(),
+  attackType: WeaponAttackModeTypeSchema.nullable().optional(),
   label: z.string().nullable().optional(),
   order: z.number().int().nonnegative().nullable().optional(),
   canonicalMeleeMode: CanonicalMeleeModeSchema.nullable().optional(),
@@ -146,21 +240,27 @@ export const WeaponAttackModeSchema = z.object({
   obRaw: z.string().nullable().optional(),
   dmb: z.number().nullable().optional(),
   dmbRaw: z.string().nullable().optional(),
-  dmbFormula: z.object({
-    kind: z.enum(["numeric", "dice", "special", "unresolved"]),
-    raw: z.string(),
-    numericValue: z.number().nullable().optional(),
-    diceCount: z.number().int().positive().nullable().optional(),
-    diceSides: z.number().int().positive().nullable().optional(),
-    flatModifier: z.number().nullable().optional(),
-    textModifier: z.string().nullable().optional(),
-    specialValue: z.string().nullable().optional(),
-    note: z.string().nullable().optional(),
-  }).nullable().optional(),
+  dmbFormula: z
+    .object({
+      kind: z.enum(["numeric", "dice", "special", "unresolved"]),
+      raw: z.string(),
+      numericValue: z.number().nullable().optional(),
+      diceCount: z.number().int().positive().nullable().optional(),
+      diceSides: z.number().int().positive().nullable().optional(),
+      flatModifier: z.number().nullable().optional(),
+      textModifier: z.string().nullable().optional(),
+      specialValue: z.string().nullable().optional(),
+      note: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
   crit: z.string().nullable().optional(),
   secondCrit: z.string().nullable().optional(),
   armorModifier: z.string().nullable().optional(),
+  initiative: z.number().nullable().optional(),
+  range: z.string().nullable().optional(),
   provenance: WeaponAttackModeProvenanceSchema,
+  sourceMetadata: ImportedWeaponSourceMetadataSchema.nullable().optional(),
   notes: z.string().nullable().optional(),
 });
 
@@ -172,15 +272,6 @@ export const WeaponEncumbranceFormulaSchema = z.object({
   ammoValue: z.number().nonnegative().nullable().optional(),
   specialValue: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
-});
-
-export const ImportedWeaponSourceMetadataSchema = z.object({
-  workbook: z.string(),
-  sheet: z.string(),
-  row: z.number().int().positive(),
-  sourceRange: z.string(),
-  sourceColumns: z.record(z.string()),
-  rawRow: z.record(z.string()),
 });
 
 export const ImportedShieldSourceMetadataSchema = z.object({
@@ -304,6 +395,9 @@ export const WeaponTemplateSchema = EquipmentTemplateSchema.extend({
   manualEnrichment: WeaponTemplateManualEnrichmentSchema.nullable().optional(),
   formulaNormalization: WeaponTemplateFormulaNormalizationSchema.nullable().optional(),
   durabilityProfile: WeaponDurabilityProfileSchema.nullable().optional(),
+  disarmCapability: WeaponDisarmCapabilitySchema.nullable().optional(),
+  disarmGripClass: WeaponDisarmGripClassSchema.nullable().optional(),
+  disarmControlOverride: z.number().int().min(1).max(6).nullable().optional(),
 });
 
 export const ShieldTemplateSchema = EquipmentTemplateSchema.extend({
@@ -368,31 +462,99 @@ export const AnyEquipmentTemplateSchema = z.discriminatedUnion("category", [
   ValuableTemplateSchema,
 ]);
 
-export const EquipmentItemSchema = z.object({
-  id: z.string(),
-  characterId: z.string(),
-  templateId: z.string(),
-  category: EquipmentCategorySchema,
-  displayName: z.string().nullable().optional(),
-  specificityType: SpecificityTypeSchema,
-  quantity: z.number().positive(),
-  isStackable: z.boolean(),
-  material: MaterialTypeSchema,
-  quality: QualityTypeSchema,
-  storageAssignment: ItemStorageAssignmentSchema,
-  previousStorageAssignment: ItemStorageAssignmentSchema.nullable().optional(),
-  conditionState: ItemConditionStateSchema,
-  durabilityCurrent: z.number().int().nonnegative().nullable().optional(),
-  durabilityMax: z.number().int().positive().nullable().optional(),
-  encumbranceOverride: z.number().nonnegative().nullable().optional(),
-  valueOverride: z.number().nonnegative().nullable().optional(),
-  specialProperties: EquipmentSpecialPropertiesSchema.nullable().optional(),
-  notes: z.string().nullable().optional(),
-  isEquipped: z.boolean().nullable().optional(),
-  isFavorite: z.boolean().nullable().optional(),
-  acquiredFrom: z.string().nullable().optional(),
-  statusTags: z.array(z.string()).nullable().optional(),
-});
+function normalizeEquipmentItemInput(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+
+  const input = value as Record<string, unknown>;
+  const hasHolder = Object.prototype.hasOwnProperty.call(input, "holderCharacterId");
+  const hasCharacter = Object.prototype.hasOwnProperty.call(input, "characterId");
+  const holderCharacterId = hasHolder
+    ? input.holderCharacterId
+    : hasCharacter
+      ? input.characterId
+      : null;
+  const characterId = hasCharacter ? input.characterId : holderCharacterId;
+  const legacy = EquipmentSpecialPropertiesSchema.nullable().safeParse(input.specialProperties);
+  const legacyCustomNotes = legacy.success ? legacy.data?.customNotes?.trim() : undefined;
+  const existingNotes = typeof input.notes === "string" ? input.notes.trim() : "";
+
+  return {
+    ...input,
+    campaignContextId: input.campaignContextId ?? null,
+    characterId,
+    holderCharacterId,
+    itemFacts:
+      input.itemFacts ??
+      (legacy.success
+        ? migrateLegacySpecialProperties(legacy.data)
+        : createEmptyEquipmentItemFacts()),
+    notes: legacyCustomNotes
+      ? [existingNotes, legacyCustomNotes].filter(Boolean).join("\n\n")
+      : input.notes,
+    specialProperties: null,
+  };
+}
+
+const CanonicalEquipmentItemObjectSchema = z
+  .object({
+    acquiredFrom: z.string().nullable().optional(),
+    campaignContextId: z.string().nullable().default(null),
+    category: EquipmentCategorySchema,
+    characterId: z.string().nullable(),
+    conditionState: ItemConditionStateSchema,
+    displayName: z.string().nullable().optional(),
+    durabilityCurrent: z.number().int().nonnegative().nullable().optional(),
+    durabilityMax: z.number().int().positive().nullable().optional(),
+    encumbranceOverride: z.number().nonnegative().nullable().optional(),
+    holderCharacterId: z.string().nullable(),
+    id: z.string(),
+    isEquipped: z.boolean().nullable().optional(),
+    isFavorite: z.boolean().nullable().optional(),
+    isStackable: z.boolean(),
+    itemFacts: EquipmentItemFactsV1Schema.default(createEmptyEquipmentItemFacts),
+    material: MaterialTypeSchema,
+    notes: z.string().nullable().optional(),
+    previousStorageAssignment: ItemStorageAssignmentSchema.nullable().optional(),
+    quality: QualityTypeSchema,
+    quantity: z.number().positive(),
+    revision: z.string().datetime().optional(),
+    specialProperties: z.null().optional(),
+    specificityType: SpecificityTypeSchema,
+    statusTags: z.array(z.string()).nullable().optional(),
+    storageAssignment: ItemStorageAssignmentSchema.nullable(),
+    templateId: z.string(),
+    valueOverride: z.number().nonnegative().nullable().optional(),
+  })
+  .superRefine((item, ctx) => {
+    if (item.characterId !== item.holderCharacterId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "characterId must be derived from holderCharacterId.",
+        path: ["characterId"],
+      });
+    }
+  });
+
+export const CanonicalEquipmentItemSchema = z.preprocess(
+  normalizeEquipmentItemInput,
+  CanonicalEquipmentItemObjectSchema,
+);
+
+export const EquipmentItemSchema = z.preprocess(
+  normalizeEquipmentItemInput,
+  CanonicalEquipmentItemObjectSchema.refine(
+    (
+      item,
+    ): item is typeof item & {
+      characterId: string;
+      holderCharacterId: string;
+      storageAssignment: z.infer<typeof ItemStorageAssignmentSchema>;
+    } => item.holderCharacterId !== null && item.storageAssignment !== null,
+    "Character equipment requires a holder and storage assignment.",
+  ),
+);
 
 export const StorageLocationSchema = z.object({
   id: z.string(),
@@ -430,5 +592,6 @@ export type GearTemplateInput = z.input<typeof GearTemplateSchema>;
 export type ValuableTemplateInput = z.input<typeof ValuableTemplateSchema>;
 export type ItemStorageAssignmentInput = z.input<typeof ItemStorageAssignmentSchema>;
 export type EquipmentItemInput = z.input<typeof EquipmentItemSchema>;
+export type CanonicalEquipmentItemInput = z.input<typeof CanonicalEquipmentItemSchema>;
 export type StorageLocationInput = z.input<typeof StorageLocationSchema>;
 export type CharacterLoadoutInput = z.input<typeof CharacterLoadoutSchema>;

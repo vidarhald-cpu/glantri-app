@@ -1,20 +1,22 @@
 "use client";
 
+import Link from "next/link";
 import { Fragment, use, useEffect, useMemo, useState } from "react";
 import {
   type CarryMode,
+  type EquipmentItem,
   type ItemConditionState,
   type LocationAvailabilityClass,
   type MaterialType,
   type QualityType,
-  type StorageLocationType
+  type StorageLocationType,
 } from "@glantri/domain/equipment";
 
 import {
   getCharacterLocations,
   getInventoryMoveOptions,
   getInventoryRows,
-  getItemsGroupedForInventoryPage
+  getItemsGroupedForInventoryPage,
 } from "@/features/equipment/equipmentSelectors";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import {
@@ -25,14 +27,21 @@ import {
   moveCharacterEquipmentItemOnServer,
   removeCharacterStorageLocationOnServer,
   removeCharacterEquipmentItemOnServer,
-  updateServerCharacter,
   updateCharacterEquipmentMetadataOnServer,
-  updateCharacterEquipmentQuantityOnServer
+  updateCharacterEquipmentQuantityOnServer,
+} from "@/lib/api/equipmentClient";
+import {
+  getCurrentCharacterFromMutationConflict,
+  updateServerCharacter,
 } from "@/lib/api/localServiceClient";
 import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
 import type { LocalCharacterRecord } from "@/lib/offline/glantriDexie";
-import { LocalCharacterRepository } from "@/lib/offline/repositories/localCharacterRepository";
-import { UNNAMED_CHARACTER_PLACEHOLDER } from "@/lib/offline/repositories/localCharacterRepository";
+import {
+  buildServerBackedLocalCharacterRecord,
+  LocalCharacterRepository,
+  requireServerCharacterRevision,
+  UNNAMED_CHARACTER_PLACEHOLDER,
+} from "@/lib/offline/repositories/localCharacterRepository";
 import { getWorkbookCharacterSize } from "@/features/equipment/armorSummary";
 import { formatEncumbranceDisplay } from "@/features/equipment/displayFormatting";
 import {
@@ -44,6 +53,7 @@ import {
   getPlayerFacingEquipmentLocationTemplateOptions,
   getPlayerFacingEquipmentTemplateName,
 } from "@/features/equipment/playerFacingTemplateOptions";
+import { ItemFactsPresentation } from "@/features/equipment/components/ItemFactsPresentation";
 
 interface CharacterEquipmentPageProps {
   params: Promise<{
@@ -58,6 +68,17 @@ function formatLabel(value: string): string {
     .join(" ");
 }
 
+function hasPresentedItemFacts(item?: EquipmentItem): boolean {
+  const facts = item?.itemFacts;
+  return Boolean(
+    facts &&
+    (facts.templateOverrides.length > 0 ||
+      facts.activeMechanics.length > 0 ||
+      facts.descriptiveTraits.length > 0 ||
+      facts.unsupportedCapabilities.length > 0),
+  );
+}
+
 const materialOptions: MaterialType[] = [
   "steel",
   "bronze",
@@ -68,23 +89,17 @@ const materialOptions: MaterialType[] = [
   "stone",
   "silver",
   "gold",
-  "other"
+  "other",
 ];
 
 const qualityOptions: QualityType[] = ["standard", "extraordinary"];
-const conditionOptions: ItemConditionState[] = [
-  "intact",
-  "worn",
-  "damaged",
-  "broken",
-  "lost"
-];
+const conditionOptions: ItemConditionState[] = ["intact", "worn", "damaged", "broken", "lost"];
 const availabilityOptions: Array<{
   label: string;
   value: LocationAvailabilityClass;
 }> = [
   { label: "With you", value: "with_you" },
-  { label: "Elsewhere", value: "elsewhere" }
+  { label: "Elsewhere", value: "elsewhere" },
 ];
 
 const templateFilterOptions: Array<{ label: string; value: InventoryTemplateFilter }> = [
@@ -102,6 +117,7 @@ const localCharacterRepository = new LocalCharacterRepository();
 export default function CharacterEquipmentPage({ params }: CharacterEquipmentPageProps) {
   const { id } = use(params);
   const [characterRecord, setCharacterRecord] = useState<LocalCharacterRecord | null>(null);
+  const [recoveryRequired, setRecoveryRequired] = useState(false);
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
   const [characterSize, setCharacterSize] = useState<number | null>(null);
   const [characterName, setCharacterName] = useState(UNNAMED_CHARACTER_PLACEHOLDER);
@@ -144,27 +160,20 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
   >({});
   const rows = useMemo(
     () => (state ? getInventoryRows(state, id, characterSize) : []),
-    [state, id, characterSize]
+    [state, id, characterSize],
   );
   const locations = useMemo(() => (state ? getCharacterLocations(state, id) : []), [state, id]);
   const groupedSections = useMemo(
     () => (state ? getItemsGroupedForInventoryPage(state, id) : []),
-    [state, id]
+    [state, id],
   );
   const hasVisibleLocationGroups = groupedSections.some((section) => section.groups.length > 0);
-  const rowsByItemId = useMemo(
-    () => new Map(rows.map((row) => [row.itemId, row])),
-    [rows]
-  );
+  const rowsByItemId = useMemo(() => new Map(rows.map((row) => [row.itemId, row])), [rows]);
   const moveOptions = useMemo(() => (state ? getInventoryMoveOptions(state, id) : []), [state, id]);
   const templateOptions = useMemo(
     () =>
-      state
-        ? getPlayerFacingEquipmentLocationTemplateOptions(
-            state.templates.templatesById,
-          )
-        : [],
-    [state]
+      state ? getPlayerFacingEquipmentLocationTemplateOptions(state.templates.templatesById) : [],
+    [state],
   );
   const filteredTemplateOptions = useMemo(
     () => filterInventoryTemplateOptions(templateOptions, addTemplateFilter),
@@ -174,7 +183,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     return buildInventoryTemplateGroups(filteredTemplateOptions);
   }, [filteredTemplateOptions]);
   const selectedTemplate =
-    addTemplateId && state ? state.templates.templatesById[addTemplateId] ?? null : null;
+    addTemplateId && state ? (state.templates.templatesById[addTemplateId] ?? null) : null;
   const selectedTemplateIsStackable = selectedTemplate?.category === "valuables";
 
   useEffect(() => {
@@ -188,11 +197,17 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
 
         setState(nextState);
         setCharacterRecord(characterContext.record ?? null);
+        setRecoveryRequired(Boolean(characterContext.recoveryRecord));
         setCharacterName(
-          characterContext.record?.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER
+          characterContext.record?.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER,
         );
         setInventoryNotes(characterContext.record?.build.inventoryNotes ?? "");
         setCharacterSize(getWorkbookCharacterSize(characterContext.record?.build));
+        if (characterContext.recoveryRecord) {
+          setInventoryNotesFeedback(
+            "The current server notes are shown. A local Character draft is retained for deliberate recovery on the Character Sheet.",
+          );
+        }
         setPageError(undefined);
       })
       .catch((error) => {
@@ -204,7 +219,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         setPageError(
           message === "Character not found."
             ? "Character not found or not accessible from this account."
-            : message
+            : message,
         );
       })
       .finally(() => {
@@ -267,8 +282,8 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       Object.fromEntries(
         Object.values(state.itemsById)
           .filter((item) => item.isStackable)
-          .map((item) => [item.id, String(item.quantity)])
-      )
+          .map((item) => [item.id, String(item.quantity)]),
+      ),
     );
 
     setMetadataDrafts(
@@ -279,10 +294,10 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
             conditionState: item.conditionState,
             displayName: item.displayName ?? "",
             isFavorite: item.isFavorite ?? false,
-            notes: item.notes ?? ""
-          }
-        ])
-      )
+            notes: item.notes ?? "",
+          },
+        ]),
+      ),
     );
   }, [state]);
 
@@ -303,7 +318,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         carryMode: carryMode as typeof item.storageAssignment.carryMode,
         characterId: id,
         itemId,
-        locationId
+        locationId,
       });
       setState(nextState);
       setRowErrors((current) => {
@@ -316,7 +331,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       console.warn(message);
       setRowErrors((current) => ({
         ...current,
-        [itemId]: message
+        [itemId]: message,
       }));
     }
   }
@@ -329,9 +344,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       return;
     }
 
-    if (
-      locations.some((location) => location.name.toLowerCase() === trimmedName.toLowerCase())
-    ) {
+    if (locations.some((location) => location.name.toLowerCase() === trimmedName.toLowerCase())) {
       setLocationError("A location with that name already exists.");
       return;
     }
@@ -341,15 +354,14 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         availabilityClass: locationAvailabilityClass,
         characterId: id,
         name: trimmedName,
-        type: locationType
+        type: locationType,
       });
       setState(nextState);
       setLocationName("");
       setLocationAvailabilityClass("elsewhere");
       setLocationError(undefined);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unable to create location.";
+      const message = error instanceof Error ? error.message : "Unable to create location.";
       console.warn(message);
       setLocationError(message);
     }
@@ -359,13 +371,12 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     try {
       const nextState = await removeCharacterStorageLocationOnServer({
         characterId: id,
-        locationId
+        locationId,
       });
       setState(nextState);
       setLocationError(undefined);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unable to remove location.";
+      const message = error instanceof Error ? error.message : "Unable to remove location.";
       console.warn(message);
       setLocationError(message);
     }
@@ -377,7 +388,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
 
     try {
       const nextState = await bootstrapSampleCharacterEquipmentOnServer({
-        characterId: id
+        characterId: id,
       });
       setState(nextState);
       setRowErrors({});
@@ -433,7 +444,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         notes: addNotes.trim() || null,
         quality: addQuality,
         quantity,
-        templateId: addTemplateId
+        templateId: addTemplateId,
       });
       setState(nextState);
       setAddDisplayName("");
@@ -452,7 +463,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     try {
       const nextState = await removeCharacterEquipmentItemOnServer({
         characterId: id,
-        itemId
+        itemId,
       });
       setState(nextState);
       setRowErrors((current) => {
@@ -465,7 +476,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       console.warn(message);
       setRowErrors((current) => ({
         ...current,
-        [itemId]: message
+        [itemId]: message,
       }));
     }
   }
@@ -476,7 +487,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     if (!Number.isFinite(quantity) || quantity <= 0) {
       setRowErrors((current) => ({
         ...current,
-        [itemId]: "Quantity must be greater than zero."
+        [itemId]: "Quantity must be greater than zero.",
       }));
       return;
     }
@@ -485,7 +496,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       const nextState = await updateCharacterEquipmentQuantityOnServer({
         characterId: id,
         itemId,
-        quantity
+        quantity,
       });
       setState(nextState);
       setRowErrors((current) => {
@@ -498,7 +509,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       console.warn(message);
       setRowErrors((current) => ({
         ...current,
-        [itemId]: message
+        [itemId]: message,
       }));
     }
   }
@@ -517,7 +528,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         displayName: draft.displayName,
         isFavorite: draft.isFavorite,
         itemId,
-        notes: draft.notes
+        notes: draft.notes,
       });
       setState(nextState);
       setRowErrors((current) => {
@@ -527,14 +538,14 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       });
       setExpandedItemIds((current) => ({
         ...current,
-        [itemId]: false
+        [itemId]: false,
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to update item details.";
       console.warn(message);
       setRowErrors((current) => ({
         ...current,
-        [itemId]: message
+        [itemId]: message,
       }));
     }
   }
@@ -544,17 +555,37 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       return;
     }
 
+    if (recoveryRequired) {
+      setInventoryNotesError(
+        "Review or discard the retained draft on the Character Sheet before saving inventory notes.",
+      );
+      return;
+    }
+
     setSavingInventoryNotes(true);
     setInventoryNotesError(undefined);
     setInventoryNotesFeedback(undefined);
 
     try {
+      const expectedUpdatedAt = requireServerCharacterRevision(characterRecord);
+      const attemptedBuild = {
+        ...characterRecord.build,
+        inventoryNotes,
+      };
+      await localCharacterRepository.save({
+        build: attemptedBuild,
+        creatorDisplayName: characterRecord.creatorDisplayName,
+        creatorEmail: characterRecord.creatorEmail,
+        creatorId: characterRecord.creatorId,
+        createdAt: characterRecord.createdAt,
+        finalizedAt: characterRecord.finalizedAt,
+        serverUpdatedAt: expectedUpdatedAt,
+        syncStatus: "local",
+      });
       const savedServerRecord = await updateServerCharacter({
-        build: {
-          ...characterRecord.build,
-          inventoryNotes
-        },
-        characterId: id
+        build: attemptedBuild,
+        characterId: id,
+        expectedUpdatedAt,
       });
       const savedLocalRecord = await localCharacterRepository.save({
         build: savedServerRecord.build,
@@ -563,18 +594,40 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         creatorId: savedServerRecord.ownerId ?? characterRecord.creatorId,
         createdAt: characterRecord.createdAt,
         finalizedAt: characterRecord.finalizedAt,
+        serverUpdatedAt: savedServerRecord.updatedAt,
         syncStatus: "synced",
-        updatedAt: savedServerRecord.updatedAt
+        updatedAt: savedServerRecord.updatedAt,
       });
 
       setCharacterRecord(savedLocalRecord);
       setCharacterName(savedLocalRecord.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER);
       setInventoryNotes(savedLocalRecord.build.inventoryNotes ?? "");
+      setRecoveryRequired(false);
       setInventoryNotesFeedback("Inventory notes saved.");
     } catch (error) {
-      setInventoryNotesError(
-        error instanceof Error ? error.message : "Unable to save inventory notes."
-      );
+      const currentCharacter = getCurrentCharacterFromMutationConflict(error);
+
+      if (currentCharacter) {
+        const canonicalRecord = buildServerBackedLocalCharacterRecord(
+          currentCharacter,
+          characterRecord,
+        );
+        setCharacterRecord(canonicalRecord);
+        setCharacterName(canonicalRecord.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER);
+        setInventoryNotes(canonicalRecord.build.inventoryNotes ?? "");
+        setRecoveryRequired(true);
+        setInventoryNotesError(
+          "The Character changed on the server. Current notes are shown and your exact attempted draft is retained on the Character Sheet.",
+        );
+      } else {
+        setInventoryNotes(characterRecord.build.inventoryNotes ?? "");
+        setRecoveryRequired(true);
+        setInventoryNotesError(
+          error instanceof Error
+            ? `${error.message} Current server notes are shown and your attempted notes remain in the retained local draft.`
+            : "Unable to save inventory notes. Current server notes are shown and your attempted notes remain in the retained local draft.",
+        );
+      }
     } finally {
       setSavingInventoryNotes(false);
     }
@@ -583,7 +636,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
   function toggleExpandedItem(itemId: string) {
     setExpandedItemIds((current) => ({
       ...current,
-      [itemId]: !current[itemId]
+      [itemId]: !current[itemId],
     }));
   }
 
@@ -593,6 +646,28 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         <h1 style={{ margin: 0 }}>Inventory by location - {characterName}</h1>
       </div>
 
+      {recoveryRequired ? (
+        <section
+          style={{
+            background: "#fff8e8",
+            border: "1px solid #d9b86c",
+            borderRadius: 12,
+            display: "grid",
+            gap: "0.75rem",
+            padding: "1rem",
+          }}
+        >
+          <strong>Local Character draft retained</strong>
+          <span>
+            Inventory uses the current server Character. Review or discard the retained draft before
+            changing Character-level inventory notes.
+          </span>
+          <div>
+            <Link href={`/characters/${id}`}>Review or discard retained draft</Link>
+          </div>
+        </section>
+      ) : null}
+
       {!loading && !pageError && state ? (
         <section
           style={{
@@ -601,13 +676,14 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
             borderRadius: 12,
             display: "grid",
             gap: "0.75rem",
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           <div style={{ display: "grid", gap: "0.2rem" }}>
             <strong>Add item</strong>
             <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-              Create a persisted inventory item from an existing equipment template, including workbook-backed shields.
+              Create a persisted inventory item from an existing equipment template, including
+              workbook-backed shields.
             </div>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
@@ -634,7 +710,8 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
             style={{
               display: "grid",
               gap: "0.75rem",
-              gridTemplateColumns: "minmax(180px, 1.2fr) minmax(180px, 1fr) 120px 140px 140px minmax(180px, 1fr)"
+              gridTemplateColumns:
+                "minmax(180px, 1.2fr) minmax(180px, 1fr) 120px 140px 140px minmax(180px, 1fr)",
             }}
           >
             <label style={{ display: "grid", gap: "0.35rem" }}>
@@ -768,7 +845,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
           borderRadius: 12,
           display: "grid",
           gap: "0.75rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <div style={{ display: "grid", gap: "0.2rem" }}>
@@ -783,7 +860,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
             display: "grid",
             gap: "0.75rem",
             gridTemplateColumns:
-              "minmax(220px, 1fr) minmax(180px, 220px) minmax(180px, 220px) auto"
+              "minmax(220px, 1fr) minmax(180px, 220px) minmax(180px, 220px) auto",
           }}
         >
           <label style={{ display: "grid", gap: "0.35rem" }}>
@@ -840,7 +917,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
             background: "#f6f5ef",
             border: "1px solid #d9ddd8",
             borderRadius: 12,
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           Loading equipment...
@@ -854,7 +931,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
             border: "1px solid #e4b9a7",
             borderRadius: 12,
             color: "#8b3a1a",
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           {pageError}
@@ -870,7 +947,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
               borderRadius: 12,
               display: "grid",
               gap: "0.35rem",
-              padding: "1rem"
+              padding: "1rem",
             }}
           >
             <div style={{ color: "#5e5a50", fontSize: "0.95rem" }}>
@@ -902,327 +979,417 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
             );
 
             return (
-            <section
-              key={section.key}
-              style={{
-                background: "#fbfaf5",
-                border: "1px solid #d9ddd8",
-                borderRadius: 12,
-                display: "grid",
-                gap: "1rem",
-                padding: "1rem"
-              }}
-            >
-              <div style={{ display: "grid", gap: "0.2rem" }}>
-                <h2 style={{ margin: 0 }}>{section.label}</h2>
-                <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                  {section.description}
-                </div>
-                <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                  Total encumbrance {formatEncumbranceDisplay(sectionActualEncumbrance)}
-                </div>
-                {section.key === "carried" ? (
+              <section
+                key={section.key}
+                style={{
+                  background: "#fbfaf5",
+                  border: "1px solid #d9ddd8",
+                  borderRadius: 12,
+                  display: "grid",
+                  gap: "1rem",
+                  padding: "1rem",
+                }}
+              >
+                <div style={{ display: "grid", gap: "0.2rem" }}>
+                  <h2 style={{ margin: 0 }}>{section.label}</h2>
+                  <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{section.description}</div>
                   <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                    Carried encumbrance {formatEncumbranceDisplay(sectionEffectiveEncumbrance)}
+                    Total encumbrance {formatEncumbranceDisplay(sectionActualEncumbrance)}
                   </div>
-                ) : null}
-              </div>
+                  {section.key === "carried" ? (
+                    <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                      Carried encumbrance {formatEncumbranceDisplay(sectionEffectiveEncumbrance)}
+                    </div>
+                  ) : null}
+                </div>
 
-              {section.groups.map((group) => {
-                const groupRows = group.items
-                  .map((item) => rowsByItemId.get(item.id))
-                  .filter((row): row is NonNullable<typeof row> => row !== undefined);
-                const groupActualEncumbrance = groupRows.reduce(
-                  (total, row) => total + row.actualEncumbrance,
-                  0
-                );
-                const groupEffectiveEncumbrance = groupRows.reduce(
-                  (total, row) => total + (row.effectiveEncumbrance ?? 0),
-                  0
-                );
-                const canDeleteLocation =
-                  !group.location.type.endsWith("_system") && groupRows.length === 0;
+                {section.groups.map((group) => {
+                  const groupRows = group.items
+                    .map((item) => rowsByItemId.get(item.id))
+                    .filter((row): row is NonNullable<typeof row> => row !== undefined);
+                  const groupActualEncumbrance = groupRows.reduce(
+                    (total, row) => total + row.actualEncumbrance,
+                    0,
+                  );
+                  const groupEffectiveEncumbrance = groupRows.reduce(
+                    (total, row) => total + (row.effectiveEncumbrance ?? 0),
+                    0,
+                  );
+                  const canDeleteLocation =
+                    !group.location.type.endsWith("_system") && groupRows.length === 0;
 
-                return (
-                  <section
-                    key={group.location.id}
-                    style={{
-                      background: "#fffdf8",
-                      border: "1px solid #d9ddd8",
-                      borderRadius: 12,
-                      display: "grid",
-                      gap: "0.75rem",
-                      padding: "1rem"
-                    }}
-                  >
-                    <div
+                  return (
+                    <section
+                      key={group.location.id}
                       style={{
-                        alignItems: "start",
-                        display: "flex",
-                        flexWrap: "wrap",
+                        background: "#fffdf8",
+                        border: "1px solid #d9ddd8",
+                        borderRadius: 12,
+                        display: "grid",
                         gap: "0.75rem",
-                        justifyContent: "space-between"
+                        padding: "1rem",
                       }}
                     >
-                      <div style={{ display: "grid", gap: "0.2rem" }}>
-                        <strong>{group.location.name}</strong>
-                        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                          {groupRows.length} item{groupRows.length === 1 ? "" : "s"} • Total encumbrance{" "}
-                          {formatEncumbranceDisplay(groupActualEncumbrance)}
-                        </div>
-                        {group.location.type === "equipped_system" ||
-                        group.location.type === "person_system" ||
-                        group.location.type === "backpack_system" ? (
-                          <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                            Carried encumbrance {formatEncumbranceDisplay(groupEffectiveEncumbrance)}
-                          </div>
-                        ) : null}
-                      </div>
-                      {canDeleteLocation ? (
-                        <button
-                          onClick={() => void handleRemoveLocation(group.location.id)}
-                          type="button"
-                        >
-                          Delete location
-                        </button>
-                      ) : null}
-                    </div>
-
-                    {groupRows.length > 0 ? (
                       <div
                         style={{
-                          border: "1px solid #d9ddd8",
-                          borderRadius: 10,
-                          overflowX: "auto"
+                          alignItems: "start",
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "0.75rem",
+                          justifyContent: "space-between",
                         }}
                       >
-                        <table style={{ borderCollapse: "collapse", minWidth: 980, width: "100%" }}>
-                          <thead style={{ background: "#f6f5ef" }}>
-                            <tr>
-                              <th style={tableHeaderStyle}>Type</th>
-                              <th style={tableHeaderStyle}>Display name</th>
-                              <th style={tableHeaderStyle}>Carry mode</th>
-                              <th style={tableHeaderStyle}>Material</th>
-                              <th style={tableHeaderStyle}>Quality</th>
-                              <th style={tableHeaderStyle}>Condition</th>
-                              <th style={tableHeaderStyle}>Quantity</th>
-                              <th style={tableHeaderStyle}>Encumbrance</th>
-                              <th style={tableHeaderStyle}>Carried encumbrance</th>
-                              <th style={tableHeaderStyle}>Access tier</th>
-                              <th style={tableHeaderStyle}>Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {groupRows.map((row) => (
-                              <Fragment key={row.itemId}>
-                                <tr>
-                                  <td style={tableCellStyle}>
-                                    <div style={{ display: "grid", gap: "0.2rem" }}>
-                                      <strong>{row.templateName}</strong>
-                                      <span style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
-                                        {formatLabel(row.category)}
-                                      </span>
-                                    </div>
-                                  </td>
-                                  <td style={tableCellStyle}>
-                                    <div style={{ display: "grid", gap: "0.35rem", minWidth: 180 }}>
-                                      <input
-                                        onChange={(event) =>
-                                          setMetadataDrafts((current) => ({
-                                            ...current,
-                                            [row.itemId]: {
-                                              ...current[row.itemId],
-                                              displayName: event.target.value
-                                            }
-                                          }))
-                                        }
-                                        placeholder="Optional given name"
-                                        type="text"
-                                        value={metadataDrafts[row.itemId]?.displayName ?? ""}
-                                      />
-                                      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
-                                        <button
-                                          onClick={() => void handleUpdateMetadata(row.itemId)}
-                                          type="button"
-                                        >
-                                          Save name
-                                        </button>
-                                        {state?.itemsById[row.itemId]?.isFavorite ? (
-                                          <span style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
-                                            Favorite
-                                          </span>
-                                        ) : null}
+                        <div style={{ display: "grid", gap: "0.2rem" }}>
+                          <strong>{group.location.name}</strong>
+                          <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                            {groupRows.length} item{groupRows.length === 1 ? "" : "s"} • Total
+                            encumbrance {formatEncumbranceDisplay(groupActualEncumbrance)}
+                          </div>
+                          {group.location.type === "equipped_system" ||
+                          group.location.type === "person_system" ||
+                          group.location.type === "backpack_system" ? (
+                            <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                              Carried encumbrance{" "}
+                              {formatEncumbranceDisplay(groupEffectiveEncumbrance)}
+                            </div>
+                          ) : null}
+                        </div>
+                        {canDeleteLocation ? (
+                          <button
+                            onClick={() => void handleRemoveLocation(group.location.id)}
+                            type="button"
+                          >
+                            Delete location
+                          </button>
+                        ) : null}
+                      </div>
+
+                      {groupRows.length > 0 ? (
+                        <div
+                          style={{
+                            border: "1px solid #d9ddd8",
+                            borderRadius: 10,
+                            overflowX: "auto",
+                          }}
+                        >
+                          <table
+                            style={{ borderCollapse: "collapse", minWidth: 980, width: "100%" }}
+                          >
+                            <thead style={{ background: "#f6f5ef" }}>
+                              <tr>
+                                <th style={tableHeaderStyle}>Type</th>
+                                <th style={tableHeaderStyle}>Display name</th>
+                                <th style={tableHeaderStyle}>Carry mode</th>
+                                <th style={tableHeaderStyle}>Material</th>
+                                <th style={tableHeaderStyle}>Quality</th>
+                                <th style={tableHeaderStyle}>Condition</th>
+                                <th style={tableHeaderStyle}>Quantity</th>
+                                <th style={tableHeaderStyle}>Encumbrance</th>
+                                <th style={tableHeaderStyle}>Carried encumbrance</th>
+                                <th style={tableHeaderStyle}>Access tier</th>
+                                <th style={tableHeaderStyle}>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {groupRows.map((row) => (
+                                <Fragment key={row.itemId}>
+                                  <tr>
+                                    <td style={tableCellStyle}>
+                                      <div style={{ display: "grid", gap: "0.2rem" }}>
+                                        <strong>{row.templateName}</strong>
+                                        <span style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                                          {formatLabel(row.category)}
+                                        </span>
                                       </div>
-                                    </div>
-                                  </td>
-                                  <td style={tableCellStyle}>{formatLabel(row.carryMode)}</td>
-                                  <td style={tableCellStyle}>{formatLabel(row.material)}</td>
-                                  <td style={tableCellStyle}>{formatLabel(row.quality)}</td>
-                                  <td style={tableCellStyle}>{formatLabel(row.conditionState)}</td>
-                                  <td style={tableCellStyle}>
-                                    {state?.itemsById[row.itemId]?.isStackable ? (
-                                      <div style={{ display: "grid", gap: "0.35rem", maxWidth: 120 }}>
+                                    </td>
+                                    <td style={tableCellStyle}>
+                                      <div
+                                        style={{ display: "grid", gap: "0.35rem", minWidth: 180 }}
+                                      >
                                         <input
-                                          min={1}
+                                          disabled={Boolean(
+                                            state?.itemsById[row.itemId]?.campaignContextId,
+                                          )}
                                           onChange={(event) =>
-                                            setQuantityDrafts((current) => ({
+                                            setMetadataDrafts((current) => ({
                                               ...current,
-                                              [row.itemId]: event.target.value
+                                              [row.itemId]: {
+                                                ...current[row.itemId],
+                                                displayName: event.target.value,
+                                              },
                                             }))
                                           }
-                                          step={1}
-                                          type="number"
-                                          value={quantityDrafts[row.itemId] ?? String(state?.itemsById[row.itemId]?.quantity ?? 1)}
+                                          placeholder="Optional given name"
+                                          type="text"
+                                          value={metadataDrafts[row.itemId]?.displayName ?? ""}
                                         />
-                                        <button
-                                          onClick={() => void handleUpdateQuantity(row.itemId)}
-                                          type="button"
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            flexWrap: "wrap",
+                                            gap: "0.5rem",
+                                          }}
                                         >
-                                          Save qty
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      state?.itemsById[row.itemId]?.quantity ?? 1
-                                    )}
-                                  </td>
-                                  <td style={tableCellStyle}>{formatEncumbranceDisplay(row.actualEncumbrance)}</td>
-                                  <td style={tableCellStyle}>{formatEncumbranceDisplay(row.effectiveEncumbrance)}</td>
-                                  <td style={tableCellStyle}>{formatLabel(row.accessTier)}</td>
-                                  <td style={tableCellStyle}>
-                                    <div style={{ display: "grid", gap: "0.5rem", maxWidth: 220 }}>
-                                      <select
-                                        aria-label={`Move ${row.displayName ?? row.templateName}`}
-                                        onChange={(event) => void handleMove(row.itemId, event.target.value)}
-                                        value={`${state?.itemsById[row.itemId]?.storageAssignment.locationId ?? ""}::${state?.itemsById[row.itemId]?.storageAssignment.carryMode ?? ""}`}
-                                      >
-                                        {moveOptions.map((option) => (
-                                          <option key={option.value} value={option.value}>
-                                            {option.label}
-                                          </option>
-                                        ))}
-                                      </select>
-                                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                                        <button
-                                          onClick={() => toggleExpandedItem(row.itemId)}
-                                          type="button"
-                                        >
-                                          {expandedItemIds[row.itemId] ? "Close" : "Edit"}
-                                        </button>
-                                        <button onClick={() => void handleRemoveItem(row.itemId)} type="button">
-                                          Remove item
-                                        </button>
-                                      </div>
-                                      {rowErrors[row.itemId] ? (
-                                        <div style={{ color: "#8b3a1a", fontSize: "0.8rem" }}>
-                                          {rowErrors[row.itemId]}
+                                          <button
+                                            disabled={Boolean(
+                                              state?.itemsById[row.itemId]?.campaignContextId,
+                                            )}
+                                            onClick={() => void handleUpdateMetadata(row.itemId)}
+                                            type="button"
+                                          >
+                                            Save name
+                                          </button>
+                                          {state?.itemsById[row.itemId]?.isFavorite ? (
+                                            <span style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                                              Favorite
+                                            </span>
+                                          ) : null}
                                         </div>
-                                      ) : null}
-                                    </div>
-                                  </td>
-                                </tr>
-                                {expandedItemIds[row.itemId] ? (
-                                  <tr>
-                                    <td
-                                      colSpan={11}
-                                      style={{
-                                        ...tableCellStyle,
-                                        background: "#f8f4ea"
-                                      }}
-                                    >
+                                      </div>
+                                    </td>
+                                    <td style={tableCellStyle}>{formatLabel(row.carryMode)}</td>
+                                    <td style={tableCellStyle}>{formatLabel(row.material)}</td>
+                                    <td style={tableCellStyle}>{formatLabel(row.quality)}</td>
+                                    <td style={tableCellStyle}>
+                                      {formatLabel(row.conditionState)}
+                                    </td>
+                                    <td style={tableCellStyle}>
+                                      {state?.itemsById[row.itemId]?.isStackable ? (
+                                        <div
+                                          style={{ display: "grid", gap: "0.35rem", maxWidth: 120 }}
+                                        >
+                                          <input
+                                            disabled={Boolean(
+                                              state?.itemsById[row.itemId]?.campaignContextId,
+                                            )}
+                                            min={1}
+                                            onChange={(event) =>
+                                              setQuantityDrafts((current) => ({
+                                                ...current,
+                                                [row.itemId]: event.target.value,
+                                              }))
+                                            }
+                                            step={1}
+                                            type="number"
+                                            value={
+                                              quantityDrafts[row.itemId] ??
+                                              String(state?.itemsById[row.itemId]?.quantity ?? 1)
+                                            }
+                                          />
+                                          <button
+                                            disabled={Boolean(
+                                              state?.itemsById[row.itemId]?.campaignContextId,
+                                            )}
+                                            onClick={() => void handleUpdateQuantity(row.itemId)}
+                                            type="button"
+                                          >
+                                            Save qty
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        (state?.itemsById[row.itemId]?.quantity ?? 1)
+                                      )}
+                                    </td>
+                                    <td style={tableCellStyle}>
+                                      {formatEncumbranceDisplay(row.actualEncumbrance)}
+                                    </td>
+                                    <td style={tableCellStyle}>
+                                      {formatEncumbranceDisplay(row.effectiveEncumbrance)}
+                                    </td>
+                                    <td style={tableCellStyle}>{formatLabel(row.accessTier)}</td>
+                                    <td style={tableCellStyle}>
                                       <div
+                                        style={{ display: "grid", gap: "0.5rem", maxWidth: 220 }}
+                                      >
+                                        <select
+                                          aria-label={`Move ${row.displayName ?? row.templateName}`}
+                                          onChange={(event) =>
+                                            void handleMove(row.itemId, event.target.value)
+                                          }
+                                          value={`${state?.itemsById[row.itemId]?.storageAssignment.locationId ?? ""}::${state?.itemsById[row.itemId]?.storageAssignment.carryMode ?? ""}`}
+                                        >
+                                          {moveOptions.map((option) => (
+                                            <option key={option.value} value={option.value}>
+                                              {option.label}
+                                            </option>
+                                          ))}
+                                        </select>
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            flexWrap: "wrap",
+                                            gap: "0.5rem",
+                                          }}
+                                        >
+                                          <button
+                                            disabled={Boolean(
+                                              state?.itemsById[row.itemId]?.campaignContextId,
+                                            )}
+                                            onClick={() => toggleExpandedItem(row.itemId)}
+                                            type="button"
+                                          >
+                                            {expandedItemIds[row.itemId] ? "Close" : "Edit"}
+                                          </button>
+                                          <button
+                                            disabled={Boolean(
+                                              state?.itemsById[row.itemId]?.campaignContextId,
+                                            )}
+                                            onClick={() => void handleRemoveItem(row.itemId)}
+                                            type="button"
+                                          >
+                                            Remove item
+                                          </button>
+                                        </div>
+                                        {state?.itemsById[row.itemId]?.campaignContextId ? (
+                                          <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                                            Item details are managed by the GM in Campaign Items.
+                                          </div>
+                                        ) : null}
+                                        {rowErrors[row.itemId] ? (
+                                          <div style={{ color: "#8b3a1a", fontSize: "0.8rem" }}>
+                                            {rowErrors[row.itemId]}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {hasPresentedItemFacts(state!.itemsById[row.itemId]) &&
+                                  state!.templates.templatesById[
+                                    state!.itemsById[row.itemId]!.templateId
+                                  ] &&
+                                  state!.itemsById[row.itemId] ? (
+                                    <tr>
+                                      <td
+                                        colSpan={11}
+                                        style={{ ...tableCellStyle, background: "#fbfaf6" }}
+                                      >
+                                        <ItemFactsPresentation
+                                          item={state!.itemsById[row.itemId]!}
+                                          template={
+                                            state!.templates.templatesById[
+                                              state!.itemsById[row.itemId]!.templateId
+                                            ]!
+                                          }
+                                        />
+                                      </td>
+                                    </tr>
+                                  ) : null}
+                                  {expandedItemIds[row.itemId] ? (
+                                    <tr>
+                                      <td
+                                        colSpan={11}
                                         style={{
-                                          display: "grid",
-                                          gap: "0.75rem",
-                                          gridTemplateColumns:
-                                            "minmax(160px, 180px) minmax(220px, 1fr) auto"
+                                          ...tableCellStyle,
+                                          background: "#f8f4ea",
                                         }}
                                       >
-                                        <label style={{ display: "grid", gap: "0.25rem" }}>
-                                          <span style={{ fontSize: "0.8rem" }}>Condition</span>
-                                          <select
-                                            onChange={(event) =>
-                                              setMetadataDrafts((current) => ({
-                                                ...current,
-                                                [row.itemId]: {
-                                                  ...current[row.itemId],
-                                                  conditionState: event.target.value as ItemConditionState
-                                                }
-                                              }))
-                                            }
-                                            value={metadataDrafts[row.itemId]?.conditionState ?? row.conditionState}
-                                          >
-                                            {conditionOptions.map((condition) => (
-                                              <option key={condition} value={condition}>
-                                                {formatLabel(condition)}
-                                              </option>
-                                            ))}
-                                          </select>
-                                        </label>
-                                        <label style={{ display: "grid", gap: "0.25rem" }}>
-                                          <span style={{ fontSize: "0.8rem" }}>Notes</span>
-                                          <textarea
-                                            onChange={(event) =>
-                                              setMetadataDrafts((current) => ({
-                                                ...current,
-                                                [row.itemId]: {
-                                                  ...current[row.itemId],
-                                                  notes: event.target.value
-                                                }
-                                              }))
-                                            }
-                                            rows={3}
-                                            value={metadataDrafts[row.itemId]?.notes ?? ""}
-                                          />
-                                        </label>
-                                        <div style={{ display: "grid", alignContent: "start", gap: "0.75rem" }}>
-                                          <label
-                                            style={{
-                                              alignItems: "center",
-                                              display: "flex",
-                                              gap: "0.5rem",
-                                              fontSize: "0.85rem"
-                                            }}
-                                          >
-                                            <input
-                                              checked={metadataDrafts[row.itemId]?.isFavorite ?? false}
+                                        <div
+                                          style={{
+                                            display: "grid",
+                                            gap: "0.75rem",
+                                            gridTemplateColumns:
+                                              "minmax(160px, 180px) minmax(220px, 1fr) auto",
+                                          }}
+                                        >
+                                          <label style={{ display: "grid", gap: "0.25rem" }}>
+                                            <span style={{ fontSize: "0.8rem" }}>Condition</span>
+                                            <select
                                               onChange={(event) =>
                                                 setMetadataDrafts((current) => ({
                                                   ...current,
                                                   [row.itemId]: {
                                                     ...current[row.itemId],
-                                                    isFavorite: event.target.checked
-                                                  }
+                                                    conditionState: event.target
+                                                      .value as ItemConditionState,
+                                                  },
                                                 }))
                                               }
-                                              type="checkbox"
-                                            />
-                                            Favorite
+                                              value={
+                                                metadataDrafts[row.itemId]?.conditionState ??
+                                                row.conditionState
+                                              }
+                                            >
+                                              {conditionOptions.map((condition) => (
+                                                <option key={condition} value={condition}>
+                                                  {formatLabel(condition)}
+                                                </option>
+                                              ))}
+                                            </select>
                                           </label>
-                                          <button
-                                            onClick={() => void handleUpdateMetadata(row.itemId)}
-                                            type="button"
+                                          <label style={{ display: "grid", gap: "0.25rem" }}>
+                                            <span style={{ fontSize: "0.8rem" }}>Notes</span>
+                                            <textarea
+                                              onChange={(event) =>
+                                                setMetadataDrafts((current) => ({
+                                                  ...current,
+                                                  [row.itemId]: {
+                                                    ...current[row.itemId],
+                                                    notes: event.target.value,
+                                                  },
+                                                }))
+                                              }
+                                              rows={3}
+                                              value={metadataDrafts[row.itemId]?.notes ?? ""}
+                                            />
+                                          </label>
+                                          <div
+                                            style={{
+                                              display: "grid",
+                                              alignContent: "start",
+                                              gap: "0.75rem",
+                                            }}
                                           >
-                                            Save details
-                                          </button>
+                                            <label
+                                              style={{
+                                                alignItems: "center",
+                                                display: "flex",
+                                                gap: "0.5rem",
+                                                fontSize: "0.85rem",
+                                              }}
+                                            >
+                                              <input
+                                                checked={
+                                                  metadataDrafts[row.itemId]?.isFavorite ?? false
+                                                }
+                                                onChange={(event) =>
+                                                  setMetadataDrafts((current) => ({
+                                                    ...current,
+                                                    [row.itemId]: {
+                                                      ...current[row.itemId],
+                                                      isFavorite: event.target.checked,
+                                                    },
+                                                  }))
+                                                }
+                                                type="checkbox"
+                                              />
+                                              Favorite
+                                            </label>
+                                            <button
+                                              onClick={() => void handleUpdateMetadata(row.itemId)}
+                                              type="button"
+                                            >
+                                              Save details
+                                            </button>
+                                          </div>
                                         </div>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ) : null}
-                              </Fragment>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                        No items in this location.
-                      </div>
-                    )}
-                  </section>
-                );
-              })}
-            </section>
+                                      </td>
+                                    </tr>
+                                  ) : null}
+                                </Fragment>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                          No items in this location.
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
+              </section>
             );
           })}
         </div>
@@ -1234,7 +1401,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
             borderRadius: 12,
             display: "grid",
             gap: "0.75rem",
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           <div style={{ display: "grid", gap: "0.25rem" }}>
@@ -1266,7 +1433,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
             borderRadius: 12,
             display: "grid",
             gap: "0.75rem",
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           <h2 style={{ margin: 0 }}>Inventory notes</h2>
@@ -1282,12 +1449,16 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
               minHeight: 320,
               overflow: "auto",
               padding: "0.75rem",
-              resize: "vertical"
+              resize: "vertical",
             }}
             value={inventoryNotes}
           />
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "center" }}>
-            <button disabled={savingInventoryNotes || !characterRecord} onClick={() => void handleSaveInventoryNotes()} type="button">
+            <button
+              disabled={savingInventoryNotes || !characterRecord || recoveryRequired}
+              onClick={() => void handleSaveInventoryNotes()}
+              type="button"
+            >
               {savingInventoryNotes ? "Saving..." : "Save inventory notes"}
             </button>
             {inventoryNotesFeedback ? (
@@ -1307,11 +1478,11 @@ const tableHeaderStyle = {
   borderBottom: "1px solid #d9ddd8",
   fontSize: "0.85rem",
   padding: "0.75rem 1rem",
-  textAlign: "left" as const
+  textAlign: "left" as const,
 };
 
 const tableCellStyle = {
   borderTop: "1px solid #ece8da",
   padding: "0.75rem 1rem",
-  verticalAlign: "top" as const
+  verticalAlign: "top" as const,
 };
