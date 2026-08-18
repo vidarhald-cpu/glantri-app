@@ -21,12 +21,26 @@ try {
 
 const mergeBase = git(["merge-base", base, "HEAD"]).trim();
 
-git(["diff", "--check", mergeBase], { stdio: "inherit" });
+function isAncestor(ancestor, descendant) {
+  try {
+    git(["merge-base", "--is-ancestor", ancestor, descendant]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const formattingBase =
+  isAncestor(mergeBase, inheritedDebtBaseline) && isAncestor(inheritedDebtBaseline, "HEAD")
+    ? inheritedDebtBaseline
+    : mergeBase;
+
+git(["diff", "--check", formattingBase], { stdio: "inherit" });
 
 const changedFiles = [
   ...new Set(
     [
-      git(["diff", "--name-only", "--diff-filter=ACMRTUXB", "-z", mergeBase]),
+      git(["diff", "--name-only", "--diff-filter=ACMRTUXB", "-z", formattingBase]),
       git(["ls-files", "--others", "--exclude-standard", "-z"]),
     ]
       .join("")
@@ -40,7 +54,9 @@ if (changedFiles.length === 0) {
   process.exit(0);
 }
 
-console.log(`Checking formatting for ${changedFiles.length} changed files relative to ${base}.`);
+console.log(
+  `Checking formatting for ${changedFiles.length} changed files relative to ${formattingBase}.`,
+);
 execFileSync("pnpm", ["exec", "prettier", "--check", "--ignore-unknown", "--", ...changedFiles], {
   stdio: "inherit",
 });

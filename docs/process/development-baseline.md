@@ -75,7 +75,7 @@ Before the initial or any materially reconciled `dev` baseline is published:
 
 The initial reconciliation inherited 470 files that fail a full-repository Prettier check. Wholesale normalization is explicit P3 technical debt and is not part of initial `dev` publication. `pnpm format:check` remains the debt-audit command; it is not a publication gate while that debt remains.
 
-The required gate is `pnpm format:check:changed -- <accepted-parent-sha>`. It runs `git diff --check` and Prettier on added, copied, modified, renamed, type-changed, or unmerged files relative to the accepted parent. CI supplies the PR base or prior push SHA and falls back to reconciliation candidate `581841e99afd536d41cce4e5a5bac5a09f2be194` for a new branch. Thus every post-baseline touched file must be formatted while untouched historical debt remains non-blocking.
+The required gate is `pnpm format:check:changed -- <accepted-parent-sha>`. It runs `git diff --check` and Prettier on added, copied, modified, renamed, type-changed, or unmerged files relative to the accepted parent. CI supplies the PR base or prior push SHA and falls back to reconciliation candidate `581841e99afd536d41cce4e5a5bac5a09f2be194` for a new branch. When a release PR targets a base older than that candidate, the gate clamps the comparison to the inherited-debt baseline so the known historical backlog does not become release-blocking. Thus every post-baseline touched file must be formatted while untouched historical debt remains non-blocking.
 
 For every published baseline change, verify remote `dev`, required checks, task-PR target behavior, and absence of production deployment. Record the resulting `dev` SHA in the task handoff.
 
