@@ -14,6 +14,7 @@ import {
 
 import type {
   CombatRoundDeclaration,
+  CombatDefenseSnapshot,
   CombatNpcDeclarationProposal,
   CombatProgressionBoundaryKind,
   CombatRoundAttackDirection,
@@ -78,6 +79,7 @@ import {
   getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundRequiredCombatExperienceTrigger,
   getCombatRoundDamageSubstate,
+  getLatestCombatDefenseSnapshot,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundEffectiveCriticalRoll,
   getCombatRoundEffectiveDamageResult,
@@ -153,6 +155,7 @@ import {
   backOutPhaseAttackOnServer,
   clearCurrentCombatRoundStepOnServer,
   commitPhaseInitiativeResolutionOnServer,
+  commitCombatDefenseReviewOnServer,
   commitCurrentCombatPhaseDamageOnServer,
   continuePhaseAttackOnServer,
   decideDoubleAttackPhase2OnServer,
@@ -516,6 +519,51 @@ interface CombatParrySourceOptions {
 interface CombatParrySourceSelection {
   usedMainHand: boolean;
   usedOffHand: boolean;
+}
+
+interface CombatDefenseReviewSourceOption {
+  itemId: string;
+  label: string;
+  slot: "mainHand" | "offHand";
+}
+
+interface CombatDefenseReviewDraft {
+  aware: boolean;
+  includedByItemId: Record<string, boolean>;
+}
+
+function buildCombatDefenseReviewSourceOptions(input: {
+  participant?: ScenarioParticipant;
+  resolvedEquipmentState?: EquipmentFeatureState;
+}): CombatDefenseReviewSourceOption[] {
+  const state = input.resolvedEquipmentState ?? input.participant?.snapshot.equipmentState;
+  if (!isEquipmentFeatureState(state)) return [];
+  const characterId =
+    input.participant?.characterId ?? Object.keys(state.activeLoadoutByCharacterId)[0];
+  const loadout = characterId ? state.activeLoadoutByCharacterId[characterId] : undefined;
+  if (!loadout) return [];
+  const sourceIds = [
+    { itemId: loadout.activePrimaryWeaponItemId, slot: "mainHand" as const },
+    {
+      itemId: loadout.readyShieldItemId ?? loadout.activeSecondaryWeaponItemId,
+      slot: "offHand" as const,
+    },
+  ];
+  return sourceIds.flatMap(({ itemId, slot }) => {
+    if (!itemId) return [];
+    const item = state.itemsById[itemId];
+    const template = item ? state.templates.templatesById[item.templateId] : undefined;
+    if (!item || !template || (template.category !== "weapon" && template.category !== "shield")) {
+      return [];
+    }
+    return [
+      {
+        itemId,
+        label: item.displayName?.trim() || template.name,
+        slot,
+      },
+    ];
+  });
 }
 
 interface CombatDamageReviewAdditionalEffectDraft {
@@ -1545,6 +1593,57 @@ function getCombatResolutionStepKind(step: CombatRoundStep): "parry" | "damage" 
 
 function formatCombatPhaseLabel(phase: CombatRoundPhase): string {
   return phase === "phase1" ? "phase 1" : "phase 2";
+}
+
+function formatDefenseSourceDecision(
+  decision: CombatDefenseSnapshot["sources"][number]["decision"],
+): string {
+  switch (decision) {
+    case "default_included":
+      return "default included";
+    case "gm_included":
+      return "GM included";
+    case "gm_excluded":
+      return "GM excluded";
+  }
+}
+
+export function CombatDefenseSnapshotPanel({ snapshot }: { snapshot: CombatDefenseSnapshot }) {
+  return (
+    <section
+      aria-label="Latest committed defense review"
+      style={{
+        background: "#f8f6ef",
+        border: "1px solid #e2dccd",
+        borderRadius: 6,
+        display: "grid",
+        fontSize: "0.85rem",
+        gap: "0.25rem",
+        padding: "0.45rem 0.55rem",
+      }}
+    >
+      <strong>Latest incoming-attack defense review</strong>
+      <span>Awareness: {snapshot.aware ? "aware" : "unaware"}</span>
+      <span>
+        Ordinary active Dodge: {snapshot.ordinaryDodgeAvailable ? "available" : "unavailable"}
+      </span>
+      <span>Attack direction: {snapshot.attackDirection}</span>
+      {snapshot.sources.length > 0 ? (
+        <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
+          {snapshot.sources.map((source) => (
+            <li key={`${source.slot}:${source.itemId}`}>
+              {source.slot === "mainHand" ? "Main hand" : "Off hand"} {source.kind}: {source.label}
+              {" — "}
+              {source.included ? "included" : "excluded"} (
+              {formatDefenseSourceDecision(source.decision)})
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <span>No weapon or shield defense sources were available at review.</span>
+      )}
+    </section>
+  );
 }
 
 function formatCombatResolutionSubstepLabel(substep: string): string {
@@ -4032,6 +4131,9 @@ export default function CombatRoundManagerPanel({
   );
   const [parrySourceSelections, setParrySourceSelections] = useState<
     Record<string, CombatParrySourceSelection>
+  >({});
+  const [defenseReviewDrafts, setDefenseReviewDrafts] = useState<
+    Record<string, CombatDefenseReviewDraft>
   >({});
   const [damageReviewDrafts, setDamageReviewDrafts] = useState<
     Record<string, CombatDamageReviewDraft>
@@ -7413,6 +7515,110 @@ export default function CombatRoundManagerPanel({
       ) : null}
     </section>
   ) : null;
+  const inspectorDefenseReviewDescriptor =
+    currentActionPresentation?.primaryAction.descriptor?.commandType === "commit_defense_review"
+      ? currentActionPresentation.primaryAction.descriptor
+      : undefined;
+  const inspectorDefenseReviewAttackId = inspectorDefenseReviewDescriptor?.attackResultId;
+  const inspectorDefenseReviewAttacker = inspectorDefenseReviewDescriptor?.attackerParticipantId
+    ? encounter.participants.find(
+        (participant) => participant.id === inspectorDefenseReviewDescriptor.attackerParticipantId,
+      )
+    : undefined;
+  const inspectorDefenseReviewAttackerScenario = inspectorDefenseReviewAttacker
+    ? findScenarioParticipantForEncounterParticipant({
+        encounterParticipant: inspectorDefenseReviewAttacker,
+        scenarioParticipants: effectiveScenarioParticipants,
+      })
+    : undefined;
+  const inspectorDefenseReviewDefender = inspectorDefenseReviewDescriptor?.defenderParticipantId
+    ? encounter.participants.find(
+        (participant) => participant.id === inspectorDefenseReviewDescriptor.defenderParticipantId,
+      )
+    : undefined;
+  const inspectorDefenseReviewDefenderScenario = inspectorDefenseReviewDefender
+    ? findScenarioParticipantForEncounterParticipant({
+        encounterParticipant: inspectorDefenseReviewDefender,
+        scenarioParticipants: effectiveScenarioParticipants,
+      })
+    : undefined;
+  const inspectorDefenseReviewDefenderState = inspectorDefenseReviewDefenderScenario
+    ? resolvedCharacterStateByParticipantId[inspectorDefenseReviewDefenderScenario.id]
+    : undefined;
+  const inspectorDefenseReviewVisibility =
+    inspectorDefenseReviewAttackerScenario?.visibilityOverrides?.visibility;
+  const inspectorDefenseReviewDefaultAware =
+    inspectorDefenseReviewVisibility !== "hidden" && inspectorDefenseReviewVisibility !== "gm_only";
+  const inspectorDefenseReviewSources = buildCombatDefenseReviewSourceOptions({
+    participant: inspectorDefenseReviewDefenderScenario,
+    resolvedEquipmentState: inspectorDefenseReviewDefenderState?.equipmentState,
+  });
+  const inspectorDefenseReviewDraft = inspectorDefenseReviewAttackId
+    ? (defenseReviewDrafts[inspectorDefenseReviewAttackId] ?? {
+        aware: inspectorDefenseReviewDefaultAware,
+        includedByItemId: Object.fromEntries(
+          inspectorDefenseReviewSources.map((source) => [source.itemId, true]),
+        ),
+      })
+    : undefined;
+  const inspectorDefenseReviewControls =
+    inspectorDefenseReviewAttackId && inspectorDefenseReviewDraft ? (
+      <div aria-label="Defense review choices" style={{ display: "grid", gap: "0.45rem" }}>
+        <label style={{ alignItems: "center", display: "flex", gap: "0.45rem" }}>
+          <input
+            checked={inspectorDefenseReviewDraft.aware}
+            disabled={saving || inspectorIsInspectionOnly}
+            onChange={(event) =>
+              setDefenseReviewDrafts((current) => ({
+                ...current,
+                [inspectorDefenseReviewAttackId]: {
+                  ...inspectorDefenseReviewDraft,
+                  aware: event.target.checked,
+                },
+              }))
+            }
+            type="checkbox"
+          />
+          Defender is aware of this attack
+        </label>
+        {inspectorDefenseReviewSources.length > 0 ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+            {inspectorDefenseReviewSources.map((source) => (
+              <label
+                key={source.itemId}
+                style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}
+              >
+                <input
+                  checked={inspectorDefenseReviewDraft.includedByItemId[source.itemId] ?? true}
+                  disabled={saving || inspectorIsInspectionOnly}
+                  onChange={(event) =>
+                    setDefenseReviewDrafts((current) => ({
+                      ...current,
+                      [inspectorDefenseReviewAttackId]: {
+                        ...inspectorDefenseReviewDraft,
+                        includedByItemId: {
+                          ...inspectorDefenseReviewDraft.includedByItemId,
+                          [source.itemId]: event.target.checked,
+                        },
+                      },
+                    }))
+                  }
+                  type="checkbox"
+                />
+                {source.slot === "mainHand" ? "Main hand" : "Off hand"}: {source.label}
+              </label>
+            ))}
+          </div>
+        ) : (
+          <span style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+            No shield or weapon defense source is currently equipped.
+          </span>
+        )}
+        <span style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+          This review is committed for this exact attack and will not change if the loadout changes.
+        </span>
+      </div>
+    ) : null;
   const inspectorMissileReadinessControls =
     currentActionPresentation?.taskKind === "missile_readiness" ? (
       <div
@@ -7480,6 +7686,7 @@ export default function CombatRoundManagerPanel({
       </div>
     ) : null;
   const inspectorPreActionControls =
+    inspectorDefenseReviewControls ||
     inspectorMissileReadinessControls ||
     inspectorCurrentActionOutcomeControls ||
     inspectorDisarmControls ||
@@ -7496,6 +7703,7 @@ export default function CombatRoundManagerPanel({
         {inspectorStepWorkflowStatus}
         {inspectorDeclarationProposal}
         {inspectorCurrentActionOutcomeControls}
+        {inspectorDefenseReviewControls}
         {inspectorMissileReadinessControls}
         {inspectorDisarmControls}
         {inspectorCombatExperienceDifficultyControls}
@@ -10336,6 +10544,95 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  async function commitInspectorDefenseReview(descriptor: CurrentActionCommandDescriptor) {
+    const phase = descriptor.phase;
+    const attackId = descriptor.attackResultId;
+    if (
+      descriptor.commandType !== "commit_defense_review" ||
+      !attackId ||
+      !descriptor.attackerParticipantId ||
+      !descriptor.defenderParticipantId ||
+      !descriptor.executionGroupId ||
+      !descriptor.taskId ||
+      !phase
+    ) {
+      setSaveError("The exact incoming attack is no longer available for defense review.");
+      return;
+    }
+    const defenderEncounterParticipant = encounter.participants.find(
+      (participant) => participant.id === descriptor.defenderParticipantId,
+    );
+    const defenderScenarioParticipant = defenderEncounterParticipant
+      ? findScenarioParticipantForEncounterParticipant({
+          encounterParticipant: defenderEncounterParticipant,
+          scenarioParticipants: effectiveScenarioParticipants,
+        })
+      : undefined;
+    if (!defenderScenarioParticipant) {
+      setSaveError("The defender's canonical equipment context is unavailable.");
+      return;
+    }
+    const defenderEquipment = resolvedCharacterStateByParticipantId[defenderScenarioParticipant.id];
+    const sources = buildCombatDefenseReviewSourceOptions({
+      participant: defenderScenarioParticipant,
+      resolvedEquipmentState: defenderEquipment?.equipmentState,
+    });
+    const attackerEncounterParticipant = encounter.participants.find(
+      (participant) => participant.id === descriptor.attackerParticipantId,
+    );
+    const attackerScenarioParticipant = attackerEncounterParticipant
+      ? findScenarioParticipantForEncounterParticipant({
+          encounterParticipant: attackerEncounterParticipant,
+          scenarioParticipants: effectiveScenarioParticipants,
+        })
+      : undefined;
+    const visibility = attackerScenarioParticipant?.visibilityOverrides?.visibility;
+    const defaultAware = visibility !== "hidden" && visibility !== "gm_only";
+    const draft = defenseReviewDrafts[attackId] ?? {
+      aware: defaultAware,
+      includedByItemId: Object.fromEntries(sources.map((source) => [source.itemId, true])),
+    };
+
+    setSaving(true);
+    try {
+      const { commandEnvelope, encounter: nextEncounter } = await commitCombatDefenseReviewOnServer(
+        {
+          attackId,
+          attackerParticipantId: descriptor.attackerParticipantId,
+          aware: draft.aware,
+          currentEncounter: encounter,
+          defenderParticipantId: descriptor.defenderParticipantId,
+          encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId,
+          expectedRevision: descriptor.expectedRevision,
+          phase,
+          sourceSelections: sources.map((source) => ({
+            included: draft.includedByItemId[source.itemId] ?? true,
+            itemId: source.itemId,
+          })),
+          taskId: descriptor.taskId,
+        },
+      );
+      const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
+        getCombatRoundManagerStateFromCommandEnvelope({
+          commandEnvelope,
+          encounter: nextEncounter,
+        });
+      setInspectionSelection(nextInspectionSelection);
+      acceptCanonicalEncounterState(nextEncounter, nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to commit defense review.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function rollInspectorOffensiveParryBrawling(candidate: CurrentActionCommandDescriptor) {
     const descriptor = resolveCombatTaskCommandContext({
       descriptor: candidate,
@@ -11268,6 +11565,11 @@ export default function CombatRoundManagerPanel({
       case "roll_parry":
         void invokeResultProducingGmCommand(descriptor, () => rollInspectorParry(descriptor));
         return;
+      case "commit_defense_review":
+        void invokeResultProducingGmCommand(descriptor, () =>
+          commitInspectorDefenseReview(descriptor),
+        );
+        return;
       case "roll_offensive_parry_brawling":
         void invokeResultProducingGmCommand(descriptor, () =>
           rollInspectorOffensiveParryBrawling(descriptor),
@@ -11659,6 +11961,14 @@ export default function CombatRoundManagerPanel({
                           inspectorNormalizedFeintPhaseContexts[phaseKey] ??
                           inspectorDisplayDraft.phaseContexts[phaseKey]);
                       const phaseLoadoutSummary = inspectorPhaseLoadoutSummaries[phaseKey];
+                      const phaseDefenseSnapshot = inspector.participant?.participantId
+                        ? getLatestCombatDefenseSnapshot({
+                            defenderParticipantId: inspector.participant.participantId,
+                            phase: phaseKey,
+                            roundNumber: selectedTimelineRoundState.roundNumber,
+                            snapshots: selectedTimelineRoundState.defenseSnapshots,
+                          })
+                        : undefined;
                       const phaseTargetIdentity = !inspectorIsHistorical
                         ? resolveCanonicalCombatTargetIdentity({
                             encounterParticipants: encounter.participants,
@@ -11761,6 +12071,7 @@ export default function CombatRoundManagerPanel({
                           phaseCard,
                           phaseContext: phaseCombatContext,
                           phaseDefenseStats: inspectorIsHistorical ? null : phaseDefenseStats,
+                          defenseSnapshot: phaseDefenseSnapshot,
                           phaseKey,
                           secondaryActionId: inspectorDisplayDraft.secondaryActionId,
                           selectedResolutionContext,
@@ -11783,6 +12094,7 @@ export default function CombatRoundManagerPanel({
                               dependencies: [
                                 inspectorDisplayDraft.actionId,
                                 phaseLoadoutSummary,
+                                phaseDefenseSnapshot,
                                 inspectorGeneratedCombatContext,
                                 selectedScenarioParticipant?.state.combatEffects,
                                 inspector.participant?.participantId,
@@ -11818,6 +12130,11 @@ export default function CombatRoundManagerPanel({
                           phaseCard={phaseCard}
                           sourceLabel={phaseSourceLabel}
                         >
+                          {phaseProjection.defenseSnapshot ? (
+                            <CombatDefenseSnapshotPanel
+                              snapshot={phaseProjection.defenseSnapshot}
+                            />
+                          ) : null}
                           {inspectorIsHistorical && !historicalPhasePanel ? (
                             <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
                               No information available for this panel.

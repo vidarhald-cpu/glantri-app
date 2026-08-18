@@ -967,7 +967,9 @@ describe("combat history projection", () => {
   it("sanitizes a perceived hidden attacker without exposing its id or row", () => {
     const attack = event({
       defenderParticipantId: "aria",
+      id: "event:hidden:attack-result:hidden:aria",
       ownerParticipantId: "hidden",
+      opportunityId: "opportunity:hidden:aria",
       rollerParticipantId: "hidden",
       type: "attack",
       visibility: {
@@ -999,6 +1001,10 @@ describe("combat history projection", () => {
       visibility: "unseen",
     });
     expect(projection.activeRound.events[0]?.ownerParticipantId).toBeUndefined();
+    expect(projection.activeRound.events[0]).toMatchObject({
+      id: "round:1:event:0",
+      opportunityId: undefined,
+    });
     expect(serialized).not.toContain("hidden");
     expect(serialized).not.toContain("Unknown participant");
   });

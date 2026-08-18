@@ -33,7 +33,23 @@ function taskIsVisible(
 ): boolean {
   if (viewer.kind === "gm") return true;
 
-  if (task.kind === "gm_advance_boundary") return false;
+  if (task.kind === "gm_advance_boundary" || task.kind === "defense_review") return false;
+
+  const attackParticipantIds = [
+    task.identity.attackerParticipantId,
+    task.identity.defenderParticipantId,
+  ].filter((participantId): participantId is string => participantId !== undefined);
+  if (
+    attackParticipantIds.length > 0 &&
+    attackParticipantIds.some(
+      (participantId) => !viewer.visibleParticipantIds.has(participantId),
+    ) &&
+    !attackParticipantIds.some((participantId) =>
+      viewer.controlledParticipantIds.has(participantId),
+    )
+  ) {
+    return false;
+  }
 
   const owner = task.owner?.kind === "combatant" ? task.owner : undefined;
   const facetOwner = task.trackerFacet.owner;
@@ -123,11 +139,15 @@ function visibleTaskIdentity(
   if (viewer.kind === "gm") return task.identity;
   const participantVisible = (participantId: string | undefined) =>
     participantId !== undefined && viewer.visibleParticipantIds.has(participantId);
+  const attackLineageVisible = [
+    task.identity.attackerParticipantId,
+    task.identity.defenderParticipantId,
+  ].every((participantId) => participantId === undefined || participantVisible(participantId));
   return {
     actionId: task.identity.actionId,
     attackIndex: task.identity.attackIndex,
     attackModeId: task.identity.attackModeId,
-    attackResultId: task.identity.attackResultId,
+    attackResultId: attackLineageVisible ? task.identity.attackResultId : undefined,
     attackerParticipantId: participantVisible(task.identity.attackerParticipantId)
       ? task.identity.attackerParticipantId
       : undefined,
@@ -146,7 +166,7 @@ function visibleTaskIdentity(
     executionGroupId: task.identity.executionGroupId,
     healthRollId: task.identity.healthRollId,
     hitLocationResultId: task.identity.hitLocationResultId,
-    opportunityId: task.identity.opportunityId,
+    opportunityId: attackLineageVisible ? task.identity.opportunityId : undefined,
     offensiveParryAttemptId: task.identity.offensiveParryAttemptId,
     observationAttemptId: task.identity.observationAttemptId,
     opponentParticipantId: participantVisible(task.identity.opponentParticipantId)

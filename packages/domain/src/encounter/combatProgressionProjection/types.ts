@@ -140,6 +140,7 @@ export type CombatProgressionTaskKind =
   | "critical"
   | "damage_roll"
   | "damage_review"
+  | "defense_review"
   | "distance_commit"
   | "distance_roll"
   | "double_attack_decision"
