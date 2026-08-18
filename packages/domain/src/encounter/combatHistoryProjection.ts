@@ -51,6 +51,7 @@ export interface CombatHistoryParticipantIdentity {
 export interface ProjectedCombatHistoryEvent {
   completeness: CombatStepEvent["completeness"];
   facts: {
+    defenseReview?: PlayerSafeCombatDefenseReview;
     gmReview?: CombatStepEventFacts["gmReview"];
     involvedOutcome?: CombatStepEventFacts["involvedOutcome"];
     privateCalculation?: CombatStepEventFacts["rollerPrivate"];
@@ -70,6 +71,87 @@ export interface ProjectedCombatHistoryEvent {
   status: CombatStepEvent["status"];
   step: CombatStepEvent["step"];
   type: CombatStepEvent["type"];
+}
+
+export interface PlayerSafeCombatDefenseReview {
+  attackDirection: "front" | "left" | "rear" | "right";
+  aware: boolean;
+  eventSequence: number;
+  ordinaryDodgeAvailable: boolean;
+  phase: NonNullable<CombatStepEvent["phase"]>;
+  roundNumber: number;
+  sources: Array<{
+    included: boolean;
+    kind: "shield" | "weapon";
+    label: string;
+    slot: "mainHand" | "offHand";
+  }>;
+}
+
+function projectPlayerSafeCombatDefenseReview(input: {
+  event: CombatStepEvent;
+  ownRoll: boolean;
+}): PlayerSafeCombatDefenseReview | undefined {
+  if (!input.ownRoll || !input.event.phase) return undefined;
+  const facts = input.event.facts.rollerPrivate;
+  if (
+    typeof facts.aware !== "boolean" ||
+    typeof facts.ordinaryDodgeAvailable !== "boolean" ||
+    (facts.attackDirection !== "front" &&
+      facts.attackDirection !== "left" &&
+      facts.attackDirection !== "rear" &&
+      facts.attackDirection !== "right") ||
+    !Array.isArray(facts.sources)
+  ) {
+    return undefined;
+  }
+  const sources = facts.sources.flatMap((candidate) => {
+    if (
+      typeof candidate !== "object" ||
+      candidate === null ||
+      typeof (candidate as Record<string, unknown>).included !== "boolean" ||
+      ((candidate as Record<string, unknown>).kind !== "shield" &&
+        (candidate as Record<string, unknown>).kind !== "weapon") ||
+      typeof (candidate as Record<string, unknown>).label !== "string" ||
+      ((candidate as Record<string, unknown>).slot !== "mainHand" &&
+        (candidate as Record<string, unknown>).slot !== "offHand")
+    ) {
+      return [];
+    }
+    const source = candidate as {
+      included: boolean;
+      kind: "shield" | "weapon";
+      label: string;
+      slot: "mainHand" | "offHand";
+    };
+    return [{ ...source }];
+  });
+  if (sources.length !== facts.sources.length) return undefined;
+  return {
+    attackDirection: facts.attackDirection,
+    aware: facts.aware,
+    eventSequence: input.event.sequence,
+    ordinaryDodgeAvailable: facts.ordinaryDodgeAvailable,
+    phase: input.event.phase,
+    roundNumber: input.event.roundNumber,
+    sources,
+  };
+}
+
+export function getLatestPlayerSafeCombatDefenseReview(input: {
+  defenderParticipantId?: string;
+  events: readonly ProjectedCombatHistoryEvent[];
+  phase: NonNullable<CombatStepEvent["phase"]>;
+  roundNumber: number;
+}): PlayerSafeCombatDefenseReview | undefined {
+  return input.events
+    .filter(
+      (event) =>
+        event.facts.defenseReview?.phase === input.phase &&
+        event.facts.defenseReview.roundNumber === input.roundNumber &&
+        (!input.defenderParticipantId || event.ownerParticipantId === input.defenderParticipantId),
+    )
+    .sort((left, right) => right.sequence - left.sequence)[0]?.facts.defenseReview;
 }
 
 export interface ProjectedCombatHistoryRow {
@@ -469,6 +551,7 @@ export function projectCombatHistoryEvent(input: {
   return {
     completeness: input.event.completeness,
     facts: {
+      defenseReview: projectPlayerSafeCombatDefenseReview({ event: input.event, ownRoll }),
       gmReview: gm && hasFacts(input.event.facts.gmReview) ? input.event.facts.gmReview : undefined,
       involvedOutcome:
         involved && hasFacts(input.event.facts.involvedOutcome)

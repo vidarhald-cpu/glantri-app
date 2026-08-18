@@ -16513,6 +16513,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           snapshot,
           state: roundState,
         });
+        const committedSnapshot = nextRoundState.defenseSnapshots.find(
+          (candidate) => candidate.attackId === body.attackId,
+        );
+        if (!committedSnapshot) {
+          throw new Error("Committed defense snapshot is unavailable after persistence.");
+        }
         const savedEncounter = await encounterService.updateCombatEncounter({
           campaignId: access.campaignId,
           encounterId,
@@ -16538,7 +16544,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               : undefined,
             state: nextRoundState,
           }),
-          defenseSnapshot: snapshot,
+          defenseSnapshot: committedSnapshot,
           encounter: savedEncounter,
         };
       } catch (error) {

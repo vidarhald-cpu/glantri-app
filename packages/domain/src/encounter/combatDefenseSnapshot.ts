@@ -41,6 +41,7 @@ export const combatDefenseSnapshotSchema = z
     awarenessDefault: z.boolean(),
     awarenessOverridden: z.boolean(),
     defenderParticipantId: idSchema,
+    eventSequence: z.number().int().nonnegative().default(0),
     id: idSchema,
     ordinaryDodgeAvailable: z.boolean(),
     phase: z.enum(["phase1", "phase2"]),
@@ -101,14 +102,16 @@ export function getLatestCombatDefenseSnapshot(input: {
   snapshots: readonly CombatDefenseSnapshot[];
 }): CombatDefenseSnapshot | undefined {
   return input.snapshots
+    .map((snapshot, appendIndex) => ({ appendIndex, snapshot }))
     .filter(
-      (snapshot) =>
+      ({ snapshot }) =>
         snapshot.defenderParticipantId === input.defenderParticipantId &&
         snapshot.phase === input.phase &&
         snapshot.roundNumber === input.roundNumber,
     )
     .sort(
       (left, right) =>
-        right.reviewedAt.localeCompare(left.reviewedAt) || right.id.localeCompare(left.id),
-    )[0];
+        right.snapshot.eventSequence - left.snapshot.eventSequence ||
+        right.appendIndex - left.appendIndex,
+    )[0]?.snapshot;
 }

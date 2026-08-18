@@ -84,6 +84,7 @@ function buildProjection(
 
 describe("buildCombatRoundPhasePanelProjection", () => {
   it("uses the latest immutable defense snapshot instead of the mutable phase context", () => {
+    let eventSequence = 0;
     const snapshot = (input: {
       attackId: string;
       attackDirection: CombatDefenseSnapshot["attackDirection"];
@@ -99,6 +100,7 @@ describe("buildCombatRoundPhasePanelProjection", () => {
       awarenessDefault: true,
       awarenessOverridden: !input.aware,
       defenderParticipantId: "defender",
+      eventSequence: eventSequence++,
       id: `defense-snapshot:${input.attackId}`,
       ordinaryDodgeAvailable: input.aware,
       phase: "phase1",

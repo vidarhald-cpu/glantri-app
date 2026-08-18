@@ -6,6 +6,7 @@ import {
   getCombatDefenseSnapshotForAttack,
   type CombatDefenseSnapshot,
 } from "./combatDefenseSnapshot";
+import { acceptedCombatDefenseCalculationSchema } from "./combatDefenseCalculation";
 import {
   buildContinuedContactMaintenanceContestId,
   buildContinuedContactMaintenanceContestResultId,
@@ -21752,10 +21753,89 @@ function addCombatRoundAttackResultToAuthority(input: {
   };
 }
 
+function replaceCombatRoundAttackResultInAuthority(input: {
+  next: CombatRoundAttackRollResult;
+  previous: CombatRoundAttackRollResult;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const previousKey = getCombatRoundCanonicalAttackResultKey({
+    result: input.previous,
+    roundNumber: input.state.roundNumber,
+  });
+  const nextKey = getCombatRoundCanonicalAttackResultKey({
+    result: input.next,
+    roundNumber: input.state.roundNumber,
+  });
+  if (previousKey !== nextKey) {
+    throw new RangeError("Reviewed attack result identity changed during defense review.");
+  }
+
+  return combatRoundStateSchema.parse({
+    ...input.state,
+    participants: input.state.participants.map((participant) => {
+      if (participant.participantId !== input.previous.attackerParticipantId) return participant;
+      const attackResultsByOpportunity = {
+        ...(participant.attackResultsByOpportunity ?? {}),
+        [previousKey]: input.next,
+      };
+      return {
+        ...participant,
+        attackResultsByOpportunity,
+        attackResults: deriveCombatRoundAttackResultsCompatibility({
+          attackResultsByOpportunity,
+          participantId: participant.participantId,
+        }),
+      };
+    }),
+  });
+}
+
+function rebuildCombatRoundAttackResultWithDefenderDb(input: {
+  defenderDb: number;
+  result: CombatRoundAttackRollResult;
+}): CombatRoundAttackRollResult {
+  const toHit = resolveCombatToHit({
+    db: input.defenderDb,
+    ob: input.result.ob,
+    rollTotal: input.result.rollTotal,
+  });
+  return combatRoundAttackRollResultSchema.parse({
+    ...input.result,
+    defenderDb: input.defenderDb,
+    defenderParryModifier: toHit.parryModifier,
+    grazing: toHit.grazing,
+    hit: toHit.hit,
+    lookupTotal: toHit.lookupTotal,
+    marginOverMissThreshold: toHit.lookupTotal - 10,
+    tableResult: toHit.resultLabel,
+  });
+}
+
+function getPreservedUnawareMeleeDb(input: {
+  attackResultId: string;
+  state: CombatRoundState;
+}): number {
+  const command = [...input.state.commands]
+    .reverse()
+    .find(
+      (candidate) =>
+        candidate.type === "roll_attack" && candidate.facts.attackResultId === input.attackResultId,
+    );
+  const calculation = acceptedCombatDefenseCalculationSchema.safeParse(
+    command?.facts.defenderCalculation,
+  );
+  if (calculation.success && calculation.data.authority === "canonical_scenario_state") {
+    return calculation.data.flatDbAdjustment;
+  }
+  return typeof command?.facts.defenderFlatDbAdjustment === "number"
+    ? command.facts.defenderFlatDbAdjustment
+    : 0;
+}
+
 /**
  * Commits one immutable, GM-reviewed defense context for one exact incoming attack.
- * A pending missile may provide its newly materialized ordinary attack result; melee results
- * already exist and are only linked to the committed defense context here.
+ * A pending missile may provide its newly materialized ordinary attack result. An existing melee
+ * result is deterministically finalized from its preserved roll inputs and reviewed awareness.
  */
 export function recordCombatRoundDefenseReview(input: {
   command: {
@@ -21769,7 +21849,10 @@ export function recordCombatRoundDefenseReview(input: {
   state: CombatRoundState;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
-  const snapshot = combatDefenseSnapshotSchema.parse(input.snapshot);
+  const snapshot = combatDefenseSnapshotSchema.parse({
+    ...input.snapshot,
+    eventSequence: getCombatRoundNextEventSequence(normalized),
+  });
   if (snapshot.roundNumber !== normalized.roundNumber) {
     throw new RangeError("Defense review belongs to another combat round.");
   }
@@ -21788,11 +21871,24 @@ export function recordCombatRoundDefenseReview(input: {
   const resolvedMissileAttackResult = input.resolvedMissileAttackResult
     ? combatRoundAttackRollResultSchema.parse(input.resolvedMissileAttackResult)
     : undefined;
-  const attackResult = existingAttackResult ?? resolvedMissileAttackResult;
+  const originalAttackResult = existingAttackResult ?? resolvedMissileAttackResult;
 
-  if (!attackResult || Boolean(pendingMissile) !== Boolean(resolvedMissileAttackResult)) {
+  if (!originalAttackResult || Boolean(pendingMissile) !== Boolean(resolvedMissileAttackResult)) {
     throw new RangeError("The incoming attack is not open for this defense review.");
   }
+  const awarenessAdjustedMeleeResult =
+    !pendingMissile &&
+    !snapshot.ordinaryDodgeAvailable &&
+    (originalAttackResult.attackType ?? "melee") === "melee"
+      ? rebuildCombatRoundAttackResultWithDefenderDb({
+          defenderDb: getPreservedUnawareMeleeDb({
+            attackResultId: snapshot.attackId,
+            state: normalized,
+          }),
+          result: originalAttackResult,
+        })
+      : undefined;
+  const attackResult = awarenessAdjustedMeleeResult ?? originalAttackResult;
   const attackResultId = getCombatRoundAttackResultId({
     result: attackResult,
     roundNumber: normalized.roundNumber,
@@ -21814,19 +21910,20 @@ export function recordCombatRoundDefenseReview(input: {
 
   const withAttackResult = resolvedMissileAttackResult
     ? addCombatRoundAttackResultToAuthority({ result: attackResult, state: normalized })
-    : normalized;
-  const existingResolution = getCombatRoundPhaseResolutionResultForAttack({
-    attackResult,
-    state: withAttackResult,
-  });
+    : awarenessAdjustedMeleeResult
+      ? replaceCombatRoundAttackResultInAuthority({
+          next: awarenessAdjustedMeleeResult,
+          previous: originalAttackResult,
+          state: normalized,
+        })
+      : normalized;
   const resolution = combatRoundPhaseResolutionResultSchema.parse({
-    ...(existingResolution ??
-      buildCombatRoundPhaseResolutionResult({
-        attackResult,
-        roundNumber: normalized.roundNumber,
-        state: withAttackResult,
-        updatedAt: snapshot.reviewedAt,
-      })),
+    ...buildCombatRoundPhaseResolutionResult({
+      attackResult,
+      roundNumber: normalized.roundNumber,
+      state: withAttackResult,
+      updatedAt: snapshot.reviewedAt,
+    }),
     defenseSnapshotId: snapshot.id,
     updatedAt: snapshot.reviewedAt,
   });
@@ -21906,6 +22003,8 @@ export function recordCombatRoundDefenseReview(input: {
       ...(input.command.facts ?? {}),
       attackResult: resolvedMissileAttackResult,
       attackResultId,
+      previousAttackResult: awarenessAdjustedMeleeResult ? originalAttackResult : undefined,
+      reviewedAttackResult: awarenessAdjustedMeleeResult,
       defenseSnapshot: snapshot,
       defenseSnapshotId: snapshot.id,
       nextSubstep,
@@ -24627,6 +24726,9 @@ function undoCombatRoundDefenseReviewCommandAtIndex(input: {
   const resolvedMissileAttackResult = combatRoundAttackRollResultSchema.safeParse(
     command.facts.attackResult,
   );
+  const previousMeleeAttackResult = combatRoundAttackRollResultSchema.safeParse(
+    command.facts.previousAttackResult,
+  );
   const attackResult = resolvedMissileAttackResult.success
     ? resolvedMissileAttackResult.data
     : getCombatRoundAttackResultById({
@@ -24660,18 +24762,31 @@ function undoCombatRoundDefenseReviewCommandAtIndex(input: {
           }),
         };
       })
-    : withoutEvents.participants;
+    : previousMeleeAttackResult.success
+      ? replaceCombatRoundAttackResultInAuthority({
+          next: previousMeleeAttackResult.data,
+          previous: attackResult,
+          state: withoutEvents,
+        }).participants
+      : withoutEvents.participants;
   const phaseResolutionResults = resolvedMissileAttackResult.success
     ? withoutEvents.phaseResolutionResults.filter(
         (resolution) => resolution.attackResultId !== snapshot.data.attackId,
       )
     : withoutEvents.phaseResolutionResults.map((resolution) =>
         resolution.attackResultId === snapshot.data.attackId
-          ? combatRoundPhaseResolutionResultSchema.parse({
-              ...resolution,
-              defenseSnapshotId: undefined,
-              updatedAt: attackResult.rolledAt,
-            })
+          ? previousMeleeAttackResult.success
+            ? buildCombatRoundPhaseResolutionResult({
+                attackResult: previousMeleeAttackResult.data,
+                roundNumber: normalized.roundNumber,
+                state: { ...withoutEvents, participants },
+                updatedAt: previousMeleeAttackResult.data.rolledAt,
+              })
+            : combatRoundPhaseResolutionResultSchema.parse({
+                ...resolution,
+                defenseSnapshotId: undefined,
+                updatedAt: attackResult.rolledAt,
+              })
           : resolution,
       );
 

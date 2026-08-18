@@ -26,6 +26,7 @@ import {
   ensureCombatRoundPhaseResolutionResultsForPhase,
   fingerprintCombatModifierResolution,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundAttackResultById,
   getCombatRoundAttackResultId,
   getCurrentExecutableCombatTasks,
   getCombatRoundPhaseAttackCandidates,
@@ -19005,7 +19006,7 @@ describe("scenarios route contract", () => {
       actionId: "attack_parry",
       attackOpportunityId: "test-opportunity:defense-review-endpoint",
       attackerParticipantId: "encounter-participant-1",
-      defenderDb: 10,
+      defenderDb: 100,
       defenderParticipantId: "encounter-participant-2",
       ob: 10,
       phase: "phase1",
@@ -19078,6 +19079,7 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(attack.hit).toBe(false);
     expect(response.json().defenseSnapshot).toMatchObject({
       attackId,
       attackOpportunityId: "test-opportunity:defense-review-endpoint",
@@ -19085,6 +19087,7 @@ describe("scenarios route contract", () => {
       awarenessDefault: true,
       awarenessOverridden: true,
       ordinaryDodgeAvailable: false,
+      eventSequence: expect.any(Number),
       sources: [
         { decision: "gm_included", included: true, itemId: primaryItemId },
         { decision: "gm_excluded", included: false, itemId: secondaryItemId },
@@ -19094,6 +19097,15 @@ describe("scenarios route contract", () => {
     const savedState = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session
       .combatRoundState as CombatRoundState;
     expect(savedState.defenseSnapshots).toHaveLength(1);
+    expect(
+      getCombatRoundAttackResultById({ attackResultId: attackId, state: savedState }),
+    ).toMatchObject({
+      defenderDb: 0,
+      hit: true,
+      ob: 10,
+      rollD20: 14,
+      rollTotal: 14,
+    });
     expect(savedState.phaseResolutionResults[0]).toMatchObject({
       attackResultId: attackId,
       defenseSnapshotId: `defense-snapshot:${attackId}`,

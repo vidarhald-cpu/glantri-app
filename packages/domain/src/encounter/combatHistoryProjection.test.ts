@@ -9,6 +9,7 @@ import {
   buildCombatRoundAttackRollResult,
   buildCombatRoundPhaseResolutionResult,
   deriveCombatHistoryStepOutcome,
+  getLatestPlayerSafeCombatDefenseReview,
   projectCombatHistory,
   projectCombatHistoryEvent,
   type CombatStepEvent,
@@ -67,6 +68,90 @@ const player = (controlled: string[], visible: string[]) => ({
 });
 
 describe("combat history projection", () => {
+  it("projects only defender-safe committed defense facts and orders tied events by sequence", () => {
+    const defenseEvent = (sequence: number, aware: boolean) =>
+      event({
+        attackerParticipantId: "hidden",
+        defenderParticipantId: "aria",
+        facts: {
+          gmReview: {
+            defenseSnapshot: {
+              attackerParticipantId: "hidden",
+              itemRevision: "secret-revision",
+              templateId: "secret-template",
+            },
+          },
+          involvedOutcome: {},
+          publicOutcome: { hit: true },
+          rollerPrivate: {
+            attackDirection: sequence === 3 ? "rear" : "front",
+            aware,
+            ordinaryDodgeAvailable: aware,
+            sources: [
+              {
+                included: sequence !== 2,
+                kind: "shield",
+                label: "Round shield",
+                slot: "offHand",
+              },
+            ],
+          },
+        },
+        id: `attack:hidden:item-hidden-sword:${sequence}`,
+        ownerParticipantId: "aria",
+        phase: "phase1",
+        rollerParticipantId: "aria",
+        sequence,
+        type: "attack",
+        visibility: {
+          identityRefs: [
+            { participantId: "hidden", role: "attacker" },
+            { participantId: "aria", role: "defender" },
+          ],
+          involvedParticipantIds: ["hidden", "aria"],
+          outcomeScope: "involved",
+        },
+      });
+    const defenderEvents = [1, 2, 3].map((sequence) =>
+      projectCombatHistoryEvent({
+        event: defenseEvent(sequence, sequence !== 2),
+        participants,
+        viewer: player(["aria"], ["aria"]),
+      }),
+    );
+    const projected = defenderEvents.filter(
+      (candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate),
+    );
+
+    expect(projected).toHaveLength(3);
+    expect(
+      getLatestPlayerSafeCombatDefenseReview({
+        defenderParticipantId: "aria",
+        events: projected,
+        phase: "phase1",
+        roundNumber: 1,
+      }),
+    ).toMatchObject({ attackDirection: "rear", aware: true, eventSequence: 3 });
+    const serialized = JSON.stringify(projected);
+    ["hidden", "item-hidden-sword", "secret-revision", "secret-template"].forEach((secret) =>
+      expect(serialized).not.toContain(secret),
+    );
+
+    const attacker = projectCombatHistoryEvent({
+      event: defenseEvent(3, true),
+      participants,
+      viewer: player(["hidden"], ["hidden"]),
+    });
+    expect(attacker?.facts.defenseReview).toBeUndefined();
+    expect(
+      projectCombatHistoryEvent({
+        event: defenseEvent(3, true),
+        participants,
+        viewer: player(["cyra"], ["cyra"]),
+      }),
+    ).toBeUndefined();
+  });
+
   it("does not project a carried initiative result as an attack-step result", () => {
     const state = combatRoundStateSchema.parse({
       participants: [{ label: "Aria", participantId: "aria" }],

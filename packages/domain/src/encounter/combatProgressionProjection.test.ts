@@ -1832,16 +1832,53 @@ describe("authorizeCombatProgressionTask", () => {
         owner: { participantId: "guard" },
       });
       expect(playerTask).toMatchObject({
-        actorAccess: { combatant: true },
+        actorAccess: { combatant: false },
+        automation: { eligibility: "not_allowed", stopReason: "hidden_information" },
         expectedCommand: "roll_parry",
         identity: {
-          disarmAttemptId: attemptId,
           parryPurpose: "parry_disarm",
-          parrySourceId: "declared-disarm-weapon",
         },
         owner: { participantId: "guard" },
       });
-      expect(JSON.stringify(playerTask)).not.toContain("hero");
+      expect(playerTask?.identity).not.toHaveProperty("disarmAttemptId");
+      expect(playerTask?.identity).not.toHaveProperty("parrySourceId");
+      const defenderSerialization = JSON.stringify(playerProjection);
+      [
+        "hero",
+        "character-hero",
+        "scenario-hero",
+        "item-hero-sword",
+        "item:item-hero-sword",
+        "weapon-template-sword",
+      ].forEach((hiddenIdentifier) => {
+        expect(defenderSerialization).not.toContain(hiddenIdentifier);
+      });
+      const attackerProjection = projectCombatProgressionPresentation({
+        projection,
+        viewer: {
+          controlledParticipantIds: new Set(["hero"]),
+          kind: "player",
+          visibleParticipantIds: new Set(["hero"]),
+        },
+      });
+      const attackerSerialization = JSON.stringify(attackerProjection);
+      ["guard", "character-guard", "scenario-guard", "declared-disarm-weapon"].forEach(
+        (hiddenIdentifier) => {
+          expect(attackerSerialization).not.toContain(hiddenIdentifier);
+        },
+      );
+      const uninvolvedProjection = projectCombatProgressionPresentation({
+        projection,
+        viewer: {
+          controlledParticipantIds: new Set(["observer"]),
+          kind: "player",
+          visibleParticipantIds: new Set(["observer"]),
+        },
+      });
+      const uninvolvedSerialization = JSON.stringify(uninvolvedProjection);
+      ["hero", "guard", "item-hero-sword", "weapon-template-sword"].forEach((hiddenIdentifier) => {
+        expect(uninvolvedSerialization).not.toContain(hiddenIdentifier);
+      });
       const safeAfterAttack = {
         ...afterDefenseReview,
         disarmAttempts: afterDefenseReview.disarmAttempts.map((attempt) => ({
@@ -1868,8 +1905,8 @@ describe("authorizeCombatProgressionTask", () => {
           parrySourceId: "declared-disarm-weapon",
         },
       });
-      expect(JSON.stringify(playerProjection)).not.toContain("item-main-gauche");
-      expect(JSON.stringify(playerProjection)).not.toContain('"participantId":"hero"');
+      expect(defenderSerialization).not.toContain("item-main-gauche");
+      expect(defenderSerialization).not.toContain('"participantId":"hero"');
     },
   );
 

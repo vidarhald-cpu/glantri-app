@@ -42,6 +42,7 @@ import {
   getCombatRoundStepForProgressionBoundary,
   getCombatRoundStepForCursorStep,
   getHitLocationFullLabel,
+  getLatestPlayerSafeCombatDefenseReview,
   getPlayerCombatCurrentRollAction,
   getParticipantCombatExperienceSkillTotalLookup,
   getWeaponPreferredDistances,
@@ -103,6 +104,7 @@ import {
   PlayerCombatActionSelectorPanel,
   type PlayerCombatDistancePreferenceOption,
   PlayerCombatDefenseStatsTable,
+  PlayerCombatCommittedDefenseReview,
   PlayerCombatModifierPanel,
   PlayerCombatObservationProgress,
   PlayerCombatOpponentSelector,
@@ -5116,6 +5118,14 @@ export default function ScenarioPlayerCombatPageContent({
                 normalizedFeintPhaseContexts[phaseKey] ??
                 phaseCombatContextDrafts[phaseKey];
               const phaseLoadoutSummary = phaseCombatLoadoutSummaries[phaseKey];
+              const committedDefenseReview = combatHistory
+                ? getLatestPlayerSafeCombatDefenseReview({
+                    defenderParticipantId: selectedRoundParticipant?.participantId,
+                    events: combatHistory.activeRound.events,
+                    phase: phaseKey,
+                    roundNumber: combatHistory.activeRound.roundNumber,
+                  })
+                : undefined;
               const targetRoundParticipant = phaseCombatContext.targetParticipantId
                 ? combatRoundState?.participants.find(
                     (participant) =>
@@ -5423,7 +5433,9 @@ export default function ScenarioPlayerCombatPageContent({
                       />
                     </>
                   ) : null}
-                  {phaseModel.showDefenseContext ? (
+                  {committedDefenseReview ? (
+                    <PlayerCombatCommittedDefenseReview review={committedDefenseReview} />
+                  ) : phaseModel.showDefenseContext ? (
                     <>
                       {phaseModel.defenseStats ? (
                         <PlayerCombatDefenseStatsTable stats={phaseModel.defenseStats} />
