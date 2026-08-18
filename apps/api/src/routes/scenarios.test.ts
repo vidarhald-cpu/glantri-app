@@ -90,6 +90,9 @@ const mocks = vi.hoisted(() => {
     getCharacterById: vi.fn(),
     getOwnedCharacter: vi.fn(),
   };
+  const characterEquipmentReadModelService = {
+    getCharacterEquipmentState: vi.fn(),
+  };
   const combatStateReadService = {
     getCombatHistorySourceById: vi.fn(),
     getEncounterMetadataById: vi.fn(),
@@ -99,6 +102,8 @@ const mocks = vi.hoisted(() => {
   const combatItemInteractionService = {
     commitDisarm: vi.fn(),
     commitDisarmUndo: vi.fn(),
+    commitMissileWeaponAttack: vi.fn(),
+    commitMissileWeaponAttackUndo: vi.fn(),
     commitThrownWeaponAttack: vi.fn(),
     commitThrownWeaponAttackUndo: vi.fn(),
     getOptions: vi.fn(),
@@ -136,6 +141,7 @@ const mocks = vi.hoisted(() => {
   return {
     adminUser,
     campaignService,
+    characterEquipmentReadModelService,
     characterService,
     combatItemInteractionService,
     combatStateReadService,
@@ -149,6 +155,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("@glantri/database", () => ({
   CampaignService: vi.fn(() => mocks.campaignService),
+  CharacterEquipmentReadModelService: vi.fn(() => mocks.characterEquipmentReadModelService),
   CharacterService: vi.fn(() => mocks.characterService),
   CombatItemInteractionService: vi.fn(() => mocks.combatItemInteractionService),
   CombatStateReadService: vi.fn(() => mocks.combatStateReadService),
@@ -4049,6 +4056,112 @@ describe("scenarios route contract", () => {
       },
       status: "reviewed",
     });
+  });
+
+  it("interrupts fragile missile preparation once when a reviewed generic action becomes substantial", async () => {
+    const baseEncounter = makeCombatEncounter() as EncounterSession;
+    const roundState = initializeCombatRoundState({ encounter: baseEncounter });
+    const genericActions = declareCombatGenericAction({
+      action: {
+        createdAt: "2026-08-18T10:00:00.000Z",
+        duration: { kind: "round" },
+        id: "generic-substantial-1",
+        intent: "Force the barred gate.",
+        ownerParticipantId: "encounter-participant-1",
+      },
+      actions: [],
+    });
+    const encounter = {
+      ...baseEncounter,
+      combatRoundState: combatRoundStateSchema.parse({
+        ...roundState,
+        genericActions,
+        missileReadiness: [
+          {
+            aimCompletedRounds: 1,
+            aimLevel: 1,
+            aimRequiredRounds: 2,
+            ammoFamily: "arrow",
+            ammoItemId: "arrows",
+            ammoItemRevision: "ammo-revision-1",
+            baseCompletedRounds: 1,
+            baseRequiredRounds: 1,
+            family: "long_bow",
+            gmPreparationAdjustment: 0,
+            id: "missile-readiness:encounter-participant-1:bow",
+            participantId: "encounter-participant-1",
+            profile: {
+              ammoFamily: "arrow",
+              canRemainReady: false,
+              family: "long_bow",
+              fullNormalCycleRounds: 2,
+              preparationModel: "continuous_fragile",
+              rapidShotAllowed: true,
+              standardPreparationRounds: 1,
+            },
+            rapidShot: false,
+            status: "preparing",
+            targetParticipantId: "encounter-participant-2",
+            updatedAt: "2026-08-18T10:00:00.000Z",
+            weaponItemId: "bow",
+            weaponTemplateId: "weapon-template-long-bow",
+          },
+        ],
+      }),
+    } as EncounterSession;
+    const participant = makeCombatScenarioParticipant();
+    setupCombatDeclarationRoute({ encounter, participants: [participant], user: mocks.adminUser });
+    setupMutableCombatRouteState({ encounter, participants: [participant], user: mocks.adminUser });
+    const app = await buildScenarioTestApp();
+
+    const reviewed = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "generic-substantial-1",
+        duration: { kind: "round" },
+        expectedRevision: encounter.updatedAt,
+        operation: "review",
+        referenceKind: "none",
+        rollKind: "none",
+      },
+      url: "/encounters/encounter-1/combat-round/generic-actions",
+    });
+    expect(reviewed.statusCode, JSON.stringify(reviewed.json())).toBe(200);
+    expect(reviewed.json().encounter.combatRoundState.missileReadiness[0].status).toBe("preparing");
+    expect(reviewed.json().encounter.combatRoundState.commands).toHaveLength(0);
+
+    const activated = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "generic-substantial-1",
+        expectedRevision: reviewed.json().encounter.updatedAt,
+        operation: "activate",
+      },
+      url: "/encounters/encounter-1/combat-round/generic-actions",
+    });
+    expect(activated.statusCode, JSON.stringify(activated.json())).toBe(200);
+    expect(activated.json().encounter.combatRoundState.missileReadiness[0]).toMatchObject({
+      aimCompletedRounds: 0,
+      baseCompletedRounds: 0,
+      status: "idle",
+    });
+    expect(activated.json().encounter.combatRoundState.commands).toHaveLength(1);
+    expect(activated.json().encounter.combatRoundState.commands[0].type).toBe(
+      "interrupt_missile_readiness",
+    );
+
+    const cancelled = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "generic-substantial-1",
+        expectedRevision: activated.json().encounter.updatedAt,
+        operation: "cancel",
+      },
+      url: "/encounters/encounter-1/combat-round/generic-actions",
+    });
+    await app.close();
+    expect(cancelled.statusCode, JSON.stringify(cancelled.json())).toBe(200);
+    expect(cancelled.json().encounter.combatRoundState.commands).toHaveLength(1);
   });
 
   it("lists campaigns for the authenticated game master", async () => {
@@ -17257,6 +17370,147 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(409);
     expect(response.json().code).toBe("identity_mismatch");
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("gives hidden, nonexistent, wrong-target, and stale missile probes one zero-write response", async () => {
+    const bow = weaponTemplates.find((candidate) => candidate.id === "weapon-template-bow");
+    if (!bow?.missileProfile) throw new Error("Missing Short bow missile fixture.");
+    const weaponItemId = "item-weapon-template-bow";
+    const source = {
+      attackModeId: "mode-1",
+      itemId: weaponItemId,
+      sourceKind: "weapon" as const,
+      weaponInstanceId: weaponItemId,
+      weaponSourceId: `weapon:${weaponItemId}`,
+      weaponSourceSlot: "primary" as const,
+      weaponTemplateId: bow.id,
+    };
+    const baseState = makeOpenPhase1AttackRoundState({ snapshotWeaponName: bow.name });
+    const combatRoundState = {
+      ...baseState,
+      missileReadiness: [
+        {
+          aimCompletedRounds: 0,
+          aimLevel: 0,
+          aimRequiredRounds: 0,
+          ammoFamily: bow.missileProfile.ammoFamily,
+          ammoItemId: "arrow-stack-1",
+          ammoItemRevision: "2026-01-01T00:00:00.000Z",
+          baseCompletedRounds: 1,
+          baseRequiredRounds: 1,
+          family: bow.missileProfile.family,
+          gmPreparationAdjustment: 0,
+          id: `missile-readiness:encounter-participant-1:${weaponItemId}`,
+          lastProgressRound: 1,
+          participantId: "encounter-participant-1",
+          phase: "phase1" as const,
+          profile: bow.missileProfile,
+          rapidShot: false,
+          status: "ready" as const,
+          targetParticipantId: "encounter-participant-2",
+          updatedAt: "2026-01-01T00:02:00.000Z",
+          weaponItemId,
+          weaponTemplateId: bow.id,
+        },
+      ],
+      participants: baseState.participants.map((participant, index) =>
+        index === 0
+          ? {
+              ...participant,
+              declaration: {
+                ...participant.declaration,
+                attackOpportunities: buildCombatRoundDeclaredAttackOpportunities({
+                  actionId: "attack_parry",
+                  participantId: "encounter-participant-1",
+                  phaseContexts: {
+                    phase1: testCombatPhaseContext("encounter-participant-2"),
+                  },
+                  roundNumber: 1,
+                  sources: { phase1: source },
+                }),
+              },
+            }
+          : participant,
+      ),
+    };
+    const encounterParticipants = makeFourCombatEncounterParticipants();
+    const participants = [
+      makeCombatScenarioParticipantWithWeapon({
+        characterId: "character-1",
+        id: "participant-1",
+        weaponName: bow.name,
+      }),
+      makeCombatScenarioParticipant({ controlledByUserId: "target-player", id: "participant-2" }),
+      makeCombatScenarioParticipant({ controlledByUserId: "hidden-player", id: "participant-3" }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "uninvolved-player",
+        id: "participant-4",
+      }),
+    ];
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState,
+        participantVisibility: {
+          "encounter-participant-1": {
+            "encounter-participant-1": true,
+            "encounter-participant-2": true,
+            "encounter-participant-4": true,
+          },
+          "encounter-participant-2": {
+            "encounter-participant-1": true,
+            "encounter-participant-2": true,
+          },
+          "encounter-participant-3": { "encounter-participant-3": true },
+          "encounter-participant-4": {
+            "encounter-participant-1": true,
+            "encounter-participant-2": true,
+            "encounter-participant-4": true,
+          },
+        },
+        participants: encounterParticipants,
+      },
+      participants,
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+    const basePayload = {
+      defenderParticipantId: "encounter-participant-2",
+      phase: "phase1",
+      scenarioParticipantId: "participant-1",
+    };
+    const probes = [
+      { defenderParticipantId: "encounter-participant-3" },
+      { defenderParticipantId: "missing-participant" },
+      { defenderParticipantId: "encounter-participant-4" },
+      { opportunityId: "stale-missile-opportunity" },
+    ];
+    const beforeState = JSON.stringify(combatRoundState);
+    const responses = [];
+    for (const probe of probes) {
+      responses.push(
+        await app.inject({
+          method: "POST",
+          payload: { ...basePayload, ...probe },
+          url: "/encounters/encounter-1/combat-round/roll-attack",
+        }),
+      );
+    }
+    await app.close();
+
+    expect(responses.map((response) => [response.statusCode, response.json()])).toEqual(
+      probes.map(() => [
+        409,
+        {
+          code: "task_mismatch",
+          error: "Attack task is unavailable. Refresh combat before rolling.",
+        },
+      ]),
+    );
+    expect(JSON.stringify(combatRoundState)).toBe(beforeState);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateCombatEncounter).not.toHaveBeenCalled();
+    expect(mocks.scenarioService.recordScenarioEvent).not.toHaveBeenCalled();
+    expect(mocks.combatItemInteractionService.commitMissileWeaponAttack).not.toHaveBeenCalled();
   });
 
   it("accepts a narrow live attack request without a client Skill/OB total", async () => {

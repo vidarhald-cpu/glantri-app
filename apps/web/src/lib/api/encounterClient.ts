@@ -10,6 +10,7 @@ import {
   CombatHistoryProjection,
   CombatGenericActionDuration,
   CombatItemInteractionOperation,
+  CombatMissileIncomingAttack,
   CombatProgressionBoundaryKind,
   CombatParryPurpose,
   CombatRoundAttackRollResult,
@@ -1273,18 +1274,20 @@ export async function rollCombatAttackOnServer(input: {
   weaponTemplateId: string;
   currentEncounter?: EncounterSession;
 }): Promise<{
-  attackResult: CombatRoundAttackRollResult;
+  attackResult?: CombatRoundAttackRollResult;
   command?: CombatRoundCommand;
   commandEnvelope: CombatRoundCommandEnvelope;
   encounter: EncounterSession;
   participant?: ScenarioParticipant;
+  pendingMissileAttack?: CombatMissileIncomingAttack;
 }> {
   const payload = await sendCombatMutationJson<{
-    attackResult: CombatRoundAttackRollResult;
+    attackResult?: CombatRoundAttackRollResult;
     command?: CombatRoundCommand;
     commandEnvelope: CombatRoundCommandEnvelope;
     encounter: EncounterSession;
     participant?: ScenarioParticipant;
+    pendingMissileAttack?: CombatMissileIncomingAttack;
   }>(
     `/encounters/${input.encounterId}/combat-round/roll-attack`,
     {
@@ -1316,6 +1319,58 @@ export async function rollCombatAttackOnServer(input: {
   );
 
   return payload;
+}
+
+export async function progressCombatMissileReadinessOnServer(input: {
+  aimLevel: 0 | 1 | 2 | 3;
+  ammoItemId: string;
+  ammoItemRevision: string;
+  currentEncounter?: EncounterSession;
+  encounterId: string;
+  executionGroupId: string;
+  expectedParticipantRevision: string;
+  expectedRevision: string;
+  gmPreparationAdjustment?: number;
+  opportunityId: string;
+  phase: "phase1" | "phase2";
+  rapidShot?: boolean;
+  scenarioParticipantId: string;
+  targetParticipantId: string;
+  taskId: string;
+  weaponInstanceId: string;
+  weaponTemplateId: string;
+}): Promise<{ commandEnvelope: CombatRoundCommandEnvelope; encounter: EncounterSession }> {
+  return sendCombatMutationJson(
+    `/encounters/${input.encounterId}/combat-round/progress-missile-readiness`,
+    {
+      body: JSON.stringify({
+        ...input,
+        currentEncounter: undefined,
+        gmPreparationAdjustment: input.gmPreparationAdjustment ?? 0,
+        rapidShot: input.rapidShot ?? false,
+      }),
+      method: "POST",
+    },
+    input.currentEncounter,
+  );
+}
+
+export async function interruptCombatMissileReadinessOnServer(input: {
+  currentEncounter?: EncounterSession;
+  encounterId: string;
+  expectedRevision: string;
+  reason: string;
+  scenarioParticipantId: string;
+  weaponInstanceId?: string;
+}): Promise<{ commandEnvelope: CombatRoundCommandEnvelope; encounter: EncounterSession }> {
+  return sendCombatMutationJson(
+    `/encounters/${input.encounterId}/combat-round/interrupt-missile-readiness`,
+    {
+      body: JSON.stringify({ ...input, currentEncounter: undefined }),
+      method: "POST",
+    },
+    input.currentEncounter,
+  );
 }
 
 export async function rollCombatParryOnServer(input: {

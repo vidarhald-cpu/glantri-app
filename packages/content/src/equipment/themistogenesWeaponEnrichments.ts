@@ -1,4 +1,5 @@
 import type {
+  MissileWeaponProfile,
   WeaponAttackMode,
   WeaponTemplate,
   WeaponTemplateManualEnrichment,
@@ -21,6 +22,7 @@ export interface WeaponTemplateEnrichment {
   disarmCapability?: "none" | "trap";
   disarmGripClass?: "one_handed" | "two_handed";
   disarmControlOverride?: number;
+  missileProfile?: MissileWeaponProfile;
 }
 
 export interface ThemistogenesWeaponEnrichmentReport {
@@ -89,6 +91,72 @@ const trapDisarmWeaponIds = [
   "weapon-template-fencing-sword",
 ];
 
+const missileProfiles: Record<string, MissileWeaponProfile> = {
+  "weapon-template-sling": {
+    ammoFamily: "sling_projectile",
+    canRemainReady: false,
+    family: "sling",
+    fullNormalCycleRounds: 3,
+    preparationModel: "continuous_fragile",
+    rapidShotAllowed: true,
+    standardPreparationRounds: 2,
+  },
+  "weapon-template-bow": {
+    ammoFamily: "arrow",
+    canRemainReady: false,
+    family: "short_bow",
+    fullNormalCycleRounds: 2,
+    preparationModel: "continuous_fragile",
+    rapidShotAllowed: true,
+    standardPreparationRounds: 1,
+  },
+  "weapon-template-composite-bow": {
+    ammoFamily: "arrow",
+    canRemainReady: false,
+    family: "composite_bow",
+    fullNormalCycleRounds: 2,
+    preparationModel: "continuous_fragile",
+    rapidShotAllowed: true,
+    standardPreparationRounds: 1,
+  },
+  "weapon-template-long-bow": {
+    ammoFamily: "arrow",
+    canRemainReady: false,
+    family: "long_bow",
+    fullNormalCycleRounds: 2,
+    preparationModel: "continuous_fragile",
+    rapidShotAllowed: true,
+    standardPreparationRounds: 1,
+  },
+  "weapon-template-hand-crossbow": {
+    ammoFamily: "crossbow_bolt",
+    canRemainReady: true,
+    family: "hand_crossbow",
+    fullNormalCycleRounds: 4,
+    preparationModel: "staged_persistent",
+    rapidShotAllowed: false,
+    standardPreparationRounds: 3,
+  },
+  "weapon-template-crossbow": {
+    ammoFamily: "crossbow_bolt",
+    canRemainReady: true,
+    family: "crossbow",
+    fullNormalCycleRounds: 8,
+    preparationModel: "staged_persistent",
+    rapidShotAllowed: false,
+    standardPreparationRounds: 7,
+  },
+  "weapon-template-heavy-crossbow": {
+    ammoFamily: "crossbow_bolt",
+    canRemainReady: true,
+    family: "heavy_crossbow",
+    fullNormalCycleRounds: 10,
+    preparationModel: "staged_persistent",
+    rapidShotAllowed: false,
+    standardPreparationRounds: 9,
+  },
+};
+
 export const themistogenesWeaponEnrichments: Record<string, WeaponTemplateEnrichment> = {
   ...fromIds(repeatedThrustMode1Ids, {
     attackModes: {
@@ -132,6 +200,18 @@ for (const id of trapDisarmWeaponIds) {
     notes: [
       ...(current.notes ?? []),
       "Approved Disarm V1 specialist capability (combat source p. 8).",
+    ],
+  };
+}
+
+for (const [id, missileProfile] of Object.entries(missileProfiles)) {
+  const current = themistogenesWeaponEnrichments[id] ?? {};
+  themistogenesWeaponEnrichments[id] = {
+    ...current,
+    missileProfile,
+    notes: [
+      ...(current.notes ?? []),
+      "Approved Missile Weapons V1 preparation/readiness calibration (#290).",
     ],
   };
 }
@@ -397,6 +477,7 @@ export function applyThemistogenesWeaponEnrichments(templates: WeaponTemplate[])
       disarmControlOverride:
         enrichment?.disarmControlOverride ?? template.disarmControlOverride ?? null,
       disarmGripClass: enrichment?.disarmGripClass ?? template.disarmGripClass ?? null,
+      missileProfile: enrichment?.missileProfile ?? template.missileProfile ?? null,
       primeAttackType,
       primaryAttackType:
         primeAttackType ?? primaryMode?.label ?? template.primaryAttackType ?? null,

@@ -115,6 +115,31 @@ export interface CommitCombatThrownWeaponAttackInput {
   templateId: string;
 }
 
+export interface CombatMissileAmmoUndo {
+  actionId: string;
+  ammoItemId: string;
+  ammoItemRevisionBefore: string;
+  ammoItemRevisionAfter: string;
+  encounterId: string;
+  quantityAfter: number;
+  quantityBefore: number;
+  version: 1;
+}
+
+export interface CommitCombatMissileAttackInput {
+  actorUserId: string;
+  ammoItemId: string;
+  ammoItemRevision: string;
+  campaignId: string;
+  commandId: string;
+  encounterId: string;
+  expectedEncounterRevision: string;
+  ownerCharacterId: string;
+  roundNumber: number;
+  scenarioId: string;
+  session: EncounterSession;
+}
+
 export interface CommitCombatDisarmInput {
   actorUserId: string;
   campaignId: string;
@@ -269,6 +294,37 @@ function commandHasThrownWeaponUndo(
     undo.actionId === commandId &&
     undo.encounterId === encounter.id &&
     isDeepStrictEqual(fact, undo)
+  );
+}
+
+function attachMissileAmmoUndo(
+  encounter: EncounterSession,
+  commandId: string,
+  undo: CombatMissileAmmoUndo,
+): EncounterSession {
+  const state = encounter.combatRoundState;
+  if (!state) throw new CombatItemUnavailableError();
+  let found = false;
+  const commands = state.commands.map((command) => {
+    if (command.id !== commandId || command.type !== "roll_attack") return command;
+    found = true;
+    return { ...command, facts: { ...command.facts, missileAmmoUndo: undo } };
+  });
+  if (!found) throw new CombatItemUnavailableError();
+  return { ...encounter, combatRoundState: { ...state, commands } };
+}
+
+function commandHasMissileAmmoUndo(
+  encounter: EncounterSession,
+  commandId: string,
+  undo: CombatMissileAmmoUndo,
+): boolean {
+  const command = findCombatCommand(encounter, commandId);
+  return (
+    command?.type === "roll_attack" &&
+    undo.actionId === commandId &&
+    undo.encounterId === encounter.id &&
+    isDeepStrictEqual(command.facts.missileAmmoUndo, undo)
   );
 }
 
@@ -802,6 +858,154 @@ export class CombatItemInteractionService {
     );
   }
 
+  async commitMissileWeaponAttack(
+    input: CommitCombatMissileAttackInput,
+  ): Promise<{ encounter: EncounterSession; undo: CombatMissileAmmoUndo }> {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await this.client.$transaction(
+          async (transaction) => {
+            await transaction.$queryRaw(
+              Prisma.sql`SELECT "id" FROM "Encounter" WHERE "id" = ${input.encounterId} FOR UPDATE`,
+            );
+            const persistedEncounter = (
+              await createPrismaCombatStateReadRepository(transaction).getFullEncounterById(
+                input.encounterId,
+              )
+            )?.encounter;
+            const submittedCommand = findCombatCommand(input.session, input.commandId);
+            if (
+              !persistedEncounter ||
+              persistedEncounter.campaignId !== input.campaignId ||
+              persistedEncounter.scenarioId !== input.scenarioId ||
+              submittedCommand?.type !== "roll_attack"
+            ) {
+              throw new CombatItemUnavailableError();
+            }
+            const priorCommand = findCombatCommand(persistedEncounter, input.commandId);
+            if (priorCommand?.type === "roll_attack") {
+              const priorUndo = priorCommand.facts.missileAmmoUndo as
+                | CombatMissileAmmoUndo
+                | undefined;
+              if (
+                !priorUndo ||
+                priorUndo.ammoItemId !== input.ammoItemId ||
+                priorUndo.ammoItemRevisionBefore !== input.ammoItemRevision ||
+                !commandHasMissileAmmoUndo(persistedEncounter, input.commandId, priorUndo)
+              ) {
+                throw new CombatItemUnavailableError();
+              }
+              const currentAmmo = await transaction.characterEquipmentItem.findUnique({
+                where: { id: input.ammoItemId },
+              });
+              if (
+                !currentAmmo ||
+                currentAmmo.quantity !== priorUndo.quantityAfter ||
+                currentAmmo.updatedAt.toISOString() !== priorUndo.ammoItemRevisionAfter
+              ) {
+                throw new CombatItemUnavailableError();
+              }
+              return { encounter: persistedEncounter, undo: priorUndo };
+            }
+            if (persistedEncounter.updatedAt !== input.expectedEncounterRevision) {
+              throw new CombatItemUnavailableError();
+            }
+            const readiness = submittedCommand.facts.previousMissileReadiness as
+              | { ammoItemId?: string; ammoItemRevision?: string }
+              | undefined;
+            if (
+              readiness?.ammoItemId !== input.ammoItemId ||
+              readiness.ammoItemRevision !== input.ammoItemRevision
+            ) {
+              throw new CombatItemUnavailableError();
+            }
+            await transaction.$queryRaw(
+              Prisma.sql`SELECT "id" FROM "CharacterEquipmentItem" WHERE "id" = ${input.ammoItemId} FOR UPDATE`,
+            );
+            const ammo = await transaction.characterEquipmentItem.findUnique({
+              where: { id: input.ammoItemId },
+            });
+            const loadout = await transaction.characterLoadout.findFirst({
+              where: { characterId: input.ownerCharacterId, isActive: true },
+            });
+            if (
+              !ammo ||
+              ammo.updatedAt.toISOString() !== input.ammoItemRevision ||
+              ammo.campaignContextId !== input.campaignId ||
+              ammo.holderCharacterId !== input.ownerCharacterId ||
+              ammo.quantity < 1 ||
+              !loadout?.activeAmmoItemIds.includes(input.ammoItemId)
+            ) {
+              throw new CombatItemUnavailableError();
+            }
+            const quantityAfter = ammo.quantity - 1;
+            const ammoAfter = await transaction.characterEquipmentItem.update({
+              data: {
+                quantity: quantityAfter,
+                updatedAt: new Date(Math.max(Date.now(), ammo.updatedAt.getTime() + 1)),
+              },
+              where: { id: ammo.id },
+            });
+            await this.transactionBoundaryHook?.("item");
+            const undo: CombatMissileAmmoUndo = {
+              actionId: input.commandId,
+              ammoItemId: ammo.id,
+              ammoItemRevisionAfter: ammoAfter.updatedAt.toISOString(),
+              ammoItemRevisionBefore: input.ammoItemRevision,
+              encounterId: input.encounterId,
+              quantityAfter,
+              quantityBefore: ammo.quantity,
+              version: 1,
+            };
+            const session = attachMissileAmmoUndo(input.session, input.commandId, undo);
+            const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
+              maxTransactionAttempts: 1,
+            }).updateCombatEncounter({
+              campaignId: input.campaignId,
+              encounterId: input.encounterId,
+              expectedRevision: input.expectedEncounterRevision,
+              scenarioId: input.scenarioId,
+              session,
+            });
+            await this.transactionBoundaryHook?.("encounter");
+            await transaction.scenarioEventLog.create({
+              data: {
+                actorUserId: input.actorUserId,
+                eventType: "encounter_updated",
+                payloadJson: {
+                  ammoItemId: ammo.id,
+                  commandId: input.commandId,
+                  encounterId: input.encounterId,
+                  quantityAfter,
+                  resolutionKind: "canonical_missile_ammunition",
+                },
+                roundNumber: input.roundNumber,
+                scenarioId: input.scenarioId,
+                summary: "Canonical missile ammunition consumed.",
+              },
+            });
+            await this.transactionBoundaryHook?.("event");
+            return { encounter, undo };
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        if (!isRetryableCombatTransactionError(error)) throw error;
+        if (attempt === 3) {
+          throw new CombatPersistenceError(
+            "transaction_conflict",
+            "Combat state changed while saving. Refresh and try again.",
+            error,
+          );
+        }
+      }
+    }
+    throw new CombatPersistenceError(
+      "transaction_conflict",
+      "Combat state changed while saving. Refresh and try again.",
+    );
+  }
+
   async commitDisarm(
     input: CommitCombatDisarmInput,
   ): Promise<{ encounter: EncounterSession; item?: ApplyCombatItemInteractionResult }> {
@@ -1115,6 +1319,97 @@ export class CombatItemInteractionService {
             },
             scenarioId: input.scenarioId,
             summary: "Canonical thrown weapon attack undone.",
+          },
+        });
+        await this.transactionBoundaryHook?.("event");
+        return encounter;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  async commitMissileWeaponAttackUndo(input: {
+    actorUserId: string;
+    campaignId: string;
+    commandId: string;
+    encounterId: string;
+    expectedEncounterRevision: string;
+    participantStateUpdates?: Array<{
+      expectedRevision: string;
+      participantId: string;
+      scenarioId: string;
+      state: ScenarioParticipantState;
+    }>;
+    scenarioId: string;
+    session: EncounterSession;
+    undo: CombatMissileAmmoUndo;
+  }): Promise<EncounterSession> {
+    return this.client.$transaction(
+      async (transaction) => {
+        await transaction.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "Encounter" WHERE "id" = ${input.encounterId} FOR UPDATE`,
+        );
+        const persistedEncounter = (
+          await createPrismaCombatStateReadRepository(transaction).getFullEncounterById(
+            input.encounterId,
+          )
+        )?.encounter;
+        if (
+          !persistedEncounter ||
+          persistedEncounter.updatedAt !== input.expectedEncounterRevision ||
+          persistedEncounter.campaignId !== input.campaignId ||
+          persistedEncounter.scenarioId !== input.scenarioId ||
+          !commandHasMissileAmmoUndo(persistedEncounter, input.commandId, input.undo) ||
+          findCombatCommand(input.session, input.commandId)
+        ) {
+          throw new CombatItemUnavailableError();
+        }
+        await transaction.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "CharacterEquipmentItem" WHERE "id" = ${input.undo.ammoItemId} FOR UPDATE`,
+        );
+        const ammo = await transaction.characterEquipmentItem.findUnique({
+          where: { id: input.undo.ammoItemId },
+        });
+        if (
+          !ammo ||
+          ammo.campaignContextId !== input.campaignId ||
+          ammo.quantity !== input.undo.quantityAfter ||
+          ammo.updatedAt.toISOString() !== input.undo.ammoItemRevisionAfter
+        ) {
+          throw new CombatItemUnavailableError();
+        }
+        await transaction.characterEquipmentItem.update({
+          data: {
+            quantity: input.undo.quantityBefore,
+            updatedAt: new Date(Math.max(Date.now(), ammo.updatedAt.getTime() + 1)),
+          },
+          where: { id: ammo.id },
+        });
+        await this.transactionBoundaryHook?.("item");
+        const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
+          maxTransactionAttempts: 1,
+        }).updateCombatEncounter({
+          campaignId: input.campaignId,
+          encounterId: input.encounterId,
+          expectedRevision: input.expectedEncounterRevision,
+          participantStateUpdates: input.participantStateUpdates,
+          scenarioId: input.scenarioId,
+          session: input.session,
+        });
+        await this.transactionBoundaryHook?.("encounter");
+        await transaction.scenarioEventLog.create({
+          data: {
+            actorUserId: input.actorUserId,
+            eventType: "encounter_updated",
+            payloadJson: {
+              ammoItemId: ammo.id,
+              commandId: input.commandId,
+              encounterId: input.encounterId,
+              quantity: input.undo.quantityBefore,
+              resolutionKind: "canonical_missile_ammunition_undo",
+            },
+            scenarioId: input.scenarioId,
+            summary: "Canonical missile ammunition restored.",
           },
         });
         await this.transactionBoundaryHook?.("event");

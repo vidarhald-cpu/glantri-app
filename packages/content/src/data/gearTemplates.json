@@ -4,11 +4,7 @@
     "category": "gear",
     "name": "Rope",
     "subtype": "utility",
-    "tags": [
-      "gear",
-      "utility",
-      "travel"
-    ],
+    "tags": ["gear", "utility", "travel"],
     "specificityTypeDefault": "generic",
     "defaultMaterial": "cloth",
     "baseEncumbrance": 4,
@@ -21,11 +17,7 @@
     "category": "gear",
     "name": "Lantern",
     "subtype": "light-source",
-    "tags": [
-      "gear",
-      "light",
-      "travel"
-    ],
+    "tags": ["gear", "light", "travel"],
     "specificityTypeDefault": "generic",
     "defaultMaterial": "bronze",
     "baseEncumbrance": 3,
@@ -38,11 +30,7 @@
     "category": "gear",
     "name": "Bedroll",
     "subtype": "camping",
-    "tags": [
-      "gear",
-      "camp",
-      "travel"
-    ],
+    "tags": ["gear", "camp", "travel"],
     "specificityTypeDefault": "generic",
     "defaultMaterial": "cloth",
     "baseEncumbrance": 5,
@@ -55,16 +43,72 @@
     "category": "gear",
     "name": "Waterskin",
     "subtype": "container",
-    "tags": [
-      "gear",
-      "travel",
-      "container"
-    ],
+    "tags": ["gear", "travel", "container"],
     "specificityTypeDefault": "generic",
     "defaultMaterial": "leather",
     "baseEncumbrance": 2,
     "baseValue": null,
     "rulesNotes": "Personal water container for daily travel.",
     "roleplayNotes": null
+  },
+  {
+    "id": "gear-template-arrows",
+    "category": "gear",
+    "name": "Arrows",
+    "subtype": "ammunition",
+    "tags": ["gear", "ammunition", "arrow"],
+    "specificityTypeDefault": "generic",
+    "defaultMaterial": "wood",
+    "baseEncumbrance": 0.2,
+    "baseValue": null,
+    "rulesNotes": "Canonical arrow stack; quantity is ammunition authority.",
+    "roleplayNotes": null,
+    "equipmentRole": "ammunition",
+    "ammunitionProfile": { "family": "arrow", "quantityPerShot": 1 }
+  },
+  {
+    "id": "gear-template-crossbow-bolts",
+    "category": "gear",
+    "name": "Crossbow bolts",
+    "subtype": "ammunition",
+    "tags": ["gear", "ammunition", "crossbow-bolt", "quarrel"],
+    "specificityTypeDefault": "generic",
+    "defaultMaterial": "wood",
+    "baseEncumbrance": 0.2,
+    "baseValue": null,
+    "rulesNotes": "Canonical crossbow bolt/quarrel stack; quantity is ammunition authority.",
+    "roleplayNotes": null,
+    "equipmentRole": "ammunition",
+    "ammunitionProfile": { "family": "crossbow_bolt", "quantityPerShot": 1 }
+  },
+  {
+    "id": "gear-template-sling-projectiles",
+    "category": "gear",
+    "name": "Sling projectiles",
+    "subtype": "ammunition",
+    "tags": ["gear", "ammunition", "sling-projectile"],
+    "specificityTypeDefault": "generic",
+    "defaultMaterial": "stone",
+    "baseEncumbrance": 0.2,
+    "baseValue": null,
+    "rulesNotes": "Canonical sling ammunition stack; quantity is ammunition authority.",
+    "roleplayNotes": null,
+    "equipmentRole": "ammunition",
+    "ammunitionProfile": { "family": "sling_projectile", "quantityPerShot": 1 }
+  },
+  {
+    "id": "gear-template-quiver",
+    "category": "gear",
+    "name": "Quiver",
+    "subtype": "container",
+    "tags": ["gear", "container", "quiver"],
+    "specificityTypeDefault": "specific",
+    "defaultMaterial": "leather",
+    "baseEncumbrance": 1,
+    "baseValue": null,
+    "rulesNotes": "Ordinary ammunition container. It does not own ammunition quantity.",
+    "roleplayNotes": null,
+    "equipmentRole": "ammunition_container",
+    "ammunitionProfile": null
   }
 ]

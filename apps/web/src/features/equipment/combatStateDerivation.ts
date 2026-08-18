@@ -65,6 +65,8 @@ export interface DerivedCombatAttackMode {
   ob: DerivedCombatValue;
   order: number;
   range?: WeaponAttackMode["range"];
+  provenance?: WeaponAttackMode["provenance"];
+  sourceMetadata?: WeaponAttackMode["sourceMetadata"];
   secondCrit: DerivedCombatValue;
 }
 
@@ -540,7 +542,9 @@ function buildWeaponRow(input: {
       template: input.template,
     }),
     order: mode.order ?? index,
+    provenance: mode.provenance,
     range: mode.range,
+    sourceMetadata: mode.sourceMetadata,
     secondCrit: mode.secondCrit ?? (index === 0 ? input.template?.secondCrit : undefined) ?? "—",
   }));
 

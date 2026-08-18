@@ -35,6 +35,7 @@ import {
   type TaskSpec,
 } from "./internal";
 import type { CombatProgressionProcess, CombatProgressionStageKind } from "./types";
+import { isCombatMissileReady } from "../combatMissile";
 
 function buildPhaseCombatExperienceProcess(
   context: ProjectionBuildContext,
@@ -325,6 +326,18 @@ function buildLegacyAttackProcess(
     const candidate = getCombatRoundPhaseAttackCandidates({ phase, state: context.state }).find(
       (entry) => entry.participantId === participantId,
     );
+    const missileReadiness =
+      candidate?.attackType === "missile"
+        ? context.state.missileReadiness.find(
+            (entry) =>
+              entry.participantId === participantId &&
+              entry.weaponItemId === candidate.weaponInstanceId &&
+              entry.targetParticipantId === candidate.targetParticipantId,
+          )
+        : undefined;
+    const needsMissileReadiness =
+      candidate?.attackType === "missile" &&
+      (!missileReadiness || !isCombatMissileReady(missileReadiness));
     const dependencies: TaskDependency[] = [];
     if (!candidate)
       dependencies.push({
@@ -343,13 +356,17 @@ function buildLegacyAttackProcess(
       tasks: [
         {
           dependencies,
-          expectedCommand: "roll_attack",
+          expectedCommand: needsMissileReadiness ? "progress_missile_readiness" : "roll_attack",
           identity: {
+            ammoItemId: missileReadiness?.ammoItemId,
+            missileReadinessId: missileReadiness?.id,
             opponentParticipantId: candidate?.targetParticipantId,
             opportunityId: candidate?.id,
             phase,
+            weaponInstanceId: candidate?.weaponInstanceId,
+            weaponTemplateId: candidate?.weaponTemplateId,
           },
-          kind: "attack",
+          kind: needsMissileReadiness ? "missile_readiness" : "attack",
           owner,
           presentationContext: {
             actionKind: presentationActionKind(participant?.declaration?.actionId),
@@ -372,55 +389,60 @@ function buildLegacyAttackProcess(
           state: context.state,
         })
       : undefined;
-    stages[1] = {
-      ...stages[1],
-      tasks: [
-        {
-          dependencies: attack
-            ? undefined
-            : [
-                {
-                  message: "The active parry has no incoming attack.",
-                  owner,
-                  type: "invalid_source",
-                },
-              ],
-          expectedCommand: "roll_parry",
-          identity: {
-            attackResultId: attack
-              ? getCombatRoundAttackResultId({
-                  result: attack,
-                  roundNumber: context.state.roundNumber,
-                })
-              : undefined,
-            attackerParticipantId: attack?.attackerParticipantId,
-            defenderParticipantId: attack?.defenderParticipantId,
-            opportunityId: attack?.attackOpportunityId,
-            opponentParticipantId: attack?.attackerParticipantId,
-            parryPurpose: "ordinary_defense",
-            parrySourceId: "auto",
-            phase,
-          },
-          kind: "parry",
-          owner,
-          presentationContext: {
-            actionKind: presentationActionKind(
-              attack
-                ? context.state.participants.find(
-                    (entry) => entry.participantId === attack.attackerParticipantId,
-                  )?.declaration?.actionId
+    if (attack?.attackType === "missile") {
+      stages[1] = { ...stages[1], state: "complete", tasks: [] };
+      stages[2] = { ...stages[2], state: "active" };
+    } else {
+      stages[1] = {
+        ...stages[1],
+        tasks: [
+          {
+            dependencies: attack
+              ? undefined
+              : [
+                  {
+                    message: "The active parry has no incoming attack.",
+                    owner,
+                    type: "invalid_source",
+                  },
+                ],
+            expectedCommand: "roll_parry",
+            identity: {
+              attackResultId: attack
+                ? getCombatRoundAttackResultId({
+                    result: attack,
+                    roundNumber: context.state.roundNumber,
+                  })
                 : undefined,
-            ),
-            actor: attack ? context.identities.get(attack.attackerParticipantId) : undefined,
-            attackOutcome: attack?.hit === true ? "hit" : "miss",
-            responder: owner,
-            target: owner,
+              attackerParticipantId: attack?.attackerParticipantId,
+              defenderParticipantId: attack?.defenderParticipantId,
+              opportunityId: attack?.attackOpportunityId,
+              opponentParticipantId: attack?.attackerParticipantId,
+              parryPurpose: "ordinary_defense",
+              parrySourceId: "auto",
+              phase,
+            },
+            kind: "parry",
+            owner,
+            presentationContext: {
+              actionKind: presentationActionKind(
+                attack
+                  ? context.state.participants.find(
+                      (entry) => entry.participantId === attack.attackerParticipantId,
+                    )?.declaration?.actionId
+                  : undefined,
+              ),
+              actor: attack ? context.identities.get(attack.attackerParticipantId) : undefined,
+              attackOutcome: attack?.hit === true ? "hit" : "miss",
+              responder: owner,
+              target: owner,
+            },
+            trackerOwner: owner,
+            trackerStep: trackerParry,
           },
-          trackerOwner: owner,
-          trackerStep: trackerParry,
-        },
-      ],
-    };
+        ],
+      };
+    }
   } else if (substep === "damage") {
     const attack = participantId
       ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
@@ -992,6 +1014,7 @@ function buildAdapterAttackProcess(
                   actionId: opportunityIdentity?.actionId,
                   attackIndex: opportunityIdentity?.attackIndex,
                   attackModeId: opportunityIdentity?.attackModeId,
+                  attackerParticipantId: plan.ownerParticipantId,
                   declarationId:
                     taskKind === "parry" && offensiveParryAttempt
                       ? offensiveParryAttempt.declarationId
@@ -1005,6 +1028,7 @@ function buildAdapterAttackProcess(
                     taskKind === "parry" ? parryDisarmAttempt?.disarmAttemptId : undefined,
                   damageRollExpression:
                     taskKind === "damage_roll" ? damageRollExpression : undefined,
+                  defenderParticipantId: plan.targetParticipantId,
                   opponentParticipantId:
                     task.owner === "defender" ? plan.ownerParticipantId : plan.targetParticipantId,
                   opportunityId: task.opportunityId,
