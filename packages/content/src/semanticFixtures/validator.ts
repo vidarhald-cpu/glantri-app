@@ -62,6 +62,7 @@ const ACCESS_BAND_SET = new Set<string>(ACCESS_BANDS);
 const LEARNING_HISTORY_KIND_SET = new Set<string>(LEARNING_HISTORY_KINDS);
 const CONCEPTUAL_NODE_ECONOMIC_FIELDS = [
   "cost",
+  "economic",
   "economicClass",
   "economicallyActive",
   "price",

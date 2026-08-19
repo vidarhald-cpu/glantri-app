@@ -19,8 +19,28 @@ function asInvalidFixture(value: unknown): SkillSemanticFixture {
   return value as SkillSemanticFixture;
 }
 
+export const invalidDomainEconomicFixture = asInvalidFixture({
+  ...medicineFixture,
+  id: "invalid-domain-economic-field",
+  title: "Invalid: conceptual domain defines economic behavior",
+  nodes: medicineFixture.nodes.map((node) =>
+    node.kind === "domain" ? { ...node, economic: true } : node,
+  ),
+});
+
+export const invalidCategoryEconomicFixture = asInvalidFixture({
+  ...engineeringFixture,
+  id: "invalid-category-economic-field",
+  title: "Invalid: conceptual category defines economic behavior",
+  nodes: engineeringFixture.nodes.map((node) =>
+    node.kind === "category" ? { ...node, economic: true } : node,
+  ),
+});
+
 /** Deliberately malformed design evidence used only to prove anti-optimization diagnostics. */
 export const antiOptimizationSkillSemanticFixtures = [
+  invalidDomainEconomicFixture,
+  invalidCategoryEconomicFixture,
   asInvalidFixture({
     ...medicineFixture,
     id: "invalid-purchasable-domain",

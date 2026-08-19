@@ -13,6 +13,18 @@ describe("skill semantic anti-optimization validation", () => {
 
   it.each([
     [
+      "invalid-domain-economic-field",
+      "CONCEPTUAL_NODE_ECONOMIC_FIELD",
+      "nodes[0].economic",
+      'Domain "Medicine" (domain:medicine) cannot define economic field "economic".',
+    ],
+    [
+      "invalid-category-economic-field",
+      "CONCEPTUAL_NODE_ECONOMIC_FIELD",
+      "nodes[1].economic",
+      'Category "Construction" (category:construction) cannot define economic field "economic".',
+    ],
+    [
       "invalid-purchasable-domain",
       "CONCEPTUAL_NODE_PURCHASABLE",
       "nodes[0].purchasable",
@@ -155,6 +167,26 @@ describe("skill semantic anti-optimization validation", () => {
         }),
       ]),
     );
+  });
+
+  it("reports exact diagnostics for economic-only conceptual nodes", () => {
+    expect(diagnosticsByFixture.get("invalid-domain-economic-field")).toEqual([
+      {
+        code: "CONCEPTUAL_NODE_ECONOMIC_FIELD",
+        fixtureId: "invalid-domain-economic-field",
+        message: 'Domain "Medicine" (domain:medicine) cannot define economic field "economic".',
+        path: "nodes[0].economic",
+      },
+    ]);
+    expect(diagnosticsByFixture.get("invalid-category-economic-field")).toEqual([
+      {
+        code: "CONCEPTUAL_NODE_ECONOMIC_FIELD",
+        fixtureId: "invalid-category-economic-field",
+        message:
+          'Category "Construction" (category:construction) cannot define economic field "economic".',
+        path: "nodes[1].economic",
+      },
+    ]);
   });
 
   it("returns diagnostics in deterministic order", () => {
