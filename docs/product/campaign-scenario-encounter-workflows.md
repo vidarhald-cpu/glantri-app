@@ -75,7 +75,7 @@ Current design rules:
 
 Scenario has one persisted five-state lifecycle: `Draft -> Live <-> Paused -> Closed -> Archived`. Readiness is a derived start preflight, not a sixth state. A Scenario does not need an Encounter in order to start. Missing optional preparation may be shown as an explicit warning that the owning campaign GM can accept; hard preflight blockers leave the Scenario unchanged.
 
-Only the owning campaign GM controls lifecycle actions. Platform-admin status alone does not grant Campaign product authority. Each accepted transition records the actor, time, reason, source and target state, expected and resulting revision, and lifecycle cycle. Stale revisions and wrong-state actions make no changes.
+Only the owning campaign GM controls lifecycle actions, and that authority is enforced at the Scenario service boundary as well as at the API boundary. Platform-admin status alone does not grant Campaign product authority. Each accepted transition records the actor, time, reason, source and target state, expected and resulting revision, and lifecycle cycle. Scenario metadata and participant changes that can affect start preflight advance the same lifecycle revision before changing those inputs, so a start can commit only against the exact preparation state it checked. Stale revisions and wrong-state actions make no changes.
 
 Allowed actions in the lifecycle authority slice are:
 

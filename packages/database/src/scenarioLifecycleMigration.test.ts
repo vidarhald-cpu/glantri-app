@@ -1,11 +1,13 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const migration = readFileSync(
-  resolve(
-    process.cwd(),
-    "prisma/migrations/20260819143000_add_scenario_lifecycle_kernel/migration.sql",
+  fileURLToPath(
+    new URL(
+      "../prisma/migrations/20260819143000_add_scenario_lifecycle_kernel/migration.sql",
+      import.meta.url,
+    ),
   ),
   "utf8",
 );

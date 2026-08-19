@@ -1,4 +1,17 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import type { CampaignService, ScenarioService } from "@glantri/database";
+
+type ScenarioWorkspaceAccessIntent = "read" | "write";
+
+const requestAccessIntent = new AsyncLocalStorage<ScenarioWorkspaceAccessIntent>();
+
+export function runScenarioWorkspaceAccessRequest<T>(method: string, operation: () => T): T {
+  return requestAccessIntent.run(
+    method === "GET" || method === "HEAD" ? "read" : "write",
+    operation,
+  );
+}
 
 export async function resolveScenarioWorkspaceAccess(
   services: {
@@ -34,11 +47,19 @@ export async function resolveScenarioWorkspaceAccess(
     };
   }
 
-  const hasPlayerAccess = await services.scenarioService.userHasPlayerScenarioAccess({
-    ...(input.accessIntent === "read" ? { includePaused: true } : {}),
+  const accessIntent = input.accessIntent ?? requestAccessIntent.getStore() ?? "write";
+  const hasLivePlayerAccess = await services.scenarioService.userHasPlayerScenarioAccess({
     scenarioId: input.scenarioId,
     userId: input.userId,
   });
+  const hasPlayerAccess =
+    hasLivePlayerAccess ||
+    (accessIntent === "read" &&
+      (await services.scenarioService.userHasPlayerScenarioAccess({
+        includePaused: true,
+        scenarioId: input.scenarioId,
+        userId: input.userId,
+      })));
 
   return hasPlayerAccess
     ? {

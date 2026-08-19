@@ -188,6 +188,12 @@ export class ScenarioService {
       return null;
     }
 
+    const campaign = await this.repository.getCampaignById(scenario.campaignId);
+
+    if (!campaign || campaign.gmUserId !== input.actorUserId) {
+      return null;
+    }
+
     const lifecycleRevision = scenario.lifecycleRevision ?? 0;
     const lifecycleCycle = scenario.lifecycleCycle ?? 0;
 

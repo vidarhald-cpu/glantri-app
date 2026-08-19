@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { resolveScenarioWorkspaceAccess } from "./access";
+import { resolveScenarioWorkspaceAccess, runScenarioWorkspaceAccessRequest } from "./access";
 
 function createServices() {
   return {
@@ -32,7 +32,9 @@ describe("Scenario workspace lifecycle access", () => {
 
   it("allows paused player reads but keeps player writes live-only", async () => {
     const services = createServices();
-    services.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    services.scenarioService.userHasPlayerScenarioAccess.mockImplementation(
+      async (input: { includePaused?: boolean }) => input.includePaused === true,
+    );
 
     await resolveScenarioWorkspaceAccess(services as never, {
       accessIntent: "read",
@@ -56,5 +58,34 @@ describe("Scenario workspace lifecycle access", () => {
       scenarioId: "scenario-1",
       userId: "player-1",
     });
+  });
+
+  it("derives omitted access intent from the request method without admitting paused writes", async () => {
+    const services = createServices();
+    services.scenarioService.userHasPlayerScenarioAccess.mockImplementation(
+      async (input: { includePaused?: boolean }) => input.includePaused === true,
+    );
+
+    await expect(
+      runScenarioWorkspaceAccessRequest("GET", () =>
+        resolveScenarioWorkspaceAccess(services as never, {
+          scenarioId: "scenario-1",
+          userId: "player-1",
+          userRoles: ["player"],
+        }),
+      ),
+    ).resolves.toMatchObject({ mode: "player" });
+
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+      await expect(
+        runScenarioWorkspaceAccessRequest(method, () =>
+          resolveScenarioWorkspaceAccess(services as never, {
+            scenarioId: "scenario-1",
+            userId: "player-1",
+            userRoles: ["player"],
+          }),
+        ),
+      ).resolves.toBeNull();
+    }
   });
 });

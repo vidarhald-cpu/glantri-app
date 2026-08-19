@@ -633,6 +633,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
         data: {
           description: input.description,
           kind: input.kind,
+          lifecycleRevision: { increment: 1 },
           mapAssetId: input.mapAssetId,
           name: input.name,
         },
@@ -650,6 +651,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
             status: input.toStatus,
           },
           where: {
+            campaign: { gmUserId: input.actorUserId },
             id: input.scenarioId,
             lifecycleRevision: input.expectedRevision,
             status: input.fromStatus,
@@ -767,27 +769,36 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
       return records.map(mapReusableEntity);
     },
     async createScenarioParticipant(input) {
-      const record = await prisma.scenarioParticipant.create({
-        data: {
-          characterId: input.characterId ?? null,
-          controlledByUserId: input.controlledByUserId ?? null,
-          displayOrder: input.displayOrder ?? null,
-          entityId: input.entityId ?? null,
-          factionId: input.factionId ?? null,
-          initiativeSlot: input.initiativeSlot ?? null,
-          isActive: input.isActive ?? true,
-          joinSource: input.joinSource,
-          positionJson: input.position == null ? Prisma.JsonNull : asJson(input.position),
-          role: input.role,
-          roleTag: input.roleTag ?? null,
-          scenarioId: input.scenarioId,
-          snapshotJson: asJson(input.snapshot),
-          sourceType: input.sourceType,
-          stateJson: asJson(input.state),
-          tacticalGroupId: input.tacticalGroupId ?? null,
-          visibilityOverridesJson:
-            input.visibilityOverrides == null ? Prisma.JsonNull : asJson(input.visibilityOverrides),
-        },
+      const record = await prisma.$transaction(async (transaction) => {
+        await transaction.scenario.update({
+          data: { lifecycleRevision: { increment: 1 } },
+          where: { id: input.scenarioId },
+        });
+
+        return transaction.scenarioParticipant.create({
+          data: {
+            characterId: input.characterId ?? null,
+            controlledByUserId: input.controlledByUserId ?? null,
+            displayOrder: input.displayOrder ?? null,
+            entityId: input.entityId ?? null,
+            factionId: input.factionId ?? null,
+            initiativeSlot: input.initiativeSlot ?? null,
+            isActive: input.isActive ?? true,
+            joinSource: input.joinSource,
+            positionJson: input.position == null ? Prisma.JsonNull : asJson(input.position),
+            role: input.role,
+            roleTag: input.roleTag ?? null,
+            scenarioId: input.scenarioId,
+            snapshotJson: asJson(input.snapshot),
+            sourceType: input.sourceType,
+            stateJson: asJson(input.state),
+            tacticalGroupId: input.tacticalGroupId ?? null,
+            visibilityOverridesJson:
+              input.visibilityOverrides == null
+                ? Prisma.JsonNull
+                : asJson(input.visibilityOverrides),
+          },
+        });
       });
 
       return mapScenarioParticipant(record);
@@ -839,17 +850,29 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
       return mapScenarioParticipant(record);
     },
     async updateScenarioParticipantMetadata(input) {
-      const record = await prisma.scenarioParticipant.update({
-        data: {
-          controlledByUserId:
-            input.controlledByUserId === undefined ? undefined : input.controlledByUserId,
-          displayOrder: input.displayOrder === undefined ? undefined : input.displayOrder,
-          factionId: input.factionId === undefined ? undefined : input.factionId,
-          isActive: input.isActive === undefined ? undefined : input.isActive,
-          roleTag: input.roleTag === undefined ? undefined : input.roleTag,
-          tacticalGroupId: input.tacticalGroupId === undefined ? undefined : input.tacticalGroupId,
-        },
-        where: { id: input.participantId },
+      const record = await prisma.$transaction(async (transaction) => {
+        const participant = await transaction.scenarioParticipant.findUniqueOrThrow({
+          select: { scenarioId: true },
+          where: { id: input.participantId },
+        });
+        await transaction.scenario.update({
+          data: { lifecycleRevision: { increment: 1 } },
+          where: { id: participant.scenarioId },
+        });
+
+        return transaction.scenarioParticipant.update({
+          data: {
+            controlledByUserId:
+              input.controlledByUserId === undefined ? undefined : input.controlledByUserId,
+            displayOrder: input.displayOrder === undefined ? undefined : input.displayOrder,
+            factionId: input.factionId === undefined ? undefined : input.factionId,
+            isActive: input.isActive === undefined ? undefined : input.isActive,
+            roleTag: input.roleTag === undefined ? undefined : input.roleTag,
+            tacticalGroupId:
+              input.tacticalGroupId === undefined ? undefined : input.tacticalGroupId,
+          },
+          where: { id: input.participantId },
+        });
       });
 
       return mapScenarioParticipant(record);

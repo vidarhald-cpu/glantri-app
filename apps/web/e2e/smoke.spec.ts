@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -21,6 +21,28 @@ function loadTestState(): SmokeTestState {
   return JSON.parse(
     fs.readFileSync(path.join(__dirname, "test-state.json"), "utf-8"),
   ) as SmokeTestState;
+}
+
+async function transitionScenarioLifecycle(
+  request: APIRequestContext,
+  scenarioId: string,
+  action: "pause" | "resume",
+) {
+  const lifecycleResponse = await request.get(`${API_URL}/scenarios/${scenarioId}/lifecycle`);
+  expect(lifecycleResponse.ok(), await lifecycleResponse.text()).toBe(true);
+  const lifecycle = (await lifecycleResponse.json()) as {
+    scenario: { lifecycleRevision?: number };
+  };
+  const transitionResponse = await request.post(
+    `${API_URL}/scenarios/${scenarioId}/lifecycle/${action}`,
+    {
+      data: {
+        expectedRevision: lifecycle.scenario.lifecycleRevision ?? 0,
+        reason: `${action} for paused workspace smoke verification`,
+      },
+    },
+  );
+  expect(transitionResponse.ok(), await transitionResponse.text()).toBe(true);
 }
 
 // ---------------------------------------------------------------------------
@@ -191,6 +213,43 @@ test.describe("delegated Scenario controller access", () => {
     expect(await responses[1]!.text()).toContain(testState.delegatedScenarioName);
     expect(await responses[2]!.text()).toContain(testState.delegatedEncounterName);
     expect(await responses[3]!.text()).toContain(testState.delegatedEncounterName);
+  });
+});
+
+test.describe("paused Scenario controller access", () => {
+  test.use({ storageState: "e2e/.auth/non-holder.json" });
+
+  test("keeps Scenario and Encounter reads available while denying player writes", async ({
+    browser,
+    page,
+  }) => {
+    const testState = loadTestState();
+    const gmContext = await browser.newContext({ storageState: "e2e/.auth/gm.json" });
+
+    await transitionScenarioLifecycle(gmContext.request, testState.delegatedScenarioId, "pause");
+    try {
+      const [participantResponse, encountersResponse, encounterResponse] = await Promise.all([
+        page.request.get(`${API_URL}/scenarios/${testState.delegatedScenarioId}/my-participant`),
+        page.request.get(`${API_URL}/scenarios/${testState.delegatedScenarioId}/encounters`),
+        page.request.get(`${API_URL}/encounters/${testState.delegatedEncounterId}`),
+      ]);
+
+      expect(participantResponse.status()).toBe(200);
+      expect(encountersResponse.status()).toBe(200);
+      expect(encounterResponse.status()).toBe(200);
+      const { participant } = (await participantResponse.json()) as {
+        participant: { id: string; state: unknown };
+      };
+      const writeResponse = await page.request.put(
+        `${API_URL}/scenarios/${testState.delegatedScenarioId}/participants/${participant.id}/state`,
+        { data: { state: participant.state } },
+      );
+
+      expect(writeResponse.status()).toBe(404);
+    } finally {
+      await transitionScenarioLifecycle(gmContext.request, testState.delegatedScenarioId, "resume");
+      await gmContext.close();
+    }
   });
 });
 

@@ -40,6 +40,23 @@ async function apiGet<T = unknown>(endpoint: string, sessionCookie: string): Pro
   return (await res.json()) as T;
 }
 
+async function startScenario(scenarioId: string, sessionCookie: string, reason: string) {
+  const lifecycle = await apiGet<{
+    preflight?: { warnings: Array<{ code: string }> };
+    scenario: { lifecycleRevision?: number };
+  }>(`/scenarios/${scenarioId}/lifecycle`, sessionCookie);
+
+  await apiPost(
+    `/scenarios/${scenarioId}/lifecycle/start`,
+    {
+      acceptedWarningCodes: lifecycle.preflight?.warnings.map((warning) => warning.code) ?? [],
+      expectedRevision: lifecycle.scenario.lifecycleRevision ?? 0,
+      reason,
+    },
+    sessionCookie,
+  );
+}
+
 function buildStorageState(cookieHeader: string, domain: string): object {
   const nameValue = (cookieHeader.split(";")[0] ?? "").trim();
   const eqIdx = nameValue.indexOf("=");
@@ -194,6 +211,7 @@ export default async function globalSetup() {
   const playerCookie = await loginOrRegister(SMOKE_PLAYER_EMAIL, "Smoke Player");
   const nonHolderCookie = await loginOrRegister(SMOKE_NON_HOLDER_EMAIL, "Smoke Non-holder");
   const unrelatedCookie = await loginOrRegister(SMOKE_UNRELATED_EMAIL, "Smoke Unrelated");
+  const { user: playerUser } = await apiGet<{ user: { id: string } }>("/auth/me", playerCookie);
   const { user: nonHolderUser } = await apiGet<{ user: { id: string } }>(
     "/auth/me",
     nonHolderCookie,
@@ -247,18 +265,26 @@ export default async function globalSetup() {
   );
   const { data: b2ScenarioData } = await apiPost<{ scenario: { id: string } }>(
     `/campaigns/${b2CampaignId}/scenarios`,
-    { name: "B2 Perspective Scenario", status: "live" },
+    { name: "B2 Perspective Scenario" },
     gmCookie,
   );
   await apiPost(
     `/scenarios/${b2ScenarioData.scenario.id}/participants/character`,
-    { characterId: SMOKE_CHARACTER_ID },
-    playerCookie,
+    { characterId: SMOKE_CHARACTER_ID, controlledByUserId: playerUser.id },
+    gmCookie,
   );
   await apiPost(
     `/scenarios/${b2ScenarioData.scenario.id}/participants/character`,
-    { characterId: SMOKE_NON_HOLDER_CHARACTER_ID },
-    nonHolderCookie,
+    {
+      characterId: SMOKE_NON_HOLDER_CHARACTER_ID,
+      controlledByUserId: nonHolderUser.id,
+    },
+    gmCookie,
+  );
+  await startScenario(
+    b2ScenarioData.scenario.id,
+    gmCookie,
+    "Start the B2 perspective smoke fixture",
   );
 
   // --- Campaign Home privacy: owner keeps Campaign access while Scenario control is delegated ---
@@ -285,7 +311,6 @@ export default async function globalSetup() {
     {
       description: delegatedScenarioDescription,
       name: delegatedScenarioName,
-      status: "live",
     },
     gmCookie,
   );
@@ -298,6 +323,7 @@ export default async function globalSetup() {
     },
     gmCookie,
   );
+  await startScenario(delegatedScenarioId, gmCookie, "Start the delegated privacy smoke fixture");
   const delegatedEncounterName = "Delegated Private Encounter";
   const delegatedEncounterDescription = "Controller-only moment";
   const delegatedEncounterSeed = Date.now();

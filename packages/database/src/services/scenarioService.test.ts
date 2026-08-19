@@ -547,6 +547,31 @@ describe("ScenarioService scenario relationships", () => {
 });
 
 describe("ScenarioService lifecycle authority", () => {
+  it.each([
+    ["assigned player", "player-1"],
+    ["unrelated game master", "gm-2"],
+    ["non-owning platform administrator", "platform-admin-1"],
+  ])(
+    "denies a %s at the service boundary without revealing or changing the Scenario",
+    async (_label, actorUserId) => {
+      const { lifecycleTransitions, repository, scenario } = createScenarioRepositoryStub();
+      const service = new ScenarioService(repository);
+
+      await expect(
+        service.transitionScenarioLifecycle({
+          acceptedWarningCodes: ["missing_description", "no_active_player_participants"],
+          action: "start",
+          actorUserId,
+          expectedRevision: 0,
+          reason: "Unauthorized start",
+          scenarioId: scenario.id,
+        }),
+      ).resolves.toBeNull();
+      expect(lifecycleTransitions).toHaveLength(0);
+      expect(scenario).toMatchObject({ status: "draft" });
+    },
+  );
+
   it("requires start warning acceptance and records the first lifecycle cycle", async () => {
     const { lifecycleTransitions, repository, scenario } = createScenarioRepositoryStub();
     const service = new ScenarioService(repository);
