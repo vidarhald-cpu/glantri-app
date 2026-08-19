@@ -1,0 +1,138 @@
+import { describe, expect, it } from "vitest";
+
+import { antiOptimizationSkillSemanticFixtures } from "./invalidFixtures";
+import { validateSkillSemanticFixtures } from "./validator";
+
+describe("skill semantic anti-optimization validation", () => {
+  const diagnosticsByFixture = new Map(
+    validateSkillSemanticFixtures(antiOptimizationSkillSemanticFixtures).fixtures.map((fixture) => [
+      fixture.fixtureId,
+      fixture.diagnostics,
+    ]),
+  );
+
+  it.each([
+    [
+      "invalid-purchasable-domain",
+      "CONCEPTUAL_NODE_PURCHASABLE",
+      "nodes[0].purchasable",
+      'Domain "Medicine"',
+    ],
+    [
+      "invalid-purchasable-category",
+      "CONCEPTUAL_NODE_PURCHASABLE",
+      "nodes[1].purchasable",
+      'Category "Construction"',
+    ],
+    [
+      "invalid-taxonomy-economic-group",
+      "LEARNING_HISTORY_TAXONOMY_BUCKET",
+      "learningHistories[0].basis",
+      "taxonomy bucket",
+    ],
+    [
+      "invalid-taxonomy-economic-group",
+      "UNRESOLVED_GROUP_ECONOMICS_ASSUMPTION",
+      "learningHistories[0]",
+      "cannot decide unresolved group economics",
+    ],
+    [
+      "invalid-nested-specialization-parent",
+      "SPECIALIZATION_PARENT_NOT_CONCRETE_SKILL",
+      "nodes[6].parentSkillId",
+      "must have a concrete skill parent",
+    ],
+    [
+      "invalid-surgery-only-specialization",
+      "SURGERY_ONLY_NESTED_SPECIALIZATION",
+      "nodes",
+      "distinct concrete skill",
+    ],
+    [
+      "invalid-closed-language-list",
+      "LANGUAGE_CLOSED_VOCABULARY",
+      "languagePolicy",
+      "closed built-in list",
+    ],
+    [
+      "invalid-closed-language-list",
+      "UNIVERSAL_LITERACY_AUTHORITY",
+      "languagePolicy.universalLiteracySkill",
+      "universal generic Literacy skill",
+    ],
+    [
+      "invalid-relationship-recursion-stacking",
+      "RELATIONSHIP_POLICY_AMBIGUOUS",
+      "relationshipPolicy.recursion",
+      "non-recursive",
+    ],
+    [
+      "invalid-relationship-recursion-stacking",
+      "RELATIONSHIP_POLICY_AMBIGUOUS",
+      "relationshipPolicy.sourceSelection",
+      "strongest-source-only",
+    ],
+    [
+      "invalid-relationship-recursion-stacking",
+      "RELATIONSHIP_POLICY_AMBIGUOUS",
+      "relationshipPolicy.stacking",
+      "non-stacking",
+    ],
+    [
+      "invalid-mechanical-category",
+      "CATEGORY_MEMBERSHIP_MECHANICALLY_ACTIVE",
+      "nodes[1].categoryMembershipIsMechanical",
+      "mechanically inactive",
+    ],
+    [
+      "invalid-mechanical-category",
+      "CATEGORY_MECHANICALLY_ACTIVE",
+      "nodes[1].mechanicalEffects",
+      "cannot define mechanical effects",
+    ],
+    [
+      "invalid-derived-relationship-source",
+      "RELATIONSHIP_DERIVED_VALUE_AS_SOURCE",
+      "relationships[0].sourceValue",
+      "cannot source another relationship",
+    ],
+    [
+      "invalid-axis-conflation",
+      "INVALID_DEVELOPMENT_STAGE",
+      "civilizationProfiles[0].developmentStage",
+      "must be DS1-DS6",
+    ],
+    [
+      "invalid-axis-conflation",
+      "INVALID_ACCESS_BAND",
+      "civilizationProfiles[0].accessRoutes[0].accessBand",
+      "must be AB1-AB4",
+    ],
+    [
+      "invalid-axis-conflation",
+      "ACCESS_AXIS_NAMING_CONFLATION",
+      "civilizationProfiles[0].societyLevel",
+      "use developmentStage plus accessRoutes[].accessBand",
+    ],
+  ])("reports %s with %s", (fixtureId, code, path, messagePart) => {
+    expect(diagnosticsByFixture.get(fixtureId)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code,
+          fixtureId,
+          message: expect.stringContaining(messagePart),
+          path,
+        }),
+      ]),
+    );
+  });
+
+  it("returns diagnostics in deterministic order", () => {
+    const first = validateSkillSemanticFixtures(antiOptimizationSkillSemanticFixtures);
+    const second = validateSkillSemanticFixtures(
+      [...antiOptimizationSkillSemanticFixtures].reverse(),
+    );
+
+    expect(second.diagnostics).toEqual(first.diagnostics);
+  });
+});
