@@ -6,17 +6,15 @@ export async function resolveScenarioWorkspaceAccess(
     scenarioService: Pick<ScenarioService, "getScenarioById" | "userHasPlayerScenarioAccess">;
   },
   input: {
+    accessIntent?: "read" | "write";
     scenarioId: string;
     userId: string;
     userRoles: string[];
-  }
-): Promise<
-  | {
-      campaignId: string;
-      mode: "gm" | "player";
-    }
-  | null
-> {
+  },
+): Promise<{
+  campaignId: string;
+  mode: "gm" | "player";
+} | null> {
   const scenario = await services.scenarioService.getScenarioById(input.scenarioId);
 
   if (!scenario) {
@@ -29,10 +27,7 @@ export async function resolveScenarioWorkspaceAccess(
     return null;
   }
 
-  const isAdmin = input.userRoles.includes("admin");
-  const isGameMaster = input.userRoles.includes("game_master");
-
-  if (isAdmin || (isGameMaster && campaign.gmUserId === input.userId)) {
+  if (campaign.gmUserId === input.userId) {
     return {
       campaignId: campaign.id,
       mode: "gm",
@@ -40,6 +35,7 @@ export async function resolveScenarioWorkspaceAccess(
   }
 
   const hasPlayerAccess = await services.scenarioService.userHasPlayerScenarioAccess({
+    ...(input.accessIntent === "read" ? { includePaused: true } : {}),
     scenarioId: input.scenarioId,
     userId: input.userId,
   });

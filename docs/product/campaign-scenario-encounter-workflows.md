@@ -71,6 +71,22 @@ Current design rules:
 - Template sources are not participants until the GM creates concrete actors from them.
 - Player pages should not expose whether hidden or GM-only participants exist.
 
+### Scenario lifecycle
+
+Scenario has one persisted five-state lifecycle: `Draft -> Live <-> Paused -> Closed -> Archived`. Readiness is a derived start preflight, not a sixth state. A Scenario does not need an Encounter in order to start. Missing optional preparation may be shown as an explicit warning that the owning campaign GM can accept; hard preflight blockers leave the Scenario unchanged.
+
+Only the owning campaign GM controls lifecycle actions. Platform-admin status alone does not grant Campaign product authority. Each accepted transition records the actor, time, reason, source and target state, expected and resulting revision, and lifecycle cycle. Stale revisions and wrong-state actions make no changes.
+
+Allowed actions in the lifecycle authority slice are:
+
+- Draft can start as Live or be archived.
+- Live can pause or close.
+- Paused can resume as Live or close.
+- Closed can reopen as Paused, starting a new lifecycle cycle, or be archived.
+- Archived restores to Draft when the Scenario has never entered play and to Closed after play.
+
+Pause and close in this lifecycle slice change Scenario state only. They do not automatically pause, resume, resolve, cancel, archive, or reactivate Encounter work. Closed is currently a lifecycle boundary primitive; closeout blocker inventory, consequence reconciliation, recap publication, and player history remain separate workflows. Draft is private. Live is available to assigned players for play; Paused may be read as saved Scenario context but does not grant player mutation authority. Closed and Archived do not expose player history until an audience-scoped publication workflow provides it.
+
 Player Scenario pages should not show:
 
 - GM-only scenario notes.

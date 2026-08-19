@@ -13,6 +13,7 @@ import type {
   ReusableEntity,
   Scenario,
   ScenarioEventLog,
+  ScenarioLifecycleAction,
   ScenarioEncounterManagementProjection,
   ScenarioParticipant,
 } from "@glantri/domain";
@@ -37,7 +38,12 @@ import {
   updateScenarioParticipantMetadataOnServer,
   updateScenarioOnServer,
 } from "@/lib/api/localServiceClient";
-import { refreshScenarioParticipantEquipmentOnServer } from "@/lib/api/scenarioClient";
+import {
+  loadScenarioLifecycle,
+  refreshScenarioParticipantEquipmentOnServer,
+  transitionScenarioLifecycleOnServer,
+  type ScenarioLifecycleRecord,
+} from "@/lib/api/scenarioClient";
 import {
   buildScenarioActorInputFromTemplate,
   getCampaignActorMetadata,
@@ -89,6 +95,8 @@ export default function ScenarioDetailPageContent({
   const [playerCharacters, setPlayerCharacters] = useState<ServerCharacterRecord[]>([]);
   const [roster, setRoster] = useState<CampaignRosterEntry[]>([]);
   const [scenario, setScenario] = useState<Scenario | null>(null);
+  const [scenarioLifecycle, setScenarioLifecycle] = useState<ScenarioLifecycleRecord>();
+  const [lifecyclePending, setLifecyclePending] = useState(false);
   const [templates, setTemplates] = useState<ReusableEntity[]>([]);
 
   const [encounterTitle, setEncounterTitle] = useState("");
@@ -131,7 +139,6 @@ export default function ScenarioDetailPageContent({
 
   const [scenarioName, setScenarioName] = useState("");
   const [scenarioDescription, setScenarioDescription] = useState("");
-  const [scenarioStatus, setScenarioStatus] = useState<Scenario["status"]>("draft");
   const usersById = useMemo(
     () => new Map(assignableUsers.map((user) => [user.id, user])),
     [assignableUsers],
@@ -529,6 +536,7 @@ export default function ScenarioDetailPageContent({
       nextUsers,
       nextPlayerCharacters,
       nextRoster,
+      nextLifecycle,
     ] = await Promise.all([
       loadScenarioById(scenarioId),
       loadScenarioParticipants(scenarioId),
@@ -539,6 +547,7 @@ export default function ScenarioDetailPageContent({
       loadAuthUsers(),
       loadServerCharacters(),
       loadCampaignRoster(campaignId),
+      loadScenarioLifecycle(scenarioId),
     ]);
 
     const globalTemplates = nextTemplates.filter(
@@ -554,9 +563,9 @@ export default function ScenarioDetailPageContent({
     setAssignableUsers(nextUsers);
     setPlayerCharacters(nextPlayerCharacters);
     setRoster(nextRoster);
+    setScenarioLifecycle(nextLifecycle);
     setScenarioName(nextScenario.name);
     setScenarioDescription(nextScenario.description);
-    setScenarioStatus(nextScenario.status);
     setError(undefined);
   }
 
@@ -605,13 +614,44 @@ export default function ScenarioDetailPageContent({
         description: scenarioDescription,
         name: scenarioName,
         scenarioId,
-        status: scenarioStatus,
       });
 
       setFeedback(`Updated scenario ${updatedScenario.name}.`);
       await refreshScenario();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to update scenario.");
+    }
+  }
+
+  async function handleScenarioLifecycleAction(input: {
+    acceptedWarningCodes: string[];
+    action: ScenarioLifecycleAction;
+    reason: string;
+  }) {
+    if (!scenario) {
+      return;
+    }
+
+    try {
+      setError(undefined);
+      setFeedback(undefined);
+      setLifecyclePending(true);
+      const result = await transitionScenarioLifecycleOnServer({
+        ...input,
+        expectedRevision: scenario.lifecycleRevision ?? 0,
+        scenarioId,
+      });
+
+      setFeedback(`Scenario is now ${result.scenario.status}.`);
+      await refreshScenario();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to change the Scenario lifecycle.",
+      );
+    } finally {
+      setLifecyclePending(false);
     }
   }
 
@@ -968,13 +1008,17 @@ export default function ScenarioDetailPageContent({
       {feedback ? <div>{feedback}</div> : null}
 
       <ScenarioSummarySection
+        availableLifecycleActions={scenarioLifecycle?.availableActions ?? []}
+        key={scenario.lifecycleRevision ?? 0}
+        lifecyclePending={lifecyclePending}
         onDescriptionChange={setScenarioDescription}
+        onLifecycleAction={(input) => void handleScenarioLifecycleAction(input)}
         onNameChange={setScenarioName}
-        onStatusChange={setScenarioStatus}
         onUpdate={() => void handleUpdateScenarioMetadata()}
         scenarioDescription={scenarioDescription}
         scenarioName={scenarioName}
-        scenarioStatus={scenarioStatus}
+        scenarioStatus={scenario.status}
+        startPreflight={scenarioLifecycle?.preflight}
       />
 
       <ScenarioEncountersSection

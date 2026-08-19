@@ -95,12 +95,18 @@ if (!process.env.DATABASE_URL_TEST) {
         campaignId: campaign.id,
         description: "Private to delegated controller",
         name: "Delegated Private Scenario",
-        status: "live",
       });
       await service.addCharacterParticipant({
         characterId: character.id,
         controlledByUserId: delegatedController.id,
         joinSource: "gm_added",
+        scenarioId: scenario.id,
+      });
+      await service.transitionScenarioLifecycle({
+        action: "start",
+        actorUserId: gm.id,
+        expectedRevision: 0,
+        reason: "Start delegated Scenario",
         scenarioId: scenario.id,
       });
 
@@ -122,6 +128,42 @@ if (!process.env.DATABASE_URL_TEST) {
           userId: delegatedController.id,
         }),
       ).resolves.toBe(true);
+    });
+
+    it("commits only one transition for concurrent requests with the same revision", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["gm"] });
+      const repo = createPrismaScenarioRepository(prisma!);
+      const campaignService = new CampaignService(repo);
+      const service = new ScenarioService(repo);
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Concurrency Campaign",
+      });
+      const scenario = await service.createScenario({
+        campaignId: campaign.id,
+        description: "Ready for play",
+        name: "Concurrent Start",
+      });
+      const request = () =>
+        service.transitionScenarioLifecycle({
+          acceptedWarningCodes: ["no_active_player_participants"],
+          action: "start",
+          actorUserId: gm.id,
+          expectedRevision: 0,
+          reason: "Start once",
+          scenarioId: scenario.id,
+        });
+
+      const results = await Promise.allSettled([request(), request()]);
+
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+      await expect(service.listScenarioLifecycleTransitions(scenario.id)).resolves.toHaveLength(1);
+      await expect(service.getScenarioById(scenario.id)).resolves.toMatchObject({
+        lifecycleCycle: 1,
+        lifecycleRevision: 1,
+        status: "live",
+      });
     });
   });
 }

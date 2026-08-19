@@ -4,6 +4,7 @@ import {
   campaignSchema,
   reusableEntitySchema,
   scenarioEventLogSchema,
+  scenarioLifecycleTransitionSchema,
   scenarioLiveStateSchema,
   scenarioParticipantSchema,
   scenarioRelationshipSchema,
@@ -18,6 +19,8 @@ import {
   type Scenario,
   type ScenarioEventLog,
   type ScenarioLiveState,
+  type ScenarioLifecycleAction,
+  type ScenarioLifecycleTransition,
   type ScenarioParticipant,
   type ScenarioParticipantPosition,
   type ScenarioParticipantSnapshot,
@@ -63,6 +66,8 @@ function mapScenario(record: {
   description: string;
   id: string;
   kind: string;
+  lifecycleCycle: number;
+  lifecycleRevision: number;
   liveStateJson: Prisma.JsonValue | null;
   mapAssetId: string | null;
   name: string;
@@ -75,6 +80,8 @@ function mapScenario(record: {
     description: record.description,
     id: record.id,
     kind: record.kind,
+    lifecycleCycle: record.lifecycleCycle,
+    lifecycleRevision: record.lifecycleRevision,
     liveState:
       record.liveStateJson == null
         ? undefined
@@ -83,6 +90,25 @@ function mapScenario(record: {
     name: record.name,
     status: record.status,
     updatedAt: record.updatedAt.toISOString(),
+  });
+}
+
+function mapScenarioLifecycleTransition(record: {
+  action: string;
+  actorUserId: string;
+  cycle: number;
+  expectedRevision: number;
+  fromStatus: string;
+  id: string;
+  reason: string;
+  resultingRevision: number;
+  scenarioId: string;
+  toStatus: string;
+  transitionedAt: Date;
+}): ScenarioLifecycleTransition {
+  return scenarioLifecycleTransitionSchema.parse({
+    ...record,
+    transitionedAt: record.transitionedAt.toISOString(),
   });
 }
 
@@ -296,8 +322,19 @@ export interface ScenarioRepository {
     mapAssetId?: string | null;
     name?: string;
     scenarioId: string;
-    status?: Scenario["status"];
   }): Promise<Scenario>;
+  transitionScenarioLifecycle(input: {
+    action: ScenarioLifecycleAction;
+    actorUserId: string;
+    cycle: number;
+    expectedRevision: number;
+    fromStatus: Scenario["status"];
+    reason: string;
+    scenarioId: string;
+    toStatus: Scenario["status"];
+    transitionedAt: Date;
+  }): Promise<{ scenario: Scenario; transition: ScenarioLifecycleTransition } | null>;
+  listScenarioLifecycleTransitions(scenarioId: string): Promise<ScenarioLifecycleTransition[]>;
   createReusableEntity(input: {
     description?: string | null;
     gmUserId: string;
@@ -489,7 +526,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
         where: {
           scenarios: {
             some: {
-              status: "live",
+              status: { in: ["live", "paused"] },
               participants: {
                 some: {
                   isActive: true,
@@ -545,7 +582,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
         orderBy: { createdAt: "desc" },
         where: {
           campaignId,
-          status: "live",
+          status: { in: ["live", "paused"] },
           participants: {
             some: {
               isActive: true,
@@ -598,12 +635,62 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
           kind: input.kind,
           mapAssetId: input.mapAssetId,
           name: input.name,
-          status: input.status,
         },
         where: { id: input.scenarioId },
       });
 
       return mapScenario(record);
+    },
+    async transitionScenarioLifecycle(input) {
+      return prisma.$transaction(async (transaction) => {
+        const updated = await transaction.scenario.updateMany({
+          data: {
+            lifecycleCycle: input.cycle,
+            lifecycleRevision: input.expectedRevision + 1,
+            status: input.toStatus,
+          },
+          where: {
+            id: input.scenarioId,
+            lifecycleRevision: input.expectedRevision,
+            status: input.fromStatus,
+          },
+        });
+
+        if (updated.count !== 1) {
+          return null;
+        }
+
+        const [scenario, transition] = await Promise.all([
+          transaction.scenario.findUniqueOrThrow({ where: { id: input.scenarioId } }),
+          transaction.scenarioLifecycleTransition.create({
+            data: {
+              action: input.action,
+              actorUserId: input.actorUserId,
+              cycle: input.cycle,
+              expectedRevision: input.expectedRevision,
+              fromStatus: input.fromStatus,
+              reason: input.reason,
+              resultingRevision: input.expectedRevision + 1,
+              scenarioId: input.scenarioId,
+              toStatus: input.toStatus,
+              transitionedAt: input.transitionedAt,
+            },
+          }),
+        ]);
+
+        return {
+          scenario: mapScenario(scenario),
+          transition: mapScenarioLifecycleTransition(transition),
+        };
+      });
+    },
+    async listScenarioLifecycleTransitions(scenarioId) {
+      const records = await prisma.scenarioLifecycleTransition.findMany({
+        orderBy: { resultingRevision: "asc" },
+        where: { scenarioId },
+      });
+
+      return records.map(mapScenarioLifecycleTransition);
     },
     async createReusableEntity(input) {
       const record = await prisma.reusableEntity.create({

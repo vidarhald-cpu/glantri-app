@@ -28,7 +28,39 @@ const scenarioCanonicalCombatModifierTransitionSchema = z
 export const scenarioVisibilitySchema = z.enum(["hidden", "visible_to_all", "gm_only"]);
 export const campaignStatusSchema = z.enum(["draft", "active", "archived"]);
 export const scenarioKindSchema = z.enum(["combat", "social", "travel", "mixed"]);
-export const scenarioStatusSchema = z.enum(["draft", "prepared", "live", "completed", "archived"]);
+export const scenarioStatusSchema = z.enum(["draft", "live", "paused", "closed", "archived"]);
+export const scenarioCompatibleStatusSchema = z.enum([
+  "draft",
+  "prepared",
+  "live",
+  "paused",
+  "completed",
+  "closed",
+  "archived",
+]);
+export const scenarioLifecycleActionSchema = z.enum([
+  "start",
+  "pause",
+  "resume",
+  "close",
+  "reopen",
+  "archive",
+  "restore",
+]);
+export const scenarioStartPreflightFindingCodeSchema = z.enum([
+  "missing_name",
+  "missing_description",
+  "no_active_player_participants",
+]);
+export const scenarioStartPreflightFindingSchema = z.object({
+  code: scenarioStartPreflightFindingCodeSchema,
+  message: z.string().min(1),
+});
+export const scenarioStartPreflightSchema = z.object({
+  blockers: z.array(scenarioStartPreflightFindingSchema),
+  ready: z.boolean(),
+  warnings: z.array(scenarioStartPreflightFindingSchema),
+});
 export const scenarioCombatStatusSchema = z.enum(["not_started", "in_progress", "paused", "ended"]);
 export const scenarioParticipantSourceTypeSchema = z.enum(["character", "entity"]);
 export const scenarioParticipantRoleSchema = z.enum([
@@ -85,11 +117,27 @@ export const scenarioSchema = z.object({
   description: z.string().default(""),
   id: idSchema,
   kind: scenarioKindSchema.default("mixed"),
+  lifecycleCycle: z.number().int().nonnegative().optional(),
+  lifecycleRevision: z.number().int().nonnegative().optional(),
   liveState: scenarioLiveStateSchema.optional(),
   mapAssetId: idSchema.optional(),
   name: z.string().min(1),
-  status: scenarioStatusSchema.default("draft"),
+  status: z.preprocess(normalizeScenarioStatus, scenarioStatusSchema).default("draft"),
   updatedAt: timestampSchema,
+});
+
+export const scenarioLifecycleTransitionSchema = z.object({
+  action: scenarioLifecycleActionSchema,
+  actorUserId: idSchema,
+  cycle: z.number().int().nonnegative(),
+  expectedRevision: z.number().int().nonnegative(),
+  fromStatus: scenarioStatusSchema,
+  id: idSchema,
+  reason: z.string().min(1),
+  resultingRevision: z.number().int().positive(),
+  scenarioId: idSchema,
+  toStatus: scenarioStatusSchema,
+  transitionedAt: timestampSchema,
 });
 
 export const scenarioParticipantPositionSchema = z.object({
@@ -412,6 +460,12 @@ export type ScenarioVisibility = z.infer<typeof scenarioVisibilitySchema>;
 export type CampaignStatus = z.infer<typeof campaignStatusSchema>;
 export type ScenarioKind = z.infer<typeof scenarioKindSchema>;
 export type ScenarioStatus = z.infer<typeof scenarioStatusSchema>;
+export type ScenarioLifecycleAction = z.infer<typeof scenarioLifecycleActionSchema>;
+export type ScenarioStartPreflightFindingCode = z.infer<
+  typeof scenarioStartPreflightFindingCodeSchema
+>;
+export type ScenarioStartPreflightFinding = z.infer<typeof scenarioStartPreflightFindingSchema>;
+export type ScenarioStartPreflight = z.infer<typeof scenarioStartPreflightSchema>;
 export type ScenarioCombatStatus = z.infer<typeof scenarioCombatStatusSchema>;
 export type ScenarioParticipantSourceType = z.infer<typeof scenarioParticipantSourceTypeSchema>;
 export type ScenarioParticipantRole = z.infer<typeof scenarioParticipantRoleSchema>;
@@ -425,6 +479,7 @@ export type CampaignSettings = z.infer<typeof campaignSettingsSchema>;
 export type Campaign = z.infer<typeof campaignSchema>;
 export type ScenarioLiveState = z.infer<typeof scenarioLiveStateSchema>;
 export type Scenario = z.infer<typeof scenarioSchema>;
+export type ScenarioLifecycleTransition = z.infer<typeof scenarioLifecycleTransitionSchema>;
 export type ScenarioParticipantPosition = z.infer<typeof scenarioParticipantPositionSchema>;
 export type ScenarioParticipantModifier = z.infer<typeof scenarioParticipantModifierSchema>;
 export type ScenarioParticipantCondition = z.infer<typeof scenarioParticipantConditionSchema>;
@@ -463,6 +518,90 @@ export type ScenarioPlayerControlledParticipant = z.infer<
   typeof scenarioPlayerControlledParticipantSchema
 >;
 export type ScenarioPlayerProjection = z.infer<typeof scenarioPlayerProjectionSchema>;
+
+export function normalizeScenarioStatus(value: unknown): unknown {
+  if (value === "prepared") {
+    return "draft";
+  }
+
+  if (value === "completed") {
+    return "closed";
+  }
+
+  return value;
+}
+
+export function deriveScenarioStartPreflight(input: {
+  participants: readonly ScenarioParticipant[];
+  scenario: Pick<Scenario, "description" | "name">;
+}): ScenarioStartPreflight {
+  const blockers: ScenarioStartPreflightFinding[] = [];
+  const warnings: ScenarioStartPreflightFinding[] = [];
+
+  if (!input.scenario.name.trim()) {
+    blockers.push({
+      code: "missing_name",
+      message: "Add a Scenario name before starting play.",
+    });
+  }
+
+  if (!input.scenario.description.trim()) {
+    warnings.push({
+      code: "missing_description",
+      message: "This Scenario has no player-facing description yet.",
+    });
+  }
+
+  if (
+    !input.participants.some(
+      (participant) => participant.isActive && participant.role === "player_character",
+    )
+  ) {
+    warnings.push({
+      code: "no_active_player_participants",
+      message: "No active player characters are assigned to this Scenario.",
+    });
+  }
+
+  return {
+    blockers,
+    ready: blockers.length === 0,
+    warnings,
+  };
+}
+
+export function getScenarioLifecycleTarget(input: {
+  action: ScenarioLifecycleAction;
+  lifecycleCycle: number;
+  status: ScenarioStatus;
+}): ScenarioStatus | null {
+  const { action, lifecycleCycle, status } = input;
+
+  if (status === "draft" && action === "start") return "live";
+  if (status === "live" && action === "pause") return "paused";
+  if (status === "paused" && action === "resume") return "live";
+  if ((status === "live" || status === "paused") && action === "close") return "closed";
+  if (status === "closed" && action === "reopen") return "paused";
+  if ((status === "draft" || status === "closed") && action === "archive") return "archived";
+  if (status === "archived" && action === "restore") {
+    return lifecycleCycle === 0 ? "draft" : "closed";
+  }
+
+  return null;
+}
+
+export function getAvailableScenarioLifecycleActions(
+  scenario: Pick<Scenario, "lifecycleCycle" | "status">,
+): ScenarioLifecycleAction[] {
+  return scenarioLifecycleActionSchema.options.filter(
+    (action) =>
+      getScenarioLifecycleTarget({
+        action,
+        lifecycleCycle: scenario.lifecycleCycle ?? 0,
+        status: scenario.status,
+      }) !== null,
+  );
+}
 
 function clampHealth(value: number, max: number): number {
   return Math.max(0, Math.min(value, max));

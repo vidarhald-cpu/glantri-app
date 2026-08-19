@@ -88,9 +88,9 @@ enum ScenarioKind {
 
 enum ScenarioStatus {
   draft
-  prepared
   live
-  completed
+  paused
+  closed
   archived
 }
 
@@ -241,6 +241,7 @@ model User {
   reusableEntities ReusableEntity[]
   roles       UserRole[]
   scenarioEvents ScenarioEventLog[]
+  scenarioLifecycleTransitions ScenarioLifecycleTransition[]
   sessions    Session[]
 }
 
@@ -383,12 +384,15 @@ model Scenario {
   description   String
   kind          ScenarioKind
   status        ScenarioStatus
+  lifecycleRevision Int              @default(0)
+  lifecycleCycle Int                 @default(0)
   mapAssetId    String?
   liveStateJson Json?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   campaign      Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   eventLogs     ScenarioEventLog[]
+  lifecycleTransitions ScenarioLifecycleTransition[]
   mapAsset      CampaignAsset?     @relation("ScenarioMapAsset", fields: [mapAssetId], references: [id], onDelete: SetNull)
   participants  ScenarioParticipant[]
   relationshipsFrom ScenarioRelationship[] @relation("ScenarioRelationshipFrom")
@@ -396,6 +400,26 @@ model Scenario {
 
   @@index([campaignId])
   @@index([campaignId, status])
+}
+
+model ScenarioLifecycleTransition {
+  id                String         @id @default(cuid())
+  scenarioId        String
+  actorUserId       String
+  action            String
+  reason            String
+  fromStatus        ScenarioStatus
+  toStatus          ScenarioStatus
+  expectedRevision  Int
+  resultingRevision Int
+  cycle             Int
+  transitionedAt    DateTime       @default(now())
+  actor              User           @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  scenario           Scenario       @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@unique([scenarioId, resultingRevision])
+  @@index([scenarioId, transitionedAt])
+  @@index([actorUserId])
 }
 
 model ScenarioRelationship {

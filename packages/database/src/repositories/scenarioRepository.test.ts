@@ -29,7 +29,7 @@ describe("scenarioRepository player scenario access queries", () => {
       where: {
         scenarios: {
           some: expect.objectContaining({
-            status: "live",
+            status: { in: ["live", "paused"] },
           }),
         },
       },
@@ -46,7 +46,7 @@ describe("scenarioRepository player scenario access queries", () => {
       orderBy: { createdAt: "desc" },
       where: expect.objectContaining({
         campaignId: "campaign-1",
-        status: "live",
+        status: { in: ["live", "paused"] },
       }),
     });
   });

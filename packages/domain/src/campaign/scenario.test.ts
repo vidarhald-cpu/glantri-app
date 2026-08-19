@@ -1,9 +1,92 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  deriveScenarioStartPreflight,
+  getAvailableScenarioLifecycleActions,
+  getScenarioLifecycleTarget,
   scenarioCombatModifierEntrySchema,
   scenarioParticipantCombatContextSchema,
+  scenarioSchema,
 } from "./scenario";
+
+describe("Scenario lifecycle contract", () => {
+  it("normalizes persisted legacy statuses without retaining a second authority", () => {
+    const base = {
+      campaignId: "campaign-1",
+      createdAt: "2026-08-19T12:00:00.000Z",
+      description: "",
+      id: "scenario-1",
+      kind: "mixed",
+      name: "Legacy episode",
+      updatedAt: "2026-08-19T12:00:00.000Z",
+    };
+
+    expect(scenarioSchema.parse({ ...base, status: "prepared" }).status).toBe("draft");
+    expect(scenarioSchema.parse({ ...base, status: "completed" }).status).toBe("closed");
+  });
+
+  it("derives blockers and warnings without requiring an Encounter", () => {
+    expect(
+      deriveScenarioStartPreflight({
+        participants: [],
+        scenario: { description: "", name: "" },
+      }),
+    ).toEqual({
+      blockers: [
+        {
+          code: "missing_name",
+          message: "Add a Scenario name before starting play.",
+        },
+      ],
+      ready: false,
+      warnings: [
+        {
+          code: "missing_description",
+          message: "This Scenario has no player-facing description yet.",
+        },
+        {
+          code: "no_active_player_participants",
+          message: "No active player characters are assigned to this Scenario.",
+        },
+      ],
+    });
+
+    expect(
+      deriveScenarioStartPreflight({
+        participants: [],
+        scenario: { description: "A quiet opening.", name: "Episode one" },
+      }),
+    ).toMatchObject({ blockers: [], ready: true });
+  });
+
+  it("allows only the canonical five-state transitions", () => {
+    expect(getAvailableScenarioLifecycleActions({ lifecycleCycle: 0, status: "draft" })).toEqual([
+      "start",
+      "archive",
+    ]);
+    expect(getAvailableScenarioLifecycleActions({ lifecycleCycle: 1, status: "live" })).toEqual([
+      "pause",
+      "close",
+    ]);
+    expect(getAvailableScenarioLifecycleActions({ lifecycleCycle: 1, status: "paused" })).toEqual([
+      "resume",
+      "close",
+    ]);
+    expect(getAvailableScenarioLifecycleActions({ lifecycleCycle: 1, status: "closed" })).toEqual([
+      "reopen",
+      "archive",
+    ]);
+    expect(
+      getScenarioLifecycleTarget({ action: "restore", lifecycleCycle: 0, status: "archived" }),
+    ).toBe("draft");
+    expect(
+      getScenarioLifecycleTarget({ action: "restore", lifecycleCycle: 2, status: "archived" }),
+    ).toBe("closed");
+    expect(
+      getScenarioLifecycleTarget({ action: "archive", lifecycleCycle: 1, status: "live" }),
+    ).toBeNull();
+  });
+});
 
 describe("scenario combat modifier entries", () => {
   it("accepts numeric duration rounds while keeping old entries compatible", () => {

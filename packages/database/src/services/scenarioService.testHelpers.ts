@@ -5,6 +5,7 @@ import type {
   ReusableEntity,
   Scenario,
   ScenarioEventLog,
+  ScenarioLifecycleTransition,
   ScenarioParticipant,
   ScenarioRelationship,
 } from "@glantri/domain";
@@ -93,6 +94,7 @@ export function createScenarioRepositoryStub() {
   const rosterEntries: CampaignRosterEntry[] = [];
   const reusableEntities: ReusableEntity[] = [];
   const scenarioRelationships: ScenarioRelationship[] = [];
+  const lifecycleTransitions: ScenarioLifecycleTransition[] = [];
 
   const repository: ScenarioRepository = {
     createCampaign: async () => {
@@ -132,6 +134,35 @@ export function createScenarioRepositoryStub() {
     updateScenario: async () => {
       throw new Error("Not implemented in test stub.");
     },
+    transitionScenarioLifecycle: async (input) => {
+      if (
+        scenario.status !== input.fromStatus ||
+        (scenario.lifecycleRevision ?? 0) !== input.expectedRevision
+      ) {
+        return null;
+      }
+
+      scenario.status = input.toStatus;
+      scenario.lifecycleCycle = input.cycle;
+      scenario.lifecycleRevision = input.expectedRevision + 1;
+      scenario.updatedAt = input.transitionedAt.toISOString();
+      const transition: ScenarioLifecycleTransition = {
+        action: input.action,
+        actorUserId: input.actorUserId,
+        cycle: input.cycle,
+        expectedRevision: input.expectedRevision,
+        fromStatus: input.fromStatus,
+        id: `lifecycle-${lifecycleTransitions.length + 1}`,
+        reason: input.reason,
+        resultingRevision: input.expectedRevision + 1,
+        scenarioId: input.scenarioId,
+        toStatus: input.toStatus,
+        transitionedAt: input.transitionedAt.toISOString(),
+      };
+      lifecycleTransitions.push(transition);
+      return { scenario, transition };
+    },
+    listScenarioLifecycleTransitions: async () => lifecycleTransitions,
     createReusableEntity: async () => {
       throw new Error("Not implemented in test stub.");
     },
@@ -360,6 +391,7 @@ export function createScenarioRepositoryStub() {
   return {
     campaigns,
     eventLogs,
+    lifecycleTransitions,
     participants,
     reusableEntities,
     repository,
