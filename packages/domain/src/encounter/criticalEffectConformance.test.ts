@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCriticalEffectConformanceReport,
+  classifyCriticalEffectConformance,
   CRITICAL_EFFECT_MAPPING_STATUSES,
 } from "./criticalEffectConformance";
 import { renderCriticalEffectConformanceReport } from "./criticalEffectConformanceReport";
@@ -129,8 +130,136 @@ describe("Critical effect source/conformance inventory", () => {
     });
     expect(report.familyCounts.loss_of_use).toBe(307);
     expect(report.familyCounts.external_bleed).toBe(138);
-    expect(report.familyCounts.internal_bleed).toBe(82);
+    expect(report.familyCounts.internal_bleed).toBe(85);
     expect(report.statusCounts.mechanically_unmapped).toBeGreaterThan(0);
+  });
+
+  it("does not let a mapped numeric facet suppress an independent mobility extension gap", () => {
+    const entries = buildCriticalEffectConformanceReport().effectEntries;
+    const numericMobilityEntries = entries.filter(
+      ({ consequenceFamilies, proposalProjection }) =>
+        consequenceFamilies.includes("mobility") &&
+        proposalProjection === "review_effect:db_parry_modifier",
+    );
+    const entry = numericMobilityEntries.find(
+      ({ effectKey }) => effectKey === "arrows_bolts|abdomen|03|02",
+    );
+
+    expect(numericMobilityEntries).toHaveLength(122);
+    expect(
+      numericMobilityEntries.filter(
+        ({ consequenceFamilies }) => !consequenceFamilies.includes("terminal_marker"),
+      ),
+    ).toHaveLength(120);
+    expect(
+      numericMobilityEntries.every(
+        ({ mappingStatus, requiresExtension }) =>
+          mappingStatus === "projection_only" && requiresExtension,
+      ),
+    ).toBe(true);
+    expect(entry).toMatchObject({
+      consequenceFamilies: expect.arrayContaining(["mobility"]),
+      mappingStatus: "projection_only",
+      proposalProjection: "review_effect:db_parry_modifier",
+      requiresExtension: true,
+    });
+    expect(entry?.diagnostic).toContain("independent mobility/stance fact");
+    expect(entry?.diagnostic).toContain("durable consumer extension");
+  });
+
+  it("classifies terminal companion gaps without assigning terminal mechanics", () => {
+    const entries = buildCriticalEffectConformanceReport().effectEntries;
+    const terminalMobility = entries.find(
+      ({ effectKey }) => effectKey === "fire_energy|whole_body|14|02",
+    );
+    const terminalNumericMobility = entries.find(
+      ({ effectKey }) => effectKey === "sharp|arm|16|02",
+    );
+    const terminalLossOfUse = entries.find(
+      ({ effectKey }) => effectKey === "pointed_weapons|head|14|03",
+    );
+    const terminalStructural = entries.find(
+      ({ effectKey }) => effectKey === "pointed_weapons|head|12|05",
+    );
+
+    expect(terminalMobility).toMatchObject({
+      consequenceFamilies: expect.arrayContaining(["mobility", "terminal_marker"]),
+      mappingStatus: "mechanically_unmapped",
+      requiresExtension: true,
+    });
+    expect(terminalMobility?.diagnostic).toContain("mobility");
+    expect(terminalMobility?.diagnostic).toContain("terminal/death marker remains source evidence");
+
+    expect(terminalNumericMobility).toMatchObject({
+      consequenceFamilies: expect.arrayContaining(["mobility", "terminal_marker"]),
+      mappingStatus: "projection_only",
+      proposalProjection: "review_effect:db_parry_modifier",
+      requiresExtension: true,
+    });
+    expect(terminalNumericMobility?.diagnostic).toContain("independent mobility/stance fact");
+    expect(terminalNumericMobility?.diagnostic).toContain(
+      "terminal/death marker remains source evidence",
+    );
+
+    expect(terminalLossOfUse).toMatchObject({
+      consequenceFamilies: expect.arrayContaining(["loss_of_use", "terminal_marker"]),
+      mappingStatus: "projection_only",
+      requiresExtension: true,
+    });
+    expect(terminalLossOfUse?.diagnostic).toContain("loss-of-use");
+    expect(terminalLossOfUse?.diagnostic).toContain(
+      "terminal/death marker remains source evidence",
+    );
+
+    expect(terminalStructural).toMatchObject({
+      consequenceFamilies: expect.arrayContaining(["structural_anatomical", "terminal_marker"]),
+      mappingStatus: "mechanically_unmapped",
+      requiresExtension: true,
+    });
+    expect(terminalStructural?.diagnostic).toContain("structural/anatomical");
+    expect(terminalStructural?.diagnostic).toContain(
+      "terminal/death marker remains source evidence",
+    );
+  });
+
+  it.each([
+    {
+      effectKey: "blunt|abdomen|15|03",
+      expectedFamilies: ["internal_bleed"],
+      specialFlag: "internal_bleeding",
+    },
+    {
+      effectKey: "blunt|head|12|04",
+      expectedFamilies: ["internal_bleed", "structural_anatomical"],
+      specialFlag: "brain_haemorrhage",
+    },
+    {
+      effectKey: "blunt|upper_leg|12|05",
+      expectedFamilies: ["internal_bleed"],
+      specialFlag: "hidden_blood_loss",
+    },
+  ])("classifies authored $specialFlag as internal bleed", ({ effectKey, expectedFamilies }) => {
+    const effect = CRITICAL_EFFECTS_TABLE.effectTemplates.find(
+      (candidate) => candidate.effectKey === effectKey,
+    );
+
+    expect(effect).toBeDefined();
+    expect(classifyCriticalEffectConformance(effect!).consequenceFamilies).toEqual(
+      expectedFamilies,
+    );
+  });
+
+  it("reports the compositional mapping and extension counts", () => {
+    const report = buildCriticalEffectConformanceReport();
+
+    expect(report.statusCounts).toEqual({
+      mapped: 215,
+      projection_only: 523,
+      mechanically_unmapped: 362,
+      deferred_rule_decision: 524,
+      provenance_only: 555,
+    });
+    expect(report.effectEntries.filter((entry) => entry.requiresExtension)).toHaveLength(885);
   });
 
   it("renders the checked-in exhaustive report byte-for-byte deterministically", async () => {

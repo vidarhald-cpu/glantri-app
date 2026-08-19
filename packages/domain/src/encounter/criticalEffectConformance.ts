@@ -92,6 +92,12 @@ export interface CriticalEffectConformanceReport {
   uniqueEffectCount: number;
 }
 
+const INTERNAL_BLEED_SPECIAL_FLAGS = new Set([
+  "brain_haemorrhage",
+  "hidden_blood_loss",
+  "internal_bleeding",
+]);
+
 function projectionLabel(projection: CriticalEffectProposalProjection): string {
   return `${projection.representation}:${projection.rowCategory}`;
 }
@@ -129,14 +135,20 @@ function classifyConsequenceFamilies(
     families.add("mobility");
   }
   if (effect.type === "Bleed") families.add("external_bleed");
-  if (effect.type === "Internal bleed") families.add("internal_bleed");
+  if (
+    effect.type === "Internal bleed" ||
+    (effect.specialFlag !== undefined && INTERNAL_BLEED_SPECIAL_FLAGS.has(effect.specialFlag))
+  ) {
+    families.add("internal_bleed");
+  }
   if (/drop_item|weapon_stuck|equipment_damage|drop (?:item|weapon)/.test(text)) {
     families.add("item_control");
   }
   if (
     /amputation|anatom|transfix|crush|ruined|organ|heart|vessel|embedded|extraction|spinal|thoracic|pelvic|abdominal|airway|breathing|burn|maiming/.test(
       text,
-    )
+    ) ||
+    effect.specialFlag === "brain_haemorrhage"
   ) {
     families.add("structural_anatomical");
   }
@@ -171,6 +183,46 @@ function isDeferredNumericDeficit(effect: CriticalEffectTemplate): boolean {
   );
 }
 
+function withTerminalDeferral(diagnostic: string): string {
+  return `${diagnostic} The terminal/death marker remains source evidence pending a separate approved rule decision.`;
+}
+
+function classifyTerminalCompanionGap(input: {
+  families: readonly CriticalConsequenceFamily[];
+  projection: CriticalEffectProposalProjection;
+}): Pick<
+  CriticalEffectConformanceEntry,
+  "diagnostic" | "mappingStatus" | "requiresExtension"
+> | null {
+  const companionFamilies = input.families.filter(
+    (family) =>
+      family === "loss_of_use" || family === "mobility" || family === "structural_anatomical",
+  );
+
+  if (companionFamilies.length === 0) return null;
+
+  const familyLabel = companionFamilies
+    .map((family) => {
+      if (family === "loss_of_use") return "loss-of-use";
+      if (family === "mobility") return "mobility/stance";
+      return "structural/anatomical";
+    })
+    .join(", ");
+  const reachesTypedReviewProjection =
+    input.projection.representation === "review_effect" &&
+    input.projection.rowCategory !== "special_note";
+
+  return {
+    diagnostic: withTerminalDeferral(
+      reachesTypedReviewProjection
+        ? `The ${familyLabel} fact reaches a typed review projection, but lacks a general durable consumer and requires an extension.`
+        : `The ${familyLabel} fact degrades to a generic special/note row and requires an explicit model/consumer extension.`,
+    ),
+    mappingStatus: reachesTypedReviewProjection ? "projection_only" : "mechanically_unmapped",
+    requiresExtension: true,
+  };
+}
+
 function classifyMapping(input: {
   effect: CriticalEffectTemplate;
   families: readonly CriticalConsequenceFamily[];
@@ -187,7 +239,27 @@ function classifyMapping(input: {
     };
   }
 
+  if (
+    families.includes("mobility") &&
+    projection.representation === "review_effect" &&
+    projection.kind === "modifier"
+  ) {
+    return {
+      diagnostic: families.includes("terminal_marker")
+        ? withTerminalDeferral(
+            "The numeric penalty maps to a typed modifier, but the independent mobility/stance fact remains review-only and requires a durable consumer extension.",
+          )
+        : "The numeric penalty maps to a typed modifier, but the independent mobility/stance fact remains review-only and requires a durable consumer extension.",
+      mappingStatus: "projection_only",
+      requiresExtension: true,
+    };
+  }
+
   if (families.includes("terminal_marker")) {
+    const companionGap = classifyTerminalCompanionGap({ families, projection });
+
+    if (companionGap) return companionGap;
+
     return {
       diagnostic:
         "Terminal marker is retained as source evidence; terminal/death semantics require a separate approved rule decision.",
