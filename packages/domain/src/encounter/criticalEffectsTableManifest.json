@@ -1,8 +1,8 @@
 {
-  "manifestVersion": 1,
+  "manifestVersion": 2,
   "generator": {
     "path": "scripts/generateCriticalEffectsTable.mjs",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "generationTimestampPolicy": {
       "mode": "omitted-for-byte-stability",
       "rationale": "The manifest intentionally has no wall-clock timestamp. Git history records publication time while identical workbook input remains byte-stable."
@@ -382,7 +382,7 @@
     "Compact semantic JSON is split into deterministic 6,000-code-unit TypeScript string chunks; no generation timestamp is emitted."
   ],
   "validation": {
-    "complete": true,
+    "complete": false,
     "effectKeysUnique": true,
     "everyCriticalHasEffects": true,
     "everyEffectHasCritical": true,
@@ -395,7 +395,53 @@
     ],
     "resultKeysUnique": true,
     "supportedCombinationsContainIndexes1Through16": true,
-    "workbookSummaryCountsMatch": true
+    "workbookSummary": {
+      "declaredBreakdowns": 39,
+      "discrepancies": [
+        {
+          "actual": 1517,
+          "bucket": "Physical",
+          "expected": 1045,
+          "matches": false,
+          "section": "Type",
+          "sourceCell": "AppFacing_Summary!C7"
+        },
+        {
+          "actual": 563,
+          "bucket": "Special",
+          "expected": 546,
+          "matches": false,
+          "section": "Type",
+          "sourceCell": "AppFacing_Summary!C8"
+        },
+        {
+          "actual": 42,
+          "bucket": "DB",
+          "expected": 122,
+          "matches": false,
+          "section": "Group",
+          "sourceCell": "AppFacing_Summary!C11"
+        },
+        {
+          "actual": 295,
+          "bucket": "Mobility",
+          "expected": 215,
+          "matches": false,
+          "section": "Group",
+          "sourceCell": "AppFacing_Summary!C13"
+        },
+        {
+          "actual": 1035,
+          "bucket": "Special",
+          "expected": 546,
+          "matches": false,
+          "section": "Group",
+          "sourceCell": "AppFacing_Summary!C16"
+        }
+      ],
+      "matchesPayload": false,
+      "verifiedAgainstGeneratedPayload": true
+    }
   },
   "warnings": {
     "summary": {

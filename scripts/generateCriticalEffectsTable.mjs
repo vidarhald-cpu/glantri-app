@@ -7,7 +7,12 @@ import { fileURLToPath } from "node:url";
 import { inflateRawSync } from "node:zlib";
 import { format as formatWithPrettier } from "prettier";
 
-const GENERATOR_VERSION = "1.0.0";
+import {
+  formatCriticalEffectsSummaryDiscrepancies,
+  verifyCriticalEffectsSummaryBreakdowns,
+} from "./lib/criticalEffectsSummaryVerification.mjs";
+
+const GENERATOR_VERSION = "1.1.0";
 const JSON_CHUNK_SIZE = 6000;
 const END_OF_CENTRAL_DIRECTORY_SIGNATURE = 0x06054b50;
 const CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE = 0x02014b50;
@@ -618,7 +623,7 @@ function assertRepresentativeCase(resultsByKey, effectsByCritKey, expected) {
   }
 }
 
-function validateTables(results, effects, summaryRows) {
+function validateTables(results, effects) {
   if (results.length !== 608 || effects.length !== 2179) {
     throw new Error(
       `Approved row counts changed (results ${results.length}/608, effects ${effects.length}/2179).`,
@@ -701,18 +706,6 @@ function validateTables(results, effects, summaryRows) {
     assertRepresentativeCase(resultsByKey, effectsByCritKey, representativeCase);
   }
 
-  const summaryCounts = new Map(
-    summaryRows.map((record) => [
-      `${record.values.Section}|${record.values.Bucket}`,
-      record.values.Count,
-    ]),
-  );
-  if (
-    summaryCounts.get("Crits|Total crit rows") !== results.length ||
-    summaryCounts.get("Effects|Total effect rows") !== effects.length
-  ) {
-    throw new Error("AppFacing_Summary row counts do not match the maintained tables.");
-  }
   return representativeCases;
 }
 
@@ -795,6 +788,7 @@ function buildManifest(input) {
     results,
     dataFile,
     representativeCases,
+    summaryVerification,
   } = input;
   const unresolvedDurationModes = new Set(["death_timer_special", "special", "stateful_special"]);
   const unresolvedSpecialOrStatefulMappings = effects.flatMap((effect, index) =>
@@ -857,7 +851,7 @@ function buildManifest(input) {
   }
 
   return {
-    manifestVersion: 1,
+    manifestVersion: 2,
     generator: {
       path: repoPath(SCRIPT_PATH),
       version: GENERATOR_VERSION,
@@ -906,7 +900,7 @@ function buildManifest(input) {
       "Compact semantic JSON is split into deterministic 6,000-code-unit TypeScript string chunks; no generation timestamp is emitted.",
     ],
     validation: {
-      complete: true,
+      complete: summaryVerification.matchesPayload,
       effectKeysUnique: true,
       everyCriticalHasEffects: true,
       everyEffectHasCritical: true,
@@ -914,7 +908,12 @@ function buildManifest(input) {
       representativeCases: representativeCases.map((entry) => entry.critKey),
       resultKeysUnique: true,
       supportedCombinationsContainIndexes1Through16: true,
-      workbookSummaryCountsMatch: true,
+      workbookSummary: {
+        declaredBreakdowns: summaryVerification.declaredBreakdowns,
+        discrepancies: summaryVerification.discrepancies,
+        matchesPayload: summaryVerification.matchesPayload,
+        verifiedAgainstGeneratedPayload: true,
+      },
     },
     warnings: {
       summary: {
@@ -993,7 +992,12 @@ async function main() {
   const summaryRows = readUnmappedTable(workbook.sheets, SUMMARY_SOURCE);
   const results = resultsRecords.map(buildCriticalResult);
   const effects = effectsRecords.map(buildEffectTemplate);
-  const representativeCases = validateTables(results, effects, summaryRows);
+  const representativeCases = validateTables(results, effects);
+  const summaryVerification = verifyCriticalEffectsSummaryBreakdowns({
+    effects,
+    results,
+    summaryRows,
+  });
   const dataFile = renderDataFile(results, effects);
   const manifest = buildManifest({
     dataFile,
@@ -1003,6 +1007,7 @@ async function main() {
     representativeCases,
     results,
     reviewRows,
+    summaryVerification,
     workbookBuffer: workbook.buffer,
   });
   const manifestFile = await formatWithPrettier(JSON.stringify(manifest), {
@@ -1020,6 +1025,7 @@ async function main() {
     console.log(
       `Preserved warnings: ${manifest.warnings.summary.fractionalRatesPreserved} fractional rates, ${manifest.warnings.summary.unresolvedSpecialOrStatefulMappings} unresolved special/stateful mappings, ${manifest.warnings.summary.rollOnceRateMappings} roll-once rates, ${manifest.warnings.summary.deathTimerMappings} death timers.`,
     );
+    console.log(formatCriticalEffectsSummaryDiscrepancies(summaryVerification));
     return;
   }
 
