@@ -1,6 +1,7 @@
 import {
   ACCESS_BANDS,
   DEVELOPMENT_STAGES,
+  LEARNING_HISTORY_KINDS,
   type AccessBand,
   type DevelopmentStage,
   type SkillSemanticFixture,
@@ -58,6 +59,32 @@ export interface SkillSemanticValidationResult {
 
 const DEVELOPMENT_STAGE_SET = new Set<string>(DEVELOPMENT_STAGES);
 const ACCESS_BAND_SET = new Set<string>(ACCESS_BANDS);
+const LEARNING_HISTORY_KIND_SET = new Set<string>(LEARNING_HISTORY_KINDS);
+const CONCEPTUAL_NODE_ECONOMIC_FIELDS = [
+  "cost",
+  "economicClass",
+  "economicallyActive",
+  "price",
+  "xpCost",
+] as const;
+const CONCEPTUAL_NODE_MECHANICAL_FIELDS = [
+  "derivedGrants",
+  "eligibility",
+  "eligibilityRules",
+  "mechanicallyActive",
+  "mechanicalEffects",
+  "transfer",
+  "transferFactor",
+] as const;
+const RELATIONSHIP_FACTOR_FIELDS = [
+  "effectFactor",
+  "factor",
+  "familiarityFactor",
+  "learningFactor",
+  "reinforcementFactor",
+  "reverseFactor",
+  "transferFactor",
+] as const;
 
 function isDevelopmentStage(value: unknown): value is DevelopmentStage {
   return typeof value === "string" && DEVELOPMENT_STAGE_SET.has(value);
@@ -111,6 +138,26 @@ function validateFixture(fixture: SkillSemanticFixture): SkillSemanticDiagnostic
           `${node.kind === "domain" ? "Domain" : "Category"} "${node.name}" (${node.id}) cannot carry XP.`,
         );
       }
+
+      for (const field of CONCEPTUAL_NODE_ECONOMIC_FIELDS) {
+        if (looseNode[field] !== undefined) {
+          add(
+            "CONCEPTUAL_NODE_ECONOMIC_FIELD",
+            `${path}.${field}`,
+            `${node.kind === "domain" ? "Domain" : "Category"} "${node.name}" (${node.id}) cannot define economic field "${field}".`,
+          );
+        }
+      }
+
+      for (const field of CONCEPTUAL_NODE_MECHANICAL_FIELDS) {
+        if (looseNode[field] !== undefined) {
+          add(
+            "CONCEPTUAL_NODE_MECHANICAL_FIELD",
+            `${path}.${field}`,
+            `${node.kind === "domain" ? "Domain" : "Category"} "${node.name}" (${node.id}) cannot define mechanical field "${field}".`,
+          );
+        }
+      }
     }
 
     if (node.kind === "category") {
@@ -125,7 +172,7 @@ function validateFixture(fixture: SkillSemanticFixture): SkillSemanticDiagnostic
         );
       }
 
-      if ((node as { mechanicalEffects?: unknown }).mechanicalEffects !== undefined) {
+      if (looseNode.mechanicalEffects !== undefined) {
         add(
           "CATEGORY_MECHANICALLY_ACTIVE",
           `${path}.mechanicalEffects`,
@@ -213,6 +260,14 @@ function validateFixture(fixture: SkillSemanticFixture): SkillSemanticDiagnostic
       );
     }
 
+    if (!LEARNING_HISTORY_KIND_SET.has(String(history.identity?.kind))) {
+      add(
+        "LEARNING_HISTORY_IDENTITY_KIND_INVALID",
+        `${path}.identity.kind`,
+        `Learning history "${history.id}" identity kind "${String(history.identity?.kind)}" is not narratable shared-training history; categories and taxonomy labels cannot masquerade as learning histories.`,
+      );
+    }
+
     if (looseHistory.economicallyActive !== undefined || looseHistory.cost !== undefined) {
       add(
         "UNRESOLVED_GROUP_ECONOMICS_ASSUMPTION",
@@ -255,6 +310,7 @@ function validateFixture(fixture: SkillSemanticFixture): SkillSemanticDiagnostic
 
   fixture.relationships.forEach((relationship, index) => {
     const path = `relationships[${index}]`;
+    const looseRelationship = relationship as unknown as Record<string, unknown>;
     const source = nodeById.get(relationship.sourceCompetencyId);
     const target = nodeById.get(relationship.targetCompetencyId);
 
@@ -281,9 +337,27 @@ function validateFixture(fixture: SkillSemanticFixture): SkillSemanticDiagnostic
         `Relationship "${relationship.id}" must use an authored source value; relationship-derived values cannot source another relationship.`,
       );
     }
+
+    for (const field of RELATIONSHIP_FACTOR_FIELDS) {
+      if (looseRelationship[field] !== undefined) {
+        add(
+          "RELATIONSHIP_FACTOR_UNRESOLVED",
+          `${path}.${field}`,
+          `Relationship "${relationship.id}" cannot define unresolved numeric/effect factor field "${field}" in this fixture slice.`,
+        );
+      }
+    }
   });
 
   const looseLanguagePolicy = fixture.languagePolicy as unknown as Record<string, unknown>;
+
+  if (looseLanguagePolicy.allowCampaignAuthoredStableIds !== true) {
+    add(
+      "CAMPAIGN_AUTHORED_LANGUAGE_IDS_DISABLED",
+      "languagePolicy.allowCampaignAuthoredStableIds",
+      "Language/script policy must allow campaign-authored stable IDs.",
+    );
+  }
 
   if (
     looseLanguagePolicy.closedVocabulary !== false ||

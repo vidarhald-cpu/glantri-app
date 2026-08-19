@@ -25,6 +25,18 @@ describe("skill semantic anti-optimization validation", () => {
       'Category "Construction"',
     ],
     [
+      "invalid-conceptual-node-hidden-mechanics",
+      "CONCEPTUAL_NODE_ECONOMIC_FIELD",
+      "nodes[0].cost",
+      'cannot define economic field "cost"',
+    ],
+    [
+      "invalid-conceptual-node-hidden-mechanics",
+      "CONCEPTUAL_NODE_MECHANICAL_FIELD",
+      "nodes[0].mechanicalEffects",
+      'cannot define mechanical field "mechanicalEffects"',
+    ],
+    [
       "invalid-taxonomy-economic-group",
       "LEARNING_HISTORY_TAXONOMY_BUCKET",
       "learningHistories[0].basis",
@@ -35,6 +47,12 @@ describe("skill semantic anti-optimization validation", () => {
       "UNRESOLVED_GROUP_ECONOMICS_ASSUMPTION",
       "learningHistories[0]",
       "cannot decide unresolved group economics",
+    ],
+    [
+      "invalid-category-history-identity",
+      "LEARNING_HISTORY_IDENTITY_KIND_INVALID",
+      "learningHistories[0].identity.kind",
+      "categories and taxonomy labels cannot masquerade",
     ],
     [
       "invalid-nested-specialization-parent",
@@ -95,6 +113,18 @@ describe("skill semantic anti-optimization validation", () => {
       "RELATIONSHIP_DERIVED_VALUE_AS_SOURCE",
       "relationships[0].sourceValue",
       "cannot source another relationship",
+    ],
+    [
+      "invalid-relationship-factor",
+      "RELATIONSHIP_FACTOR_UNRESOLVED",
+      "relationships[0].factor",
+      'cannot define unresolved numeric/effect factor field "factor"',
+    ],
+    [
+      "invalid-campaign-authored-language-ids-disabled",
+      "CAMPAIGN_AUTHORED_LANGUAGE_IDS_DISABLED",
+      "languagePolicy.allowCampaignAuthoredStableIds",
+      "must allow campaign-authored stable IDs",
     ],
     [
       "invalid-axis-conflation",

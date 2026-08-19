@@ -49,15 +49,17 @@ export type SkillSemanticNode =
   | ConcreteSkillSemanticNode
   | SkillSpecializationSemanticNode;
 
-export type LearningHistoryKind =
-  | "apprenticeship"
-  | "campaign"
-  | "crew"
-  | "household"
-  | "institution"
-  | "office"
-  | "unit"
-  | "workshop";
+export const LEARNING_HISTORY_KINDS = [
+  "apprenticeship",
+  "campaign",
+  "crew",
+  "household",
+  "institution",
+  "office",
+  "unit",
+  "workshop",
+] as const;
+export type LearningHistoryKind = (typeof LEARNING_HISTORY_KINDS)[number];
 
 export interface LearningHistorySemanticFixture {
   basis: "shared-training-history";

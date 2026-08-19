@@ -38,6 +38,14 @@ export const antiOptimizationSkillSemanticFixtures = [
     ),
   }),
   asInvalidFixture({
+    ...medicineFixture,
+    id: "invalid-conceptual-node-hidden-mechanics",
+    title: "Invalid: conceptual domain hides economic and mechanical behavior",
+    nodes: medicineFixture.nodes.map((node) =>
+      node.kind === "domain" ? { ...node, cost: 4, mechanicalEffects: ["transfer"] } : node,
+    ),
+  }),
+  asInvalidFixture({
     ...navigationFixture,
     id: "invalid-taxonomy-economic-group",
     title: "Invalid: taxonomy group treated as economic history",
@@ -49,6 +57,18 @@ export const antiOptimizationSkillSemanticFixtures = [
         kind: "category",
         name: "Navigation",
         sharedContext: "These competencies share a subject theme.",
+      },
+    })),
+  }),
+  asInvalidFixture({
+    ...navigationFixture,
+    id: "invalid-category-history-identity",
+    title: "Invalid: category masquerades as a learning-history identity",
+    learningHistories: navigationFixture.learningHistories.map((history) => ({
+      ...history,
+      identity: {
+        ...history.identity,
+        kind: "category",
       },
     })),
   }),
@@ -121,6 +141,24 @@ export const antiOptimizationSkillSemanticFixtures = [
       ...relationship,
       sourceValue: "derived",
     })),
+  }),
+  asInvalidFixture({
+    ...navigationFixture,
+    id: "invalid-relationship-factor",
+    title: "Invalid: unresolved numeric relationship factor",
+    relationships: navigationFixture.relationships.map((relationship) => ({
+      ...relationship,
+      factor: 0.5,
+    })),
+  }),
+  asInvalidFixture({
+    ...languageFixture,
+    id: "invalid-campaign-authored-language-ids-disabled",
+    title: "Invalid: campaign-authored stable language IDs disabled",
+    languagePolicy: {
+      ...languageFixture.languagePolicy,
+      allowCampaignAuthoredStableIds: false,
+    },
   }),
   asInvalidFixture({
     ...navigationFixture,
