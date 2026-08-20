@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type {
+  CombatDefenseSnapshot,
   CombatRoundParryResolution,
   CombatRoundStep,
   ScenarioParticipantCombatContext,
 } from "@glantri/domain";
+import { getLatestCombatDefenseSnapshot } from "@glantri/domain";
 
 import type {
   PlayerCombatAttackStatsView,
@@ -49,10 +51,15 @@ const phaseDefenseStats: PlayerCombatDefenseStatsView = {
   sourceName: "Sword / shield",
 };
 
-function buildProjection(input: {
-  selectedResolutionContext?: Parameters<typeof buildCombatRoundPhasePanelProjection>[0]["selectedResolutionContext"];
-  selectedStep?: CombatRoundStep;
-} = {}) {
+function buildProjection(
+  input: {
+    defenseSnapshot?: CombatDefenseSnapshot;
+    selectedResolutionContext?: Parameters<
+      typeof buildCombatRoundPhasePanelProjection
+    >[0]["selectedResolutionContext"];
+    selectedStep?: CombatRoundStep;
+  } = {},
+) {
   return buildCombatRoundPhasePanelProjection({
     actionId: "double_attack",
     attackStats,
@@ -64,6 +71,7 @@ function buildProjection(input: {
       obSkillRaw: -1,
     },
     participantId: "defender",
+    defenseSnapshot: input.defenseSnapshot,
     phaseCard,
     phaseContext,
     phaseDefenseStats,
@@ -75,6 +83,84 @@ function buildProjection(input: {
 }
 
 describe("buildCombatRoundPhasePanelProjection", () => {
+  it("uses the latest immutable defense snapshot instead of the mutable phase context", () => {
+    let eventSequence = 0;
+    const snapshot = (input: {
+      attackId: string;
+      attackDirection: CombatDefenseSnapshot["attackDirection"];
+      aware: boolean;
+      included: boolean;
+      reviewedAt: string;
+    }): CombatDefenseSnapshot => ({
+      attackDirection: input.attackDirection,
+      attackerParticipantId: `attacker-${input.attackId}`,
+      attackId: input.attackId,
+      attackOpportunityId: `opportunity-${input.attackId}`,
+      aware: input.aware,
+      awarenessDefault: true,
+      awarenessOverridden: !input.aware,
+      defenderParticipantId: "defender",
+      eventSequence: eventSequence++,
+      id: `defense-snapshot:${input.attackId}`,
+      ordinaryDodgeAvailable: input.aware,
+      phase: "phase1",
+      reviewedAt: input.reviewedAt,
+      reviewedByUserId: "gm",
+      roundNumber: 2,
+      schemaVersion: 1,
+      sources: [
+        {
+          decision: input.included ? "default_included" : "gm_excluded",
+          included: input.included,
+          itemId: "shield-1",
+          itemRevision: "revision-1",
+          kind: "shield",
+          label: "Round shield",
+          slot: "offHand",
+          templateId: "shield-template",
+        },
+      ],
+      status: "committed",
+    });
+    const snapshots = [
+      snapshot({
+        attackDirection: "front",
+        attackId: "attack-a",
+        aware: true,
+        included: true,
+        reviewedAt: "2026-08-18T10:00:00.000Z",
+      }),
+      snapshot({
+        attackDirection: "left",
+        attackId: "attack-b",
+        aware: false,
+        included: false,
+        reviewedAt: "2026-08-18T10:01:00.000Z",
+      }),
+      snapshot({
+        attackDirection: "rear",
+        attackId: "attack-c",
+        aware: true,
+        included: false,
+        reviewedAt: "2026-08-18T10:02:00.000Z",
+      }),
+    ];
+    const reloaded = JSON.parse(JSON.stringify(snapshots)) as CombatDefenseSnapshot[];
+    const latest = getLatestCombatDefenseSnapshot({
+      defenderParticipantId: "defender",
+      phase: "phase1",
+      roundNumber: 2,
+      snapshots: reloaded,
+    });
+    const projection = buildProjection({ defenseSnapshot: latest });
+
+    expect(latest?.attackId).toBe("attack-c");
+    expect(projection.defenseSnapshot).toEqual(snapshots[2]);
+    expect(projection.phaseModel.phaseContext.incomingAttackSide).toBe("rear");
+    expect(snapshots[0]).toMatchObject({ aware: true, sources: [{ included: true }] });
+    expect(snapshots[1]).toMatchObject({ aware: false, sources: [{ included: false }] });
+  });
+
   it("uses phase-aware attack rows for the selected context", () => {
     const projection = buildProjection();
 

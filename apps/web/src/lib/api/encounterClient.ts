@@ -7,6 +7,7 @@ import {
   type EncounterSessionRevision,
   type EncounterSessionSummary,
   CombatAttackSourceRef,
+  CombatDefenseSnapshot,
   CombatHistoryProjection,
   CombatGenericActionDuration,
   CombatItemInteractionOperation,
@@ -1643,6 +1644,33 @@ export async function rollCombatParryCommandOnServer(input: {
   );
 
   return payload;
+}
+
+export async function commitCombatDefenseReviewOnServer(input: {
+  attackId: string;
+  attackerParticipantId: string;
+  aware: boolean;
+  currentEncounter?: EncounterSession;
+  defenderParticipantId: string;
+  encounterId: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  phase: "phase1" | "phase2";
+  sourceSelections: Array<{ included: boolean; itemId: string }>;
+  taskId: string;
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  defenseSnapshot: CombatDefenseSnapshot;
+  encounter: EncounterSession;
+}> {
+  return sendCombatMutationJson(
+    `/encounters/${input.encounterId}/combat-round/commit-defense-review`,
+    {
+      body: JSON.stringify({ ...input, currentEncounter: undefined }),
+      method: "POST",
+    },
+    input.currentEncounter,
+  );
 }
 
 export async function clearCurrentCombatRoundStepOnServer(input: {

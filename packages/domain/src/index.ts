@@ -16,6 +16,7 @@ export * from "./dice/openEndedD20";
 export * from "./encounter/armorModifier";
 export * from "./encounter/combatRoundManager";
 export * from "./encounter/combatDefenseCalculation";
+export * from "./encounter/combatDefenseSnapshot";
 export * from "./encounter/combatRoundStep";
 export * from "./encounter/combatRoundEndProcesses";
 export * from "./encounter/combatActionProcesses";

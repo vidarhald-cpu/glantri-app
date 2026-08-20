@@ -124,8 +124,10 @@ import {
   projectCanonicalCombatModifierReviewInput,
   getCombatRoundParryReviewStepForPhase,
   getCombatRoundAttackResultById,
+  getCombatDefenseSnapshotForAttack,
   getCombatRoundAttackResultForOpportunity,
   getCombatRoundPendingMissileIncomingAttack,
+  getCombatRoundPendingMissileIncomingAttackById,
   getCombatRoundAttackResultId,
   getCombatMissileAttackModifier,
   canInterruptCombatMissileReadiness,
@@ -182,6 +184,7 @@ import {
   recordCombatRoundHitLocationRoll,
   recordCombatRoundInitiative,
   recordCombatRoundAttackResult,
+  recordCombatRoundDefenseReview,
   recordCombatRoundMissileShot,
   combatMissileIncomingAttackSchema,
   progressCombatRoundMissileReadiness,
@@ -344,10 +347,13 @@ import { parseBodyObject, parseId, parseOptionalString } from "./parsing";
 import { resolveScenarioWorkspaceAccess } from "./access";
 import { selectCurrentCombatModifierValidationTask } from "./combatModifierValidationTaskSelection";
 import { resolveCanonicalScenarioParticipantDefense } from "./combatDefenseResolution";
+import {
+  buildCanonicalCombatDefenseSnapshot,
+  resolveCanonicalParryBaseForDefenseSnapshot,
+} from "./combatDefenseSnapshotResolution";
 import { resolveCanonicalCombatInitiativeBaseForTask } from "./combatInitiativeResolution";
 import {
   resolveCanonicalAttackOffense,
-  resolveCanonicalParryBase,
   resolveCanonicalWeaponParryBase,
 } from "./combatManualCalculationResolution";
 
@@ -2792,6 +2798,49 @@ function getCombatMissileAmmoUndo(command: CombatRoundCommand): CombatMissileAmm
     return undefined;
   }
   return value as unknown as CombatMissileAmmoUndo;
+}
+
+function parseCombatDefenseReviewBody(body: unknown): {
+  attackId: string;
+  attackerParticipantId: string;
+  aware: boolean;
+  defenderParticipantId: string;
+  expectedRevision: string;
+  phase: CombatRoundPhase;
+  sourceSelections: Array<{ included: boolean; itemId: string }>;
+} & ParsedCombatTaskCommandIdentity {
+  const value = parseBodyObject(body, "Combat defense review payload");
+  if (typeof value.aware !== "boolean") {
+    throw new Error("aware must be a boolean.");
+  }
+  if (!Array.isArray(value.sourceSelections)) {
+    throw new Error("sourceSelections must be an array.");
+  }
+  return {
+    ...parseCombatTaskCommandIdentity(value),
+    attackId: parseNonEmptyString(value.attackId, "attackId"),
+    attackerParticipantId: parseNonEmptyString(
+      value.attackerParticipantId,
+      "attackerParticipantId",
+    ),
+    aware: value.aware,
+    defenderParticipantId: parseNonEmptyString(
+      value.defenderParticipantId,
+      "defenderParticipantId",
+    ),
+    expectedRevision: parseNonEmptyString(value.expectedRevision, "expectedRevision"),
+    phase: combatRoundPhaseSchema.parse(value.phase),
+    sourceSelections: value.sourceSelections.map((entry, index) => {
+      const selection = parseBodyObject(entry, `sourceSelections[${index}]`);
+      if (typeof selection.included !== "boolean") {
+        throw new Error(`sourceSelections[${index}].included must be a boolean.`);
+      }
+      return {
+        included: selection.included,
+        itemId: parseNonEmptyString(selection.itemId, `sourceSelections[${index}].itemId`),
+      };
+    }),
+  };
 }
 
 function parseCombatParryBody(body: unknown): ParsedCombatTaskCommandIdentity & {
@@ -6127,6 +6176,12 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
     };
   }
 
+  // Defense-review command facts retain exact canonical item identities, revisions,
+  // GM provenance, and undo material. The defender receives the safe event projection.
+  if (input.command.type === "commit_defense_review") {
+    return undefined;
+  }
+
   // Readiness commands carry exact ammunition identities/revisions, GM timing
   // adjustments, and undo snapshots. Players use their sanitized readiness row.
   if (
@@ -6365,6 +6420,7 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
         }),
       )
       .filter((command): command is CombatRoundCommand => Boolean(command)),
+    defenseSnapshots: [],
     distanceState: {
       edges: safeDistanceEdges,
     },
@@ -16220,6 +16276,288 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.post(
+    "/encounters/:encounterId/combat-round/commit-defense-review",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+        if (!encounter?.scenarioId) {
+          return reply.code(404).send({ error: "Encounter not found." });
+        }
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId, userId: user.id, userRoles: user.roles },
+        );
+        if (!access || access.mode !== "gm") {
+          return reply.code(404).send({ error: "Encounter not found." });
+        }
+        const body = parseCombatDefenseReviewBody(request.body);
+        if (body.expectedRevision !== encounter.updatedAt) {
+          return reply.code(409).send({
+            code: "stale_revision",
+            error: "Combat changed before the defense review was committed. Refresh combat.",
+          });
+        }
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const membership = resolveEncounterParticipantMembership({
+          encounter,
+          scenarioParticipants,
+        });
+        const attackerMembership = membership.participants.find(
+          (participant) => participant.id === body.attackerParticipantId,
+        );
+        const defenderMembership = membership.participants.find(
+          (participant) => participant.id === body.defenderParticipantId,
+        );
+        const attacker = attackerMembership?.scenarioParticipantId
+          ? scenarioParticipants.find(
+              (participant) => participant.id === attackerMembership.scenarioParticipantId,
+            )
+          : undefined;
+        const defender = defenderMembership?.scenarioParticipantId
+          ? scenarioParticipants.find(
+              (participant) => participant.id === defenderMembership.scenarioParticipantId,
+            )
+          : undefined;
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const existingAttackResult = getCombatRoundAttackResultById({
+          attackResultId: body.attackId,
+          state: roundState,
+        });
+        const pendingMissileAttack = getCombatRoundPendingMissileIncomingAttackById({
+          attackId: body.attackId,
+          state: roundState,
+        });
+        const incomingAttack = existingAttackResult ?? pendingMissileAttack;
+        if (
+          !attacker ||
+          !defender ||
+          !attacker.isActive ||
+          !defender.isActive ||
+          !incomingAttack ||
+          incomingAttack.attackerParticipantId !== body.attackerParticipantId ||
+          incomingAttack.defenderParticipantId !== body.defenderParticipantId ||
+          incomingAttack.phase !== body.phase ||
+          roundState.phaseResolutionCursor?.substep !== "defense" ||
+          roundState.phaseResolutionCursor.participantId !== body.defenderParticipantId ||
+          roundState.phaseResolutionCursor.phase !== body.phase
+        ) {
+          return reply.code(409).send({
+            code: "defense_review_unavailable",
+            error: "Defense review is no longer available. Refresh combat.",
+          });
+        }
+
+        const defenseReviewAuthorization = authorizeCombatTaskCommand({
+          authorization: {
+            actor: { kind: "gm" },
+            attackResultId: body.attackId,
+            attackerParticipantId: body.attackerParticipantId,
+            commandType: "commit_defense_review",
+            defenderParticipantId: body.defenderParticipantId,
+            opportunityId: incomingAttack.attackOpportunityId,
+            phase: body.phase,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity: body,
+          roundState,
+        });
+        if (!defenseReviewAuthorization.ok) {
+          return reply.code(409).send({
+            code: defenseReviewAuthorization.code,
+            error: "Defense review is no longer available. Refresh combat.",
+          });
+        }
+
+        const reviewedAt = new Date().toISOString();
+        const defenderRoundParticipant = roundState.participants.find(
+          (participant) => participant.participantId === body.defenderParticipantId,
+        );
+        const attackDirection =
+          defenderRoundParticipant?.declaration?.phaseContexts?.[body.phase]?.incomingAttackSide ??
+          defender.state.combat.combatContext.incomingAttackSide;
+        const attackOpportunityId = incomingAttack.attackOpportunityId;
+        if (!attackOpportunityId) {
+          return reply.code(409).send({
+            code: "defense_review_unavailable",
+            error: "Defense review is no longer available. Refresh combat.",
+          });
+        }
+        const snapshot = buildCanonicalCombatDefenseSnapshot({
+          attackDirection,
+          attacker,
+          attackerCombatantId: body.attackerParticipantId,
+          attackId: body.attackId,
+          attackOpportunityId,
+          aware: body.aware,
+          defender,
+          defenderCombatantId: body.defenderParticipantId,
+          phase: body.phase,
+          reviewedAt,
+          reviewedByUserId: user.id,
+          roundNumber: roundState.roundNumber,
+          sourceSelections: body.sourceSelections,
+        });
+
+        let resolvedMissileAttackResult;
+        let defenderCalculation;
+        if (pendingMissileAttack) {
+          const canonicalModifierFacts = resolveCanonicalCombatAttackModifierFacts({
+            attackerCombatantId: body.attackerParticipantId,
+            attackerScenarioParticipant: attacker,
+            defenderCombatantId: body.defenderParticipantId,
+            defenderScenarioParticipant: defender,
+            encounterId,
+            opportunityId: pendingMissileAttack.attackOpportunityId,
+            phase: body.phase,
+            state: roundState,
+          });
+          const canonicalDefense = resolveCanonicalScenarioParticipantDefense({
+            defenderResolution: canonicalModifierFacts.defenderResolution,
+            flatDbResolution: canonicalModifierFacts.defenderFlatResolution,
+            participant: defender,
+          });
+          if (canonicalDefense.completeness !== "complete") {
+            return reply.code(409).send({
+              code: "defense_context_unavailable",
+              error: "Required defense context is unavailable. Refresh combat.",
+            });
+          }
+          const breakOffConsequence = getCombatBreakOffPairConsequence({
+            attackerParticipantId: body.attackerParticipantId,
+            defenderParticipantId: body.defenderParticipantId,
+            state: roundState,
+          });
+          const awareBaseDb = snapshot.ordinaryDodgeAvailable ? canonicalDefense.effectiveDb : 0;
+          const breakOffTrace =
+            snapshot.ordinaryDodgeAvailable && breakOffConsequence.defenderDbParryModifier !== 0
+              ? calculateWorkbookPercentageAdjustmentTrace({
+                  baseValue: awareBaseDb,
+                  rawModifiers: [
+                    {
+                      label: "Break Off result · DB/Parry",
+                      value: breakOffConsequence.defenderDbParryModifier,
+                    },
+                  ],
+                })
+              : undefined;
+          const defenderDb = breakOffTrace?.finalValue ?? awareBaseDb;
+          const attackerRoundParticipant = roundState.participants.find(
+            (participant) => participant.participantId === body.attackerParticipantId,
+          );
+          const attackPhaseDefensivePenalty =
+            attackerRoundParticipant?.declaration?.attackPhaseDefensivePenalties?.find(
+              (penalty) => penalty.attackOpportunityId === pendingMissileAttack.attackOpportunityId,
+            );
+          resolvedMissileAttackResult = buildCombatRoundAttackRollResult({
+            actionId: pendingMissileAttack.actionId,
+            attackIndex: pendingMissileAttack.attackIndex,
+            attackModeId: pendingMissileAttack.attackModeId,
+            attackOpportunityId: pendingMissileAttack.attackOpportunityId,
+            attackPhaseDefensivePenalty,
+            attackSlot: pendingMissileAttack.attackSlot,
+            attackType: "missile",
+            attackerParticipantId: body.attackerParticipantId,
+            declarationId: pendingMissileAttack.declarationId,
+            defenderDb,
+            defenderParticipantId: body.defenderParticipantId,
+            ob: pendingMissileAttack.ob,
+            openEndedD10s: pendingMissileAttack.openEndedD10s,
+            phase: body.phase,
+            rollD20: pendingMissileAttack.rollD20,
+            rollTotal: pendingMissileAttack.rollTotal,
+            rolledAt: pendingMissileAttack.rolledAt,
+            rolledByUserId: pendingMissileAttack.rolledByUserId,
+            weaponArmorClass: pendingMissileAttack.weaponArmorClass,
+            weaponCriticalCode: pendingMissileAttack.weaponCriticalCode,
+            weaponDamageClass: pendingMissileAttack.weaponDamageClass,
+            weaponDmbFormula: pendingMissileAttack.weaponDmbFormula ?? undefined,
+            weaponDmbRaw: pendingMissileAttack.weaponDmbRaw,
+            weaponInstanceId: pendingMissileAttack.weaponInstanceId,
+            weaponModeInitiative: pendingMissileAttack.weaponModeInitiative,
+            weaponModeRange: pendingMissileAttack.weaponModeRange,
+            weaponModeSourceMetadata: pendingMissileAttack.weaponModeSourceMetadata,
+            weaponName: pendingMissileAttack.weaponName,
+            weaponSourceId: pendingMissileAttack.weaponSourceId,
+            weaponSourceSlot: pendingMissileAttack.weaponSourceSlot,
+            weaponTemplateId: pendingMissileAttack.weaponTemplateId,
+          });
+          defenderCalculation = buildAcceptedCombatDefenseCalculationFact({
+            calculation: canonicalDefense,
+            cutoffInitiativeGroupId: getCombatRoundCurrentInitiativeExecutionGroup({
+              phase: body.phase,
+              state: roundState,
+            })?.id,
+            cutoffSequence: getCombatRoundNextEventSequence(roundState),
+            defenderResolution: canonicalModifierFacts.defenderResolution,
+            effectiveDb: defenderDb,
+            flatResolution: canonicalModifierFacts.defenderFlatResolution,
+          });
+        }
+
+        const nextRoundState = recordCombatRoundDefenseReview({
+          command: {
+            createdAt: reviewedAt,
+            createdByUserId: user.id,
+            facts: { defenderCalculation },
+          },
+          resolvedMissileAttackResult,
+          snapshot,
+          state: roundState,
+        });
+        const committedSnapshot = nextRoundState.defenseSnapshots.find(
+          (candidate) => candidate.attackId === body.attackId,
+        );
+        if (!committedSnapshot) {
+          throw new Error("Committed defense snapshot is unavailable after persistence.");
+        }
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          expectedRevision: encounter.updatedAt,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: nextRoundState,
+            currentRound: nextRoundState.roundNumber,
+            updatedAt: reviewedAt,
+          },
+        });
+        return {
+          commandEnvelope: buildCombatRoundCommandEnvelope({
+            latestResult: resolvedMissileAttackResult
+              ? {
+                  attackResultId: body.attackId,
+                  attackerParticipantId: body.attackerParticipantId,
+                  defenderParticipantId: body.defenderParticipantId,
+                  kind: "attack",
+                  phase: body.phase,
+                }
+              : undefined,
+            state: nextRoundState,
+          }),
+          defenseSnapshot: committedSnapshot,
+          encounter: savedEncounter,
+        };
+      } catch (error) {
+        return reply.code(400).send({
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to commit the incoming attack defense review.",
+        });
+      }
+    },
+  );
+
   app.post("/encounters/:encounterId/combat-round/roll-parry", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
 
@@ -16403,6 +16741,40 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           error: "The declared Parry-Disarm weapon is no longer ready. Refresh combat.",
         });
       }
+      const defenseSnapshot = getCombatDefenseSnapshotForAttack(
+        roundState.defenseSnapshots,
+        body.attackResultId,
+      );
+      const linkedDefenseSnapshotId = roundState.phaseResolutionResults.find(
+        (resolution) => resolution.attackResultId === body.attackResultId,
+      )?.defenseSnapshotId;
+      if (
+        !defenseSnapshot ||
+        defenseSnapshot.id !== linkedDefenseSnapshotId ||
+        defenseSnapshot.attackOpportunityId !== attackResult.attackOpportunityId ||
+        defenseSnapshot.attackerParticipantId !== attackResult.attackerParticipantId ||
+        defenseSnapshot.defenderParticipantId !== attackResult.defenderParticipantId ||
+        defenseSnapshot.phase !== attackResult.phase
+      ) {
+        return reply.code(409).send({
+          code: "parry_context_unavailable",
+          error: "The committed defense review no longer matches this attack. Refresh combat.",
+        });
+      }
+      if (
+        body.parryPurpose === "parry_disarm" &&
+        parryDisarmDeclaration &&
+        !defenseSnapshot.sources.some(
+          (source) =>
+            source.included && source.itemId === parryDisarmDeclaration.actingWeapon.itemId,
+        )
+      ) {
+        return reply.code(409).send({
+          code: "parry_context_unavailable",
+          error: "The committed defense review excludes the declared Parry source.",
+        });
+      }
+
       const canonicalModifierFacts = resolveCanonicalCombatParryModifierFacts({
         attackerScenarioParticipant,
         attackResult,
@@ -16444,10 +16816,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               participant: scenarioParticipant,
               weaponItemId: parryDisarmDeclaration.actingWeapon.itemId,
             })
-          : resolveCanonicalParryBase({
-              participant: scenarioParticipant,
-              usedMainHand: body.usedMainHand,
-              usedOffHand: body.usedOffHand,
+          : resolveCanonicalParryBaseForDefenseSnapshot({
+              attackId: body.attackResultId,
+              attackOpportunityId: attackResult.attackOpportunityId ?? "",
+              attackerCombatantId: attackResult.attackerParticipantId,
+              defender: scenarioParticipant,
+              defenderCombatantId: attackResult.defenderParticipantId,
+              phase: attackResult.phase,
+              snapshot: defenseSnapshot,
             });
       if (canonicalParryBase.completeness !== "complete") {
         return reply.code(409).send({

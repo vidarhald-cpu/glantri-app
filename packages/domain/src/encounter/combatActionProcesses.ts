@@ -7,6 +7,7 @@ import {
   getCombatRoundDoubleAttackPhase2Decision,
   getCombatRoundOffensiveParryAttemptIdentity,
   getCombatRoundParryDisarmAttemptIdentity,
+  getCombatRoundPendingMissileIncomingAttack,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundParticipantAttackResults,
   type CombatRoundAttackOpportunity,
@@ -224,6 +225,7 @@ function stageTrackerFacet(kind: CombatActionProcessStageKind): "attack" | "dama
 
 function taskForStage(input: {
   attackResultId?: string;
+  defenseReviewRequired?: boolean;
   grazing: boolean;
   kind: CombatActionProcessStageKind;
   opportunityId: string;
@@ -238,7 +240,9 @@ function taskForStage(input: {
     case "attack":
       return { ...shared, expectedCommand: "roll_attack", owner: "attacker" };
     case "defense":
-      return { ...shared, expectedCommand: "roll_parry", owner: "defender" };
+      return input.defenseReviewRequired
+        ? { ...shared, expectedCommand: "commit_defense_review", owner: "gm" }
+        : { ...shared, expectedCommand: "roll_parry", owner: "defender" };
     case "offensive_parry_contest":
       return undefined;
     case "hit_location":
@@ -284,11 +288,32 @@ function stageStates(input: {
     opportunityId: input.opportunity.id,
     state: input.state,
   });
-  if (!attack) {
+  const pendingMissileAttack = attack
+    ? undefined
+    : getCombatRoundPendingMissileIncomingAttack({
+        opportunityId: input.opportunity.id,
+        state: input.state,
+      });
+  const incomingAttack = attack ?? pendingMissileAttack;
+  if (!incomingAttack) {
     pending.attack = "ready";
     return { completion: { complete: false }, states: pending };
   }
   pending.attack = "complete";
+  const attackResultId = getCombatRoundAttackResultId({
+    result: incomingAttack,
+    roundNumber: input.state.roundNumber,
+  });
+  const resolution = input.state.phaseResolutionResults.find(
+    (entry) => entry.attackResultId === attackResultId,
+  );
+  if (!resolution?.defenseSnapshotId) {
+    pending.defense = "ready";
+    return { completion: { complete: false }, states: pending };
+  }
+  if (!attack) {
+    throw new RangeError("Reviewed missile defense is missing its materialized attack result.");
+  }
   const offensiveParryAttempt = getCombatRoundOffensiveParryAttemptIdentity({
     attackResult: attack,
     state: input.state,
@@ -299,17 +324,10 @@ function stageStates(input: {
   });
   if (!attack.hit && !offensiveParryAttempt && !parryDisarmAttempt) {
     for (const kind of STAGE_ORDER.slice(1)) pending[kind] = "skipped";
+    pending.defense = "complete";
     return { completion: { complete: true, reason: "miss" }, states: pending };
   }
-
-  const attackResultId = getCombatRoundAttackResultId({
-    result: attack,
-    roundNumber: input.state.roundNumber,
-  });
-  const resolution = input.state.phaseResolutionResults.find(
-    (entry) => entry.attackResultId === attackResultId,
-  );
-  if (!resolution || resolution.parryResolution.status === "pending") {
+  if (resolution.parryResolution.status === "pending") {
     pending.defense = "ready";
     return { completion: { complete: false }, states: pending };
   }
@@ -375,9 +393,23 @@ function buildStandardAttackProcess(input: {
     opportunityId: input.opportunity.id,
     state: input.state,
   });
-  const attackResultId = attack
-    ? getCombatRoundAttackResultId({ result: attack, roundNumber: input.state.roundNumber })
+  const pendingMissileAttack = attack
+    ? undefined
+    : getCombatRoundPendingMissileIncomingAttack({
+        opportunityId: input.opportunity.id,
+        state: input.state,
+      });
+  const incomingAttack = attack ?? pendingMissileAttack;
+  const attackResultId = incomingAttack
+    ? getCombatRoundAttackResultId({
+        result: incomingAttack,
+        roundNumber: input.state.roundNumber,
+      })
     : undefined;
+  const defenseReviewRequired = attackResultId
+    ? !input.state.phaseResolutionResults.find((entry) => entry.attackResultId === attackResultId)
+        ?.defenseSnapshotId
+    : false;
   const processId = `round:${input.state.roundNumber}:action:${input.ownerParticipantId}:${input.actionKind}:attack:${input.opportunity.id}`;
   const { completion, states } = stageStates({
     opportunity: input.opportunity,
@@ -432,6 +464,7 @@ function buildStandardAttackProcess(input: {
           states[kind] === "ready" && kind !== "offensive_parry_contest"
             ? taskForStage({
                 attackResultId,
+                defenseReviewRequired: kind === "defense" && defenseReviewRequired,
                 grazing: attack?.grazing === true,
                 kind,
                 opportunityId: input.opportunity.id,

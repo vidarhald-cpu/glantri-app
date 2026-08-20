@@ -1,6 +1,7 @@
 import React from "react";
 import type {
   CombatObservationRelationship,
+  PlayerSafeCombatDefenseReview,
   ProjectedCombatHistoryEvent,
   ProjectedCombatHistoryPhasePanel,
   ProjectedCombatHistorySnapshot,
@@ -12,6 +13,7 @@ import {
   PlayerCombatAttackStatsTable,
   PlayerCombatAttackTargetSelector,
   PlayerCombatDefenseStatsTable,
+  PlayerCombatCommittedDefenseReview,
   PlayerCombatHistoricalActionSelectorPanel,
   PlayerCombatHistoricalContextPanel,
   PlayerCombatModifierPanel,
@@ -54,6 +56,7 @@ function HistoricalPhasePanel(input: {
   observationTargetLabels: Readonly<Record<string, string>>;
   panel: ProjectedCombatHistoryPhasePanel;
   phaseLabel: "Phase 1" | "Phase 2";
+  defenseReviews: readonly PlayerSafeCombatDefenseReview[];
   secondaryActionId?: string;
 }) {
   const recorded = Object.keys(input.panel).length > 0;
@@ -114,21 +117,32 @@ function HistoricalPhasePanel(input: {
             targetLabels={input.observationTargetLabels}
           />
         ) : null}
-        {input.panel.defenseSummary ? (
-          <PlayerCombatDefenseStatsTable stats={input.panel.defenseSummary} />
+        {input.defenseReviews.length > 0 ? (
+          input.defenseReviews.map((review) => (
+            <PlayerCombatCommittedDefenseReview
+              key={`${review.roundNumber}:${review.eventSequence}`}
+              review={review}
+            />
+          ))
         ) : (
-          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-            Defense information unavailable.
-          </div>
+          <>
+            {input.panel.defenseSummary ? (
+              <PlayerCombatDefenseStatsTable stats={input.panel.defenseSummary} />
+            ) : (
+              <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                Defense information unavailable.
+              </div>
+            )}
+            <PlayerCombatParryContextPanel
+              combatContext={context}
+              controlsDisabled
+              mainHandItemLabel={input.panel.mainHandParryItemLabel}
+              offHandItemLabel={input.panel.offHandParryItemLabel}
+              onCombatContextChange={noop}
+              readOnly
+            />
+          </>
         )}
-        <PlayerCombatParryContextPanel
-          combatContext={context}
-          controlsDisabled
-          mainHandItemLabel={input.panel.mainHandParryItemLabel}
-          offHandItemLabel={input.panel.offHandParryItemLabel}
-          onCombatContextChange={noop}
-          readOnly
-        />
       </>
     </PlayerCombatPhasePanel>
   );
@@ -176,10 +190,7 @@ export function PlayerCombatHistoryInspector(input: {
       <div style={playerCombatTopPanelRowStyle}>
         {selectorRecorded && selector ? (
           <PlayerCombatHistoricalActionSelectorPanel
-            actionLabel={
-              selector.actionLabel ??
-              historicalActionLabel(selector.actionId)
-            }
+            actionLabel={selector.actionLabel ?? historicalActionLabel(selector.actionId)}
             additionalActionNotes={selector.additionalActionNotes ?? ""}
             declarationRecorded
             distancePreferences={distancePreferenceOptions.map((preference) => ({
@@ -195,8 +206,7 @@ export function PlayerCombatHistoryInspector(input: {
             }
             roundNumber={input.snapshot?.roundNumber}
             secondaryActionLabel={
-              selector.secondaryActionLabel ??
-              historicalActionLabel(selector.secondaryActionId)
+              selector.secondaryActionLabel ?? historicalActionLabel(selector.secondaryActionId)
             }
           />
         ) : (
@@ -208,6 +218,10 @@ export function PlayerCombatHistoryInspector(input: {
           observationTargetLabels={input.observationTargetLabels ?? {}}
           panel={input.snapshot?.panels.phase1 ?? {}}
           phaseLabel="Phase 1"
+          defenseReviews={input.events
+            .flatMap((event) => (event.facts.defenseReview ? [event.facts.defenseReview] : []))
+            .filter((review) => review.phase === "phase1")
+            .sort((left, right) => left.eventSequence - right.eventSequence)}
           secondaryActionId={selector?.secondaryActionId}
         />
         <HistoricalPhasePanel
@@ -216,6 +230,10 @@ export function PlayerCombatHistoryInspector(input: {
           observationTargetLabels={input.observationTargetLabels ?? {}}
           panel={input.snapshot?.panels.phase2 ?? {}}
           phaseLabel="Phase 2"
+          defenseReviews={input.events
+            .flatMap((event) => (event.facts.defenseReview ? [event.facts.defenseReview] : []))
+            .filter((review) => review.phase === "phase2")
+            .sort((left, right) => left.eventSequence - right.eventSequence)}
           secondaryActionId={selector?.secondaryActionId}
         />
       </div>

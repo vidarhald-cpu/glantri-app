@@ -197,6 +197,12 @@ const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, Comma
     process: "attack",
     stage: "defense",
   },
+  commit_defense_review: {
+    boundary: resolutionBoundary,
+    kind: "defense_review",
+    process: "attack",
+    stage: "defense",
+  },
   roll_offensive_parry_brawling: {
     boundary: resolutionBoundary,
     kind: "offensive_parry_brawling_roll",
