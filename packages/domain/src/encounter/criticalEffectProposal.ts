@@ -52,6 +52,23 @@ export type CriticalEffectProposalRowCategory =
   | "special_note"
   | "physical_damage";
 
+export type CriticalEffectProposalProjection =
+  | {
+      representation: "proposal_summary";
+      rowCategory: "physical_damage";
+    }
+  | {
+      representation: "operational_consequence";
+      rowCategory: "dropped_item";
+    }
+  | {
+      kind: "modifier" | "special" | "note";
+      modifierBucket?: "general" | "obSkill" | "db";
+      modifierValue?: number;
+      representation: "review_effect";
+      rowCategory: Exclude<CriticalEffectProposalRowCategory, "dropped_item" | "physical_damage">;
+    };
+
 export interface CriticalEffectProposalAdditionalEffect {
   accepted?: boolean;
   durationRounds?: number;
@@ -447,12 +464,112 @@ function criticalEffectBlocksOrLimitsAction(effect: CriticalEffectTemplate): boo
   );
 }
 
+export function getCriticalEffectProposalProjection(
+  effect: CriticalEffectTemplate,
+): CriticalEffectProposalProjection {
+  const modifierValue = normalizePenalty(effect.penaltyPct);
+
+  if (isCriticalEffectMinimumDamageFloor(effect)) {
+    return {
+      representation: "proposal_summary",
+      rowCategory: "physical_damage",
+    };
+  }
+
+  if (isCriticalEffectDropItemTag(effect)) {
+    return {
+      representation: "operational_consequence",
+      rowCategory: "dropped_item",
+    };
+  }
+
+  if (effect.type === "Bleed") {
+    return {
+      kind: "special",
+      representation: "review_effect",
+      rowCategory: "bleed",
+    };
+  }
+
+  if (effect.type === "Internal bleed") {
+    return {
+      kind: "special",
+      representation: "review_effect",
+      rowCategory: "internal_bleed",
+    };
+  }
+
+  if (effect.type === "Stun" && criticalEffectBlocksOrLimitsAction(effect)) {
+    return {
+      kind: "special",
+      representation: "review_effect",
+      rowCategory: "no_combat_action",
+    };
+  }
+
+  if (effect.subtype === "loss_of_use") {
+    return {
+      kind: "special",
+      representation: "review_effect",
+      rowCategory: "loss_of_use",
+    };
+  }
+
+  if (modifierValue !== undefined) {
+    if (effect.group === "OB/Skill") {
+      return {
+        kind: "modifier",
+        modifierBucket: "obSkill",
+        modifierValue,
+        representation: "review_effect",
+        rowCategory: "ob_skill_modifier",
+      };
+    }
+
+    if (effect.group === "DB") {
+      return {
+        kind: "modifier",
+        modifierBucket: "db",
+        modifierValue,
+        representation: "review_effect",
+        rowCategory: "db_parry_modifier",
+      };
+    }
+
+    if (effect.group === "General") {
+      return {
+        kind: "modifier",
+        modifierBucket: "general",
+        modifierValue,
+        representation: "review_effect",
+        rowCategory: "general_modifier",
+      };
+    }
+
+    if (effect.type === "Stun") {
+      return {
+        kind: "modifier",
+        modifierBucket: "general",
+        modifierValue,
+        representation: "review_effect",
+        rowCategory: "general_modifier",
+      };
+    }
+  }
+
+  return {
+    kind: effect.type === "Special" ? "special" : "note",
+    representation: "review_effect",
+    rowCategory: "special_note",
+  };
+}
+
 function mapCriticalEffectTemplateToReviewEffect(input: {
   effect: CriticalEffectTemplate;
   existingCommittedDamageAmount: number;
   rollReports: readonly CriticalEffectProposalRollReport[];
 }): CriticalEffectProposalAdditionalEffect | undefined {
-  const modifierValue = normalizePenalty(input.effect.penaltyPct);
+  const projection = getCriticalEffectProposalProjection(input.effect);
   const common = {
     accepted: true,
     durationRounds: getCriticalEffectStoredDurationRounds(input.effect, input.rollReports),
@@ -473,102 +590,36 @@ function mapCriticalEffectTemplateToReviewEffect(input: {
     sourceKind: "critical_table" as const,
   };
 
-  if (isCriticalEffectMinimumDamageFloor(input.effect)) {
+  if (projection.representation !== "review_effect") {
     return undefined;
   }
 
-  if (isCriticalEffectDropItemTag(input.effect)) {
-    return undefined;
-  }
-
-  if (input.effect.type === "Bleed") {
+  if (projection.rowCategory === "bleed") {
     return {
       ...common,
-      kind: "special",
+      kind: projection.kind,
       label: "Bleed",
       rateValuePerRound: getCriticalEffectRateValuePerRound(input.effect, input.rollReports),
-      rowCategory: "bleed",
+      rowCategory: projection.rowCategory,
     };
   }
 
-  if (input.effect.type === "Internal bleed") {
+  if (projection.rowCategory === "internal_bleed") {
     return {
       ...common,
-      kind: "special",
+      kind: projection.kind,
       label: "Internal bleed",
       rateValuePerRound: getCriticalEffectRateValuePerRound(input.effect, input.rollReports),
-      rowCategory: "internal_bleed",
+      rowCategory: projection.rowCategory,
     };
-  }
-
-  if (input.effect.type === "Stun" && criticalEffectBlocksOrLimitsAction(input.effect)) {
-    return {
-      ...common,
-      kind: "special",
-      label: common.label || "No combat action possible",
-      rowCategory: "no_combat_action",
-    };
-  }
-
-  if (input.effect.subtype === "loss_of_use") {
-    return {
-      ...common,
-      kind: "special",
-      label: common.label || "Loss of use",
-      rowCategory: "loss_of_use",
-    };
-  }
-
-  if (modifierValue !== undefined) {
-    if (input.effect.group === "OB/Skill") {
-      return {
-        ...common,
-        kind: "modifier",
-        label: common.label || "OB/Skill modifier",
-        modifierBucket: "obSkill",
-        modifierValue,
-        rowCategory: "ob_skill_modifier",
-      };
-    }
-
-    if (input.effect.group === "DB") {
-      return {
-        ...common,
-        kind: "modifier",
-        label: common.label || "DB modifier",
-        modifierBucket: "db",
-        modifierValue,
-        rowCategory: "db_parry_modifier",
-      };
-    }
-
-    if (input.effect.group === "General") {
-      return {
-        ...common,
-        kind: "modifier",
-        label: common.label || "General modifier",
-        modifierBucket: "general",
-        modifierValue,
-        rowCategory: "general_modifier",
-      };
-    }
-
-    if (input.effect.type === "Stun") {
-      return {
-        ...common,
-        kind: "modifier",
-        label: common.label || "Stunned",
-        modifierBucket: "general",
-        modifierValue,
-        rowCategory: "general_modifier",
-      };
-    }
   }
 
   return {
     ...common,
-    kind: input.effect.type === "Special" ? "special" : "note",
-    rowCategory: "special_note",
+    kind: projection.kind,
+    modifierBucket: projection.modifierBucket,
+    modifierValue: projection.modifierValue,
+    rowCategory: projection.rowCategory,
   };
 }
 
