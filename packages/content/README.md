@@ -17,10 +17,11 @@ src/
 
 ## Eksportpunkter
 
-| Import | Innhold |
-|---|---|
-| `@glantri/content` | Hoved-barrel: alle maler og sample-data |
-| `@glantri/content/equipment` | Kun utstyrsmaler og sample-loadouts |
+| Import                               | Innhold                                                        |
+| ------------------------------------ | -------------------------------------------------------------- |
+| `@glantri/content`                   | Hoved-barrel: alle maler og sample-data                        |
+| `@glantri/content/equipment`         | Kun utstyrsmaler og sample-loadouts                            |
+| `@glantri/content/semantic-fixtures` | Ikke-live designfixtures og semantisk konformitetsrapportering |
 
 ## Sample-data
 
