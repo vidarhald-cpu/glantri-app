@@ -10,6 +10,7 @@ export * from "./campaign/scenario";
 export * from "./campaign/playerCampaignHome";
 export * from "./combat/context";
 export * from "./content/skills";
+export * from "./content/skillSemanticFixtures";
 export * from "./docs/glantriTerms";
 export * from "./dice/openEndedD20";
 export * from "./encounter/armorModifier";
