@@ -4,7 +4,7 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { ProjectedCombatHistorySnapshot } from "@glantri/domain";
+import type { ProjectedCombatHistoryEvent, ProjectedCombatHistorySnapshot } from "@glantri/domain";
 
 import { createEmptyPlayerEncounterCombatContext } from "@/lib/campaigns/playerEncounter";
 
@@ -84,6 +84,53 @@ function snapshot(): ProjectedCombatHistorySnapshot {
 }
 
 describe("PlayerCombatHistoryInspector", () => {
+  it("renders every ordered committed defense event instead of current snapshot equipment", () => {
+    const safeEvent = (
+      sequence: number,
+      label: string,
+      included: boolean,
+    ): ProjectedCombatHistoryEvent => ({
+      completeness: "complete",
+      facts: {
+        defenseReview: {
+          attackDirection: sequence === 5 ? "left" : "rear",
+          aware: sequence === 5,
+          eventSequence: sequence,
+          ordinaryDodgeAvailable: sequence === 5,
+          phase: "phase1",
+          roundNumber: 1,
+          sources: [{ included, kind: "weapon", label, slot: "mainHand" }],
+        },
+        publicOutcome: { hit: true },
+      },
+      id: `round:1:event:${sequence}`,
+      identities: [],
+      missingFacts: [],
+      occurredAt: "2026-08-18T10:00:00.000Z",
+      ownerParticipantId: "aria",
+      phase: "phase1",
+      roundNumber: 1,
+      sequence,
+      status: "committed",
+      step: "phase_1_actions",
+      type: "attack",
+    });
+    const { container } = render(
+      <PlayerCombatHistoryInspector
+        events={[safeEvent(5, "Round shield", true), safeEvent(6, "Main gauche", false)]}
+        snapshot={snapshot()}
+      />,
+    );
+
+    expect(screen.getAllByText("Committed defense")).toHaveLength(2);
+    expect(screen.getByText("Included defense sources: Round shield")).toBeTruthy();
+    expect(screen.getByText("Excluded defense sources: Main gauche")).toBeTruthy();
+    expect(screen.getByText("Awareness: Unaware")).toBeTruthy();
+    expect(container.textContent).not.toContain("item-");
+    expect(container.textContent).not.toContain("template-");
+    expect(container.textContent).not.toContain("revision-");
+  });
+
   it("preserves panel placement while rendering historical values without form controls", () => {
     const { container } = render(
       <PlayerCombatHistoryInspector events={[]} snapshot={snapshot()} />,

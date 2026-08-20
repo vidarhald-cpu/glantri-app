@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { weaponTemplates } from "@glantri/content";
 
 import {
   commitCombatRoundDisarm,
@@ -91,6 +92,7 @@ function fixture(input?: { hiddenSuffix?: string }) {
     participant("actor"),
     participant("holder"),
     participant("observer"),
+    participant("bystander"),
   ];
   let state = initializeCombatRoundState({
     encounter: { currentRound: 3, id: "encounter-1", participants: encounterParticipants },
@@ -157,7 +159,7 @@ function fixture(input?: { hiddenSuffix?: string }) {
     state,
   });
   const committedState = state;
-  const scenarioParticipants = ["actor", "holder", "observer"].map(
+  const scenarioParticipants = ["actor", "holder", "observer", "bystander"].map(
     (id) =>
       ({
         characterId: `character-${id}`,
@@ -175,6 +177,7 @@ function fixture(input?: { hiddenSuffix?: string }) {
     id: "encounter-1",
     participantVisibility: {
       actor: { actor: true, holder: true },
+      bystander: { actor: true, bystander: true, holder: true },
       holder: { actor: true, holder: true },
       observer: { observer: true },
     },
@@ -338,5 +341,179 @@ describe("player-safe Disarm state", () => {
       status: "awaiting_commit",
       targetWeaponItemId: "redacted:disarm:target-weapon",
     });
+  });
+});
+
+describe("player-safe missile readiness state", () => {
+  it("keeps only the actor's progress and removes exact ammo, GM timing, and undo payloads", () => {
+    const current = fixture();
+    const profile = weaponTemplates.find(
+      (weapon) => weapon.id === "weapon-template-bow",
+    )!.missileProfile!;
+    const seedCommand = current.state.commands[0]!;
+    const readiness = {
+      aimCompletedRounds: 1,
+      aimLevel: 2 as const,
+      aimRequiredRounds: 4,
+      ammoFamily: "arrow" as const,
+      ammoItemId: "secret-ammo-item",
+      ammoItemRevision: REVISION,
+      baseCompletedRounds: 1,
+      baseRequiredRounds: 5,
+      family: "short_bow" as const,
+      gmPreparationAdjustment: 4,
+      id: "missile-readiness:actor:secret-bow",
+      lastCommandId: "secret-readiness-command",
+      lastProgressRound: 3,
+      participantId: "actor",
+      phase: "phase1" as const,
+      profile,
+      rapidShot: false,
+      status: "preparing" as const,
+      targetParticipantId: "holder",
+      updatedAt: NOW,
+      weaponItemId: "secret-bow",
+      weaponTemplateId: "weapon-template-bow",
+    };
+    const progressCommand = {
+      ...seedCommand,
+      facts: { ammoItemId: "secret-ammo-item", ammoItemRevision: REVISION, readiness },
+      id: "secret-readiness-command",
+      participantId: "actor",
+      type: "progress_missile_readiness" as const,
+    };
+    const attackCommand = {
+      ...seedCommand,
+      facts: {
+        actionId: "attack_parry",
+        attackOpportunityId: "secret-opportunity",
+        attackResultId: "secret-result",
+        attackType: "missile",
+        defenderParticipantId: "holder",
+        distanceModifier: { notes: "secret-distance", value: -3 },
+        interruptedMissileReadiness: [
+          {
+            ...readiness,
+            ammoItemId: "secret-interrupted-ammo",
+            ammoItemRevision: REVISION,
+            id: "secret-interrupted-readiness",
+          },
+        ],
+        missileAmmoUndo: {
+          ammoItemId: "secret-ammo-item",
+          quantityAfter: 2,
+          quantityBefore: 3,
+        },
+        obBeforeOpponentSpecificModifier: 31,
+        obSkillRaw: -7,
+        opponentSpecificObModifierRows: [{ label: "secret-opponent-modifier", value: 4 }],
+        opponentSpecificObPercentageAdjustment: 4,
+        opponentSpecificObRaw: 4,
+        phase: "phase1",
+        previousMissileReadiness: readiness,
+        status: "awaiting_defense",
+        weaponInstanceId: "secret-bow",
+        weaponModeRange: "secret-range",
+        weaponModeSourceMetadata: { sourceRange: "secret-source-range" },
+      },
+      id: "secret-attack-command",
+      participantId: "actor",
+      type: "roll_attack" as const,
+    };
+    const encounter = {
+      ...current.encounter,
+      combatRoundState: {
+        ...current.state,
+        commands: [...current.state.commands, progressCommand, attackCommand],
+        missileReadiness: [
+          readiness,
+          { ...readiness, id: "other-readiness", participantId: "holder" },
+        ],
+      },
+    } as EncounterSession;
+    const actor = buildPlayerSafeEncounterForUser({
+      encounter,
+      scenarioParticipants: current.scenarioParticipants,
+      userId: "user-actor",
+    }).combatRoundState!;
+    const observer = buildPlayerSafeEncounterForUser({
+      encounter,
+      scenarioParticipants: current.scenarioParticipants,
+      userId: "user-observer",
+    }).combatRoundState!;
+    const target = buildPlayerSafeEncounterForUser({
+      encounter,
+      scenarioParticipants: current.scenarioParticipants,
+      userId: "user-holder",
+    }).combatRoundState!;
+    const bystander = buildPlayerSafeEncounterForUser({
+      encounter,
+      scenarioParticipants: current.scenarioParticipants,
+      userId: "user-bystander",
+    }).combatRoundState!;
+
+    expect(actor.missileReadiness).toHaveLength(1);
+    expect(actor.missileReadiness[0]).toMatchObject({
+      aimCompletedRounds: 1,
+      aimLevel: 2,
+      aimRequiredRounds: 4,
+      ammoItemId: undefined,
+      ammoItemRevision: undefined,
+      baseCompletedRounds: 1,
+      baseRequiredRounds: 5,
+      gmPreparationAdjustment: 0,
+      lastCommandId: undefined,
+      participantId: "actor",
+    });
+    expect(actor.commands.map((command) => command.type)).not.toContain(
+      "progress_missile_readiness",
+    );
+    const actorAttackCommand = actor.commands.find(
+      (command) => command.id === "secret-attack-command",
+    );
+    expect(actorAttackCommand?.facts).toEqual({
+      actionId: "attack_parry",
+      attackOpportunityId: "secret-opportunity",
+      attackResultId: "secret-result",
+      attackType: "missile",
+      phase: "phase1",
+      status: "awaiting_defense",
+    });
+    expect(JSON.stringify(actorAttackCommand)).not.toMatch(
+      /secret-distance|secret-opponent-modifier|secret-bow|secret-range|secret-source-range|obSkillRaw|opponentSpecific/,
+    );
+    expect(JSON.stringify(actor)).not.toMatch(
+      /secret-ammo-item|secret-interrupted-ammo|secret-interrupted-readiness|secret-readiness-command|secret-distance|secret-opponent-modifier|secret-range|secret-source-range|quantityBefore|quantityAfter/,
+    );
+    expect(
+      target.commands.find((command) => command.id === "secret-attack-command")?.facts,
+    ).toBeUndefined();
+    expect(JSON.stringify(target)).not.toMatch(
+      /secret-ammo-item|secret-interrupted-ammo|secret-interrupted-readiness|secret-readiness-command|secret-distance|secret-opponent-modifier|secret-range|secret-source-range|quantityBefore|quantityAfter/,
+    );
+    expect(bystander.missileReadiness).toEqual([]);
+    expect(
+      bystander.commands.find((command) => command.id === "secret-attack-command"),
+    ).toBeUndefined();
+    expect(JSON.stringify(bystander)).not.toMatch(
+      /secret-ammo-item|secret-interrupted-ammo|secret-interrupted-readiness|other-readiness|secret-distance|secret-opponent-modifier|secret-bow|secret-range|secret-source-range/,
+    );
+    expect(observer.missileReadiness).toEqual([]);
+    expect(
+      observer.commands.find((command) => command.id === "secret-attack-command"),
+    ).toBeUndefined();
+    expect(JSON.stringify(observer)).not.toMatch(
+      /secret-ammo-item|secret-interrupted-ammo|secret-interrupted-readiness|other-readiness|secret-distance|secret-opponent-modifier|secret-bow|secret-range|secret-source-range/,
+    );
+
+    const authoritativeAttack = encounter.combatRoundState!.commands.find(
+      (command) => command.id === "secret-attack-command",
+    );
+    expect(authoritativeAttack?.facts).toMatchObject({
+      defenderParticipantId: "holder",
+      obSkillRaw: -7,
+      weaponInstanceId: "secret-bow",
+    });
+    expect(undoLatestCombatRoundCommand({ state: current.state })).toBeDefined();
   });
 });

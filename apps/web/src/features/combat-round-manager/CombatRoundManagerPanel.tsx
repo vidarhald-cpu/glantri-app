@@ -14,6 +14,7 @@ import {
 
 import type {
   CombatRoundDeclaration,
+  CombatDefenseSnapshot,
   CombatNpcDeclarationProposal,
   CombatProgressionBoundaryKind,
   CombatRoundAttackDirection,
@@ -78,11 +79,14 @@ import {
   getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundRequiredCombatExperienceTrigger,
   getCombatRoundDamageSubstate,
+  getLatestCombatDefenseSnapshot,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundEffectiveCriticalRoll,
   getCombatRoundEffectiveDamageResult,
   getCombatRoundPhaseDamageCommitReadiness,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundPhaseAttackCandidates,
+  getCombatMissileRequiredRounds,
   getCombatRoundPhaseAttackBackOutOpportunity,
   getCombatRoundParticipantPhaseStepStatus,
   getCombatRoundPhaseResolutionResultForAttack,
@@ -151,6 +155,7 @@ import {
   backOutPhaseAttackOnServer,
   clearCurrentCombatRoundStepOnServer,
   commitPhaseInitiativeResolutionOnServer,
+  commitCombatDefenseReviewOnServer,
   commitCurrentCombatPhaseDamageOnServer,
   continuePhaseAttackOnServer,
   decideDoubleAttackPhase2OnServer,
@@ -168,6 +173,8 @@ import {
   loadCombatItemInteractionOptions,
   commitRoundEndDistanceControlOnServer,
   commitRoundEndParticipantReviewOnServer,
+  progressCombatMissileReadinessOnServer,
+  interruptCombatMissileReadinessOnServer,
   rollCombatAttackOnServer,
   rollCombatExperienceOnServer,
   rollCombatInitiativeOnServer,
@@ -512,6 +519,51 @@ interface CombatParrySourceOptions {
 interface CombatParrySourceSelection {
   usedMainHand: boolean;
   usedOffHand: boolean;
+}
+
+interface CombatDefenseReviewSourceOption {
+  itemId: string;
+  label: string;
+  slot: "mainHand" | "offHand";
+}
+
+interface CombatDefenseReviewDraft {
+  aware: boolean;
+  includedByItemId: Record<string, boolean>;
+}
+
+function buildCombatDefenseReviewSourceOptions(input: {
+  participant?: ScenarioParticipant;
+  resolvedEquipmentState?: EquipmentFeatureState;
+}): CombatDefenseReviewSourceOption[] {
+  const state = input.resolvedEquipmentState ?? input.participant?.snapshot.equipmentState;
+  if (!isEquipmentFeatureState(state)) return [];
+  const characterId =
+    input.participant?.characterId ?? Object.keys(state.activeLoadoutByCharacterId)[0];
+  const loadout = characterId ? state.activeLoadoutByCharacterId[characterId] : undefined;
+  if (!loadout) return [];
+  const sourceIds = [
+    { itemId: loadout.activePrimaryWeaponItemId, slot: "mainHand" as const },
+    {
+      itemId: loadout.readyShieldItemId ?? loadout.activeSecondaryWeaponItemId,
+      slot: "offHand" as const,
+    },
+  ];
+  return sourceIds.flatMap(({ itemId, slot }) => {
+    if (!itemId) return [];
+    const item = state.itemsById[itemId];
+    const template = item ? state.templates.templatesById[item.templateId] : undefined;
+    if (!item || !template || (template.category !== "weapon" && template.category !== "shield")) {
+      return [];
+    }
+    return [
+      {
+        itemId,
+        label: item.displayName?.trim() || template.name,
+        slot,
+      },
+    ];
+  });
 }
 
 interface CombatDamageReviewAdditionalEffectDraft {
@@ -1541,6 +1593,57 @@ function getCombatResolutionStepKind(step: CombatRoundStep): "parry" | "damage" 
 
 function formatCombatPhaseLabel(phase: CombatRoundPhase): string {
   return phase === "phase1" ? "phase 1" : "phase 2";
+}
+
+function formatDefenseSourceDecision(
+  decision: CombatDefenseSnapshot["sources"][number]["decision"],
+): string {
+  switch (decision) {
+    case "default_included":
+      return "default included";
+    case "gm_included":
+      return "GM included";
+    case "gm_excluded":
+      return "GM excluded";
+  }
+}
+
+export function CombatDefenseSnapshotPanel({ snapshot }: { snapshot: CombatDefenseSnapshot }) {
+  return (
+    <section
+      aria-label="Latest committed defense review"
+      style={{
+        background: "#f8f6ef",
+        border: "1px solid #e2dccd",
+        borderRadius: 6,
+        display: "grid",
+        fontSize: "0.85rem",
+        gap: "0.25rem",
+        padding: "0.45rem 0.55rem",
+      }}
+    >
+      <strong>Latest incoming-attack defense review</strong>
+      <span>Awareness: {snapshot.aware ? "aware" : "unaware"}</span>
+      <span>
+        Ordinary active Dodge: {snapshot.ordinaryDodgeAvailable ? "available" : "unavailable"}
+      </span>
+      <span>Attack direction: {snapshot.attackDirection}</span>
+      {snapshot.sources.length > 0 ? (
+        <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
+          {snapshot.sources.map((source) => (
+            <li key={`${source.slot}:${source.itemId}`}>
+              {source.slot === "mainHand" ? "Main hand" : "Off hand"} {source.kind}: {source.label}
+              {" — "}
+              {source.included ? "included" : "excluded"} (
+              {formatDefenseSourceDecision(source.decision)})
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <span>No weapon or shield defense sources were available at review.</span>
+      )}
+    </section>
+  );
 }
 
 function formatCombatResolutionSubstepLabel(substep: string): string {
@@ -4029,6 +4132,9 @@ export default function CombatRoundManagerPanel({
   const [parrySourceSelections, setParrySourceSelections] = useState<
     Record<string, CombatParrySourceSelection>
   >({});
+  const [defenseReviewDrafts, setDefenseReviewDrafts] = useState<
+    Record<string, CombatDefenseReviewDraft>
+  >({});
   const [damageReviewDrafts, setDamageReviewDrafts] = useState<
     Record<string, CombatDamageReviewDraft>
   >({});
@@ -4063,6 +4169,10 @@ export default function CombatRoundManagerPanel({
   const [inspectorBreakOffAttackerAdjustment, setInspectorBreakOffAttackerAdjustment] =
     useState("0");
   const [inspectorBreakOffNote, setInspectorBreakOffNote] = useState("");
+  const [inspectorMissileAimLevel, setInspectorMissileAimLevel] = useState<0 | 1 | 2 | 3>(0);
+  const [inspectorMissileRapidShot, setInspectorMissileRapidShot] = useState(false);
+  const [inspectorMissilePreparationAdjustment, setInspectorMissilePreparationAdjustment] =
+    useState("0");
   const [inspectorDisarmSkillChoice, setInspectorDisarmSkillChoice] = useState<
     "weapon_skill" | "parry"
   >("weapon_skill");
@@ -4271,6 +4381,34 @@ export default function CombatRoundManagerPanel({
   const displayParticipants = combatPresentation.active.displayParticipants;
   const projectedCurrentTasks = combatPresentation.active.projectedCurrentTasks;
   const currentActionPresentation = combatPresentation.active.currentAction;
+  const inspectorMissileReadiness =
+    currentActionPresentation?.taskKind === "missile_readiness"
+      ? roundState.missileReadiness.find(
+          (entry) =>
+            entry.participantId ===
+              currentActionPresentation.primaryAction.descriptor?.participantId &&
+            entry.weaponItemId ===
+              currentActionPresentation.primaryAction.descriptor?.weaponInstanceId,
+        )
+      : undefined;
+  const inspectorMissileRequired = inspectorMissileReadiness
+    ? {
+        aimRounds:
+          inspectorMissileReadiness.aimRequiredRounds ??
+          getCombatMissileRequiredRounds(inspectorMissileReadiness).aimRounds,
+        baseRounds:
+          inspectorMissileReadiness.baseRequiredRounds ??
+          getCombatMissileRequiredRounds(inspectorMissileReadiness).baseRounds,
+      }
+    : undefined;
+  useEffect(() => {
+    if (!inspectorMissileReadiness) return;
+    setInspectorMissileAimLevel(inspectorMissileReadiness.aimLevel);
+    setInspectorMissileRapidShot(inspectorMissileReadiness.rapidShot);
+    setInspectorMissilePreparationAdjustment(
+      String(inspectorMissileReadiness.gmPreparationAdjustment),
+    );
+  }, [inspectorMissileReadiness?.id, inspectorMissileReadiness?.updatedAt]);
   const liveInspectorContext = combatPresentation.active.liveInspectorContext;
   const currentTaskSelection = combatPresentation.active.currentTaskSelection;
   const renderedInspectionSelection = combatPresentation.selection.renderedInspectionSelection;
@@ -7377,7 +7515,179 @@ export default function CombatRoundManagerPanel({
       ) : null}
     </section>
   ) : null;
+  const inspectorDefenseReviewDescriptor =
+    currentActionPresentation?.primaryAction.descriptor?.commandType === "commit_defense_review"
+      ? currentActionPresentation.primaryAction.descriptor
+      : undefined;
+  const inspectorDefenseReviewAttackId = inspectorDefenseReviewDescriptor?.attackResultId;
+  const inspectorDefenseReviewAttacker = inspectorDefenseReviewDescriptor?.attackerParticipantId
+    ? encounter.participants.find(
+        (participant) => participant.id === inspectorDefenseReviewDescriptor.attackerParticipantId,
+      )
+    : undefined;
+  const inspectorDefenseReviewAttackerScenario = inspectorDefenseReviewAttacker
+    ? findScenarioParticipantForEncounterParticipant({
+        encounterParticipant: inspectorDefenseReviewAttacker,
+        scenarioParticipants: effectiveScenarioParticipants,
+      })
+    : undefined;
+  const inspectorDefenseReviewDefender = inspectorDefenseReviewDescriptor?.defenderParticipantId
+    ? encounter.participants.find(
+        (participant) => participant.id === inspectorDefenseReviewDescriptor.defenderParticipantId,
+      )
+    : undefined;
+  const inspectorDefenseReviewDefenderScenario = inspectorDefenseReviewDefender
+    ? findScenarioParticipantForEncounterParticipant({
+        encounterParticipant: inspectorDefenseReviewDefender,
+        scenarioParticipants: effectiveScenarioParticipants,
+      })
+    : undefined;
+  const inspectorDefenseReviewDefenderState = inspectorDefenseReviewDefenderScenario
+    ? resolvedCharacterStateByParticipantId[inspectorDefenseReviewDefenderScenario.id]
+    : undefined;
+  const inspectorDefenseReviewVisibility =
+    inspectorDefenseReviewAttackerScenario?.visibilityOverrides?.visibility;
+  const inspectorDefenseReviewDefaultAware =
+    inspectorDefenseReviewVisibility !== "hidden" && inspectorDefenseReviewVisibility !== "gm_only";
+  const inspectorDefenseReviewSources = buildCombatDefenseReviewSourceOptions({
+    participant: inspectorDefenseReviewDefenderScenario,
+    resolvedEquipmentState: inspectorDefenseReviewDefenderState?.equipmentState,
+  });
+  const inspectorDefenseReviewDraft = inspectorDefenseReviewAttackId
+    ? (defenseReviewDrafts[inspectorDefenseReviewAttackId] ?? {
+        aware: inspectorDefenseReviewDefaultAware,
+        includedByItemId: Object.fromEntries(
+          inspectorDefenseReviewSources.map((source) => [source.itemId, true]),
+        ),
+      })
+    : undefined;
+  const inspectorDefenseReviewControls =
+    inspectorDefenseReviewAttackId && inspectorDefenseReviewDraft ? (
+      <div aria-label="Defense review choices" style={{ display: "grid", gap: "0.45rem" }}>
+        <label style={{ alignItems: "center", display: "flex", gap: "0.45rem" }}>
+          <input
+            checked={inspectorDefenseReviewDraft.aware}
+            disabled={saving || inspectorIsInspectionOnly}
+            onChange={(event) =>
+              setDefenseReviewDrafts((current) => ({
+                ...current,
+                [inspectorDefenseReviewAttackId]: {
+                  ...inspectorDefenseReviewDraft,
+                  aware: event.target.checked,
+                },
+              }))
+            }
+            type="checkbox"
+          />
+          Defender is aware of this attack
+        </label>
+        {inspectorDefenseReviewSources.length > 0 ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+            {inspectorDefenseReviewSources.map((source) => (
+              <label
+                key={source.itemId}
+                style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}
+              >
+                <input
+                  checked={inspectorDefenseReviewDraft.includedByItemId[source.itemId] ?? true}
+                  disabled={saving || inspectorIsInspectionOnly}
+                  onChange={(event) =>
+                    setDefenseReviewDrafts((current) => ({
+                      ...current,
+                      [inspectorDefenseReviewAttackId]: {
+                        ...inspectorDefenseReviewDraft,
+                        includedByItemId: {
+                          ...inspectorDefenseReviewDraft.includedByItemId,
+                          [source.itemId]: event.target.checked,
+                        },
+                      },
+                    }))
+                  }
+                  type="checkbox"
+                />
+                {source.slot === "mainHand" ? "Main hand" : "Off hand"}: {source.label}
+              </label>
+            ))}
+          </div>
+        ) : (
+          <span style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+            No shield or weapon defense source is currently equipped.
+          </span>
+        )}
+        <span style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+          This review is committed for this exact attack and will not change if the loadout changes.
+        </span>
+      </div>
+    ) : null;
+  const inspectorMissileReadinessControls =
+    currentActionPresentation?.taskKind === "missile_readiness" ? (
+      <div
+        aria-label="Missile preparation choices"
+        style={{
+          display: "grid",
+          gap: "0.45rem",
+          gridTemplateColumns: "repeat(auto-fit, minmax(10rem, 1fr))",
+        }}
+      >
+        {inspectorMissileReadiness && inspectorMissileRequired ? (
+          <div style={{ gridColumn: "1 / -1" }}>
+            Readiness: {inspectorMissileReadiness.status} · preparation{" "}
+            {inspectorMissileReadiness.baseCompletedRounds}/{inspectorMissileRequired.baseRounds} ·
+            aim {inspectorMissileReadiness.aimCompletedRounds}/{inspectorMissileRequired.aimRounds}
+          </div>
+        ) : (
+          <div style={{ gridColumn: "1 / -1" }}>Readiness: not started</div>
+        )}
+        <label style={compactFieldLabelStyle}>
+          <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Aim</span>
+          <select
+            disabled={saving || Boolean(inspectorSnapshot) || inspectorIsInspectionOnly}
+            onChange={(event) =>
+              setInspectorMissileAimLevel(Number(event.target.value) as 0 | 1 | 2 | 3)
+            }
+            value={inspectorMissileAimLevel}
+          >
+            <option value={0}>Normal</option>
+            <option value={1}>Aim I · +1 OB · 2 rounds</option>
+            <option value={2}>Aim II · +2 OB · 4 rounds</option>
+            <option value={3}>Aim III · +3 OB · 6 rounds</option>
+          </select>
+        </label>
+        <label style={compactFieldLabelStyle}>
+          <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>GM round adjustment</span>
+          <input
+            disabled={saving || Boolean(inspectorSnapshot) || inspectorIsInspectionOnly}
+            inputMode="numeric"
+            onChange={(event) => setInspectorMissilePreparationAdjustment(event.target.value)}
+            value={inspectorMissilePreparationAdjustment}
+          />
+        </label>
+        <label style={{ alignItems: "center", display: "flex", gap: "0.45rem" }}>
+          <input
+            checked={inspectorMissileRapidShot}
+            disabled={saving || Boolean(inspectorSnapshot) || inspectorIsInspectionOnly}
+            onChange={(event) => setInspectorMissileRapidShot(event.target.checked)}
+            type="checkbox"
+          />
+          Rapid shot · bows/slings only · −4 OB
+        </label>
+        {inspectorMissileReadiness ? (
+          <button
+            disabled={saving || Boolean(inspectorSnapshot) || inspectorIsInspectionOnly}
+            onClick={() => {
+              const descriptor = currentActionPresentation.primaryAction.descriptor;
+              if (descriptor) void invalidateInspectorMissileReadiness(descriptor);
+            }}
+            type="button"
+          >
+            Invalidate preparation
+          </button>
+        ) : null}
+      </div>
+    ) : null;
   const inspectorPreActionControls =
+    inspectorDefenseReviewControls ||
+    inspectorMissileReadinessControls ||
     inspectorCurrentActionOutcomeControls ||
     inspectorDisarmControls ||
     inspectorCombatExperienceDifficultyControls ||
@@ -7393,6 +7703,8 @@ export default function CombatRoundManagerPanel({
         {inspectorStepWorkflowStatus}
         {inspectorDeclarationProposal}
         {inspectorCurrentActionOutcomeControls}
+        {inspectorDefenseReviewControls}
+        {inspectorMissileReadinessControls}
         {inspectorDisarmControls}
         {inspectorCombatExperienceDifficultyControls}
         {inspectorFeintControls}
@@ -9937,6 +10249,128 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  async function progressInspectorMissileReadiness(candidate: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["progress_missile_readiness"],
+      presentation: currentActionPresentation,
+      requiredFields: [
+        "executionGroupId",
+        "expectedRevision",
+        "opponentParticipantId",
+        "opportunityId",
+        "participantId",
+        "phase",
+        "taskId",
+        "weaponInstanceId",
+        "weaponTemplateId",
+      ],
+    });
+    const participant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
+    const opportunity = descriptor
+      ? getCombatRoundPhaseAttackCandidates({ phase: descriptor.phase!, state: roundState }).find(
+          (entry) => entry.id === descriptor.opportunityId,
+        )
+      : undefined;
+    const characterId = participant?.characterId;
+    const loadout = characterId
+      ? inspectorEquipmentState?.activeLoadoutByCharacterId[characterId]
+      : undefined;
+    const ammo = loadout?.activeAmmoItemIds
+      .map((itemId) => inspectorEquipmentState?.itemsById[itemId])
+      .find((item) => {
+        const template = item
+          ? inspectorEquipmentState?.templates.templatesById[item.templateId]
+          : undefined;
+        return (
+          item &&
+          item.quantity > 0 &&
+          template?.category === "gear" &&
+          template.ammunitionProfile?.family === opportunity?.missileProfile?.ammoFamily
+        );
+      });
+    if (!descriptor || !participant || !opportunity?.missileProfile || !ammo?.revision) {
+      setSaveError("Choose compatible active ammunition before preparing this missile weapon.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { commandEnvelope, encounter: nextEncounter } =
+        await progressCombatMissileReadinessOnServer({
+          aimLevel: inspectorMissileAimLevel,
+          ammoItemId: ammo.id,
+          ammoItemRevision: ammo.revision,
+          currentEncounter: encounter,
+          encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId!,
+          expectedParticipantRevision: participant.updatedAt,
+          expectedRevision: descriptor.expectedRevision,
+          gmPreparationAdjustment: parseCombatInteger(
+            inspectorMissilePreparationAdjustment,
+            "Missile preparation adjustment",
+          ),
+          opportunityId: descriptor.opportunityId!,
+          phase: descriptor.phase!,
+          rapidShot: inspectorMissileRapidShot,
+          scenarioParticipantId: participant.id,
+          targetParticipantId: descriptor.opponentParticipantId!,
+          taskId: descriptor.taskId,
+          weaponInstanceId: descriptor.weaponInstanceId!,
+          weaponTemplateId: descriptor.weaponTemplateId!,
+        });
+      const { inspectionSelection, state } = getCombatRoundManagerStateFromCommandEnvelope({
+        commandEnvelope,
+        encounter: nextEncounter,
+      });
+      setInspectionSelection(inspectionSelection);
+      acceptCanonicalEncounterState(nextEncounter, state);
+      setSelectedRoundNumber(state.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to prepare missile weapon.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function invalidateInspectorMissileReadiness(candidate: CurrentActionCommandDescriptor) {
+    const participant = scenarioParticipantForTask(candidate);
+    const weaponInstanceId = candidate.weaponInstanceId;
+    if (!participant || !weaponInstanceId || !inspectorMissileReadiness) {
+      setSaveError("No missile preparation is available to invalidate.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { commandEnvelope, encounter: nextEncounter } =
+        await interruptCombatMissileReadinessOnServer({
+          currentEncounter: encounter,
+          encounterId: encounter.id,
+          expectedRevision: candidate.expectedRevision,
+          reason: "GM invalidation",
+          scenarioParticipantId: participant.id,
+          weaponInstanceId,
+        });
+      const { inspectionSelection, state } = getCombatRoundManagerStateFromCommandEnvelope({
+        commandEnvelope,
+        encounter: nextEncounter,
+      });
+      setInspectionSelection(inspectionSelection);
+      acceptCanonicalEncounterState(nextEncounter, state);
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to invalidate preparation.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function rollInspectorParry(descriptor: CurrentActionCommandDescriptor) {
     const attackResult = descriptor.attackResultId
       ? getCombatRoundAttackResultById({
@@ -10105,6 +10539,95 @@ export default function CombatRoundManagerPanel({
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(caughtError instanceof Error ? caughtError.message : "Unable to roll parry.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function commitInspectorDefenseReview(descriptor: CurrentActionCommandDescriptor) {
+    const phase = descriptor.phase;
+    const attackId = descriptor.attackResultId;
+    if (
+      descriptor.commandType !== "commit_defense_review" ||
+      !attackId ||
+      !descriptor.attackerParticipantId ||
+      !descriptor.defenderParticipantId ||
+      !descriptor.executionGroupId ||
+      !descriptor.taskId ||
+      !phase
+    ) {
+      setSaveError("The exact incoming attack is no longer available for defense review.");
+      return;
+    }
+    const defenderEncounterParticipant = encounter.participants.find(
+      (participant) => participant.id === descriptor.defenderParticipantId,
+    );
+    const defenderScenarioParticipant = defenderEncounterParticipant
+      ? findScenarioParticipantForEncounterParticipant({
+          encounterParticipant: defenderEncounterParticipant,
+          scenarioParticipants: effectiveScenarioParticipants,
+        })
+      : undefined;
+    if (!defenderScenarioParticipant) {
+      setSaveError("The defender's canonical equipment context is unavailable.");
+      return;
+    }
+    const defenderEquipment = resolvedCharacterStateByParticipantId[defenderScenarioParticipant.id];
+    const sources = buildCombatDefenseReviewSourceOptions({
+      participant: defenderScenarioParticipant,
+      resolvedEquipmentState: defenderEquipment?.equipmentState,
+    });
+    const attackerEncounterParticipant = encounter.participants.find(
+      (participant) => participant.id === descriptor.attackerParticipantId,
+    );
+    const attackerScenarioParticipant = attackerEncounterParticipant
+      ? findScenarioParticipantForEncounterParticipant({
+          encounterParticipant: attackerEncounterParticipant,
+          scenarioParticipants: effectiveScenarioParticipants,
+        })
+      : undefined;
+    const visibility = attackerScenarioParticipant?.visibilityOverrides?.visibility;
+    const defaultAware = visibility !== "hidden" && visibility !== "gm_only";
+    const draft = defenseReviewDrafts[attackId] ?? {
+      aware: defaultAware,
+      includedByItemId: Object.fromEntries(sources.map((source) => [source.itemId, true])),
+    };
+
+    setSaving(true);
+    try {
+      const { commandEnvelope, encounter: nextEncounter } = await commitCombatDefenseReviewOnServer(
+        {
+          attackId,
+          attackerParticipantId: descriptor.attackerParticipantId,
+          aware: draft.aware,
+          currentEncounter: encounter,
+          defenderParticipantId: descriptor.defenderParticipantId,
+          encounterId: encounter.id,
+          executionGroupId: descriptor.executionGroupId,
+          expectedRevision: descriptor.expectedRevision,
+          phase,
+          sourceSelections: sources.map((source) => ({
+            included: draft.includedByItemId[source.itemId] ?? true,
+            itemId: source.itemId,
+          })),
+          taskId: descriptor.taskId,
+        },
+      );
+      const { inspectionSelection: nextInspectionSelection, state: nextRoundState } =
+        getCombatRoundManagerStateFromCommandEnvelope({
+          commandEnvelope,
+          encounter: nextEncounter,
+        });
+      setInspectionSelection(nextInspectionSelection);
+      acceptCanonicalEncounterState(nextEncounter, nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to commit defense review.",
+      );
     } finally {
       setSaving(false);
     }
@@ -11042,6 +11565,11 @@ export default function CombatRoundManagerPanel({
       case "roll_parry":
         void invokeResultProducingGmCommand(descriptor, () => rollInspectorParry(descriptor));
         return;
+      case "commit_defense_review":
+        void invokeResultProducingGmCommand(descriptor, () =>
+          commitInspectorDefenseReview(descriptor),
+        );
+        return;
       case "roll_offensive_parry_brawling":
         void invokeResultProducingGmCommand(descriptor, () =>
           rollInspectorOffensiveParryBrawling(descriptor),
@@ -11115,6 +11643,9 @@ export default function CombatRoundManagerPanel({
         return;
       case "roll_attack":
         void invokeResultProducingGmCommand(descriptor, () => rollInspectorPhaseAttack(descriptor));
+        return;
+      case "progress_missile_readiness":
+        void progressInspectorMissileReadiness(descriptor);
         return;
       case "declare_action":
       case "review_modifiers_phase1":
@@ -11430,6 +11961,14 @@ export default function CombatRoundManagerPanel({
                           inspectorNormalizedFeintPhaseContexts[phaseKey] ??
                           inspectorDisplayDraft.phaseContexts[phaseKey]);
                       const phaseLoadoutSummary = inspectorPhaseLoadoutSummaries[phaseKey];
+                      const phaseDefenseSnapshot = inspector.participant?.participantId
+                        ? getLatestCombatDefenseSnapshot({
+                            defenderParticipantId: inspector.participant.participantId,
+                            phase: phaseKey,
+                            roundNumber: selectedTimelineRoundState.roundNumber,
+                            snapshots: selectedTimelineRoundState.defenseSnapshots,
+                          })
+                        : undefined;
                       const phaseTargetIdentity = !inspectorIsHistorical
                         ? resolveCanonicalCombatTargetIdentity({
                             encounterParticipants: encounter.participants,
@@ -11532,6 +12071,7 @@ export default function CombatRoundManagerPanel({
                           phaseCard,
                           phaseContext: phaseCombatContext,
                           phaseDefenseStats: inspectorIsHistorical ? null : phaseDefenseStats,
+                          defenseSnapshot: phaseDefenseSnapshot,
                           phaseKey,
                           secondaryActionId: inspectorDisplayDraft.secondaryActionId,
                           selectedResolutionContext,
@@ -11554,6 +12094,7 @@ export default function CombatRoundManagerPanel({
                               dependencies: [
                                 inspectorDisplayDraft.actionId,
                                 phaseLoadoutSummary,
+                                phaseDefenseSnapshot,
                                 inspectorGeneratedCombatContext,
                                 selectedScenarioParticipant?.state.combatEffects,
                                 inspector.participant?.participantId,
@@ -11589,6 +12130,11 @@ export default function CombatRoundManagerPanel({
                           phaseCard={phaseCard}
                           sourceLabel={phaseSourceLabel}
                         >
+                          {phaseProjection.defenseSnapshot ? (
+                            <CombatDefenseSnapshotPanel
+                              snapshot={phaseProjection.defenseSnapshot}
+                            />
+                          ) : null}
                           {inspectorIsHistorical && !historicalPhasePanel ? (
                             <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
                               No information available for this panel.

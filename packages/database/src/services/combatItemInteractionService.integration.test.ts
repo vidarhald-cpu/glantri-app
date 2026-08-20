@@ -541,6 +541,120 @@ if (!process.env.DATABASE_URL_TEST) {
       );
     });
 
+    it("atomically consumes exact missile ammunition and restores it on exact undo", async () => {
+      const current = await fixture("missile-ammo");
+      const equipmentService = new CharacterEquipmentWriteService(current.itemRepository);
+      const createdAmmo = await equipmentService.createCampaignEquipmentItem({
+        campaignId: current.campaign.id,
+        holderCharacterId: current.character.id,
+        itemFacts: {
+          activeMechanics: [],
+          descriptiveTraits: [],
+          templateOverrides: [],
+          unsupportedCapabilities: [],
+          version: 1,
+        },
+        templateId: "gear-template-arrows",
+      });
+      await prisma!.characterEquipmentItem.update({
+        data: { isStackable: true, quantity: 2 },
+        where: { id: createdAmmo.id },
+      });
+      const ammo = (await current.itemRepository.getCanonicalEquipmentItemById(createdAmmo.id))!;
+      const loadout = (await current.itemRepository.getCharacterLoadouts(current.character.id))[0]!;
+      await current.itemRepository.upsertCharacterLoadout({
+        ...loadout,
+        activeAmmoItemIds: [ammo.id],
+      });
+      const commandId = "missile-ammo-command";
+      const cursor = current.persisted.combatRoundState!.currentCursor;
+      const session = encounterSessionSchema.parse({
+        ...current.persisted,
+        combatRoundState: {
+          ...current.persisted.combatRoundState!,
+          commands: [
+            ...current.persisted.combatRoundState!.commands,
+            {
+              afterCursor: cursor,
+              beforeCursor: cursor,
+              createdAt: "2026-08-16T10:04:00.000Z",
+              facts: {
+                previousMissileReadiness: {
+                  ammoItemId: ammo.id,
+                  ammoItemRevision: ammo.revision,
+                },
+              },
+              id: commandId,
+              participantId: "participant-missile-ammo",
+              roundNumber: 1,
+              type: "roll_attack",
+            },
+          ],
+        },
+        updatedAt: "2026-08-16T10:04:00.000Z",
+      });
+      const service = new CombatItemInteractionService(current.itemRepository, prisma!);
+      const committed = await service.commitMissileWeaponAttack({
+        actorUserId: current.gm.id,
+        ammoItemId: ammo.id,
+        ammoItemRevision: ammo.revision!,
+        campaignId: current.campaign.id,
+        commandId,
+        encounterId: current.encounterId,
+        expectedEncounterRevision: current.persisted.updatedAt,
+        ownerCharacterId: current.character.id,
+        roundNumber: 1,
+        scenarioId: current.scenario.id,
+        session,
+      });
+      expect(
+        (await prisma!.characterEquipmentItem.findUniqueOrThrow({ where: { id: ammo.id } }))
+          .quantity,
+      ).toBe(1);
+      const replay = await service.commitMissileWeaponAttack({
+        actorUserId: current.gm.id,
+        ammoItemId: ammo.id,
+        ammoItemRevision: ammo.revision!,
+        campaignId: current.campaign.id,
+        commandId,
+        encounterId: current.encounterId,
+        expectedEncounterRevision: current.persisted.updatedAt,
+        ownerCharacterId: current.character.id,
+        roundNumber: 1,
+        scenarioId: current.scenario.id,
+        session,
+      });
+      expect(replay.undo).toEqual(committed.undo);
+      expect(
+        (await prisma!.characterEquipmentItem.findUniqueOrThrow({ where: { id: ammo.id } }))
+          .quantity,
+      ).toBe(1);
+      const restoredSession = encounterSessionSchema.parse({
+        ...committed.encounter,
+        combatRoundState: {
+          ...committed.encounter.combatRoundState!,
+          commands: committed.encounter.combatRoundState!.commands.filter(
+            (command) => command.id !== commandId,
+          ),
+        },
+        updatedAt: "2026-08-16T10:05:00.000Z",
+      });
+      await service.commitMissileWeaponAttackUndo({
+        actorUserId: current.gm.id,
+        campaignId: current.campaign.id,
+        commandId,
+        encounterId: current.encounterId,
+        expectedEncounterRevision: committed.encounter.updatedAt,
+        scenarioId: current.scenario.id,
+        session: restoredSession,
+        undo: committed.undo,
+      });
+      expect(
+        (await prisma!.characterEquipmentItem.findUniqueOrThrow({ where: { id: ammo.id } }))
+          .quantity,
+      ).toBe(2);
+    });
+
     it("atomically disarms the exact Item with rollback, idempotent retry, and exact undo", async () => {
       for (const boundary of ["item", "encounter", "event"] as const) {
         const current = await disarmFixture(`rollback-${boundary}`);

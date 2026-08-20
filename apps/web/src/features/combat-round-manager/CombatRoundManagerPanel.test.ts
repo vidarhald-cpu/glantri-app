@@ -27,6 +27,15 @@ function readPanelSource(): string {
 }
 
 describe("CombatRoundManagerPanel", () => {
+  it("hydrates and presents canonical missile preparation progress for GM continuation", () => {
+    const source = readPanelSource();
+
+    expect(source).toContain("setInspectorMissileAimLevel(inspectorMissileReadiness.aimLevel)");
+    expect(source).toContain("String(inspectorMissileReadiness.gmPreparationAdjustment)");
+    expect(source).toContain("inspectorMissileReadiness.baseRequiredRounds");
+    expect(source).toContain("inspectorMissileReadiness.aimRequiredRounds");
+    expect(source).toContain("Invalidate preparation");
+  });
   it("offers bounded GM Continued Contact maintenance workflow without distance automation", () => {
     const source = readPanelSource();
 

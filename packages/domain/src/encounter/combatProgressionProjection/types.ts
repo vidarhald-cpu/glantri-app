@@ -65,6 +65,7 @@ export type CombatProgressionProcessKind =
   | "disarm"
   | "attack_decision"
   | "attack"
+  | "missile_readiness"
   | "combat_experience"
   | "continued_contact_maintenance"
   | "boundary_transition"
@@ -126,6 +127,7 @@ export type CombatProgressionTaskKind =
   | "adjust_distance_defender_roll"
   | "adjust_distance_response"
   | "attack"
+  | "missile_readiness"
   | "break_off_review"
   | "break_off_escapee_roll"
   | "break_off_attacker_roll"
@@ -138,6 +140,7 @@ export type CombatProgressionTaskKind =
   | "critical"
   | "damage_roll"
   | "damage_review"
+  | "defense_review"
   | "distance_commit"
   | "distance_roll"
   | "double_attack_decision"
@@ -203,6 +206,7 @@ export interface CombatProgressionTrackerFacet {
 /** Stable facts used to identify projected work without relying on a runtime cursor cell. */
 export interface CombatProgressionTaskIdentity {
   readonly actionId?: string;
+  readonly ammoItemId?: string;
   readonly attackIndex?: number;
   readonly attackModeId?: string;
   readonly attackResultId?: string;
@@ -222,6 +226,7 @@ export interface CombatProgressionTaskIdentity {
   readonly initiativeGroupId?: string;
   readonly initiativeValue?: number;
   readonly opportunityId?: string;
+  readonly missileReadinessId?: string;
   readonly offensiveParryAttemptId?: string;
   readonly observationAttemptId?: string;
   readonly parryPurpose?: CombatParryPurpose;

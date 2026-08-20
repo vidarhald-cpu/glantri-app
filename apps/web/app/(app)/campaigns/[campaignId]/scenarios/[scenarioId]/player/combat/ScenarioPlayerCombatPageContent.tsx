@@ -29,6 +29,7 @@ import {
   getCombatRoundArmorCriticalModifierForDamageResult,
   getCombatRoundAttackResultById,
   getCombatRoundCombatExperienceDifficulty,
+  getCombatMissileRequiredRounds,
   getCombatRoundEffectiveCriticalRoll,
   getCombatRoundEffectiveDamageResult,
   getCombatRoundPhaseInitiativeChoice,
@@ -41,6 +42,7 @@ import {
   getCombatRoundStepForProgressionBoundary,
   getCombatRoundStepForCursorStep,
   getHitLocationFullLabel,
+  getLatestPlayerSafeCombatDefenseReview,
   getPlayerCombatCurrentRollAction,
   getParticipantCombatExperienceSkillTotalLookup,
   getWeaponPreferredDistances,
@@ -102,6 +104,7 @@ import {
   PlayerCombatActionSelectorPanel,
   type PlayerCombatDistancePreferenceOption,
   PlayerCombatDefenseStatsTable,
+  PlayerCombatCommittedDefenseReview,
   PlayerCombatModifierPanel,
   PlayerCombatObservationProgress,
   PlayerCombatOpponentSelector,
@@ -183,6 +186,7 @@ import {
   loadScenarioParticipants,
   loadScenarioPlayerProjection,
   loadServerCharacterById,
+  progressCombatMissileReadinessOnServer,
   resolveCurrentCombatPhaseDamageOnServer,
   rollCombatAttackOnServer,
   rollCombatCriticalOnServer,
@@ -1152,6 +1156,8 @@ export default function ScenarioPlayerCombatPageContent({
     "oppose",
   );
   const [continuedContactDistanceChoice, setContinuedContactDistanceChoice] = useState("");
+  const [missileAimLevel, setMissileAimLevel] = useState<0 | 1 | 2 | 3>(0);
+  const [missileRapidShot, setMissileRapidShot] = useState(false);
   const [selectedSecondaryActionId, setSelectedSecondaryActionId] = useState<
     PlayerEncounterActionId | ""
   >("");
@@ -1920,6 +1926,40 @@ export default function ScenarioPlayerCombatPageContent({
       selectedRoundParticipant,
     ],
   );
+  const currentMissileReadinessOpportunity =
+    currentActionPresentation?.taskKind === "missile_readiness"
+      ? combatRoundState?.participants
+          .flatMap((participant) => participant.declaration?.attackOpportunities ?? [])
+          .find(
+            (opportunity) =>
+              opportunity.id === currentActionPresentation.primaryAction.descriptor?.opportunityId,
+          )
+      : undefined;
+  const currentMissileReadiness =
+    currentActionPresentation?.taskKind === "missile_readiness"
+      ? combatRoundState?.missileReadiness.find(
+          (entry) =>
+            entry.participantId ===
+              currentActionPresentation.primaryAction.descriptor?.participantId &&
+            entry.weaponItemId ===
+              currentActionPresentation.primaryAction.descriptor?.weaponInstanceId,
+        )
+      : undefined;
+  const currentMissileRequired = currentMissileReadiness
+    ? {
+        aimRounds:
+          currentMissileReadiness.aimRequiredRounds ??
+          getCombatMissileRequiredRounds(currentMissileReadiness).aimRounds,
+        baseRounds:
+          currentMissileReadiness.baseRequiredRounds ??
+          getCombatMissileRequiredRounds(currentMissileReadiness).baseRounds,
+      }
+    : undefined;
+  useEffect(() => {
+    if (!currentMissileReadiness) return;
+    setMissileAimLevel(currentMissileReadiness.aimLevel);
+    setMissileRapidShot(currentMissileReadiness.rapidShot);
+  }, [currentMissileReadiness?.id, currentMissileReadiness?.updatedAt]);
   const currentStepResultPresentation = useMemo(
     () =>
       playerCombatLog &&
@@ -3523,6 +3563,76 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
+  async function progressMissileReadiness(descriptor: CurrentActionCommandDescriptor) {
+    const opportunity = combatRoundState?.participants
+      .flatMap((participant) => participant.declaration?.attackOpportunities ?? [])
+      .find((entry) => entry.id === descriptor.opportunityId);
+    const characterId = selectedParticipant?.characterId;
+    const loadout = characterId
+      ? controlledEquipmentState?.activeLoadoutByCharacterId[characterId]
+      : undefined;
+    const ammo = loadout?.activeAmmoItemIds
+      .map((itemId) => controlledEquipmentState?.itemsById[itemId])
+      .find((item) => {
+        const template = item
+          ? controlledEquipmentState?.templates.templatesById[item.templateId]
+          : undefined;
+        return (
+          item &&
+          item.quantity > 0 &&
+          template?.category === "gear" &&
+          template.ammunitionProfile?.family === opportunity?.missileProfile?.ammoFamily
+        );
+      });
+    if (
+      readOnlyInspection ||
+      !encounterSession ||
+      !encounterId ||
+      !selectedParticipant ||
+      !descriptor.executionGroupId ||
+      !descriptor.opponentParticipantId ||
+      !descriptor.opportunityId ||
+      !descriptor.participantId ||
+      !descriptor.phase ||
+      !descriptor.weaponInstanceId ||
+      !descriptor.weaponTemplateId ||
+      !opportunity?.missileProfile ||
+      !ammo?.revision
+    ) {
+      setError("Choose compatible active ammunition before preparing this missile weapon.");
+      return;
+    }
+    setSavingCombatContext(true);
+    try {
+      const { encounter } = await progressCombatMissileReadinessOnServer({
+        aimLevel: missileAimLevel,
+        ammoItemId: ammo.id,
+        ammoItemRevision: ammo.revision,
+        currentEncounter: encounterSession,
+        encounterId,
+        executionGroupId: descriptor.executionGroupId,
+        expectedParticipantRevision: selectedParticipant.updatedAt,
+        expectedRevision: descriptor.expectedRevision,
+        opportunityId: descriptor.opportunityId,
+        phase: descriptor.phase,
+        rapidShot: missileRapidShot,
+        scenarioParticipantId: selectedParticipant.id,
+        targetParticipantId: descriptor.opponentParticipantId,
+        taskId: descriptor.taskId,
+        weaponInstanceId: descriptor.weaponInstanceId,
+        weaponTemplateId: descriptor.weaponTemplateId,
+      });
+      acceptEncounterSession(encounter);
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to prepare missile weapon.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
   async function rollCurrentParry(descriptor: CurrentActionCommandDescriptor) {
     const attackResult =
       combatRoundState && descriptor.attackResultId
@@ -4602,6 +4712,9 @@ export default function ScenarioPlayerCombatPageContent({
       case "roll_attack":
         void invokeResultProducingProxyCommand(descriptor, () => rollPhaseAttack(descriptor));
         return;
+      case "progress_missile_readiness":
+        void progressMissileReadiness(descriptor);
+        return;
       case "roll_initiative_phase1":
       case "roll_initiative_phase2":
         void invokeResultProducingProxyCommand(descriptor, () => rollInitiative(descriptor));
@@ -5005,6 +5118,14 @@ export default function ScenarioPlayerCombatPageContent({
                 normalizedFeintPhaseContexts[phaseKey] ??
                 phaseCombatContextDrafts[phaseKey];
               const phaseLoadoutSummary = phaseCombatLoadoutSummaries[phaseKey];
+              const committedDefenseReview = combatHistory
+                ? getLatestPlayerSafeCombatDefenseReview({
+                    defenderParticipantId: selectedRoundParticipant?.participantId,
+                    events: combatHistory.activeRound.events,
+                    phase: phaseKey,
+                    roundNumber: combatHistory.activeRound.roundNumber,
+                  })
+                : undefined;
               const targetRoundParticipant = phaseCombatContext.targetParticipantId
                 ? combatRoundState?.participants.find(
                     (participant) =>
@@ -5312,7 +5433,9 @@ export default function ScenarioPlayerCombatPageContent({
                       />
                     </>
                   ) : null}
-                  {phaseModel.showDefenseContext ? (
+                  {committedDefenseReview ? (
+                    <PlayerCombatCommittedDefenseReview review={committedDefenseReview} />
+                  ) : phaseModel.showDefenseContext ? (
                     <>
                       {phaseModel.defenseStats ? (
                         <PlayerCombatDefenseStatsTable stats={phaseModel.defenseStats} />
@@ -5573,7 +5696,47 @@ export default function ScenarioPlayerCombatPageContent({
                 disabled={currentActionDomainValidationDisabled}
                 onDeclareAction={invokePlayerCurrentAction}
                 preActionControls={
-                  selectedContinuedContactDistanceChoice ? (
+                  currentActionPresentation?.taskKind === "missile_readiness" ? (
+                    <div style={{ display: "grid", gap: "0.6rem" }}>
+                      {currentMissileReadiness && currentMissileRequired ? (
+                        <div>
+                          Readiness: {currentMissileReadiness.status} · preparation{" "}
+                          {currentMissileReadiness.baseCompletedRounds}/
+                          {currentMissileRequired.baseRounds} · aim{" "}
+                          {currentMissileReadiness.aimCompletedRounds}/
+                          {currentMissileRequired.aimRounds}
+                        </div>
+                      ) : (
+                        <div>Readiness: not started</div>
+                      )}
+                      <label style={{ display: "grid", gap: "0.25rem" }}>
+                        <strong>Aim</strong>
+                        <select
+                          disabled={savingCombatContext}
+                          onChange={(event) =>
+                            setMissileAimLevel(Number(event.target.value) as 0 | 1 | 2 | 3)
+                          }
+                          value={missileAimLevel}
+                        >
+                          <option value={0}>Normal · no extra rounds</option>
+                          <option value={1}>Aim I · +1 OB · 2 rounds</option>
+                          <option value={2}>Aim II · +2 OB · 4 rounds</option>
+                          <option value={3}>Aim III · +3 OB · 6 rounds</option>
+                        </select>
+                      </label>
+                      {currentMissileReadinessOpportunity?.missileProfile?.rapidShotAllowed ? (
+                        <label style={{ alignItems: "center", display: "flex", gap: "0.45rem" }}>
+                          <input
+                            checked={missileRapidShot}
+                            disabled={savingCombatContext}
+                            onChange={(event) => setMissileRapidShot(event.target.checked)}
+                            type="checkbox"
+                          />
+                          Rapid shot · −4 OB, no normal preparation
+                        </label>
+                      ) : null}
+                    </div>
+                  ) : selectedContinuedContactDistanceChoice ? (
                     <label style={{ display: "grid", gap: "0.25rem" }}>
                       <strong>Engagement distance</strong>
                       <select

@@ -1,4 +1,5 @@
 import type {
+  CombatDefenseSnapshot,
   CombatRoundParryResolution,
   CombatRoundStep,
   CombatRoundPhase,
@@ -54,6 +55,7 @@ export interface CombatRoundPhasePanelProjection {
   attackRows: PlayerCombatAttackStatsView | null;
   contextAttackResultId?: string;
   defenseRows: PlayerCombatDefenseStatsView | null;
+  defenseSnapshot?: CombatDefenseSnapshot;
   modifierContext: CombatRoundPhasePanelModifierContext;
   participantId?: string;
   phase: CombatRoundPhase;
@@ -89,9 +91,7 @@ function getSituationalModifiers(
     }));
 }
 
-function getStoredParryBeforeRoll(
-  resolution?: CombatRoundParryResolution,
-): number | undefined {
+function getStoredParryBeforeRoll(resolution?: CombatRoundParryResolution): number | undefined {
   if (resolution?.status !== "resolved" || resolution.combinedParryScore === undefined) {
     return undefined;
   }
@@ -148,6 +148,7 @@ export function buildCombatRoundPhasePanelProjection(input: {
   phaseContext: ScenarioParticipantCombatContext;
   phaseKey: PlayerCombatPhaseKey;
   phaseDefenseStats: PlayerCombatDefenseStatsView | null;
+  defenseSnapshot?: CombatDefenseSnapshot;
   secondaryActionId: PlayerEncounterActionId | "";
   selectedResolutionContext?: CombatRoundSelectedResolutionContext;
   selectedStep: CombatRoundStep;
@@ -160,12 +161,18 @@ export function buildCombatRoundPhasePanelProjection(input: {
     selectedResolutionContext: input.selectedResolutionContext,
     snapshotDefenseStats: input.snapshotDefenseStats,
   });
+  const phaseContext = input.defenseSnapshot
+    ? {
+        ...input.phaseContext,
+        incomingAttackSide: input.defenseSnapshot.attackDirection,
+      }
+    : input.phaseContext;
   const phaseModel = buildPlayerCombatPhasePanelModel({
     actionId: input.actionId,
     attackStats: attackRows,
     defenseStats: defenseRows,
     phaseCard: input.phaseCard,
-    phaseContext: input.phaseContext,
+    phaseContext,
     phaseKey: input.phaseKey,
     secondaryActionId: input.secondaryActionId,
   });
@@ -174,6 +181,7 @@ export function buildCombatRoundPhasePanelProjection(input: {
     attackRows,
     contextAttackResultId: input.selectedResolutionContext?.attackResultId,
     defenseRows,
+    defenseSnapshot: input.defenseSnapshot,
     modifierContext: {
       phaseModifiers: getPhaseModifierContext(input.liveModifiers),
       situationalModifiers: getSituationalModifiers(input.selectedResolutionContext),

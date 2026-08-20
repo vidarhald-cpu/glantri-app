@@ -1102,6 +1102,50 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("commits one exact GM defense review with awareness and source choices", async () => {
+    const encounter = { id: "encounter-1", scenarioId: "scenario-1" };
+    const commandEnvelope = { currentStep: "review_phase_2_actions", warnings: [] };
+    const defenseSnapshot = { id: "defense-snapshot:attack-1" };
+    const fetchMock = stubFetch({ commandEnvelope, defenseSnapshot, encounter });
+    const client = await loadClient();
+
+    await client.commitCombatDefenseReviewOnServer({
+      attackId: "1:opportunity:attack-1",
+      attackerParticipantId: "attacker",
+      aware: false,
+      defenderParticipantId: "defender",
+      encounterId: "encounter-1",
+      executionGroupId: "defense-review-group-1",
+      expectedRevision: "2026-08-18T10:00:00.000Z",
+      phase: "phase1",
+      sourceSelections: [
+        { included: true, itemId: "weapon-1" },
+        { included: false, itemId: "shield-1" },
+      ],
+      taskId: "defense-review-task-1",
+    });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        attackId: "1:opportunity:attack-1",
+        attackerParticipantId: "attacker",
+        aware: false,
+        defenderParticipantId: "defender",
+        encounterId: "encounter-1",
+        executionGroupId: "defense-review-group-1",
+        expectedRevision: "2026-08-18T10:00:00.000Z",
+        phase: "phase1",
+        sourceSelections: [
+          { included: true, itemId: "weapon-1" },
+          { included: false, itemId: "shield-1" },
+        ],
+        taskId: "defense-review-task-1",
+      },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/commit-defense-review",
+    });
+  });
+
   it("rolls Continued Contact maintenance with the exact contest and task lineage", async () => {
     const encounter = { id: "encounter-1", scenarioId: "scenario-1" };
     const commandEnvelope = { currentStep: "round_summary", warnings: [] };

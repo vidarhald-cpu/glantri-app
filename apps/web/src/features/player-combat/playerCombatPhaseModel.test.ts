@@ -545,6 +545,16 @@ describe("player combat phase model", () => {
               label: "Throw",
               ob: 5,
               order: 2,
+              provenance: "imported",
+              range: "10/30/60",
+              sourceMetadata: {
+                rawRow: { A: "Dagger" },
+                row: 12,
+                sheet: "Weapon2",
+                sourceColumns: { A: "Weapon" },
+                sourceRange: "A12:K12",
+                workbook: "Themistogenes 1.07.xlsx",
+              },
             },
           ],
           attackMode1Id: "mode-3",
@@ -564,6 +574,10 @@ describe("player combat phase model", () => {
     });
 
     expect(summary.selectedAttackModeId).toBe("mode-3");
+    expect(summary.attackStats).toMatchObject({
+      provenance: "Weapon2 row 12 · A12:K12",
+      range: "10/30/60",
+    });
     expect(summary.reference).toMatchObject({
       am: "A",
       attackMode: "Throw",

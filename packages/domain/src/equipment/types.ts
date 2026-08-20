@@ -55,6 +55,32 @@ export type WeaponAttackModeProvenance = "imported" | "manual" | "derived";
 
 export type WeaponAttackModeType = "melee" | "missile" | "thrown";
 
+export type MissileAmmoFamily = "arrow" | "crossbow_bolt" | "sling_projectile";
+
+export type MissileWeaponFamily =
+  | "sling"
+  | "short_bow"
+  | "composite_bow"
+  | "long_bow"
+  | "hand_crossbow"
+  | "crossbow"
+  | "heavy_crossbow";
+
+export interface MissileWeaponProfile {
+  ammoFamily: MissileAmmoFamily;
+  canRemainReady: boolean;
+  family: MissileWeaponFamily;
+  fullNormalCycleRounds: number;
+  preparationModel: "continuous_fragile" | "staged_persistent";
+  rapidShotAllowed: boolean;
+  standardPreparationRounds: number;
+}
+
+export interface MissileAmmunitionProfile {
+  family: MissileAmmoFamily;
+  quantityPerShot: number;
+}
+
 /** Explicit specialist capability; absence is conservatively treated as none. */
 export type WeaponDisarmCapability = "none" | "trap";
 
@@ -272,6 +298,8 @@ export interface WeaponTemplate extends EquipmentTemplateBase {
   disarmGripClass?: WeaponDisarmGripClass | null;
   /** Optional rules/content override for the derived 1-6 weapon-control rating. */
   disarmControlOverride?: number | null;
+  /** Content-defined projectile preparation and compatibility; absent means not a V1 missile weapon. */
+  missileProfile?: MissileWeaponProfile | null;
 }
 
 export interface ShieldTemplate extends EquipmentTemplateBase {
@@ -322,6 +350,8 @@ export interface ArmorTemplate extends EquipmentTemplateBase {
 
 export interface GearTemplate extends EquipmentTemplateBase {
   category: "gear";
+  ammunitionProfile?: MissileAmmunitionProfile | null;
+  equipmentRole?: "ammunition" | "ammunition_container" | null;
 }
 
 export interface ValuableTemplate extends EquipmentTemplateBase {

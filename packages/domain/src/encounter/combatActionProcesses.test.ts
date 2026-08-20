@@ -9,9 +9,11 @@ import {
   buildCombatRoundPhaseResolutionResult,
   combatRoundStateSchema,
   decideCombatRoundDoubleAttackPhase2,
+  getCombatRoundAttackResultId,
   type CombatRoundState,
 } from "./combatRoundManager";
 import { buildCombatProgressionProjection } from "./combatProgressionProjection";
+import { buildCombatDefenseSnapshotId } from "./combatDefenseSnapshot";
 
 const NOW = "2026-07-19T10:00:00.000Z";
 
@@ -72,6 +74,47 @@ function attack(input: {
   return {
     ...result,
     attackOpportunityId: `round:2:participant:${input.attackerParticipantId ?? "hero"}:${input.phase}:${input.phase === "phase1" ? "attack_1" : "attack_2"}`,
+  };
+}
+
+function reviewedAttackStateFields(
+  result: ReturnType<typeof attack>,
+  resolutionOverrides: Record<string, unknown> = {},
+) {
+  const attackResultId = getCombatRoundAttackResultId({ result, roundNumber: 2 });
+  const defenseSnapshotId = buildCombatDefenseSnapshotId(attackResultId);
+  return {
+    defenseSnapshots: [
+      {
+        attackDirection: "front" as const,
+        attackerParticipantId: result.attackerParticipantId,
+        attackId: attackResultId,
+        attackOpportunityId: result.attackOpportunityId,
+        aware: true,
+        awarenessDefault: true,
+        awarenessOverridden: false,
+        defenderParticipantId: result.defenderParticipantId,
+        id: defenseSnapshotId,
+        ordinaryDodgeAvailable: true,
+        phase: result.phase,
+        reviewedAt: NOW,
+        roundNumber: 2,
+        schemaVersion: 1 as const,
+        sources: [],
+        status: "committed" as const,
+      },
+    ],
+    phaseResolutionResults: [
+      {
+        ...buildCombatRoundPhaseResolutionResult({
+          attackResult: result,
+          roundNumber: 2,
+          updatedAt: NOW,
+        }),
+        defenseSnapshotId,
+        ...resolutionOverrides,
+      },
+    ],
   };
 }
 
@@ -146,7 +189,7 @@ describe("combat action process adapters", () => {
     ]);
   });
 
-  it("completes a missed Single Attack without opening defense or damage", () => {
+  it("completes a missed Single Attack after defense review without opening damage", () => {
     const result = attack({ actionId: "attack_parry", hit: false, phase: "phase1" });
     const base = stateFor("attack_parry");
     const state = combatRoundStateSchema.parse({
@@ -156,18 +199,13 @@ describe("combat action process adapters", () => {
           ? { ...participant, attackResults: { phase1: result } }
           : participant,
       ),
-      phaseResolutionResults: [
-        buildCombatRoundPhaseResolutionResult({
-          attackResult: result,
-          roundNumber: 2,
-          updatedAt: NOW,
-        }),
-      ],
+      ...reviewedAttackStateFields(result),
     });
     const standardAttack = buildCombatActionProcessPlans(state)[0]?.standardAttacks[0];
 
     expect(standardAttack?.completion).toEqual({ complete: true, reason: "miss" });
-    expect(standardAttack?.stages.slice(1).every((stage) => stage.state === "skipped")).toBe(true);
+    expect(standardAttack?.stages[1]).toMatchObject({ kind: "defense", state: "complete" });
+    expect(standardAttack?.stages.slice(2).every((stage) => stage.state === "skipped")).toBe(true);
   });
 
   it("keeps Reactive Attack locked until the declared opponent attacks in phase 1", () => {
@@ -215,6 +253,7 @@ describe("combat action process adapters", () => {
     });
     const waiting = combatRoundStateSchema.parse({
       ...base,
+      ...reviewedAttackStateFields(phase1Result),
       participants: base.participants.map((participant) =>
         participant.participantId === "hero"
           ? { ...participant, attackResults: { phase1: phase1Result } }
@@ -256,6 +295,7 @@ describe("combat action process adapters", () => {
     });
     const waiting = combatRoundStateSchema.parse({
       ...base,
+      ...reviewedAttackStateFields(phase1Result),
       participants: base.participants.map((participant) =>
         participant.participantId === "hero"
           ? { ...participant, attackResults: { phase1: phase1Result } }

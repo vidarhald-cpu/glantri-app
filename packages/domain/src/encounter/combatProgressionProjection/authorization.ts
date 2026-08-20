@@ -167,6 +167,18 @@ const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, Comma
     process: "attack",
     stage: "attack",
   },
+  progress_missile_readiness: {
+    boundary: resolutionBoundary,
+    kind: "missile_readiness",
+    process: "attack",
+    stage: "attack",
+  },
+  interrupt_missile_readiness: {
+    boundary: resolutionBoundary,
+    kind: "missile_readiness",
+    process: "attack",
+    stage: "attack",
+  },
   roll_initiative_phase1: {
     boundary: "phase1_initiative",
     kind: "roll_initiative",
@@ -182,6 +194,12 @@ const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, Comma
   roll_parry: {
     boundary: resolutionBoundary,
     kind: "parry",
+    process: "attack",
+    stage: "defense",
+  },
+  commit_defense_review: {
+    boundary: resolutionBoundary,
+    kind: "defense_review",
     process: "attack",
     stage: "defense",
   },

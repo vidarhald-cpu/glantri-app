@@ -295,7 +295,8 @@ describe("combat route canonical-conformance guards", () => {
     expect(source).toContain('commandType: "roll_parry"');
     expect(source).toContain("commandType must be roll_parry.");
     expect(source).toContain("resolveCanonicalCombatParryModifierFacts({");
-    expect(source).toContain("resolveCanonicalParryBase({");
+    expect(source).toContain("getCombatDefenseSnapshotForAttack(");
+    expect(source).toContain("resolveCanonicalParryBaseForDefenseSnapshot({");
     expect(source).toContain('code: "parry_modifier_signature_mismatch"');
     expect(source).not.toContain("parryBase: body.parryBase");
     expect(source).not.toContain("body.defenderModifierFingerprint !==");

@@ -33,6 +33,7 @@ export function classifyCombatTrackerTaskAttention(
 ): CombatTrackerAttention {
   switch (task.kind) {
     case "attack":
+    case "missile_readiness":
     case "commit_initiative":
     case "effect_review":
     case "gm_advance_boundary":
@@ -59,6 +60,7 @@ export function classifyCombatTrackerTaskAttention(
     case "critical":
     case "damage_roll":
     case "damage_review":
+    case "defense_review":
     case "distance_commit":
     case "distance_roll":
     case "double_attack_decision":
@@ -105,6 +107,8 @@ function actionLabel(kind: CombatProgressionTaskKind): string {
       return "Initiative";
     case "attack":
       return "Attack";
+    case "missile_readiness":
+      return "Missile preparation";
     case "break_off_review":
     case "break_off_escapee_roll":
     case "break_off_attacker_roll":
@@ -130,6 +134,8 @@ function actionLabel(kind: CombatProgressionTaskKind): string {
       return "Graze damage";
     case "damage_review":
       return "Damage review";
+    case "defense_review":
+      return "Defense review";
     case "double_attack_decision":
       return "Double Attack";
     case "feint_attacker_roll":
@@ -182,6 +188,8 @@ function gmText(task: CombatProgressionPresentationTask, owner: string | undefin
       return `Awaiting GM: Review distance control${owner ? ` for ${owner}` : ""}.`;
     case "damage_review":
       return `Awaiting GM: Review damage${owner ? ` for ${owner}` : ""}.`;
+    case "defense_review":
+      return `Awaiting GM: Review awareness and defense sources${owner ? ` for ${owner}` : ""}.`;
     case "effect_review":
       return `Awaiting GM: Review round-end effects${owner ? ` for ${owner}` : ""}.`;
     case "participant_review":
@@ -238,6 +246,11 @@ export function buildCombatTrackerTaskHover(
         text = owner
           ? `${owner} may make ${phase ? `${phase.toLowerCase()} ` : ""}attack${opponent ? ` against ${opponent}` : ""}.`
           : "An attack is ready.";
+        break;
+      case "missile_readiness":
+        text = owner
+          ? `${owner} must prepare a missile weapon${opponent ? ` for an attack against ${opponent}` : ""}.`
+          : "Missile preparation is required before combat can continue.";
         break;
       case "parry":
         text = owner
@@ -332,6 +345,7 @@ export function buildCombatTrackerTaskHover(
       case "adjust_distance_commit":
       case "distance_commit":
       case "damage_review":
+      case "defense_review":
       case "effect_review":
       case "participant_review":
       case "round_end_prepare":

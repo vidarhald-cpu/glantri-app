@@ -191,6 +191,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   adjust_distance: "Adjust Distance",
   adjust_distance_attack: "Adjust Distance-Attack",
   attack: "Attack",
+  missile_readiness: "Missile Preparation",
   break_off_engagement: "Break Off",
   combat_experience: "Combat Experience",
   continued_contact_distance_control: "Continued Contact",
@@ -222,6 +223,7 @@ const TASK_ACTION_NAMES: Record<CombatProgressionTaskKind, string> = {
   adjust_distance_defender_roll: "Adjust Distance",
   adjust_distance_response: "Adjust Distance",
   attack: "Attack",
+  missile_readiness: "Missile Preparation",
   break_off_attacker_roll: "Break Off",
   break_off_commit: "Break Off",
   break_off_escapee_roll: "Break Off",
@@ -235,6 +237,7 @@ const TASK_ACTION_NAMES: Record<CombatProgressionTaskKind, string> = {
   critical: "Critical",
   damage_roll: "Graze Damage",
   damage_review: "Damage Review",
+  defense_review: "Defense Review",
   distance_commit: "Distance Control",
   distance_roll: "Distance Control",
   double_attack_decision: "Double Attack",
@@ -432,6 +435,8 @@ function summaryFor(input: {
         return `${actor} committed to an attack.${attackOutcome ? ` The attack ${attackOutcome === "hit" ? "hit" : "missed"}.` : ""} ${target ?? "The defender"} prepared an Offensive Parry.`;
       }
       return `${actor} hit ${target ?? "the defender"}.`;
+    case "defense_review":
+      return `Review ${target ?? "the defender"}'s awareness and defense sources for this attack.`;
     case "offensive_parry_brawling_roll":
       return input.task.presentationContext?.responder?.participantId ===
         input.task.presentationContext?.actor?.participantId
@@ -567,6 +572,8 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
       return "Choose Continue or Cancel";
     case "attack":
       return "Roll attack";
+    case "missile_readiness":
+      return "Prepare missile weapon";
     case "break_off_review":
       return "Review Break Off";
     case "break_off_escapee_roll":
@@ -583,6 +590,8 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
       return task.identity.parryPurpose === "offensive_parry"
         ? "Roll Offensive Parry"
         : "Roll parry";
+    case "defense_review":
+      return "Commit defense review";
     case "offensive_parry_brawling_roll":
       return "Roll Brawling";
     case "continued_contact_maintenance_roll":
@@ -658,6 +667,8 @@ function requiredNowFor(
       return "Choose Continue or Cancel.";
     case "attack":
       return "Roll attack.";
+    case "missile_readiness":
+      return "Prepare the missile weapon or choose Rapid shot.";
     case "break_off_review":
       return "Review the Break Off modifiers.";
     case "break_off_escapee_roll":
@@ -674,6 +685,8 @@ function requiredNowFor(
       return task.identity.parryPurpose === "offensive_parry"
         ? "Attempt the parry."
         : "Defend against the attack.";
+    case "defense_review":
+      return "Confirm awareness and applicable defense sources.";
     case "offensive_parry_brawling_roll":
       return "Roll Brawling.";
     case "continued_contact_maintenance_roll":

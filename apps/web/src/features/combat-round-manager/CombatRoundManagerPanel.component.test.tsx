@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  buildCombatRoundAttackRollResult,
   buildCombatRoundCommandEnvelope,
   buildCombatRoundDeclaredAttackOpportunities,
   buildCombatProgressionProjection,
@@ -13,6 +14,7 @@ import {
   encounterSessionSchema,
   initializeCombatRoundState,
   prepareCombatRoundEndReview,
+  recordCombatRoundAttackResult,
   recordCombatRoundFeintRoll,
   recordCombatRoundDeclaration,
   recordCombatObservationRoll,
@@ -28,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   advanceDeterministic: vi.fn(),
   advanceCurrentStep: vi.fn(),
   clearCurrentStep: vi.fn(),
+  commitDefenseReview: vi.fn(),
   commitParticipantReview: vi.fn(),
   runStepWorkflow: vi.fn(),
   loadEncounter: vi.fn(),
@@ -47,6 +50,7 @@ vi.mock("@/lib/api/encounterClient", async (importOriginal) => {
     advanceDeterministicCombatOnServer: mocks.advanceDeterministic,
     advanceCombatRoundCurrentStepOnServer: mocks.advanceCurrentStep,
     clearCurrentCombatRoundStepOnServer: mocks.clearCurrentStep,
+    commitCombatDefenseReviewOnServer: mocks.commitDefenseReview,
     runGmCombatStepWorkflowOnServer: mocks.runStepWorkflow,
     commitRoundEndParticipantReviewOnServer: mocks.commitParticipantReview,
     loadEncounterById: mocks.loadEncounter,
@@ -148,7 +152,7 @@ vi.mock("@/features/player-combat/playerCombatPhaseModel", async (importOriginal
   };
 });
 
-import CombatRoundManagerPanel from "./CombatRoundManagerPanel";
+import CombatRoundManagerPanel, { CombatDefenseSnapshotPanel } from "./CombatRoundManagerPanel";
 import { buildActiveCombatPresentation } from "./view-models/combatPresentationModel";
 import {
   beginCombatPerformanceInteraction,
@@ -452,6 +456,102 @@ function buildAttackReadyEncounter(): EncounterSession {
     ...encounter,
     combatRoundState: state.state,
   });
+}
+
+function buildDefenseReviewEncounter(): EncounterSession {
+  const encounter = buildAttackReadyEncounter();
+  const state = combatRoundStateSchema.parse(encounter.combatRoundState);
+  const opportunity = state.participants.find(
+    (participant) => participant.participantId === "encounter-attacker",
+  )?.declaration?.attackOpportunities?.[0];
+  if (!opportunity) throw new Error("Expected the rendered attack opportunity.");
+  const attack = buildCombatRoundAttackRollResult({
+    actionId: "attack_parry",
+    attackIndex: opportunity.attackIndex,
+    attackModeId: opportunity.attackModeId,
+    attackOpportunityId: opportunity.id,
+    attackSlot: opportunity.slot,
+    attackerParticipantId: "encounter-attacker",
+    declarationId: opportunity.declarationId,
+    defenderDb: 20,
+    defenderParticipantId: "encounter-defender",
+    ob: 40,
+    phase: "phase1",
+    rollD20: 10,
+    rollTotal: 10,
+    rolledAt: "2026-07-23T10:02:10.000Z",
+    weaponInstanceId: opportunity.weaponInstanceId,
+    weaponName: "Long sword",
+    weaponSourceId: opportunity.weaponSourceId,
+    weaponSourceSlot: opportunity.weaponSourceSlot,
+    weaponTemplateId: opportunity.weaponTemplateId,
+  });
+  const reviewed = recordCombatRoundAttackResult({
+    command: { createdAt: attack.rolledAt, createdByUserId: "gm-1" },
+    participantId: "encounter-attacker",
+    result: attack,
+    state,
+    submittedBy: "gm",
+  });
+  return encounterSessionSchema.parse({
+    ...encounter,
+    combatRoundState: reviewed,
+    updatedAt: "2026-07-23T10:02:10.000Z",
+  });
+}
+
+function buildDefenseSnapshotDisplayEncounter(): EncounterSession {
+  const encounter = buildDefenseReviewEncounter();
+  const base = combatRoundStateSchema.parse(encounter.combatRoundState);
+  const snapshots = [
+    { attackId: "attack-a", direction: "front", label: "Shield A", reviewedAt: "10:00:00" },
+    { attackId: "attack-b", direction: "left", label: "Shield B", reviewedAt: "10:01:00" },
+    { attackId: "attack-c", direction: "rear", label: "Shield C", reviewedAt: "10:02:00" },
+  ].map((entry, index) => ({
+    attackDirection: entry.direction,
+    attackerParticipantId: `attacker-${entry.attackId}`,
+    attackId: entry.attackId,
+    attackOpportunityId: `opportunity-${entry.attackId}`,
+    aware: index !== 1,
+    awarenessDefault: true,
+    awarenessOverridden: index === 1,
+    defenderParticipantId: "encounter-defender",
+    id: `defense-snapshot:${entry.attackId}`,
+    ordinaryDodgeAvailable: index !== 1,
+    phase: "phase1",
+    reviewedAt: `2026-07-23T${entry.reviewedAt}.000Z`,
+    reviewedByUserId: "gm-1",
+    roundNumber: 1,
+    schemaVersion: 1,
+    sources: [
+      {
+        decision: index === 0 ? "default_included" : "gm_excluded",
+        included: index === 0,
+        itemId: `shield-${entry.attackId}`,
+        itemRevision: `revision-${entry.attackId}`,
+        kind: "shield",
+        label: entry.label,
+        slot: "offHand",
+        templateId: "shield-template",
+      },
+    ],
+    status: "committed",
+  }));
+  const state = combatRoundStateSchema.parse({
+    ...base,
+    defenseSnapshots: snapshots,
+    selectedParticipantId: "encounter-defender",
+    selectedStep: "review_phase_2_actions",
+  });
+  return encounterSessionSchema.parse(
+    JSON.parse(
+      JSON.stringify({
+        ...encounter,
+        combatRoundState: state,
+        updatedAt: "2026-07-23T10:02:30.000Z",
+      }),
+    ),
+  );
 }
 
 function buildFeintRollEncounter(): {
@@ -954,9 +1054,150 @@ function scenarioParticipant(input: {
   } as unknown as ScenarioParticipant;
 }
 
+function scenarioParticipantWithDefenseLoadout(): ScenarioParticipant {
+  const participant = scenarioParticipant({
+    id: "scenario-defender",
+    name: "Scyrian cavalry guy",
+    order: 1,
+  });
+  return {
+    ...participant,
+    snapshot: {
+      ...participant.snapshot,
+      equipmentState: {
+        activeLoadoutByCharacterId: {
+          "scenario-defender": {
+            activeAmmoItemIds: [],
+            activePrimaryWeaponItemId: "defender-sword",
+            readyShieldItemId: "defender-shield",
+          },
+        },
+        itemsById: {
+          "defender-shield": {
+            displayName: "Round shield",
+            id: "defender-shield",
+            revision: "shield-revision-1",
+            templateId: "shield-template",
+          },
+          "defender-sword": {
+            displayName: "Defender sword",
+            id: "defender-sword",
+            revision: "sword-revision-1",
+            templateId: "sword-template",
+          },
+        },
+        locationsById: {},
+        templates: {
+          templatesById: {
+            "shield-template": { category: "shield", id: "shield-template", name: "Shield" },
+            "sword-template": { category: "weapon", id: "sword-template", name: "Sword" },
+          },
+        },
+      },
+    },
+  } as unknown as ScenarioParticipant;
+}
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+describe("CombatRoundManagerPanel defense review", () => {
+  const participants = () => [
+    scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+    scenarioParticipantWithDefenseLoadout(),
+  ];
+
+  it("renders mandatory GM awareness and per-source override controls", async () => {
+    render(
+      <CombatRoundManagerPanel
+        encounter={buildDefenseReviewEncounter()}
+        scenarioParticipants={participants()}
+      />,
+    );
+
+    const choices = await screen.findByLabelText("Defense review choices");
+    const awareness = within(choices).getByRole("checkbox", {
+      name: "Defender is aware of this attack",
+    });
+    const sword = within(choices).getByRole("checkbox", {
+      name: "Main hand: Defender sword",
+    });
+    const shield = within(choices).getByRole("checkbox", {
+      name: "Off hand: Round shield",
+    });
+    expect(awareness).toBeChecked();
+    expect(sword).toBeChecked();
+    expect(shield).toBeChecked();
+
+    fireEvent.click(awareness);
+    fireEvent.click(shield);
+    expect(awareness).not.toBeChecked();
+    expect(sword).toBeChecked();
+    expect(shield).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Commit defense review" })).toBeTruthy();
+  });
+
+  it("commits the rendered choices once and advances to the latest canonical snapshot", async () => {
+    const committedEncounter = buildDefenseSnapshotDisplayEncounter();
+    const committedState = combatRoundStateSchema.parse(committedEncounter.combatRoundState);
+    const latest = committedState.defenseSnapshots.at(-1)!;
+    mocks.commitDefenseReview.mockResolvedValue({
+      commandEnvelope: buildCombatRoundCommandEnvelope({ state: committedState }),
+      defenseSnapshot: latest,
+      encounter: committedEncounter,
+    });
+    const onEncounterUpdated = vi.fn();
+    const { unmount } = render(
+      <CombatRoundManagerPanel
+        encounter={buildDefenseReviewEncounter()}
+        onEncounterUpdated={onEncounterUpdated}
+        scenarioParticipants={participants()}
+      />,
+    );
+
+    const choices = await screen.findByLabelText("Defense review choices");
+    fireEvent.click(
+      within(choices).getByRole("checkbox", { name: "Defender is aware of this attack" }),
+    );
+    fireEvent.click(within(choices).getByRole("checkbox", { name: "Off hand: Round shield" }));
+    fireEvent.click(screen.getByRole("button", { name: "Commit defense review" }));
+
+    await waitFor(() => expect(mocks.commitDefenseReview).toHaveBeenCalledTimes(1));
+    expect(mocks.commitDefenseReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aware: false,
+        executionGroupId: expect.any(String),
+        sourceSelections: expect.arrayContaining([
+          { included: true, itemId: "defender-sword" },
+          { included: false, itemId: "defender-shield" },
+        ]),
+        taskId: expect.any(String),
+      }),
+    );
+    expect(onEncounterUpdated).toHaveBeenCalledWith(committedEncounter);
+    unmount();
+    render(<CombatDefenseSnapshotPanel snapshot={latest} />);
+    const review = await screen.findByLabelText("Latest committed defense review");
+    expect(within(review).getByText("Attack direction: rear")).toBeTruthy();
+    expect(within(review).getByText(/Shield C — excluded \(GM excluded\)/)).toBeTruthy();
+  });
+
+  it("reopens with the latest sequential defense snapshot and not current loadout facts", async () => {
+    const reloaded = buildDefenseSnapshotDisplayEncounter();
+    const state = combatRoundStateSchema.parse(reloaded.combatRoundState);
+    const latest = state.defenseSnapshots.at(-1)!;
+    render(<CombatDefenseSnapshotPanel snapshot={latest} />);
+
+    const review = await screen.findByLabelText("Latest committed defense review");
+    expect(within(review).getByText("Awareness: aware")).toBeTruthy();
+    expect(within(review).getByText("Attack direction: rear")).toBeTruthy();
+    expect(within(review).getByText(/Shield C — excluded \(GM excluded\)/)).toBeTruthy();
+    expect(within(review).queryByText(/Shield A/)).toBeNull();
+    expect(within(review).queryByText(/Shield B/)).toBeNull();
+    expect(within(review).queryByText(/Round shield/)).toBeNull();
+  });
 });
 
 describe("CombatRoundManagerPanel Combat Experience difficulty", () => {
