@@ -8,7 +8,6 @@ import type {
   WeaponHandlingClass,
   WeaponTemplate,
 } from "./types";
-import { isItemMechanicalFactActive } from "./itemFacts";
 
 export const weaponSchema = z.object({
   baseOb: z.number(),
@@ -93,15 +92,10 @@ export function resolveWeaponDisarmProfile(input: {
   });
   const capabilityOverride = [...(input.itemFacts?.templateOverrides ?? [])]
     .reverse()
-    .find(
-      (fact) =>
-        fact.kind === "weapon_disarm_capability_override" && isItemMechanicalFactActive(fact),
-    );
+    .find((fact) => fact.kind === "weapon_disarm_capability_override");
   const controlOverride = [...(input.itemFacts?.templateOverrides ?? [])]
     .reverse()
-    .find(
-      (fact) => fact.kind === "weapon_disarm_control_override" && isItemMechanicalFactActive(fact),
-    );
+    .find((fact) => fact.kind === "weapon_disarm_control_override");
   const templateControlOverride = validControlOverride(input.template.disarmControlOverride);
   const itemControlOverride =
     controlOverride?.kind === "weapon_disarm_control_override"

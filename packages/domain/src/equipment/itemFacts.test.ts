@@ -32,6 +32,22 @@ function baseItem() {
   };
 }
 
+function attackModeObCharacteristic(id: string) {
+  return {
+    id,
+    kind: "attack_mode_ob_delta" as const,
+    provenance: {
+      source: "item-fact-test",
+      sourceTemplateId: "weapon-template-fencing-sword",
+      sourceTemplateVersion: "v1",
+    },
+    scope: { attackModeId: "slash", kind: "attack_mode" as const },
+    unit: "ob_points" as const,
+    value: 2,
+    visibility: "revealed" as const,
+  };
+}
+
 describe("durable equipment item authority", () => {
   it("represents an unheld item with no Character storage assignment", () => {
     const item = CanonicalEquipmentItemSchema.parse({
@@ -111,6 +127,74 @@ describe("durable equipment item authority", () => {
         version: 1,
       }),
     ).toThrow("final_attack_ob_delta does not stack");
+  });
+
+  it("enforces one global fact identity across typed and legacy fact collections", () => {
+    const duplicateId = "duplicate-fact-id";
+
+    expect(() =>
+      EquipmentItemFactsV1Schema.parse({
+        characteristics: [
+          attackModeObCharacteristic(duplicateId),
+          {
+            ...attackModeObCharacteristic(duplicateId),
+            kind: "attack_mode_dmb_delta",
+            unit: "dmb_points",
+          },
+        ],
+        version: 1,
+      }),
+    ).toThrow("Item fact IDs must be unique");
+
+    const crossCollectionCollisions = [
+      {
+        activeMechanics: [{ id: duplicateId, kind: "final_attack_ob_delta", value: 1 }],
+      },
+      {
+        descriptiveTraits: [{ category: "other", id: duplicateId, text: "same identity" }],
+      },
+      {
+        templateOverrides: [{ id: duplicateId, kind: "weapon_initiative_override", value: 3 }],
+      },
+      {
+        unsupportedCapabilities: [
+          { id: duplicateId, name: "Unknown effect", rulesText: "Not yet modeled" },
+        ],
+      },
+    ];
+
+    for (const collision of crossCollectionCollisions) {
+      expect(() =>
+        EquipmentItemFactsV1Schema.parse({
+          characteristics: [attackModeObCharacteristic(duplicateId)],
+          ...collision,
+          version: 1,
+        }),
+      ).toThrow("Item fact IDs must be unique");
+    }
+  });
+
+  it("keeps unique typed fact identity and provenance deterministic", () => {
+    const input = {
+      characteristics: [attackModeObCharacteristic("slash-ob")],
+      descriptiveTraits: [
+        { category: "provenance", id: "maker-history", text: "Forged at Highforge" },
+      ],
+      version: 1,
+    };
+
+    const first = EquipmentItemFactsV1Schema.parse(input);
+    const second = EquipmentItemFactsV1Schema.parse(input);
+
+    expect(second).toEqual(first);
+    expect(first.characteristics?.[0]).toMatchObject({
+      id: "slash-ob",
+      provenance: {
+        source: "item-fact-test",
+        sourceTemplateId: "weapon-template-fencing-sword",
+        sourceTemplateVersion: "v1",
+      },
+    });
   });
 
   it("migrates legacy strings without making them active mechanics", () => {

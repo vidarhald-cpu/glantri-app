@@ -314,6 +314,7 @@ export const EquipmentItemFactsV1Schema = z.preprocess(
       const ids = [
         ...facts.templateOverrides,
         ...facts.activeMechanics,
+        ...facts.characteristics,
         ...facts.descriptiveTraits,
         ...facts.unsupportedCapabilities,
       ].map((fact) => fact.id);
