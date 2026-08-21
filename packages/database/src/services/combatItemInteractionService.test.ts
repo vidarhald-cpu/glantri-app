@@ -286,7 +286,7 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
     ).rejects.toEqual(new CombatItemUnavailableError());
   });
 
-  it("projects only revealed Disarm override facts to players while retaining GM mechanics", async () => {
+  it("keeps hidden Disarm override facts dormant for both player and GM mechanics", async () => {
     const hiddenCapability = record({
       holderCharacterId: "character-1",
       id: "secret-trap-dagger",
@@ -350,11 +350,11 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
       playerOptions.disarmTargets.find((target) => target.participantId === "participant-2")
         ?.items[0]?.weaponDisarm?.controlRating,
     ).not.toBe(6);
-    expect(gmOptions.actors[0]?.items[0]?.weaponDisarm?.capability).toBe("trap");
+    expect(gmOptions.actors[0]?.items[0]?.weaponDisarm?.capability).toBe("none");
     expect(
       gmOptions.disarmTargets.find((target) => target.participantId === "participant-2")?.items[0]
         ?.weaponDisarm?.controlRating,
-    ).toBe(6);
+    ).not.toBe(6);
 
     const resolve = (actingItemId: string) =>
       service.resolveDisarmDeclaration({

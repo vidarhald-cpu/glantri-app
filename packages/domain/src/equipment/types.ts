@@ -376,35 +376,50 @@ export interface EquipmentSpecialProperties {
 
 export type ItemFactVisibility = "gm_only" | "revealed";
 
+export interface ItemFactSourceProvenance {
+  source: string;
+  sourceTemplateId?: string | null;
+  sourceTemplateValue?: number | null;
+  sourceTemplateVersion?: string | null;
+  migration?: string | null;
+}
+
 export interface ItemFactProvenance {
   factId: string;
   itemId: string;
 }
 
 export interface WeaponInitiativeOverrideFact {
+  /** Missing on legacy JSON; parsing derives active from visibility. */
+  active?: boolean;
   id: string;
   kind: "weapon_initiative_override";
   scope: "all_attack_modes";
   unit: "initiative_points";
   value: number;
   visibility: ItemFactVisibility;
+  provenance?: ItemFactSourceProvenance | null;
 }
 
 export interface WeaponDisarmCapabilityOverrideFact {
+  active?: boolean;
   id: string;
   kind: "weapon_disarm_capability_override";
   scope: "all_attack_modes";
   value: WeaponDisarmCapability;
   visibility: ItemFactVisibility;
+  provenance?: ItemFactSourceProvenance | null;
 }
 
 export interface WeaponDisarmControlOverrideFact {
+  active?: boolean;
   id: string;
   kind: "weapon_disarm_control_override";
   scope: "all_attack_modes";
   unit: "control_rating";
   value: number;
   visibility: ItemFactVisibility;
+  provenance?: ItemFactSourceProvenance | null;
 }
 
 export type EquipmentTemplateOverrideFact =
@@ -413,6 +428,7 @@ export type EquipmentTemplateOverrideFact =
   | WeaponDisarmControlOverrideFact;
 
 export interface FinalAttackObDeltaFact {
+  active?: boolean;
   id: string;
   kind: "final_attack_ob_delta";
   calculationStage: "final_attack_ob";
@@ -420,7 +436,96 @@ export interface FinalAttackObDeltaFact {
   unit: "ob_points";
   value: number;
   visibility: ItemFactVisibility;
+  provenance?: ItemFactSourceProvenance | null;
 }
+
+export type ArmorLocation =
+  | "head"
+  | "frontArm"
+  | "chest"
+  | "backArm"
+  | "abdomen"
+  | "frontThigh"
+  | "frontFoot"
+  | "backThigh"
+  | "backFoot";
+
+export interface ItemAttackModeScope {
+  kind: "attack_mode";
+  attackModeId: string;
+}
+
+export interface ItemEquipmentScope {
+  kind: "equipment";
+}
+
+export interface ItemArmorLocationScope {
+  kind: "armor_location";
+  location: ArmorLocation;
+}
+
+interface ItemCharacteristicDeltaFactBase<TKind extends string, TScope, TUnit extends string> {
+  /** Missing on legacy JSON; parsing derives active from visibility. */
+  active?: boolean;
+  id: string;
+  kind: TKind;
+  provenance?: ItemFactSourceProvenance | null;
+  scope: TScope;
+  unit: TUnit;
+  value: number;
+  visibility: ItemFactVisibility;
+}
+
+export type ItemCharacteristicFact =
+  | ItemCharacteristicDeltaFactBase<"attack_mode_ob_delta", ItemAttackModeScope, "ob_points">
+  | ItemCharacteristicDeltaFactBase<"attack_mode_dmb_delta", ItemAttackModeScope, "dmb_points">
+  | ItemCharacteristicDeltaFactBase<
+      "attack_mode_initiative_delta",
+      ItemAttackModeScope,
+      "initiative_points"
+    >
+  | ItemCharacteristicDeltaFactBase<
+      "fallback_initiative_delta",
+      ItemEquipmentScope,
+      "initiative_points"
+    >
+  | ItemCharacteristicDeltaFactBase<"weapon_parry_delta", ItemEquipmentScope, "parry_points">
+  | ItemCharacteristicDeltaFactBase<
+      "weapon_defensive_value_delta",
+      ItemEquipmentScope,
+      "defensive_value_points"
+    >
+  | ItemCharacteristicDeltaFactBase<"shield_parry_delta", ItemEquipmentScope, "parry_points">
+  | ItemCharacteristicDeltaFactBase<
+      "shield_defensive_value_delta",
+      ItemEquipmentScope,
+      "defensive_value_points"
+    >
+  | ItemCharacteristicDeltaFactBase<
+      "armor_location_value_delta",
+      ItemArmorLocationScope,
+      "armor_points"
+    >
+  | ItemCharacteristicDeltaFactBase<
+      "armor_location_critical_modifier_delta",
+      ItemArmorLocationScope,
+      "critical_modifier_points"
+    >
+  | ItemCharacteristicDeltaFactBase<
+      "armor_general_critical_modifier_delta",
+      ItemEquipmentScope,
+      "critical_modifier_points"
+    >
+  | ItemCharacteristicDeltaFactBase<
+      "armor_activity_modifier_delta",
+      ItemEquipmentScope,
+      "activity_modifier_points"
+    >
+  | ItemCharacteristicDeltaFactBase<
+      "armor_perception_modifier_delta",
+      ItemEquipmentScope,
+      "perception_modifier_points"
+    >;
 
 export type DescriptiveItemTraitCategory =
   | "engraving"
@@ -450,6 +555,8 @@ export interface UnsupportedItemCapability {
 
 export interface EquipmentItemFactsV1 {
   version: 1;
+  /** Defaults to an empty list when parsing persisted V1 JSON. */
+  characteristics?: ItemCharacteristicFact[];
   templateOverrides: EquipmentTemplateOverrideFact[];
   activeMechanics: FinalAttackObDeltaFact[];
   descriptiveTraits: DescriptiveItemTrait[];

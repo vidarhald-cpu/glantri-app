@@ -1,13 +1,31 @@
-import type { EquipmentItemFactsV1, EquipmentSpecialProperties } from "./types";
+import type { EquipmentItemFactsV1, EquipmentSpecialProperties, ItemFactVisibility } from "./types";
 
 export function createEmptyEquipmentItemFacts(): EquipmentItemFactsV1 {
   return {
     activeMechanics: [],
+    characteristics: [],
     descriptiveTraits: [],
     templateOverrides: [],
     unsupportedCapabilities: [],
     version: 1,
   };
+}
+
+export type ItemMechanicalFactState = "hidden_dormant" | "revealed_inactive" | "revealed_active";
+
+export function getItemMechanicalFactState(fact: {
+  active?: boolean;
+  visibility: ItemFactVisibility;
+}): ItemMechanicalFactState {
+  if (fact.visibility === "gm_only") return "hidden_dormant";
+  return fact.active === false ? "revealed_inactive" : "revealed_active";
+}
+
+export function isItemMechanicalFactActive(fact: {
+  active?: boolean;
+  visibility: ItemFactVisibility;
+}): boolean {
+  return getItemMechanicalFactState(fact) === "revealed_active";
 }
 
 function cleanLegacyStrings(values: string[] | undefined): string[] {
@@ -55,6 +73,7 @@ export function migrateLegacySpecialProperties(
 export function revealableEquipmentItemFacts(facts: EquipmentItemFactsV1): EquipmentItemFactsV1 {
   return {
     activeMechanics: facts.activeMechanics.filter((fact) => fact.visibility === "revealed"),
+    characteristics: (facts.characteristics ?? []).filter((fact) => fact.visibility === "revealed"),
     descriptiveTraits: facts.descriptiveTraits.filter((fact) => fact.visibility === "revealed"),
     templateOverrides: facts.templateOverrides.filter((fact) => fact.visibility === "revealed"),
     unsupportedCapabilities: facts.unsupportedCapabilities.filter(

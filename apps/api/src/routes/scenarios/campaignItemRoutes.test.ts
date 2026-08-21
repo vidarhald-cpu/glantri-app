@@ -77,7 +77,10 @@ describe("campaign item fact parsing", () => {
         templateOverrides: overrides,
         unsupportedCapabilities: [],
       }).templateOverrides,
-    ).toEqual(overrides);
+    ).toEqual([
+      expect.objectContaining({ active: false, id: "capability" }),
+      expect.objectContaining({ active: true, id: "control" }),
+    ]);
     expect(
       parseCampaignItemFacts({
         descriptiveTraits: [],
@@ -85,6 +88,42 @@ describe("campaign item fact parsing", () => {
         unsupportedCapabilities: [],
       }).templateOverrides,
     ).toEqual([]);
+  });
+
+  it("accepts the closed typed characteristic contract and explicit inactive state", () => {
+    const facts = parseCampaignItemFacts({
+      characteristics: [
+        {
+          active: false,
+          id: "slash-ob",
+          kind: "attack_mode_ob_delta",
+          scope: { attackModeId: "slash", kind: "attack_mode" },
+          unit: "ob_points",
+          value: 2,
+          visibility: "revealed",
+        },
+      ],
+      descriptiveTraits: [],
+      finalAttackObDelta: {
+        active: false,
+        id: "late-ob",
+        provenance: { source: "legacy_item_fact", sourceTemplateVersion: "v1" },
+        value: 1,
+        visibility: "revealed",
+      },
+      unsupportedCapabilities: [],
+    });
+
+    expect(facts.characteristics).toEqual([
+      expect.objectContaining({ active: false, id: "slash-ob" }),
+    ]);
+    expect(facts.activeMechanics).toEqual([
+      expect.objectContaining({
+        active: false,
+        id: "late-ob",
+        provenance: { source: "legacy_item_fact", sourceTemplateVersion: "v1" },
+      }),
+    ]);
   });
 });
 

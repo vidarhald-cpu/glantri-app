@@ -227,5 +227,25 @@ describe("Disarm weapon-control profile", () => {
       template: { ...template, disarmCapability: "trap" },
     });
     expect(removed.capability).toBe("none");
+
+    const hidden = resolveWeaponDisarmProfile({
+      itemFacts: {
+        activeMechanics: [],
+        descriptiveTraits: [],
+        templateOverrides: [
+          {
+            id: "hidden-trap",
+            kind: "weapon_disarm_capability_override",
+            scope: "all_attack_modes",
+            value: "trap",
+            visibility: "gm_only",
+          },
+        ],
+        unsupportedCapabilities: [],
+        version: 1,
+      },
+      template,
+    });
+    expect(hidden.capability).toBe("none");
   });
 });

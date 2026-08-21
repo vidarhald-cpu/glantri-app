@@ -11,6 +11,7 @@ import {
   DescriptiveItemTraitCategorySchema,
   EquipmentItemFactsV1Schema,
   EquipmentTemplateOverrideFactSchema,
+  ItemCharacteristicFactSchema,
   ItemFactVisibilitySchema,
   type EquipmentItemFactsV1,
 } from "@glantri/domain/equipment";
@@ -57,16 +58,22 @@ function visibility(body: Body) {
   return ItemFactVisibilitySchema.parse(body.visibility);
 }
 
+function active(body: Body): boolean | undefined {
+  return typeof body.active === "boolean" ? body.active : undefined;
+}
+
 export function parseCampaignItemFacts(value: unknown): EquipmentItemFactsV1 {
   const body = bodyObject(value);
   const initiative = body.initiativeOverride == null ? null : bodyObject(body.initiativeOverride);
   const finalOb = body.finalAttackObDelta == null ? null : bodyObject(body.finalAttackObDelta);
   const descriptive = body.descriptiveTraits ?? [];
+  const characteristics = body.characteristics ?? [];
   const unsupported = body.unsupportedCapabilities ?? [];
   const templateOverrides = body.templateOverrides ?? [];
 
   if (
     !Array.isArray(descriptive) ||
+    !Array.isArray(characteristics) ||
     !Array.isArray(templateOverrides) ||
     !Array.isArray(unsupported)
   ) {
@@ -82,8 +89,10 @@ export function parseCampaignItemFacts(value: unknown): EquipmentItemFactsV1 {
       ? [
           {
             calculationStage: "final_attack_ob",
+            active: active(finalOb),
             id: optionalFactId(finalOb),
             kind: "final_attack_ob_delta",
+            provenance: finalOb.provenance,
             scope: "all_attack_modes",
             unit: "ob_points",
             value: integerValue(finalOb, "value"),
@@ -100,12 +109,15 @@ export function parseCampaignItemFacts(value: unknown): EquipmentItemFactsV1 {
         visibility: visibility(fact),
       };
     }),
+    characteristics: characteristics.map((entry) => ItemCharacteristicFactSchema.parse(entry)),
     templateOverrides: [
       ...(initiative
         ? [
             {
               id: optionalFactId(initiative),
+              active: active(initiative),
               kind: "weapon_initiative_override",
+              provenance: initiative.provenance,
               scope: "all_attack_modes",
               unit: "initiative_points",
               value: integerValue(initiative, "value"),

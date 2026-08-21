@@ -45,6 +45,7 @@ function itemToDraft(item: CanonicalEquipmentItem): Draft {
     description: item.notes ?? "",
     displayName: item.displayName ?? "",
     facts: {
+      characteristics: (item.itemFacts.characteristics ?? []).map((fact) => ({ ...fact })),
       descriptiveTraits: item.itemFacts.descriptiveTraits.map((fact) => ({ ...fact })),
       finalAttackObDelta: item.itemFacts.activeMechanics[0]
         ? { ...item.itemFacts.activeMechanics[0] }

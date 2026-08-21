@@ -189,6 +189,10 @@ describe("campaign equipment services", () => {
         visibility: "revealed" as const,
       },
     ];
+    const normalizedOverrides = [
+      { ...disarmOverrides[0], active: false },
+      { ...disarmOverrides[1], active: true },
+    ];
 
     await write.updateCampaignEquipmentItemAuthoring({
       campaignId: "campaign-1",
@@ -198,7 +202,7 @@ describe("campaign equipment services", () => {
       notes: "First edit",
     });
     const added = (await read.getCampaignEquipmentState("campaign-1")).itemsById[created.id]!;
-    expect(added.itemFacts.templateOverrides).toEqual(disarmOverrides);
+    expect(added.itemFacts.templateOverrides).toEqual(normalizedOverrides);
 
     await write.updateCampaignEquipmentItemAuthoring({
       campaignId: "campaign-1",
@@ -208,7 +212,7 @@ describe("campaign equipment services", () => {
       notes: "Unrelated edit",
     });
     const preserved = (await read.getCampaignEquipmentState("campaign-1")).itemsById[created.id]!;
-    expect(preserved.itemFacts.templateOverrides).toEqual(disarmOverrides);
+    expect(preserved.itemFacts.templateOverrides).toEqual(normalizedOverrides);
 
     await write.updateCampaignEquipmentItemAuthoring({
       campaignId: "campaign-1",

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { createEmptyEquipmentItemFacts, migrateLegacySpecialProperties } from "./itemFacts";
+import type { EquipmentItemFactsV1 } from "./types";
 
 export const EquipmentCategorySchema = z.enum(["weapon", "shield", "armor", "gear", "valuables"]);
 
@@ -105,30 +106,44 @@ export const ItemFactVisibilitySchema = z.preprocess(
   z.enum(["gm_only", "revealed"]),
 );
 
+export const ItemFactSourceProvenanceSchema = z.object({
+  migration: z.string().trim().min(1).nullable().optional(),
+  source: z.string().trim().min(1),
+  sourceTemplateId: z.string().trim().min(1).nullable().optional(),
+  sourceTemplateValue: z.number().nullable().optional(),
+  sourceTemplateVersion: z.string().trim().min(1).nullable().optional(),
+});
+
 export const WeaponInitiativeOverrideFactSchema = z.object({
+  active: z.boolean().optional(),
   id: z.string().trim().min(1),
   kind: z.literal("weapon_initiative_override"),
   scope: z.literal("all_attack_modes").default("all_attack_modes"),
   unit: z.literal("initiative_points").default("initiative_points"),
   value: z.number().int(),
   visibility: ItemFactVisibilitySchema.default("gm_only"),
+  provenance: ItemFactSourceProvenanceSchema.nullable().optional(),
 });
 
 export const WeaponDisarmCapabilityOverrideFactSchema = z.object({
+  active: z.boolean().optional(),
   id: z.string().trim().min(1),
   kind: z.literal("weapon_disarm_capability_override"),
   scope: z.literal("all_attack_modes").default("all_attack_modes"),
   value: WeaponDisarmCapabilitySchema,
   visibility: ItemFactVisibilitySchema.default("gm_only"),
+  provenance: ItemFactSourceProvenanceSchema.nullable().optional(),
 });
 
 export const WeaponDisarmControlOverrideFactSchema = z.object({
+  active: z.boolean().optional(),
   id: z.string().trim().min(1),
   kind: z.literal("weapon_disarm_control_override"),
   scope: z.literal("all_attack_modes").default("all_attack_modes"),
   unit: z.literal("control_rating").default("control_rating"),
   value: z.number().int().min(1).max(6),
   visibility: ItemFactVisibilitySchema.default("gm_only"),
+  provenance: ItemFactSourceProvenanceSchema.nullable().optional(),
 });
 
 export const EquipmentTemplateOverrideFactSchema = z.discriminatedUnion("kind", [
@@ -138,6 +153,7 @@ export const EquipmentTemplateOverrideFactSchema = z.discriminatedUnion("kind", 
 ]);
 
 export const FinalAttackObDeltaFactSchema = z.object({
+  active: z.boolean().optional(),
   calculationStage: z.literal("final_attack_ob").default("final_attack_ob"),
   id: z.string().trim().min(1),
   kind: z.literal("final_attack_ob_delta"),
@@ -145,7 +161,93 @@ export const FinalAttackObDeltaFactSchema = z.object({
   unit: z.literal("ob_points").default("ob_points"),
   value: z.number().int(),
   visibility: ItemFactVisibilitySchema.default("gm_only"),
+  provenance: ItemFactSourceProvenanceSchema.nullable().optional(),
 });
+
+export const ArmorLocationSchema = z.enum([
+  "head",
+  "frontArm",
+  "chest",
+  "backArm",
+  "abdomen",
+  "frontThigh",
+  "frontFoot",
+  "backThigh",
+  "backFoot",
+]);
+
+const ItemAttackModeScopeSchema = z.object({
+  attackModeId: z.string().trim().min(1),
+  kind: z.literal("attack_mode"),
+});
+
+const ItemEquipmentScopeSchema = z.object({ kind: z.literal("equipment") });
+
+const ItemArmorLocationScopeSchema = z.object({
+  kind: z.literal("armor_location"),
+  location: ArmorLocationSchema,
+});
+
+function itemIntegerDeltaFact<TKind extends string, TUnit extends string>(
+  kind: TKind,
+  scope: z.ZodTypeAny,
+  unit: TUnit,
+) {
+  return z.object({
+    active: z.boolean().optional(),
+    id: z.string().trim().min(1),
+    kind: z.literal(kind),
+    provenance: ItemFactSourceProvenanceSchema.nullable().optional(),
+    scope,
+    unit: z.literal(unit),
+    value: z.number().int(),
+    visibility: ItemFactVisibilitySchema.default("gm_only"),
+  });
+}
+
+export const ItemCharacteristicFactSchema = z.discriminatedUnion("kind", [
+  itemIntegerDeltaFact("attack_mode_ob_delta", ItemAttackModeScopeSchema, "ob_points"),
+  itemIntegerDeltaFact("attack_mode_dmb_delta", ItemAttackModeScopeSchema, "dmb_points"),
+  itemIntegerDeltaFact(
+    "attack_mode_initiative_delta",
+    ItemAttackModeScopeSchema,
+    "initiative_points",
+  ),
+  itemIntegerDeltaFact("fallback_initiative_delta", ItemEquipmentScopeSchema, "initiative_points"),
+  itemIntegerDeltaFact("weapon_parry_delta", ItemEquipmentScopeSchema, "parry_points"),
+  itemIntegerDeltaFact(
+    "weapon_defensive_value_delta",
+    ItemEquipmentScopeSchema,
+    "defensive_value_points",
+  ),
+  itemIntegerDeltaFact("shield_parry_delta", ItemEquipmentScopeSchema, "parry_points"),
+  itemIntegerDeltaFact(
+    "shield_defensive_value_delta",
+    ItemEquipmentScopeSchema,
+    "defensive_value_points",
+  ),
+  itemIntegerDeltaFact("armor_location_value_delta", ItemArmorLocationScopeSchema, "armor_points"),
+  itemIntegerDeltaFact(
+    "armor_location_critical_modifier_delta",
+    ItemArmorLocationScopeSchema,
+    "critical_modifier_points",
+  ),
+  itemIntegerDeltaFact(
+    "armor_general_critical_modifier_delta",
+    ItemEquipmentScopeSchema,
+    "critical_modifier_points",
+  ),
+  itemIntegerDeltaFact(
+    "armor_activity_modifier_delta",
+    ItemEquipmentScopeSchema,
+    "activity_modifier_points",
+  ),
+  itemIntegerDeltaFact(
+    "armor_perception_modifier_delta",
+    ItemEquipmentScopeSchema,
+    "perception_modifier_points",
+  ),
+]);
 
 export const DescriptiveItemTraitCategorySchema = z.enum([
   "engraving",
@@ -174,46 +276,110 @@ export const UnsupportedItemCapabilitySchema = z.object({
   visibility: ItemFactVisibilitySchema.default("gm_only"),
 });
 
-export const EquipmentItemFactsV1Schema = z
-  .object({
-    activeMechanics: z.array(FinalAttackObDeltaFactSchema).default([]),
-    descriptiveTraits: z.array(DescriptiveItemTraitSchema).default([]),
-    templateOverrides: z.array(EquipmentTemplateOverrideFactSchema).default([]),
-    unsupportedCapabilities: z.array(UnsupportedItemCapabilitySchema).default([]),
-    version: z.literal(1),
-  })
-  .superRefine((facts, ctx) => {
-    const ids = [
-      ...facts.templateOverrides,
-      ...facts.activeMechanics,
-      ...facts.descriptiveTraits,
-      ...facts.unsupportedCapabilities,
-    ].map((fact) => fact.id);
+function normalizeMechanicalFactInput(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const fact = value as Record<string, unknown>;
+  return {
+    ...fact,
+    active: typeof fact.active === "boolean" ? fact.active : fact.visibility === "revealed",
+  };
+}
 
-    if (new Set(ids).size !== ids.length) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Item fact IDs must be unique.",
-      });
-    }
+function normalizeEquipmentItemFactsInput(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const facts = value as Record<string, unknown>;
+  const normalizeList = (candidate: unknown) =>
+    Array.isArray(candidate) ? candidate.map(normalizeMechanicalFactInput) : candidate;
 
-    const overrideKinds = facts.templateOverrides.map((fact) => fact.kind);
-    if (new Set(overrideKinds).size !== overrideKinds.length) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Equipment template overrides do not stack by kind.",
-        path: ["templateOverrides"],
-      });
-    }
+  return {
+    ...facts,
+    activeMechanics: normalizeList(facts.activeMechanics),
+    characteristics: normalizeList(facts.characteristics),
+    templateOverrides: normalizeList(facts.templateOverrides),
+  };
+}
 
-    if (facts.activeMechanics.length > 1) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "final_attack_ob_delta does not stack.",
-        path: ["activeMechanics"],
-      });
-    }
-  });
+export const EquipmentItemFactsV1Schema = z.preprocess(
+  normalizeEquipmentItemFactsInput,
+  z
+    .object({
+      activeMechanics: z.array(FinalAttackObDeltaFactSchema).default([]),
+      characteristics: z.array(ItemCharacteristicFactSchema).default([]),
+      descriptiveTraits: z.array(DescriptiveItemTraitSchema).default([]),
+      templateOverrides: z.array(EquipmentTemplateOverrideFactSchema).default([]),
+      unsupportedCapabilities: z.array(UnsupportedItemCapabilitySchema).default([]),
+      version: z.literal(1),
+    })
+    .superRefine((facts, ctx) => {
+      const ids = [
+        ...facts.templateOverrides,
+        ...facts.activeMechanics,
+        ...facts.descriptiveTraits,
+        ...facts.unsupportedCapabilities,
+      ].map((fact) => fact.id);
+
+      if (new Set(ids).size !== ids.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Item fact IDs must be unique.",
+        });
+      }
+
+      const overrideKinds = facts.templateOverrides.map((fact) => fact.kind);
+      if (new Set(overrideKinds).size !== overrideKinds.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Equipment template overrides do not stack by kind.",
+          path: ["templateOverrides"],
+        });
+      }
+
+      if (facts.activeMechanics.length > 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "final_attack_ob_delta does not stack.",
+          path: ["activeMechanics"],
+        });
+      }
+
+      const hiddenActive = [
+        ...facts.activeMechanics,
+        ...facts.characteristics,
+        ...facts.templateOverrides,
+      ].find((fact) => fact.visibility === "gm_only" && fact.active === true);
+      if (hiddenActive) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Hidden Item mechanics must be dormant.",
+        });
+      }
+
+      const characteristicScopes = facts.characteristics.map(
+        (fact) => `${fact.kind}:${JSON.stringify(fact.scope)}`,
+      );
+      if (new Set(characteristicScopes).size !== characteristicScopes.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Item characteristics do not stack by kind and scope.",
+          path: ["characteristics"],
+        });
+      }
+
+      const hasLegacyInitiative = facts.templateOverrides.some(
+        (fact) => fact.kind === "weapon_initiative_override",
+      );
+      const hasTypedInitiative = facts.characteristics.some(
+        (fact) =>
+          fact.kind === "attack_mode_initiative_delta" || fact.kind === "fallback_initiative_delta",
+      );
+      if (hasLegacyInitiative && hasTypedInitiative) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Legacy and typed initiative facts cannot be competing authorities.",
+        });
+      }
+    }),
+) as z.ZodType<EquipmentItemFactsV1>;
 
 export const ItemStorageAssignmentSchema = z.object({
   locationId: z.string(),

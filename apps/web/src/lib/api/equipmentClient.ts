@@ -5,6 +5,8 @@ import type {
   EquipmentTemplate,
   EquipmentTemplateOverrideFact,
   ItemFactVisibility,
+  ItemCharacteristicFact,
+  ItemFactSourceProvenance,
   ItemConditionState,
   LocationAvailabilityClass,
   MaterialType,
@@ -26,13 +28,18 @@ export interface CampaignEquipmentState {
 }
 
 export interface CampaignItemFactDraft {
+  characteristics?: ItemCharacteristicFact[];
   initiativeOverride?: {
+    active?: boolean;
     id?: string;
+    provenance?: ItemFactSourceProvenance | null;
     value: number;
     visibility: ItemFactVisibility;
   } | null;
   finalAttackObDelta?: {
+    active?: boolean;
     id?: string;
+    provenance?: ItemFactSourceProvenance | null;
     value: number;
     visibility: ItemFactVisibility;
   } | null;
