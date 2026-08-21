@@ -115,7 +115,9 @@ Priority is separate from defect severity. Small defects can remain durably reco
 
 An issue reaches `Ready` only when its task contract supplies an exact baseline, acceptance examples, ownership, rule basis, affected contracts/hotspots, verification, required decisions, and an applicability result for every acceptance dimension. See `docs/process/task-contract.md`.
 
-`Ready` is a completeness state, not implementation permission. `Authorized` is a separate, explicit product-owner/control-plane dispatch decision recorded in durable GitHub state. `Active` means a Builder or repair loop is in flight. `Blocked`, `Design only`, `Completed`, and `Stale/needs refresh` remain non-dispatchable; a stale contract must be reconciled to live `origin/dev` before it can return to `Ready`. No more than four authorized implementation Builders may be active concurrently, and hotspot or dependency conflicts can reduce that number.
+`Ready` is a completeness state, not implementation permission. `Authorized` is a separate, explicit product-owner/control-plane dispatch decision recorded in durable GitHub state. `Active` means a role-specific Builder/repair or Independent QA lane is claimed under the canonical [ACTIVE claim and release protocol](agent-execution.md#active-lane-claim-and-release-protocol). `Blocked`, `Design only`, `Completed`, and `Stale/needs refresh` remain non-dispatchable; a stale contract must be reconciled to live `origin/dev` before it can return to `Ready`. No more than four authorized implementation Builders may be active concurrently, and hotspot or dependency conflicts can reduce that number.
+
+The current issue-level `ACTIVE` claim plus exact SHA/PR is authoritative for occupancy even when the Project or portfolio ledger has not yet been refreshed. GitHub assignees are optional metadata, not agent-lane authority. A valid same-role claim prohibits duplicate external work unless the control plane explicitly records parallel ownership.
 
 ## When I approve a case, what happens next?
 

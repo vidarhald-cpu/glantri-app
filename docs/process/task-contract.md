@@ -2,7 +2,7 @@
 
 Use this contract for every significant implementation issue. Small defects may use a shorter form only when scope, ownership, rule basis, and verification are still unambiguous.
 
-`Ready` and `Authorized` are separate. `Ready` means the contract below is complete and current. `Authorized` means the product owner/control plane has explicitly permitted implementation dispatch in durable GitHub state. An agent starts implementation only when both are true; neither technical completeness nor credentials imply authorization. `Active` means a Builder or its repair loop is already in flight.
+`Ready` and `Authorized` are separate. `Ready` means the contract below is complete and current. `Authorized` means the product owner/control plane has explicitly permitted implementation dispatch in durable GitHub state. An agent starts implementation only when both are true; neither technical completeness nor credentials imply authorization. `Active` means a role-specific Builder/repair or Independent QA lane is claimed under `docs/process/agent-execution.md`.
 
 ## Ready contract
 
@@ -33,6 +33,7 @@ Explain impact and why this task has priority.
 - Implementation authorization: `Authorized` / `Not authorized`:
 - Activity: `Active` / `Inactive`:
 - Durable authorization record (issue body, comment, or project metadata):
+- Current `ACTIVE` claim or terminal/release record:
 - Accepted baseline branch:
 - Accepted baseline commit SHA:
 - Local branch/worktree name:
@@ -45,6 +46,8 @@ Explain impact and why this task has priority.
 - Disposable PostgreSQL 16 setup, verification, and cleanup commands, when database-capable:
 
 Name only the documents needed to execute this task safely. `AGENTS.md` is always required; area-specific contracts apply only when the task touches that area. Decision records, audits, and historical reports are on-demand references, not blanket startup reading. Do not use instructions such as `read all architecture docs`.
+
+The activity summary does not itself claim a lane. Before substantive external Builder or Independent QA work, inspect the owning issue and follow the canonical [ACTIVE claim and release protocol](agent-execution.md#active-lane-claim-and-release-protocol). A current issue-level claim is authoritative for occupancy even if portfolio metadata is stale; GitHub assignees are not agent-lane authority.
 
 Database-capable Builder/QA work must name an isolated disposable target before any application, migration, reset, seed, or integration-test command runs. A separate Git worktree does not isolate PostgreSQL state. Linked worktrees must not copy or inherit the primary checkout `.env` or another worktree's `.env.task`, and must not use the protected normal database at `localhost:5432/glantri`. Every database-capable operation and cleanup must re-bind the declared task environment to the actual current linked worktree and its expected container labels. If current-worktree ownership cannot be proved from the task contract and repository preflight, the command does not run.
 
