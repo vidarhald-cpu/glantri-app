@@ -20,12 +20,16 @@ Prisma-enums i `schema.prisma` må holdes i sync med Zod-skjemaer i `@glantri/do
 
 ## Tester
 
-| Type | Fil | Krav |
-|---|---|---|
-| Unit (mock DB) | `*.test.ts` | Ingen |
-| Integrasjon (ekte DB) | `*.integration.test.ts` | `DATABASE_URL_TEST` |
+| Type                  | Fil                     | Krav                                    |
+| --------------------- | ----------------------- | --------------------------------------- |
+| Unit (mock DB)        | `*.test.ts`             | Ingen                                   |
+| Integrasjon (ekte DB) | `*.integration.test.ts` | Guarded, disposable `DATABASE_URL_TEST` |
 
 Integrasjonstester tilbakestiller egne tabeller mellom suites via `beforeEach`.
+Fra en linked Builder/QA-worktree brukes `pnpm db:task:setup -- --task <issue>` og
+`pnpm db:task:test`; se `docs/dev-database.md`. Test-targeten avvises hvis den er
+den beskyttede normale databasen, deler database med `DATABASE_URL`, ikke er lokal,
+eller ikke slutter med `_test`.
 
 ## Importregel
 

@@ -1,15 +1,21 @@
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+
+import { validateTaskDatabaseEnvironment } from "../src/databaseTargetSafety";
 
 function loadDatabaseEnv(): void {
   const scriptDir = dirname(fileURLToPath(import.meta.url));
   const packageDir = resolve(scriptDir, "..");
   const repoRoot = resolve(packageDir, "..", "..");
 
-  process.loadEnvFile(resolve(repoRoot, ".env"));
-  process.loadEnvFile(resolve(packageDir, ".env"));
+  for (const path of [resolve(repoRoot, ".env"), resolve(packageDir, ".env")]) {
+    if (existsSync(path)) {
+      process.loadEnvFile(path);
+    }
+  }
 }
 
 function getRequiredDatabaseUrl(): string {
@@ -29,18 +35,18 @@ function buildTimestamp(date: Date): string {
 function runDumpCommand(
   command: string,
   args: string[],
-  env: NodeJS.ProcessEnv
+  env: NodeJS.ProcessEnv,
 ): { error?: NodeJS.ErrnoException | null; status: number | null; stderr: string; stdout: Buffer } {
   const result = spawnSync(command, args, {
     env,
-    encoding: "buffer"
+    encoding: "buffer",
   });
 
   return {
     error: result.error,
     status: result.status,
     stderr: Buffer.from(result.stderr ?? []).toString("utf8"),
-    stdout: Buffer.from(result.stdout ?? [])
+    stdout: Buffer.from(result.stdout ?? []),
   };
 }
 
@@ -66,7 +72,7 @@ async function main(): Promise<void> {
   const backupFile = resolve(backupDir, `${databaseName}-${buildTimestamp(new Date())}.sql`);
 
   await mkdir(backupDir, {
-    recursive: true
+    recursive: true,
   });
 
   const dumpArgs = [
@@ -80,22 +86,37 @@ async function main(): Promise<void> {
     username,
     "--format=plain",
     "--no-owner",
-    "--no-privileges"
+    "--no-privileges",
   ];
 
   const localDump = runDumpCommand("pg_dump", dumpArgs, {
     ...process.env,
-    PGPASSWORD: password
+    PGPASSWORD: password,
   });
 
   let dumpOutput = localDump.stdout;
   let dumpError = localDump.stderr;
 
   if (localDump.error?.code === "ENOENT") {
+    const container =
+      process.env.GLANTRI_DB_MODE === "task"
+        ? validateTaskDatabaseEnvironment(process.env).container
+        : "glantri-postgres";
+    const dockerDumpArgs = dumpArgs.map((argument, index) => {
+      if (dumpArgs[index - 1] === "--host") {
+        return "localhost";
+      }
+
+      if (dumpArgs[index - 1] === "--port") {
+        return "5432";
+      }
+
+      return argument;
+    });
     const dockerDump = runDumpCommand(
       "docker",
-      ["exec", "-e", `PGPASSWORD=${password}`, "glantri-postgres", "pg_dump", ...dumpArgs],
-      process.env
+      ["exec", "-e", `PGPASSWORD=${password}`, container, "pg_dump", ...dockerDumpArgs],
+      process.env,
     );
 
     dumpOutput = dockerDump.stdout;

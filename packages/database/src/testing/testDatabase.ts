@@ -1,5 +1,10 @@
 import { PrismaClient } from "@prisma/client";
 
+import {
+  validateTaskDatabaseEnvironment,
+  validateTestDatabaseTarget,
+} from "../databaseTargetSafety";
+
 let testClient: PrismaClient | undefined;
 
 export function getTestPrismaClient(): PrismaClient | null {
@@ -7,14 +12,20 @@ export function getTestPrismaClient(): PrismaClient | null {
     return null;
   }
 
+  if (process.env.GLANTRI_DB_MODE === "task") {
+    validateTaskDatabaseEnvironment(process.env);
+  } else {
+    validateTestDatabaseTarget(process.env.DATABASE_URL_TEST, process.env.DATABASE_URL);
+  }
+
   if (!testClient) {
     testClient = new PrismaClient({
       datasources: {
         db: {
-          url: process.env.DATABASE_URL_TEST
-        }
+          url: process.env.DATABASE_URL_TEST,
+        },
       },
-      log: ["warn", "error"]
+      log: ["warn", "error"],
     });
   }
 

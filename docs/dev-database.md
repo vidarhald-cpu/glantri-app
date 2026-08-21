@@ -1,47 +1,94 @@
 # Local Development Database Workflow
 
-Use the local database workflow below to avoid casually wiping valuable development data.
+The normal database at `localhost:5432/glantri` is **protected shared user state**. It can contain valuable development users, characters, campaigns, scenarios, and other records. A separate Git worktree only isolates files; it does not isolate PostgreSQL.
 
-## Normal Day-to-Day Commands
+## Two Supported Database Modes
 
-Start Postgres:
+### Normal primary checkout
+
+The primary checkout may use the protected shared database through its own `.env`:
+
+```text
+DATABASE_URL=postgresql://postgres:<password>@localhost:5432/glantri
+```
+
+Root database commands print the sanitized host, port, database name, and `protected-shared-user-state` marker before connecting. Do not copy this `.env` into a linked Builder/QA worktree.
+
+Start Postgres and use the normal developer commands only from the primary checkout:
 
 ```bash
 pnpm db:up
-```
-
-Apply local migrations:
-
-```bash
 pnpm db:migrate
-```
-
-Regenerate the Prisma client after schema changes:
-
-```bash
 pnpm db:generate
 ```
 
-## Before Any Destructive Reset
+`pnpm db:up` and `pnpm db:down` are deliberately refused in linked worktrees because the root Compose service is the protected normal container.
 
-`pnpm db:reset:local` is intentionally destructive. It wipes local Postgres-backed data, including:
+### Builder/QA linked worktree
 
-- auth users and sessions
-- server-backed characters
-- campaigns, scenarios, participants, and assets
-- other local records stored in Postgres
+Every database-capable Builder/QA task owns one disposable PostgreSQL 16 container with two distinct databases:
 
-Back up first:
+```text
+owner: issue-<task>-<worktree-key>
+container: glantri-task-issue-<task>-<worktree-key>-pg16
+application database: glantri_task_issue_<task>_<worktree_key>
+test database: glantri_task_issue_<task>_<worktree_key>_test
+```
+
+The worktree key comes from the parent directory assigned to the Git worktree. Docker chooses an unused loopback port. Names and ownership are deterministic; the port is recorded explicitly in the generated `.env.task`.
+
+Set up and verify the target:
+
+```bash
+pnpm db:task:setup -- --task 312
+pnpm db:task:verify
+```
+
+Setup creates an ignored, mode-`0600` `.env.task` with all five required values:
+
+- `GLANTRI_DB_MODE=task`
+- `GLANTRI_DB_OWNER`
+- `GLANTRI_DB_CONTAINER`
+- `DATABASE_URL`
+- `DATABASE_URL_TEST`
+
+Do not create this file by copying `.env`. The guard fails closed if it is missing, incomplete, points at the protected database, has database names that do not match its owner, aliases application and test databases, uses a non-local test host, or conflicts with inherited shell variables.
+
+## Task Database Commands
+
+The supported task workflow is:
+
+```bash
+pnpm db:task:migrate
+pnpm db:task:reset -- --target application --confirm
+pnpm db:task:seed
+pnpm db:task:test
+pnpm db:task:exec -- pnpm dev
+pnpm db:task:cleanup
+```
+
+- `db:task:migrate` replays committed migrations on both owned databases by default. Use `--target application` or `--target test` to select one.
+- `db:task:reset` accepts only `application` or `test` and requires `--confirm`.
+- `db:task:seed` seeds only the owned application database.
+- `db:task:test` migrates the owned test database, then runs the database integration suite with the explicit test URL.
+- `db:task:exec` supplies both owned URLs to application or other database-capable commands.
+- `db:task:cleanup` verifies the Docker ownership labels before removing the exact disposable container and `.env.task`.
+
+Each migration, reset, seed, application, and integration-test path prints a preflight line containing only the ownership marker, host, port, and database name. Passwords are never printed. Direct Prisma commands are unsupported; Prisma's configuration applies the same worktree environment guard so they cannot use a copied `.env` or an inherited protected target.
+
+Two concurrent worktrees necessarily get different ownership markers, container names, ports, application databases, and test databases. A task must never reuse another worktree's `.env.task`, container, or database URL. Builder and independent QA each set up and clean up their own target.
+
+## Protected Shared Database Backup Expectations
+
+Before an explicitly authorized migration, reset, seed replacement, or other administrative mutation of the protected normal database, create and verify a backup:
 
 ```bash
 pnpm db:backup
 ```
 
-Backups are written to `data/snapshots/local-db/` with timestamped filenames.
+Backups are written to `data/snapshots/local-db/` with timestamped filenames. `db:backup` prefers a local `pg_dump` and falls back to `docker exec glantri-postgres pg_dump`.
 
-## Allowed Reset Workflow
-
-Only use a reset when migrations or local state are unrecoverably broken.
+No task or credential implicitly authorizes mutation of protected shared data. The task contract must state the authorization and target. A reset additionally requires:
 
 ```bash
 pnpm db:backup
@@ -49,38 +96,17 @@ pnpm db:reset:local -- --confirm
 pnpm db:seed
 ```
 
-The reset command refuses to run unless you pass `--confirm`.
+If a backup cannot be completed and verified, do not run the administrative mutation. Installing PostgreSQL client tools still requires the approval described in `docs/process/control-plane.md`.
 
-## Local Seed / Bootstrap
+## Handoff Evidence
 
-After a reset, restore a predictable local baseline:
+Database-capable Builder/QA handoffs record:
 
-```bash
-pnpm db:seed
-```
+- the explicit ownership marker;
+- sanitized application and test host, port, and database names;
+- PostgreSQL 16 verification;
+- migration/reset/seed/integration commands actually run;
+- proof that concurrent targets did not see or mutate each other's sentinel data when concurrency is in scope; and
+- cleanup result, including any intentionally retained disposable target.
 
-The seed command creates or refreshes:
-
-- a local email/password user
-- `player` and `game_master` roles for that user
-- one starter campaign
-- one reusable GM entity
-
-Default credentials:
-
-- email: `local-gm@example.com`
-- password: `devpassword123`
-
-Optional overrides:
-
-- `GLANTRI_LOCAL_SEED_EMAIL`
-- `GLANTRI_LOCAL_SEED_PASSWORD`
-- `GLANTRI_LOCAL_SEED_DISPLAY_NAME`
-- `GLANTRI_LOCAL_SEED_CAMPAIGN_NAME`
-- `GLANTRI_LOCAL_SEED_ENTITY_NAME`
-
-## Backup Notes
-
-`pnpm db:backup` prefers a local `pg_dump` binary. If that is unavailable, it falls back to `docker exec glantri-postgres pg_dump`.
-
-If neither path is available, use the repo's Docker Postgres container with `pnpm db:up`, or obtain explicit user approval before installing PostgreSQL client tools locally.
+Never include database passwords in logs, PRs, issue comments, or handoffs.
