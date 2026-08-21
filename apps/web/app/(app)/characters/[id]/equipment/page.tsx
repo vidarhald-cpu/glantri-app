@@ -35,6 +35,10 @@ import {
   updateServerCharacter,
 } from "@/lib/api/localServiceClient";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
+import {
+  formatCharacterRecoveryCompetition,
+  resolveCharacterRecoverySaveFailure,
+} from "@/lib/characters/characterRecoverySaveFailure";
 import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
 import type { CharacterRecoveryEnvelope, LocalCharacterRecord } from "@/lib/offline/glantriDexie";
 import {
@@ -635,6 +639,20 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       setRecoveryRecord(await characterRecoveryRepository.get(currentUser.id, id));
       setInventoryNotesFeedback("Inventory notes saved.");
     } catch (error) {
+      const recoveryFailure = resolveCharacterRecoverySaveFailure(
+        error,
+        inventoryNotes,
+        characterRecord.build.inventoryNotes ?? "",
+      );
+
+      if (recoveryFailure.competingAttempt) {
+        const retainedRecovery = await characterRecoveryRepository.get(currentUser.id, id);
+        setInventoryNotes(recoveryFailure.displayedValue);
+        setRecoveryRecord(retainedRecovery);
+        setInventoryNotesError(formatCharacterRecoveryCompetition(Boolean(retainedRecovery)));
+        return;
+      }
+
       const currentCharacter = getCurrentCharacterFromMutationConflict(error);
 
       if (currentCharacter) {
@@ -680,7 +698,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
               error instanceof Error ? error.name : undefined,
             )
           : undefined;
-        setInventoryNotes(characterRecord.build.inventoryNotes ?? "");
+        setInventoryNotes(recoveryFailure.displayedValue);
         setRecoveryRecord(
           failedRecovery ?? (await characterRecoveryRepository.get(currentUser.id, id)),
         );

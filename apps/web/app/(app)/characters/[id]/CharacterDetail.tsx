@@ -25,6 +25,10 @@ import {
   characterSheetSpecializationsTableColumns,
   characterSheetStatsTableColumns,
 } from "@/lib/characters/characterSheet";
+import {
+  formatCharacterRecoveryCompetition,
+  resolveCharacterRecoverySaveFailure,
+} from "@/lib/characters/characterRecoverySaveFailure";
 import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import type { CharacterRecoveryEnvelope, LocalCharacterRecord } from "@/lib/offline/glantriDexie";
@@ -72,6 +76,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
   const { currentUser, loading: sessionLoading } = useSessionUser();
   const [build, setBuild] = useState<CharacterBuild>();
   const [canonicalBuild, setCanonicalBuild] = useState<CharacterBuild>();
+  const [competingRecovery, setCompetingRecovery] = useState(false);
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [record, setRecord] = useState<LocalCharacterRecord>();
@@ -110,6 +115,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
         setBuild(result.record?.build);
         setCanonicalBuild(result.record?.build);
         setRecoveryRecord(result.recoveryRecord);
+        setCompetingRecovery(false);
         setReviewingRecovery(false);
         if (result.recoveryRecord && result.record) {
           setFeedback(
@@ -234,6 +240,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
         sourceAction,
         sourceSurface: "Character Sheet",
       });
+      setCompetingRecovery(false);
       if (recoveryEnvelope) {
         setRecoveryRecord(recoveryEnvelope);
       }
@@ -266,9 +273,26 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
         );
       }
       setRecoveryRecord(await characterRecoveryRepository.get(currentUser.id, id));
+      setCompetingRecovery(false);
       setReviewingRecovery(false);
       setFeedback(successMessage);
     } catch (error) {
+      const recoveryFailure = resolveCharacterRecoverySaveFailure(
+        error,
+        nextBuild,
+        canonicalBuild ?? record.build,
+      );
+
+      if (recoveryFailure.competingAttempt) {
+        const retainedRecovery = await characterRecoveryRepository.get(currentUser.id, id);
+        setBuild(recoveryFailure.displayedValue);
+        setRecoveryRecord(retainedRecovery);
+        setCompetingRecovery(true);
+        setReviewingRecovery(false);
+        setFeedback(formatCharacterRecoveryCompetition(Boolean(retainedRecovery)));
+        return;
+      }
+
       const currentCharacter = getCurrentCharacterFromMutationConflict(error);
 
       if (currentCharacter) {
@@ -317,7 +341,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       setRecoveryRecord(
         failedRecovery ?? (await characterRecoveryRepository.get(currentUser.id, id)),
       );
-      setBuild(canonicalBuild ?? record.build);
+      setBuild(recoveryFailure.displayedValue);
       setReviewingRecovery(false);
       throw error;
     }
@@ -329,6 +353,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     }
 
     setBuild(applyCharacterRecoveryPatch(canonicalBuild, recoveryRecord.patch));
+    setCompetingRecovery(false);
     setReviewingRecovery(true);
     setFeedback(
       "Unsaved changes loaded for review. Nothing has been saved to the current Character yet.",
@@ -341,6 +366,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     }
 
     setBuild(canonicalBuild);
+    setCompetingRecovery(false);
     setReviewingRecovery(false);
     setFeedback("Current Character restored. Your unsaved changes are still available.");
   }
@@ -354,6 +380,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     setCanonicalBuild(record.build);
     setBuild(record.build);
     setRecoveryRecord(undefined);
+    setCompetingRecovery(false);
     setReviewingRecovery(false);
     setFeedback("Unsaved changes discarded. The current Character remains unchanged.");
   }
@@ -452,14 +479,20 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
           }}
         >
           <strong>
-            {reviewingRecovery ? "Reviewing unsaved changes" : "Unsaved changes need review"}
+            {competingRecovery
+              ? "Competing unsaved changes need review"
+              : reviewingRecovery
+                ? "Reviewing unsaved changes"
+                : "Unsaved changes need review"}
           </strong>
           <span>
-            {reviewingRecovery
-              ? "These changes are shown for review. They have not replaced the current Character."
-              : recoveryRecord.reconciliation === "conflict"
-                ? "The same Character details changed elsewhere. Review your saved-on-device changes before deciding what to keep."
-                : "The current Character is shown. Your unsaved changes are still available on this device."}
+            {competingRecovery
+              ? "Another tab's recovery is listed below. Your newer edits remain in this form and are not stored in that recovery."
+              : reviewingRecovery
+                ? "These changes are shown for review. They have not replaced the current Character."
+                : recoveryRecord.reconciliation === "conflict"
+                  ? "The same Character details changed elsewhere. Review your saved-on-device changes before deciding what to keep."
+                  : "The current Character is shown. Your unsaved changes are still available on this device."}
           </span>
           <span>
             From {recoveryRecord.sourceSurface} · {recoveryRecord.sourceAction}

@@ -20,6 +20,10 @@ import {
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import { getPlayerFacingSkillBucket, groupRowsBySkillType } from "@/lib/chargen/chargenBrowse";
 import { buildCharacterSheetProfileStatRows } from "@/lib/characters/characterSheet";
+import {
+  formatCharacterRecoveryCompetition,
+  resolveCharacterRecoverySaveFailure,
+} from "@/lib/characters/characterRecoverySaveFailure";
 import { loadLocalCharacterAdvancementContext } from "@/lib/characters/loadLocalCharacterAdvancementContext";
 import type {
   CharacterRecoveryEnvelope,
@@ -106,6 +110,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     Awaited<ReturnType<typeof loadLocalCharacterAdvancementContext>>["content"] | undefined
   >();
   const [canonicalDraft, setCanonicalDraft] = useState<LocalCharacterDraft>();
+  const [competingRecovery, setCompetingRecovery] = useState(false);
   const [draft, setDraft] = useState<LocalCharacterDraft>();
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
@@ -144,6 +149,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         setRecoveryDraft(result.recoveryDraft);
         setRecoveryRecord(result.recoveryRecord);
         setRecoveryRequired(Boolean(result.recoveryDraft || result.recoveryRecord));
+        setCompetingRecovery(false);
         setReviewingRecovery(false);
 
         if (!result.record) {
@@ -274,6 +280,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     }
 
     setDraft(recoveryDraft);
+    setCompetingRecovery(false);
     setReviewingRecovery(true);
     setFeedback(
       "Unsaved progression loaded for review. Nothing has been saved to the current Character yet.",
@@ -286,6 +293,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     }
 
     setDraft(canonicalDraft);
+    setCompetingRecovery(false);
     setReviewingRecovery(false);
     setFeedback("Current progression restored. Your unsaved progression is still available.");
   }
@@ -313,6 +321,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     setRecoveryDraft(undefined);
     setRecoveryRecord(undefined);
     setRecoveryRequired(false);
+    setCompetingRecovery(false);
     setReviewingRecovery(false);
     setFeedback("Unsaved progression discarded. The current Character remains unchanged.");
   }
@@ -430,6 +439,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         sourceAction: "Save progression",
         sourceSurface: "Character Progression",
       });
+      setCompetingRecovery(false);
       if (recoveryEnvelope) {
         setRecoveryRecord(recoveryEnvelope);
       }
@@ -471,9 +481,27 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         }
         setRecoveryRecord(remainingRecovery);
         setRecoveryRequired(Boolean(remainingRecovery));
+        setCompetingRecovery(false);
         setReviewingRecovery(false);
       }
     } catch (error) {
+      const recoveryFailure = resolveCharacterRecoverySaveFailure(
+        error,
+        draft,
+        canonicalDraft ?? draft,
+      );
+
+      if (recoveryFailure.competingAttempt) {
+        const retainedRecovery = await characterRecoveryRepository.get(currentUser.id, id);
+        setDraft(recoveryFailure.displayedValue);
+        setRecoveryRecord(retainedRecovery);
+        setRecoveryRequired(Boolean(retainedRecovery));
+        setCompetingRecovery(true);
+        setReviewingRecovery(false);
+        setFeedback(formatCharacterRecoveryCompetition(Boolean(retainedRecovery)));
+        return;
+      }
+
       const currentCharacter = getCurrentCharacterFromMutationConflict(error);
 
       if (currentCharacter) {
@@ -532,7 +560,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           failedRecovery ?? (await characterRecoveryRepository.get(currentUser.id, id));
         if (canonicalDraft) {
           setRecord(record);
-          setDraft(canonicalDraft);
+          setDraft(recoveryFailure.displayedValue);
         }
         setRecoveryDraft(draft);
         setRecoveryRecord(retainedRecovery);
@@ -711,16 +739,20 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           }}
         >
           <strong>
-            {reviewingRecovery
-              ? "Reviewing unsaved progression"
-              : "Unsaved progression needs review"}
+            {competingRecovery
+              ? "Competing unsaved changes need review"
+              : reviewingRecovery
+                ? "Reviewing unsaved progression"
+                : "Unsaved progression needs review"}
           </strong>
           <span>
-            {reviewingRecovery
-              ? "These progression changes are visible for review. Saving remains a separate action."
-              : recoveryRecord.reconciliation === "conflict"
-                ? "The same progression details changed elsewhere. Review your saved-on-device changes before deciding what to keep."
-                : "The current Character is shown. Your unsaved progression remains available on this device."}
+            {competingRecovery
+              ? "Another tab's recovery is listed below. Your newer progression remains visible here and is not stored in that recovery."
+              : reviewingRecovery
+                ? "These progression changes are visible for review. Saving remains a separate action."
+                : recoveryRecord.reconciliation === "conflict"
+                  ? "The same progression details changed elsewhere. Review your saved-on-device changes before deciding what to keep."
+                  : "The current Character is shown. Your unsaved progression remains available on this device."}
           </span>
           <span>
             From {recoveryRecord.sourceSurface} · {recoveryRecord.sourceAction} ·{" "}
@@ -728,7 +760,9 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
             {recoveryFieldLabels.join(", ")}
           </span>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-            {reviewingRecovery ? (
+            {competingRecovery ? (
+              <Link href={`/characters/${id}`}>Review competing recovery on Character Sheet</Link>
+            ) : reviewingRecovery ? (
               <button onClick={handleReturnToCanonical} type="button">
                 Return to current progression
               </button>
