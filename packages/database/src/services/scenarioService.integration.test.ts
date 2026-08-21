@@ -74,6 +74,40 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(relationships[0]?.relationType).toBe("continues_from");
     });
 
+    it("requires Campaign roster membership before any Character can enter a Scenario", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const owner = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, owner.id, { name: "Ari" });
+      const repo = createPrismaScenarioRepository(prisma!);
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const equipmentService = new CharacterEquipmentReadModelService(
+        createPrismaCharacterEquipmentRepository(prisma!),
+      );
+      const campaignService = new CampaignService(repo, characterService);
+      const service = new ScenarioService(repo, characterService, equipmentService);
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Roster Gate",
+      });
+      const scenario = await service.createScenario({
+        campaignId: campaign.id,
+        name: "Closed Scene",
+      });
+
+      await expect(
+        service.addCharacterParticipant({
+          characterId: character.id,
+          controlledByUserId: gm.id,
+          joinSource: "gm_added",
+          scenarioId: scenario.id,
+        }),
+      ).rejects.toThrow("Character is not in the campaign roster.");
+      await expect(prisma!.scenarioParticipant.count()).resolves.toBe(0);
+      await expect(
+        prisma!.character.findUnique({ where: { id: character.id } }),
+      ).resolves.toMatchObject({ ownerId: owner.id });
+    });
+
     it("withholds a delegated live Scenario from its Character owner", async () => {
       const gm = await createTestUser(prisma!, { roles: ["gm"] });
       const owner = await createTestUser(prisma!);
@@ -96,6 +130,12 @@ if (!process.env.DATABASE_URL_TEST) {
         description: "Private to delegated controller",
         name: "Delegated Private Scenario",
         status: "live",
+      });
+      await campaignService.addCampaignRosterEntry({
+        campaignId: campaign.id,
+        category: "pc",
+        sourceId: character.id,
+        sourceType: "character",
       });
       await service.addCharacterParticipant({
         characterId: character.id,

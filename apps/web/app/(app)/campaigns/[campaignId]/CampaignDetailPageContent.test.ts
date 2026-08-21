@@ -3,10 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-const sourcePath = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "CampaignDetailPageContent.tsx"
-);
+const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "CampaignDetailPageContent.tsx");
 
 function readCampaignDetailSource(): string {
   return readFileSync(sourcePath, "utf8");
@@ -40,16 +37,20 @@ describe("CampaignDetailPageContent roster UI", () => {
     expect(source).toContain("All professions");
     expect(source).toContain("All skill groups");
     expect(source).toContain("Search roster candidates");
-    expect(source).toContain("Member</th>");
-    expect(source).toContain("Name</th>");
-    expect(source).toContain("Type</th>");
-    expect(source).toContain("Civilization</th>");
-    expect(source).toContain("Profession</th>");
-    expect(source).toContain("Owner</th>");
+    expect(source).toMatch(/>\s*Member\s*<\/th>/);
+    expect(source).toMatch(/>\s*Name\s*<\/th>/);
+    expect(source).toMatch(/>\s*Type\s*<\/th>/);
+    expect(source).toMatch(/>\s*Civilization\s*<\/th>/);
+    expect(source).toMatch(/>\s*Profession\s*<\/th>/);
+    expect(source).toMatch(/>\s*Owner\s*<\/th>/);
     expect(source).not.toContain(">Remove<");
     expect(source).not.toContain("Skill groups</th>");
     expect(source).not.toContain("Source</th>");
     expect(source).not.toContain("Character · Owner:");
+    expect(source).toContain("loadCampaignCharacterRosterCandidates(campaignId)");
+    expect(source).not.toContain("loadServerCharacters()");
+    expect(source).not.toContain("character.owner?.email");
+    expect(source).not.toContain("character.build.progression");
   });
 
   it("maps roster civilizations to player-facing names without showing unknown internal ids", () => {

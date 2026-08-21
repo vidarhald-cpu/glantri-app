@@ -161,17 +161,17 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
             error: "No live scenario is currently available for this character.",
           });
         }
+      }
 
-        const campaignRoster = await campaignService.listCampaignRosterEntries(campaign.id);
-        const characterIsInCampaignRoster = campaignRoster.some(
-          (entry) => entry.sourceType === "character" && entry.sourceId === characterId,
-        );
+      const campaignRoster = await campaignService.listCampaignRosterEntries(campaign.id);
+      const characterIsInCampaignRoster = campaignRoster.some(
+        (entry) => entry.sourceType === "character" && entry.sourceId === characterId,
+      );
 
-        if (!characterIsInCampaignRoster) {
-          return reply.code(403).send({
-            error: "This character is not currently assigned to a campaign.",
-          });
-        }
+      if (!characterIsInCampaignRoster) {
+        return reply.code(403).send({
+          error: "This character is not currently assigned to a campaign.",
+        });
       }
 
       const participant = await scenarioService.addCharacterParticipant({
