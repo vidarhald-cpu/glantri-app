@@ -141,6 +141,209 @@ describe("CharacterRecoveryRepository", () => {
     });
   });
 
+  it("retains CAS-rejected same-field and disjoint candidates beside the winning attempt across reloads", async () => {
+    const repository = new CharacterRecoveryRepository();
+    const canonical = createBuild();
+    const winner = await repository.createAttempt({
+      account: accountA,
+      attemptedBuild: { ...canonical, inventoryNotes: "Winning notes" },
+      baseBuild: canonical,
+      baseRevision: "revision-1",
+      characterId: canonical.id,
+      sourceAction: "Save notes in tab A",
+      sourceSurface: "Character Sheet",
+    });
+
+    await expect(
+      repository.createAttempt({
+        account: accountA,
+        attemptedBuild: { ...canonical, name: "Rejected name" },
+        baseBuild: canonical,
+        baseRevision: "revision-1",
+        characterId: canonical.id,
+        sourceAction: "Save identity in tab B",
+        sourceSurface: "Character Sheet",
+      }),
+    ).rejects.toMatchObject({ name: "CharacterRecoveryAttemptChangedError" });
+    await expect(
+      repository.createAttempt({
+        account: accountA,
+        attemptedBuild: { ...canonical, inventoryNotes: "Rejected notes" },
+        baseBuild: canonical,
+        baseRevision: "revision-1",
+        characterId: canonical.id,
+        sourceAction: "Save notes in tab C",
+        sourceSurface: "Character Inventory",
+      }),
+    ).rejects.toMatchObject({ name: "CharacterRecoveryAttemptChangedError" });
+
+    const reloaded = await new CharacterRecoveryRepository().get(accountA.id, canonical.id);
+
+    expect(reloaded?.saveAttempt.id).toBe(winner?.saveAttempt.id);
+    expect(reloaded?.patch).toEqual(winner?.patch);
+    expect(reloaded?.competingCandidates).toEqual([
+      expect.objectContaining({
+        patch: [expect.objectContaining({ attemptedValue: "Rejected name", path: "/name" })],
+        relationshipToPrimary: "disjoint",
+        sourceAction: "Save identity in tab B",
+      }),
+      expect.objectContaining({
+        patch: [
+          expect.objectContaining({
+            attemptedValue: "Rejected notes",
+            path: "/inventoryNotes",
+          }),
+        ],
+        relationshipToPrimary: "overlapping",
+        sourceAction: "Save notes in tab C",
+      }),
+    ]);
+    expect(
+      new Set(reloaded?.competingCandidates?.map((candidate) => candidate.saveAttempt.id)),
+    ).toHaveProperty("size", 2);
+  });
+
+  it("guards candidate cleanup by the exact primary attempt and promotes retained work one attempt at a time", async () => {
+    const repository = new CharacterRecoveryRepository();
+    const canonical = createBuild();
+    const winner = await repository.createAttempt({
+      account: accountA,
+      attemptedBuild: { ...canonical, inventoryNotes: "Winning notes" },
+      baseBuild: canonical,
+      baseRevision: "revision-1",
+      characterId: canonical.id,
+      sourceAction: "Save notes",
+      sourceSurface: "Character Sheet",
+    });
+
+    await expect(
+      repository.createAttempt({
+        account: accountA,
+        attemptedBuild: { ...canonical, name: "Rejected name" },
+        baseBuild: canonical,
+        baseRevision: "revision-1",
+        characterId: canonical.id,
+        sourceAction: "Save identity",
+        sourceSurface: "Character Sheet",
+      }),
+    ).rejects.toBeDefined();
+
+    const retained = await repository.get(accountA.id, canonical.id);
+    const candidateAttemptId = retained?.competingCandidates?.[0]?.saveAttempt.id;
+    expect(candidateAttemptId).toBeDefined();
+    await expect(
+      repository.deleteCandidate(
+        accountA.id,
+        canonical.id,
+        "stale-primary-attempt",
+        candidateAttemptId!,
+      ),
+    ).resolves.toBe(false);
+    await expect(repository.get(accountA.id, canonical.id)).resolves.toStrictEqual(retained);
+
+    await expect(
+      repository.deleteAttempt(accountA.id, canonical.id, winner!.saveAttempt.id),
+    ).resolves.toBe(true);
+    await expect(repository.get(accountA.id, canonical.id)).resolves.toMatchObject({
+      patch: [{ attemptedValue: "Rejected name", path: "/name" }],
+      saveAttempt: { id: candidateAttemptId },
+    });
+    await expect(
+      repository.deleteAttempt(accountA.id, canonical.id, winner!.saveAttempt.id),
+    ).resolves.toBe(false);
+    await expect(
+      repository.deleteAttempt(accountA.id, canonical.id, candidateAttemptId!),
+    ).resolves.toBe(true);
+    await expect(repository.get(accountA.id, canonical.id)).resolves.toBeUndefined();
+  });
+
+  it("clears only a candidate that matches canonical state while retaining the unresolved primary", async () => {
+    const repository = new CharacterRecoveryRepository();
+    const canonical = createBuild();
+    const primary = await repository.createAttempt({
+      account: accountA,
+      attemptedBuild: { ...canonical, inventoryNotes: "Primary notes" },
+      baseBuild: canonical,
+      baseRevision: "revision-1",
+      characterId: canonical.id,
+      sourceAction: "Save notes",
+      sourceSurface: "Character Sheet",
+    });
+    await expect(
+      repository.createAttempt({
+        account: accountA,
+        attemptedBuild: { ...canonical, name: "Candidate name" },
+        baseBuild: canonical,
+        baseRevision: "revision-1",
+        characterId: canonical.id,
+        sourceAction: "Save identity",
+        sourceSurface: "Character Sheet",
+      }),
+    ).rejects.toBeDefined();
+
+    const state = await repository.reconcile(
+      accountA.id,
+      canonical.id,
+      { ...canonical, name: "Candidate name" },
+      "revision-2",
+      primary!.saveAttempt.id,
+    );
+
+    expect(state?.envelope).toMatchObject({
+      competingCandidates: undefined,
+      patch: [{ attemptedValue: "Primary notes", path: "/inventoryNotes" }],
+      saveAttempt: { id: primary!.saveAttempt.id },
+    });
+  });
+
+  it("clears each matching resolved attempt without deleting the next retained candidate", async () => {
+    const repository = new CharacterRecoveryRepository();
+    const canonical = createBuild();
+    const primaryBuild = { ...canonical, inventoryNotes: "Primary notes" };
+    const primary = await repository.createAttempt({
+      account: accountA,
+      attemptedBuild: primaryBuild,
+      baseBuild: canonical,
+      baseRevision: "revision-1",
+      characterId: canonical.id,
+      sourceAction: "Save notes",
+      sourceSurface: "Character Sheet",
+    });
+    await expect(
+      repository.createAttempt({
+        account: accountA,
+        attemptedBuild: { ...canonical, name: "Candidate name" },
+        baseBuild: canonical,
+        baseRevision: "revision-1",
+        characterId: canonical.id,
+        sourceAction: "Save identity",
+        sourceSurface: "Character Sheet",
+      }),
+    ).rejects.toBeDefined();
+
+    const remaining = await repository.completeAttempt(
+      accountA.id,
+      canonical.id,
+      primary!.saveAttempt.id,
+      primaryBuild,
+      "revision-2",
+    );
+
+    expect(remaining).toMatchObject({
+      patch: [{ attemptedValue: "Candidate name", path: "/name" }],
+    });
+    await expect(
+      repository.completeAttempt(
+        accountA.id,
+        canonical.id,
+        remaining!.saveAttempt.id,
+        { ...primaryBuild, name: "Candidate name" },
+        "revision-3",
+      ),
+    ).resolves.toBeUndefined();
+    await expect(repository.get(accountA.id, canonical.id)).resolves.toBeUndefined();
+  });
+
   it("clears lost-success-response residue when canonical state already has the attempted value", async () => {
     const repository = new CharacterRecoveryRepository();
     const canonical = createBuild();
@@ -232,7 +435,7 @@ describe("CharacterRecoveryRepository", () => {
     await expect(repository.get(accountA.id, canonical.id)).resolves.toStrictEqual(retained);
   });
 
-  it("does not replace another tab's retained recovery with a later non-empty save attempt", async () => {
+  it("does not replace another tab's primary recovery when retaining a later non-empty candidate", async () => {
     const repository = new CharacterRecoveryRepository();
     const canonical = createBuild();
     const retained = await repository.createAttempt({
@@ -257,7 +460,13 @@ describe("CharacterRecoveryRepository", () => {
       }),
     ).rejects.toThrow("Unsaved Character changes were updated in another tab");
 
-    await expect(repository.get(accountA.id, canonical.id)).resolves.toStrictEqual(retained);
+    const reloaded = await repository.get(accountA.id, canonical.id);
+    expect({ ...reloaded, competingCandidates: undefined }).toStrictEqual(retained);
+    expect(reloaded?.competingCandidates).toEqual([
+      expect.objectContaining({
+        patch: [expect.objectContaining({ attemptedValue: "Tab B new name", path: "/name" })],
+      }),
+    ]);
   });
 
   it("ignores a late outcome from an older save attempt when a newer attempt is current", async () => {

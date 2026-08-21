@@ -24,6 +24,7 @@ import {
   formatCharacterRecoveryCompetition,
   resolveCharacterRecoverySaveFailure,
 } from "@/lib/characters/characterRecoverySaveFailure";
+import { CharacterRecoveryCandidateList } from "@/lib/characters/CharacterRecoveryCandidateList";
 import { loadLocalCharacterAdvancementContext } from "@/lib/characters/loadLocalCharacterAdvancementContext";
 import type {
   CharacterRecoveryEnvelope,
@@ -314,16 +315,25 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       syncStatus: "synced",
       updatedAt: record.updatedAt,
     });
-    await characterRecoveryRepository.delete(currentUser.id, id);
+    await characterRecoveryRepository.deleteAttempt(
+      currentUser.id,
+      id,
+      recoveryRecord?.saveAttempt.id ?? "",
+    );
+    const remainingRecovery = await characterRecoveryRepository.get(currentUser.id, id);
 
     setCanonicalDraft(savedDraft);
     setDraft(savedDraft);
     setRecoveryDraft(undefined);
-    setRecoveryRecord(undefined);
-    setRecoveryRequired(false);
+    setRecoveryRecord(remainingRecovery);
+    setRecoveryRequired(Boolean(remainingRecovery));
     setCompetingRecovery(false);
     setReviewingRecovery(false);
-    setFeedback("Unsaved progression discarded. The current Character remains unchanged.");
+    setFeedback(
+      remainingRecovery
+        ? "The selected recovery was discarded. Another retained attempt now needs review."
+        : "Unsaved progression discarded. The current Character remains unchanged.",
+    );
   }
 
   async function handleBuyAttempt(targetType: ProgressionTargetType, targetId: string) {
@@ -418,6 +428,11 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       return;
     }
 
+    if (recoveryRecord?.competingCandidates?.length) {
+      setFeedback("Resolve or discard every rejected recovery candidate before saving.");
+      return;
+    }
+
     if (recoveryRequired && !reviewingRecovery) {
       setFeedback("Review or discard the existing unsaved progression before saving.");
       return;
@@ -467,14 +482,15 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         status: "synced",
       });
       if (syncedDraft) {
-        if (recoveryEnvelope) {
-          await characterRecoveryRepository.deleteAttempt(
-            currentUser.id,
-            id,
-            recoveryEnvelope.saveAttempt.id,
-          );
-        }
-        const remainingRecovery = await characterRecoveryRepository.get(currentUser.id, id);
+        const remainingRecovery = recoveryEnvelope
+          ? await characterRecoveryRepository.completeAttempt(
+              currentUser.id,
+              id,
+              recoveryEnvelope.saveAttempt.id,
+              serverRecord.build,
+              serverRecord.updatedAt,
+            )
+          : await characterRecoveryRepository.get(currentUser.id, id);
         setCanonicalDraft(syncedDraft);
         if (!remainingRecovery) {
           setRecoveryDraft(undefined);
@@ -739,7 +755,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           }}
         >
           <strong>
-            {competingRecovery
+            {competingRecovery || Boolean(recoveryRecord.competingCandidates?.length)
               ? "Competing unsaved changes need review"
               : reviewingRecovery
                 ? "Reviewing unsaved progression"
@@ -747,12 +763,14 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           </strong>
           <span>
             {competingRecovery
-              ? "Another tab's recovery is listed below. Your newer progression remains visible here and is not stored in that recovery."
-              : reviewingRecovery
-                ? "These progression changes are visible for review. Saving remains a separate action."
-                : recoveryRecord.reconciliation === "conflict"
-                  ? "The same progression details changed elsewhere. Review your saved-on-device changes before deciding what to keep."
-                  : "The current Character is shown. Your unsaved progression remains available on this device."}
+              ? "Another tab's primary recovery is listed below. Your newer progression remains visible here and is also retained as a separate rejected candidate."
+              : recoveryRecord.competingCandidates?.length
+                ? "The primary recovery and additional rejected candidates are retained separately. Review candidates on the Character Sheet before retrying here."
+                : reviewingRecovery
+                  ? "These progression changes are visible for review. Saving remains a separate action."
+                  : recoveryRecord.reconciliation === "conflict"
+                    ? "The same progression details changed elsewhere. Review your saved-on-device changes before deciding what to keep."
+                    : "The current Character is shown. Your unsaved progression remains available on this device."}
           </span>
           <span>
             From {recoveryRecord.sourceSurface} · {recoveryRecord.sourceAction} ·{" "}
@@ -775,6 +793,10 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
               Discard unsaved progression
             </button>
           </div>
+          <CharacterRecoveryCandidateList
+            envelope={recoveryRecord}
+            reviewHref={`/characters/${id}`}
+          />
         </section>
       ) : null}
 
@@ -814,7 +836,13 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         <span>Pending: {progressionView.pendingAttempts.length}</span>
         <span>History: {progressionView.history.length}</span>
         <button
-          disabled={saving || Boolean(recoveryRequired && !reviewingRecovery)}
+          disabled={
+            saving ||
+            Boolean(
+              recoveryRequired &&
+              (!reviewingRecovery || recoveryRecord?.competingCandidates?.length),
+            )
+          }
           onClick={() => void handleSaveChanges()}
           type="button"
         >

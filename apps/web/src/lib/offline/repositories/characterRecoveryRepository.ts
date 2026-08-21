@@ -3,6 +3,7 @@ import { characterBuildSchema, type CharacterBuild } from "@glantri/domain";
 
 import {
   localDb,
+  type CharacterRecoveryCandidate,
   type CharacterRecoveryEnvelope,
   type CharacterRecoveryPatchEntry,
   type LegacyCharacterRecoveryRecord,
@@ -230,12 +231,97 @@ function createAttemptId(): string {
 }
 
 export class CharacterRecoveryAttemptChangedError extends Error {
-  constructor() {
+  constructor(
+    readonly currentAttemptId?: string,
+    readonly retainedCandidateAttemptId?: string,
+  ) {
     super(
-      "Unsaved Character changes were updated in another tab. Review the retained changes before saving again.",
+      "Unsaved Character changes were updated in another tab. Both attempts are retained for deliberate review.",
     );
     this.name = "CharacterRecoveryAttemptChangedError";
   }
+}
+
+function patchesOverlap(
+  primaryPatch: CharacterRecoveryPatchEntry[],
+  candidatePatch: CharacterRecoveryPatchEntry[],
+): boolean {
+  return primaryPatch.some((primaryEntry) =>
+    candidatePatch.some(
+      (candidateEntry) =>
+        primaryEntry.path === candidateEntry.path ||
+        primaryEntry.path.startsWith(`${candidateEntry.path}/`) ||
+        candidateEntry.path.startsWith(`${primaryEntry.path}/`),
+    ),
+  );
+}
+
+function candidateRelationship(
+  primaryPatch: CharacterRecoveryPatchEntry[],
+  candidatePatch: CharacterRecoveryPatchEntry[],
+): CharacterRecoveryCandidate["relationshipToPrimary"] {
+  return patchesOverlap(primaryPatch, candidatePatch) ? "overlapping" : "disjoint";
+}
+
+function withCandidateRelationships(
+  primaryPatch: CharacterRecoveryPatchEntry[],
+  candidates: CharacterRecoveryCandidate[],
+): CharacterRecoveryCandidate[] {
+  return candidates.map((candidate) => ({
+    ...candidate,
+    relationshipToPrimary: candidateRelationship(primaryPatch, candidate.patch),
+  }));
+}
+
+function promoteCandidate(
+  envelope: CharacterRecoveryEnvelope,
+  candidate: CharacterRecoveryCandidate,
+  remainingCandidates: CharacterRecoveryCandidate[],
+): CharacterRecoveryEnvelope {
+  return {
+    ...envelope,
+    baseHash: candidate.baseHash,
+    baseRevision: candidate.baseRevision,
+    competingCandidates:
+      remainingCandidates.length > 0
+        ? withCandidateRelationships(candidate.patch, remainingCandidates)
+        : undefined,
+    createdAt: candidate.createdAt,
+    patch: candidate.patch,
+    reconciliation: candidate.reconciliation,
+    saveAttempt: candidate.saveAttempt,
+    sourceAction: candidate.sourceAction,
+    sourceSurface: candidate.sourceSurface,
+    updatedAt: candidate.updatedAt,
+  };
+}
+
+function reconcilePatch(
+  patch: CharacterRecoveryPatchEntry[],
+  canonicalBuild: CharacterBuild,
+): { conflictPaths: string[]; patch: CharacterRecoveryPatchEntry[] } {
+  const unresolvedPatch: CharacterRecoveryPatchEntry[] = [];
+  const conflictPaths: string[] = [];
+
+  for (const entry of patch) {
+    const currentValue = getValueAtPath(canonicalBuild, entry.path);
+
+    if (matchesAttemptedValue(currentValue, entry)) {
+      continue;
+    }
+
+    if (matchesPatchBase(currentValue, entry)) {
+      unresolvedPatch.push({
+        ...entry,
+        baseValue: currentValue === MISSING ? undefined : structuredClone(currentValue),
+      });
+    } else {
+      unresolvedPatch.push(entry);
+      conflictPaths.push(entry.path);
+    }
+  }
+
+  return { conflictPaths, patch: unresolvedPatch };
 }
 
 export function formatCharacterRecoveryField(path: string): string {
@@ -274,13 +360,64 @@ export class CharacterRecoveryRepository {
       return undefined;
     }
 
-    return localDb.transaction("rw", localDb.characterRecoveries, async () => {
+    const result = await localDb.transaction("rw", localDb.characterRecoveries, async () => {
       const now = new Date().toISOString();
       const existing = await localDb.characterRecoveries.get(id);
 
       if (existing?.saveAttempt.id !== input.expectedAttemptId) {
-        throw new CharacterRecoveryAttemptChangedError();
+        const candidateAttemptId = createAttemptId();
+        const candidate: CharacterRecoveryCandidate = {
+          baseHash: hashCharacterBuild(baseBuild),
+          baseRevision: input.baseRevision,
+          createdAt: now,
+          patch,
+          reconciliation: "ready",
+          relationshipToPrimary: existing
+            ? candidateRelationship(existing.patch, patch)
+            : "disjoint",
+          saveAttempt: {
+            attemptedAt: now,
+            completedAt: now,
+            errorCode: "competing_recovery",
+            id: candidateAttemptId,
+            outcome: "conflict",
+          },
+          sourceAction: input.sourceAction,
+          sourceSurface: input.sourceSurface,
+          updatedAt: now,
+        };
+
+        if (existing) {
+          await localDb.characterRecoveries.put({
+            ...existing,
+            competingCandidates: [...(existing.competingCandidates ?? []), candidate],
+          });
+        } else {
+          await localDb.characterRecoveries.put({
+            accountDisplayName: input.account.displayName,
+            accountEmail: input.account.email,
+            accountId: input.account.id,
+            baseHash: candidate.baseHash,
+            baseRevision: candidate.baseRevision,
+            characterId: input.characterId,
+            createdAt: candidate.createdAt,
+            id,
+            patch: candidate.patch,
+            reconciliation: candidate.reconciliation,
+            saveAttempt: candidate.saveAttempt,
+            sourceAction: candidate.sourceAction,
+            sourceSurface: candidate.sourceSurface,
+            updatedAt: candidate.updatedAt,
+          });
+        }
+
+        return {
+          competingCandidateAttemptId: candidateAttemptId,
+          currentAttemptId: existing?.saveAttempt.id,
+        };
       }
+
+      const existingCandidates = existing?.competingCandidates ?? [];
 
       const envelope: CharacterRecoveryEnvelope = {
         accountDisplayName: input.account.displayName,
@@ -289,6 +426,10 @@ export class CharacterRecoveryRepository {
         baseHash: hashCharacterBuild(baseBuild),
         baseRevision: input.baseRevision,
         characterId: input.characterId,
+        competingCandidates:
+          existingCandidates.length > 0
+            ? withCandidateRelationships(patch, existingCandidates)
+            : undefined,
         createdAt: existing?.createdAt ?? now,
         id,
         patch,
@@ -304,8 +445,17 @@ export class CharacterRecoveryRepository {
       };
 
       await localDb.characterRecoveries.put(envelope);
-      return envelope;
+      return { envelope };
     });
+
+    if ("competingCandidateAttemptId" in result) {
+      throw new CharacterRecoveryAttemptChangedError(
+        result.currentAttemptId,
+        result.competingCandidateAttemptId,
+      );
+    }
+
+    return result.envelope;
   }
 
   async delete(accountId: string, characterId: string): Promise<void> {
@@ -321,7 +471,75 @@ export class CharacterRecoveryRepository {
         return false;
       }
 
-      await localDb.characterRecoveries.delete(id);
+      const [nextCandidate, ...remainingCandidates] = envelope.competingCandidates ?? [];
+
+      if (nextCandidate) {
+        await localDb.characterRecoveries.put(
+          promoteCandidate(envelope, nextCandidate, remainingCandidates),
+        );
+      } else {
+        await localDb.characterRecoveries.delete(id);
+      }
+      return true;
+    });
+  }
+
+  async completeAttempt(
+    accountId: string,
+    characterId: string,
+    attemptId: string,
+    canonicalBuild: CharacterBuild,
+    canonicalRevision: string,
+  ): Promise<CharacterRecoveryEnvelope | undefined> {
+    const deleted = await this.deleteAttempt(accountId, characterId, attemptId);
+
+    if (!deleted) {
+      return this.get(accountId, characterId);
+    }
+
+    const remaining = await this.get(accountId, characterId);
+
+    if (!remaining) {
+      return undefined;
+    }
+
+    const reconciled = await this.reconcile(
+      accountId,
+      characterId,
+      canonicalBuild,
+      canonicalRevision,
+      remaining.saveAttempt.id,
+    );
+
+    return reconciled?.envelope ?? this.get(accountId, characterId);
+  }
+
+  async deleteCandidate(
+    accountId: string,
+    characterId: string,
+    expectedPrimaryAttemptId: string,
+    candidateAttemptId: string,
+  ): Promise<boolean> {
+    return localDb.transaction("rw", localDb.characterRecoveries, async () => {
+      const envelope = await this.get(accountId, characterId);
+
+      if (!envelope || envelope.saveAttempt.id !== expectedPrimaryAttemptId) {
+        return false;
+      }
+
+      const candidates = envelope.competingCandidates ?? [];
+      const retainedCandidates = candidates.filter(
+        (candidate) => candidate.saveAttempt.id !== candidateAttemptId,
+      );
+
+      if (retainedCandidates.length === candidates.length) {
+        return false;
+      }
+
+      await localDb.characterRecoveries.put({
+        ...envelope,
+        competingCandidates: retainedCandidates.length > 0 ? retainedCandidates : undefined,
+      });
       return true;
     });
   }
@@ -412,45 +630,79 @@ export class CharacterRecoveryRepository {
         return undefined;
       }
 
-      const unresolvedPatch: CharacterRecoveryPatchEntry[] = [];
-      const conflictPaths: string[] = [];
-
-      for (const entry of envelope.patch) {
-        const currentValue = getValueAtPath(canonicalBuild, entry.path);
-
-        if (matchesAttemptedValue(currentValue, entry)) {
-          continue;
-        }
-
-        if (matchesPatchBase(currentValue, entry)) {
-          unresolvedPatch.push({
-            ...entry,
-            baseValue: currentValue === MISSING ? undefined : structuredClone(currentValue),
-          });
-        } else {
-          unresolvedPatch.push(entry);
-          conflictPaths.push(entry.path);
-        }
-      }
-
-      if (unresolvedPatch.length === 0) {
-        await localDb.characterRecoveries.delete(envelope.id);
-        return undefined;
-      }
-
       const baseHash = hashCharacterBuild(canonicalBuild);
+      const primaryState = reconcilePatch(envelope.patch, canonicalBuild);
+      const reconciledCandidates = (envelope.competingCandidates ?? []).flatMap(
+        (candidate): CharacterRecoveryCandidate[] => {
+          const candidateState = reconcilePatch(candidate.patch, canonicalBuild);
+
+          if (candidateState.patch.length === 0) {
+            return [];
+          }
+
+          const reconciliation: CharacterRecoveryCandidate["reconciliation"] =
+            candidateState.conflictPaths.length > 0 ? "conflict" : "ready";
+          const hasSemanticChange =
+            candidate.baseHash !== baseHash ||
+            candidate.baseRevision !== canonicalRevision ||
+            candidate.reconciliation !== reconciliation ||
+            !valuesEqual(candidate.patch, candidateState.patch);
+
+          return [
+            hasSemanticChange
+              ? {
+                  ...candidate,
+                  baseHash,
+                  baseRevision: canonicalRevision,
+                  patch: candidateState.patch,
+                  reconciliation,
+                  updatedAt: new Date().toISOString(),
+                }
+              : candidate,
+          ];
+        },
+      );
+
+      if (primaryState.patch.length === 0) {
+        const [nextCandidate, ...remainingCandidates] = reconciledCandidates;
+
+        if (!nextCandidate) {
+          await localDb.characterRecoveries.delete(envelope.id);
+          return undefined;
+        }
+
+        const promoted = promoteCandidate(envelope, nextCandidate, remainingCandidates);
+        await localDb.characterRecoveries.put(promoted);
+        const promotedConflictPaths = reconcilePatch(promoted.patch, canonicalBuild).conflictPaths;
+        return {
+          conflictPaths: promotedConflictPaths,
+          envelope: promoted,
+          recoveredBuild:
+            promotedConflictPaths.length === 0
+              ? applyCharacterRecoveryPatch(canonicalBuild, promoted.patch)
+              : undefined,
+        };
+      }
+
+      const conflictPaths = primaryState.conflictPaths;
       const reconciliation = conflictPaths.length > 0 ? "conflict" : "ready";
+      const relatedCandidates = withCandidateRelationships(
+        primaryState.patch,
+        reconciledCandidates,
+      );
       const hasSemanticChange =
         envelope.baseHash !== baseHash ||
         envelope.baseRevision !== canonicalRevision ||
         envelope.reconciliation !== reconciliation ||
-        !valuesEqual(envelope.patch, unresolvedPatch);
+        !valuesEqual(envelope.patch, primaryState.patch) ||
+        !valuesEqual(envelope.competingCandidates ?? [], relatedCandidates);
       const reconciled: CharacterRecoveryEnvelope = hasSemanticChange
         ? {
             ...envelope,
             baseHash,
             baseRevision: canonicalRevision,
-            patch: unresolvedPatch,
+            competingCandidates: relatedCandidates.length > 0 ? relatedCandidates : undefined,
+            patch: primaryState.patch,
             reconciliation,
             updatedAt: new Date().toISOString(),
           }
@@ -465,7 +717,7 @@ export class CharacterRecoveryRepository {
         envelope: reconciled,
         recoveredBuild:
           conflictPaths.length === 0
-            ? applyCharacterRecoveryPatch(canonicalBuild, unresolvedPatch)
+            ? applyCharacterRecoveryPatch(canonicalBuild, primaryState.patch)
             : undefined,
       };
     });

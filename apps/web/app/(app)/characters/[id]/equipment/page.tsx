@@ -39,6 +39,7 @@ import {
   formatCharacterRecoveryCompetition,
   resolveCharacterRecoverySaveFailure,
 } from "@/lib/characters/characterRecoverySaveFailure";
+import { CharacterRecoveryCandidateList } from "@/lib/characters/CharacterRecoveryCandidateList";
 import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
 import type { CharacterRecoveryEnvelope, LocalCharacterRecord } from "@/lib/offline/glantriDexie";
 import {
@@ -629,14 +630,16 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       setCharacterRecord(savedLocalRecord);
       setCharacterName(savedLocalRecord.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER);
       setInventoryNotes(savedLocalRecord.build.inventoryNotes ?? "");
-      if (recoveryEnvelope) {
-        await characterRecoveryRepository.deleteAttempt(
-          currentUser.id,
-          id,
-          recoveryEnvelope.saveAttempt.id,
-        );
-      }
-      setRecoveryRecord(await characterRecoveryRepository.get(currentUser.id, id));
+      const remainingRecovery = recoveryEnvelope
+        ? await characterRecoveryRepository.completeAttempt(
+            currentUser.id,
+            id,
+            recoveryEnvelope.saveAttempt.id,
+            savedLocalRecord.build,
+            savedServerRecord.updatedAt,
+          )
+        : await characterRecoveryRepository.get(currentUser.id, id);
+      setRecoveryRecord(remainingRecovery);
       setInventoryNotesFeedback("Inventory notes saved.");
     } catch (error) {
       const recoveryFailure = resolveCharacterRecoverySaveFailure(
@@ -754,6 +757,10 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
           <div>
             <Link href={`/characters/${id}`}>Review or discard unsaved changes</Link>
           </div>
+          <CharacterRecoveryCandidateList
+            envelope={recoveryRecord}
+            reviewHref={`/characters/${id}`}
+          />
         </section>
       ) : null}
 

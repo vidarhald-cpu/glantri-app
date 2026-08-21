@@ -156,7 +156,7 @@ describe("CharacterDetail competing recovery presentation", () => {
     const user = userEvent.setup();
     const repository = new CharacterRecoveryRepository();
     const canonical = createBuild();
-    render(<CharacterDetail id={canonical.id} />);
+    const view = render(<CharacterDetail id={canonical.id} />);
     const nameInput = await screen.findByDisplayValue("Canonical name");
     const winningAttempt = await repository.createAttempt({
       account,
@@ -174,20 +174,55 @@ describe("CharacterDetail competing recovery presentation", () => {
 
     expect(
       await screen.findByText(
-        "Another recovery attempt for this Character won in another tab. Your changes were not saved and remain in this form. Review or discard the competing recovery before retrying.",
+        "Another recovery attempt for this Character won in another tab. Your changes were not sent to the server and are retained as a separate rejected candidate. Review the competing attempts before retrying.",
       ),
     ).toBeVisible();
     expect(nameInput).toHaveValue("Tab B new name");
     expect(
       screen.getByText(
-        "Another tab's recovery is listed below. Your newer edits remain in this form and are not stored in that recovery.",
+        "Another tab's primary recovery is listed below. Your newer edits remain in this form and are also retained as a separate rejected candidate.",
       ),
     ).toBeVisible();
     expect(screen.getByText("Changed: Inventory notes")).toBeVisible();
     expect(screen.getByRole("button", { name: "Save identity" })).toBeDisabled();
     expect(mocks.updateServerCharacter).not.toHaveBeenCalled();
-    await waitFor(() =>
-      expect(repository.get(account.id, canonical.id)).resolves.toStrictEqual(winningAttempt),
-    );
+    const retained = await waitFor(async () => {
+      const recovery = await repository.get(account.id, canonical.id);
+      expect(recovery?.saveAttempt.id).toBe(winningAttempt?.saveAttempt.id);
+      expect(recovery?.competingCandidates).toHaveLength(1);
+      return recovery;
+    });
+
+    view.unmount();
+    mocks.loadContext.mockResolvedValue({
+      canonicalMissing: false,
+      conflictPaths: [],
+      content: {
+        professionFamilies: [],
+        professions: [],
+        skillGroups: [],
+      },
+      hasRevisionConflict: false,
+      record: createRecord(canonical),
+      recoveredBuild: undefined,
+      recoveryRecord: retained,
+    });
+    render(<CharacterDetail id={canonical.id} />);
+
+    expect(await screen.findByDisplayValue("Canonical name")).toBeVisible();
+    expect(screen.getByText("Competing rejected save — Character name")).toBeVisible();
+    expect(screen.getByText(/Save identity details/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Review rejected candidate" }));
+    expect(screen.getByDisplayValue("Tab B new name")).toBeVisible();
+    expect(
+      screen.getByText(
+        "The rejected candidate is shown separately for review. It has not been merged or sent to the server.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Save identity" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Return to current Character" }));
+    await user.click(screen.getByRole("button", { name: "Review unsaved changes" }));
+    expect(screen.getByRole("button", { name: "Save identity" })).toBeDisabled();
+    expect(mocks.updateServerCharacter).not.toHaveBeenCalled();
   });
 });

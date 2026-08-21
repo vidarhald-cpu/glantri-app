@@ -68,6 +68,33 @@ const recovery: CharacterRecoveryEnvelope = {
   baseHash: hashCharacterBuild(canonicalBuild),
   baseRevision: "revision-1",
   characterId: "character-1",
+  competingCandidates: [
+    {
+      baseHash: hashCharacterBuild(canonicalBuild),
+      baseRevision: "revision-1",
+      createdAt: "2026-08-21T10:01:00.000Z",
+      patch: [
+        {
+          attemptedValue: "Rejected name",
+          baseValue: "Canonical Character",
+          operation: "set",
+          path: "/name",
+        },
+      ],
+      reconciliation: "ready",
+      relationshipToPrimary: "disjoint",
+      saveAttempt: {
+        attemptedAt: "2026-08-21T10:01:00.000Z",
+        completedAt: "2026-08-21T10:01:00.000Z",
+        errorCode: "competing_recovery",
+        id: "candidate-1",
+        outcome: "conflict",
+      },
+      sourceAction: "Save identity",
+      sourceSurface: "Character Sheet",
+      updatedAt: "2026-08-21T10:01:00.000Z",
+    },
+  ],
   createdAt: "2026-08-21T10:00:00.000Z",
   id: "account-1:character-1",
   patch: [

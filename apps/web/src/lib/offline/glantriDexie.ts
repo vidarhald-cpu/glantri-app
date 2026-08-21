@@ -72,6 +72,19 @@ export interface CharacterRecoverySaveAttempt {
   outcome: "conflict" | "failed" | "pending" | "unknown";
 }
 
+export interface CharacterRecoveryCandidate {
+  baseHash: string;
+  baseRevision: string;
+  createdAt: string;
+  patch: CharacterRecoveryPatchEntry[];
+  reconciliation: "conflict" | "ready";
+  relationshipToPrimary: "disjoint" | "overlapping";
+  saveAttempt: CharacterRecoverySaveAttempt;
+  sourceAction: string;
+  sourceSurface: string;
+  updatedAt: string;
+}
+
 export interface CharacterRecoveryEnvelope {
   accountDisplayName?: string;
   accountEmail: string;
@@ -79,6 +92,7 @@ export interface CharacterRecoveryEnvelope {
   baseHash: string;
   baseRevision: string;
   characterId: string;
+  competingCandidates?: CharacterRecoveryCandidate[];
   createdAt: string;
   id: string;
   patch: CharacterRecoveryPatchEntry[];

@@ -45,6 +45,7 @@ import {
   formatCharacterRecoveryCompetition,
   resolveCharacterRecoverySaveFailure,
 } from "@/lib/characters/characterRecoverySaveFailure";
+import { CharacterRecoveryCandidateList } from "@/lib/characters/CharacterRecoveryCandidateList";
 import { loadServerCharacterEditContext } from "@/lib/characters/loadServerCharacterEditContext";
 import type { CharacterRecoveryEnvelope, LocalCharacterRecord } from "@/lib/offline/glantriDexie";
 import {
@@ -266,6 +267,11 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
       return;
     }
 
+    if (recoveryRecord?.competingCandidates?.length) {
+      setFeedback("Resolve or discard every rejected recovery candidate before saving.");
+      return;
+    }
+
     if (recoveryRecord && !reviewingRecovery) {
       setFeedback("Review or discard the existing unsaved changes before saving new changes.");
       return;
@@ -309,14 +315,16 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
       setCanonicalBuild(savedServerRecord.build);
       setBuild(savedServerRecord.build);
       setExpectedUpdatedAt(savedServerRecord.updatedAt);
-      if (recoveryEnvelope) {
-        await characterRecoveryRepository.deleteAttempt(
-          currentUser.id,
-          id,
-          recoveryEnvelope.saveAttempt.id,
-        );
-      }
-      setRecoveryRecord(await characterRecoveryRepository.get(currentUser.id, id));
+      const remainingRecovery = recoveryEnvelope
+        ? await characterRecoveryRepository.completeAttempt(
+            currentUser.id,
+            id,
+            recoveryEnvelope.saveAttempt.id,
+            savedServerRecord.build,
+            savedServerRecord.updatedAt,
+          )
+        : await characterRecoveryRepository.get(currentUser.id, id);
+      setRecoveryRecord(remainingRecovery);
       setCompetingRecovery(false);
       setReviewingRecovery(false);
       setFeedback("Character edits saved to the server.");
@@ -415,13 +423,22 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
       return;
     }
 
-    await characterRecoveryRepository.delete(currentUser.id, id);
+    await characterRecoveryRepository.deleteAttempt(
+      currentUser.id,
+      id,
+      recoveryRecord?.saveAttempt.id ?? "",
+    );
+    const remainingRecovery = await characterRecoveryRepository.get(currentUser.id, id);
     setCanonicalBuild(record.build);
     setBuild(record.build);
-    setRecoveryRecord(undefined);
+    setRecoveryRecord(remainingRecovery);
     setCompetingRecovery(false);
     setReviewingRecovery(false);
-    setFeedback("Unsaved changes discarded. The current Character remains unchanged.");
+    setFeedback(
+      remainingRecovery
+        ? "The selected recovery was discarded. Another retained attempt now needs review."
+        : "Unsaved changes discarded. The current Character remains unchanged.",
+    );
   }
 
   function handleReturnToCanonical() {
@@ -774,7 +791,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
           }}
         >
           <strong>
-            {competingRecovery
+            {competingRecovery || Boolean(recoveryRecord.competingCandidates?.length)
               ? "Competing unsaved changes need review"
               : reviewingRecovery
                 ? "Reviewing unsaved changes"
@@ -782,12 +799,14 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
           </strong>
           <span>
             {competingRecovery
-              ? "Another tab's recovery is listed below. Your newer edits remain in this form and are not stored in that recovery."
-              : reviewingRecovery
-                ? "These changes are shown for review. They have not replaced the current Character."
-                : recoveryRecord.reconciliation === "conflict"
-                  ? "The same Character details changed elsewhere. Review your saved-on-device changes before deciding what to keep."
-                  : "The current Character is shown. Your unsaved changes are still available on this device."}
+              ? "Another tab's primary recovery is listed below. Your newer edits remain in this form and are also retained as a separate rejected candidate."
+              : recoveryRecord.competingCandidates?.length
+                ? "The primary recovery and additional rejected candidates are retained separately. Review candidates on the Character Sheet before retrying here."
+                : reviewingRecovery
+                  ? "These changes are shown for review. They have not replaced the current Character."
+                  : recoveryRecord.reconciliation === "conflict"
+                    ? "The same Character details changed elsewhere. Review your saved-on-device changes before deciding what to keep."
+                    : "The current Character is shown. Your unsaved changes are still available on this device."}
           </span>
           <span>
             From {recoveryRecord.sourceSurface} · {recoveryRecord.sourceAction}
@@ -808,6 +827,10 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
               Discard unsaved changes
             </button>
           </div>
+          <CharacterRecoveryCandidateList
+            envelope={recoveryRecord}
+            reviewHref={`/characters/${id}`}
+          />
         </section>
       ) : null}
 
@@ -852,7 +875,13 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             </>
           ) : null}
           <button
-            disabled={saving || Boolean(recoveryRecord && !reviewingRecovery)}
+            disabled={
+              saving ||
+              Boolean(
+                recoveryRecord &&
+                (!reviewingRecovery || recoveryRecord.competingCandidates?.length),
+              )
+            }
             onClick={() => void handleSave()}
             type="button"
           >

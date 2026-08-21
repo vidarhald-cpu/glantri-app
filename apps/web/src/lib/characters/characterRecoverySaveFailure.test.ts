@@ -31,6 +31,9 @@ describe("Character recovery save failure presentation", () => {
     expect(formatCharacterRecoveryCompetition(true)).toContain(
       "Another recovery attempt for this Character won in another tab",
     );
+    expect(formatCharacterRecoveryCompetition(true)).toContain(
+      "retained as a separate rejected candidate",
+    );
     expect(formatCharacterRecoveryCompetition(false)).toContain(
       "Character recovery changed in another tab",
     );

@@ -29,6 +29,7 @@ import {
   formatCharacterRecoveryCompetition,
   resolveCharacterRecoverySaveFailure,
 } from "@/lib/characters/characterRecoverySaveFailure";
+import { CharacterRecoveryCandidateList } from "@/lib/characters/CharacterRecoveryCandidateList";
 import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import type { CharacterRecoveryEnvelope, LocalCharacterRecord } from "@/lib/offline/glantriDexie";
@@ -81,6 +82,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
   const [loading, setLoading] = useState(true);
   const [record, setRecord] = useState<LocalCharacterRecord>();
   const [recoveryRecord, setRecoveryRecord] = useState<CharacterRecoveryEnvelope>();
+  const [reviewingCandidateAttemptId, setReviewingCandidateAttemptId] = useState<string>();
   const [reviewingRecovery, setReviewingRecovery] = useState(false);
   const [savingIdentity, setSavingIdentity] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
@@ -116,6 +118,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
         setCanonicalBuild(result.record?.build);
         setRecoveryRecord(result.recoveryRecord);
         setCompetingRecovery(false);
+        setReviewingCandidateAttemptId(undefined);
         setReviewingRecovery(false);
         if (result.recoveryRecord && result.record) {
           setFeedback(
@@ -221,6 +224,11 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       return;
     }
 
+    if (recoveryRecord?.competingCandidates?.length) {
+      setFeedback("Resolve or discard every rejected recovery candidate before saving.");
+      return;
+    }
+
     if (recoveryRecord && !reviewingRecovery) {
       setFeedback("Review or discard the existing unsaved changes before saving new changes.");
       return;
@@ -265,14 +273,16 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       setRecord(savedLocalRecord);
       setCanonicalBuild(savedLocalRecord.build);
       setBuild(savedLocalRecord.build);
-      if (recoveryEnvelope) {
-        await characterRecoveryRepository.deleteAttempt(
-          currentUser.id,
-          id,
-          recoveryEnvelope.saveAttempt.id,
-        );
-      }
-      setRecoveryRecord(await characterRecoveryRepository.get(currentUser.id, id));
+      const remainingRecovery = recoveryEnvelope
+        ? await characterRecoveryRepository.completeAttempt(
+            currentUser.id,
+            id,
+            recoveryEnvelope.saveAttempt.id,
+            savedLocalRecord.build,
+            savedServerRecord.updatedAt,
+          )
+        : await characterRecoveryRepository.get(currentUser.id, id);
+      setRecoveryRecord(remainingRecovery);
       setCompetingRecovery(false);
       setReviewingRecovery(false);
       setFeedback(successMessage);
@@ -354,6 +364,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
 
     setBuild(applyCharacterRecoveryPatch(canonicalBuild, recoveryRecord.patch));
     setCompetingRecovery(false);
+    setReviewingCandidateAttemptId(undefined);
     setReviewingRecovery(true);
     setFeedback(
       "Unsaved changes loaded for review. Nothing has been saved to the current Character yet.",
@@ -367,6 +378,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
 
     setBuild(canonicalBuild);
     setCompetingRecovery(false);
+    setReviewingCandidateAttemptId(undefined);
     setReviewingRecovery(false);
     setFeedback("Current Character restored. Your unsaved changes are still available.");
   }
@@ -376,13 +388,70 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       return;
     }
 
-    await characterRecoveryRepository.delete(currentUser.id, id);
+    await characterRecoveryRepository.deleteAttempt(
+      currentUser.id,
+      id,
+      recoveryRecord?.saveAttempt.id ?? "",
+    );
+    const remainingRecovery = await characterRecoveryRepository.get(currentUser.id, id);
     setCanonicalBuild(record.build);
     setBuild(record.build);
-    setRecoveryRecord(undefined);
+    setRecoveryRecord(remainingRecovery);
     setCompetingRecovery(false);
+    setReviewingCandidateAttemptId(undefined);
     setReviewingRecovery(false);
-    setFeedback("Unsaved changes discarded. The current Character remains unchanged.");
+    setFeedback(
+      remainingRecovery
+        ? "The selected recovery was discarded. Another retained attempt now needs review."
+        : "Unsaved changes discarded. The current Character remains unchanged.",
+    );
+  }
+
+  function handleReviewCandidate(candidateAttemptId: string) {
+    if (!canonicalBuild || !recoveryRecord) {
+      return;
+    }
+
+    const candidate = recoveryRecord.competingCandidates?.find(
+      (item) => item.saveAttempt.id === candidateAttemptId,
+    );
+
+    if (!candidate) {
+      return;
+    }
+
+    setBuild(applyCharacterRecoveryPatch(canonicalBuild, candidate.patch));
+    setCompetingRecovery(false);
+    setReviewingCandidateAttemptId(candidateAttemptId);
+    setReviewingRecovery(false);
+    setFeedback(
+      "The rejected candidate is shown separately for review. It has not been merged or sent to the server.",
+    );
+  }
+
+  async function handleDiscardCandidate(candidateAttemptId: string) {
+    if (!canonicalBuild || !currentUser || !recoveryRecord) {
+      return;
+    }
+
+    const deleted = await characterRecoveryRepository.deleteCandidate(
+      currentUser.id,
+      id,
+      recoveryRecord.saveAttempt.id,
+      candidateAttemptId,
+    );
+
+    if (!deleted) {
+      setFeedback("Recovery changed in another tab. Reload before discarding anything.");
+      return;
+    }
+
+    setBuild(canonicalBuild);
+    setRecoveryRecord(await characterRecoveryRepository.get(currentUser.id, id));
+    setCompetingRecovery(false);
+    setReviewingCandidateAttemptId(undefined);
+    setReviewingRecovery(false);
+    setFeedback("Rejected recovery candidate discarded. The primary recovery remains unchanged.");
   }
 
   async function handleSaveIdentity() {
@@ -479,7 +548,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
           }}
         >
           <strong>
-            {competingRecovery
+            {competingRecovery || Boolean(recoveryRecord.competingCandidates?.length)
               ? "Competing unsaved changes need review"
               : reviewingRecovery
                 ? "Reviewing unsaved changes"
@@ -487,12 +556,14 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
           </strong>
           <span>
             {competingRecovery
-              ? "Another tab's recovery is listed below. Your newer edits remain in this form and are not stored in that recovery."
-              : reviewingRecovery
-                ? "These changes are shown for review. They have not replaced the current Character."
-                : recoveryRecord.reconciliation === "conflict"
-                  ? "The same Character details changed elsewhere. Review your saved-on-device changes before deciding what to keep."
-                  : "The current Character is shown. Your unsaved changes are still available on this device."}
+              ? "Another tab's primary recovery is listed below. Your newer edits remain in this form and are also retained as a separate rejected candidate."
+              : recoveryRecord.competingCandidates?.length
+                ? "The primary recovery and additional rejected candidates are retained separately. Review one at a time; nothing is merged automatically."
+                : reviewingRecovery
+                  ? "These changes are shown for review. They have not replaced the current Character."
+                  : recoveryRecord.reconciliation === "conflict"
+                    ? "The same Character details changed elsewhere. Review your saved-on-device changes before deciding what to keep."
+                    : "The current Character is shown. Your unsaved changes are still available on this device."}
           </span>
           <span>
             From {recoveryRecord.sourceSurface} · {recoveryRecord.sourceAction}
@@ -500,7 +571,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
           </span>
           <span>Changed: {recoveryFieldLabels.join(", ")}</span>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-            {reviewingRecovery ? (
+            {reviewingRecovery || reviewingCandidateAttemptId ? (
               <button onClick={handleReturnToCanonical} type="button">
                 Return to current Character
               </button>
@@ -513,6 +584,12 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
               Discard unsaved changes
             </button>
           </div>
+          <CharacterRecoveryCandidateList
+            envelope={recoveryRecord}
+            onDiscard={(candidateAttemptId) => void handleDiscardCandidate(candidateAttemptId)}
+            onReview={handleReviewCandidate}
+            reviewingCandidateAttemptId={reviewingCandidateAttemptId}
+          />
         </section>
       ) : null}
 
@@ -722,7 +799,13 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
               Personal information is edited and saved here on the Character Sheet.
             </div>
             <button
-              disabled={savingIdentity || Boolean(recoveryRecord && !reviewingRecovery)}
+              disabled={
+                savingIdentity ||
+                Boolean(
+                  recoveryRecord &&
+                  (!reviewingRecovery || recoveryRecord.competingCandidates?.length),
+                )
+              }
               onClick={() => void handleSaveIdentity()}
               type="button"
             >
@@ -927,7 +1010,13 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
             Character notes stay separate from inventory notes.
           </div>
           <button
-            disabled={savingNotes || Boolean(recoveryRecord && !reviewingRecovery)}
+            disabled={
+              savingNotes ||
+              Boolean(
+                recoveryRecord &&
+                (!reviewingRecovery || recoveryRecord.competingCandidates?.length),
+              )
+            }
             onClick={() => void handleSaveNotes()}
             type="button"
           >
