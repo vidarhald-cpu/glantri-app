@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { buildCombatActionProcessPlans } from "./combatActionProcesses";
+import { buildCombatProgressionProjection } from "./combatProgressionProjection";
 import {
   combatMissileIncomingAttackSchema,
   combatRoundStateSchema,
@@ -490,6 +492,31 @@ describe("pending missile defense boundary", () => {
       details: "Range 70/210/420 · Weapon2 row 17",
       shortTitle: "Missile shot committed",
       summaryText: "Round 1, Phase 1: Archer fired at Target; awaiting defense review.",
+    });
+
+    const process = buildCombatActionProcessPlans(next)[0]?.standardAttacks[0];
+    expect(process).toMatchObject({
+      attackResultId: "1:opportunity:opportunity-1",
+    });
+    expect(process?.stages.find((stage) => stage.kind === "attack")?.state).toBe("complete");
+    expect(process?.stages.find((stage) => stage.kind === "defense")?.state).toBe("ready");
+    const tasks = buildCombatProgressionProjection(next).boundary.processes.flatMap((entry) =>
+      entry.stages.flatMap((stage) => stage.tasks),
+    );
+    expect(next.currentCursor).toMatchObject({ participantId: "target", step: "P1" });
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({
+      expectedCommand: "commit_defense_review",
+      identity: {
+        attackResultId: "1:opportunity:opportunity-1",
+        attackerParticipantId: "archer",
+        defenderParticipantId: "target",
+        opportunityId: "opportunity-1",
+        phase: "phase1",
+      },
+      kind: "defense_review",
+      state: "executable",
+      trackerFacet: { owner: { participantId: "target" }, step: "P1" },
     });
   });
 

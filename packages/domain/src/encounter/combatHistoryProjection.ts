@@ -51,6 +51,7 @@ export interface CombatHistoryParticipantIdentity {
 export interface ProjectedCombatHistoryEvent {
   completeness: CombatStepEvent["completeness"];
   facts: {
+    defenseReview?: PlayerSafeCombatDefenseReview;
     gmReview?: CombatStepEventFacts["gmReview"];
     involvedOutcome?: CombatStepEventFacts["involvedOutcome"];
     privateCalculation?: CombatStepEventFacts["rollerPrivate"];
@@ -70,6 +71,87 @@ export interface ProjectedCombatHistoryEvent {
   status: CombatStepEvent["status"];
   step: CombatStepEvent["step"];
   type: CombatStepEvent["type"];
+}
+
+export interface PlayerSafeCombatDefenseReview {
+  attackDirection: "front" | "left" | "rear" | "right";
+  aware: boolean;
+  eventSequence: number;
+  ordinaryDodgeAvailable: boolean;
+  phase: NonNullable<CombatStepEvent["phase"]>;
+  roundNumber: number;
+  sources: Array<{
+    included: boolean;
+    kind: "shield" | "weapon";
+    label: string;
+    slot: "mainHand" | "offHand";
+  }>;
+}
+
+function projectPlayerSafeCombatDefenseReview(input: {
+  event: CombatStepEvent;
+  ownRoll: boolean;
+}): PlayerSafeCombatDefenseReview | undefined {
+  if (!input.ownRoll || !input.event.phase) return undefined;
+  const facts = input.event.facts.rollerPrivate;
+  if (
+    typeof facts.aware !== "boolean" ||
+    typeof facts.ordinaryDodgeAvailable !== "boolean" ||
+    (facts.attackDirection !== "front" &&
+      facts.attackDirection !== "left" &&
+      facts.attackDirection !== "rear" &&
+      facts.attackDirection !== "right") ||
+    !Array.isArray(facts.sources)
+  ) {
+    return undefined;
+  }
+  const sources = facts.sources.flatMap((candidate) => {
+    if (
+      typeof candidate !== "object" ||
+      candidate === null ||
+      typeof (candidate as Record<string, unknown>).included !== "boolean" ||
+      ((candidate as Record<string, unknown>).kind !== "shield" &&
+        (candidate as Record<string, unknown>).kind !== "weapon") ||
+      typeof (candidate as Record<string, unknown>).label !== "string" ||
+      ((candidate as Record<string, unknown>).slot !== "mainHand" &&
+        (candidate as Record<string, unknown>).slot !== "offHand")
+    ) {
+      return [];
+    }
+    const source = candidate as {
+      included: boolean;
+      kind: "shield" | "weapon";
+      label: string;
+      slot: "mainHand" | "offHand";
+    };
+    return [{ ...source }];
+  });
+  if (sources.length !== facts.sources.length) return undefined;
+  return {
+    attackDirection: facts.attackDirection,
+    aware: facts.aware,
+    eventSequence: input.event.sequence,
+    ordinaryDodgeAvailable: facts.ordinaryDodgeAvailable,
+    phase: input.event.phase,
+    roundNumber: input.event.roundNumber,
+    sources,
+  };
+}
+
+export function getLatestPlayerSafeCombatDefenseReview(input: {
+  defenderParticipantId?: string;
+  events: readonly ProjectedCombatHistoryEvent[];
+  phase: NonNullable<CombatStepEvent["phase"]>;
+  roundNumber: number;
+}): PlayerSafeCombatDefenseReview | undefined {
+  return input.events
+    .filter(
+      (event) =>
+        event.facts.defenseReview?.phase === input.phase &&
+        event.facts.defenseReview.roundNumber === input.roundNumber &&
+        (!input.defenderParticipantId || event.ownerParticipantId === input.defenderParticipantId),
+    )
+    .sort((left, right) => right.sequence - left.sequence)[0]?.facts.defenseReview;
 }
 
 export interface ProjectedCombatHistoryRow {
@@ -427,6 +509,16 @@ export function projectCombatHistoryEvent(input: {
     );
   const ownRoll =
     gm || isControlled({ participantId: input.event.rollerParticipantId, viewer: input.viewer });
+  const playerViewer = input.viewer.kind === "player" ? input.viewer : undefined;
+  const allIdentitiesVisible =
+    !playerViewer ||
+    input.event.visibility.identityRefs.every((ref) =>
+      playerViewer.visibleParticipantIds.has(ref.participantId),
+    );
+  const projectedEventId =
+    gm || allIdentitiesVisible
+      ? input.event.id
+      : `round:${input.event.roundNumber}:event:${input.event.sequence}`;
   const identities = projectEventIdentities({
     event: input.event,
     labels,
@@ -438,10 +530,28 @@ export function projectCombatHistoryEvent(input: {
       involved ||
       (identity.role !== "target" && identity.role !== "defender"),
   );
+  const resultEnvelope = projectCombatResultEnvelope({
+    event: allIdentitiesVisible
+      ? input.event
+      : {
+          ...input.event,
+          commandId: undefined,
+          facts: { ...input.event.facts, resultPresentation: undefined },
+          id: projectedEventId,
+          opportunityId: undefined,
+          source: { ...input.event.source, sourceIds: [] },
+        },
+    identities,
+    involved,
+    ownRoll,
+    viewer: gm ? "gm" : "player",
+  });
+  const publicCombatNote = input.event.facts.resultPresentation?.publicCombatNote;
 
   return {
     completeness: input.event.completeness,
     facts: {
+      defenseReview: projectPlayerSafeCombatDefenseReview({ event: input.event, ownRoll }),
       gmReview: gm && hasFacts(input.event.facts.gmReview) ? input.event.facts.gmReview : undefined,
       involvedOutcome:
         involved && hasFacts(input.event.facts.involvedOutcome)
@@ -453,24 +563,23 @@ export function projectCombatHistoryEvent(input: {
           : undefined,
       publicOutcome: input.event.facts.publicOutcome,
     },
-    id: input.event.id,
+    // Canonical event/opportunity ids may embed participant or attack lineage. Player read models
+    // use sequence-scoped aliases unless every referenced identity is visible to that viewer.
+    id: projectedEventId,
     identities,
     missingFacts: input.event.missingFacts,
     occurredAt: input.event.occurredAt,
-    opportunityId: input.event.opportunityId,
+    opportunityId: allIdentitiesVisible ? input.event.opportunityId : undefined,
     ownerParticipantId:
       input.event.ownerParticipantId &&
       isVisible({ participantId: input.event.ownerParticipantId, viewer: input.viewer })
         ? input.event.ownerParticipantId
         : undefined,
     phase: input.event.phase,
-    resultEnvelope: projectCombatResultEnvelope({
-      event: input.event,
-      identities,
-      involved,
-      ownRoll,
-      viewer: gm ? "gm" : "player",
-    }),
+    resultEnvelope:
+      !allIdentitiesVisible && publicCombatNote
+        ? { ...resultEnvelope, publicCombatNote }
+        : resultEnvelope,
     roundNumber: input.event.roundNumber,
     sequence: input.event.sequence,
     status: input.event.status,

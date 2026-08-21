@@ -46,6 +46,7 @@ Useful references:
 - Use one clean, short-lived task branch/worktree from the exact accepted `dev` SHA. Do not continue feature work on accepted or long-lived branches.
 - Coordinate reserved hotspots and cross-area merge order through the task contract.
 - Existing repository tools, Docker/local database tooling, and declared dependency installation are allowed. New software, global tools, services, permissions, or external transmission require explicit approval.
+- A linked Builder/QA worktree that can reach PostgreSQL must own an explicit disposable task target; worktree filesystem isolation is not database isolation. Follow `docs/dev-database.md`, never copy the primary checkout `.env`, and never use the protected `localhost:5432/glantri` database from a linked worktree.
 - Run verification proportional to the affected layers; normally typecheck, lint, tests, and build, plus database or browser checks when relevant.
 - Inspect Git status after generation/build/test steps. Do not silently commit generated output.
 

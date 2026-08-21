@@ -393,6 +393,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
       "selectedParticipant.state.combat.lastDeclaredEncounterId === encounterId",
     );
     expect(source).toContain("phaseModel.showDefenseContext");
+    expect(source).toContain("getLatestPlayerSafeCombatDefenseReview({");
+    expect(source).toContain("events: combatHistory.activeRound.events");
+    expect(source).toContain("PlayerCombatCommittedDefenseReview review={committedDefenseReview}");
+    expect(source).toContain("committedDefenseReview ? (");
     expect(source).not.toContain("movementLabel=");
     expect(source).not.toContain('description: selectedSecondaryActionId ? "" : "Open"');
     expect(source).not.toContain("formatCombatInitiativeRoll(selectedRoundParticipant");

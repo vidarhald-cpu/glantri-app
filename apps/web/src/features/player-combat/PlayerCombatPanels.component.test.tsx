@@ -6,6 +6,7 @@ import {
   PlayerCombatActionButtonPanel,
   PlayerCombatActionSelectorPanel,
   PlayerCombatAttackModeSelector,
+  PlayerCombatCommittedDefenseReview,
   PlayerCombatModifierPanel,
   PlayerCombatObservationProgress,
   PlayerCombatOpponentSelector,
@@ -16,6 +17,60 @@ afterEach(() => {
 });
 
 describe("PlayerCombatActionSelectorPanel", () => {
+  it("advances the rendered committed defense without exposing canonical identifiers", () => {
+    const first = {
+      attackDirection: "front" as const,
+      aware: true,
+      eventSequence: 8,
+      ordinaryDodgeAvailable: true,
+      phase: "phase1" as const,
+      roundNumber: 2,
+      sources: [
+        {
+          included: true,
+          kind: "shield" as const,
+          label: "Round shield",
+          slot: "offHand" as const,
+        },
+      ],
+    };
+    const { container, rerender } = render(<PlayerCombatCommittedDefenseReview review={first} />);
+
+    expect(screen.getByText("Awareness: Aware")).toBeInTheDocument();
+    expect(screen.getByText("Included defense sources: Round shield")).toBeInTheDocument();
+
+    rerender(
+      <PlayerCombatCommittedDefenseReview
+        review={{
+          ...first,
+          attackDirection: "rear",
+          aware: false,
+          eventSequence: 9,
+          ordinaryDodgeAvailable: false,
+          sources: [
+            { ...first.sources[0]!, included: false },
+            {
+              included: true,
+              kind: "weapon",
+              label: "Main gauche",
+              slot: "mainHand",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Awareness: Unaware")).toBeInTheDocument();
+    expect(screen.getByText("Ordinary Dodge: Unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Incoming direction: Rear")).toBeInTheDocument();
+    expect(screen.getByText("Included defense sources: Main gauche")).toBeInTheDocument();
+    expect(screen.getByText("Excluded defense sources: Round shield")).toBeInTheDocument();
+    expect(container.textContent).not.toContain("item-");
+    expect(container.textContent).not.toContain("template-");
+    expect(container.textContent).not.toContain("revision");
+    expect(container.textContent).not.toContain("attacker");
+  });
+
   it("keeps the selector prompt and shows the completed declaration state", () => {
     render(
       <PlayerCombatActionSelectorPanel

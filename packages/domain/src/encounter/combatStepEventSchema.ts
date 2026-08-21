@@ -132,6 +132,7 @@ export const combatStepEventCommandTypeSchema = z.enum([
   "roll_attack",
   "progress_missile_readiness",
   "interrupt_missile_readiness",
+  "commit_defense_review",
   "roll_parry",
   "roll_offensive_parry_brawling",
   "roll_continued_contact_maintenance",

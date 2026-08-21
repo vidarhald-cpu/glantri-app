@@ -12,6 +12,10 @@
     "./equipment": {
       "types": "./dist/equipment/index.d.ts",
       "default": "./dist/equipment/index.js"
+    },
+    "./semantic-fixtures": {
+      "types": "./dist/semanticFixtures/index.d.ts",
+      "default": "./dist/semanticFixtures/index.js"
     }
   },
   "scripts": {

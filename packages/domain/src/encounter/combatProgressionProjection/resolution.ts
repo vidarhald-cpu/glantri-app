@@ -5,6 +5,8 @@ import {
   getCombatRoundDamageSubstate,
   getCombatRoundGrazeDamageRollContext,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
+  getCombatRoundPendingDefenseAttackResult,
+  getCombatRoundPendingMissileIncomingAttackForParticipantPhase,
   getCombatRoundAttackResultForOpportunity,
   getCombatRoundAttackResultId,
   getCombatRoundHitLocationResultId,
@@ -298,7 +300,12 @@ function buildLegacyAttackProcess(
     },
     {
       kind: "defense",
-      state: substep === "parry" ? "active" : substep === "attack" ? "pending" : "complete",
+      state:
+        substep === "defense" || substep === "parry"
+          ? "active"
+          : substep === "attack"
+            ? "pending"
+            : "complete",
       strategy: "single_task",
     },
     {
@@ -306,7 +313,7 @@ function buildLegacyAttackProcess(
       state:
         substep === "damage"
           ? "active"
-          : substep === "attack" || substep === "parry"
+          : substep === "attack" || substep === "defense" || substep === "parry"
             ? "pending"
             : "complete",
       strategy: "single_task",
@@ -377,6 +384,79 @@ function buildLegacyAttackProcess(
           },
           trackerOwner: owner,
           trackerStep: trackerAttack,
+        },
+      ],
+    };
+  } else if (substep === "defense") {
+    const defender = participantId ? context.identities.get(participantId) : undefined;
+    const pendingMissile = participantId
+      ? getCombatRoundPendingMissileIncomingAttackForParticipantPhase({
+          defenderParticipantId: participantId,
+          phase,
+          state: context.state,
+        })
+      : undefined;
+    const attack = participantId
+      ? getCombatRoundPendingDefenseAttackResult({
+          participantId,
+          phase,
+          state: context.state,
+        })
+      : undefined;
+    const attackerParticipantId =
+      pendingMissile?.attackerParticipantId ?? attack?.attackerParticipantId;
+    const attackId = pendingMissile
+      ? getCombatRoundAttackResultId({
+          result: pendingMissile,
+          roundNumber: context.state.roundNumber,
+        })
+      : attack
+        ? getCombatRoundAttackResultId({
+            result: attack,
+            roundNumber: context.state.roundNumber,
+          })
+        : undefined;
+    stages[1] = {
+      ...stages[1],
+      tasks: [
+        {
+          dependencies:
+            attackId && attackerParticipantId && participantId
+              ? undefined
+              : [
+                  {
+                    message: "The active defense review has no exact incoming attack.",
+                    owner: defender,
+                    type: "invalid_source",
+                  },
+                ],
+          expectedCommand: "commit_defense_review",
+          identity: {
+            attackResultId: attackId,
+            attackerParticipantId,
+            defenderParticipantId: participantId,
+            opportunityId: pendingMissile?.attackOpportunityId ?? attack?.attackOpportunityId,
+            opponentParticipantId: attackerParticipantId,
+            phase,
+          },
+          kind: "defense_review",
+          owner: GM_IDENTITY,
+          presentationContext: {
+            actionKind: presentationActionKind(
+              attackerParticipantId
+                ? context.state.participants.find(
+                    (entry) => entry.participantId === attackerParticipantId,
+                  )?.declaration?.actionId
+                : undefined,
+            ),
+            actor: attackerParticipantId
+              ? context.identities.get(attackerParticipantId)
+              : undefined,
+            responder: defender,
+            target: defender,
+          },
+          trackerOwner: defender,
+          trackerStep: trackerParry,
         },
       ],
     };
@@ -946,9 +1026,11 @@ function buildAdapterAttackProcess(
     }
     const task = stage.task;
     const taskKind =
-      stage.kind === "damage" && task?.owner === "attacker"
-        ? ("damage_roll" as const)
-        : adapterStageTaskKind(stage);
+      task?.expectedCommand === "commit_defense_review"
+        ? ("defense_review" as const)
+        : stage.kind === "damage" && task?.owner === "attacker"
+          ? ("damage_roll" as const)
+          : adapterStageTaskKind(stage);
     const owner =
       task?.owner === "gm" ? GM_IDENTITY : task?.owner === "defender" ? defender : attacker;
     // Tracker ownership follows the participant who must supply this stage's input.
@@ -1072,7 +1154,12 @@ function buildAdapterAttackProcess(
                   actor: attacker,
                   damageRollExpression:
                     taskKind === "damage_roll" ? damageRollExpression : undefined,
-                  responder: owner?.kind === "combatant" ? owner : undefined,
+                  responder:
+                    taskKind === "defense_review"
+                      ? defender
+                      : owner?.kind === "combatant"
+                        ? owner
+                        : undefined,
                   target: defender,
                   weapon:
                     weaponLabel || plan.opportunity.itemId || plan.opportunity.weaponTemplateId
@@ -1082,7 +1169,12 @@ function buildAdapterAttackProcess(
                         }
                       : undefined,
                 },
-                trackerOwner: task.owner === "gm" ? undefined : trackerOwner,
+                trackerOwner:
+                  taskKind === "defense_review"
+                    ? defender
+                    : task.owner === "gm"
+                      ? undefined
+                      : trackerOwner,
                 trackerStep: trackerStepForPhase(plan.phase, stage.trackerFacet),
               },
             ]

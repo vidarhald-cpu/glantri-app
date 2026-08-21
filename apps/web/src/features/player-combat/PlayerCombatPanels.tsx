@@ -14,6 +14,7 @@ import {
   type ScenarioCombatModifierBucket,
   type ScenarioCombatModifierEntry,
   type CombatObservationRelationship,
+  type PlayerSafeCombatDefenseReview,
   type ScenarioParticipantCombatContext,
   type ScenarioParticipantParryDirection,
   type ScenarioParticipantTargetLocation,
@@ -221,6 +222,10 @@ interface PlayerCombatAttackStatsTableProps {
 
 interface PlayerCombatDefenseStatsTableProps {
   stats: PlayerCombatDefenseStatsView;
+}
+
+interface PlayerCombatCommittedDefenseReviewProps {
+  review: PlayerSafeCombatDefenseReview;
 }
 
 interface PlayerCombatParryContextPanelProps {
@@ -2311,6 +2316,47 @@ export function PlayerCombatDefenseStatsTable({ stats }: PlayerCombatDefenseStat
         </tbody>
       </table>
     </div>
+  );
+}
+
+export function PlayerCombatCommittedDefenseReview({
+  review,
+}: PlayerCombatCommittedDefenseReviewProps) {
+  const includedSources = review.sources.filter((source) => source.included);
+  const excludedSources = review.sources.filter((source) => !source.included);
+  const directionLabel =
+    review.attackDirection === "rear"
+      ? "Rear"
+      : `${review.attackDirection[0]?.toUpperCase()}${review.attackDirection.slice(1)}`;
+
+  return (
+    <section
+      aria-label={`Committed defense review · ${review.phase === "phase1" ? "Phase 1" : "Phase 2"}`}
+      style={{
+        background: "#eef4ef",
+        border: "1px solid #b9cbbb",
+        borderRadius: 8,
+        display: "grid",
+        gap: "0.35rem",
+        padding: "0.55rem",
+      }}
+    >
+      <strong>Committed defense</strong>
+      <div style={{ color: "#3f5145", display: "grid", fontSize: "0.85rem", gap: "0.2rem" }}>
+        <div>Awareness: {review.aware ? "Aware" : "Unaware"}</div>
+        <div>Ordinary Dodge: {review.ordinaryDodgeAvailable ? "Available" : "Unavailable"}</div>
+        <div>Incoming direction: {directionLabel}</div>
+        <div>
+          Included defense sources:{" "}
+          {includedSources.map((source) => source.label).join(", ") || "None"}
+        </div>
+        {excludedSources.length > 0 ? (
+          <div>
+            Excluded defense sources: {excludedSources.map((source) => source.label).join(", ")}
+          </div>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

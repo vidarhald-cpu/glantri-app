@@ -33,8 +33,14 @@ Explain impact and why this task has priority.
 - Local-only, push authorized, or PR authorized:
 - Intended PR target, if confirmed:
 - Required reading (exact repository paths):
+- Database capability: none, application-only, migrations, reset/seed, integration tests, or other:
+- Explicit `DATABASE_URL` owner/target, when database-capable:
+- Explicit `DATABASE_URL_TEST` owner/target, when database-capable:
+- Disposable PostgreSQL 16 setup, verification, and cleanup commands, when database-capable:
 
 Name only the documents needed to execute this task safely. `AGENTS.md` is always required; area-specific contracts apply only when the task touches that area. Decision records, audits, and historical reports are on-demand references, not blanket startup reading. Do not use instructions such as `read all architecture docs`.
+
+Database-capable Builder/QA work must name an isolated disposable target before any application, migration, reset, seed, or integration-test command runs. A separate Git worktree does not isolate PostgreSQL state. Linked worktrees must not copy or inherit the primary checkout `.env` or another worktree's `.env.task`, and must not use the protected normal database at `localhost:5432/glantri`. Every database-capable operation and cleanup must re-bind the declared task environment to the actual current linked worktree and its expected container labels. If current-worktree ownership cannot be proved from the task contract and repository preflight, the command does not run.
 
 ### Rule basis
 
@@ -216,6 +222,7 @@ Passing automated tests is necessary where specified but does not override an ob
 - Reload/history/undo/stale-state checks:
 - Accessibility/responsive checks:
 - Migration/compatibility checks:
+- Database target evidence: sanitized host, port, database names, ownership marker, PostgreSQL version, and cleanup result:
 - Performance/security checks:
 - Required CI jobs:
 - Product-owner acceptance script:

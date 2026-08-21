@@ -60,6 +60,7 @@ export function classifyCombatTrackerTaskAttention(
     case "critical":
     case "damage_roll":
     case "damage_review":
+    case "defense_review":
     case "distance_commit":
     case "distance_roll":
     case "double_attack_decision":
@@ -133,6 +134,8 @@ function actionLabel(kind: CombatProgressionTaskKind): string {
       return "Graze damage";
     case "damage_review":
       return "Damage review";
+    case "defense_review":
+      return "Defense review";
     case "double_attack_decision":
       return "Double Attack";
     case "feint_attacker_roll":
@@ -185,6 +188,8 @@ function gmText(task: CombatProgressionPresentationTask, owner: string | undefin
       return `Awaiting GM: Review distance control${owner ? ` for ${owner}` : ""}.`;
     case "damage_review":
       return `Awaiting GM: Review damage${owner ? ` for ${owner}` : ""}.`;
+    case "defense_review":
+      return `Awaiting GM: Review awareness and defense sources${owner ? ` for ${owner}` : ""}.`;
     case "effect_review":
       return `Awaiting GM: Review round-end effects${owner ? ` for ${owner}` : ""}.`;
     case "participant_review":
@@ -340,6 +345,7 @@ export function buildCombatTrackerTaskHover(
       case "adjust_distance_commit":
       case "distance_commit":
       case "damage_review":
+      case "defense_review":
       case "effect_review":
       case "participant_review":
       case "round_end_prepare":

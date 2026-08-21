@@ -589,6 +589,7 @@ function actionTaskParticipantId(
   }
   if (task.owner === "attacker") return plan.ownerParticipantId;
   if (task.owner === "defender") return targetParticipantId;
+  if (task.owner === "gm" && stage.kind === "defense") return targetParticipantId;
   if (task.owner === "offensive_parry_controller") return task.declaredOpponentParticipantId;
   if (task.owner === "offensive_parry_responder") return targetParticipantId;
   return undefined;

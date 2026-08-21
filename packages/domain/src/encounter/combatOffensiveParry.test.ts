@@ -31,10 +31,12 @@ import {
   recordCombatRoundOffensiveParryBrawlingRoll,
   recordCombatRoundDeclaration,
   recordCombatRoundAttackResult,
+  recordCombatRoundDefenseReview,
   recordCombatRoundParryResult,
   type CombatRoundState,
   undoLatestCombatRoundCommand,
 } from "./combatRoundManager";
+import { buildCombatDefenseSnapshotId, combatDefenseSnapshotSchema } from "./combatDefenseSnapshot";
 
 const at = "2026-07-23T10:00:00.000Z";
 
@@ -43,13 +45,17 @@ function state(input?: {
   selectedOpponentId?: string;
 }): CombatRoundState {
   const sourceAttack = input?.attackResult ?? attack;
-  return combatRoundStateSchema.parse({
-    currentCursor: { participantId: "attacker", roundNumber: 1, step: "P1" },
+  const sourceAttackOpportunityId = sourceAttack.attackOpportunityId;
+  if (!sourceAttackOpportunityId)
+    throw new Error("Offensive Parry test attack needs an opportunity.");
+  const base = combatRoundStateSchema.parse({
+    currentCursor: { participantId: "defender", roundNumber: 1, step: "P1" },
     currentStep: "phase_1_actions",
     encounterId: "encounter",
     participants: [
       {
         attackResults: { phase1: sourceAttack },
+        attackResultsByOpportunity: { [sourceAttackOpportunityId]: sourceAttack },
         declaration: {
           actionId: "attack_parry",
           attackOpportunities: [
@@ -102,11 +108,44 @@ function state(input?: {
       },
     ],
     phaseResolutionCursor: {
-      participantId: "attacker",
+      participantId: "defender",
       phase: "phase1",
-      substep: "parry",
+      substep: "defense",
     },
     roundNumber: 1,
+  });
+  return commitTestDefenseReview({ attackResult: sourceAttack, state: base });
+}
+
+function commitTestDefenseReview(input: {
+  attackResult: typeof attack;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const attackResultId = getCombatRoundAttackResultId({
+    result: input.attackResult,
+    roundNumber: input.state.roundNumber,
+  });
+  return recordCombatRoundDefenseReview({
+    command: { commandId: "defense-review", createdAt: at },
+    snapshot: combatDefenseSnapshotSchema.parse({
+      attackDirection: "front",
+      attackerParticipantId: input.attackResult.attackerParticipantId,
+      attackId: attackResultId,
+      attackOpportunityId: input.attackResult.attackOpportunityId,
+      aware: true,
+      awarenessDefault: true,
+      awarenessOverridden: false,
+      defenderParticipantId: input.attackResult.defenderParticipantId,
+      id: buildCombatDefenseSnapshotId(attackResultId),
+      ordinaryDodgeAvailable: true,
+      phase: input.attackResult.phase,
+      reviewedAt: at,
+      roundNumber: input.state.roundNumber,
+      schemaVersion: 1,
+      sources: [],
+      status: "committed",
+    }),
+    state: input.state,
   });
 }
 
@@ -404,6 +443,7 @@ describe("Offensive Parry rules", () => {
     const preAttack = combatRoundStateSchema.parse({
       ...state(),
       currentCursor: { participantId: "attacker", roundNumber: 1, step: "A1" },
+      defenseSnapshots: [],
       participants: state().participants.map((participant) =>
         participant.participantId === "attacker"
           ? { ...participant, attackResults: {}, attackResultsByOpportunity: {} }
@@ -414,6 +454,7 @@ describe("Offensive Parry rules", () => {
         phase: "phase1",
         substep: "attack",
       },
+      phaseResolutionResults: [],
     });
     const rolled = recordCombatRoundAttackResult({
       command: { commandId: "source-attack", createdAt: at },
@@ -427,10 +468,21 @@ describe("Offensive Parry rules", () => {
         .boundary.processes.flatMap((process) => process.stages)
         .flatMap((stage) => stage.executionGroups)
         .flatMap((group) => group.tasks)
+        .some((task) => task.kind === "defense_review"),
+    ).toBe(true);
+    const reviewed = commitTestDefenseReview({ attackResult: missedAttack, state: rolled });
+    expect(
+      buildCombatProgressionProjection(reviewed)
+        .boundary.processes.flatMap((process) => process.stages)
+        .flatMap((stage) => stage.executionGroups)
+        .flatMap((group) => group.tasks)
         .some((task) => task.identity.offensiveParryAttemptId === offensiveParryAttemptId),
     ).toBe(true);
 
-    const undone = undoLatestCombatRoundCommand({ state: rolled });
+    const defenseUndone = undoLatestCombatRoundCommand({ state: reviewed });
+    const undone = defenseUndone
+      ? undoLatestCombatRoundCommand({ state: defenseUndone })
+      : undefined;
     expect(
       undone &&
         buildCombatProgressionProjection(undone)

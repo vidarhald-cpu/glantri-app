@@ -17,6 +17,10 @@ import {
   resolveCanonicalParryBase,
   resolveCanonicalWeaponParryBase,
 } from "./combatManualCalculationResolution";
+import {
+  buildCanonicalCombatDefenseSnapshot,
+  resolveCanonicalParryBaseForDefenseSnapshot,
+} from "./combatDefenseSnapshotResolution";
 
 function buildParticipant(): ScenarioParticipant {
   const characterId = "character-defender";
@@ -194,6 +198,19 @@ function buildArmedParticipant(): ScenarioParticipant {
   } as ScenarioParticipant;
 }
 
+function getArmedEquipmentState(participant: ScenarioParticipant) {
+  return participant.snapshot.equipmentState as {
+    activeLoadoutByCharacterId: Record<
+      string,
+      { activePrimaryWeaponItemId?: string; activeSecondaryWeaponItemId?: string }
+    >;
+    itemsById: Record<
+      string,
+      { id: string; revision?: string; templateId: string } & Record<string, unknown>
+    >;
+  };
+}
+
 function contribution(input: {
   bucket?: "db_parry" | "general_fatigue";
   id: string;
@@ -336,6 +353,203 @@ describe("server-owned combat defense resolution", () => {
     ) {
       expect(laterGroupCalculation.effectiveDb).toBeLessThan(sameGroupCalculation.effectiveDb);
     }
+  });
+});
+
+describe("per-attack defense snapshot resolution", () => {
+  it("captures exact equipment revisions and GM inclusion provenance", () => {
+    const attacker = {
+      ...buildParticipant(),
+      id: "scenario-attacker",
+      visibilityOverrides: { visibility: "hidden" as const },
+    };
+    const defender = buildArmedParticipant();
+    const equipmentState = defender.snapshot.equipmentState as {
+      activeLoadoutByCharacterId: Record<
+        string,
+        { activePrimaryWeaponItemId?: string; activeSecondaryWeaponItemId?: string }
+      >;
+    };
+    const loadout = equipmentState.activeLoadoutByCharacterId[defender.characterId!];
+    const primaryId = loadout!.activePrimaryWeaponItemId!;
+    const secondaryId = loadout!.activeSecondaryWeaponItemId!;
+
+    const result = buildCanonicalCombatDefenseSnapshot({
+      attacker,
+      attackerCombatantId: "attacker",
+      attackId: "1:opportunity:attack-1",
+      attackOpportunityId: "attack-1",
+      aware: true,
+      defender,
+      defenderCombatantId: "defender",
+      phase: "phase1",
+      reviewedAt: "2026-08-18T10:00:00.000Z",
+      reviewedByUserId: "gm",
+      roundNumber: 1,
+      sourceSelections: [
+        { included: true, itemId: primaryId },
+        { included: false, itemId: secondaryId },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      aware: true,
+      awarenessDefault: false,
+      awarenessOverridden: true,
+      ordinaryDodgeAvailable: true,
+    });
+    expect(result.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          decision: "gm_included",
+          included: true,
+          itemId: primaryId,
+          itemRevision: "2026-08-07T09:00:00.000Z",
+        }),
+        expect.objectContaining({
+          decision: "gm_excluded",
+          included: false,
+          itemId: secondaryId,
+          itemRevision: "2026-08-07T09:00:00.000Z",
+        }),
+      ]),
+    );
+  });
+
+  it("rejects forged defense-source item identities before creating a snapshot", () => {
+    expect(() =>
+      buildCanonicalCombatDefenseSnapshot({
+        attacker: buildParticipant(),
+        attackerCombatantId: "attacker",
+        attackId: "1:opportunity:attack-1",
+        attackOpportunityId: "attack-1",
+        aware: true,
+        defender: buildArmedParticipant(),
+        defenderCombatantId: "defender",
+        phase: "phase1",
+        reviewedAt: "2026-08-18T10:00:00.000Z",
+        roundNumber: 1,
+        sourceSelections: [{ included: true, itemId: "forged-item" }],
+      }),
+    ).toThrow(/Defense sources changed/);
+  });
+
+  it("uses only the exact included source committed for this incoming attack", () => {
+    const attacker = { ...buildParticipant(), id: "scenario-attacker" };
+    const defender = buildArmedParticipant();
+    const equipmentState = getArmedEquipmentState(defender);
+    const loadout = equipmentState.activeLoadoutByCharacterId[defender.characterId!]!;
+    const snapshot = buildCanonicalCombatDefenseSnapshot({
+      attacker,
+      attackerCombatantId: "attacker",
+      attackId: "1:opportunity:attack-a",
+      attackOpportunityId: "attack-a",
+      aware: true,
+      defender,
+      defenderCombatantId: "defender",
+      phase: "phase1",
+      reviewedAt: "2026-08-18T10:00:00.000Z",
+      roundNumber: 1,
+      sourceSelections: [
+        { included: true, itemId: loadout.activePrimaryWeaponItemId! },
+        { included: false, itemId: loadout.activeSecondaryWeaponItemId! },
+      ],
+    });
+
+    const result = resolveCanonicalParryBaseForDefenseSnapshot({
+      attackId: snapshot.attackId,
+      attackOpportunityId: snapshot.attackOpportunityId,
+      attackerCombatantId: snapshot.attackerParticipantId,
+      defender,
+      defenderCombatantId: snapshot.defenderParticipantId,
+      phase: snapshot.phase,
+      snapshot,
+    });
+
+    expect(result).toMatchObject({
+      completeness: "complete",
+      parrySourceLabel: "Long sword",
+      usedMainHand: true,
+      usedOffHand: false,
+    });
+  });
+
+  it("rejects stale included equipment instead of substituting the current loadout", () => {
+    const attacker = { ...buildParticipant(), id: "scenario-attacker" };
+    const defender = buildArmedParticipant();
+    const equipmentState = getArmedEquipmentState(defender);
+    const loadout = equipmentState.activeLoadoutByCharacterId[defender.characterId!]!;
+    const snapshot = buildCanonicalCombatDefenseSnapshot({
+      attacker,
+      attackerCombatantId: "attacker",
+      attackId: "1:opportunity:attack-a",
+      attackOpportunityId: "attack-a",
+      aware: true,
+      defender,
+      defenderCombatantId: "defender",
+      phase: "phase1",
+      reviewedAt: "2026-08-18T10:00:00.000Z",
+      roundNumber: 1,
+      sourceSelections: [{ included: true, itemId: loadout.activePrimaryWeaponItemId! }],
+    });
+    const stale = {
+      ...defender,
+      snapshot: {
+        ...defender.snapshot,
+        equipmentState: {
+          ...defender.snapshot.equipmentState!,
+          itemsById: {
+            ...equipmentState.itemsById,
+            [loadout.activePrimaryWeaponItemId!]: {
+              ...equipmentState.itemsById[loadout.activePrimaryWeaponItemId!]!,
+              revision: "2026-08-18T10:01:00.000Z",
+            },
+          },
+        },
+      },
+    } as ScenarioParticipant;
+
+    expect(
+      resolveCanonicalParryBaseForDefenseSnapshot({
+        attackId: snapshot.attackId,
+        attackOpportunityId: snapshot.attackOpportunityId,
+        attackerCombatantId: snapshot.attackerParticipantId,
+        defender: stale,
+        defenderCombatantId: snapshot.defenderParticipantId,
+        phase: snapshot.phase,
+        snapshot,
+      }),
+    ).toMatchObject({ completeness: "partial", missingFacts: ["defense_snapshot_source"] });
+  });
+
+  it("rejects a snapshot linked to another incoming attack", () => {
+    const attacker = { ...buildParticipant(), id: "scenario-attacker" };
+    const defender = buildArmedParticipant();
+    const snapshot = buildCanonicalCombatDefenseSnapshot({
+      attacker,
+      attackerCombatantId: "attacker",
+      attackId: "1:opportunity:attack-a",
+      attackOpportunityId: "attack-a",
+      aware: true,
+      defender,
+      defenderCombatantId: "defender",
+      phase: "phase1",
+      reviewedAt: "2026-08-18T10:00:00.000Z",
+      roundNumber: 1,
+      sourceSelections: [],
+    });
+
+    expect(
+      resolveCanonicalParryBaseForDefenseSnapshot({
+        attackId: "1:opportunity:attack-b",
+        attackOpportunityId: "attack-b",
+        attackerCombatantId: snapshot.attackerParticipantId,
+        defender,
+        defenderCombatantId: snapshot.defenderParticipantId,
+        phase: snapshot.phase,
+        snapshot,
+      }),
+    ).toMatchObject({ completeness: "partial", missingFacts: ["defense_snapshot_identity"] });
   });
 });
 

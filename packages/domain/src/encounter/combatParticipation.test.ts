@@ -572,7 +572,7 @@ describe("canonical combat participation", () => {
     });
   });
 
-  it("classifies a miss as resolved attack work with no Parry or damage participation", () => {
+  it("classifies a miss as requiring its attack-specific defense review first", () => {
     const miss = attackResult({ hit: false });
     const projection = project(
       activeState({
@@ -601,13 +601,17 @@ describe("canonical combat participation", () => {
         phase: "phase1",
         step: "defense",
       }),
-    ).toMatchObject({ status: "not_required", workClass: "no_work" });
+    ).toMatchObject({
+      ownership: { kind: "gm_owned", participantId: "guard" },
+      status: "required",
+      workClass: "human_decision",
+    });
     const damageFacts = projection.facts.filter(
       (entry) =>
         entry.identity.processFamily === "damage_chain" &&
         entry.identity.opportunityId === miss.attackOpportunityId,
     );
-    expect(damageFacts.every((entry) => entry.status === "not_required")).toBe(true);
+    expect(damageFacts.every((entry) => entry.status === "conditional")).toBe(true);
   });
 
   it("classifies a hit as a required response with conditional damage-chain work", () => {
@@ -667,6 +671,7 @@ describe("canonical combat participation", () => {
         roundNumber: 2,
         updatedAt: NOW,
       }),
+      defenseSnapshotId: "defense-snapshot:successful-parry",
       damageRoll: { status: "not_required" as const },
       parryResolution: {
         resultLabel: "Parried",

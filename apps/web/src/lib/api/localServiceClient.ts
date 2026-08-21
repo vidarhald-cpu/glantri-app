@@ -80,6 +80,7 @@ export {
   completeRemainingCombatStepOnServer,
   commitPhaseInitiativeResolutionOnServer,
   commitCurrentCombatPhaseDamageOnServer,
+  commitCombatDefenseReviewOnServer,
   continuePhaseAttackOnServer,
   decideDoubleAttackPhase2OnServer,
   rollCombatFeintOnServer,

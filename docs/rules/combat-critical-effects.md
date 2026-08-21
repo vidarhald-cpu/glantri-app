@@ -23,6 +23,13 @@ full validation warnings with source cells. Fractional bleed rates, roll-once ra
 and unresolved Special/stateful mappings remain authored source values. Generation does not infer
 bleed units, duration semantics, treatment behavior, or lifecycle rules.
 
+The generator also compares every declared `AppFacing_Summary` breakdown with the generated payload.
+Stale summary cells are recorded with exact source-cell, expected, and workbook values; they do not
+replace generated-payload truth or authorize workbook edits. The exhaustive, rule-neutral mapping
+inventory is checked in at `docs/audits/critical-effects-conformance.md`. Run
+`node --import tsx scripts/reportCriticalEffectsConformance.mts --verify` to reproduce it, or use the
+bounded `--generate` mode after an approved source/proposal diagnostic change and inspect the diff.
+
 ## Critical result lookup
 
 Each critical result is addressed by three values:

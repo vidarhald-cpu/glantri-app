@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   advanceCombatRoundStep,
   backOutCombatRoundPhaseAttack,
+  buildCombatDefenseSnapshotId,
   buildCombatRoundAttackRollResult,
   buildDamagePersistentLifecycle,
   buildCombatHistorySourceViewFromPersistedSession,
@@ -11,6 +12,7 @@ import {
   buildCombatProgressionProjection,
   canonicalCombatModifierEffectSchema,
   combatRoundStateSchema,
+  combatDefenseSnapshotSchema,
   combatRoundParticipantHasExecutablePhaseAttack,
   combatRoundParticipantHasPhaseAttack,
   combatRoundParticipantWasAttackedInPhase,
@@ -24,6 +26,8 @@ import {
   ensureCombatRoundPhaseResolutionResultsForPhase,
   fingerprintCombatModifierResolution,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundAttackResultById,
+  getCombatRoundAttackResultId,
   getCurrentExecutableCombatTasks,
   getCombatRoundPhaseAttackCandidates,
   getCanonicalAttackOpportunityIdentity,
@@ -41,14 +45,16 @@ import {
   recordCombatRoundAttackResult,
   recordCombatRoundCriticalRoll,
   recordCombatRoundDeclaration,
+  recordCombatRoundDefenseReview,
   recordCombatRoundDamageResult,
   recordCombatRoundHitLocationRoll,
   recordCombatRoundInitiative,
-  recordCombatRoundParryResult,
+  recordCombatRoundParryResult as recordCanonicalCombatRoundParryResult,
   recordCombatRoundParticipantStepReview,
   resolveEncounterParticipantMembership,
   scenarioParticipantSchema,
   type CombatProgressionBoundaryKind,
+  type CombatDefenseSnapshot,
   type CombatRoundState,
   type CombatEffectsState,
   type EncounterSession,
@@ -721,6 +727,63 @@ function addPrivateDamageReviewToResolution(input: {
   };
 }
 
+function commitTestDefenseReview(input: {
+  attackResult: Parameters<typeof recordCanonicalCombatRoundParryResult>[0]["attackResult"];
+  sources?: CombatDefenseSnapshot["sources"];
+  state: CombatRoundState;
+}): CombatRoundState {
+  const canonicalAttack = getCombatRoundOutgoingAttackResultForParticipantPhase({
+    participantId: input.attackResult.attackerParticipantId,
+    phase: input.attackResult.phase,
+    state: input.state,
+  });
+  if (!canonicalAttack?.attackOpportunityId) {
+    throw new Error("Test attack requires a canonical attack opportunity.");
+  }
+  const attackResultId = getCombatRoundAttackResultId({
+    result: canonicalAttack,
+    roundNumber: input.state.roundNumber,
+  });
+  return recordCombatRoundDefenseReview({
+    command: { createdAt: canonicalAttack.rolledAt, createdByUserId: "gm-1" },
+    snapshot: combatDefenseSnapshotSchema.parse({
+      attackDirection: "front",
+      attackerParticipantId: canonicalAttack.attackerParticipantId,
+      attackId: attackResultId,
+      attackOpportunityId: canonicalAttack.attackOpportunityId,
+      aware: true,
+      awarenessDefault: true,
+      awarenessOverridden: false,
+      defenderParticipantId: canonicalAttack.defenderParticipantId,
+      id: buildCombatDefenseSnapshotId(attackResultId),
+      ordinaryDodgeAvailable: true,
+      phase: canonicalAttack.phase,
+      reviewedAt: canonicalAttack.rolledAt,
+      reviewedByUserId: "gm-1",
+      roundNumber: input.state.roundNumber,
+      schemaVersion: 1,
+      sources: input.sources ?? [],
+      status: "committed",
+    }),
+    state: input.state,
+  });
+}
+
+function recordCombatRoundParryResult(
+  input: Parameters<typeof recordCanonicalCombatRoundParryResult>[0],
+) {
+  const attackResultId = getCombatRoundAttackResultId({
+    result: input.attackResult,
+    roundNumber: input.state.roundNumber,
+  });
+  const state = input.state.phaseResolutionResults.find(
+    (resolution) => resolution.attackResultId === attackResultId,
+  )?.defenseSnapshotId
+    ? input.state
+    : commitTestDefenseReview({ attackResult: input.attackResult, state: input.state });
+  return recordCanonicalCombatRoundParryResult({ ...input, state });
+}
+
 function makeCriticalRollMutationFixture() {
   const encounterParticipants = makeTwoCombatEncounterParticipants();
   const combatEncounter = makeCombatEncounter({
@@ -728,6 +791,7 @@ function makeCriticalRollMutationFixture() {
   }) as EncounterSession;
   const attackHit = buildCombatRoundAttackRollResult({
     actionId: "attack_parry",
+    attackOpportunityId: "test-opportunity:critical-fixture",
     attackerParticipantId: "encounter-participant-1",
     defenderDb: 10,
     defenderParticipantId: "encounter-participant-2",
@@ -794,7 +858,7 @@ function makeCriticalRollMutationFixture() {
     submittedBy: "gm",
     updatedAt: "2026-01-01T00:05:00.000Z",
   });
-  const attackResultId = "1:phase1:encounter-participant-1:encounter-participant-2";
+  const attackResultId = getCombatRoundAttackResultId({ result: attackHit, roundNumber: 1 });
 
   return {
     attackResultId,
@@ -821,6 +885,7 @@ function makeGrazeDamageMutationFixture() {
   }) as EncounterSession;
   const attackGraze = buildCombatRoundAttackRollResult({
     actionId: "attack_parry",
+    attackOpportunityId: "test-opportunity:graze-fixture",
     attackerParticipantId: "encounter-participant-1",
     defenderDb: 0,
     defenderParticipantId: "encounter-participant-2",
@@ -940,6 +1005,7 @@ function makeCombatReadProjectionFixture() {
   }) as EncounterSession;
   const attackHit = buildCombatRoundAttackRollResult({
     actionId: "attack_parry",
+    attackOpportunityId: "test-opportunity:read-projection",
     attackerParticipantId: "encounter-participant-1",
     defenderDb: 10,
     defenderParticipantId: "encounter-participant-2",
@@ -1006,7 +1072,7 @@ function makeCombatReadProjectionFixture() {
     submittedBy: "gm",
     updatedAt: "2026-01-01T00:05:00.000Z",
   });
-  const attackResultId = "1:phase1:encounter-participant-1:encounter-participant-2";
+  const attackResultId = getCombatRoundAttackResultId({ result: attackHit, roundNumber: 1 });
 
   return {
     attackResultId,
@@ -1470,6 +1536,7 @@ function makeMovementBurdenEquipmentState(input: { characterId: string; load?: n
         material: "steel",
         quality: "standard",
         quantity: 1,
+        revision: "2026-07-30T07:59:00.000Z",
         specificityType: "generic",
         storageAssignment: { carryMode: "on_person", locationId },
         templateId,
@@ -1534,6 +1601,7 @@ function makeCanonicalWeaponDefenseEquipmentState(input: {
         material: "steel",
         quality: "standard",
         quantity: 1,
+        revision: "2026-07-30T07:59:00.000Z",
         specificityType: "generic",
         storageAssignment: { carryMode: "equipped", locationId },
         templateId: template.id,
@@ -1610,6 +1678,7 @@ function makeCanonicalCombatCalculationSnapshot(input: {
           material: "steel",
           quality: "standard",
           quantity: 1,
+          revision: "2026-07-30T07:59:00.000Z",
           specificityType: "generic",
           storageAssignment: { carryMode: "equipped", locationId: secondaryLocationId },
           templateId: secondary.id,
@@ -15571,6 +15640,23 @@ describe("scenarios route contract", () => {
         }),
       ]);
 
+      const incomingAttack = getCombatRoundOutgoingAttackResultForParticipantPhase({
+        participantId: "encounter-participant-2",
+        phase: "phase1",
+        state: roundState(),
+      });
+      if (!incomingAttack) throw new Error("Reactive attack fixture did not record its trigger.");
+      const afterDefenseReview = commitTestDefenseReview({
+        attackResult: incomingAttack,
+        state: roundState(),
+      });
+      await mocks.encounterService.updateEncounter({
+        session: {
+          ...fixture.encounter,
+          combatRoundState: afterDefenseReview,
+          currentRound: afterDefenseReview.roundNumber,
+        },
+      });
       expect(roundState().currentStep).toBe("phase_1_actions");
       const phase2ReviewResponse = await app.inject({
         method: "POST",
@@ -18903,6 +18989,191 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
+  it("commits authoritative GM awareness and weapon-source choices for the exact attack", async () => {
+    const encounterParticipants = [
+      makeCombatEncounter().participants[0],
+      {
+        ...makeCombatEncounter().participants[0],
+        id: "encounter-participant-2",
+        label: "City guard",
+        scenarioParticipantId: "participant-2",
+      },
+    ];
+    const combatEncounter = makeCombatEncounter({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const attack = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackOpportunityId: "test-opportunity:defense-review-endpoint",
+      attackerParticipantId: "encounter-participant-1",
+      defenderDb: 100,
+      defenderParticipantId: "encounter-participant-2",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: { createdAt: attack.rolledAt, createdByUserId: "gm-1" },
+      participantId: "encounter-participant-1",
+      result: attack,
+      state: initializeCombatRoundState({ encounter: combatEncounter }),
+      submittedBy: "gm",
+    });
+    const attackerSnapshot = makeCanonicalCombatCalculationSnapshot({
+      characterId: "character-participant-1",
+      displayName: "The Gladiator",
+    });
+    const defenderSnapshot = makeCanonicalCombatCalculationSnapshot({
+      characterId: "character-participant-2",
+      displayName: "City guard",
+    });
+    const loadout =
+      defenderSnapshot.equipmentState.activeLoadoutByCharacterId["character-participant-2"]!;
+    const primaryItemId = loadout.activePrimaryWeaponItemId!;
+    const secondaryItemId = loadout.activeSecondaryWeaponItemId!;
+    const attackId = getCombatRoundAttackResultId({ result: attack, roundNumber: 1 });
+    const defenseReviewTask = buildCombatProgressionProjection(afterAttack)
+      .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((task) => task.kind === "defense_review");
+    if (!defenseReviewTask) throw new Error("Expected canonical defense-review task.");
+
+    setupCombatDeclarationRoute({
+      encounter: { combatRoundState: afterAttack, participants: encounterParticipants },
+      participants: [
+        {
+          characterId: "character-participant-1",
+          id: "participant-1",
+          snapshot: attackerSnapshot,
+        },
+        {
+          characterId: "character-participant-2",
+          controlledByUserId: "other-player",
+          id: "participant-2",
+          snapshot: defenderSnapshot,
+        },
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        attackId,
+        attackerParticipantId: "encounter-participant-1",
+        aware: false,
+        defenderParticipantId: "encounter-participant-2",
+        executionGroupId: defenseReviewTask.executionGroupId,
+        expectedRevision: combatEncounter.updatedAt,
+        phase: "phase1",
+        sourceSelections: [
+          { included: true, itemId: primaryItemId },
+          { included: false, itemId: secondaryItemId },
+        ],
+        taskId: defenseReviewTask.id,
+      },
+      url: "/encounters/encounter-1/combat-round/commit-defense-review",
+    });
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(attack.hit).toBe(false);
+    expect(response.json().defenseSnapshot).toMatchObject({
+      attackId,
+      attackOpportunityId: "test-opportunity:defense-review-endpoint",
+      aware: false,
+      awarenessDefault: true,
+      awarenessOverridden: true,
+      ordinaryDodgeAvailable: false,
+      eventSequence: expect.any(Number),
+      sources: [
+        { decision: "gm_included", included: true, itemId: primaryItemId },
+        { decision: "gm_excluded", included: false, itemId: secondaryItemId },
+      ],
+    });
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(1);
+    const savedState = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session
+      .combatRoundState as CombatRoundState;
+    expect(savedState.defenseSnapshots).toHaveLength(1);
+    expect(
+      getCombatRoundAttackResultById({ attackResultId: attackId, state: savedState }),
+    ).toMatchObject({
+      defenderDb: 0,
+      hit: true,
+      ob: 10,
+      rollD20: 14,
+      rollTotal: 14,
+    });
+    expect(savedState.phaseResolutionResults[0]).toMatchObject({
+      attackResultId: attackId,
+      defenseSnapshotId: `defense-snapshot:${attackId}`,
+    });
+    expect(
+      defenderSnapshot.equipmentState.activeLoadoutByCharacterId["character-participant-2"],
+    ).toEqual(loadout);
+  });
+
+  it("makes hidden, nonexistent, and forged defense-review probes privacy-equivalent and zero-write", async () => {
+    setupCombatDeclarationRoute({
+      participants: [
+        {
+          id: "participant-1",
+          visibilityOverrides: { visibility: "hidden" },
+        },
+        { controlledByUserId: "other-player", id: "participant-2" },
+      ],
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+    const common = {
+      aware: false,
+      defenderParticipantId: "encounter-participant-2",
+      expectedRevision: "2026-01-01T00:00:00.000Z",
+      phase: "phase1",
+      sourceSelections: [],
+    };
+    const probes = [
+      {
+        ...common,
+        attackId: "hidden-real-looking-attack",
+        attackerParticipantId: "encounter-participant-1",
+      },
+      {
+        ...common,
+        attackId: "nonexistent-attack",
+        attackerParticipantId: "nonexistent-attacker",
+      },
+      {
+        ...common,
+        attackId: "forged-attack",
+        attackerParticipantId: "forged-attacker",
+        sourceSelections: [{ included: true, itemId: "forged-defense-source" }],
+      },
+    ];
+    const responses = [];
+    for (const payload of probes) {
+      responses.push(
+        await app.inject({
+          method: "POST",
+          payload,
+          url: "/encounters/encounter-1/combat-round/commit-defense-review",
+        }),
+      );
+    }
+    await app.close();
+
+    expect(responses.map((response) => response.statusCode)).toEqual([404, 404, 404]);
+    expect(responses.map((response) => response.json())).toEqual([
+      { error: "Encounter not found." },
+      { error: "Encounter not found." },
+      { error: "Encounter not found." },
+    ]);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+  });
+
   it("uses canonical Parry values for the current defending player's roll", async () => {
     const encounterParticipants = [
       makeCombatEncounter().participants[0],
@@ -18918,6 +19189,7 @@ describe("scenarios route contract", () => {
     }) as EncounterSession;
     const attackHit = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
+      attackOpportunityId: "test-opportunity:canonical-parry",
       attackerParticipantId: "encounter-participant-1",
       defenderDb: 10,
       defenderParticipantId: "encounter-participant-2",
@@ -18938,15 +19210,55 @@ describe("scenarios route contract", () => {
       state: initializeCombatRoundState({ encounter: combatEncounter }),
       submittedBy: "gm",
     });
+    const defenderSnapshot = makeCanonicalCombatCalculationSnapshot({
+      characterId: "character-participant-2",
+      displayName: "City guard",
+    });
+    const defenderLoadout =
+      defenderSnapshot.equipmentState.activeLoadoutByCharacterId["character-participant-2"]!;
+    const primaryItem =
+      defenderSnapshot.equipmentState.itemsById[defenderLoadout.activePrimaryWeaponItemId!]!;
+    const secondaryItem =
+      defenderSnapshot.equipmentState.itemsById[defenderLoadout.activeSecondaryWeaponItemId!]!;
+    const afterDefenseReview = commitTestDefenseReview({
+      attackResult: attackHit,
+      sources: [
+        {
+          decision: "default_included",
+          included: true,
+          itemId: primaryItem.id,
+          itemRevision: primaryItem.revision!,
+          kind: "weapon",
+          label: "Long sword",
+          slot: "mainHand",
+          templateId: primaryItem.templateId,
+        },
+        {
+          decision: "gm_excluded",
+          included: false,
+          itemId: secondaryItem.id,
+          itemRevision: secondaryItem.revision!,
+          kind: "weapon",
+          label: "Dagger",
+          slot: "offHand",
+          templateId: secondaryItem.templateId,
+        },
+      ],
+      state: afterAttack,
+    });
     const afterAttackWithStaleInspection: CombatRoundState = {
-      ...afterAttack,
+      ...afterDefenseReview,
       selectedParticipantId: "encounter-participant-1",
       selectedStep: "initiative_phase_1",
     };
-    const projectedParryTask = buildCombatProgressionProjection(afterAttack)
+    const projectedParryTask = buildCombatProgressionProjection(afterDefenseReview)
       .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
       .find((task) => task.kind === "parry");
     expect(projectedParryTask).toBeDefined();
+    const canonicalParryAttackResultId = getCombatRoundAttackResultId({
+      result: attackHit,
+      roundNumber: afterDefenseReview.roundNumber,
+    });
     const canonicalDefenderState = {
       ...makeCombatScenarioParticipant().state,
       combat: {
@@ -19010,10 +19322,7 @@ describe("scenarios route contract", () => {
           characterId: "character-participant-2",
           controlledByUserId: "player-1",
           id: "participant-2",
-          snapshot: makeCanonicalCombatCalculationSnapshot({
-            characterId: "character-participant-2",
-            displayName: "City guard",
-          }),
+          snapshot: defenderSnapshot,
           state: canonicalDefenderState,
         },
       ],
@@ -19022,7 +19331,7 @@ describe("scenarios route contract", () => {
 
     const parryPayload = {
       attackResultModifier: 999,
-      attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+      attackResultId: canonicalParryAttackResultId,
       attackerParticipantId: "encounter-participant-1",
       commandType: "roll_parry",
       defenderModifierFingerprint: fingerprintCombatModifierResolution({
@@ -19103,7 +19412,7 @@ describe("scenarios route contract", () => {
     const payload = response.json();
     expect(payload.commandEnvelope).toMatchObject({
       latestResult: {
-        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        attackResultId: canonicalParryAttackResultId,
         defenderParticipantId: "encounter-participant-2",
         kind: "parry",
         phase: "phase1",
@@ -19115,7 +19424,7 @@ describe("scenarios route contract", () => {
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
       facts: expect.objectContaining({
-        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        attackResultId: canonicalParryAttackResultId,
         defenderParticipantId: "encounter-participant-2",
       }),
       participantId: "encounter-participant-2",
@@ -19124,9 +19433,9 @@ describe("scenarios route contract", () => {
     expect(
       updatedEncounter.combatRoundState.phaseResolutionResults[0]?.parryResolution,
     ).toMatchObject({
-      combinedParryScore: 7,
+      combinedParryScore: 5,
       modifierBreakdown: [{ label: "DB/Parry", value: -4 }],
-      parrySourceLabel: "Long sword + Dagger",
+      parrySourceLabel: "Long sword",
       status: "resolved",
     });
   });
@@ -19534,6 +19843,7 @@ describe("scenarios route contract", () => {
     }) as EncounterSession;
     const attackHit = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
+      attackOpportunityId: "test-opportunity:player-location",
       attackerParticipantId: "encounter-participant-1",
       defenderDb: 10,
       defenderParticipantId: "encounter-participant-2",
@@ -19647,6 +19957,7 @@ describe("scenarios route contract", () => {
     }) as EncounterSession;
     const attackHit = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
+      attackOpportunityId: "test-opportunity:damage-draft",
       attackerParticipantId: "encounter-participant-1",
       defenderDb: 10,
       defenderParticipantId: "encounter-participant-2",
@@ -19863,6 +20174,7 @@ describe("scenarios route contract", () => {
     }) as EncounterSession;
     const attackHit = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
+      attackOpportunityId: "test-opportunity:player-critical",
       attackerParticipantId: "encounter-participant-1",
       defenderDb: 10,
       defenderParticipantId: "encounter-participant-2",
@@ -19991,6 +20303,7 @@ describe("scenarios route contract", () => {
     }) as EncounterSession;
     const relevantAttack = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
+      attackOpportunityId: "test-opportunity:relevant-private-result",
       attackerParticipantId: "encounter-participant-1",
       defenderDb: 10,
       defenderParticipantId: "encounter-participant-2",
@@ -20011,9 +20324,38 @@ describe("scenarios route contract", () => {
       state: initializeCombatRoundState({ encounter: combatEncounter }),
       submittedBy: "gm",
     });
+    const relevantDefenderSnapshot = makeCanonicalCombatCalculationSnapshot({
+      characterId: "character-participant-2",
+      displayName: "City guard",
+    });
+    const relevantDefenderEquipment = relevantDefenderSnapshot.equipmentState;
+    const relevantDefenderLoadout =
+      relevantDefenderEquipment.activeLoadoutByCharacterId["character-participant-2"]!;
+    const relevantDefenseSources = [
+      { itemId: relevantDefenderLoadout.activePrimaryWeaponItemId!, slot: "mainHand" as const },
+      { itemId: relevantDefenderLoadout.activeSecondaryWeaponItemId!, slot: "offHand" as const },
+    ].map(({ itemId, slot }) => {
+      const item = relevantDefenderEquipment.itemsById[itemId]!;
+      const template = relevantDefenderEquipment.templatesById[item.templateId]!;
+      return {
+        decision: "default_included" as const,
+        included: true,
+        itemId,
+        itemRevision: item.revision,
+        kind: "weapon" as const,
+        label: template.name,
+        slot,
+        templateId: template.id,
+      };
+    });
+    const afterRelevantDefenseReview = commitTestDefenseReview({
+      attackResult: relevantAttack,
+      sources: relevantDefenseSources,
+      state: afterRelevantAttack,
+    });
     const afterRelevantAttackWithPrivateThrownUndo = {
-      ...afterRelevantAttack,
-      commands: afterRelevantAttack.commands.map((command) =>
+      ...afterRelevantDefenseReview,
+      commands: afterRelevantDefenseReview.commands.map((command) =>
         command.type === "roll_attack"
           ? {
               ...command,
@@ -20032,6 +20374,7 @@ describe("scenarios route contract", () => {
     };
     const unrelatedAttack = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
+      attackOpportunityId: "test-opportunity:unrelated-private-result",
       attackerParticipantId: "encounter-participant-3",
       defenderDb: 10,
       defenderParticipantId: "encounter-participant-4",
@@ -20104,11 +20447,11 @@ describe("scenarios route contract", () => {
     });
     const combatRoundState = {
       ...stateWithPrivateUnrelatedReview,
-      currentCursor: afterRelevantAttack.currentCursor,
-      currentStep: afterRelevantAttack.currentStep,
-      phaseResolutionCursor: afterRelevantAttack.phaseResolutionCursor,
-      selectedParticipantId: afterRelevantAttack.selectedParticipantId,
-      selectedStep: afterRelevantAttack.selectedStep,
+      currentCursor: afterRelevantDefenseReview.currentCursor,
+      currentStep: afterRelevantDefenseReview.currentStep,
+      phaseResolutionCursor: afterRelevantDefenseReview.phaseResolutionCursor,
+      selectedParticipantId: afterRelevantDefenseReview.selectedParticipantId,
+      selectedStep: afterRelevantDefenseReview.selectedStep,
     };
     const projectedParryTask = buildCombatProgressionProjection(combatRoundState)
       .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
@@ -20132,10 +20475,7 @@ describe("scenarios route contract", () => {
           characterId: "character-participant-2",
           controlledByUserId: "player-1",
           id: "participant-2",
-          snapshot: makeCanonicalCombatCalculationSnapshot({
-            characterId: "character-participant-2",
-            displayName: "City guard",
-          }),
+          snapshot: relevantDefenderSnapshot,
         },
         {
           controlledByUserId: "other-player",
@@ -20153,7 +20493,10 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         attackResultModifier: relevantAttack.defenderParryModifier,
-        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        attackResultId: getCombatRoundAttackResultId({
+          result: relevantAttack,
+          roundNumber: combatRoundState.roundNumber,
+        }),
         attackerParticipantId: "encounter-participant-1",
         commandType: "roll_parry",
         dbParryRaw: 0,
@@ -21761,6 +22104,7 @@ describe("scenarios route contract", () => {
     });
     const attackHit = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
+      attackOpportunityId: "test-opportunity:clear-parry",
       attackerParticipantId: "encounter-participant-1",
       defenderDb: 10,
       defenderParticipantId: "encounter-participant-2",
@@ -21834,10 +22178,10 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(200);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
-    expect(updatedEncounter.combatRoundState.commands).toHaveLength(3);
+    expect(updatedEncounter.combatRoundState.commands).toHaveLength(4);
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
-      participantId: "encounter-participant-1",
-      type: "roll_attack",
+      participantId: "encounter-participant-2",
+      type: "commit_defense_review",
     });
     expect(updatedEncounter.combatRoundState.currentCursor).toEqual({
       participantId: "encounter-participant-2",
@@ -21918,6 +22262,7 @@ describe("scenarios route contract", () => {
     });
     const attackHit = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
+      attackOpportunityId: "test-opportunity:clear-damage",
       attackerParticipantId: "encounter-participant-1",
       defenderDb: 10,
       defenderParticipantId: "encounter-participant-2",
@@ -23529,5 +23874,100 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(403);
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("commits defense review through the direct route once and rejects stale or repeated descriptors", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const configured = setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: makeOpenPhase1AttackRoundState(),
+        participants: encounterParticipants,
+      },
+      participants: [
+        makeCombatScenarioParticipant({ id: "participant-1" }),
+        makeCombatScenarioParticipant({ controlledByUserId: "other-player", id: "participant-2" }),
+      ],
+      user: mocks.adminUser,
+    });
+    const mutable = setupMutableCombatRouteState({
+      encounter: configured.encounter as EncounterSession,
+      participants: configured.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const attackResponse = await app.inject({
+      method: "POST",
+      payload: {
+        defenderScenarioParticipantId: "participant-2",
+        ob: 10,
+        obSkillRaw: 0,
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+    expect(attackResponse.statusCode, JSON.stringify(attackResponse.json())).toBe(200);
+
+    const openState = mutable.encounter.combatRoundState!;
+    const task = buildCombatProgressionProjection(openState)
+      .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+      .find((candidate) => candidate.kind === "defense_review");
+    if (
+      !task?.identity.attackResultId ||
+      !task.identity.attackerParticipantId ||
+      !task.identity.defenderParticipantId ||
+      !task.identity.phase
+    ) {
+      throw new Error("Expected one exact defense-review task after the attack.");
+    }
+    const payload = {
+      attackId: task.identity.attackResultId,
+      attackerParticipantId: task.identity.attackerParticipantId,
+      aware: false,
+      defenderParticipantId: task.identity.defenderParticipantId,
+      executionGroupId: task.executionGroupId,
+      expectedRevision: mutable.encounter.updatedAt,
+      phase: task.identity.phase,
+      sourceSelections: [] as Array<{ included: boolean; itemId: string }>,
+      taskId: task.id,
+    };
+    const writesAfterAttack = mocks.encounterService.updateCombatEncounter.mock.calls.length;
+
+    const stale = await app.inject({
+      method: "POST",
+      payload: { ...payload, expectedRevision: "stale-revision" },
+      url: "/encounters/encounter-1/combat-round/commit-defense-review",
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toMatchObject({ code: "stale_revision" });
+    expect(mocks.encounterService.updateCombatEncounter).toHaveBeenCalledTimes(writesAfterAttack);
+
+    const committed = await app.inject({
+      method: "POST",
+      payload,
+      url: "/encounters/encounter-1/combat-round/commit-defense-review",
+    });
+    expect(committed.statusCode, JSON.stringify(committed.json())).toBe(200);
+    expect(committed.json().defenseSnapshot).toMatchObject({
+      attackId: payload.attackId,
+      aware: false,
+      ordinaryDodgeAvailable: false,
+      status: "committed",
+    });
+    expect(mutable.encounter.combatRoundState?.defenseSnapshots).toHaveLength(1);
+    expect(mutable.encounter.combatRoundState?.commands.at(-1)?.type).toBe("commit_defense_review");
+    const writesAfterCommit = mocks.encounterService.updateCombatEncounter.mock.calls.length;
+
+    const retry = await app.inject({
+      method: "POST",
+      payload,
+      url: "/encounters/encounter-1/combat-round/commit-defense-review",
+    });
+    expect([400, 409]).toContain(retry.statusCode);
+    expect(mocks.encounterService.updateCombatEncounter).toHaveBeenCalledTimes(writesAfterCommit);
+    expect(mutable.encounter.combatRoundState?.defenseSnapshots).toHaveLength(1);
+
+    await app.close();
   });
 });

@@ -1,5 +1,8 @@
 import { PrismaClient } from "@prisma/client";
 
+import { validateTestDatabaseTarget } from "../databaseTargetSafety";
+import { assertWorktreeDatabaseRuntimeSafety } from "../worktreeDatabaseRuntimeSafety";
+
 let testClient: PrismaClient | undefined;
 
 export function getTestPrismaClient(): PrismaClient | null {
@@ -7,14 +10,20 @@ export function getTestPrismaClient(): PrismaClient | null {
     return null;
   }
 
+  const worktreeEnvironment = assertWorktreeDatabaseRuntimeSafety();
+
+  if (!worktreeEnvironment) {
+    validateTestDatabaseTarget(process.env.DATABASE_URL_TEST, process.env.DATABASE_URL);
+  }
+
   if (!testClient) {
     testClient = new PrismaClient({
       datasources: {
         db: {
-          url: process.env.DATABASE_URL_TEST
-        }
+          url: process.env.DATABASE_URL_TEST,
+        },
       },
-      log: ["warn", "error"]
+      log: ["warn", "error"],
     });
   }
 

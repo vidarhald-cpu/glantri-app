@@ -3,21 +3,24 @@ import { describe, expect, it } from "vitest";
 import {
   buildCombatRoundAttackRollResult,
   buildCombatRoundDeclaredAttackOpportunities,
+  buildCombatRoundPhaseResolutionResult,
   getCombatRoundAttackResultId,
   commitCombatRoundPhaseInitiativeResolution,
   combatRoundStateSchema,
   recordCombatRoundAttackResult,
   recordCombatRoundCriticalRoll,
   recordCombatRoundDamageResult,
+  recordCombatRoundDefenseReview,
   recordCombatRoundGlobalParticipantCommand,
   recordCombatRoundHitLocationRoll,
-  recordCombatRoundParryResult,
+  recordCombatRoundParryResult as recordCanonicalCombatRoundParryResult,
   rollCombatRoundCombatExperience,
   undoLatestCombatRoundCommand,
   type CombatRoundCursorStep,
   type CombatRoundState,
   type CombatRoundStep,
 } from "./combatRoundManager";
+import { buildCombatDefenseSnapshotId, combatDefenseSnapshotSchema } from "./combatDefenseSnapshot";
 import {
   advanceCombatProgressionBoundary,
   authorizeCombatProgressionTask,
@@ -34,6 +37,45 @@ function participant(id: string, label: string) {
     participantId: id,
     scenarioParticipantId: `scenario-${id}`,
   };
+}
+
+function recordCombatRoundParryResult(
+  input: Parameters<typeof recordCanonicalCombatRoundParryResult>[0],
+) {
+  const attackerId = input.attackResult.attackerParticipantId;
+  const phase = input.attackResult.phase;
+  const current = input.state.phaseResolutionStatuses[attackerId]?.[phase];
+  const state =
+    current?.substep === "defense"
+      ? combatRoundStateSchema.parse({
+          ...input.state,
+          phaseResolutionCursor: {
+            participantId: input.attackResult.defenderParticipantId,
+            phase,
+            substep: "parry",
+          },
+          phaseResolutionStatuses: {
+            ...input.state.phaseResolutionStatuses,
+            [attackerId]: {
+              ...input.state.phaseResolutionStatuses[attackerId],
+              [phase]: { substep: "parry", updatedAt: input.updatedAt },
+            },
+          },
+        })
+      : input.state;
+  const result = recordCanonicalCombatRoundParryResult({ ...input, state });
+  const attackResultId = getCombatRoundAttackResultId({
+    result: input.attackResult,
+    roundNumber: result.roundNumber,
+  });
+  return combatRoundStateSchema.parse({
+    ...result,
+    phaseResolutionResults: result.phaseResolutionResults.map((resolution) =>
+      resolution.attackResultId === attackResultId
+        ? { ...resolution, defenseSnapshotId: `test-defense:${attackResultId}` }
+        : resolution,
+    ),
+  });
 }
 
 function state(
@@ -1520,6 +1562,16 @@ describe("authorizeCombatProgressionTask", () => {
         currentStep: "phase_1_actions",
         overrides: {
           phaseResolutionCursor: { participantId: "guard", phase: "phase1", substep: "parry" },
+          phaseResolutionResults: [
+            {
+              ...buildCombatRoundPhaseResolutionResult({
+                attackResult,
+                roundNumber: 2,
+                updatedAt: "2026-07-19T10:00:30.000Z",
+              }),
+              defenseSnapshotId: "defense-snapshot:hero-phase1-attack",
+            },
+          ],
         },
         participantOverrides: [
           {
@@ -1717,11 +1769,45 @@ describe("authorizeCombatProgressionTask", () => {
       });
 
       expect(afterAttack).toMatchObject({
-        phaseResolutionCursor: { participantId: "guard", phase: "phase1", substep: "parry" },
+        phaseResolutionCursor: { participantId: "guard", phase: "phase1", substep: "defense" },
         selectedParticipantId: "guard",
         selectedStep: "review_phase_2_actions",
       });
-      const projection = buildCombatProgressionProjection(afterAttack);
+      expect(
+        buildCombatProgressionProjection(afterAttack)
+          .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+          .find((task) => task.kind === "defense_review"),
+      ).toMatchObject({
+        expectedCommand: "commit_defense_review",
+        identity: {
+          attackResultId: getCombatRoundAttackResultId({ result: attackResult, roundNumber: 2 }),
+        },
+        owner: { kind: "gm" },
+      });
+      const attackResultId = getCombatRoundAttackResultId({ result: attackResult, roundNumber: 2 });
+      const afterDefenseReview = recordCombatRoundDefenseReview({
+        command: { createdAt: "2026-07-19T10:00:30.000Z", createdByUserId: "gm" },
+        snapshot: combatDefenseSnapshotSchema.parse({
+          attackDirection: "front",
+          attackerParticipantId: "hero",
+          attackId: attackResultId,
+          attackOpportunityId: opportunityId,
+          aware: true,
+          awarenessDefault: true,
+          awarenessOverridden: false,
+          defenderParticipantId: "guard",
+          id: buildCombatDefenseSnapshotId(attackResultId),
+          ordinaryDodgeAvailable: true,
+          phase: "phase1",
+          reviewedAt: "2026-07-19T10:00:30.000Z",
+          roundNumber: 2,
+          schemaVersion: 1,
+          sources: [],
+          status: "committed",
+        }),
+        state: afterAttack,
+      });
+      const projection = buildCombatProgressionProjection(afterDefenseReview);
       const gmTask = projection.boundary.processes
         .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
         .find((task) => task.kind === "parry");
@@ -1746,18 +1832,56 @@ describe("authorizeCombatProgressionTask", () => {
         owner: { participantId: "guard" },
       });
       expect(playerTask).toMatchObject({
-        actorAccess: { combatant: true },
+        actorAccess: { combatant: false },
+        automation: { eligibility: "not_allowed", stopReason: "hidden_information" },
         expectedCommand: "roll_parry",
         identity: {
-          disarmAttemptId: attemptId,
           parryPurpose: "parry_disarm",
-          parrySourceId: "declared-disarm-weapon",
         },
         owner: { participantId: "guard" },
       });
+      expect(playerTask?.identity).not.toHaveProperty("disarmAttemptId");
+      expect(playerTask?.identity).not.toHaveProperty("parrySourceId");
+      const defenderSerialization = JSON.stringify(playerProjection);
+      [
+        "hero",
+        "character-hero",
+        "scenario-hero",
+        "item-hero-sword",
+        "item:item-hero-sword",
+        "weapon-template-sword",
+      ].forEach((hiddenIdentifier) => {
+        expect(defenderSerialization).not.toContain(hiddenIdentifier);
+      });
+      const attackerProjection = projectCombatProgressionPresentation({
+        projection,
+        viewer: {
+          controlledParticipantIds: new Set(["hero"]),
+          kind: "player",
+          visibleParticipantIds: new Set(["hero"]),
+        },
+      });
+      const attackerSerialization = JSON.stringify(attackerProjection);
+      ["guard", "character-guard", "scenario-guard", "declared-disarm-weapon"].forEach(
+        (hiddenIdentifier) => {
+          expect(attackerSerialization).not.toContain(hiddenIdentifier);
+        },
+      );
+      const uninvolvedProjection = projectCombatProgressionPresentation({
+        projection,
+        viewer: {
+          controlledParticipantIds: new Set(["observer"]),
+          kind: "player",
+          visibleParticipantIds: new Set(["observer"]),
+        },
+      });
+      const uninvolvedSerialization = JSON.stringify(uninvolvedProjection);
+      ["hero", "guard", "item-hero-sword", "weapon-template-sword"].forEach((hiddenIdentifier) => {
+        expect(uninvolvedSerialization).not.toContain(hiddenIdentifier);
+      });
       const safeAfterAttack = {
-        ...afterAttack,
-        disarmAttempts: afterAttack.disarmAttempts.map((attempt) => ({
+        ...afterDefenseReview,
+        disarmAttempts: afterDefenseReview.disarmAttempts.map((attempt) => ({
           ...attempt,
           actingWeaponItemId: "redacted:disarm:acting-weapon",
           actingWeaponTemplateId: "redacted:disarm:acting-template",
@@ -1781,8 +1905,8 @@ describe("authorizeCombatProgressionTask", () => {
           parrySourceId: "declared-disarm-weapon",
         },
       });
-      expect(JSON.stringify(playerProjection)).not.toContain("item-main-gauche");
-      expect(JSON.stringify(playerProjection)).not.toContain('"participantId":"hero"');
+      expect(defenderSerialization).not.toContain("item-main-gauche");
+      expect(defenderSerialization).not.toContain('"participantId":"hero"');
     },
   );
 
@@ -1840,15 +1964,16 @@ describe("authorizeCombatProgressionTask", () => {
     expect(afterHit.currentCursor).toMatchObject({ participantId: "guard", step: "P1" });
     expect(tasks).toHaveLength(1);
     expect(tasks[0]).toMatchObject({
-      allowedActors: ["combatant", "gm"],
-      expectedCommand: "roll_parry",
+      allowedActors: ["gm"],
+      expectedCommand: "commit_defense_review",
       identity: {
         attackResultId: getCombatRoundAttackResultId({ result: hit, roundNumber: 2 }),
-        opponentParticipantId: "hero",
+        attackerParticipantId: "hero",
+        defenderParticipantId: "guard",
         phase: "phase1",
       },
-      kind: "parry",
-      owner: { participantId: "guard" },
+      kind: "defense_review",
+      owner: { kind: "gm" },
       presentationContext: {
         actor: { participantId: "hero" },
         target: { participantId: "guard" },
@@ -2582,6 +2707,99 @@ describe("authorizeCombatProgressionTask", () => {
     expect(serialized).not.toContain("blocker");
     expect(serialized).not.toContain("diagnostic");
     expect(serialized).not.toContain("proposalId");
+  });
+
+  it("redacts a hidden incoming defense review and every attacker-bearing lineage identifier", () => {
+    const initial = state({
+      cursorParticipantId: "guard",
+      cursorStep: "A1",
+      currentStep: "phase_1_actions",
+      overrides: {
+        phaseResolutionCursor: { participantId: "guard", phase: "phase1", substep: "attack" },
+      },
+      participantOverrides: [
+        {},
+        {
+          declaration: {
+            actionId: "attack_parry",
+            phaseContexts: { phase1: { targetParticipantId: "hero" } },
+            roundNumber: 2,
+            submittedBy: "gm",
+          },
+        },
+      ],
+    });
+    const opportunityId = "round:2:participant:guard:phase1:attack_1";
+    const hiddenAttack = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackIndex: 1,
+      attackModeId: "mode-punch",
+      attackOpportunityId: opportunityId,
+      attackSlot: "attack_1",
+      attackerParticipantId: "guard",
+      declarationId: "round:2:participant:guard:declaration",
+      defenderDb: 0,
+      defenderParticipantId: "hero",
+      ob: 80,
+      phase: "phase1",
+      rollD20: 20,
+      rollTotal: 20,
+      rolledAt: "2026-07-19T10:00:00.000Z",
+      weaponName: "Hidden blade",
+      weaponSourceId: "hidden-item:guard-blade",
+      weaponSourceSlot: "primary",
+      weaponTemplateId: "hidden-template:guard-blade",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: { createdAt: hiddenAttack.rolledAt, createdByUserId: "gm" },
+      participantId: "guard",
+      result: hiddenAttack,
+      state: initial,
+      submittedBy: "gm",
+    });
+    const projection = buildCombatProgressionProjection(afterAttack);
+    const gm = projectCombatProgressionPresentation({ projection, viewer: { kind: "gm" } });
+    const observer = projectCombatProgressionPresentation({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set(["observer"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["observer", "hero"]),
+      },
+    });
+
+    expect(
+      gm.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks)),
+    ).toContainEqual(
+      expect.objectContaining({
+        identity: expect.objectContaining({
+          attackResultId: getCombatRoundAttackResultId({ result: hiddenAttack, roundNumber: 2 }),
+          attackerParticipantId: "guard",
+          opportunityId,
+        }),
+        kind: "defense_review",
+      }),
+    );
+    expect(
+      observer.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks)),
+    ).toEqual([]);
+    expect(observer.canonicalOperationalPosition).toMatchObject({
+      task: undefined,
+      taskVisibility: "redacted",
+      waitingFor: "gm",
+    });
+    const serialized = JSON.stringify(observer);
+    for (const secret of [
+      "defense_review",
+      "guard",
+      "Hidden blade",
+      "hidden-item:guard-blade",
+      "hidden-template:guard-blade",
+      opportunityId,
+      getCombatRoundAttackResultId({ result: hiddenAttack, roundNumber: 2 }),
+    ]) {
+      expect(serialized).not.toContain(secret);
+    }
   });
 
   it.each([
