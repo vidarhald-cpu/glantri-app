@@ -125,6 +125,21 @@ export class ScenarioService {
     scenarioId: string;
     tacticalGroupId?: string | null;
   }): Promise<ScenarioParticipant> {
+    const scenario = await this.repository.getScenarioById(input.scenarioId);
+
+    if (!scenario) {
+      throw new Error("Scenario not found.");
+    }
+
+    const campaignRoster = await this.repository.listCampaignRosterEntries(scenario.campaignId);
+    const characterIsInCampaignRoster = campaignRoster.some(
+      (entry) => entry.sourceType === "character" && entry.sourceId === input.characterId,
+    );
+
+    if (!characterIsInCampaignRoster) {
+      throw new Error("Character is not in the campaign roster.");
+    }
+
     const character = await this.characterService.getCharacterById(input.characterId);
 
     if (!character) {

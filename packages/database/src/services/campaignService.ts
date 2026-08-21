@@ -1,10 +1,13 @@
-import type {
-  Campaign,
-  CampaignAsset,
-  CampaignRosterCategory,
-  CampaignRosterEntry,
-  CampaignRosterSourceType,
-  ReusableEntity,
+import {
+  campaignCharacterRosterCandidateSchema,
+  type CampaignCharacterRosterCandidate,
+  type Campaign,
+  type CampaignAsset,
+  type CampaignRosterCategory,
+  type CampaignRosterEntry,
+  type CampaignRosterSourceType,
+  type CharacterRecord,
+  type ReusableEntity,
 } from "@glantri/domain";
 
 import {
@@ -36,6 +39,37 @@ function normalizeCampaignNpcSnapshot(input: {
     actorClass: "campaign_npc",
     campaignId: input.campaignId,
   };
+}
+
+export class CampaignCharacterRosterCandidateNotFoundError extends Error {
+  constructor() {
+    super("Campaign character candidate not found.");
+    this.name = "CampaignCharacterRosterCandidateNotFoundError";
+  }
+}
+
+/** Server Character records are finalized; browser-local drafts never reach this boundary. */
+export function isEligibleCampaignCharacterRosterCandidate(
+  character: CharacterRecord | null | undefined,
+): character is CharacterRecord {
+  return character != null;
+}
+
+function buildCampaignCharacterOwnerLabel(input: {
+  actorUserId: string;
+  character: CharacterRecord;
+}): string {
+  if (input.character.ownerId === input.actorUserId) {
+    return "You";
+  }
+
+  const displayName = input.character.owner?.displayName?.trim();
+
+  if (displayName) {
+    return displayName;
+  }
+
+  return input.character.ownerId ? "Another player" : "No assigned owner";
 }
 
 export class CampaignService {
@@ -126,6 +160,36 @@ export class CampaignService {
 
   async listCampaignRosterEntries(campaignId: string): Promise<CampaignRosterEntry[]> {
     return this.repository.listCampaignRosterEntries(campaignId);
+  }
+
+  async listCampaignCharacterRosterCandidates(input: {
+    actorUserId: string;
+    campaignId: string;
+  }): Promise<CampaignCharacterRosterCandidate[]> {
+    const [characters, rosterEntries] = await Promise.all([
+      this.characterService.listCharacters(),
+      this.repository.listCampaignRosterEntries(input.campaignId),
+    ]);
+    const rosteredCharacterIds = new Set(
+      rosterEntries
+        .filter((entry) => entry.sourceType === "character")
+        .map((entry) => entry.sourceId),
+    );
+
+    return characters
+      .filter(isEligibleCampaignCharacterRosterCandidate)
+      .map((character) =>
+        campaignCharacterRosterCandidateSchema.parse({
+          alreadyRostered: rosteredCharacterIds.has(character.id),
+          id: character.id,
+          name: character.name,
+          ownerLabel: buildCampaignCharacterOwnerLabel({
+            actorUserId: input.actorUserId,
+            character,
+          }),
+        }),
+      )
+      .sort((left, right) => left.name.localeCompare(right.name));
   }
 
   async addCampaignRosterEntry(input: {
@@ -295,10 +359,14 @@ export class CampaignService {
     sourceType: CampaignRosterSourceType;
   }): Promise<string> {
     if (input.sourceType === "character") {
+      if (input.category !== "pc") {
+        throw new CampaignCharacterRosterCandidateNotFoundError();
+      }
+
       const character = await this.characterService.getCharacterById(input.sourceId);
 
-      if (!character) {
-        throw new Error("Character not found.");
+      if (!isEligibleCampaignCharacterRosterCandidate(character)) {
+        throw new CampaignCharacterRosterCandidateNotFoundError();
       }
 
       return character.name;

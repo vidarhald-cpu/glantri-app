@@ -42,6 +42,7 @@ export {
   loadAccessibleCampaigns,
   loadCampaignAssets,
   loadCampaignById,
+  loadCampaignCharacterRosterCandidates,
   loadCampaignEntities,
   loadCampaignRoster,
   loadCampaignScenarioRelationships,

@@ -2,8 +2,12 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Campaign, CampaignRosterEntry, Scenario } from "@glantri/domain";
-import type { ServerCharacterRecord } from "@/lib/api/localServiceClient";
+import type {
+  Campaign,
+  CampaignCharacterRosterCandidate,
+  CampaignRosterEntry,
+  Scenario,
+} from "@glantri/domain";
 
 const mocks = vi.hoisted(() => ({
   addCampaignRosterEntryOnServer: vi.fn(),
@@ -11,12 +15,12 @@ const mocks = vi.hoisted(() => ({
   createScenarioOnServer: vi.fn(),
   loadCampaignAssets: vi.fn(),
   loadCampaignById: vi.fn(),
+  loadCampaignCharacterRosterCandidates: vi.fn(),
   loadCampaignEntities: vi.fn(),
   loadCampaigns: vi.fn(),
   loadCampaignRoster: vi.fn(),
   loadCampaignScenarioRelationships: vi.fn(),
   loadCampaignScenarios: vi.fn(),
-  loadServerCharacters: vi.fn(),
   loadTemplates: vi.fn(),
   removeCampaignRosterEntryOnServer: vi.fn(),
   updateCampaignAssetVisibilityOnServer: vi.fn(),
@@ -28,12 +32,12 @@ vi.mock("@/lib/api/localServiceClient", () => ({
   createScenarioOnServer: mocks.createScenarioOnServer,
   loadCampaignAssets: mocks.loadCampaignAssets,
   loadCampaignById: mocks.loadCampaignById,
+  loadCampaignCharacterRosterCandidates: mocks.loadCampaignCharacterRosterCandidates,
   loadCampaignEntities: mocks.loadCampaignEntities,
   loadCampaigns: mocks.loadCampaigns,
   loadCampaignRoster: mocks.loadCampaignRoster,
   loadCampaignScenarioRelationships: mocks.loadCampaignScenarioRelationships,
   loadCampaignScenarios: mocks.loadCampaignScenarios,
-  loadServerCharacters: mocks.loadServerCharacters,
   loadTemplates: mocks.loadTemplates,
   removeCampaignRosterEntryOnServer: mocks.removeCampaignRosterEntryOnServer,
   updateCampaignAssetVisibilityOnServer: mocks.updateCampaignAssetVisibilityOnServer,
@@ -70,26 +74,12 @@ const rosterEntry: CampaignRosterEntry = {
   updatedAt: "2026-05-01T00:00:00.000Z",
 };
 
-const character = {
-  build: {
-    name: "Ari",
-    professionId: "fighter",
-    progression: {
-      skillGroups: [],
-    },
-    societyId: "thyatis",
-  },
-  createdAt: "2026-05-01T00:00:00.000Z",
+const character: CampaignCharacterRosterCandidate = {
+  alreadyRostered: true,
   id: "character-1",
-  level: 1,
   name: "Ari",
-  owner: {
-    displayName: "Player One",
-    email: "player@example.test",
-    id: "player-1",
-  },
-  updatedAt: "2026-05-01T00:00:00.000Z",
-} as unknown as ServerCharacterRecord;
+  ownerLabel: "Player One",
+};
 
 describe("CampaignDetailPageContent roster membership interaction", () => {
   beforeEach(() => {
@@ -101,7 +91,7 @@ describe("CampaignDetailPageContent roster membership interaction", () => {
     mocks.loadTemplates.mockResolvedValue([]);
     mocks.loadCampaignScenarioRelationships.mockResolvedValue([]);
     mocks.loadCampaigns.mockResolvedValue([campaign]);
-    mocks.loadServerCharacters.mockResolvedValue([character]);
+    mocks.loadCampaignCharacterRosterCandidates.mockResolvedValue([character]);
     mocks.removeCampaignRosterEntryOnServer.mockResolvedValue(undefined);
   });
 
@@ -124,6 +114,7 @@ describe("CampaignDetailPageContent roster membership interaction", () => {
       name: "Toggle Ari campaign roster membership",
     });
     expect(memberCheckbox).toBeChecked();
+    expect(screen.getByText("Player One")).toBeInTheDocument();
 
     await user.click(memberCheckbox);
 

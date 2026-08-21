@@ -2,6 +2,7 @@ import type {
   AccessibleCampaignRecord,
   Campaign,
   CampaignAsset,
+  CampaignCharacterRosterCandidate,
   CampaignRosterCategory,
   CampaignRosterEntry,
   CampaignRosterSourceType,
@@ -188,6 +189,19 @@ export async function loadCampaignRoster(campaignId: string): Promise<CampaignRo
   );
 
   return payload.roster;
+}
+
+export async function loadCampaignCharacterRosterCandidates(
+  campaignId: string,
+): Promise<CampaignCharacterRosterCandidate[]> {
+  const payload = await sendJson<{ characters: CampaignCharacterRosterCandidate[] }>(
+    `/campaigns/${campaignId}/roster-candidates/characters`,
+    {
+      method: "GET",
+    },
+  );
+
+  return payload.characters;
 }
 
 export async function addCampaignRosterEntryOnServer(input: {
