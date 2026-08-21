@@ -35,6 +35,7 @@ describe("repository-owned Prisma client entry points", () => {
     expect(entryPoints).toEqual([
       "packages/database/scripts/profileCombatPersistenceSplit.ts",
       "packages/database/src/client.ts",
+      "packages/database/src/migrationCompatibilityClient.ts",
       "packages/database/src/testing/testDatabase.ts",
     ]);
 
@@ -43,6 +44,13 @@ describe("repository-owned Prisma client entry points", () => {
         "assertWorktreeDatabaseRuntimeSafety",
       );
     }
+
+    expect(
+      readFileSync(
+        resolve(repositoryRoot, "packages/database/src/migrationCompatibilityClient.ts"),
+        "utf8",
+      ),
+    ).toContain(["new Prisma", "Client({ log: [] })"].join(""));
   });
 
   it("keeps direct external database process entry points behind current ownership checks", () => {

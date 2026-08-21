@@ -22,6 +22,18 @@ pnpm db:migrate
 pnpm db:generate
 ```
 
+`pnpm dev`, `pnpm db:migrate`, and `pnpm db:seed` run a read-only migration
+compatibility check before ordinary application work. API startup independently
+runs the same check before it listens, including when the API is started without
+the root launcher. A protected/shared database with an applied migration unknown
+to the checkout, a changed checksum, unfinished history, or non-prefix history is
+refused before domain queries. The diagnostic contains only validated migration
+identifiers and SHA-256 checksums; it never prints a connection URL or credentials.
+
+An empty database or a checkout with normal pending migrations is classified as
+`checkout_ahead` and may continue to the explicit migration workflow. The guard
+never applies, rolls back, resolves, deletes, or edits migration history.
+
 `pnpm db:up` and `pnpm db:down` are deliberately refused in linked worktrees because the root Compose service is the protected normal container.
 
 ### Builder/QA linked worktree
@@ -76,6 +88,42 @@ pnpm db:task:cleanup
 - `db:task:cleanup` re-derives current-worktree ownership and verifies the Docker task/worktree ownership labels before removing the exact disposable container and `.env.task`.
 
 Each migration, reset, seed, application, client, and integration-test path validates the current `.env.task`, current-worktree identity, PostgreSQL 16 image, ownership labels, running state, and bound port before database access. It prints a preflight line containing only the ownership marker, host, port, and database name. Passwords are never printed. Direct Prisma commands are unsupported; Prisma's configuration and every repository-owned direct `PrismaClient` construction path apply the same worktree environment guard so they cannot use a copied environment or an inherited protected/foreign target.
+
+## Migration Compatibility And Release Readiness
+
+Run the database compatibility check directly for an application or release
+candidate with its explicit target environment:
+
+```bash
+pnpm release:readiness:database
+```
+
+The command is read-only and reports one of these operational classes:
+
+- `equal`: every applied migration and checksum matches the candidate;
+- `checkout_ahead`: the candidate has a normal pending migration suffix;
+- `database_ahead`: the target has an applied migration unknown to the candidate;
+- `checksum_mismatch`: an applied migration differs from the candidate copy;
+- `migration_history_incomplete` or `migration_history_diverged`: history is not
+  a completed prefix of the candidate history; or
+- `database_unavailable`: history could not be inspected safely.
+
+Only `equal` and `checkout_ahead` exit successfully. Run this check before a
+deployment proceeds; migration deployment remains a separate explicit step.
+There is no compatibility bypass. Recovery continues to use the separately
+authorized backup/reset policy below or a newer compatible checkout. Do not edit
+`_prisma_migrations` manually.
+
+The release artifact embeds the checkout migration names and SHA-256 checksums,
+so the check also works in the API runtime image where migration SQL files are not
+present. `packages/database/src/migrationManifest.test.ts` fails if that manifest
+does not exactly match the committed migration directory. Any future migration
+must update the embedded manifest in the same change.
+
+The API `/ready` endpoint uses the same comparison but returns only
+`database_incompatible`, `unresolved_migrations`, or `database_unavailable` to an
+ordinary client. Migration names, checksums, Prisma errors, and connection detail
+remain operator-only.
 
 Two concurrent worktrees necessarily get different ownership markers, container names, ports, application databases, and test databases. A copied foreign `.env.task`, a foreign full shell environment, and a cleanup attempt through foreign ownership all fail before container or database access. Builder and independent QA each set up and clean up their own target.
 

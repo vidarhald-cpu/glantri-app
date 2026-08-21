@@ -1,4 +1,4 @@
-import { prisma } from "@glantri/database";
+import { inspectMigrationCompatibility, migrationCompatibilityPrisma } from "@glantri/database";
 
 type QueryableDatabase = {
   $queryRaw: <T = unknown>(query: TemplateStringsArray, ...values: unknown[]) => Promise<T>;
@@ -13,30 +13,31 @@ export type ReadinessResult =
       reason: string;
     };
 
-export async function checkReadiness(database: QueryableDatabase = prisma): Promise<ReadinessResult> {
-  try {
-    await database.$queryRaw`SELECT 1`;
+export async function checkReadiness(
+  database: QueryableDatabase = migrationCompatibilityPrisma,
+): Promise<ReadinessResult> {
+  const compatibility = await inspectMigrationCompatibility(database);
 
-    const migrationRows = await database.$queryRaw<Array<{ unresolved_count: number | bigint | string }>>`
-      SELECT COUNT(*)::int AS unresolved_count
-      FROM "_prisma_migrations"
-      WHERE finished_at IS NULL
-        AND rolled_back_at IS NULL
-    `;
-    const unresolvedCount = Number(migrationRows[0]?.unresolved_count ?? 0);
-
-    if (unresolvedCount > 0) {
-      return {
-        status: "not_ready",
-        reason: "unresolved_migrations"
-      };
-    }
-
-    return { status: "ready" };
-  } catch {
+  if (compatibility.classification === "database_unavailable") {
     return {
       status: "not_ready",
-      reason: "database_unavailable"
+      reason: "database_unavailable",
     };
   }
+
+  if (compatibility.classification === "migration_history_incomplete") {
+    return {
+      status: "not_ready",
+      reason: "unresolved_migrations",
+    };
+  }
+
+  if (!compatibility.safeToQuery) {
+    return {
+      status: "not_ready",
+      reason: "database_incompatible",
+    };
+  }
+
+  return { status: "ready" };
 }

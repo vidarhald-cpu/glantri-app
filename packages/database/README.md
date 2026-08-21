@@ -32,6 +32,12 @@ den beskyttede normale databasen, deler database med `DATABASE_URL`, ikke er lok
 ikke slutter med `_test`, eller ikke tilhører den faktiske nåværende worktree-en
 og dens verifiserte containeretiketter.
 
+Før vanlig applikasjonsarbeid sammenlignes anvendt Prisma-historikk med den
+innebygde migrasjonsmanifesten. `pnpm release:readiness:database` kjører den samme
+skrivebeskyttede kontrollen direkte for en checkout/release-kandidat. En database
+med ukjent migrasjon eller avvikende checksum avvises uten at
+migrasjonshistorikken endres; API-readiness returnerer bare en sanert feilklasse.
+
 ## Importregel
 
 `packages/database` importeres kun av `apps/api`. `apps/web` skal aldri importere direkte — bruk domeneklienter i `apps/web/src/lib/api/`.
