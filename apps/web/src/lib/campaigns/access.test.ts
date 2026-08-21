@@ -139,6 +139,41 @@ describe("campaign access", () => {
     });
   });
 
+  it.each([403, 404])(
+    "maps a player Campaign %s response to the privacy-safe unavailable state",
+    async (status) => {
+      vi.mocked(api.loadAccessibleCampaignById).mockRejectedValue(
+        new ApiRequestError("Campaign not found.", status),
+      );
+
+      await expect(
+        loadCampaignWorkspaceAccessForUser({
+          campaignId: "campaign-hidden",
+          user: createUser({ id: "player-1", roles: ["player"] }),
+        }),
+      ).resolves.toEqual({
+        accessMode: "none",
+        scenarios: [],
+      });
+    },
+  );
+
+  it("does not turn an operational Campaign failure into accessMode none", async () => {
+    const operationalError = new ApiRequestError(
+      "Unable to load campaign data. Please try again.",
+      500,
+      { code: "CAMPAIGN_LOAD_FAILED" },
+    );
+    vi.mocked(api.loadAccessibleCampaignById).mockRejectedValue(operationalError);
+
+    await expect(
+      loadCampaignWorkspaceAccessForUser({
+        campaignId: "campaign-1",
+        user: createUser({ id: "player-1", roles: ["player"] }),
+      }),
+    ).rejects.toBe(operationalError);
+  });
+
   it("falls back cleanly when the remembered campaign is no longer accessible", () => {
     expect(
       resolveCampaignResumeDestination({

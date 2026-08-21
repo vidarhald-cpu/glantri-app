@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 
 import {
   CampaignCharacterRosterCandidateNotFoundError,
@@ -38,6 +38,16 @@ const scenarioService = new ScenarioService();
 interface RouteError extends Error {
   code?: string;
   details?: unknown;
+}
+
+const CAMPAIGN_LOAD_FAILURE_PAYLOAD = {
+  code: "CAMPAIGN_LOAD_FAILED",
+  error: "Unable to load campaign data. Please try again.",
+} as const;
+
+function sendCampaignLoadFailure(request: FastifyRequest, reply: FastifyReply, error: unknown) {
+  request.log.error({ err: error }, "Campaign data load failed");
+  return reply.code(500).send(CAMPAIGN_LOAD_FAILURE_PAYLOAD);
 }
 
 function parseConcreteNpcSnapshot(value: unknown): Record<string, unknown> {
@@ -170,9 +180,13 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       return;
     }
 
-    const campaigns = await campaignService.listCampaignsByGameMaster(user.id);
+    try {
+      const campaigns = await campaignService.listCampaignsByGameMaster(user.id);
 
-    return { campaigns };
+      return { campaigns };
+    } catch (error) {
+      return sendCampaignLoadFailure(request, reply, error);
+    }
   });
 
   app.get("/campaigns/accessible", async (request, reply) => {
@@ -195,9 +209,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
       return { accessibleCampaigns };
     } catch (error) {
-      return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to load accessible campaigns.",
-      });
+      return sendCampaignLoadFailure(request, reply, error);
     }
   });
 
@@ -242,10 +254,8 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       );
 
       return { campaigns: playerCampaigns };
-    } catch {
-      return reply.code(400).send({
-        error: "Unable to load Campaign Home.",
-      });
+    } catch (error) {
+      return sendCampaignLoadFailure(request, reply, error);
     }
   });
 
@@ -280,9 +290,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
         },
       };
     } catch (error) {
-      return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to load accessible campaign.",
-      });
+      return sendCampaignLoadFailure(request, reply, error);
     }
   });
 
@@ -330,9 +338,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
       return { campaign };
     } catch (error) {
-      return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to load campaign.",
-      });
+      return sendCampaignLoadFailure(request, reply, error);
     }
   });
 
@@ -357,9 +363,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
       return { scenarios };
     } catch (error) {
-      return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to list scenarios.",
-      });
+      return sendCampaignLoadFailure(request, reply, error);
     }
   });
 
@@ -420,9 +424,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
       return { relationships };
     } catch (error) {
-      return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to list scenario relationships.",
-      });
+      return sendCampaignLoadFailure(request, reply, error);
     }
   });
 
@@ -447,9 +449,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
       return { roster };
     } catch (error) {
-      return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to list campaign roster.",
-      });
+      return sendCampaignLoadFailure(request, reply, error);
     }
   });
 
@@ -477,10 +477,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
       return { characters };
     } catch (error) {
-      return reply.code(400).send({
-        error:
-          error instanceof Error ? error.message : "Unable to list Campaign Character candidates.",
-      });
+      return sendCampaignLoadFailure(request, reply, error);
     }
   });
 
@@ -631,9 +628,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
       return { entities };
     } catch (error) {
-      return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to list reusable entities.",
-      });
+      return sendCampaignLoadFailure(request, reply, error);
     }
   });
 
@@ -778,9 +773,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
       return { assets };
     } catch (error) {
-      return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to list campaign assets.",
-      });
+      return sendCampaignLoadFailure(request, reply, error);
     }
   });
 

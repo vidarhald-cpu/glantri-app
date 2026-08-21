@@ -4270,6 +4270,79 @@ describe("scenarios route contract", () => {
     expect(mocks.campaignService.listCampaignsByGameMaster).toHaveBeenCalledWith("gm-1");
   });
 
+  it("keeps Campaign workspace authorization denial distinct from operational failure", async () => {
+    mocks.requireAdminUser.mockImplementationOnce(async (_request, reply) => {
+      await reply.code(403).send({ error: "Admin or GM role required." });
+      return null;
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/campaigns/campaign-1/scenarios",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: "Admin or GM role required." });
+    expect(mocks.campaignService.getCampaignById).not.toHaveBeenCalled();
+    expect(mocks.scenarioService.listScenariosByCampaign).not.toHaveBeenCalled();
+  });
+
+  it("keeps a hidden Campaign privacy-safe instead of classifying it as a load failure", async () => {
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "other-gm",
+      id: "campaign-1",
+      name: "Private Campaign",
+      status: "active",
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/campaigns/campaign-1/scenarios",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Campaign not found." });
+    expect(mocks.scenarioService.listScenariosByCampaign).not.toHaveBeenCalled();
+  });
+
+  it("returns a sanitized 500 when the owning GM Campaign Scenario query fails", async () => {
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.scenarioService.listScenariosByCampaign.mockRejectedValue(
+      new Error(
+        "Invalid `prisma.scenario.findMany()` invocation in /srv/glantri/packages/database/src/repositories/scenarioRepository.ts: Value 'paused' not found in enum ScenarioStatus",
+      ),
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/campaigns/campaign-1/scenarios",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      code: "CAMPAIGN_LOAD_FAILED",
+      error: "Unable to load campaign data. Please try again.",
+    });
+    const clientPayload = JSON.stringify(response.json()).toLowerCase();
+    for (const diagnostic of ["prisma", "/srv/", "findmany", "scenariostatus", "paused"]) {
+      expect(clientPayload).not.toContain(diagnostic);
+    }
+  });
+
   it("lists player-accessible campaigns through the player-safe projection", async () => {
     const campaign = {
       createdAt: "2026-05-09T12:00:00.000Z",
@@ -4518,6 +4591,48 @@ describe("scenarios route contract", () => {
         scenarios: [],
       },
     });
+  });
+
+  it("keeps an inaccessible player Campaign privacy-safe", async () => {
+    mocks.campaignService.listCampaignsByUserAccess.mockResolvedValue([]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/campaigns/accessible/campaign-hidden",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Campaign not found." });
+    expect(mocks.scenarioService.listScenariosByCampaignPlayerControl).not.toHaveBeenCalled();
+  });
+
+  it("sanitizes an operational player Campaign access query failure", async () => {
+    mocks.campaignService.listCampaignsByUserAccess.mockRejectedValue(
+      new Error(
+        "Invalid `prisma.campaign.findMany()` invocation at /srv/glantri/scenarioRepository.ts: database enum mismatch",
+      ),
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/campaigns/accessible/campaign-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      code: "CAMPAIGN_LOAD_FAILED",
+      error: "Unable to load campaign data. Please try again.",
+    });
+    const clientPayload = JSON.stringify(response.json()).toLowerCase();
+    for (const diagnostic of ["prisma", "/srv/", "findmany", "enum", "scenariorepository"]) {
+      expect(clientPayload).not.toContain(diagnostic);
+    }
   });
 
   it("returns a validation error instead of calling the service for invalid campaign creation", async () => {
