@@ -1,7 +1,12 @@
 import type { CanonicalContent } from "@glantri/content";
 
-import type { LocalCharacterDraft, LocalCharacterRecord } from "../offline/glantriDexie";
+import type {
+  CharacterRecoveryEnvelope,
+  LocalCharacterDraft,
+  LocalCharacterRecord,
+} from "../offline/glantriDexie";
 import { CharacterDraftRepository } from "../offline/repositories/characterDraftRepository";
+import { applyCharacterRecoveryPatch } from "../offline/repositories/characterRecoveryRepository";
 import { getServerCharacterRevision } from "../offline/repositories/localCharacterRepository";
 import { loadLocalCharacterContext } from "./loadLocalCharacterContext";
 
@@ -11,98 +16,61 @@ export interface LocalCharacterAdvancementContext {
   content: CanonicalContent;
   draft?: LocalCharacterDraft;
   hasRevisionConflict: boolean;
+  legacyRecoveryCount: number;
   record?: LocalCharacterRecord;
   recoveryDraft?: LocalCharacterDraft;
-  recoveryRecord?: LocalCharacterRecord;
+  recoveryRecord?: CharacterRecoveryEnvelope;
 }
 
 export async function loadLocalCharacterAdvancementContext(
   id: string,
+  accountId: string,
 ): Promise<LocalCharacterAdvancementContext> {
-  const [characterContext, existingDraft] = await Promise.all([
-    loadLocalCharacterContext(id),
-    characterDraftRepository.get(id),
-  ]);
+  const characterContext = await loadLocalCharacterContext(id, accountId);
   const { content, record, recoveryRecord } = characterContext;
 
   if (!record) {
     return {
       content,
       hasRevisionConflict: characterContext.hasRevisionConflict,
-      recoveryDraft: existingDraft,
+      legacyRecoveryCount: characterContext.legacyRecoveryCount,
       recoveryRecord,
     };
   }
 
+  const existingDraft = await characterDraftRepository.get(id);
   const serverRevision = getServerCharacterRevision(record);
-  const draftServerRevision =
-    existingDraft?.serverUpdatedAt ??
-    (existingDraft?.syncStatus === "synced" ? existingDraft.updatedAt : undefined);
-  const draftHasPendingChanges = existingDraft?.syncStatus !== "synced";
-  const draftHasRevisionConflict = Boolean(
-    existingDraft &&
-    draftHasPendingChanges &&
-    (!draftServerRevision || draftServerRevision !== serverRevision),
-  );
-  const hasRevisionConflict = characterContext.hasRevisionConflict || draftHasRevisionConflict;
-  const canonicalDraft: LocalCharacterDraft = {
+  const canonicalDraft = await characterDraftRepository.save({
     advancementPointsSpent: 0,
     advancementPointsTotal: record.build.progressionState?.availablePoints ?? 0,
     build: structuredClone(record.build),
     characterId: record.id,
-    createdAt: existingDraft?.createdAt ?? record.createdAt,
     id: record.id,
     serverUpdatedAt: serverRevision,
     syncStatus: "synced",
     updatedAt: record.updatedAt,
-  };
-
-  if (hasRevisionConflict || recoveryRecord) {
-    const recoveryDraft =
-      existingDraft && existingDraft.syncStatus !== "synced"
-        ? existingDraft
-        : recoveryRecord
-          ? {
-              ...canonicalDraft,
-              build: structuredClone(recoveryRecord.build),
-              serverUpdatedAt: getServerCharacterRevision(recoveryRecord),
-              syncStatus: "local" as const,
-              updatedAt: recoveryRecord.updatedAt,
-            }
-          : existingDraft;
-
-    return {
-      content,
-      draft: canonicalDraft,
-      hasRevisionConflict,
-      record,
-      recoveryDraft,
-      recoveryRecord,
-    };
-  }
-
-  const recordIsNewer =
-    record &&
-    (!existingDraft || Date.parse(record.updatedAt) > Date.parse(existingDraft.updatedAt));
-  const draft =
-    record && recordIsNewer
-      ? await characterDraftRepository.save({
-          advancementPointsSpent: 0,
-          advancementPointsTotal: record.build.progressionState?.availablePoints ?? 0,
-          build: structuredClone(record.build),
-          characterId: record.id,
-          id: record.id,
-          serverUpdatedAt: serverRevision,
-          syncStatus: record.syncStatus,
-          updatedAt: record.updatedAt,
-        })
-      : existingDraft;
+  });
+  const recoveredBuild =
+    characterContext.recoveredBuild ??
+    (recoveryRecord ? applyCharacterRecoveryPatch(record.build, recoveryRecord.patch) : undefined);
+  const recoveryDraft = recoveredBuild
+    ? {
+        ...canonicalDraft,
+        advancementPointsTotal: recoveredBuild.progressionState?.availablePoints ?? 0,
+        build: recoveredBuild,
+        createdAt: existingDraft?.createdAt ?? recoveryRecord?.createdAt ?? record.createdAt,
+        syncStatus: "local" as const,
+        updatedAt: recoveryRecord?.updatedAt ?? record.updatedAt,
+      }
+    : undefined;
 
   return {
     content,
-    draft,
-    hasRevisionConflict: false,
+    draft: canonicalDraft,
+    hasRevisionConflict: characterContext.hasRevisionConflict,
+    legacyRecoveryCount: characterContext.legacyRecoveryCount,
     record,
+    recoveryDraft,
     recoveryRecord,
   };
 }

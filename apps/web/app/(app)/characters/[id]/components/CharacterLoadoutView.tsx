@@ -27,10 +27,7 @@ import {
   setCharacterReadyShieldOnServer,
   setCharacterWornArmorOnServer,
 } from "@/lib/api/localServiceClient";
-import {
-  loadCurrentCharacterContext,
-  loadLocalCharacterContext,
-} from "@/lib/characters/loadLocalCharacterContext";
+import { loadCurrentCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
 import { buildCharacterPhysicalStateView } from "@/lib/characters/physicalState";
 import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
 
@@ -50,9 +47,7 @@ interface CharacterLoadoutViewProps {
   showPhysicalState?: boolean;
 }
 
-type CharacterLoadoutContext =
-  | Awaited<ReturnType<typeof loadCurrentCharacterContext>>
-  | Awaited<ReturnType<typeof loadLocalCharacterContext>>;
+type CharacterLoadoutContext = Awaited<ReturnType<typeof loadCurrentCharacterContext>>;
 
 function getCharacterName(name: string | undefined): string {
   return name?.trim() || "Unnamed character";
@@ -87,7 +82,6 @@ export default function CharacterLoadoutView({
   physicalStateGeneralHitpoints,
   physicalStateScenarioId,
   physicalStateTargetParticipantId,
-  preferCurrentCharacterRecord = false,
   showPhysicalState = false,
 }: CharacterLoadoutViewProps) {
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
@@ -107,12 +101,11 @@ export default function CharacterLoadoutView({
 
   useEffect(() => {
     let cancelled = false;
-    const loadCharacterContext = preferCurrentCharacterRecord
-      ? loadCurrentCharacterContext
-      : loadLocalCharacterContext;
-
     setLoading(true);
-    Promise.all([loadCharacterEquipmentState(characterId), loadCharacterContext(characterId)])
+    Promise.all([
+      loadCharacterEquipmentState(characterId),
+      loadCurrentCharacterContext(characterId),
+    ])
       .then(([nextState, nextCharacterContext]) => {
         if (cancelled) {
           return;
@@ -143,7 +136,7 @@ export default function CharacterLoadoutView({
     return () => {
       cancelled = true;
     };
-  }, [characterId, preferCurrentCharacterRecord]);
+  }, [characterId]);
 
   useEffect(() => {
     if (!throwingWeaponItemId || !state) {

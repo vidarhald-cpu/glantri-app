@@ -19,14 +19,14 @@ Rolled/Base -> Original -> Developed -> Current
 
 ## Authorities
 
-| Record or checkpoint        | Authority                                            | Role                                                                                                                                                                                                      |
-| --------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| In-progress chargen session | Browser-local chargen session                        | Recoverable draft. It is not a Character and cannot be rostered or snapshotted.                                                                                                                           |
-| Finalized Character         | Server `Character` record                            | Canonical identity, build, owner, and revision after authenticated finalization. Existing server Characters are treated as finalized without reinterpreting their build fields.                           |
-| Browser-local Character     | Browser-local record with optional `serverUpdatedAt` | Local-only finalized Character, or cache/recoverable draft of a server Character. It never wins over a changed server revision automatically.                                                             |
-| Edit/advancement draft      | Browser-local Character draft                        | Proposed mutation only. Saving it to a server Character requires the server revision on which it was based.                                                                                               |
-| Campaign roster entry       | Campaign-owned reference                             | Membership reference to the canonical Character. Deleting the Character removes its roster references in the same server mutation.                                                                        |
-| Scenario participant        | Scenario-owned snapshot and live state               | Immutable copy of the Character at admission. Later Character edits or deletion do not rewrite it. The existing explicit equipment-refresh action is the only Character refresh covered by this contract. |
+| Record or checkpoint        | Authority                              | Role                                                                                                                                                                                                      |
+| --------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| In-progress chargen session | Browser-local chargen session          | Recoverable draft. It is not a Character and cannot be rostered or snapshotted.                                                                                                                           |
+| Finalized Character         | Server `Character` record              | Canonical identity, build, owner, and revision after authenticated finalization. Existing server Characters are treated as finalized without reinterpreting their build fields.                           |
+| Browser-local Character     | Non-authoritative canonical cache      | Cache of the last canonical Character response. It has no gameplay or replacement authority and is never used when canonical state is unavailable.                                                        |
+| Character recovery          | Account-scoped field patch             | Proposed user-authored changes only. It records its canonical base revision/hash, changed fields, source, time, and save attempt; it never acts as an old whole-Character replacement.                    |
+| Campaign roster entry       | Campaign-owned reference               | Membership reference to the canonical Character. Deleting the Character removes its roster references in the same server mutation.                                                                        |
+| Scenario participant        | Scenario-owned snapshot and live state | Immutable copy of the Character at admission. Later Character edits or deletion do not rewrite it. The existing explicit equipment-refresh action is the only Character refresh covered by this contract. |
 
 ## Actor and privacy matrix
 
@@ -62,7 +62,9 @@ The database update compares both id and revision. A mismatch returns `409 stale
 
 When a retained local draft and the canonical server revision differ, Character screens present the canonical server record as current and keep the retained draft as a separate recovery candidate. The actor may review the retained draft, return to the canonical version, or discard the retained draft. Review does not merge or save anything automatically; a later deliberate save uses the current canonical revision. Reloading repeats this bounded state instead of promoting the stale draft or hiding the canonical record.
 
-`updatedAt` is the server's opaque Character revision; clients compare it for equality and do not infer ordering or game meaning from it. Browser-local `updatedAt` is only the local save time. `serverUpdatedAt` records the canonical revision on which that cache or draft was based. For existing synced browser records created before `serverUpdatedAt`, their `updatedAt` is used once as the compatibility base revision.
+`updatedAt` is the server's opaque Character revision; clients compare it for equality and do not infer ordering or game meaning from it. Browser-local canonical-cache `updatedAt` mirrors that revision. Recovery records separately retain the exact base revision/hash and attempted changed fields. A canonical load clears only empty or canonical-equal residue, safely rebases demonstrably disjoint field changes, and requires explicit review when the same field changed. Successful save removes the matching recovery record; failed or lost responses retain it until canonical reconciliation proves the attempted values were accepted.
+
+Recovery is scoped to the authenticated account and Character. Another account cannot query or inherit it. Explicit logout purges that account's pending recovery from the device. Older unsynced whole-build rows with insufficient provenance are copied into a separate quarantine during browser-database upgrade; they are never applied, promoted, or silently deleted.
 
 ### Delete
 
@@ -75,7 +77,7 @@ A stale delete returns `409 stale_character` and changes nothing.
 1. **Draft -> finalized:** a valid local chargen draft is finalized by an authenticated user; one canonical server Character is created and the browser stores a synced cache with its server revision.
 2. **Finalize retry:** the response is lost and the identical request is repeated; the existing record is returned without rewriting it.
 3. **Finalized -> edited:** an owner, owning GM, or admin submits the exact base revision; one new canonical revision is returned and cached.
-4. **Offline edit -> synchronized:** the browser retains the base server revision while saving local changes. Synchronization succeeds only if that base is still current.
+4. **Failed edit -> recovered:** the browser retains only the attempted changed fields and their canonical base while saving. A retry succeeds only after canonical reconciliation proves a safe base or the user explicitly reviews a conflict.
 5. **Concurrent edit conflict:** another actor saves first; the later stale draft receives `409`, remains recoverable locally, and cannot overwrite the newer Character.
 6. **Conflict recovery:** the canonical server Character is shown as current while the retained draft can be reviewed, left for later, or discarded. No recovery choice automatically merges or overwrites either record.
 7. **Rostered:** Campaign membership refers to the canonical Character; it does not create another Character authority.
@@ -86,6 +88,6 @@ A stale delete returns `409 stale_character` and changes nothing.
 ## Compatibility limits
 
 - Existing server Character builds are accepted as finalized records. This task does not migrate or reinterpret rolled stats, `Original`, `Developed`, `Current`, Skills, progression fields, or `statModifiers`.
-- Existing local-only Characters remain local and have no server mutation authority until finalized through the create contract.
-- Existing synced local caches use their saved server timestamp as the initial base revision; once refreshed or saved, `serverUpdatedAt` is explicit.
+- Existing local-only/unsynced whole-Character rows are legacy quarantine input only. They are not playable, are not submitted as recovery, and do not acquire server mutation authority.
+- Existing synced local caches use their saved server timestamp only as cache compatibility metadata; canonical load refreshes them before use.
 - Character read-model and formula conformance belongs to C&P-2 and is deliberately outside this contract.

@@ -26,7 +26,13 @@ import {
   characterSheetStatsTableColumns,
 } from "@/lib/characters/characterSheet";
 import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
-import type { LocalCharacterRecord } from "@/lib/offline/glantriDexie";
+import { useSessionUser } from "@/lib/auth/SessionUserContext";
+import type { CharacterRecoveryEnvelope, LocalCharacterRecord } from "@/lib/offline/glantriDexie";
+import {
+  applyCharacterRecoveryPatch,
+  CharacterRecoveryRepository,
+  formatCharacterRecoveryField,
+} from "@/lib/offline/repositories/characterRecoveryRepository";
 import {
   buildServerBackedLocalCharacterRecord,
   LocalCharacterRepository,
@@ -39,6 +45,7 @@ interface CharacterDetailProps {
 }
 
 const localCharacterRepository = new LocalCharacterRepository();
+const characterRecoveryRepository = new CharacterRecoveryRepository();
 
 function getCharacterName(build: CharacterBuild): string {
   return build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
@@ -62,12 +69,14 @@ function getProfessionFamilyName(
 }
 
 export default function CharacterDetail({ id }: CharacterDetailProps) {
+  const { currentUser, loading: sessionLoading } = useSessionUser();
   const [build, setBuild] = useState<CharacterBuild>();
   const [canonicalBuild, setCanonicalBuild] = useState<CharacterBuild>();
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [record, setRecord] = useState<LocalCharacterRecord>();
-  const [recoveryRecord, setRecoveryRecord] = useState<LocalCharacterRecord>();
+  const [recoveryRecord, setRecoveryRecord] = useState<CharacterRecoveryEnvelope>();
+  const [legacyRecoveryCount, setLegacyRecoveryCount] = useState(0);
   const [reviewingRecovery, setReviewingRecovery] = useState(false);
   const [savingIdentity, setSavingIdentity] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
@@ -78,7 +87,20 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
   useEffect(() => {
     let cancelled = false;
 
-    loadLocalCharacterContext(id)
+    if (sessionLoading) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!currentUser) {
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    loadLocalCharacterContext(id, currentUser.id)
       .then((result) => {
         if (cancelled) {
           return;
@@ -89,12 +111,13 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
         setBuild(result.record?.build);
         setCanonicalBuild(result.record?.build);
         setRecoveryRecord(result.recoveryRecord);
+        setLegacyRecoveryCount(result.legacyRecoveryCount);
         setReviewingRecovery(false);
         if (result.recoveryRecord && result.record) {
           setFeedback(
             result.hasRevisionConflict
-              ? "The current server Character is shown. A stale local draft is retained for review or discard."
-              : "The current server Character is shown. An unsaved local draft is retained for review or discard.",
+              ? "The same Character details changed elsewhere. The current Character is shown, and your unsaved changes need review."
+              : "The current Character is shown, and your unsaved changes remain available on this device.",
           );
         }
       })
@@ -107,7 +130,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [currentUser, id, sessionLoading]);
 
   const profession = useMemo(() => {
     if (!build || !contentState) {
@@ -185,28 +208,31 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       );
   }, [contentState, sheetSummary]);
 
-  async function persistBuild(nextBuild: CharacterBuild, successMessage: string) {
-    if (!record) {
+  async function persistBuild(
+    nextBuild: CharacterBuild,
+    successMessage: string,
+    sourceAction: string,
+  ) {
+    if (!record || !currentUser) {
       return;
     }
 
     if (recoveryRecord && !reviewingRecovery) {
-      setFeedback("Review the retained draft or discard it before saving new server edits.");
+      setFeedback("Review or discard the existing unsaved changes before saving new changes.");
       return;
     }
 
     const expectedUpdatedAt = requireServerCharacterRevision(record);
-    const localBackupRecord = await localCharacterRepository.save({
-      build: nextBuild,
-      creatorDisplayName: record.creatorDisplayName,
-      creatorEmail: record.creatorEmail,
-      creatorId: record.creatorId,
-      createdAt: record.createdAt,
-      finalizedAt: record.finalizedAt,
-      serverUpdatedAt: expectedUpdatedAt,
-      syncStatus: "local",
+    const recoveryEnvelope = await characterRecoveryRepository.createAttempt({
+      account: currentUser,
+      attemptedBuild: nextBuild,
+      baseBuild: record.build,
+      baseRevision: expectedUpdatedAt,
+      characterId: id,
+      sourceAction,
+      sourceSurface: "Character Sheet",
     });
-    setRecoveryRecord(localBackupRecord);
+    setRecoveryRecord(recoveryEnvelope);
 
     try {
       const savedServerRecord = await updateServerCharacter({
@@ -229,7 +255,14 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       setRecord(savedLocalRecord);
       setCanonicalBuild(savedLocalRecord.build);
       setBuild(savedLocalRecord.build);
-      setRecoveryRecord(undefined);
+      if (recoveryEnvelope) {
+        await characterRecoveryRepository.deleteAttempt(
+          currentUser.id,
+          id,
+          recoveryEnvelope.saveAttempt.id,
+        );
+      }
+      setRecoveryRecord(await characterRecoveryRepository.get(currentUser.id, id));
       setReviewingRecovery(false);
       setFeedback(successMessage);
     } catch (error) {
@@ -237,16 +270,36 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
 
       if (currentCharacter) {
         const canonicalRecord = buildServerBackedLocalCharacterRecord(currentCharacter, record);
+        await localCharacterRepository.save(canonicalRecord);
+        await characterRecoveryRepository.markAttemptOutcome(
+          currentUser.id,
+          id,
+          "conflict",
+          "stale_character",
+        );
+        const recoveryState = await characterRecoveryRepository.reconcile(
+          currentUser.id,
+          id,
+          currentCharacter.build,
+          currentCharacter.updatedAt,
+        );
         setRecord(canonicalRecord);
         setCanonicalBuild(canonicalRecord.build);
         setBuild(canonicalRecord.build);
+        setRecoveryRecord(recoveryState?.envelope);
         setReviewingRecovery(false);
         setFeedback(
-          "The Character changed on the server. The current server version is shown and your exact attempted draft is retained for review.",
+          "The Character changed elsewhere. The current Character is shown, and your attempted changes remain available for review.",
         );
         return;
       }
 
+      await characterRecoveryRepository.markAttemptOutcome(
+        currentUser.id,
+        id,
+        "failed",
+        error instanceof Error ? error.name : undefined,
+      );
       setBuild(canonicalBuild ?? record.build);
       setReviewingRecovery(false);
       throw error;
@@ -254,14 +307,14 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
   }
 
   function handleReviewRecovery() {
-    if (!recoveryRecord) {
+    if (!recoveryRecord || !canonicalBuild) {
       return;
     }
 
-    setBuild(recoveryRecord.build);
+    setBuild(applyCharacterRecoveryPatch(canonicalBuild, recoveryRecord.patch));
     setReviewingRecovery(true);
     setFeedback(
-      "Retained draft loaded for review. Saving deliberately replaces the server Character only if its current revision still matches.",
+      "Unsaved changes loaded for review. Nothing has been saved to the current Character yet.",
     );
   }
 
@@ -272,31 +325,20 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
 
     setBuild(canonicalBuild);
     setReviewingRecovery(false);
-    setFeedback("Current server Character restored. The retained draft is still available.");
+    setFeedback("Current Character restored. Your unsaved changes are still available.");
   }
 
   async function handleDiscardRecovery() {
-    if (!record) {
+    if (!record || !currentUser) {
       return;
     }
 
-    const savedRecord = await localCharacterRepository.save({
-      build: record.build,
-      creatorDisplayName: record.creatorDisplayName,
-      creatorEmail: record.creatorEmail,
-      creatorId: record.creatorId,
-      createdAt: record.createdAt,
-      finalizedAt: record.finalizedAt,
-      serverUpdatedAt: record.serverUpdatedAt,
-      syncStatus: "synced",
-      updatedAt: record.updatedAt,
-    });
-    setRecord(savedRecord);
-    setCanonicalBuild(savedRecord.build);
-    setBuild(savedRecord.build);
+    await characterRecoveryRepository.delete(currentUser.id, id);
+    setCanonicalBuild(record.build);
+    setBuild(record.build);
     setRecoveryRecord(undefined);
     setReviewingRecovery(false);
-    setFeedback("Retained draft discarded. The current server Character remains unchanged.");
+    setFeedback("Unsaved changes discarded. The current Character remains unchanged.");
   }
 
   async function handleSaveIdentity() {
@@ -308,12 +350,12 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     setFeedback(undefined);
 
     try {
-      await persistBuild(build, "Identity details saved.");
+      await persistBuild(build, "Identity details saved.", "Save identity details");
     } catch (error) {
       setFeedback(
         error instanceof Error
-          ? `${error.message} The current server Character is shown and your attempted draft is retained for review.`
-          : "Unable to save identity details. The current server Character is shown and your attempted draft is retained for review.",
+          ? `${error.message} The current Character is shown and your attempted changes remain available for review.`
+          : "Unable to save identity details. The current Character is shown and your attempted changes remain available for review.",
       );
     } finally {
       setSavingIdentity(false);
@@ -329,12 +371,12 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     setFeedback(undefined);
 
     try {
-      await persistBuild(build, "Character notes saved.");
+      await persistBuild(build, "Character notes saved.", "Save Character notes");
     } catch (error) {
       setFeedback(
         error instanceof Error
-          ? `${error.message} The current server Character is shown and your attempted draft is retained for review.`
-          : "Unable to save character notes. The current server Character is shown and your attempted draft is retained for review.",
+          ? `${error.message} The current Character is shown and your attempted changes remain available for review.`
+          : "Unable to save Character notes. The current Character is shown and your attempted changes remain available for review.",
       );
     } finally {
       setSavingNotes(false);
@@ -368,6 +410,12 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     sheetSummary.draftView.primaryPoolAvailable + sheetSummary.draftView.secondaryPoolAvailable;
   const educationLevel = sheetSummary.draftView.education.theoreticalSkillCount;
   const notes = build.profile.notes ?? "";
+  const recoveryFieldLabels = recoveryRecord
+    ? [...new Set(recoveryRecord.patch.map((entry) => formatCharacterRecoveryField(entry.path)))]
+    : [];
+  const recoveryTime = recoveryRecord
+    ? new Date(recoveryRecord.updatedAt).toLocaleString()
+    : undefined;
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1180 }}>
@@ -387,27 +435,53 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
           }}
         >
           <strong>
-            {reviewingRecovery ? "Reviewing retained local draft" : "Local draft retained"}
+            {reviewingRecovery ? "Reviewing unsaved changes" : "Unsaved changes need review"}
           </strong>
           <span>
             {reviewingRecovery
-              ? "This draft is visible for deliberate review and has not replaced the current server Character."
-              : "The current server Character is visible. Choose how to handle the retained draft before saving."}
+              ? "These changes are shown for review. They have not replaced the current Character."
+              : recoveryRecord.reconciliation === "conflict"
+                ? "The same Character details changed elsewhere. Review your saved-on-device changes before deciding what to keep."
+                : "The current Character is shown. Your unsaved changes are still available on this device."}
           </span>
+          <span>
+            From {recoveryRecord.sourceSurface} · {recoveryRecord.sourceAction}
+            {recoveryTime ? ` · ${recoveryTime}` : ""}
+          </span>
+          <span>Changed: {recoveryFieldLabels.join(", ")}</span>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
             {reviewingRecovery ? (
               <button onClick={handleReturnToCanonical} type="button">
-                Return to current server version
+                Return to current Character
               </button>
             ) : (
               <button onClick={handleReviewRecovery} type="button">
-                Review retained draft
+                Review unsaved changes
               </button>
             )}
             <button onClick={() => void handleDiscardRecovery()} type="button">
-              Discard draft and keep server version
+              Discard unsaved changes
             </button>
           </div>
+        </section>
+      ) : null}
+
+      {legacyRecoveryCount > 0 ? (
+        <section
+          style={{
+            background: "#f6f5ef",
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            display: "grid",
+            gap: "0.5rem",
+            padding: "1rem",
+          }}
+        >
+          <strong>Older saved-on-device changes were kept separately</strong>
+          <span>
+            Their account and exact origin could not be verified, so they will never replace this
+            Character automatically or be shown to another account.
+          </span>
         </section>
       ) : null}
 

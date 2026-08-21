@@ -139,13 +139,9 @@ describe("characterBrowser", () => {
       ],
     });
 
-    expect(entries.map((entry) => entry.id)).toEqual([
-      "server-copy",
-      "the-gladiator",
-      "local-only",
-    ]);
+    expect(entries.map((entry) => entry.id)).toEqual(["server-copy", "the-gladiator"]);
     expect(entries.find((entry) => entry.id === "server-copy")?.sourceLabel).toBe("Server-backed");
-    expect(entries.find((entry) => entry.id === "local-only")?.sourceLabel).toBe("Local-only");
+    expect(entries.find((entry) => entry.id === "local-only")).toBeUndefined();
   });
 
   it("drops stale synced local records that no longer exist on the server", () => {
@@ -168,8 +164,7 @@ describe("characterBrowser", () => {
       serverRecords: [],
     });
 
-    expect(entries.map((entry) => entry.id)).toEqual(["local-only"]);
-    expect(entries[0]?.sourceLabel).toBe("Local-only");
+    expect(entries).toEqual([]);
   });
 
   it("builds owner options from distinct owners and filters by specific owner", () => {
@@ -209,7 +204,6 @@ describe("characterBrowser", () => {
     expect(buildCharacterBrowserOwnerOptions(entries)).toEqual([
       { label: "All owners", value: "all" },
       { label: "Arena GM (arena@example.com)", value: "owner:gm-2" },
-      { label: "Current GM (gm@example.com) (You)", value: "owner:gm-1" },
       { label: "Player One (player@example.com)", value: "owner:player-1" },
     ]);
 
@@ -284,7 +278,7 @@ describe("characterBrowser", () => {
       ],
     });
 
-    expect(entries.find((entry) => entry.id === "local-npc")?.type).toBe("npc");
+    expect(entries.find((entry) => entry.id === "local-npc")).toBeUndefined();
     expect(entries.find((entry) => entry.id === "the-gladiator")?.type).toBe("pc");
 
     expect(
@@ -293,7 +287,7 @@ describe("characterBrowser", () => {
         sourceFilter: "local",
         typeFilter: "all",
       }).map((entry) => entry.id),
-    ).toEqual(["local-npc"]);
+    ).toEqual([]);
 
     expect(
       filterCharacterBrowserEntries(entries, {
@@ -301,7 +295,7 @@ describe("characterBrowser", () => {
         sourceFilter: "all",
         typeFilter: "npc",
       }).map((entry) => entry.id),
-    ).toEqual(["local-npc"]);
+    ).toEqual([]);
   });
 
   it("treats records returned by the scoped server list as authorized for the current account", () => {
@@ -392,8 +386,8 @@ describe("characterBrowser", () => {
     });
 
     expect(unrelatedGmEntries).toEqual([]);
-    expect(ownerEntries.map((entry) => entry.id)).toEqual([retainedDraft.id]);
+    expect(ownerEntries).toEqual([]);
     expect(owningGmEntries.map((entry) => entry.id)).toEqual([retainedDraft.id]);
-    expect(adminEntries.map((entry) => entry.id)).toEqual([retainedDraft.id]);
+    expect(adminEntries).toEqual([]);
   });
 });

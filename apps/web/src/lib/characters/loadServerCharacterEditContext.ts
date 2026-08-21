@@ -2,54 +2,58 @@ import type { CanonicalContent } from "@glantri/content";
 
 import { loadServerCharacterById, type ServerCharacterRecord } from "../api/characterClient";
 import { loadCanonicalContent } from "../content/loadCanonicalContent";
-import type { LocalCharacterRecord } from "../offline/glantriDexie";
+import type { CharacterRecoveryEnvelope, LocalCharacterRecord } from "../offline/glantriDexie";
+import { CharacterRecoveryRepository } from "../offline/repositories/characterRecoveryRepository";
 import {
   buildServerBackedLocalCharacterRecord,
-  getServerCharacterRevision,
   LocalCharacterRepository,
 } from "../offline/repositories/localCharacterRepository";
 
 const localCharacterRepository = new LocalCharacterRepository();
+const characterRecoveryRepository = new CharacterRecoveryRepository();
 
 export interface ServerCharacterEditContext {
   canonicalRecord: LocalCharacterRecord;
+  conflictPaths: string[];
   content: CanonicalContent;
   expectedUpdatedAt: string;
   hasRevisionConflict: boolean;
-  recoveryRecord?: LocalCharacterRecord;
+  legacyRecoveryCount: number;
+  recoveredBuild?: LocalCharacterRecord["build"];
+  recoveryRecord?: CharacterRecoveryEnvelope;
   serverRecord: ServerCharacterRecord;
 }
 
 export async function loadServerCharacterEditContext(
   id: string,
+  accountId: string,
 ): Promise<ServerCharacterEditContext> {
   const [content, serverRecord, existingLocalRecord] = await Promise.all([
     loadCanonicalContent(),
     loadServerCharacterById(id),
     localCharacterRepository.get(id),
   ]);
-  const localHasPendingChanges = Boolean(
-    existingLocalRecord &&
-    (existingLocalRecord.syncStatus !== "synced" ||
-      Date.parse(existingLocalRecord.updatedAt) > Date.parse(serverRecord.updatedAt)),
-  );
-  const localServerRevision = existingLocalRecord
-    ? getServerCharacterRevision(existingLocalRecord)
-    : undefined;
   const canonicalRecord = buildServerBackedLocalCharacterRecord(serverRecord, existingLocalRecord);
-
-  if (!localHasPendingChanges) {
-    await localCharacterRepository.save(canonicalRecord);
-  }
+  const savedCanonicalRecord = await localCharacterRepository.save(canonicalRecord);
+  const [recoveryState, legacyRecovery] = await Promise.all([
+    characterRecoveryRepository.reconcile(
+      accountId,
+      id,
+      serverRecord.build,
+      serverRecord.updatedAt,
+    ),
+    characterRecoveryRepository.listLegacyQuarantine(id),
+  ]);
 
   return {
-    canonicalRecord,
+    canonicalRecord: savedCanonicalRecord,
+    conflictPaths: recoveryState?.conflictPaths ?? [],
     content,
     expectedUpdatedAt: serverRecord.updatedAt,
-    hasRevisionConflict:
-      localHasPendingChanges &&
-      (localServerRevision === undefined || localServerRevision !== serverRecord.updatedAt),
-    recoveryRecord: localHasPendingChanges ? existingLocalRecord : undefined,
+    hasRevisionConflict: Boolean(recoveryState && recoveryState.conflictPaths.length > 0),
+    legacyRecoveryCount: legacyRecovery.length,
+    recoveredBuild: recoveryState?.recoveredBuild,
+    recoveryRecord: recoveryState?.envelope,
     serverRecord,
   };
 }

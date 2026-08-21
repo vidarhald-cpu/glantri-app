@@ -141,7 +141,7 @@ function mergeCharacterRecords(input: {
   const serverRecordIds = new Set(input.serverRecords.map((record) => record.id));
 
   for (const localRecord of input.localRecords) {
-    if (localRecord.syncStatus === "synced" && !serverRecordIds.has(localRecord.id)) {
+    if (!serverRecordIds.has(localRecord.id)) {
       continue;
     }
 

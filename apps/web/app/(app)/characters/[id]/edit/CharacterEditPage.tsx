@@ -22,7 +22,7 @@ import {
   getCurrentCharacterFromMutationConflict,
   updateServerCharacter,
 } from "@/lib/api/localServiceClient";
-import { useHasAnyRole } from "@/lib/auth/SessionUserContext";
+import { useHasAnyRole, useSessionUser } from "@/lib/auth/SessionUserContext";
 import { getPlayerFacingSkillBucket, groupRowsBySkillType } from "@/lib/chargen/chargenBrowse";
 import {
   addCharacterSkillGroup,
@@ -42,7 +42,12 @@ import {
   setCharacterSkillXp,
 } from "@/lib/characters/characterEdit";
 import { loadServerCharacterEditContext } from "@/lib/characters/loadServerCharacterEditContext";
-import type { LocalCharacterRecord } from "@/lib/offline/glantriDexie";
+import type { CharacterRecoveryEnvelope, LocalCharacterRecord } from "@/lib/offline/glantriDexie";
+import {
+  applyCharacterRecoveryPatch,
+  CharacterRecoveryRepository,
+  formatCharacterRecoveryField,
+} from "@/lib/offline/repositories/characterRecoveryRepository";
 import {
   buildServerBackedLocalCharacterRecord,
   LocalCharacterRepository,
@@ -53,6 +58,7 @@ interface CharacterEditPageProps {
 }
 
 const localCharacterRepository = new LocalCharacterRepository();
+const characterRecoveryRepository = new CharacterRecoveryRepository();
 const numericInputStyle = {
   fontSize: "1rem",
   padding: "0.45rem",
@@ -71,6 +77,7 @@ function parseWholeNumber(value: string): number {
 }
 
 export default function CharacterEditPage({ id }: CharacterEditPageProps) {
+  const { currentUser, loading: sessionLoading } = useSessionUser();
   const [build, setBuild] = useState<CharacterBuild>();
   const [canonicalBuild, setCanonicalBuild] = useState<CharacterBuild>();
   const [content, setContent] = useState<
@@ -80,7 +87,8 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [record, setRecord] = useState<LocalCharacterRecord>();
-  const [recoveryRecord, setRecoveryRecord] = useState<LocalCharacterRecord>();
+  const [recoveryRecord, setRecoveryRecord] = useState<CharacterRecoveryEnvelope>();
+  const [legacyRecoveryCount, setLegacyRecoveryCount] = useState(0);
   const [reviewingRecovery, setReviewingRecovery] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedSkillGroupId, setSelectedSkillGroupId] = useState("");
@@ -92,7 +100,20 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
   useEffect(() => {
     let cancelled = false;
 
-    loadServerCharacterEditContext(id)
+    if (sessionLoading) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!currentUser) {
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    loadServerCharacterEditContext(id, currentUser.id)
       .then((result) => {
         if (cancelled) {
           return;
@@ -104,12 +125,13 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
         setBuild(result.canonicalRecord.build);
         setExpectedUpdatedAt(result.expectedUpdatedAt);
         setRecoveryRecord(result.recoveryRecord);
+        setLegacyRecoveryCount(result.legacyRecoveryCount);
         setReviewingRecovery(false);
         if (result.recoveryRecord) {
           setFeedback(
             result.hasRevisionConflict
-              ? "The current server Character is shown. A local draft based on an older revision is retained until you review or discard it."
-              : "The current server Character is shown. An unsaved local draft is retained until you review or discard it.",
+              ? "The same Character details changed elsewhere. The current Character is shown, and your unsaved changes need review."
+              : "The current Character is shown, and your unsaved changes remain available on this device.",
           );
         }
       })
@@ -122,7 +144,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [currentUser, id, sessionLoading]);
 
   const sheetSummary = useMemo(() => {
     if (!build || !content) {
@@ -235,30 +257,29 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
   );
 
   async function handleSave() {
-    if (!build || !record || !expectedUpdatedAt) {
-      setFeedback("Reload the server character before saving this local draft.");
+    if (!build || !record || !expectedUpdatedAt || !currentUser) {
+      setFeedback("Reload the Character before saving these changes.");
       return;
     }
 
     if (recoveryRecord && !reviewingRecovery) {
-      setFeedback("Review the retained draft or discard it before saving new server edits.");
+      setFeedback("Review or discard the existing unsaved changes before saving new changes.");
       return;
     }
 
     setSaving(true);
 
     try {
-      const localBackupRecord = await localCharacterRepository.save({
-        build,
-        creatorDisplayName: record.creatorDisplayName,
-        creatorEmail: record.creatorEmail,
-        creatorId: record.creatorId,
-        createdAt: record.createdAt,
-        finalizedAt: record.finalizedAt,
-        serverUpdatedAt: expectedUpdatedAt,
-        syncStatus: "local",
+      const recoveryEnvelope = await characterRecoveryRepository.createAttempt({
+        account: currentUser,
+        attemptedBuild: build,
+        baseBuild: record.build,
+        baseRevision: expectedUpdatedAt,
+        characterId: id,
+        sourceAction: "Save Character edits",
+        sourceSurface: "Character Edit",
       });
-      setRecoveryRecord(localBackupRecord);
+      setRecoveryRecord(recoveryEnvelope);
 
       const savedServerRecord = await updateServerCharacter({
         build,
@@ -279,7 +300,14 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
       setCanonicalBuild(savedServerRecord.build);
       setBuild(savedServerRecord.build);
       setExpectedUpdatedAt(savedServerRecord.updatedAt);
-      setRecoveryRecord(undefined);
+      if (recoveryEnvelope) {
+        await characterRecoveryRepository.deleteAttempt(
+          currentUser.id,
+          id,
+          recoveryEnvelope.saveAttempt.id,
+        );
+      }
+      setRecoveryRecord(await characterRecoveryRepository.get(currentUser.id, id));
       setReviewingRecovery(false);
       setFeedback("Character edits saved to the server.");
     } catch (error) {
@@ -287,21 +315,41 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
 
       if (currentCharacter) {
         const canonicalRecord = buildServerBackedLocalCharacterRecord(currentCharacter, record);
+        await localCharacterRepository.save(canonicalRecord);
+        await characterRecoveryRepository.markAttemptOutcome(
+          currentUser.id,
+          id,
+          "conflict",
+          "stale_character",
+        );
+        const recoveryState = await characterRecoveryRepository.reconcile(
+          currentUser.id,
+          id,
+          currentCharacter.build,
+          currentCharacter.updatedAt,
+        );
         setRecord(canonicalRecord);
         setCanonicalBuild(canonicalRecord.build);
         setBuild(canonicalRecord.build);
         setExpectedUpdatedAt(currentCharacter.updatedAt);
+        setRecoveryRecord(recoveryState?.envelope);
         setReviewingRecovery(false);
         setFeedback(
-          "The Character changed on the server. The current server version is shown and your exact attempted draft is retained for review.",
+          "The Character changed elsewhere. The current Character is shown, and your attempted changes remain available for review.",
         );
       } else {
+        await characterRecoveryRepository.markAttemptOutcome(
+          currentUser.id,
+          id,
+          "failed",
+          error instanceof Error ? error.name : undefined,
+        );
         setBuild(canonicalBuild ?? record.build);
         setReviewingRecovery(false);
         setFeedback(
           error instanceof Error
-            ? `${error.message} The current server Character is shown and your attempted draft remains saved locally for review.`
-            : "Unable to save character edits to the server. The current server Character is shown and your attempted draft remains saved locally for review.",
+            ? `${error.message} The current Character is shown and your attempted changes remain available for review.`
+            : "Unable to save Character edits. The current Character is shown and your attempted changes remain available for review.",
         );
       }
     } finally {
@@ -310,40 +358,28 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
   }
 
   function handleReviewRecovery() {
-    if (!recoveryRecord) {
+    if (!recoveryRecord || !canonicalBuild) {
       return;
     }
 
-    setBuild(recoveryRecord.build);
+    setBuild(applyCharacterRecoveryPatch(canonicalBuild, recoveryRecord.patch));
     setReviewingRecovery(true);
     setFeedback(
-      "Retained draft loaded for review. The server has not changed; saving deliberately replaces it only if its current revision still matches.",
+      "Unsaved changes loaded for review. Nothing has been saved to the current Character yet.",
     );
   }
 
   async function handleDiscardRecovery() {
-    if (!record) {
+    if (!record || !currentUser) {
       return;
     }
 
-    const savedRecord = await localCharacterRepository.save({
-      build: record.build,
-      creatorDisplayName: record.creatorDisplayName,
-      creatorEmail: record.creatorEmail,
-      creatorId: record.creatorId,
-      createdAt: record.createdAt,
-      finalizedAt: record.finalizedAt,
-      serverUpdatedAt: record.serverUpdatedAt,
-      syncStatus: "synced",
-      updatedAt: record.updatedAt,
-    });
-
-    setRecord(savedRecord);
-    setCanonicalBuild(savedRecord.build);
-    setBuild(savedRecord.build);
+    await characterRecoveryRepository.delete(currentUser.id, id);
+    setCanonicalBuild(record.build);
+    setBuild(record.build);
     setRecoveryRecord(undefined);
     setReviewingRecovery(false);
-    setFeedback("Retained draft discarded. The current server Character remains unchanged.");
+    setFeedback("Unsaved changes discarded. The current Character remains unchanged.");
   }
 
   function handleReturnToCanonical() {
@@ -353,7 +389,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
 
     setBuild(canonicalBuild);
     setReviewingRecovery(false);
-    setFeedback("Current server Character restored. The retained draft is still available.");
+    setFeedback("Current Character restored. Your unsaved changes are still available.");
   }
 
   function updateOriginalStat(stat: GlantriCharacteristicKey, value: string) {
@@ -654,6 +690,12 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
   const approvedCheckCount =
     progressionView?.checks.filter((check) => (check.status ?? "approved") === "approved").length ??
     0;
+  const recoveryFieldLabels = recoveryRecord
+    ? [...new Set(recoveryRecord.patch.map((entry) => formatCharacterRecoveryField(entry.path)))]
+    : [];
+  const recoveryTime = recoveryRecord
+    ? new Date(recoveryRecord.updatedAt).toLocaleString()
+    : undefined;
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1180 }}>
@@ -689,27 +731,48 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
           }}
         >
           <strong>
-            {reviewingRecovery ? "Reviewing retained local draft" : "Local draft retained"}
+            {reviewingRecovery ? "Reviewing unsaved changes" : "Unsaved changes need review"}
           </strong>
           <span>
             {reviewingRecovery
-              ? "This draft is visible for deliberate review; it has not replaced the current server Character."
-              : "The current server Character is visible. Choose how to handle the retained draft before saving."}
+              ? "These changes are shown for review. They have not replaced the current Character."
+              : recoveryRecord.reconciliation === "conflict"
+                ? "The same Character details changed elsewhere. Review your saved-on-device changes before deciding what to keep."
+                : "The current Character is shown. Your unsaved changes are still available on this device."}
           </span>
+          <span>
+            From {recoveryRecord.sourceSurface} · {recoveryRecord.sourceAction}
+            {recoveryTime ? ` · ${recoveryTime}` : ""}
+          </span>
+          <span>Changed: {recoveryFieldLabels.join(", ")}</span>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
             {reviewingRecovery ? (
               <button onClick={handleReturnToCanonical} type="button">
-                Return to current server version
+                Return to current Character
               </button>
             ) : (
               <button onClick={handleReviewRecovery} type="button">
-                Review retained draft
+                Review unsaved changes
               </button>
             )}
             <button onClick={() => void handleDiscardRecovery()} type="button">
-              Discard draft and keep server version
+              Discard unsaved changes
             </button>
           </div>
+        </section>
+      ) : null}
+
+      {legacyRecoveryCount > 0 ? (
+        <section
+          style={{
+            background: "#f6f5ef",
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            padding: "1rem",
+          }}
+        >
+          Older saved-on-device changes were kept separately because their account and exact origin
+          could not be verified. They will never be applied automatically.
         </section>
       ) : null}
 

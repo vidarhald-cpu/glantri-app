@@ -12,14 +12,14 @@ describe("canPresentRetainedLocalCharacter", () => {
     return { email: `${id}@example.com`, id, roles };
   }
 
-  it("preserves owner, owning-GM, and admin access while denying an unrelated GM", () => {
+  it("requires current canonical access instead of treating a browser row as authority", () => {
     expect(
       canPresentRetainedLocalCharacter({
         currentUser: user("owner-1", ["player"]),
         hasServerAccess: false,
         record,
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       canPresentRetainedLocalCharacter({
         currentUser: user("owning-gm", ["game_master"]),
@@ -40,6 +40,6 @@ describe("canPresentRetainedLocalCharacter", () => {
         hasServerAccess: false,
         record,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 });

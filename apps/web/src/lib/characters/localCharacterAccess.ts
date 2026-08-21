@@ -11,9 +11,5 @@ export function canPresentRetainedLocalCharacter(input: {
     return false;
   }
 
-  if (input.currentUser.roles.includes("admin")) {
-    return true;
-  }
-
-  return input.record.creatorId === input.currentUser.id || input.hasServerAccess;
+  return input.hasServerAccess;
 }

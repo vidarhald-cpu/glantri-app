@@ -13,6 +13,7 @@ import {
 } from "@glantri/rules-engine";
 
 import { updateServerCharacter } from "@/lib/api/localServiceClient";
+import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import { loadLocalCharacterAdvancementContext } from "@/lib/characters/loadLocalCharacterAdvancementContext";
 import type { LocalCharacterDraft, LocalCharacterRecord } from "@/lib/offline/glantriDexie";
 import { CharacterDraftRepository } from "@/lib/offline/repositories/characterDraftRepository";
@@ -88,6 +89,7 @@ function parseInteger(value: string): number {
 }
 
 export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEditorProps) {
+  const { currentUser, loading: sessionLoading } = useSessionUser();
   const [content, setContent] = useState<
     Awaited<ReturnType<typeof loadLocalCharacterAdvancementContext>>["content"] | undefined
   >();
@@ -101,7 +103,20 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
   useEffect(() => {
     let cancelled = false;
 
-    loadLocalCharacterAdvancementContext(id)
+    if (sessionLoading) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!currentUser) {
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    loadLocalCharacterAdvancementContext(id, currentUser.id)
       .then(async (result) => {
         if (cancelled) {
           return;
@@ -130,7 +145,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [currentUser, id, sessionLoading]);
 
   const sheet = useMemo(() => {
     if (!draft || !content) {
