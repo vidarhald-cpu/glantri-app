@@ -23,6 +23,21 @@ async function getEncounter(request: APIRequestContext, encounterId: string) {
   };
 }
 
+async function startScenario(request: APIRequestContext, scenarioId: string) {
+  const lifecycleResponse = await request.get(`${API_URL}/scenarios/${scenarioId}/lifecycle`);
+  expect(lifecycleResponse.ok(), await lifecycleResponse.text()).toBe(true);
+  const lifecycle = (await lifecycleResponse.json()) as {
+    preflight?: { warnings: Array<{ code: string }> };
+    scenario: { lifecycleRevision?: number };
+  };
+
+  await postJson(request, `/scenarios/${scenarioId}/lifecycle/start`, {
+    acceptedWarningCodes: lifecycle.preflight?.warnings.map((warning) => warning.code) ?? [],
+    expectedRevision: lifecycle.scenario.lifecycleRevision ?? 0,
+    reason: "Start the ACoV4 Combat Item smoke fixture",
+  });
+}
+
 async function gmCompleteItemAction(input: {
   actionId: string;
   encounterId: string;
@@ -92,7 +107,7 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     const scenario = await postJson<{ scenario: { id: string } }>(
       gmPage.request,
       `/campaigns/${campaignId}/scenarios`,
-      { name: `ACoV4 Item Scenario ${suffix}`, status: "live" },
+      { name: `ACoV4 Item Scenario ${suffix}` },
     );
     const scenarioId = scenario.scenario.id;
     const sourceParticipant = await postJson<{ participant: { id: string } }>(
@@ -105,6 +120,7 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
       `/scenarios/${scenarioId}/participants/character`,
       { characterId: recipientCharacterId, controlledByUserId: recipientMe.user.id },
     );
+    await startScenario(gmPage.request, scenarioId);
     const now = new Date().toISOString();
     const encounterId = `acov4-item-encounter-${suffix}`;
     await postJson(gmPage.request, `/scenarios/${scenarioId}/encounters`, {

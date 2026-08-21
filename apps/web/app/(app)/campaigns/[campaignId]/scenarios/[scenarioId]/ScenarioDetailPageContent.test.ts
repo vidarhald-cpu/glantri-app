@@ -64,6 +64,12 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).toContain('aria-label="Scenario summary"');
     expect(source).toContain("gridTemplateColumns");
     expect(source).toContain("setScenarioDescription");
+    expect(source).toContain("transitionScenarioLifecycleOnServer");
+    expect(source).toContain("availableLifecycleActions");
+    expect(source).toContain("Reason for lifecycle action");
+    expect(source).not.toContain("onStatusChange");
+    expect(source).not.toContain('<option value="prepared">Prepared</option>');
+    expect(source).not.toContain('<option value="completed">Completed</option>');
     expect(source).not.toContain("<textarea");
     expect(source).not.toContain("setScenarioKind");
     expect(source).not.toContain("value={scenarioKind}");

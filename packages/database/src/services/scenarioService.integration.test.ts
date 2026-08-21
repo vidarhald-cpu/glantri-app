@@ -12,6 +12,26 @@ import { ScenarioService } from "./scenarioService";
 
 const prisma = getTestPrismaClient();
 
+function holdNextLifecycleCommit(repository: ReturnType<typeof createPrismaScenarioRepository>) {
+  const transition = repository.transitionScenarioLifecycle.bind(repository);
+  let releaseCommit!: () => void;
+  let reportPreflightComplete!: () => void;
+  const commitReleased = new Promise<void>((resolve) => {
+    releaseCommit = resolve;
+  });
+  const preflightComplete = new Promise<void>((resolve) => {
+    reportPreflightComplete = resolve;
+  });
+
+  repository.transitionScenarioLifecycle = async (input) => {
+    reportPreflightComplete();
+    await commitReleased;
+    return transition(input);
+  };
+
+  return { preflightComplete, releaseCommit };
+}
+
 if (!process.env.DATABASE_URL_TEST) {
   describe.skip("ScenarioService integration tests (DATABASE_URL_TEST not set)", () => {});
 } else {
@@ -95,12 +115,18 @@ if (!process.env.DATABASE_URL_TEST) {
         campaignId: campaign.id,
         description: "Private to delegated controller",
         name: "Delegated Private Scenario",
-        status: "live",
       });
       await service.addCharacterParticipant({
         characterId: character.id,
         controlledByUserId: delegatedController.id,
         joinSource: "gm_added",
+        scenarioId: scenario.id,
+      });
+      await service.transitionScenarioLifecycle({
+        action: "start",
+        actorUserId: gm.id,
+        expectedRevision: 1,
+        reason: "Start delegated Scenario",
         scenarioId: scenario.id,
       });
 
@@ -122,6 +148,132 @@ if (!process.env.DATABASE_URL_TEST) {
           userId: delegatedController.id,
         }),
       ).resolves.toBe(true);
+    });
+
+    it("commits only one transition for concurrent requests with the same revision", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["gm"] });
+      const repo = createPrismaScenarioRepository(prisma!);
+      const campaignService = new CampaignService(repo);
+      const service = new ScenarioService(repo);
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Concurrency Campaign",
+      });
+      const scenario = await service.createScenario({
+        campaignId: campaign.id,
+        description: "Ready for play",
+        name: "Concurrent Start",
+      });
+      const request = () =>
+        service.transitionScenarioLifecycle({
+          acceptedWarningCodes: ["no_active_player_participants"],
+          action: "start",
+          actorUserId: gm.id,
+          expectedRevision: 0,
+          reason: "Start once",
+          scenarioId: scenario.id,
+        });
+
+      const results = await Promise.allSettled([request(), request()]);
+
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+      await expect(service.listScenarioLifecycleTransitions(scenario.id)).resolves.toHaveLength(1);
+      await expect(service.getScenarioById(scenario.id)).resolves.toMatchObject({
+        lifecycleCycle: 1,
+        lifecycleRevision: 1,
+        status: "live",
+      });
+    });
+
+    it("rejects start when Scenario metadata changes after preflight", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["gm"] });
+      const repo = createPrismaScenarioRepository(prisma!);
+      const campaignService = new CampaignService(repo);
+      const service = new ScenarioService(repo);
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Metadata Race Campaign",
+      });
+      const scenario = await service.createScenario({
+        campaignId: campaign.id,
+        description: "Ready for play",
+        name: "Metadata Race",
+      });
+      const gate = holdNextLifecycleCommit(repo);
+      const start = service.transitionScenarioLifecycle({
+        acceptedWarningCodes: ["no_active_player_participants"],
+        action: "start",
+        actorUserId: gm.id,
+        expectedRevision: 0,
+        reason: "Start from checked metadata",
+        scenarioId: scenario.id,
+      });
+
+      await gate.preflightComplete;
+      await service.updateScenario({ description: "", scenarioId: scenario.id });
+      gate.releaseCommit();
+
+      await expect(start).rejects.toMatchObject({
+        code: "stale_revision",
+      });
+      await expect(service.listScenarioLifecycleTransitions(scenario.id)).resolves.toHaveLength(0);
+      await expect(service.getScenarioById(scenario.id)).resolves.toMatchObject({
+        lifecycleRevision: 1,
+        status: "draft",
+      });
+    });
+
+    it("rejects start when participant readiness changes after preflight", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["gm"] });
+      const player = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, player.id, { name: "Ready Hero" });
+      const repo = createPrismaScenarioRepository(prisma!);
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const equipmentService = new CharacterEquipmentReadModelService(
+        createPrismaCharacterEquipmentRepository(prisma!),
+      );
+      const campaignService = new CampaignService(repo, characterService);
+      const service = new ScenarioService(repo, characterService, equipmentService);
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Participant Race Campaign",
+      });
+      const scenario = await service.createScenario({
+        campaignId: campaign.id,
+        description: "Ready for play",
+        name: "Participant Race",
+      });
+      const participant = await service.addCharacterParticipant({
+        characterId: character.id,
+        joinSource: "gm_added",
+        scenarioId: scenario.id,
+      });
+      const gate = holdNextLifecycleCommit(repo);
+      const start = service.transitionScenarioLifecycle({
+        action: "start",
+        actorUserId: gm.id,
+        expectedRevision: 1,
+        reason: "Start from checked participants",
+        scenarioId: scenario.id,
+      });
+
+      await gate.preflightComplete;
+      await service.updateScenarioParticipantMetadata({
+        isActive: false,
+        participantId: participant.id,
+        scenarioId: scenario.id,
+      });
+      gate.releaseCommit();
+
+      await expect(start).rejects.toMatchObject({
+        code: "stale_revision",
+      });
+      await expect(service.listScenarioLifecycleTransitions(scenario.id)).resolves.toHaveLength(0);
+      await expect(service.getScenarioById(scenario.id)).resolves.toMatchObject({
+        lifecycleRevision: 2,
+        status: "draft",
+      });
     });
   });
 }

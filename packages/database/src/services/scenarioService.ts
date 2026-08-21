@@ -1,13 +1,18 @@
 import type {
   ReusableEntity,
   Scenario,
+  ScenarioLifecycleAction,
+  ScenarioLifecycleTransition,
   ScenarioRelationship,
   ScenarioParticipant,
   ScenarioParticipantRole,
+  ScenarioStartPreflight,
 } from "@glantri/domain";
 import {
   createParticipantSnapshotFromCharacter,
   createParticipantSnapshotFromEntity,
+  deriveScenarioStartPreflight,
+  getScenarioLifecycleTarget,
 } from "@glantri/domain";
 
 import {
@@ -21,6 +26,23 @@ import {
   resolveEntityParticipantSource,
   userHasPlayerScenarioAccess,
 } from "./scenarioParticipantSupport";
+
+export type ScenarioLifecycleConflictCode =
+  | "invalid_transition"
+  | "stale_revision"
+  | "start_blocked"
+  | "warnings_not_accepted";
+
+export class ScenarioLifecycleConflictError extends Error {
+  constructor(
+    readonly code: ScenarioLifecycleConflictCode,
+    message: string,
+    readonly preflight?: ScenarioStartPreflight,
+  ) {
+    super(message);
+    this.name = "ScenarioLifecycleConflictError";
+  }
+}
 
 export class ScenarioService {
   constructor(
@@ -36,7 +58,7 @@ export class ScenarioService {
     kind?: Scenario["kind"];
     mapAssetId?: string | null;
     name: string;
-    status?: Scenario["status"];
+    status?: Scenario["status"] | "prepared" | "completed";
   }): Promise<Scenario> {
     const previousScenario = input.continuesFromScenarioId
       ? await this.repository.getScenarioById(input.continuesFromScenarioId)
@@ -55,7 +77,7 @@ export class ScenarioService {
       kind: input.kind ?? "mixed",
       mapAssetId: input.mapAssetId ?? null,
       name: input.name.trim(),
-      status: input.status ?? "draft",
+      status: "draft",
     });
 
     if (previousScenario) {
@@ -97,9 +119,19 @@ export class ScenarioService {
   }
 
   async userHasPlayerScenarioAccess(input: {
+    includePaused?: boolean;
     scenarioId: string;
     userId: string;
   }): Promise<boolean> {
+    const scenario = await this.repository.getScenarioById(input.scenarioId);
+
+    if (
+      !scenario ||
+      (scenario.status !== "live" && !(input.includePaused && scenario.status === "paused"))
+    ) {
+      return false;
+    }
+
     return userHasPlayerScenarioAccess(this.repository, this.characterService, input);
   }
 
@@ -109,9 +141,129 @@ export class ScenarioService {
     mapAssetId?: string | null;
     name?: string;
     scenarioId: string;
-    status?: Scenario["status"];
   }): Promise<Scenario> {
     return this.repository.updateScenario(input);
+  }
+
+  async getScenarioStartPreflight(scenarioId: string): Promise<ScenarioStartPreflight | null> {
+    const scenario = await this.repository.getScenarioById(scenarioId);
+
+    if (!scenario) {
+      return null;
+    }
+
+    return deriveScenarioStartPreflight({
+      participants: await this.repository.listScenarioParticipants(scenarioId),
+      scenario,
+    });
+  }
+
+  async listScenarioLifecycleTransitions(
+    scenarioId: string,
+  ): Promise<ScenarioLifecycleTransition[]> {
+    return this.repository.listScenarioLifecycleTransitions(scenarioId);
+  }
+
+  async transitionScenarioLifecycle(input: {
+    acceptedWarningCodes?: string[];
+    action: ScenarioLifecycleAction;
+    actorUserId: string;
+    expectedRevision: number;
+    reason: string;
+    scenarioId: string;
+  }): Promise<{
+    preflight?: ScenarioStartPreflight;
+    scenario: Scenario;
+    transition: ScenarioLifecycleTransition;
+  } | null> {
+    const reason = input.reason.trim();
+
+    if (!reason) {
+      throw new Error("A lifecycle transition reason is required.");
+    }
+
+    const scenario = await this.repository.getScenarioById(input.scenarioId);
+
+    if (!scenario) {
+      return null;
+    }
+
+    const campaign = await this.repository.getCampaignById(scenario.campaignId);
+
+    if (!campaign || campaign.gmUserId !== input.actorUserId) {
+      return null;
+    }
+
+    const lifecycleRevision = scenario.lifecycleRevision ?? 0;
+    const lifecycleCycle = scenario.lifecycleCycle ?? 0;
+
+    if (lifecycleRevision !== input.expectedRevision) {
+      throw new ScenarioLifecycleConflictError(
+        "stale_revision",
+        "The Scenario changed. Refresh it before trying this action again.",
+      );
+    }
+
+    const toStatus = getScenarioLifecycleTarget({
+      action: input.action,
+      lifecycleCycle,
+      status: scenario.status,
+    });
+
+    if (!toStatus) {
+      throw new ScenarioLifecycleConflictError(
+        "invalid_transition",
+        `The Scenario cannot ${input.action} while it is ${scenario.status}.`,
+      );
+    }
+
+    let preflight: ScenarioStartPreflight | undefined;
+    if (input.action === "start") {
+      preflight = deriveScenarioStartPreflight({
+        participants: await this.repository.listScenarioParticipants(input.scenarioId),
+        scenario,
+      });
+
+      if (!preflight.ready) {
+        throw new ScenarioLifecycleConflictError(
+          "start_blocked",
+          "Resolve the Scenario start blockers before starting play.",
+          preflight,
+        );
+      }
+
+      const acceptedWarnings = new Set(input.acceptedWarningCodes ?? []);
+      if (preflight.warnings.some((warning) => !acceptedWarnings.has(warning.code))) {
+        throw new ScenarioLifecycleConflictError(
+          "warnings_not_accepted",
+          "Review and accept the Scenario start warnings before starting play.",
+          preflight,
+        );
+      }
+    }
+
+    const nextCycle =
+      input.action === "start" || input.action === "reopen" ? lifecycleCycle + 1 : lifecycleCycle;
+    const result = await this.repository.transitionScenarioLifecycle({
+      action: input.action,
+      actorUserId: input.actorUserId,
+      cycle: nextCycle,
+      expectedRevision: input.expectedRevision,
+      fromStatus: scenario.status,
+      reason,
+      scenarioId: input.scenarioId,
+      toStatus,
+      transitionedAt: new Date(),
+    });
+
+    if (!result) {
+      throw new ScenarioLifecycleConflictError(
+        "stale_revision",
+        "The Scenario changed. Refresh it before trying this action again.",
+      );
+    }
+
+    return { ...result, preflight };
   }
 
   async addCharacterParticipant(input: {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ReusableEntity } from "@glantri/domain";
 
-import { ScenarioService } from "./scenarioService";
+import { ScenarioLifecycleConflictError, ScenarioService } from "./scenarioService";
 import { createCharacterRecord, createScenarioRepositoryStub } from "./scenarioService.testHelpers";
 
 describe("ScenarioService controller assignment", () => {
@@ -145,7 +145,8 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("uses Character ownership only while Scenario control is unassigned", async () => {
-    const { repository } = createScenarioRepositoryStub();
+    const { repository, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const character = createCharacterRecord({
       id: "character-1",
       name: "Ari",
@@ -488,7 +489,6 @@ describe("ScenarioService scenario relationships", () => {
         campaignId: "campaign-1",
         kind: "mixed",
         name: "Standalone Scene",
-        status: "draft",
       }),
     ).resolves.toMatchObject({
       campaignId: "campaign-1",
@@ -506,7 +506,6 @@ describe("ScenarioService scenario relationships", () => {
       continuesFromScenarioId: "scenario-1",
       kind: "mixed",
       name: "Follow-up Scene",
-      status: "draft",
     });
 
     expect(scenarioRelationships).toEqual([
@@ -544,5 +543,180 @@ describe("ScenarioService scenario relationships", () => {
       }),
     ).rejects.toThrow("Continuation scenario not found in this campaign.");
     expect(scenarioRelationships).toHaveLength(0);
+  });
+});
+
+describe("ScenarioService lifecycle authority", () => {
+  it.each([
+    ["assigned player", "player-1"],
+    ["unrelated game master", "gm-2"],
+    ["non-owning platform administrator", "platform-admin-1"],
+  ])(
+    "denies a %s at the service boundary without revealing or changing the Scenario",
+    async (_label, actorUserId) => {
+      const { lifecycleTransitions, repository, scenario } = createScenarioRepositoryStub();
+      const service = new ScenarioService(repository);
+
+      await expect(
+        service.transitionScenarioLifecycle({
+          acceptedWarningCodes: ["missing_description", "no_active_player_participants"],
+          action: "start",
+          actorUserId,
+          expectedRevision: 0,
+          reason: "Unauthorized start",
+          scenarioId: scenario.id,
+        }),
+      ).resolves.toBeNull();
+      expect(lifecycleTransitions).toHaveLength(0);
+      expect(scenario).toMatchObject({ status: "draft" });
+    },
+  );
+
+  it("requires start warning acceptance and records the first lifecycle cycle", async () => {
+    const { lifecycleTransitions, repository, scenario } = createScenarioRepositoryStub();
+    const service = new ScenarioService(repository);
+
+    await expect(
+      service.transitionScenarioLifecycle({
+        action: "start",
+        actorUserId: "gm-1",
+        expectedRevision: 0,
+        reason: "Begin the episode",
+        scenarioId: scenario.id,
+      }),
+    ).rejects.toMatchObject({
+      code: "warnings_not_accepted",
+      preflight: expect.objectContaining({ ready: true }),
+    });
+    expect(lifecycleTransitions).toHaveLength(0);
+    expect(scenario.status).toBe("draft");
+
+    const result = await service.transitionScenarioLifecycle({
+      acceptedWarningCodes: ["missing_description", "no_active_player_participants"],
+      action: "start",
+      actorUserId: "gm-1",
+      expectedRevision: 0,
+      reason: "Begin the episode",
+      scenarioId: scenario.id,
+    });
+
+    expect(result?.scenario).toMatchObject({
+      lifecycleCycle: 1,
+      lifecycleRevision: 1,
+      status: "live",
+    });
+    expect(result?.transition).toMatchObject({
+      actorUserId: "gm-1",
+      cycle: 1,
+      expectedRevision: 0,
+      fromStatus: "draft",
+      reason: "Begin the episode",
+      resultingRevision: 1,
+      toStatus: "live",
+    });
+  });
+
+  it("blocks an invalid start preflight with zero writes", async () => {
+    const { lifecycleTransitions, repository, scenario } = createScenarioRepositoryStub();
+    scenario.name = "";
+    const service = new ScenarioService(repository);
+
+    await expect(
+      service.transitionScenarioLifecycle({
+        acceptedWarningCodes: ["missing_description", "no_active_player_participants"],
+        action: "start",
+        actorUserId: "gm-1",
+        expectedRevision: 0,
+        reason: "Begin",
+        scenarioId: scenario.id,
+      }),
+    ).rejects.toMatchObject({ code: "start_blocked" });
+    expect(lifecycleTransitions).toHaveLength(0);
+    expect(scenario.status).toBe("draft");
+  });
+
+  it("supports pause, resume, close, reopen, archive, and restore without changing Scenario data", async () => {
+    const { lifecycleTransitions, repository, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
+    scenario.lifecycleCycle = 1;
+    scenario.description = "Preserved";
+    const service = new ScenarioService(repository);
+    const actions = [
+      ["pause", 0],
+      ["resume", 1],
+      ["close", 2],
+      ["reopen", 3],
+      ["close", 4],
+      ["archive", 5],
+      ["restore", 6],
+    ] as const;
+
+    for (const [action, expectedRevision] of actions) {
+      await service.transitionScenarioLifecycle({
+        action,
+        actorUserId: "gm-1",
+        expectedRevision,
+        reason: `Apply ${action}`,
+        scenarioId: scenario.id,
+      });
+    }
+
+    expect(scenario).toMatchObject({
+      description: "Preserved",
+      lifecycleCycle: 2,
+      lifecycleRevision: 7,
+      status: "closed",
+    });
+    expect(lifecycleTransitions).toHaveLength(7);
+    expect(lifecycleTransitions[3]).toMatchObject({
+      action: "reopen",
+      cycle: 2,
+      fromStatus: "closed",
+      toStatus: "paused",
+    });
+  });
+
+  it("rejects wrong-state and stale transitions with zero writes", async () => {
+    const { lifecycleTransitions, repository, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
+    scenario.lifecycleCycle = 1;
+    const service = new ScenarioService(repository);
+
+    await expect(
+      service.transitionScenarioLifecycle({
+        action: "archive",
+        actorUserId: "gm-1",
+        expectedRevision: 0,
+        reason: "Not allowed",
+        scenarioId: scenario.id,
+      }),
+    ).rejects.toBeInstanceOf(ScenarioLifecycleConflictError);
+    await expect(
+      service.transitionScenarioLifecycle({
+        action: "pause",
+        actorUserId: "gm-1",
+        expectedRevision: 9,
+        reason: "Stale",
+        scenarioId: scenario.id,
+      }),
+    ).rejects.toMatchObject({ code: "stale_revision" });
+    expect(lifecycleTransitions).toHaveLength(0);
+    expect(scenario.status).toBe("live");
+  });
+
+  it("restores an archived never-played Scenario to Draft", async () => {
+    const { repository, scenario } = createScenarioRepositoryStub();
+    scenario.status = "archived";
+    const service = new ScenarioService(repository);
+
+    await expect(
+      service.transitionScenarioLifecycle({
+        action: "restore",
+        actorUserId: "gm-1",
+        expectedRevision: 0,
+        reason: "Return to preparation",
+        scenarioId: scenario.id,
+      }),
+    ).resolves.toMatchObject({ scenario: { lifecycleCycle: 0, status: "draft" } });
   });
 });

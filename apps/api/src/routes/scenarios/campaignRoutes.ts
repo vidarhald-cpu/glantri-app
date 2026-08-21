@@ -13,7 +13,7 @@ import {
   characterBuildSchema,
   reusableEntityKindSchema,
   scenarioKindSchema,
-  scenarioStatusSchema,
+  scenarioCompatibleStatusSchema,
   scenarioVisibilitySchema,
 } from "@glantri/domain";
 
@@ -383,7 +383,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
         kind: body.kind == null ? undefined : scenarioKindSchema.parse(body.kind),
         mapAssetId: parseOptionalNullableString(body, "mapAssetId"),
         name: parseRequiredString(body, "name"),
-        status: body.status == null ? undefined : scenarioStatusSchema.parse(body.status),
+        status: body.status == null ? undefined : scenarioCompatibleStatusSchema.parse(body.status),
       });
 
       return { scenario };

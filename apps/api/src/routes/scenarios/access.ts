@@ -1,4 +1,17 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import type { CampaignService, ScenarioService } from "@glantri/database";
+
+type ScenarioWorkspaceAccessIntent = "read" | "write";
+
+const requestAccessIntent = new AsyncLocalStorage<ScenarioWorkspaceAccessIntent>();
+
+export function runScenarioWorkspaceAccessRequest<T>(method: string, operation: () => T): T {
+  return requestAccessIntent.run(
+    method === "GET" || method === "HEAD" ? "read" : "write",
+    operation,
+  );
+}
 
 export async function resolveScenarioWorkspaceAccess(
   services: {
@@ -6,17 +19,15 @@ export async function resolveScenarioWorkspaceAccess(
     scenarioService: Pick<ScenarioService, "getScenarioById" | "userHasPlayerScenarioAccess">;
   },
   input: {
+    accessIntent?: "read" | "write";
     scenarioId: string;
     userId: string;
     userRoles: string[];
-  }
-): Promise<
-  | {
-      campaignId: string;
-      mode: "gm" | "player";
-    }
-  | null
-> {
+  },
+): Promise<{
+  campaignId: string;
+  mode: "gm" | "player";
+} | null> {
   const scenario = await services.scenarioService.getScenarioById(input.scenarioId);
 
   if (!scenario) {
@@ -29,20 +40,26 @@ export async function resolveScenarioWorkspaceAccess(
     return null;
   }
 
-  const isAdmin = input.userRoles.includes("admin");
-  const isGameMaster = input.userRoles.includes("game_master");
-
-  if (isAdmin || (isGameMaster && campaign.gmUserId === input.userId)) {
+  if (campaign.gmUserId === input.userId) {
     return {
       campaignId: campaign.id,
       mode: "gm",
     };
   }
 
-  const hasPlayerAccess = await services.scenarioService.userHasPlayerScenarioAccess({
+  const accessIntent = input.accessIntent ?? requestAccessIntent.getStore() ?? "write";
+  const hasLivePlayerAccess = await services.scenarioService.userHasPlayerScenarioAccess({
     scenarioId: input.scenarioId,
     userId: input.userId,
   });
+  const hasPlayerAccess =
+    hasLivePlayerAccess ||
+    (accessIntent === "read" &&
+      (await services.scenarioService.userHasPlayerScenarioAccess({
+        includePaused: true,
+        scenarioId: input.scenarioId,
+        userId: input.userId,
+      })));
 
   return hasPlayerAccess
     ? {

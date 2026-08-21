@@ -5,6 +5,7 @@ import type {
   ReusableEntity,
   Scenario,
   ScenarioEventLog,
+  ScenarioLifecycleTransition,
   ScenarioParticipant,
   ScenarioRelationship,
 } from "@glantri/domain";
@@ -77,7 +78,19 @@ export function createCharacterRecord(input: {
 }
 
 export function createScenarioRepositoryStub() {
-  const campaigns: Campaign[] = [];
+  const campaigns: Campaign[] = [
+    {
+      createdAt: "2026-04-21T00:00:00.000Z",
+      description: "",
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Campaign One",
+      settings: { allowPlayerSelfJoin: false, defaultVisibility: "hidden" },
+      slug: "campaign-one",
+      status: "draft",
+      updatedAt: "2026-04-21T00:00:00.000Z",
+    },
+  ];
   const scenario: Scenario = {
     campaignId: "campaign-1",
     createdAt: "2026-04-21T00:00:00.000Z",
@@ -93,12 +106,14 @@ export function createScenarioRepositoryStub() {
   const rosterEntries: CampaignRosterEntry[] = [];
   const reusableEntities: ReusableEntity[] = [];
   const scenarioRelationships: ScenarioRelationship[] = [];
+  const lifecycleTransitions: ScenarioLifecycleTransition[] = [];
 
   const repository: ScenarioRepository = {
     createCampaign: async () => {
       throw new Error("Not implemented in test stub.");
     },
-    getCampaignById: async () => null,
+    getCampaignById: async (campaignId) =>
+      campaigns.find((campaign) => campaign.id === campaignId) ?? null,
     listCampaignsByGameMaster: async () => [],
     listCampaignsAllowingPlayerSelfJoin: async () => [],
     listCampaignsByCharacterRosterAccess: async (characterId) => {
@@ -129,9 +144,48 @@ export function createScenarioRepositoryStub() {
     listScenariosByCampaign: async () => [],
     listScenariosByCampaignPlayerAccess: async () => [],
     listScenariosByCampaignPlayerControl: async () => [],
-    updateScenario: async () => {
-      throw new Error("Not implemented in test stub.");
+    updateScenario: async (input) => {
+      if (input.scenarioId !== scenario.id) {
+        throw new Error("Scenario not found.");
+      }
+
+      scenario.description = input.description ?? scenario.description;
+      scenario.kind = input.kind ?? scenario.kind;
+      scenario.mapAssetId =
+        input.mapAssetId === null ? undefined : (input.mapAssetId ?? scenario.mapAssetId);
+      scenario.name = input.name ?? scenario.name;
+      scenario.lifecycleRevision = (scenario.lifecycleRevision ?? 0) + 1;
+      return scenario;
     },
+    transitionScenarioLifecycle: async (input) => {
+      if (
+        scenario.status !== input.fromStatus ||
+        (scenario.lifecycleRevision ?? 0) !== input.expectedRevision
+      ) {
+        return null;
+      }
+
+      scenario.status = input.toStatus;
+      scenario.lifecycleCycle = input.cycle;
+      scenario.lifecycleRevision = input.expectedRevision + 1;
+      scenario.updatedAt = input.transitionedAt.toISOString();
+      const transition: ScenarioLifecycleTransition = {
+        action: input.action,
+        actorUserId: input.actorUserId,
+        cycle: input.cycle,
+        expectedRevision: input.expectedRevision,
+        fromStatus: input.fromStatus,
+        id: `lifecycle-${lifecycleTransitions.length + 1}`,
+        reason: input.reason,
+        resultingRevision: input.expectedRevision + 1,
+        scenarioId: input.scenarioId,
+        toStatus: input.toStatus,
+        transitionedAt: input.transitionedAt.toISOString(),
+      };
+      lifecycleTransitions.push(transition);
+      return { scenario, transition };
+    },
+    listScenarioLifecycleTransitions: async () => lifecycleTransitions,
     createReusableEntity: async () => {
       throw new Error("Not implemented in test stub.");
     },
@@ -192,6 +246,7 @@ export function createScenarioRepositoryStub() {
         updatedAt: now,
         visibilityOverrides: input.visibilityOverrides,
       };
+      scenario.lifecycleRevision = (scenario.lifecycleRevision ?? 0) + 1;
       participants.push(participant);
       return participant;
     },
@@ -256,6 +311,7 @@ export function createScenarioRepositoryStub() {
         participant.tacticalGroupId = input.tacticalGroupId ?? undefined;
       }
 
+      scenario.lifecycleRevision = (scenario.lifecycleRevision ?? 0) + 1;
       participant.updatedAt = "2026-04-21T00:00:00.000Z";
       return participant;
     },
@@ -360,6 +416,7 @@ export function createScenarioRepositoryStub() {
   return {
     campaigns,
     eventLogs,
+    lifecycleTransitions,
     participants,
     reusableEntities,
     repository,
