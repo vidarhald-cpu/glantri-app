@@ -16,7 +16,6 @@ export interface LocalCharacterAdvancementContext {
   content: CanonicalContent;
   draft?: LocalCharacterDraft;
   hasRevisionConflict: boolean;
-  legacyRecoveryCount: number;
   record?: LocalCharacterRecord;
   recoveryDraft?: LocalCharacterDraft;
   recoveryRecord?: CharacterRecoveryEnvelope;
@@ -33,7 +32,6 @@ export async function loadLocalCharacterAdvancementContext(
     return {
       content,
       hasRevisionConflict: characterContext.hasRevisionConflict,
-      legacyRecoveryCount: characterContext.legacyRecoveryCount,
       recoveryRecord,
     };
   }
@@ -68,7 +66,6 @@ export async function loadLocalCharacterAdvancementContext(
     content,
     draft: canonicalDraft,
     hasRevisionConflict: characterContext.hasRevisionConflict,
-    legacyRecoveryCount: characterContext.legacyRecoveryCount,
     record,
     recoveryDraft,
     recoveryRecord,

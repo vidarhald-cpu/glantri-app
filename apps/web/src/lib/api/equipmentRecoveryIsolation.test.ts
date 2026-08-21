@@ -2,8 +2,14 @@ import "fake-indexeddb/auto";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { CharacterBuild } from "@glantri/domain";
+
 import type { CharacterRecoveryEnvelope } from "../offline/glantriDexie";
 import { localDb } from "../offline/glantriDexie";
+import {
+  CharacterRecoveryRepository,
+  hashCharacterBuild,
+} from "../offline/repositories/characterRecoveryRepository";
 import {
   addCharacterEquipmentItemOnServer,
   moveCharacterEquipmentItemOnServer,
@@ -11,10 +17,55 @@ import {
   transferCampaignItemOnServer,
 } from "./equipmentClient";
 
+const canonicalBuild: CharacterBuild = {
+  equipment: { items: [] },
+  id: "character-1",
+  inventoryNotes: "Canonical notes",
+  name: "Canonical Character",
+  profile: {
+    distractionLevel: 3,
+    id: "profile-1",
+    label: "Profile",
+    rolledStats: {
+      cha: 10,
+      com: 10,
+      con: 10,
+      dex: 10,
+      health: 10,
+      int: 10,
+      lck: 10,
+      pow: 10,
+      siz: 10,
+      str: 10,
+      will: 10,
+    },
+    societyLevel: 0,
+  },
+  progression: {
+    chargenMode: "standard",
+    educationPoints: 0,
+    flexiblePointFactor: 1,
+    level: 1,
+    primaryPoolSpent: 0,
+    primaryPoolTotal: 60,
+    secondaryPoolSpent: 0,
+    secondaryPoolTotal: 0,
+    skillGroups: [],
+    skills: [],
+    specializations: [],
+  },
+  progressionState: {
+    availablePoints: 0,
+    checks: [],
+    history: [],
+    pendingAttempts: [],
+  },
+};
+
 const recovery: CharacterRecoveryEnvelope = {
   accountEmail: "player@example.com",
   accountId: "account-1",
-  baseHash: "hash-1",
+  baseHash: hashCharacterBuild(canonicalBuild),
   baseRevision: "revision-1",
   characterId: "character-1",
   createdAt: "2026-08-21T10:00:00.000Z",
@@ -61,8 +112,16 @@ describe("canonical Equipment recovery isolation", () => {
     vi.unstubAllGlobals();
   });
 
-  it("leaves Character recovery byte-for-byte unchanged through assign, move, transfer, and loadout calls", async () => {
+  it("leaves Character recovery bytes and source time unchanged through canonical Equipment load, assign, move, transfer, and loadout calls", async () => {
     const before = await localDb.characterRecoveries.toArray();
+    const repository = new CharacterRecoveryRepository();
+
+    await repository.reconcile(
+      recovery.accountId,
+      recovery.characterId,
+      canonicalBuild,
+      recovery.baseRevision,
+    );
 
     await addCharacterEquipmentItemOnServer({
       characterId: "character-1",
@@ -88,6 +147,9 @@ describe("canonical Equipment recovery isolation", () => {
       itemId: "item-1",
     });
 
-    expect(await localDb.characterRecoveries.toArray()).toStrictEqual(before);
+    const after = await localDb.characterRecoveries.toArray();
+    expect(after).toStrictEqual(before);
+    expect(after[0]?.saveAttempt.attemptedAt).toBe(recovery.saveAttempt.attemptedAt);
+    expect(after[0]?.updatedAt).toBe(recovery.updatedAt);
   });
 });

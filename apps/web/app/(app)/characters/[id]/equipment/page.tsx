@@ -585,6 +585,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     setSavingInventoryNotes(true);
     setInventoryNotesError(undefined);
     setInventoryNotesFeedback(undefined);
+    let recoveryEnvelope: CharacterRecoveryEnvelope | undefined;
 
     try {
       const expectedUpdatedAt = requireServerCharacterRevision(characterRecord);
@@ -592,7 +593,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         ...characterRecord.build,
         inventoryNotes,
       };
-      const recoveryEnvelope = await characterRecoveryRepository.createAttempt({
+      recoveryEnvelope = await characterRecoveryRepository.createAttempt({
         account: currentUser,
         attemptedBuild,
         baseBuild: characterRecord.build,
@@ -601,7 +602,9 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         sourceAction: "Save inventory notes",
         sourceSurface: "Character Inventory",
       });
-      setRecoveryRecord(recoveryEnvelope);
+      if (recoveryEnvelope) {
+        setRecoveryRecord(recoveryEnvelope);
+      }
       const savedServerRecord = await updateServerCharacter({
         build: attemptedBuild,
         characterId: id,
@@ -640,34 +643,46 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
           characterRecord,
         );
         await localCharacterRepository.save(canonicalRecord);
-        await characterRecoveryRepository.markAttemptOutcome(
-          currentUser.id,
-          id,
-          "conflict",
-          "stale_character",
-        );
-        const recoveryState = await characterRecoveryRepository.reconcile(
-          currentUser.id,
-          id,
-          currentCharacter.build,
-          currentCharacter.updatedAt,
-        );
+        const markedRecovery = recoveryEnvelope
+          ? await characterRecoveryRepository.markAttemptOutcome(
+              currentUser.id,
+              id,
+              recoveryEnvelope.saveAttempt.id,
+              "conflict",
+              "stale_character",
+            )
+          : undefined;
+        const recoveryState = markedRecovery
+          ? await characterRecoveryRepository.reconcile(
+              currentUser.id,
+              id,
+              currentCharacter.build,
+              currentCharacter.updatedAt,
+            )
+          : undefined;
         setCharacterRecord(canonicalRecord);
         setCharacterName(canonicalRecord.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER);
         setInventoryNotes(canonicalRecord.build.inventoryNotes ?? "");
-        setRecoveryRecord(recoveryState?.envelope);
+        setRecoveryRecord(
+          recoveryState?.envelope ?? (await characterRecoveryRepository.get(currentUser.id, id)),
+        );
         setInventoryNotesError(
           "The Character changed elsewhere. Current notes are shown and your attempted notes remain available for review on the Character Sheet.",
         );
       } else {
-        const failedRecovery = await characterRecoveryRepository.markAttemptOutcome(
-          currentUser.id,
-          id,
-          "failed",
-          error instanceof Error ? error.name : undefined,
-        );
+        const failedRecovery = recoveryEnvelope
+          ? await characterRecoveryRepository.markAttemptOutcome(
+              currentUser.id,
+              id,
+              recoveryEnvelope.saveAttempt.id,
+              "failed",
+              error instanceof Error ? error.name : undefined,
+            )
+          : undefined;
         setInventoryNotes(characterRecord.build.inventoryNotes ?? "");
-        setRecoveryRecord(failedRecovery);
+        setRecoveryRecord(
+          failedRecovery ?? (await characterRecoveryRepository.get(currentUser.id, id)),
+        );
         setInventoryNotesError(
           error instanceof Error
             ? `${error.message} Current notes are shown and your attempted notes remain available for review.`
@@ -710,7 +725,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
           </span>
           <span>
             From {recoveryRecord.sourceSurface} · {recoveryRecord.sourceAction} ·{" "}
-            {new Date(recoveryRecord.updatedAt).toLocaleString()} · Changed:{" "}
+            {new Date(recoveryRecord.saveAttempt.attemptedAt).toLocaleString()} · Changed:{" "}
             {[
               ...new Set(
                 recoveryRecord.patch.map((entry) => formatCharacterRecoveryField(entry.path)),

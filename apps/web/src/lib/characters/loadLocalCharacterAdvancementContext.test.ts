@@ -97,7 +97,6 @@ describe("loadLocalCharacterAdvancementContext", () => {
       conflictPaths: [],
       content: { skills: [] },
       hasRevisionConflict: false,
-      legacyRecoveryCount: 0,
       record,
     });
     draftSaveMock.mockResolvedValue(canonicalDraft);
@@ -117,7 +116,6 @@ describe("loadLocalCharacterAdvancementContext", () => {
     expect(result).toMatchObject({
       draft: canonicalDraft,
       hasRevisionConflict: false,
-      legacyRecoveryCount: 0,
       record,
     });
   });
@@ -147,7 +145,6 @@ describe("loadLocalCharacterAdvancementContext", () => {
       conflictPaths: [],
       content: { skills: [] },
       hasRevisionConflict: false,
-      legacyRecoveryCount: 0,
       record,
       recoveredBuild,
       recoveryRecord,
@@ -166,13 +163,12 @@ describe("loadLocalCharacterAdvancementContext", () => {
     expect(result.recoveryRecord).toBe(recoveryRecord);
   });
 
-  it("reports quarantined legacy rows without promoting their whole builds", async () => {
+  it("does not expose unattributed quarantine existence through advancement context", async () => {
     loadLocalCharacterContextMock.mockResolvedValue({
       canonicalMissing: false,
       conflictPaths: [],
       content: { skills: [] },
       hasRevisionConflict: false,
-      legacyRecoveryCount: 2,
       record,
     });
     draftSaveMock.mockImplementation(async (input) => ({
@@ -184,7 +180,7 @@ describe("loadLocalCharacterAdvancementContext", () => {
       await import("./loadLocalCharacterAdvancementContext");
     const result = await loadLocalCharacterAdvancementContext(record.id, "account-1");
 
-    expect(result.legacyRecoveryCount).toBe(2);
+    expect(result).not.toHaveProperty("legacyRecoveryCount");
     expect(result.recoveryDraft).toBeUndefined();
     expect(result.recoveryRecord).toBeUndefined();
   });

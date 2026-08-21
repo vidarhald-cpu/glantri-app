@@ -18,7 +18,6 @@ export interface ServerCharacterEditContext {
   content: CanonicalContent;
   expectedUpdatedAt: string;
   hasRevisionConflict: boolean;
-  legacyRecoveryCount: number;
   recoveredBuild?: LocalCharacterRecord["build"];
   recoveryRecord?: CharacterRecoveryEnvelope;
   serverRecord: ServerCharacterRecord;
@@ -35,15 +34,12 @@ export async function loadServerCharacterEditContext(
   ]);
   const canonicalRecord = buildServerBackedLocalCharacterRecord(serverRecord, existingLocalRecord);
   const savedCanonicalRecord = await localCharacterRepository.save(canonicalRecord);
-  const [recoveryState, legacyRecovery] = await Promise.all([
-    characterRecoveryRepository.reconcile(
-      accountId,
-      id,
-      serverRecord.build,
-      serverRecord.updatedAt,
-    ),
-    characterRecoveryRepository.listLegacyQuarantine(id),
-  ]);
+  const recoveryState = await characterRecoveryRepository.reconcile(
+    accountId,
+    id,
+    serverRecord.build,
+    serverRecord.updatedAt,
+  );
 
   return {
     canonicalRecord: savedCanonicalRecord,
@@ -51,7 +47,6 @@ export async function loadServerCharacterEditContext(
     content,
     expectedUpdatedAt: serverRecord.updatedAt,
     hasRevisionConflict: Boolean(recoveryState && recoveryState.conflictPaths.length > 0),
-    legacyRecoveryCount: legacyRecovery.length,
     recoveredBuild: recoveryState?.recoveredBuild,
     recoveryRecord: recoveryState?.envelope,
     serverRecord,

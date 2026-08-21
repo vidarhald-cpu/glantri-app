@@ -18,7 +18,6 @@ export interface LocalCharacterContext {
   content: CanonicalContent;
   conflictPaths: string[];
   hasRevisionConflict: boolean;
-  legacyRecoveryCount: number;
   record?: LocalCharacterRecord;
   recoveredBuild?: LocalCharacterRecord["build"];
   recoveryRecord?: CharacterRecoveryEnvelope;
@@ -42,22 +41,18 @@ export async function loadLocalCharacterContext(
 
   const canonicalRecord = buildServerBackedLocalCharacterRecord(serverRecord, localRecord);
   const record = await localCharacterRepository.save(canonicalRecord);
-  const [recoveryState, legacyRecovery] = await Promise.all([
-    characterRecoveryRepository.reconcile(
-      accountId,
-      id,
-      serverRecord.build,
-      serverRecord.updatedAt,
-    ),
-    characterRecoveryRepository.listLegacyQuarantine(id),
-  ]);
+  const recoveryState = await characterRecoveryRepository.reconcile(
+    accountId,
+    id,
+    serverRecord.build,
+    serverRecord.updatedAt,
+  );
 
   return {
     canonicalMissing: false,
     conflictPaths: recoveryState?.conflictPaths ?? [],
     content,
     hasRevisionConflict: Boolean(recoveryState && recoveryState.conflictPaths.length > 0),
-    legacyRecoveryCount: legacyRecovery.length,
     record,
     recoveredBuild: recoveryState?.recoveredBuild,
     recoveryRecord: recoveryState?.envelope,

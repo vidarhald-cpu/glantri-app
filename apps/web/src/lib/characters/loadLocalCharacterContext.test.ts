@@ -5,7 +5,6 @@ const saveMock = vi.fn();
 const loadCanonicalContentMock = vi.fn();
 const loadServerCharacterByIdMock = vi.fn();
 const reconcileRecoveryMock = vi.fn();
-const listLegacyQuarantineMock = vi.fn();
 
 vi.mock("../content/loadCanonicalContent", () => ({
   loadCanonicalContent: loadCanonicalContentMock,
@@ -17,7 +16,6 @@ vi.mock("../api/characterClient", () => ({
 
 vi.mock("../offline/repositories/characterRecoveryRepository", () => ({
   CharacterRecoveryRepository: class CharacterRecoveryRepository {
-    listLegacyQuarantine = listLegacyQuarantineMock;
     reconcile = reconcileRecoveryMock;
   },
 }));
@@ -60,7 +58,6 @@ describe("loadLocalCharacterContext", () => {
     loadCanonicalContentMock.mockReset();
     loadServerCharacterByIdMock.mockReset();
     reconcileRecoveryMock.mockReset().mockResolvedValue(undefined);
-    listLegacyQuarantineMock.mockReset().mockResolvedValue([]);
   });
 
   it("refreshes an existing synced cache from the canonical server Character", async () => {
@@ -139,7 +136,6 @@ describe("loadLocalCharacterContext", () => {
       conflictPaths: [],
       content,
       hasRevisionConflict: false,
-      legacyRecoveryCount: 0,
       record: savedRecord,
       recoveredBuild: undefined,
       recoveryRecord: undefined,
@@ -235,14 +231,13 @@ describe("loadLocalCharacterContext", () => {
       conflictPaths: [],
       content,
       hasRevisionConflict: false,
-      legacyRecoveryCount: 0,
       record: savedRecord,
       recoveredBuild: undefined,
       recoveryRecord: undefined,
     });
   });
 
-  it("uses the canonical Character and quarantined recovery instead of an unsynced cache row", async () => {
+  it("uses the canonical Character without disclosing unattributed quarantine existence", async () => {
     const content = { skills: [] };
     const localRecord = {
       build: { id: "character-4", name: "Offline draft" },
@@ -273,8 +268,6 @@ describe("loadLocalCharacterContext", () => {
       syncStatus: "synced",
       updatedAt: serverRecord.updatedAt,
     });
-    listLegacyQuarantineMock.mockResolvedValue([{ id: "legacy-row" }]);
-
     const { loadLocalCharacterContext } = await import("./loadLocalCharacterContext");
     const first = await loadLocalCharacterContext("character-4", "account-1");
     const repeated = await loadLocalCharacterContext("character-4", "account-1");
@@ -282,7 +275,7 @@ describe("loadLocalCharacterContext", () => {
     expect(first.record?.build).toBe(serverRecord.build);
     expect(first.recoveryRecord).toBeUndefined();
     expect(first.hasRevisionConflict).toBe(false);
-    expect(first.legacyRecoveryCount).toBe(1);
+    expect(first).not.toHaveProperty("legacyRecoveryCount");
     expect(repeated.record?.build).toBe(serverRecord.build);
     expect(repeated.recoveryRecord).toBeUndefined();
     expect(saveMock).toHaveBeenCalledTimes(2);

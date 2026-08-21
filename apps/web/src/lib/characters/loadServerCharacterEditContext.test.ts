@@ -5,7 +5,6 @@ const saveMock = vi.fn();
 const loadCanonicalContentMock = vi.fn();
 const loadServerCharacterByIdMock = vi.fn();
 const reconcileRecoveryMock = vi.fn();
-const listLegacyQuarantineMock = vi.fn();
 
 vi.mock("../content/loadCanonicalContent", () => ({
   loadCanonicalContent: loadCanonicalContentMock,
@@ -17,7 +16,6 @@ vi.mock("../api/characterClient", () => ({
 
 vi.mock("../offline/repositories/characterRecoveryRepository", () => ({
   CharacterRecoveryRepository: class CharacterRecoveryRepository {
-    listLegacyQuarantine = listLegacyQuarantineMock;
     reconcile = reconcileRecoveryMock;
   },
 }));
@@ -103,7 +101,6 @@ describe("loadServerCharacterEditContext", () => {
     loadCanonicalContentMock.mockReset();
     loadServerCharacterByIdMock.mockReset();
     reconcileRecoveryMock.mockReset().mockResolvedValue(undefined);
-    listLegacyQuarantineMock.mockReset().mockResolvedValue([]);
   });
 
   it("caches the canonical record when no retained local record exists", async () => {
@@ -143,7 +140,6 @@ describe("loadServerCharacterEditContext", () => {
       content,
       expectedUpdatedAt: serverRecord.updatedAt,
       hasRevisionConflict: false,
-      legacyRecoveryCount: 0,
       recoveredBuild: undefined,
       recoveryRecord: undefined,
       serverRecord,
@@ -198,14 +194,12 @@ describe("loadServerCharacterEditContext", () => {
       updatedAt: serverRecord.updatedAt,
     };
     saveMock.mockResolvedValue(savedCanonical);
-    listLegacyQuarantineMock.mockResolvedValue([{ id: "legacy-row" }]);
-
     const { loadServerCharacterEditContext } = await import("./loadServerCharacterEditContext");
     const result = await loadServerCharacterEditContext("character-1", "account-1");
 
     expect(saveMock).toHaveBeenCalled();
     expect(result.recoveryRecord).toBeUndefined();
-    expect(result.legacyRecoveryCount).toBe(1);
+    expect(result).not.toHaveProperty("legacyRecoveryCount");
     expect(result.canonicalRecord).toBe(savedCanonical);
     expect(result.serverRecord).toBe(serverRecord);
     expect(result.expectedUpdatedAt).toBe("2026-01-01T00:00:00.000Z");

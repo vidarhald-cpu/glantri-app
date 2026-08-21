@@ -115,7 +115,7 @@ describe("CharacterRecoveryRepository", () => {
   it("retains exactly the unsaved patch after a failed save and across repository reloads", async () => {
     const repository = new CharacterRecoveryRepository();
     const canonical = createBuild();
-    await repository.createAttempt({
+    const attempt = await repository.createAttempt({
       account: accountA,
       attemptedBuild: { ...canonical, inventoryNotes: "Unsaved notes" },
       baseBuild: canonical,
@@ -125,7 +125,13 @@ describe("CharacterRecoveryRepository", () => {
       sourceSurface: "Character Sheet",
     });
 
-    await repository.markAttemptOutcome(accountA.id, canonical.id, "failed", "TypeError");
+    await repository.markAttemptOutcome(
+      accountA.id,
+      canonical.id,
+      attempt!.saveAttempt.id,
+      "failed",
+      "TypeError",
+    );
 
     await expect(
       new CharacterRecoveryRepository().get(accountA.id, canonical.id),
@@ -139,7 +145,7 @@ describe("CharacterRecoveryRepository", () => {
     const repository = new CharacterRecoveryRepository();
     const canonical = createBuild();
     const attempted = { ...canonical, inventoryNotes: "Saved despite lost response" };
-    await repository.createAttempt({
+    const attempt = await repository.createAttempt({
       account: accountA,
       attemptedBuild: attempted,
       baseBuild: canonical,
@@ -148,7 +154,13 @@ describe("CharacterRecoveryRepository", () => {
       sourceAction: "Save notes",
       sourceSurface: "Character Sheet",
     });
-    await repository.markAttemptOutcome(accountA.id, canonical.id, "failed", "NetworkError");
+    await repository.markAttemptOutcome(
+      accountA.id,
+      canonical.id,
+      attempt!.saveAttempt.id,
+      "failed",
+      "NetworkError",
+    );
 
     await expect(
       repository.reconcile(accountA.id, canonical.id, attempted, "revision-2"),
@@ -189,6 +201,97 @@ describe("CharacterRecoveryRepository", () => {
       repository.deleteAttempt(accountA.id, canonical.id, second!.saveAttempt.id),
     ).resolves.toBe(true);
     await expect(repository.get(accountA.id, canonical.id)).resolves.toBeUndefined();
+  });
+
+  it("does not delete a newer tab's retained recovery when a stale tab saves no changes", async () => {
+    const repository = new CharacterRecoveryRepository();
+    const canonical = createBuild();
+    const retained = await repository.createAttempt({
+      account: accountA,
+      attemptedBuild: { ...canonical, inventoryNotes: "Newer tab unsaved notes" },
+      baseBuild: canonical,
+      baseRevision: "revision-1",
+      characterId: canonical.id,
+      sourceAction: "Save notes in tab A",
+      sourceSurface: "Character Sheet",
+    });
+
+    await expect(
+      repository.createAttempt({
+        account: accountA,
+        attemptedBuild: canonical,
+        baseBuild: canonical,
+        baseRevision: "revision-1",
+        characterId: canonical.id,
+        sourceAction: "No-op save in stale tab B",
+        sourceSurface: "Character Sheet",
+      }),
+    ).resolves.toBeUndefined();
+
+    await expect(repository.get(accountA.id, canonical.id)).resolves.toStrictEqual(retained);
+  });
+
+  it("ignores a late outcome from an older save attempt when a newer attempt is current", async () => {
+    const repository = new CharacterRecoveryRepository();
+    const canonical = createBuild();
+    const older = await repository.createAttempt({
+      account: accountA,
+      attemptedBuild: { ...canonical, inventoryNotes: "Older attempt" },
+      baseBuild: canonical,
+      baseRevision: "revision-1",
+      characterId: canonical.id,
+      sourceAction: "Older save",
+      sourceSurface: "Character Sheet",
+    });
+    const newer = await repository.createAttempt({
+      account: accountA,
+      attemptedBuild: { ...canonical, inventoryNotes: "Newer attempt" },
+      baseBuild: canonical,
+      baseRevision: "revision-1",
+      characterId: canonical.id,
+      sourceAction: "Newer save",
+      sourceSurface: "Character Sheet",
+    });
+
+    await expect(
+      repository.markAttemptOutcome(
+        accountA.id,
+        canonical.id,
+        older!.saveAttempt.id,
+        "failed",
+        "LateNetworkError",
+      ),
+    ).resolves.toBeUndefined();
+    await expect(repository.get(accountA.id, canonical.id)).resolves.toStrictEqual(newer);
+  });
+
+  it("leaves recovery bytes and user-authored time unchanged on a no-op canonical reconcile", async () => {
+    const repository = new CharacterRecoveryRepository();
+    const canonical = createBuild();
+    const attempt = await repository.createAttempt({
+      account: accountA,
+      attemptedBuild: { ...canonical, inventoryNotes: "Unsaved notes" },
+      baseBuild: canonical,
+      baseRevision: "revision-1",
+      characterId: canonical.id,
+      sourceAction: "Save notes",
+      sourceSurface: "Character Sheet",
+    });
+    await repository.markAttemptOutcome(
+      accountA.id,
+      canonical.id,
+      attempt!.saveAttempt.id,
+      "failed",
+      "NetworkError",
+    );
+    const before = await repository.get(accountA.id, canonical.id);
+
+    const state = await repository.reconcile(accountA.id, canonical.id, canonical, "revision-1");
+
+    expect(state?.envelope).toStrictEqual(before);
+    await expect(repository.get(accountA.id, canonical.id)).resolves.toStrictEqual(before);
+    expect(state?.envelope.saveAttempt.attemptedAt).toBe(before?.saveAttempt.attemptedAt);
+    expect(state?.envelope.updatedAt).toBe(before?.updatedAt);
   });
 
   it("safely rebases a notes patch over a demonstrably disjoint canonical name change", async () => {
@@ -278,5 +381,45 @@ describe("CharacterRecoveryRepository", () => {
     expect(await repository.get(accountA.id, characterA.id)).toBeUndefined();
     expect(await repository.get(accountA.id, characterB.id)).toBeUndefined();
     expect(await repository.get(accountB.id, characterA.id)).toBeDefined();
+  });
+
+  it("does not disclose unattributed legacy quarantine existence through account-scoped lookup", async () => {
+    const repository = new CharacterRecoveryRepository();
+    const canonical = createBuild();
+    const legacyRecord = {
+      build: canonical,
+      createdAt: "2026-08-20T00:00:00.000Z",
+      finalizedAt: "2026-08-20T00:00:00.000Z",
+      id: canonical.id,
+      syncStatus: "local" as const,
+      updatedAt: "2026-08-20T01:00:00.000Z",
+    };
+    await localDb.legacyCharacterRecoveries.bulkPut([
+      {
+        characterId: canonical.id,
+        id: "legacy-unattributed",
+        quarantinedAt: "2026-08-21T00:00:00.000Z",
+        record: legacyRecord,
+        sourceStore: "localCharacters",
+        updatedAt: legacyRecord.updatedAt,
+      },
+      {
+        accountId: accountA.id,
+        characterId: canonical.id,
+        id: "legacy-account-a",
+        quarantinedAt: "2026-08-21T00:00:00.000Z",
+        record: legacyRecord,
+        sourceStore: "localCharacters",
+        updatedAt: legacyRecord.updatedAt,
+      },
+    ]);
+
+    await expect(
+      repository.listLegacyQuarantineForAccount(accountB.id, canonical.id),
+    ).resolves.toEqual([]);
+    await expect(
+      repository.listLegacyQuarantineForAccount(accountA.id, canonical.id),
+    ).resolves.toEqual([expect.objectContaining({ id: "legacy-account-a" })]);
+    await expect(localDb.legacyCharacterRecoveries.count()).resolves.toBe(2);
   });
 });

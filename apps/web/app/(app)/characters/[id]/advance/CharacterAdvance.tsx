@@ -113,7 +113,6 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
   const [recoveryDraft, setRecoveryDraft] = useState<LocalCharacterDraft>();
   const [recoveryRecord, setRecoveryRecord] = useState<CharacterRecoveryEnvelope>();
   const [recoveryRequired, setRecoveryRequired] = useState(false);
-  const [legacyRecoveryCount, setLegacyRecoveryCount] = useState(0);
   const [reviewingRecovery, setReviewingRecovery] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedProvisionalSkillId, setSelectedProvisionalSkillId] = useState("");
@@ -145,7 +144,6 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         setRecoveryDraft(result.recoveryDraft);
         setRecoveryRecord(result.recoveryRecord);
         setRecoveryRequired(Boolean(result.recoveryDraft || result.recoveryRecord));
-        setLegacyRecoveryCount(result.legacyRecoveryCount);
         setReviewingRecovery(false);
 
         if (!result.record) {
@@ -427,7 +425,9 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       sourceAction: "Save progression",
       sourceSurface: "Character Progression",
     });
-    setRecoveryRecord(recoveryEnvelope);
+    if (recoveryEnvelope) {
+      setRecoveryRecord(recoveryEnvelope);
+    }
 
     try {
       const serverRecord = await updateServerCharacter({
@@ -475,18 +475,25 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       if (currentCharacter) {
         const canonicalRecord = buildServerBackedLocalCharacterRecord(currentCharacter, record);
         await localCharacterRepository.save(canonicalRecord);
-        await characterRecoveryRepository.markAttemptOutcome(
-          currentUser.id,
-          id,
-          "conflict",
-          "stale_character",
-        );
-        const recoveryState = await characterRecoveryRepository.reconcile(
-          currentUser.id,
-          id,
-          currentCharacter.build,
-          currentCharacter.updatedAt,
-        );
+        const markedRecovery = recoveryEnvelope
+          ? await characterRecoveryRepository.markAttemptOutcome(
+              currentUser.id,
+              id,
+              recoveryEnvelope.saveAttempt.id,
+              "conflict",
+              "stale_character",
+            )
+          : undefined;
+        const recoveryState = markedRecovery
+          ? await characterRecoveryRepository.reconcile(
+              currentUser.id,
+              id,
+              currentCharacter.build,
+              currentCharacter.updatedAt,
+            )
+          : undefined;
+        const retainedRecovery =
+          recoveryState?.envelope ?? (await characterRecoveryRepository.get(currentUser.id, id));
         const currentDraft: LocalCharacterDraft = {
           ...draft,
           advancementPointsSpent: 0,
@@ -500,26 +507,31 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         setCanonicalDraft(currentDraft);
         setDraft(currentDraft);
         setRecoveryDraft(draft);
-        setRecoveryRecord(recoveryState?.envelope);
-        setRecoveryRequired(true);
+        setRecoveryRecord(retainedRecovery);
+        setRecoveryRequired(Boolean(retainedRecovery));
         setReviewingRecovery(false);
         setFeedback(
           "The Character changed elsewhere. Current progression is shown, and your attempted changes remain available for review.",
         );
       } else {
-        const failedRecovery = await characterRecoveryRepository.markAttemptOutcome(
-          currentUser.id,
-          id,
-          "failed",
-          error instanceof Error ? error.name : undefined,
-        );
+        const failedRecovery = recoveryEnvelope
+          ? await characterRecoveryRepository.markAttemptOutcome(
+              currentUser.id,
+              id,
+              recoveryEnvelope.saveAttempt.id,
+              "failed",
+              error instanceof Error ? error.name : undefined,
+            )
+          : undefined;
+        const retainedRecovery =
+          failedRecovery ?? (await characterRecoveryRepository.get(currentUser.id, id));
         if (canonicalDraft) {
           setRecord(record);
           setDraft(canonicalDraft);
         }
         setRecoveryDraft(draft);
-        setRecoveryRecord(failedRecovery);
-        setRecoveryRequired(true);
+        setRecoveryRecord(retainedRecovery);
+        setRecoveryRequired(Boolean(retainedRecovery));
         setReviewingRecovery(false);
         setFeedback(
           error instanceof Error
@@ -707,7 +719,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           </span>
           <span>
             From {recoveryRecord.sourceSurface} · {recoveryRecord.sourceAction} ·{" "}
-            {new Date(recoveryRecord.updatedAt).toLocaleString()} · Changed:{" "}
+            {new Date(recoveryRecord.saveAttempt.attemptedAt).toLocaleString()} · Changed:{" "}
             {recoveryFieldLabels.join(", ")}
           </span>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
@@ -724,20 +736,6 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
               Discard unsaved progression
             </button>
           </div>
-        </section>
-      ) : null}
-
-      {legacyRecoveryCount > 0 ? (
-        <section
-          style={{
-            background: "#f6f5ef",
-            border: "1px solid #d9ddd8",
-            borderRadius: 12,
-            padding: "1rem",
-          }}
-        >
-          Older saved-on-device changes were kept separately because their account and exact origin
-          could not be verified. They will never be applied automatically.
         </section>
       ) : null}
 

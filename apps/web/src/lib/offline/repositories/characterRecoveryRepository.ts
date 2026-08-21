@@ -261,35 +261,36 @@ export class CharacterRecoveryRepository {
     const id = recoveryId(input.account.id, input.characterId);
 
     if (patch.length === 0) {
-      await localDb.characterRecoveries.delete(id);
       return undefined;
     }
 
-    const now = new Date().toISOString();
-    const existing = await localDb.characterRecoveries.get(id);
-    const envelope: CharacterRecoveryEnvelope = {
-      accountDisplayName: input.account.displayName,
-      accountEmail: input.account.email,
-      accountId: input.account.id,
-      baseHash: hashCharacterBuild(baseBuild),
-      baseRevision: input.baseRevision,
-      characterId: input.characterId,
-      createdAt: existing?.createdAt ?? now,
-      id,
-      patch,
-      reconciliation: "ready",
-      saveAttempt: {
-        attemptedAt: now,
-        id: createAttemptId(),
-        outcome: "pending",
-      },
-      sourceAction: input.sourceAction,
-      sourceSurface: input.sourceSurface,
-      updatedAt: now,
-    };
+    return localDb.transaction("rw", localDb.characterRecoveries, async () => {
+      const now = new Date().toISOString();
+      const existing = await localDb.characterRecoveries.get(id);
+      const envelope: CharacterRecoveryEnvelope = {
+        accountDisplayName: input.account.displayName,
+        accountEmail: input.account.email,
+        accountId: input.account.id,
+        baseHash: hashCharacterBuild(baseBuild),
+        baseRevision: input.baseRevision,
+        characterId: input.characterId,
+        createdAt: existing?.createdAt ?? now,
+        id,
+        patch,
+        reconciliation: "ready",
+        saveAttempt: {
+          attemptedAt: now,
+          id: createAttemptId(),
+          outcome: "pending",
+        },
+        sourceAction: input.sourceAction,
+        sourceSurface: input.sourceSurface,
+        updatedAt: now,
+      };
 
-    await localDb.characterRecoveries.put(envelope);
-    return envelope;
+      await localDb.characterRecoveries.put(envelope);
+      return envelope;
+    });
   }
 
   async delete(accountId: string, characterId: string): Promise<void> {
@@ -317,37 +318,46 @@ export class CharacterRecoveryRepository {
     return localDb.characterRecoveries.get(recoveryId(accountId, characterId));
   }
 
-  async listLegacyQuarantine(characterId: string): Promise<LegacyCharacterRecoveryRecord[]> {
-    return localDb.legacyCharacterRecoveries.where("characterId").equals(characterId).toArray();
+  async listLegacyQuarantineForAccount(
+    accountId: string,
+    characterId: string,
+  ): Promise<LegacyCharacterRecoveryRecord[]> {
+    return localDb.legacyCharacterRecoveries
+      .where("[accountId+characterId]")
+      .equals([accountId, characterId])
+      .toArray();
   }
 
   async markAttemptOutcome(
     accountId: string,
     characterId: string,
+    attemptId: string,
     outcome: "conflict" | "failed" | "unknown",
     errorCode?: string,
   ): Promise<CharacterRecoveryEnvelope | undefined> {
-    const envelope = await this.get(accountId, characterId);
+    return localDb.transaction("rw", localDb.characterRecoveries, async () => {
+      const envelope = await this.get(accountId, characterId);
 
-    if (!envelope) {
-      return undefined;
-    }
+      if (!envelope || envelope.saveAttempt.id !== attemptId) {
+        return undefined;
+      }
 
-    const now = new Date().toISOString();
-    const updated: CharacterRecoveryEnvelope = {
-      ...envelope,
-      reconciliation: outcome === "conflict" ? "conflict" : envelope.reconciliation,
-      saveAttempt: {
-        ...envelope.saveAttempt,
-        completedAt: now,
-        errorCode,
-        outcome,
-      },
-      updatedAt: now,
-    };
+      const now = new Date().toISOString();
+      const updated: CharacterRecoveryEnvelope = {
+        ...envelope,
+        reconciliation: outcome === "conflict" ? "conflict" : envelope.reconciliation,
+        saveAttempt: {
+          ...envelope.saveAttempt,
+          completedAt: now,
+          errorCode,
+          outcome,
+        },
+        updatedAt: now,
+      };
 
-    await localDb.characterRecoveries.put(updated);
-    return updated;
+      await localDb.characterRecoveries.put(updated);
+      return updated;
+    });
   }
 
   async purgeForAccount(accountId: string): Promise<void> {
@@ -376,56 +386,69 @@ export class CharacterRecoveryRepository {
     canonicalBuild: CharacterBuild,
     canonicalRevision: string,
   ): Promise<CharacterRecoveryState | undefined> {
-    const envelope = await this.get(accountId, characterId);
+    return localDb.transaction("rw", localDb.characterRecoveries, async () => {
+      const envelope = await this.get(accountId, characterId);
 
-    if (!envelope) {
-      return undefined;
-    }
-
-    const unresolvedPatch: CharacterRecoveryPatchEntry[] = [];
-    const conflictPaths: string[] = [];
-
-    for (const entry of envelope.patch) {
-      const currentValue = getValueAtPath(canonicalBuild, entry.path);
-
-      if (matchesAttemptedValue(currentValue, entry)) {
-        continue;
+      if (!envelope) {
+        return undefined;
       }
 
-      if (matchesPatchBase(currentValue, entry)) {
-        unresolvedPatch.push({
-          ...entry,
-          baseValue: currentValue === MISSING ? undefined : structuredClone(currentValue),
-        });
-      } else {
-        unresolvedPatch.push(entry);
-        conflictPaths.push(entry.path);
+      const unresolvedPatch: CharacterRecoveryPatchEntry[] = [];
+      const conflictPaths: string[] = [];
+
+      for (const entry of envelope.patch) {
+        const currentValue = getValueAtPath(canonicalBuild, entry.path);
+
+        if (matchesAttemptedValue(currentValue, entry)) {
+          continue;
+        }
+
+        if (matchesPatchBase(currentValue, entry)) {
+          unresolvedPatch.push({
+            ...entry,
+            baseValue: currentValue === MISSING ? undefined : structuredClone(currentValue),
+          });
+        } else {
+          unresolvedPatch.push(entry);
+          conflictPaths.push(entry.path);
+        }
       }
-    }
 
-    if (unresolvedPatch.length === 0) {
-      await this.delete(accountId, characterId);
-      return undefined;
-    }
+      if (unresolvedPatch.length === 0) {
+        await localDb.characterRecoveries.delete(envelope.id);
+        return undefined;
+      }
 
-    const now = new Date().toISOString();
-    const reconciled: CharacterRecoveryEnvelope = {
-      ...envelope,
-      baseHash: hashCharacterBuild(canonicalBuild),
-      baseRevision: canonicalRevision,
-      patch: unresolvedPatch,
-      reconciliation: conflictPaths.length > 0 ? "conflict" : "ready",
-      updatedAt: now,
-    };
-    await localDb.characterRecoveries.put(reconciled);
+      const baseHash = hashCharacterBuild(canonicalBuild);
+      const reconciliation = conflictPaths.length > 0 ? "conflict" : "ready";
+      const hasSemanticChange =
+        envelope.baseHash !== baseHash ||
+        envelope.baseRevision !== canonicalRevision ||
+        envelope.reconciliation !== reconciliation ||
+        !valuesEqual(envelope.patch, unresolvedPatch);
+      const reconciled: CharacterRecoveryEnvelope = hasSemanticChange
+        ? {
+            ...envelope,
+            baseHash,
+            baseRevision: canonicalRevision,
+            patch: unresolvedPatch,
+            reconciliation,
+            updatedAt: new Date().toISOString(),
+          }
+        : envelope;
 
-    return {
-      conflictPaths,
-      envelope: reconciled,
-      recoveredBuild:
-        conflictPaths.length === 0
-          ? applyCharacterRecoveryPatch(canonicalBuild, unresolvedPatch)
-          : undefined,
-    };
+      if (hasSemanticChange) {
+        await localDb.characterRecoveries.put(reconciled);
+      }
+
+      return {
+        conflictPaths,
+        envelope: reconciled,
+        recoveredBuild:
+          conflictPaths.length === 0
+            ? applyCharacterRecoveryPatch(canonicalBuild, unresolvedPatch)
+            : undefined,
+      };
+    });
   }
 }

@@ -88,7 +88,6 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
   const [loading, setLoading] = useState(true);
   const [record, setRecord] = useState<LocalCharacterRecord>();
   const [recoveryRecord, setRecoveryRecord] = useState<CharacterRecoveryEnvelope>();
-  const [legacyRecoveryCount, setLegacyRecoveryCount] = useState(0);
   const [reviewingRecovery, setReviewingRecovery] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedSkillGroupId, setSelectedSkillGroupId] = useState("");
@@ -125,7 +124,6 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
         setBuild(result.canonicalRecord.build);
         setExpectedUpdatedAt(result.expectedUpdatedAt);
         setRecoveryRecord(result.recoveryRecord);
-        setLegacyRecoveryCount(result.legacyRecoveryCount);
         setReviewingRecovery(false);
         if (result.recoveryRecord) {
           setFeedback(
@@ -268,9 +266,10 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     }
 
     setSaving(true);
+    let recoveryEnvelope: CharacterRecoveryEnvelope | undefined;
 
     try {
-      const recoveryEnvelope = await characterRecoveryRepository.createAttempt({
+      recoveryEnvelope = await characterRecoveryRepository.createAttempt({
         account: currentUser,
         attemptedBuild: build,
         baseBuild: record.build,
@@ -279,7 +278,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
         sourceAction: "Save Character edits",
         sourceSurface: "Character Edit",
       });
-      setRecoveryRecord(recoveryEnvelope);
+      if (recoveryEnvelope) {
+        setRecoveryRecord(recoveryEnvelope);
+      }
 
       const savedServerRecord = await updateServerCharacter({
         build,
@@ -316,33 +317,46 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
       if (currentCharacter) {
         const canonicalRecord = buildServerBackedLocalCharacterRecord(currentCharacter, record);
         await localCharacterRepository.save(canonicalRecord);
-        await characterRecoveryRepository.markAttemptOutcome(
-          currentUser.id,
-          id,
-          "conflict",
-          "stale_character",
-        );
-        const recoveryState = await characterRecoveryRepository.reconcile(
-          currentUser.id,
-          id,
-          currentCharacter.build,
-          currentCharacter.updatedAt,
-        );
+        const markedRecovery = recoveryEnvelope
+          ? await characterRecoveryRepository.markAttemptOutcome(
+              currentUser.id,
+              id,
+              recoveryEnvelope.saveAttempt.id,
+              "conflict",
+              "stale_character",
+            )
+          : undefined;
+        const recoveryState = markedRecovery
+          ? await characterRecoveryRepository.reconcile(
+              currentUser.id,
+              id,
+              currentCharacter.build,
+              currentCharacter.updatedAt,
+            )
+          : undefined;
         setRecord(canonicalRecord);
         setCanonicalBuild(canonicalRecord.build);
         setBuild(canonicalRecord.build);
         setExpectedUpdatedAt(currentCharacter.updatedAt);
-        setRecoveryRecord(recoveryState?.envelope);
+        setRecoveryRecord(
+          recoveryState?.envelope ?? (await characterRecoveryRepository.get(currentUser.id, id)),
+        );
         setReviewingRecovery(false);
         setFeedback(
           "The Character changed elsewhere. The current Character is shown, and your attempted changes remain available for review.",
         );
       } else {
-        await characterRecoveryRepository.markAttemptOutcome(
-          currentUser.id,
-          id,
-          "failed",
-          error instanceof Error ? error.name : undefined,
+        const failedRecovery = recoveryEnvelope
+          ? await characterRecoveryRepository.markAttemptOutcome(
+              currentUser.id,
+              id,
+              recoveryEnvelope.saveAttempt.id,
+              "failed",
+              error instanceof Error ? error.name : undefined,
+            )
+          : undefined;
+        setRecoveryRecord(
+          failedRecovery ?? (await characterRecoveryRepository.get(currentUser.id, id)),
         );
         setBuild(canonicalBuild ?? record.build);
         setReviewingRecovery(false);
@@ -694,7 +708,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     ? [...new Set(recoveryRecord.patch.map((entry) => formatCharacterRecoveryField(entry.path)))]
     : [];
   const recoveryTime = recoveryRecord
-    ? new Date(recoveryRecord.updatedAt).toLocaleString()
+    ? new Date(recoveryRecord.saveAttempt.attemptedAt).toLocaleString()
     : undefined;
 
   return (
@@ -759,20 +773,6 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
               Discard unsaved changes
             </button>
           </div>
-        </section>
-      ) : null}
-
-      {legacyRecoveryCount > 0 ? (
-        <section
-          style={{
-            background: "#f6f5ef",
-            border: "1px solid #d9ddd8",
-            borderRadius: 12,
-            padding: "1rem",
-          }}
-        >
-          Older saved-on-device changes were kept separately because their account and exact origin
-          could not be verified. They will never be applied automatically.
         </section>
       ) : null}
 

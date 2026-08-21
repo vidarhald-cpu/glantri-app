@@ -76,7 +76,6 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
   const [loading, setLoading] = useState(true);
   const [record, setRecord] = useState<LocalCharacterRecord>();
   const [recoveryRecord, setRecoveryRecord] = useState<CharacterRecoveryEnvelope>();
-  const [legacyRecoveryCount, setLegacyRecoveryCount] = useState(0);
   const [reviewingRecovery, setReviewingRecovery] = useState(false);
   const [savingIdentity, setSavingIdentity] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
@@ -111,7 +110,6 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
         setBuild(result.record?.build);
         setCanonicalBuild(result.record?.build);
         setRecoveryRecord(result.recoveryRecord);
-        setLegacyRecoveryCount(result.legacyRecoveryCount);
         setReviewingRecovery(false);
         if (result.recoveryRecord && result.record) {
           setFeedback(
@@ -232,7 +230,9 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       sourceAction,
       sourceSurface: "Character Sheet",
     });
-    setRecoveryRecord(recoveryEnvelope);
+    if (recoveryEnvelope) {
+      setRecoveryRecord(recoveryEnvelope);
+    }
 
     try {
       const savedServerRecord = await updateServerCharacter({
@@ -271,22 +271,29 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       if (currentCharacter) {
         const canonicalRecord = buildServerBackedLocalCharacterRecord(currentCharacter, record);
         await localCharacterRepository.save(canonicalRecord);
-        await characterRecoveryRepository.markAttemptOutcome(
-          currentUser.id,
-          id,
-          "conflict",
-          "stale_character",
-        );
-        const recoveryState = await characterRecoveryRepository.reconcile(
-          currentUser.id,
-          id,
-          currentCharacter.build,
-          currentCharacter.updatedAt,
-        );
+        const markedRecovery = recoveryEnvelope
+          ? await characterRecoveryRepository.markAttemptOutcome(
+              currentUser.id,
+              id,
+              recoveryEnvelope.saveAttempt.id,
+              "conflict",
+              "stale_character",
+            )
+          : undefined;
+        const recoveryState = markedRecovery
+          ? await characterRecoveryRepository.reconcile(
+              currentUser.id,
+              id,
+              currentCharacter.build,
+              currentCharacter.updatedAt,
+            )
+          : undefined;
         setRecord(canonicalRecord);
         setCanonicalBuild(canonicalRecord.build);
         setBuild(canonicalRecord.build);
-        setRecoveryRecord(recoveryState?.envelope);
+        setRecoveryRecord(
+          recoveryState?.envelope ?? (await characterRecoveryRepository.get(currentUser.id, id)),
+        );
         setReviewingRecovery(false);
         setFeedback(
           "The Character changed elsewhere. The current Character is shown, and your attempted changes remain available for review.",
@@ -294,11 +301,17 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
         return;
       }
 
-      await characterRecoveryRepository.markAttemptOutcome(
-        currentUser.id,
-        id,
-        "failed",
-        error instanceof Error ? error.name : undefined,
+      const failedRecovery = recoveryEnvelope
+        ? await characterRecoveryRepository.markAttemptOutcome(
+            currentUser.id,
+            id,
+            recoveryEnvelope.saveAttempt.id,
+            "failed",
+            error instanceof Error ? error.name : undefined,
+          )
+        : undefined;
+      setRecoveryRecord(
+        failedRecovery ?? (await characterRecoveryRepository.get(currentUser.id, id)),
       );
       setBuild(canonicalBuild ?? record.build);
       setReviewingRecovery(false);
@@ -414,7 +427,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     ? [...new Set(recoveryRecord.patch.map((entry) => formatCharacterRecoveryField(entry.path)))]
     : [];
   const recoveryTime = recoveryRecord
-    ? new Date(recoveryRecord.updatedAt).toLocaleString()
+    ? new Date(recoveryRecord.saveAttempt.attemptedAt).toLocaleString()
     : undefined;
 
   return (
@@ -463,25 +476,6 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
               Discard unsaved changes
             </button>
           </div>
-        </section>
-      ) : null}
-
-      {legacyRecoveryCount > 0 ? (
-        <section
-          style={{
-            background: "#f6f5ef",
-            border: "1px solid #d9ddd8",
-            borderRadius: 12,
-            display: "grid",
-            gap: "0.5rem",
-            padding: "1rem",
-          }}
-        >
-          <strong>Older saved-on-device changes were kept separately</strong>
-          <span>
-            Their account and exact origin could not be verified, so they will never replace this
-            Character automatically or be shown to another account.
-          </span>
         </section>
       ) : null}
 
