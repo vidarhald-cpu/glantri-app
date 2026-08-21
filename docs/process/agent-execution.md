@@ -37,6 +37,8 @@ Do not add speculative placeholders, disabled future controls, or unapproved fut
 
 Separate top-level Codex tasks are required when Builder and QA need independent filesystems, branches, worktrees, or clean-room verification. Same-task subagents share the checkout; use them only for bounded work where filesystem isolation is unnecessary.
 
+Git worktree isolation does not isolate PostgreSQL. Before a database-capable Builder or QA starts application code, migrations, resets, seeds, or integration tests, its task contract must name explicit `DATABASE_URL` and `DATABASE_URL_TEST` ownership and the worktree must pass the disposable PostgreSQL 16 setup and verification in `docs/dev-database.md`. Never copy or inherit the primary checkout `.env` or another worktree's `.env.task`; environment values are not ownership proof until they match the actual current worktree and expected container labels. Record the sanitized target before every database-capable command and clean up only the current worktree-owned container at handoff.
+
 Mandatory reading stays task-specific and short: always read `AGENTS.md`, then only the exact documents named by the Issue contract or required by a concrete question. Do not repeat general Codex orchestration research or reload broad documentation on each task. Re-check orchestration guidance only if this runbook fails in practice or the installed capability has materially changed.
 
 ## Unattended local operation

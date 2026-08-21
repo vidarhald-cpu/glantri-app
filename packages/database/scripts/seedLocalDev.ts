@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,8 +9,11 @@ function loadDatabaseEnv(): void {
   const packageDir = resolve(scriptDir, "..");
   const repoRoot = resolve(packageDir, "..", "..");
 
-  process.loadEnvFile(resolve(repoRoot, ".env"));
-  process.loadEnvFile(resolve(packageDir, ".env"));
+  for (const path of [resolve(repoRoot, ".env"), resolve(packageDir, ".env")]) {
+    if (existsSync(path)) {
+      process.loadEnvFile(path);
+    }
+  }
 }
 
 function getSeedConfig(): {
@@ -24,21 +28,27 @@ function getSeedConfig(): {
     displayName: process.env.GLANTRI_LOCAL_SEED_DISPLAY_NAME?.trim() || "Local GM",
     email: process.env.GLANTRI_LOCAL_SEED_EMAIL?.trim() || "local-gm@example.com",
     entityName: process.env.GLANTRI_LOCAL_SEED_ENTITY_NAME?.trim() || "Training Bandit",
-    password: process.env.GLANTRI_LOCAL_SEED_PASSWORD?.trim() || "devpassword123"
+    password: process.env.GLANTRI_LOCAL_SEED_PASSWORD?.trim() || "devpassword123",
   };
 }
 
-async function ensureLocalGameMaster(authService: AuthService, config: ReturnType<typeof getSeedConfig>) {
+async function ensureLocalGameMaster(
+  authService: AuthService,
+  config: ReturnType<typeof getSeedConfig>,
+) {
   const existingUser = await authService.findUserByEmail(config.email);
 
   if (!existingUser) {
     const createdUser = await authService.registerLocalUser({
       displayName: config.displayName,
       email: config.email,
-      password: config.password
+      password: config.password,
     });
 
-    const updatedUser = await authService.replaceUserRoles(createdUser.id, ["player", "game_master"]);
+    const updatedUser = await authService.replaceUserRoles(createdUser.id, [
+      "player",
+      "game_master",
+    ]);
 
     return updatedUser ?? createdUser;
   }
@@ -46,14 +56,17 @@ async function ensureLocalGameMaster(authService: AuthService, config: ReturnTyp
   await prisma.user.update({
     data: {
       displayName: config.displayName,
-      passwordHash: hashPassword(config.password)
+      passwordHash: hashPassword(config.password),
     },
     where: {
-      id: existingUser.id
-    }
+      id: existingUser.id,
+    },
   });
 
-  const updatedUser = await authService.replaceUserRoles(existingUser.id, ["player", "game_master"]);
+  const updatedUser = await authService.replaceUserRoles(existingUser.id, [
+    "player",
+    "game_master",
+  ]);
 
   if (!updatedUser) {
     throw new Error("Failed to assign local game master roles.");
@@ -62,15 +75,19 @@ async function ensureLocalGameMaster(authService: AuthService, config: ReturnTyp
   return updatedUser;
 }
 
-async function ensureSampleCampaign(campaignService: CampaignService, gmUserId: string, campaignName: string) {
+async function ensureSampleCampaign(
+  campaignService: CampaignService,
+  gmUserId: string,
+  campaignName: string,
+) {
   const existingCampaign = await prisma.campaign.findFirst({
     orderBy: {
-      createdAt: "asc"
+      createdAt: "asc",
     },
     where: {
       gmUserId,
-      name: campaignName
-    }
+      name: campaignName,
+    },
   });
 
   if (existingCampaign) {
@@ -83,25 +100,25 @@ async function ensureSampleCampaign(campaignService: CampaignService, gmUserId: 
     name: campaignName,
     settings: {
       allowPlayerSelfJoin: false,
-      defaultVisibility: "gm_only"
+      defaultVisibility: "gm_only",
     },
-    status: "draft"
+    status: "draft",
   });
 }
 
 async function ensureSampleEntity(
   campaignService: CampaignService,
   gmUserId: string,
-  entityName: string
+  entityName: string,
 ) {
   const existingEntity = await prisma.reusableEntity.findFirst({
     orderBy: {
-      createdAt: "asc"
+      createdAt: "asc",
     },
     where: {
       gmUserId,
-      name: entityName
-    }
+      name: entityName,
+    },
   });
 
   if (existingEntity) {
@@ -117,9 +134,9 @@ async function ensureSampleEntity(
     snapshot: {
       health: {
         currentHp: 12,
-        maxHp: 12
-      }
-    }
+        maxHp: 12,
+      },
+    },
   });
 }
 
