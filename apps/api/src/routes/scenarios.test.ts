@@ -68,6 +68,13 @@ import {
 import { weaponTemplates } from "@glantri/content/equipment";
 
 const mocks = vi.hoisted(() => {
+  class CampaignCharacterRosterCandidateNotFoundError extends Error {
+    constructor() {
+      super("Campaign character candidate not found.");
+      this.name = "CampaignCharacterRosterCandidateNotFoundError";
+    }
+  }
+
   const adminUser = {
     email: "gm@example.test",
     id: "gm-1",
@@ -85,6 +92,7 @@ const mocks = vi.hoisted(() => {
     getCampaignById: vi.fn(),
     getReusableEntityById: vi.fn(),
     listCampaignRosterEntries: vi.fn(),
+    listCampaignCharacterRosterCandidates: vi.fn(),
     listCampaignsByCharacterRosterAccess: vi.fn(),
     listCampaignsByGameMaster: vi.fn(),
     listCampaignsByPlayerAccess: vi.fn(),
@@ -146,6 +154,7 @@ const mocks = vi.hoisted(() => {
   };
   return {
     adminUser,
+    CampaignCharacterRosterCandidateNotFoundError,
     campaignService,
     characterEquipmentReadModelService,
     characterService,
@@ -160,6 +169,8 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("@glantri/database", () => ({
+  CampaignCharacterRosterCandidateNotFoundError:
+    mocks.CampaignCharacterRosterCandidateNotFoundError,
   CampaignService: vi.fn(() => mocks.campaignService),
   CharacterEquipmentReadModelService: vi.fn(() => mocks.characterEquipmentReadModelService),
   CharacterService: vi.fn(() => mocks.characterService),
@@ -4737,6 +4748,132 @@ describe("scenarios route contract", () => {
     expect(JSON.stringify(response.json())).not.toContain("Private NPC");
   });
 
+  it("lists only the safe Campaign-scoped Character candidate projection for the owning GM", async () => {
+    const characters = [
+      {
+        alreadyRostered: false,
+        id: "character-1",
+        name: "Ari",
+        ownerLabel: "You",
+      },
+      {
+        alreadyRostered: true,
+        id: "character-2",
+        name: "Bryn",
+        ownerLabel: "Player Two",
+      },
+    ];
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.campaignService.listCampaignCharacterRosterCandidates.mockResolvedValue(characters);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/campaigns/campaign-1/roster-candidates/characters",
+    });
+
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(response.json()).toEqual({ characters });
+    expect(Object.keys(response.json().characters[0]).sort()).toEqual([
+      "alreadyRostered",
+      "id",
+      "name",
+      "ownerLabel",
+    ]);
+    expect(JSON.stringify(response.json())).not.toContain("email");
+    expect(JSON.stringify(response.json())).not.toContain("build");
+    expect(JSON.stringify(response.json())).not.toContain("ownerId");
+    expect(mocks.campaignService.listCampaignCharacterRosterCandidates).toHaveBeenCalledWith({
+      actorUserId: "gm-1",
+      campaignId: "campaign-1",
+    });
+  });
+
+  it("does not expose Campaign Character candidates to a non-owning GM", async () => {
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "other-gm",
+      id: "campaign-1",
+      name: "Private Campaign",
+      status: "active",
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/campaigns/campaign-1/roster-candidates/characters",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Campaign not found." });
+    expect(mocks.campaignService.listCampaignCharacterRosterCandidates).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { error: "Authentication required.", label: "anonymous", status: 401 },
+    { error: "Admin or GM role required.", label: "player", status: 403 },
+  ])(
+    "returns a safe $status response for a $label candidate request",
+    async ({ error, status }) => {
+      mocks.requireAdminUser.mockImplementationOnce(async (_request, reply) => {
+        await reply.code(status).send({ error });
+        return null;
+      });
+      const app = await buildScenarioTestApp();
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/campaigns/campaign-1/roster-candidates/characters",
+      });
+
+      await app.close();
+
+      expect(response.statusCode).toBe(status);
+      expect(response.json()).toEqual({ error });
+      expect(mocks.campaignService.getCampaignById).not.toHaveBeenCalled();
+      expect(mocks.campaignService.listCampaignCharacterRosterCandidates).not.toHaveBeenCalled();
+    },
+  );
+
+  it("returns one non-disclosing error for an ineligible Character roster id", async () => {
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.campaignService.addCampaignRosterEntry.mockRejectedValue(
+      new mocks.CampaignCharacterRosterCandidateNotFoundError(),
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        category: "pc",
+        sourceId: "local-draft-or-forged",
+        sourceType: "character",
+      },
+      url: "/campaigns/campaign-1/roster",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      error: "Campaign character candidate not found.",
+    });
+    expect(JSON.stringify(response.json())).not.toContain("local-draft-or-forged");
+  });
+
   it("preserves admin authority for a campaign-valid reusable NPC roster link", async () => {
     const adminUser = {
       email: "admin@example.test",
@@ -5151,6 +5288,49 @@ describe("scenarios route contract", () => {
         characterId: "character-1",
         joinSource: "player_joined",
         role: "player_character",
+      },
+      url: "/scenarios/scenario-1/participants/character",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({
+      error: "This character is not currently assigned to a campaign.",
+    });
+    expect(mocks.scenarioService.addCharacterParticipant).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { id: "gm-1", roles: ["game_master"] },
+    { id: "admin-1", roles: ["admin"] },
+  ])("rejects out-of-roster Scenario admission for $roles", async (user) => {
+    mocks.requireAuthenticatedUser.mockResolvedValue({
+      email: `${user.id}@example.test`,
+      ...user,
+    });
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      kind: "mixed",
+      name: "Live Scene",
+      status: "live",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      settings: { allowPlayerSelfJoin: false },
+      status: "active",
+    });
+    mocks.campaignService.listCampaignRosterEntries.mockResolvedValue([]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        characterId: "out-of-roster-or-forged",
+        joinSource: "gm_added",
       },
       url: "/scenarios/scenario-1/participants/character",
     });

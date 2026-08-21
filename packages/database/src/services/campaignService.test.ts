@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Campaign, ReusableEntity } from "@glantri/domain";
 
-import { CampaignService } from "./campaignService";
+import { CampaignCharacterRosterCandidateNotFoundError, CampaignService } from "./campaignService";
 import { createCharacterRecord, createScenarioRepositoryStub } from "./scenarioService.testHelpers";
 
 function makeCampaign(input: { gmUserId: string; id: string; name?: string }): Campaign {
@@ -145,6 +145,96 @@ describe("CampaignService access listing", () => {
 });
 
 describe("CampaignService campaign roster", () => {
+  it("projects all finalized server Characters with only safe Campaign candidate fields", async () => {
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const ownCharacter = {
+      ...createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "gm-1" }),
+      owner: {
+        displayName: "Campaign GM",
+        email: "gm-private@example.test",
+        id: "gm-1",
+      },
+    };
+    const otherCharacter = {
+      ...createCharacterRecord({ id: "character-2", name: "Bryn", ownerId: "player-2" }),
+      owner: {
+        displayName: "Player Two",
+        email: "player-private@example.test",
+        id: "player-2",
+      },
+    };
+    rosterEntries.push({
+      campaignId: "campaign-1",
+      category: "pc",
+      createdAt: "2026-04-21T00:00:00.000Z",
+      id: "roster-1",
+      sourceId: otherCharacter.id,
+      sourceType: "character",
+      updatedAt: "2026-04-21T00:00:00.000Z",
+    });
+    const service = new CampaignService(repository, {
+      listCharacters: async () => [ownCharacter, otherCharacter],
+    } as never);
+
+    const candidates = await service.listCampaignCharacterRosterCandidates({
+      actorUserId: "gm-1",
+      campaignId: "campaign-1",
+    });
+
+    expect(candidates).toEqual([
+      {
+        alreadyRostered: false,
+        id: "character-1",
+        name: "Ari",
+        ownerLabel: "You",
+      },
+      {
+        alreadyRostered: true,
+        id: "character-2",
+        name: "Bryn",
+        ownerLabel: "Player Two",
+      },
+    ]);
+    expect(Object.keys(candidates[0] ?? {}).sort()).toEqual([
+      "alreadyRostered",
+      "id",
+      "name",
+      "ownerLabel",
+    ]);
+    expect(JSON.stringify(candidates)).not.toContain("example.test");
+    expect(JSON.stringify(candidates)).not.toContain("build");
+    expect(JSON.stringify(candidates)).not.toContain("ownerId");
+  });
+
+  it("rejects nonfinalized, forged, or mistyped Character roster candidates before writing", async () => {
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const finalized = createCharacterRecord({
+      id: "character-finalized",
+      name: "Ari",
+      ownerId: "player-1",
+    });
+    const service = new CampaignService(repository, {
+      getCharacterById: async (characterId: string) =>
+        characterId === finalized.id ? finalized : null,
+    } as never);
+
+    for (const input of [
+      { category: "pc" as const, sourceId: "local-draft-or-forged" },
+      { category: "npc" as const, sourceId: finalized.id },
+    ]) {
+      await expect(
+        service.addCampaignRosterEntry({
+          campaignId: "campaign-1",
+          category: input.category,
+          sourceId: input.sourceId,
+          sourceType: "character",
+        }),
+      ).rejects.toBeInstanceOf(CampaignCharacterRosterCandidateNotFoundError);
+    }
+
+    expect(rosterEntries).toEqual([]);
+  });
+
   it("persists one concrete campaign NPC and its roster link as the same identity", async () => {
     const { participants, repository, reusableEntities, rosterEntries } =
       createScenarioRepositoryStub();

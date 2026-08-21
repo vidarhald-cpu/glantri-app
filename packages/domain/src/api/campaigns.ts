@@ -1,4 +1,19 @@
+import { z } from "zod";
+
 import type { EncounterStatus } from "../encounter/session";
+
+export const campaignCharacterRosterCandidateSchema = z
+  .object({
+    alreadyRostered: z.boolean(),
+    id: z.string().min(1),
+    name: z.string().min(1),
+    ownerLabel: z.string().min(1),
+  })
+  .strict();
+
+export type CampaignCharacterRosterCandidate = z.infer<
+  typeof campaignCharacterRosterCandidateSchema
+>;
 
 export interface PlayerAccessibleCampaign {
   description: string;

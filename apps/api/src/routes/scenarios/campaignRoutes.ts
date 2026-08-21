@@ -1,6 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 
-import { CampaignService, EncounterService, ScenarioService } from "@glantri/database";
+import {
+  CampaignCharacterRosterCandidateNotFoundError,
+  CampaignService,
+  EncounterService,
+  ScenarioService,
+} from "@glantri/database";
 import {
   buildPlayerAccessibleCampaign,
   buildPlayerAccessibleScenario,
@@ -448,6 +453,37 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.get("/campaigns/:campaignId/roster-candidates/characters", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const campaignId = parseId(request.params, "campaignId", "Campaign id");
+      const campaign = await campaignService.getCampaignById(campaignId);
+
+      if (!campaign || (campaign.gmUserId !== user.id && !user.roles.includes("admin"))) {
+        return reply.code(404).send({
+          error: "Campaign not found.",
+        });
+      }
+
+      const characters = await campaignService.listCampaignCharacterRosterCandidates({
+        actorUserId: user.id,
+        campaignId,
+      });
+
+      return { characters };
+    } catch (error) {
+      return reply.code(400).send({
+        error:
+          error instanceof Error ? error.message : "Unable to list Campaign Character candidates.",
+      });
+    }
+  });
+
   app.post("/campaigns/:campaignId/roster", async (request, reply) => {
     const user = await requireAdminUser(request, reply);
 
@@ -479,6 +515,10 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
       return { rosterEntry };
     } catch (error) {
+      if (error instanceof CampaignCharacterRosterCandidateNotFoundError) {
+        return reply.code(404).send({ error: "Campaign character candidate not found." });
+      }
+
       if (error instanceof Error && error.message === "Reusable entity not found.") {
         return reply.code(404).send({ error: "Reusable entity not found." });
       }
