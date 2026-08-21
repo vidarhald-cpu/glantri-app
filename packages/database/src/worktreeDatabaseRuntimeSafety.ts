@@ -44,6 +44,24 @@ export function assertWorktreeDatabaseRuntimeSafety(): void {
   }
 
   if (process.env.DATABASE_URL) {
-    validateTaskDatabaseEnvironment(process.env);
+    const applicationUrl = process.env.GLANTRI_DB_APPLICATION_URL ?? process.env.DATABASE_URL;
+    const validated = validateTaskDatabaseEnvironment({
+      ...process.env,
+      DATABASE_URL: applicationUrl,
+    });
+
+    if (
+      process.env.GLANTRI_DB_APPLICATION_URL &&
+      process.env.DATABASE_URL !== applicationUrl &&
+      process.env.DATABASE_URL !== process.env.DATABASE_URL_TEST
+    ) {
+      throw new Error(
+        "Database command target must be the explicitly owned application or test database.",
+      );
+    }
+
+    if (validated.application.database === validated.test.database) {
+      throw new Error("Owned application and test databases must remain distinct.");
+    }
   }
 }

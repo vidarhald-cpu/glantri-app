@@ -430,7 +430,11 @@ function migrateTarget(
   const url = target === "application" ? environment.DATABASE_URL : environment.DATABASE_URL_TEST;
   run("pnpm", ["exec", "prisma", "migrate", "deploy"], {
     cwd: databasePackageDir,
-    env: { ...environment, DATABASE_URL: url },
+    env: {
+      ...environment,
+      DATABASE_URL: url,
+      GLANTRI_DB_APPLICATION_URL: environment.DATABASE_URL,
+    },
   });
 }
 
@@ -470,7 +474,11 @@ function reset(): void {
     requested === "application" ? environment.DATABASE_URL : environment.DATABASE_URL_TEST;
   run("pnpm", ["exec", "prisma", "migrate", "reset", "--force", "--skip-generate", "--skip-seed"], {
     cwd: databasePackageDir,
-    env: { ...environment, DATABASE_URL: url },
+    env: {
+      ...environment,
+      DATABASE_URL: url,
+      GLANTRI_DB_APPLICATION_URL: environment.DATABASE_URL,
+    },
   });
 }
 
