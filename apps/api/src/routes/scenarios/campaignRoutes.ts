@@ -524,7 +524,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       }
 
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to add campaign roster entry.",
+        error: "Unable to add campaign roster entry.",
       });
     }
   });
