@@ -221,20 +221,23 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     }
 
     const expectedUpdatedAt = requireServerCharacterRevision(record);
-    const recoveryEnvelope = await characterRecoveryRepository.createAttempt({
-      account: currentUser,
-      attemptedBuild: nextBuild,
-      baseBuild: record.build,
-      baseRevision: expectedUpdatedAt,
-      characterId: id,
-      sourceAction,
-      sourceSurface: "Character Sheet",
-    });
-    if (recoveryEnvelope) {
-      setRecoveryRecord(recoveryEnvelope);
-    }
+    let recoveryEnvelope: CharacterRecoveryEnvelope | undefined;
 
     try {
+      recoveryEnvelope = await characterRecoveryRepository.createAttempt({
+        account: currentUser,
+        attemptedBuild: nextBuild,
+        baseBuild: record.build,
+        baseRevision: expectedUpdatedAt,
+        characterId: id,
+        expectedAttemptId: recoveryRecord?.saveAttempt.id,
+        sourceAction,
+        sourceSurface: "Character Sheet",
+      });
+      if (recoveryEnvelope) {
+        setRecoveryRecord(recoveryEnvelope);
+      }
+
       const savedServerRecord = await updateServerCharacter({
         build: nextBuild,
         characterId: id,
@@ -286,6 +289,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
               id,
               currentCharacter.build,
               currentCharacter.updatedAt,
+              markedRecovery.saveAttempt.id,
             )
           : undefined;
         setRecord(canonicalRecord);

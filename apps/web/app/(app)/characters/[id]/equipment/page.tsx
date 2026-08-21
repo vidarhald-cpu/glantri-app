@@ -658,6 +658,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
               id,
               currentCharacter.build,
               currentCharacter.updatedAt,
+              markedRecovery.saveAttempt.id,
             )
           : undefined;
         setCharacterRecord(canonicalRecord);

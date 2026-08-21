@@ -20,6 +20,7 @@ export interface CreateCharacterRecoveryInput {
   baseBuild: CharacterBuild;
   baseRevision: string;
   characterId: string;
+  expectedAttemptId?: string;
   sourceAction: string;
   sourceSurface: string;
 }
@@ -228,6 +229,15 @@ function createAttemptId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `attempt-${Date.now()}-${Math.random()}`;
 }
 
+export class CharacterRecoveryAttemptChangedError extends Error {
+  constructor() {
+    super(
+      "Unsaved Character changes were updated in another tab. Review the retained changes before saving again.",
+    );
+    this.name = "CharacterRecoveryAttemptChangedError";
+  }
+}
+
 export function formatCharacterRecoveryField(path: string): string {
   const knownLabels: Record<string, string> = {
     "/age": "Age",
@@ -267,6 +277,11 @@ export class CharacterRecoveryRepository {
     return localDb.transaction("rw", localDb.characterRecoveries, async () => {
       const now = new Date().toISOString();
       const existing = await localDb.characterRecoveries.get(id);
+
+      if (existing?.saveAttempt.id !== input.expectedAttemptId) {
+        throw new CharacterRecoveryAttemptChangedError();
+      }
+
       const envelope: CharacterRecoveryEnvelope = {
         accountDisplayName: input.account.displayName,
         accountEmail: input.account.email,
@@ -385,11 +400,15 @@ export class CharacterRecoveryRepository {
     characterId: string,
     canonicalBuild: CharacterBuild,
     canonicalRevision: string,
+    expectedAttemptId?: string,
   ): Promise<CharacterRecoveryState | undefined> {
     return localDb.transaction("rw", localDb.characterRecoveries, async () => {
       const envelope = await this.get(accountId, characterId);
 
-      if (!envelope) {
+      if (
+        !envelope ||
+        (expectedAttemptId !== undefined && envelope.saveAttempt.id !== expectedAttemptId)
+      ) {
         return undefined;
       }
 

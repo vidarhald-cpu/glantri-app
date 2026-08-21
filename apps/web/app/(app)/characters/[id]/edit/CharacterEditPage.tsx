@@ -275,6 +275,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
         baseBuild: record.build,
         baseRevision: expectedUpdatedAt,
         characterId: id,
+        expectedAttemptId: recoveryRecord?.saveAttempt.id,
         sourceAction: "Save Character edits",
         sourceSurface: "Character Edit",
       });
@@ -332,6 +333,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
               id,
               currentCharacter.build,
               currentCharacter.updatedAt,
+              markedRecovery.saveAttempt.id,
             )
           : undefined;
         setRecord(canonicalRecord);

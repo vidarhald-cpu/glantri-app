@@ -186,6 +186,7 @@ describe("CharacterRecoveryRepository", () => {
       baseBuild: canonical,
       baseRevision: "revision-1",
       characterId: canonical.id,
+      expectedAttemptId: first!.saveAttempt.id,
       sourceAction: "Save notes",
       sourceSurface: "Character Sheet",
     });
@@ -231,6 +232,34 @@ describe("CharacterRecoveryRepository", () => {
     await expect(repository.get(accountA.id, canonical.id)).resolves.toStrictEqual(retained);
   });
 
+  it("does not replace another tab's retained recovery with a later non-empty save attempt", async () => {
+    const repository = new CharacterRecoveryRepository();
+    const canonical = createBuild();
+    const retained = await repository.createAttempt({
+      account: accountA,
+      attemptedBuild: { ...canonical, inventoryNotes: "Tab A retained notes" },
+      baseBuild: canonical,
+      baseRevision: "revision-1",
+      characterId: canonical.id,
+      sourceAction: "Save notes in tab A",
+      sourceSurface: "Character Sheet",
+    });
+
+    await expect(
+      repository.createAttempt({
+        account: accountA,
+        attemptedBuild: { ...canonical, name: "Tab B new name" },
+        baseBuild: canonical,
+        baseRevision: "revision-1",
+        characterId: canonical.id,
+        sourceAction: "Save identity in stale tab B",
+        sourceSurface: "Character Sheet",
+      }),
+    ).rejects.toThrow("Unsaved Character changes were updated in another tab");
+
+    await expect(repository.get(accountA.id, canonical.id)).resolves.toStrictEqual(retained);
+  });
+
   it("ignores a late outcome from an older save attempt when a newer attempt is current", async () => {
     const repository = new CharacterRecoveryRepository();
     const canonical = createBuild();
@@ -249,6 +278,7 @@ describe("CharacterRecoveryRepository", () => {
       baseBuild: canonical,
       baseRevision: "revision-1",
       characterId: canonical.id,
+      expectedAttemptId: older!.saveAttempt.id,
       sourceAction: "Newer save",
       sourceSurface: "Character Sheet",
     });
@@ -263,6 +293,87 @@ describe("CharacterRecoveryRepository", () => {
       ),
     ).resolves.toBeUndefined();
     await expect(repository.get(accountA.id, canonical.id)).resolves.toStrictEqual(newer);
+  });
+
+  it("does not let an older conflict reconciliation rewrite a newer attempt", async () => {
+    const repository = new CharacterRecoveryRepository();
+    const canonicalR1 = createBuild();
+    const older = await repository.createAttempt({
+      account: accountA,
+      attemptedBuild: { ...canonicalR1, inventoryNotes: "Older retained notes" },
+      baseBuild: canonicalR1,
+      baseRevision: "revision-1",
+      characterId: canonicalR1.id,
+      sourceAction: "Older save",
+      sourceSurface: "Character Sheet",
+    });
+    const markedOlder = await repository.markAttemptOutcome(
+      accountA.id,
+      canonicalR1.id,
+      older!.saveAttempt.id,
+      "conflict",
+      "stale_character",
+    );
+    const canonicalR3 = { ...canonicalR1, name: "Canonical revision 3" };
+    const newer = await repository.createAttempt({
+      account: accountA,
+      attemptedBuild: { ...canonicalR3, inventoryNotes: "Newer retained notes" },
+      baseBuild: canonicalR3,
+      baseRevision: "revision-3",
+      characterId: canonicalR1.id,
+      expectedAttemptId: markedOlder!.saveAttempt.id,
+      sourceAction: "Newer save",
+      sourceSurface: "Character Sheet",
+    });
+
+    expect(newer).toMatchObject({ baseRevision: "revision-3", reconciliation: "ready" });
+
+    await expect(
+      repository.reconcile(
+        accountA.id,
+        canonicalR1.id,
+        { ...canonicalR1, inventoryNotes: "Canonical revision 2 notes" },
+        "revision-2",
+        markedOlder!.saveAttempt.id,
+      ),
+    ).resolves.toBeUndefined();
+    await expect(repository.get(accountA.id, canonicalR1.id)).resolves.toStrictEqual(newer);
+  });
+
+  it("does not let an older reconciliation delete a newer canonical-equal attempt", async () => {
+    const repository = new CharacterRecoveryRepository();
+    const canonicalR1 = createBuild();
+    const older = await repository.createAttempt({
+      account: accountA,
+      attemptedBuild: { ...canonicalR1, inventoryNotes: "Older retained notes" },
+      baseBuild: canonicalR1,
+      baseRevision: "revision-1",
+      characterId: canonicalR1.id,
+      sourceAction: "Older save",
+      sourceSurface: "Character Sheet",
+    });
+    const canonicalR3 = { ...canonicalR1, name: "Canonical revision 3" };
+    const newer = await repository.createAttempt({
+      account: accountA,
+      attemptedBuild: { ...canonicalR3, inventoryNotes: "Newer retained notes" },
+      baseBuild: canonicalR3,
+      baseRevision: "revision-3",
+      characterId: canonicalR1.id,
+      expectedAttemptId: older!.saveAttempt.id,
+      sourceAction: "Newer save",
+      sourceSurface: "Character Sheet",
+    });
+
+    await expect(
+      repository.reconcile(
+        accountA.id,
+        canonicalR1.id,
+        { ...canonicalR3, inventoryNotes: "Newer retained notes" },
+        "revision-4",
+        older!.saveAttempt.id,
+      ),
+    ).resolves.toBeUndefined();
+    await expect(repository.get(accountA.id, canonicalR1.id)).resolves.toStrictEqual(newer);
   });
 
   it("leaves recovery bytes and user-authored time unchanged on a no-op canonical reconcile", async () => {

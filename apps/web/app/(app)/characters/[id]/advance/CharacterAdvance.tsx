@@ -250,6 +250,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         baseBuild: record.build,
         baseRevision: requireServerCharacterRevision(record),
         characterId: id,
+        expectedAttemptId: recoveryRecord?.saveAttempt.id,
         sourceAction: "Edit progression",
         sourceSurface: "Character Progression",
       });
@@ -416,20 +417,23 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     setSaving(true);
 
     const expectedUpdatedAt = requireServerCharacterRevision(record);
-    const recoveryEnvelope = await characterRecoveryRepository.createAttempt({
-      account: currentUser,
-      attemptedBuild: draft.build,
-      baseBuild: record.build,
-      baseRevision: expectedUpdatedAt,
-      characterId: id,
-      sourceAction: "Save progression",
-      sourceSurface: "Character Progression",
-    });
-    if (recoveryEnvelope) {
-      setRecoveryRecord(recoveryEnvelope);
-    }
+    let recoveryEnvelope: CharacterRecoveryEnvelope | undefined;
 
     try {
+      recoveryEnvelope = await characterRecoveryRepository.createAttempt({
+        account: currentUser,
+        attemptedBuild: draft.build,
+        baseBuild: record.build,
+        baseRevision: expectedUpdatedAt,
+        characterId: id,
+        expectedAttemptId: recoveryRecord?.saveAttempt.id,
+        sourceAction: "Save progression",
+        sourceSurface: "Character Progression",
+      });
+      if (recoveryEnvelope) {
+        setRecoveryRecord(recoveryEnvelope);
+      }
+
       const serverRecord = await updateServerCharacter({
         build: draft.build,
         characterId: id,
@@ -490,6 +494,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
               id,
               currentCharacter.build,
               currentCharacter.updatedAt,
+              markedRecovery.saveAttempt.id,
             )
           : undefined;
         const retainedRecovery =
