@@ -115,6 +115,32 @@ Priority is separate from defect severity. Small defects can remain durably reco
 
 An issue reaches `Ready` only when its task contract supplies an exact baseline, acceptance examples, ownership, rule basis, affected contracts/hotspots, verification, required decisions, and an applicability result for every acceptance dimension. See `docs/process/task-contract.md`.
 
+`Ready` is a completeness state, not implementation permission. `Authorized` is a separate, explicit product-owner/control-plane dispatch decision recorded in durable GitHub state. `Active` means a Builder or repair loop is in flight. `Blocked`, `Design only`, `Completed`, and `Stale/needs refresh` remain non-dispatchable; a stale contract must be reconciled to live `origin/dev` before it can return to `Ready`. No more than four authorized implementation Builders may be active concurrently, and hotspot or dependency conflicts can reduce that number.
+
+## When I approve a case, what happens next?
+
+Approval for implementation makes a complete issue `Ready + Authorized`. From there the normal path is:
+
+`Approved issue -> isolated Builder -> draft PR to dev -> independent QA -> control-plane acceptance -> dev integration -> optional release PR -> external-maintainer production release`
+
+| Stage                | Who acts and what is produced                                                                                                                      | Message the product owner should expect                                       | Product-owner action                                                                  |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Authorize            | Product owner/control plane records a self-contained authorized issue, exact baseline, scope, acceptance, hotspots, and Git authority.             | The issue is `Ready + Authorized`; a Builder lane is assigned.                | Decide priority and any product/rule/consequential architecture questions.            |
+| Build                | An isolated Builder verifies live `origin/dev`, implements only the issue, verifies, and publishes a draft PR to `dev` with an exact-head handoff. | **Builder complete / QA pending** or **Needs decision**.                      | None unless a decision or coordination blocker is reported.                           |
+| Independent QA       | A fresh QA reviewer tests the exact PR head in a separate worktree and posts `PASS`, `PASS WITH FOLLOW-UP`, or `FAIL` with evidence.               | **QA failed / repair required** or **QA passed / ready for dev integration**. | Review acceptance evidence; decide genuinely consequential follow-ups.                |
+| Accept and integrate | Control plane/product owner accepts the slice; an authorized integration actor merges the checked PR into shared `dev`.                            | **Integrated to dev**, including the resulting exact `dev` SHA.               | Accept/reject and choose integration order.                                           |
+| Optional release     | Under separate authority, a narrow `dev -> main` release PR is prepared after release readiness is chosen.                                         | **Narrow release PR ready for external maintainer**.                          | Decide product release readiness; do not perform production mechanics by implication. |
+| Production boundary  | The external maintainer performs production release/deployment support and records verification.                                                   | **Production deployment verified**, when applicable.                          | Confirm product outcome; ordinary agents remain read-only at this boundary.           |
+
+Exception paths stay narrow:
+
+- Missing product/rule/UX/privacy or consequential architecture decision: the Builder or QA posts **Needs decision** with one concrete question and stops affected work.
+- QA `FAIL`: the same Builder repairs the same PR where in scope, publishes a new exact head, and fresh independent QA runs again.
+- Dependency or hotspot collision: stop and coordinate ownership/merge order; do not widen scope.
+- Production-only problem: ordinary agents may diagnose safely when authorized, but do not mutate production, merge `main`, change Azure, or deploy.
+
+The issue and PR hold the durable status, exact SHAs, evidence, decisions, and follow-ups. Chat may notify the product owner, but chat-only context never authorizes work or substitutes for those records.
+
 ## Implementation flow
 
 1. Capture the observation or objective in an issue.

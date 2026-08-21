@@ -35,6 +35,8 @@ If this PR is unusually large, high-risk, or cross-area, link or include the int
 
 ## Verification and review evidence
 
+- Builder return (exact baseline/head and `READY FOR INDEPENDENT QA` or blocker):
+- Independent QA return (exact reviewed head, verdict, findings, and integration-blocker status):
 - Acceptance results: Functional; Mechanical/rules; Presentation; Information-flow/privacy; Product quality:
 - Automated checks:
 - Perspective-matrix and absent/private-fact evidence:
@@ -52,6 +54,7 @@ If this PR is unusually large, high-risk, or cross-area, link or include the int
 - [ ] Rule conflicts/deviations are recorded and approved where required.
 - [ ] Reserved hotspots and cross-area order were coordinated.
 - [ ] Verification evidence is included, with pre-existing failures distinguished.
+- [ ] Builder and independent QA handoffs use `docs/process/agent-execution.md` and identify exact immutable SHAs.
 - [ ] Product-quality, presentation, privacy, `Needs decision`, and deliberately deferred P3 findings are reported.
 - [ ] No production/Azure configuration or deployment approval was changed.
 - [ ] This PR does not authorize an agent to merge to `main` or act on Azure/production; external-maintainer involvement is limited to the production-release boundary.

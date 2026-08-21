@@ -49,6 +49,18 @@ body:
     validations:
       required: true
   - type: textarea
+    id: authorization
+    attributes:
+      label: Dispatch status and authorization
+      description: State whether the contract is Ready and whether implementation is explicitly Authorized. Link the durable authorization record; Ready alone is not permission to start.
+      placeholder: |
+        Contract status: Ready / Blocked / Design only / Completed / Stale/needs refresh
+        Implementation authorization: Authorized / Not authorized
+        Activity: Active / Inactive
+        Durable authorization record:
+    validations:
+      required: true
+  - type: textarea
     id: required_reading
     attributes:
       label: Required reading
@@ -56,6 +68,20 @@ body:
       placeholder: |
         - AGENTS.md
         - docs/area-or-process-document-required-for-this-task.md
+    validations:
+      required: true
+  - type: textarea
+    id: database_capability
+    attributes:
+      label: Database capability and isolation
+      description: Classify database access. For database-capable Builder or QA work, name the disposable task target, ownership, setup, verification, commands, and cleanup required by docs/dev-database.md. Never use the protected normal database from a linked worktree.
+      placeholder: |
+        Capability: none / application-only / migrations / reset-seed / integration tests / other
+        DATABASE_URL owner/target:
+        DATABASE_URL_TEST owner/target:
+        Setup and verification:
+        Allowed database commands:
+        Cleanup:
     validations:
       required: true
   - type: textarea
