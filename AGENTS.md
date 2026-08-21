@@ -16,16 +16,18 @@ Full process: `docs/process/control-plane.md` and `docs/process/development-base
 Before non-trivial work:
 
 1. Read this file and the exact additional documents named in the task contract.
-2. Confirm outcome, scope, ownership, accepted baseline branch/SHA, reserved hotspots, acceptance examples, verification, and Git authority.
-3. Inspect the current source and tests for the affected area; do not rely on old branches or chat history.
-4. Stop if the task requires an unapproved product/rule decision, an unknown baseline, or uncoordinated hotspot edits.
+2. Confirm the GitHub issue is both `Ready` (the contract is complete) and explicitly `Authorized` for implementation. `Ready` alone is not permission to start.
+3. Confirm outcome, scope, ownership, accepted baseline branch/SHA, reserved hotspots, acceptance examples, verification, and Git authority.
+4. Fetch and resolve the live `origin/dev` SHA. Stop for contract refresh if it differs from the accepted baseline; do not silently choose a new baseline.
+5. Inspect the current source and tests for the affected area; do not rely on old branches or chat history.
+6. Stop if the task requires an unapproved product/rule decision, an unknown baseline, or uncoordinated hotspot edits.
 
 Keep mandatory startup reading controlled and task-specific. Area documents are required only when the task touches that area. Decision records, audits, and historical reports are read on demand. Task contracts must name exact paths rather than say `read all architecture docs`.
 
 Useful references:
 
 - Task contract: `docs/process/task-contract.md`
-- Supervisor-led Builder/QA execution: `docs/process/agent-execution.md`
+- Isolated Builder/QA execution: `docs/process/agent-execution.md`
 - Functional ownership/hotspots: `docs/architecture/ownership.md`
 - Global user-facing principles: `docs/product/product-presentation-principles.md`
 - Regression guidance: `docs/testing-regression-matrix.md`

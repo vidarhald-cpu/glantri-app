@@ -2,6 +2,8 @@
 
 Use this contract for every significant implementation issue. Small defects may use a shorter form only when scope, ownership, rule basis, and verification are still unambiguous.
 
+`Ready` and `Authorized` are separate. `Ready` means the contract below is complete and current. `Authorized` means the product owner/control plane has explicitly permitted implementation dispatch in durable GitHub state. An agent starts implementation only when both are true; neither technical completeness nor credentials imply authorization. `Active` means a Builder or its repair loop is already in flight.
+
 ## Ready contract
 
 ### Outcome
@@ -27,6 +29,10 @@ Explain impact and why this task has priority.
 
 ### Baseline and Git authority
 
+- Contract status: `Ready` / `Blocked` / `Design only` / `Completed` / `Stale/needs refresh`:
+- Implementation authorization: `Authorized` / `Not authorized`:
+- Activity: `Active` / `Inactive`:
+- Durable authorization record (issue body, comment, or project metadata):
 - Accepted baseline branch:
 - Accepted baseline commit SHA:
 - Local branch/worktree name:
@@ -238,6 +244,8 @@ List blockers, upstream contracts, dependent tasks, hotspot scheduling, and inte
 List only decisions that genuinely require product/rule/UX judgment. Use `None` when complete.
 
 ### Handoff requirements
+
+For an authorized Builder/QA loop, use the standard exact-SHA Builder and independent QA returns in `docs/process/agent-execution.md` in addition to the evidence below.
 
 - Result and files changed.
 - Decision records created/updated.
