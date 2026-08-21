@@ -1,11 +1,14 @@
 import Link from "next/link";
 
 import type { CharacterRecoveryEnvelope } from "../offline/glantriDexie";
-import { formatCharacterRecoveryField } from "../offline/repositories/characterRecoveryRepository";
+import {
+  formatCharacterRecoveryField,
+  getCharacterRecoveryCandidateRevision,
+} from "../offline/repositories/characterRecoveryRepository";
 
 interface CharacterRecoveryCandidateListProps {
   envelope: CharacterRecoveryEnvelope;
-  onDiscard?: (candidateAttemptId: string) => void;
+  onDiscard?: (candidateAttemptId: string, candidateRevision: string) => void;
   onReview?: (candidateAttemptId: string) => void;
   reviewHref?: string;
   reviewingCandidateAttemptId?: string;
@@ -52,8 +55,10 @@ export function CharacterRecoveryCandidateList({
             </span>
             <span>
               From {candidate.sourceSurface} · {candidate.sourceAction} ·{" "}
-              {new Date(candidate.saveAttempt.attemptedAt).toLocaleString()} · Attempt{" "}
-              {candidate.saveAttempt.id}
+              {new Date(candidate.saveAttempt.attemptedAt).toLocaleString()} ·{" "}
+              {candidate.reconciliation === "conflict"
+                ? "Conflict needs review"
+                : "Ready for review"}
             </span>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
               {onReview ? (
@@ -68,7 +73,15 @@ export function CharacterRecoveryCandidateList({
                 <Link href={reviewHref}>Review rejected candidate</Link>
               ) : null}
               {onDiscard ? (
-                <button onClick={() => onDiscard(candidate.saveAttempt.id)} type="button">
+                <button
+                  onClick={() =>
+                    onDiscard(
+                      candidate.saveAttempt.id,
+                      getCharacterRecoveryCandidateRevision(candidate),
+                    )
+                  }
+                  type="button"
+                >
                   Discard rejected candidate
                 </button>
               ) : null}

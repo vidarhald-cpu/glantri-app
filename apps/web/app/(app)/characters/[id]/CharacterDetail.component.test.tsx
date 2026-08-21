@@ -192,6 +192,7 @@ describe("CharacterDetail competing recovery presentation", () => {
       expect(recovery?.competingCandidates).toHaveLength(1);
       return recovery;
     });
+    const internalCandidateId = retained!.competingCandidates![0]!.saveAttempt.id;
 
     view.unmount();
     mocks.loadContext.mockResolvedValue({
@@ -212,6 +213,12 @@ describe("CharacterDetail competing recovery presentation", () => {
     expect(await screen.findByDisplayValue("Canonical name")).toBeVisible();
     expect(screen.getByText("Competing rejected save — Character name")).toBeVisible();
     expect(screen.getByText(/Save identity details/)).toBeVisible();
+    expect(
+      screen.queryByText((content) => content.includes(internalCandidateId)),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/From Character Sheet · Save identity details/)).toBeVisible();
+    expect(screen.getByText(/Ready for review/)).toBeVisible();
+    expect(screen.getByText(/separate from the primary recovery/)).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Review rejected candidate" }));
     expect(screen.getByDisplayValue("Tab B new name")).toBeVisible();
     expect(

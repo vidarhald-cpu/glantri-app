@@ -79,6 +79,8 @@ export interface CharacterRecoveryCandidate {
   patch: CharacterRecoveryPatchEntry[];
   reconciliation: "conflict" | "ready";
   relationshipToPrimary: "disjoint" | "overlapping";
+  /** Exact candidate revision. Older v6 rows fall back to saveAttempt.id until rewritten. */
+  revisionToken?: string;
   saveAttempt: CharacterRecoverySaveAttempt;
   sourceAction: string;
   sourceSurface: string;
@@ -114,6 +116,20 @@ export interface LegacyCharacterRecoveryRecord {
   updatedAt: string;
 }
 
+export interface MalformedCharacterRecoveryCandidateRecord {
+  accountId: string;
+  characterId: string;
+  id: string;
+  quarantinedAt: string;
+  record: unknown;
+  sourceStore: "characterRecoveries";
+  updatedAt: string;
+}
+
+export type CharacterRecoveryQuarantineRecord =
+  | LegacyCharacterRecoveryRecord
+  | MalformedCharacterRecoveryCandidateRecord;
+
 export class GlantriDexie extends Dexie {
   cachedContent!: Table<CachedContentRecord, string>;
   characterDrafts!: Table<LocalCharacterDraft, string>;
@@ -121,7 +137,7 @@ export class GlantriDexie extends Dexie {
   chargenSessions!: Table<ChargenSessionDraft, string>;
   encounters!: Table<EncounterSession, string>;
   localCharacters!: Table<LocalCharacterRecord, string>;
-  legacyCharacterRecoveries!: Table<LegacyCharacterRecoveryRecord, string>;
+  legacyCharacterRecoveries!: Table<CharacterRecoveryQuarantineRecord, string>;
   syncQueue!: Table<SyncQueueItem, string>;
 
   constructor(databaseName = "glantri-app") {

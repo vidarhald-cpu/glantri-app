@@ -7,6 +7,7 @@ import {
   type CharacterRecoveryEnvelope,
   type CharacterRecoveryPatchEntry,
   type LegacyCharacterRecoveryRecord,
+  type MalformedCharacterRecoveryCandidateRecord,
 } from "../glantriDexie";
 
 export interface CharacterRecoveryState {
@@ -57,6 +58,53 @@ function stableSerialize(value: unknown): string {
 
 function valuesEqual(left: unknown, right: unknown): boolean {
   return stableSerialize(left) === stableSerialize(right);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isCharacterRecoveryPatchEntry(value: unknown): value is CharacterRecoveryPatchEntry {
+  if (!isPlainObject(value)) {
+    return false;
+  }
+
+  return (
+    (value.operation === "remove" || value.operation === "set") &&
+    isNonEmptyString(value.path) &&
+    value.path.startsWith("/") &&
+    value.path !== "/"
+  );
+}
+
+function isCharacterRecoveryCandidate(value: unknown): value is CharacterRecoveryCandidate {
+  if (!isPlainObject(value) || !isPlainObject(value.saveAttempt)) {
+    return false;
+  }
+
+  const saveAttempt = value.saveAttempt;
+  return (
+    isNonEmptyString(value.baseHash) &&
+    isNonEmptyString(value.baseRevision) &&
+    isNonEmptyString(value.createdAt) &&
+    Array.isArray(value.patch) &&
+    value.patch.length > 0 &&
+    value.patch.every(isCharacterRecoveryPatchEntry) &&
+    (value.reconciliation === "conflict" || value.reconciliation === "ready") &&
+    (value.relationshipToPrimary === "disjoint" || value.relationshipToPrimary === "overlapping") &&
+    (value.revisionToken === undefined || isNonEmptyString(value.revisionToken)) &&
+    isNonEmptyString(saveAttempt.attemptedAt) &&
+    (saveAttempt.completedAt === undefined || isNonEmptyString(saveAttempt.completedAt)) &&
+    (saveAttempt.errorCode === undefined || typeof saveAttempt.errorCode === "string") &&
+    isNonEmptyString(saveAttempt.id) &&
+    (saveAttempt.outcome === "conflict" ||
+      saveAttempt.outcome === "failed" ||
+      saveAttempt.outcome === "pending" ||
+      saveAttempt.outcome === "unknown") &&
+    isNonEmptyString(value.sourceAction) &&
+    isNonEmptyString(value.sourceSurface) &&
+    isNonEmptyString(value.updatedAt)
+  );
 }
 
 export function hashCharacterBuild(build: CharacterBuild): string {
@@ -230,6 +278,12 @@ function createAttemptId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `attempt-${Date.now()}-${Math.random()}`;
 }
 
+export function getCharacterRecoveryCandidateRevision(
+  candidate: CharacterRecoveryCandidate,
+): string {
+  return candidate.revisionToken ?? candidate.saveAttempt.id;
+}
+
 export class CharacterRecoveryAttemptChangedError extends Error {
   constructor(
     readonly currentAttemptId?: string,
@@ -267,10 +321,90 @@ function withCandidateRelationships(
   primaryPatch: CharacterRecoveryPatchEntry[],
   candidates: CharacterRecoveryCandidate[],
 ): CharacterRecoveryCandidate[] {
-  return candidates.map((candidate) => ({
-    ...candidate,
-    relationshipToPrimary: candidateRelationship(primaryPatch, candidate.patch),
-  }));
+  return candidates.map((candidate) => {
+    const relationshipToPrimary = candidateRelationship(primaryPatch, candidate.patch);
+
+    return relationshipToPrimary === candidate.relationshipToPrimary
+      ? candidate
+      : {
+          ...candidate,
+          relationshipToPrimary,
+          revisionToken: createAttemptId(),
+          updatedAt: new Date().toISOString(),
+        };
+  });
+}
+
+function validateCompetingCandidates(envelope: CharacterRecoveryEnvelope): {
+  envelope: CharacterRecoveryEnvelope;
+  quarantine: MalformedCharacterRecoveryCandidateRecord[];
+} {
+  const rawCandidates = (envelope as unknown as { competingCandidates?: unknown })
+    .competingCandidates;
+
+  if (rawCandidates === undefined) {
+    return { envelope, quarantine: [] };
+  }
+
+  const candidateValues = Array.isArray(rawCandidates) ? rawCandidates : [rawCandidates];
+  const validCandidates: CharacterRecoveryCandidate[] = [];
+  const quarantine: MalformedCharacterRecoveryCandidateRecord[] = [];
+  const quarantinedAt = new Date().toISOString();
+
+  candidateValues.forEach((candidate, index) => {
+    if (isCharacterRecoveryCandidate(candidate)) {
+      validCandidates.push(candidate);
+      return;
+    }
+
+    quarantine.push({
+      accountId: envelope.accountId,
+      characterId: envelope.characterId,
+      id: `characterRecoveries:${envelope.id}:${quarantinedAt}:${index}:${createAttemptId()}`,
+      quarantinedAt,
+      record: candidate,
+      sourceStore: "characterRecoveries",
+      updatedAt: envelope.updatedAt,
+    });
+  });
+
+  if (quarantine.length === 0) {
+    return { envelope, quarantine };
+  }
+
+  return {
+    envelope: {
+      ...envelope,
+      competingCandidates: validCandidates.length > 0 ? validCandidates : undefined,
+    },
+    quarantine,
+  };
+}
+
+async function getValidatedEnvelope(id: string): Promise<CharacterRecoveryEnvelope | undefined> {
+  const stored = await localDb.characterRecoveries.get(id);
+
+  if (!stored) {
+    return undefined;
+  }
+
+  const validated = validateCompetingCandidates(stored);
+
+  if (validated.quarantine.length > 0) {
+    await localDb.legacyCharacterRecoveries.bulkPut(validated.quarantine);
+    await localDb.characterRecoveries.put(validated.envelope);
+  }
+
+  return validated.envelope;
+}
+
+function withRecoveryWriteTransaction<T>(operation: () => Promise<T>): Promise<T> {
+  return localDb.transaction(
+    "rw",
+    localDb.characterRecoveries,
+    localDb.legacyCharacterRecoveries,
+    operation,
+  );
 }
 
 function promoteCandidate(
@@ -360,9 +494,9 @@ export class CharacterRecoveryRepository {
       return undefined;
     }
 
-    const result = await localDb.transaction("rw", localDb.characterRecoveries, async () => {
+    const result = await withRecoveryWriteTransaction(async () => {
       const now = new Date().toISOString();
-      const existing = await localDb.characterRecoveries.get(id);
+      const existing = await getValidatedEnvelope(id);
 
       if (existing?.saveAttempt.id !== input.expectedAttemptId) {
         const candidateAttemptId = createAttemptId();
@@ -375,6 +509,7 @@ export class CharacterRecoveryRepository {
           relationshipToPrimary: existing
             ? candidateRelationship(existing.patch, patch)
             : "disjoint",
+          revisionToken: createAttemptId(),
           saveAttempt: {
             attemptedAt: now,
             completedAt: now,
@@ -463,9 +598,9 @@ export class CharacterRecoveryRepository {
   }
 
   async deleteAttempt(accountId: string, characterId: string, attemptId: string): Promise<boolean> {
-    return localDb.transaction("rw", localDb.characterRecoveries, async () => {
+    return withRecoveryWriteTransaction(async () => {
       const id = recoveryId(accountId, characterId);
-      const envelope = await localDb.characterRecoveries.get(id);
+      const envelope = await getValidatedEnvelope(id);
 
       if (!envelope || envelope.saveAttempt.id !== attemptId) {
         return false;
@@ -519,22 +654,27 @@ export class CharacterRecoveryRepository {
     characterId: string,
     expectedPrimaryAttemptId: string,
     candidateAttemptId: string,
+    expectedCandidateRevision: string,
   ): Promise<boolean> {
-    return localDb.transaction("rw", localDb.characterRecoveries, async () => {
-      const envelope = await this.get(accountId, characterId);
+    return withRecoveryWriteTransaction(async () => {
+      const envelope = await getValidatedEnvelope(recoveryId(accountId, characterId));
 
       if (!envelope || envelope.saveAttempt.id !== expectedPrimaryAttemptId) {
         return false;
       }
 
       const candidates = envelope.competingCandidates ?? [];
-      const retainedCandidates = candidates.filter(
-        (candidate) => candidate.saveAttempt.id !== candidateAttemptId,
+      const candidateIndex = candidates.findIndex(
+        (candidate) =>
+          candidate.saveAttempt.id === candidateAttemptId &&
+          getCharacterRecoveryCandidateRevision(candidate) === expectedCandidateRevision,
       );
 
-      if (retainedCandidates.length === candidates.length) {
+      if (candidateIndex < 0) {
         return false;
       }
+
+      const retainedCandidates = candidates.filter((_, index) => index !== candidateIndex);
 
       await localDb.characterRecoveries.put({
         ...envelope,
@@ -548,17 +688,37 @@ export class CharacterRecoveryRepository {
     accountId: string,
     characterId: string,
   ): Promise<CharacterRecoveryEnvelope | undefined> {
-    return localDb.characterRecoveries.get(recoveryId(accountId, characterId));
+    return withRecoveryWriteTransaction(() =>
+      getValidatedEnvelope(recoveryId(accountId, characterId)),
+    );
   }
 
   async listLegacyQuarantineForAccount(
     accountId: string,
     characterId: string,
   ): Promise<LegacyCharacterRecoveryRecord[]> {
-    return localDb.legacyCharacterRecoveries
+    const records = await localDb.legacyCharacterRecoveries
       .where("[accountId+characterId]")
       .equals([accountId, characterId])
       .toArray();
+    return records.filter(
+      (record): record is LegacyCharacterRecoveryRecord =>
+        record.sourceStore !== "characterRecoveries",
+    );
+  }
+
+  async listMalformedCandidateQuarantineForAccount(
+    accountId: string,
+    characterId: string,
+  ): Promise<MalformedCharacterRecoveryCandidateRecord[]> {
+    const records = await localDb.legacyCharacterRecoveries
+      .where("[accountId+characterId]")
+      .equals([accountId, characterId])
+      .toArray();
+    return records.filter(
+      (record): record is MalformedCharacterRecoveryCandidateRecord =>
+        record.sourceStore === "characterRecoveries",
+    );
   }
 
   async markAttemptOutcome(
@@ -568,8 +728,8 @@ export class CharacterRecoveryRepository {
     outcome: "conflict" | "failed" | "unknown",
     errorCode?: string,
   ): Promise<CharacterRecoveryEnvelope | undefined> {
-    return localDb.transaction("rw", localDb.characterRecoveries, async () => {
-      const envelope = await this.get(accountId, characterId);
+    return withRecoveryWriteTransaction(async () => {
+      const envelope = await getValidatedEnvelope(recoveryId(accountId, characterId));
 
       if (!envelope || envelope.saveAttempt.id !== attemptId) {
         return undefined;
@@ -620,8 +780,8 @@ export class CharacterRecoveryRepository {
     canonicalRevision: string,
     expectedAttemptId?: string,
   ): Promise<CharacterRecoveryState | undefined> {
-    return localDb.transaction("rw", localDb.characterRecoveries, async () => {
-      const envelope = await this.get(accountId, characterId);
+    return withRecoveryWriteTransaction(async () => {
+      const envelope = await getValidatedEnvelope(recoveryId(accountId, characterId));
 
       if (
         !envelope ||
@@ -642,10 +802,15 @@ export class CharacterRecoveryRepository {
 
           const reconciliation: CharacterRecoveryCandidate["reconciliation"] =
             candidateState.conflictPaths.length > 0 ? "conflict" : "ready";
+          const relationshipToPrimary = candidateRelationship(
+            primaryState.patch,
+            candidateState.patch,
+          );
           const hasSemanticChange =
             candidate.baseHash !== baseHash ||
             candidate.baseRevision !== canonicalRevision ||
             candidate.reconciliation !== reconciliation ||
+            candidate.relationshipToPrimary !== relationshipToPrimary ||
             !valuesEqual(candidate.patch, candidateState.patch);
 
           return [
@@ -656,6 +821,8 @@ export class CharacterRecoveryRepository {
                   baseRevision: canonicalRevision,
                   patch: candidateState.patch,
                   reconciliation,
+                  relationshipToPrimary,
+                  revisionToken: createAttemptId(),
                   updatedAt: new Date().toISOString(),
                 }
               : candidate,
@@ -686,10 +853,7 @@ export class CharacterRecoveryRepository {
 
       const conflictPaths = primaryState.conflictPaths;
       const reconciliation = conflictPaths.length > 0 ? "conflict" : "ready";
-      const relatedCandidates = withCandidateRelationships(
-        primaryState.patch,
-        reconciledCandidates,
-      );
+      const relatedCandidates = reconciledCandidates;
       const hasSemanticChange =
         envelope.baseHash !== baseHash ||
         envelope.baseRevision !== canonicalRevision ||

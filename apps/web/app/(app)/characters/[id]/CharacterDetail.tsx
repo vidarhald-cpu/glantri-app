@@ -429,7 +429,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     );
   }
 
-  async function handleDiscardCandidate(candidateAttemptId: string) {
+  async function handleDiscardCandidate(candidateAttemptId: string, candidateRevision: string) {
     if (!canonicalBuild || !currentUser || !recoveryRecord) {
       return;
     }
@@ -439,6 +439,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       id,
       recoveryRecord.saveAttempt.id,
       candidateAttemptId,
+      candidateRevision,
     );
 
     if (!deleted) {
@@ -586,7 +587,9 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
           </div>
           <CharacterRecoveryCandidateList
             envelope={recoveryRecord}
-            onDiscard={(candidateAttemptId) => void handleDiscardCandidate(candidateAttemptId)}
+            onDiscard={(candidateAttemptId, candidateRevision) =>
+              void handleDiscardCandidate(candidateAttemptId, candidateRevision)
+            }
             onReview={handleReviewCandidate}
             reviewingCandidateAttemptId={reviewingCandidateAttemptId}
           />

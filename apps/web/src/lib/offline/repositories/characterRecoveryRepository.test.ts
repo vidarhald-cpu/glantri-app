@@ -9,6 +9,7 @@ import { localDb } from "../glantriDexie";
 import {
   CharacterRecoveryRepository,
   formatCharacterRecoveryField,
+  getCharacterRecoveryCandidateRevision,
 } from "./characterRecoveryRepository";
 
 const accountA: AuthUser = {
@@ -229,7 +230,8 @@ describe("CharacterRecoveryRepository", () => {
     ).rejects.toBeDefined();
 
     const retained = await repository.get(accountA.id, canonical.id);
-    const candidateAttemptId = retained?.competingCandidates?.[0]?.saveAttempt.id;
+    const candidate = retained?.competingCandidates?.[0];
+    const candidateAttemptId = candidate?.saveAttempt.id;
     expect(candidateAttemptId).toBeDefined();
     await expect(
       repository.deleteCandidate(
@@ -237,6 +239,7 @@ describe("CharacterRecoveryRepository", () => {
         canonical.id,
         "stale-primary-attempt",
         candidateAttemptId!,
+        getCharacterRecoveryCandidateRevision(candidate!),
       ),
     ).resolves.toBe(false);
     await expect(repository.get(accountA.id, canonical.id)).resolves.toStrictEqual(retained);
@@ -255,6 +258,71 @@ describe("CharacterRecoveryRepository", () => {
       repository.deleteAttempt(accountA.id, canonical.id, candidateAttemptId!),
     ).resolves.toBe(true);
     await expect(repository.get(accountA.id, canonical.id)).resolves.toBeUndefined();
+  });
+
+  it("rejects a stale discard after reconciliation replaces a candidate revision", async () => {
+    const repository = new CharacterRecoveryRepository();
+    const canonical = createBuild();
+    const primary = await repository.createAttempt({
+      account: accountA,
+      attemptedBuild: { ...canonical, inventoryNotes: "Primary notes" },
+      baseBuild: canonical,
+      baseRevision: "revision-1",
+      characterId: canonical.id,
+      sourceAction: "Save notes",
+      sourceSurface: "Character Sheet",
+    });
+    await expect(
+      repository.createAttempt({
+        account: accountA,
+        attemptedBuild: { ...canonical, name: "Rejected name" },
+        baseBuild: canonical,
+        baseRevision: "revision-1",
+        characterId: canonical.id,
+        sourceAction: "Save identity",
+        sourceSurface: "Character Sheet",
+      }),
+    ).rejects.toBeDefined();
+
+    const before = await repository.get(accountA.id, canonical.id);
+    const staleCandidate = before!.competingCandidates![0]!;
+    const staleRevisionToken = getCharacterRecoveryCandidateRevision(staleCandidate);
+    const reconciled = await repository.reconcile(
+      accountA.id,
+      canonical.id,
+      canonical,
+      "revision-2",
+      primary!.saveAttempt.id,
+    );
+    const replacement = reconciled!.envelope.competingCandidates![0]!;
+
+    expect(replacement.saveAttempt.id).toBe(staleCandidate.saveAttempt.id);
+    expect(getCharacterRecoveryCandidateRevision(replacement)).not.toBe(staleRevisionToken);
+    await expect(
+      repository.deleteCandidate(
+        accountA.id,
+        canonical.id,
+        primary!.saveAttempt.id,
+        staleCandidate.saveAttempt.id,
+        staleRevisionToken,
+      ),
+    ).resolves.toBe(false);
+    await expect(repository.get(accountA.id, canonical.id)).resolves.toStrictEqual(
+      reconciled!.envelope,
+    );
+    await expect(
+      repository.deleteCandidate(
+        accountA.id,
+        canonical.id,
+        primary!.saveAttempt.id,
+        replacement.saveAttempt.id,
+        getCharacterRecoveryCandidateRevision(replacement),
+      ),
+    ).resolves.toBe(true);
+    await expect(repository.get(accountA.id, canonical.id)).resolves.toMatchObject({
+      competingCandidates: undefined,
+      saveAttempt: { id: primary!.saveAttempt.id },
+    });
   });
 
   it("clears only a candidate that matches canonical state while retaining the unresolved primary", async () => {
@@ -741,5 +809,70 @@ describe("CharacterRecoveryRepository", () => {
       repository.listLegacyQuarantineForAccount(accountA.id, canonical.id),
     ).resolves.toEqual([expect.objectContaining({ id: "legacy-account-a" })]);
     await expect(localDb.legacyCharacterRecoveries.count()).resolves.toBe(2);
+  });
+
+  it("quarantines only a malformed nested candidate and continues reconciling valid recovery", async () => {
+    const repository = new CharacterRecoveryRepository();
+    const canonical = createBuild();
+    const primary = await repository.createAttempt({
+      account: accountA,
+      attemptedBuild: { ...canonical, inventoryNotes: "Primary notes" },
+      baseBuild: canonical,
+      baseRevision: "revision-1",
+      characterId: canonical.id,
+      sourceAction: "Save notes",
+      sourceSurface: "Character Sheet",
+    });
+    await expect(
+      repository.createAttempt({
+        account: accountA,
+        attemptedBuild: { ...canonical, name: "Valid rejected name" },
+        baseBuild: canonical,
+        baseRevision: "revision-1",
+        characterId: canonical.id,
+        sourceAction: "Save identity",
+        sourceSurface: "Character Sheet",
+      }),
+    ).rejects.toBeDefined();
+    const retained = await repository.get(accountA.id, canonical.id);
+    const malformedEvidence = {
+      patch: null,
+      sourceAction: "Unreadable retained edit",
+      sourceSurface: "Character Sheet",
+    };
+    await localDb.characterRecoveries.put({
+      ...retained!,
+      competingCandidates: [
+        ...retained!.competingCandidates!,
+        malformedEvidence,
+      ] as unknown as NonNullable<typeof retained>["competingCandidates"],
+    });
+
+    const state = await repository.reconcile(
+      accountA.id,
+      canonical.id,
+      canonical,
+      "revision-2",
+      primary!.saveAttempt.id,
+    );
+
+    expect(state?.envelope).toMatchObject({
+      baseRevision: "revision-2",
+      competingCandidates: [
+        expect.objectContaining({
+          patch: [expect.objectContaining({ attemptedValue: "Valid rejected name" })],
+        }),
+      ],
+      patch: [expect.objectContaining({ attemptedValue: "Primary notes" })],
+    });
+    await expect(
+      repository.listMalformedCandidateQuarantineForAccount(accountA.id, canonical.id),
+    ).resolves.toEqual([expect.objectContaining({ record: malformedEvidence })]);
+    await expect(
+      repository.listMalformedCandidateQuarantineForAccount(accountB.id, canonical.id),
+    ).resolves.toEqual([]);
+    await expect(
+      repository.listLegacyQuarantineForAccount(accountA.id, canonical.id),
+    ).resolves.toEqual([]);
   });
 });
