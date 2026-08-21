@@ -10,12 +10,18 @@ export default defineConfig({
   globalSetup: "./e2e/global-setup",
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
+    ignoreHTTPSErrors: process.env.PLAYWRIGHT_IGNORE_HTTPS_ERRORS === "1",
     trace: "retain-on-failure",
   },
   projects: [
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "webkit-session",
+      testMatch: "same-origin-session.spec.ts",
+      use: { ...devices["Desktop Safari"] },
     },
   ],
 });

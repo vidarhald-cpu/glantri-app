@@ -30,9 +30,8 @@ function stubFetch(payload: unknown, status = 200): FetchMock {
   return fetchMock;
 }
 
-async function loadClient(baseUrl = "https://api.example.test"): Promise<LocalServiceClientModule> {
+async function loadClient(): Promise<LocalServiceClientModule> {
   vi.resetModules();
-  vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", baseUrl);
   return import("./localServiceClient");
 }
 
@@ -93,7 +92,7 @@ describe("localServiceClient wire contract", () => {
     await expect(client.loadCombatHistory("encounter-1")).resolves.toEqual(history);
     expectFetchCall(fetchMock, {
       method: "GET",
-      url: "https://api.example.test/encounters/encounter-1/combat-history",
+      url: "/api/encounters/encounter-1/combat-history",
     });
   });
 
@@ -114,11 +113,11 @@ describe("localServiceClient wire contract", () => {
 
     expectFetchCall(fetchMock, {
       method: "GET",
-      url: "https://api.example.test/encounters/encounter-1/combat-history?perspectiveParticipantId=participant%2Fone",
+      url: "/api/encounters/encounter-1/combat-history?perspectiveParticipantId=participant%2Fone",
     });
   });
 
-  it("uses the configured API base URL for auth session lookup", async () => {
+  it("uses the same-origin API proxy for auth session lookup", async () => {
     const fetchMock = stubFetch({
       user: {
         email: "player@example.test",
@@ -126,14 +125,14 @@ describe("localServiceClient wire contract", () => {
         roles: ["player"],
       },
     });
-    const client = await loadClient("https://api.example.test");
+    const client = await loadClient();
 
     await expect(client.getCurrentSessionUser()).resolves.toMatchObject({
       id: "user-1",
     });
 
     expectFetchCall(fetchMock, {
-      url: "https://api.example.test/auth/me",
+      url: "/api/auth/me",
     });
   });
 
@@ -162,13 +161,12 @@ describe("localServiceClient wire contract", () => {
         password: "secret",
       },
       method: "POST",
-      url: "https://api.example.test/auth/login",
+      url: "/api/auth/login",
     });
   });
 
   it("preserves caller-provided headers while posting JSON bodies", async () => {
     const fetchMock = stubFetch({ ok: true });
-    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
     const { sendJson } = await import("./apiClient");
 
     await expect(
@@ -187,7 +185,7 @@ describe("localServiceClient wire contract", () => {
         "x-request-id": "request-1",
       },
       method: "POST",
-      url: "https://api.example.test/custom",
+      url: "/api/custom",
     });
   });
 
@@ -215,7 +213,7 @@ describe("localServiceClient wire contract", () => {
         build,
       },
       method: "POST",
-      url: "https://api.example.test/characters",
+      url: "/api/characters",
     });
   });
 
@@ -245,7 +243,7 @@ describe("localServiceClient wire contract", () => {
     expectFetchCall(updateFetch, {
       body: { build, expectedUpdatedAt },
       method: "PUT",
-      url: "https://api.example.test/characters/character-1",
+      url: "/api/characters/character-1",
     });
 
     const deleteFetch = stubFetch(undefined, 204);
@@ -258,7 +256,7 @@ describe("localServiceClient wire contract", () => {
     expectFetchCall(deleteFetch, {
       body: { expectedUpdatedAt: character.updatedAt },
       method: "DELETE",
-      url: "https://api.example.test/characters/character-1",
+      url: "/api/characters/character-1",
     });
   });
 
@@ -286,7 +284,7 @@ describe("localServiceClient wire contract", () => {
         name: "Border Trouble",
       },
       method: "POST",
-      url: "https://api.example.test/campaigns",
+      url: "/api/campaigns",
     });
   });
 
@@ -304,7 +302,7 @@ describe("localServiceClient wire contract", () => {
 
     expectFetchCall(fetchMock, {
       method: "DELETE",
-      url: "https://api.example.test/campaigns/campaign-1/roster-membership/character/character-1",
+      url: "/api/campaigns/campaign-1/roster-membership/character/character-1",
     });
     expect(fetchMock.mock.calls[0][1]?.headers).toBeInstanceOf(Headers);
     expect((fetchMock.mock.calls[0][1]?.headers as Headers).has("content-type")).toBe(false);
@@ -324,7 +322,7 @@ describe("localServiceClient wire contract", () => {
 
     expectFetchCall(fetchMock, {
       method: "DELETE",
-      url: "https://api.example.test/campaigns/campaign-1/roster-membership/template/template-1",
+      url: "/api/campaigns/campaign-1/roster-membership/template/template-1",
     });
   });
 
@@ -358,7 +356,7 @@ describe("localServiceClient wire contract", () => {
         status: "live",
       },
       method: "PUT",
-      url: "https://api.example.test/scenarios/scenario-1",
+      url: "/api/scenarios/scenario-1",
     });
   });
 
@@ -375,7 +373,7 @@ describe("localServiceClient wire contract", () => {
 
     expectFetchCall(fetchMock, {
       method: "GET",
-      url: "https://api.example.test/encounters/encounter-1",
+      url: "/api/encounters/encounter-1",
     });
     expect(fetchMock.mock.calls[0]?.[1]?.cache).toBe("no-store");
   });
@@ -417,12 +415,10 @@ describe("localServiceClient wire contract", () => {
     await expect(client.loadEncounterRevision("encounter-1")).resolves.toEqual(revision);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      "https://api.example.test/scenarios/scenario-1/encounter-summaries",
+      "/api/scenarios/scenario-1/encounter-summaries",
     );
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("GET");
-    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
-      "https://api.example.test/encounters/encounter-1/revision",
-    );
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe("/api/encounters/encounter-1/revision");
     expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("GET");
     expect(fetchMock.mock.calls[1]?.[1]?.cache).toBe("no-store");
   });
@@ -448,7 +444,7 @@ describe("localServiceClient wire contract", () => {
         status: "paused",
       },
       method: "PATCH",
-      url: "https://api.example.test/encounters/encounter-1/status",
+      url: "/api/encounters/encounter-1/status",
     });
   });
 
@@ -494,7 +490,7 @@ describe("localServiceClient wire contract", () => {
         participants,
       },
       method: "PATCH",
-      url: "https://api.example.test/encounters/encounter-1/participants",
+      url: "/api/encounters/encounter-1/participants",
     });
   });
 
@@ -647,7 +643,7 @@ describe("localServiceClient wire contract", () => {
         taskId: "task-declaration",
       },
       method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-declaration",
+      url: "/api/encounters/encounter-1/combat-declaration",
     });
   });
 
@@ -703,7 +699,7 @@ describe("localServiceClient wire contract", () => {
         taskId: "task-declaration",
       },
       method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-declaration",
+      url: "/api/encounters/encounter-1/combat-declaration",
     });
   });
 
@@ -735,7 +731,7 @@ describe("localServiceClient wire contract", () => {
         taskId: "task-initiative",
       },
       method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-initiative",
+      url: "/api/encounters/encounter-1/combat-initiative",
     });
   });
 
@@ -799,7 +795,7 @@ describe("localServiceClient wire contract", () => {
       },
       headers: { "x-glantri-combat-response": "active-v1" },
       method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-initiative",
+      url: "/api/encounters/encounter-1/combat-initiative",
     });
   });
 
@@ -868,7 +864,7 @@ describe("localServiceClient wire contract", () => {
       },
       headers: { "x-glantri-combat-response": "active-v1" },
       method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-round/complete-remaining-step",
+      url: "/api/encounters/encounter-1/combat-round/complete-remaining-step",
     });
   });
 
@@ -923,7 +919,7 @@ describe("localServiceClient wire contract", () => {
       },
       headers: { "x-glantri-combat-response": "active-v1" },
       method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-round/combat-experience-difficulty",
+      url: "/api/encounters/encounter-1/combat-round/combat-experience-difficulty",
     });
     expect(fetchMock.mock.calls[0]?.[1]?.signal).toBeUndefined();
   });
@@ -973,7 +969,7 @@ describe("localServiceClient wire contract", () => {
       },
       headers: { "x-glantri-combat-response": "active-v1" },
       method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-round/respond-adjust-distance",
+      url: "/api/encounters/encounter-1/combat-round/respond-adjust-distance",
     });
   });
 
@@ -1033,7 +1029,7 @@ describe("localServiceClient wire contract", () => {
         usedOffHand: true,
       },
       method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-round/roll-parry",
+      url: "/api/encounters/encounter-1/combat-round/roll-parry",
     });
   });
 
@@ -1098,7 +1094,7 @@ describe("localServiceClient wire contract", () => {
         usedOffHand: undefined,
       },
       method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-round/roll-parry",
+      url: "/api/encounters/encounter-1/combat-round/roll-parry",
     });
   });
 
@@ -1142,7 +1138,7 @@ describe("localServiceClient wire contract", () => {
         taskId: "defense-review-task-1",
       },
       method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-round/commit-defense-review",
+      url: "/api/encounters/encounter-1/combat-round/commit-defense-review",
     });
   });
 
@@ -1182,9 +1178,7 @@ describe("localServiceClient wire contract", () => {
         taskId: "maintenance-task-1",
       },
       method: "POST",
-      url:
-        "https://api.example.test/encounters/encounter-1/combat-round/" +
-        "roll-continued-contact-maintenance",
+      url: "/api/encounters/encounter-1/combat-round/" + "roll-continued-contact-maintenance",
     });
   });
 
@@ -1205,7 +1199,7 @@ describe("localServiceClient wire contract", () => {
 
     expectFetchCall(fetchMock, {
       method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-round/clear-current-step",
+      url: "/api/encounters/encounter-1/combat-round/clear-current-step",
     });
   });
 
@@ -1255,7 +1249,7 @@ describe("localServiceClient wire contract", () => {
         targetBoundary: "phase1_modifier_review",
       },
       method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-round/advance-current-step",
+      url: "/api/encounters/encounter-1/combat-round/advance-current-step",
     });
   });
 
@@ -1280,7 +1274,7 @@ describe("localServiceClient wire contract", () => {
         taskId: "task-round-end",
       },
       method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-round/prepare-round-end-review",
+      url: "/api/encounters/encounter-1/combat-round/prepare-round-end-review",
     });
   });
 
@@ -1328,7 +1322,7 @@ describe("localServiceClient wire contract", () => {
         taskId: "task-ce",
       },
       method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-round/roll-combat-experience",
+      url: "/api/encounters/encounter-1/combat-round/roll-combat-experience",
     });
   });
 
@@ -1363,7 +1357,7 @@ describe("localServiceClient wire contract", () => {
         taskId: "task-choice",
       },
       method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-round/back-out-phase-attack",
+      url: "/api/encounters/encounter-1/combat-round/back-out-phase-attack",
     });
   });
 
@@ -1390,7 +1384,7 @@ describe("localServiceClient wire contract", () => {
         step: "phase_1_actions",
       },
       method: "POST",
-      url: "https://api.example.test/encounters/encounter-1/combat-round/clear-current-step",
+      url: "/api/encounters/encounter-1/combat-round/clear-current-step",
     });
   });
 
@@ -1417,7 +1411,7 @@ describe("localServiceClient wire contract", () => {
         locationId: "location-1",
       },
       method: "POST",
-      url: "https://api.example.test/characters/character-1/equipment/move",
+      url: "/api/characters/character-1/equipment/move",
     });
   });
 
@@ -1442,7 +1436,7 @@ describe("localServiceClient wire contract", () => {
     expectFetchCall(fetchMock, {
       body: input,
       method: "PUT",
-      url: "https://api.example.test/api/admin/content",
+      url: "/api/api/admin/content",
     });
   });
 
@@ -1467,7 +1461,7 @@ describe("localServiceClient wire contract", () => {
 
     expectFetchCall(fetchMock, {
       method: "GET",
-      url: "https://api.example.test/campaigns/missing",
+      url: "/api/campaigns/missing",
     });
   });
 });

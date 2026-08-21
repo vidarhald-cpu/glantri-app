@@ -30,43 +30,43 @@ Pakkebehandling: **pnpm workspaces**. Turbo brukes for parallell kjøring av bui
 
 ## Tech stack
 
-| Lag | Teknologi |
-|-----|-----------|
-| Frontend | Next.js 15 (App Router), React 19 |
-| Backend | Fastify 5, Node.js 22 |
-| Database | PostgreSQL via Prisma 6 |
-| Auth | Iron Session (kryptert cookie) |
-| Validering | Zod (domene- og API-grenser) |
-| Testing | Vitest, Playwright, @testing-library/react |
-| Infra | Azure App Service (B1), Azure PostgreSQL Flexible Server, Azure Key Vault |
-| CI/CD | GitHub Actions |
-| Monorepo | pnpm workspaces + Turborepo |
+| Lag        | Teknologi                                                                 |
+| ---------- | ------------------------------------------------------------------------- |
+| Frontend   | Next.js 15 (App Router), React 19                                         |
+| Backend    | Fastify 5, Node.js 22                                                     |
+| Database   | PostgreSQL via Prisma 6                                                   |
+| Auth       | Iron Session (kryptert cookie)                                            |
+| Validering | Zod (domene- og API-grenser)                                              |
+| Testing    | Vitest, Playwright, @testing-library/react                                |
+| Infra      | Azure App Service (B1), Azure PostgreSQL Flexible Server, Azure Key Vault |
+| CI/CD      | GitHub Actions                                                            |
+| Monorepo   | pnpm workspaces + Turborepo                                               |
 
 ## API-struktur (`apps/api`)
 
 Fastify-serveren eksponerer følgende rute-grupper:
 
-| Prefix | Fil | Ansvar |
-|--------|-----|--------|
-| `/health` | `app.ts` | Liveness-sjekk (Fastify er oppe) |
-| `/ready` | `app.ts` + `lib/readiness.ts` | Readiness-sjekk (DB + migrasjoner OK) |
-| `/auth` | `routes/auth.ts` | Login, logout, session |
-| `/api/admin` | `routes/adminContent.ts` | Admin-innhold (GM-only) |
-| `/content` | `routes/content.ts` | Spillinnhold (regler, utstyr) |
-| `/chargen` | `routes/chargen.ts` | Karaktergenererings-API |
-| `/characters` | `routes/characters.ts` + `characterEquipment.ts` | Karakterer og utstyr |
-| `/sync` | `routes/sync.ts` | Synkronisering |
-| (ingen prefix) | `routes/scenarios.ts` | Orchestrator for scenario-domener |
+| Prefix         | Fil                                              | Ansvar                                |
+| -------------- | ------------------------------------------------ | ------------------------------------- |
+| `/health`      | `app.ts`                                         | Liveness-sjekk (Fastify er oppe)      |
+| `/ready`       | `app.ts` + `lib/readiness.ts`                    | Readiness-sjekk (DB + migrasjoner OK) |
+| `/auth`        | `routes/auth.ts`                                 | Login, logout, session                |
+| `/api/admin`   | `routes/adminContent.ts`                         | Admin-innhold (GM-only)               |
+| `/content`     | `routes/content.ts`                              | Spillinnhold (regler, utstyr)         |
+| `/chargen`     | `routes/chargen.ts`                              | Karaktergenererings-API               |
+| `/characters`  | `routes/characters.ts` + `characterEquipment.ts` | Karakterer og utstyr                  |
+| `/sync`        | `routes/sync.ts`                                 | Synkronisering                        |
+| (ingen prefix) | `routes/scenarios.ts`                            | Orchestrator for scenario-domener     |
 
 `routes/scenarios.ts` er en tynn orchestrator som registrerer fem domenefiler:
 
-| Domenefil | Ruter |
-|-----------|-------|
-| `scenarios/templateRoutes.ts` | `/templates/*`, `/entities/*` |
-| `scenarios/campaignRoutes.ts` | `/campaigns/*`, `/campaign-assets/*` |
-| `scenarios/scenarioRoutes.ts` | `/scenarios/joinable`, `/scenarios/:id` (CRUD, live-state, events) |
-| `scenarios/encounterRoutes.ts` | `/scenarios/:id/encounters`, `/encounters/:id` |
-| `scenarios/participantRoutes.ts` | `/scenarios/:id/participants/*` |
+| Domenefil                        | Ruter                                                              |
+| -------------------------------- | ------------------------------------------------------------------ |
+| `scenarios/templateRoutes.ts`    | `/templates/*`, `/entities/*`                                      |
+| `scenarios/campaignRoutes.ts`    | `/campaigns/*`, `/campaign-assets/*`                               |
+| `scenarios/scenarioRoutes.ts`    | `/scenarios/joinable`, `/scenarios/:id` (CRUD, live-state, events) |
+| `scenarios/encounterRoutes.ts`   | `/scenarios/:id/encounters`, `/encounters/:id`                     |
+| `scenarios/participantRoutes.ts` | `/scenarios/:id/participants/*`                                    |
 
 Delt parsing-logikk: `scenarios/parsing.ts`. Tilgangskontroll: `scenarios/access.ts`.
 
@@ -88,6 +88,7 @@ apps/api  ───────────────────────�
 ```
 
 Regler:
+
 - `apps/*` kan importere fra `packages/*` — aldri omvendt
 - `packages/rules-engine` importerer fra `packages/domain`, **ikke** fra `apps/*` eller `packages/database`
 - `packages/domain` er bunn: ingen imports fra andre pakker i dette repoet
@@ -96,18 +97,23 @@ Regler:
 ## Pakkeansvar
 
 ### `packages/domain`
+
 Kilden til sannhet for alle TypeScript-typer og Zod-skjemaer som brukes på tvers av pakker. Ingen forretningslogikk. Importeres av alle andre pakker.
 
 ### `packages/database`
+
 Prisma-klient og all databasetilgang. Eksponerer services (ikke repositories direkte) til API-laget. Repositories er interne. Services: `AuthService`, `CharacterService`, `CharacterEquipmentWriteService`, `ChargenRuleSetService`, `EncounterService`, `ScenarioService`.
 
 ### `packages/rules-engine`
+
 Ren beregningslogikk uten I/O. Implementerer Rolemaster-reglene: stats, ferdigheter, kamp, utvikling. Alle beregninger er deterministiske funksjoner — testes med golden tests mot kildearbeidsbok. All combat- og utstyrsderivasjon hører her, ikke i web-features.
 
 ### `packages/content`
+
 Statisk spillinnhold kompilert inn i applikasjonen: våpen-templates, rustning, skjold, ferdighetsrelasjoner. Importert fra Themistogenes-arbeidsboken via `packages/importers`.
 
 ### `packages/auth`
+
 Typer og hjelpefunksjoner for Iron Session-basert autentisering. Ingen egne ruter — brukes av `apps/api/src/lib/sessionAuth.ts`.
 
 ## Frontend-struktur (`apps/web`)
@@ -126,7 +132,7 @@ app/
     └── templates/     # GM-templates for NPC-er
 ```
 
-API-klient: `apps/web/src/lib/api/` med domenespesifikke klienter (`authClient.ts`, `campaignClient.ts`, `characterClient.ts`, `chargenClient.ts`, `encounterClient.ts`, `equipmentClient.ts`, `scenarioClient.ts`). `localServiceClient.ts` er en bakoverkompatibel barrel-eksport. `apiConfig.ts` er eneste sted `NEXT_PUBLIC_API_BASE_URL` refereres.
+API-klient: `apps/web/src/lib/api/` med domenespesifikke klienter (`authClient.ts`, `campaignClient.ts`, `characterClient.ts`, `chargenClient.ts`, `encounterClient.ts`, `equipmentClient.ts`, `scenarioClient.ts`). `localServiceClient.ts` er en bakoverkompatibel barrel-eksport. Nettleseren bruker relative `/api/*`-stier på web-origin; Next-ruten i `apps/web/app/api/[...path]/route.ts` videresender til Fastify-origin fra den server-side `API_UPSTREAM_URL`-innstillingen. Se `docs/architecture/same-origin-api-proxy.md`.
 
 Chargen-ruten under `apps/web/app/(app)/chargen` er en tynn wrapper. Wizard-komponenter og steg lever i `apps/web/src/features/chargen/`.
 
@@ -164,10 +170,12 @@ Azure-ressurser provisjonert via Bicep i `infra/`:
 ## CI/CD-pipeline
 
 `.github/workflows/ci.yml`:
+
 1. `ci` — typecheck, lint, test, build (alle pakker)
 2. `docker-test` — bygger Docker-images, starter Postgres, kjører DB-integrasjonstester og Playwright smoke suite
 
 `.github/workflows/deploy.yml`:
+
 - Trigger: push til `main`
 - Bygger Docker-images, pusher til Azure Container Registry, deployer til App Service
 - Post-deploy smoke: sjekker `/ready` på API
