@@ -4874,6 +4874,49 @@ describe("scenarios route contract", () => {
     expect(JSON.stringify(response.json())).not.toContain("local-draft-or-forged");
   });
 
+  it("does not expose database diagnostics when adding a Campaign roster entry fails", async () => {
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.campaignService.addCampaignRosterEntry.mockRejectedValue(
+      new Error(
+        "Invalid `prisma.campaignRosterEntry.create()` invocation in /srv/glantri/packages/database/src/repositories/scenarioRepository.ts: Unique constraint failed on the fields: (`campaignId`,`sourceType`,`sourceId`)",
+      ),
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        category: "pc",
+        sourceId: "character-1",
+        sourceType: "character",
+      },
+      url: "/campaigns/campaign-1/roster",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: "Unable to add campaign roster entry." });
+    const clientPayload = JSON.stringify(response.json());
+    for (const internalDiagnostic of [
+      "prisma",
+      "/srv/",
+      "CampaignRosterEntry",
+      "campaignId",
+      "sourceType",
+      "sourceId",
+      "Unique constraint",
+      "scenarioRepository",
+    ]) {
+      expect(clientPayload.toLowerCase()).not.toContain(internalDiagnostic.toLowerCase());
+    }
+  });
+
   it("preserves admin authority for a campaign-valid reusable NPC roster link", async () => {
     const adminUser = {
       email: "admin@example.test",

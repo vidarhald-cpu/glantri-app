@@ -176,6 +176,43 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(result.rosterEntry.sourceId).toBe(result.entity.id);
     });
 
+    it("returns one canonical roster entry for simultaneous equivalent Character adds", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const player = await createTestUser(prisma!, { displayName: "Player One" });
+      const character = await createTestCharacter(prisma!, player.id, { name: "Concurrent Hero" });
+      const repository = createPrismaScenarioRepository(prisma!);
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const service = new CampaignService(repository, characterService);
+      const campaign = await service.createCampaign({
+        gmUserId: gm.id,
+        name: "Concurrent Roster",
+      });
+      const request = {
+        actorUserId: gm.id,
+        campaignId: campaign.id,
+        category: "pc" as const,
+        createdByUserId: gm.id,
+        sourceId: character.id,
+        sourceType: "character" as const,
+      };
+
+      const [first, second] = await Promise.all([
+        service.addCampaignRosterEntry(request),
+        service.addCampaignRosterEntry(request),
+      ]);
+
+      expect(second).toEqual(first);
+      await expect(
+        prisma!.campaignRosterEntry.findMany({
+          where: {
+            campaignId: campaign.id,
+            sourceId: character.id,
+            sourceType: "character",
+          },
+        }),
+      ).resolves.toHaveLength(1);
+    });
+
     it("enforces concrete NPC roster ownership and campaign binding before writing or labeling", async () => {
       const owner = await createTestUser(prisma!, { roles: ["game_master"] });
       const foreignGm = await createTestUser(prisma!, { roles: ["game_master"] });
