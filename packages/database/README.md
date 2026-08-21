@@ -29,7 +29,8 @@ Integrasjonstester tilbakestiller egne tabeller mellom suites via `beforeEach`.
 Fra en linked Builder/QA-worktree brukes `pnpm db:task:setup -- --task <issue>` og
 `pnpm db:task:test`; se `docs/dev-database.md`. Test-targeten avvises hvis den er
 den beskyttede normale databasen, deler database med `DATABASE_URL`, ikke er lokal,
-eller ikke slutter med `_test`.
+ikke slutter med `_test`, eller ikke tilhører den faktiske nåværende worktree-en
+og dens verifiserte containeretiketter.
 
 ## Importregel
 

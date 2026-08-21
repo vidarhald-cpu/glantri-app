@@ -18,6 +18,15 @@ export interface TaskDatabaseEnvironment {
   GLANTRI_DB_CONTAINER?: string;
   GLANTRI_DB_MODE?: string;
   GLANTRI_DB_OWNER?: string;
+  GLANTRI_DB_TASK?: string;
+}
+
+export interface ValidatedTaskDatabaseEnvironment {
+  application: DatabaseTarget;
+  container: string;
+  owner: string;
+  task: string;
+  test: DatabaseTarget;
 }
 
 function decodeDatabaseName(url: URL): string {
@@ -112,18 +121,22 @@ export function validateTestDatabaseTarget(
   return testTarget;
 }
 
-export function validateTaskDatabaseEnvironment(environment: TaskDatabaseEnvironment): {
-  application: DatabaseTarget;
-  container: string;
-  owner: string;
-  test: DatabaseTarget;
-} {
+export function validateTaskDatabaseEnvironment(
+  environment: TaskDatabaseEnvironment,
+): ValidatedTaskDatabaseEnvironment {
   if (environment.GLANTRI_DB_MODE !== "task") {
     throw new Error('GLANTRI_DB_MODE must be exactly "task" in an isolated worktree.');
   }
 
   const owner = environment.GLANTRI_DB_OWNER?.trim();
   const container = environment.GLANTRI_DB_CONTAINER?.trim();
+  const task = environment.GLANTRI_DB_TASK?.trim();
+
+  if (!task || !/^[a-zA-Z0-9-]+$/.test(task)) {
+    throw new Error(
+      "GLANTRI_DB_TASK is required and may contain only letters, numbers, and hyphens.",
+    );
+  }
 
   if (!owner) {
     throw new Error("GLANTRI_DB_OWNER is required in an isolated worktree.");
@@ -131,6 +144,10 @@ export function validateTaskDatabaseEnvironment(environment: TaskDatabaseEnviron
 
   if (!container) {
     throw new Error("GLANTRI_DB_CONTAINER is required in an isolated worktree.");
+  }
+
+  if (!owner.startsWith(`issue-${task}-`)) {
+    throw new Error(`GLANTRI_DB_OWNER does not match GLANTRI_DB_TASK=${task}.`);
   }
 
   const application = parseDatabaseTarget("DATABASE_URL", environment.DATABASE_URL);
@@ -163,6 +180,7 @@ export function validateTaskDatabaseEnvironment(environment: TaskDatabaseEnviron
     application,
     container,
     owner,
+    task,
     test,
   };
 }

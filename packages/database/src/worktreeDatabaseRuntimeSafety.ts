@@ -1,9 +1,17 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-import { validateTaskDatabaseEnvironment } from "./databaseTargetSafety";
+import type { TaskDatabaseEnvironment } from "./databaseTargetSafety";
+import {
+  assertCurrentWorktreeTaskContainer,
+  readTaskDatabaseEnvironmentFile,
+  validateCurrentWorktreeTaskDatabaseEnvironment,
+  type TaskContainerInspection,
+  type ValidatedCurrentWorktreeTaskDatabaseEnvironment,
+} from "./worktreeDatabaseOwnership";
 
-function findRepositoryRoot(start: string): { linked: boolean; root: string } | null {
+export function findRepositoryRoot(start: string): { linked: boolean; root: string } | null {
   let directory = resolve(start);
 
   while (true) {
@@ -23,13 +31,103 @@ function findRepositoryRoot(start: string): { linked: boolean; root: string } | 
   }
 }
 
-export function assertWorktreeDatabaseRuntimeSafety(): void {
+function inspectContainer(container: string): TaskContainerInspection {
+  const result = spawnSync("docker", ["container", "inspect", container], {
+    encoding: "utf8",
+    stdio: "pipe",
+  });
+
+  if (result.error) {
+    throw new Error(`Unable to inspect owned task container ${container}: ${result.error.message}`);
+  }
+
+  if (result.status !== 0) {
+    throw new Error(
+      `Owned task container ${container} is missing or cannot be inspected. Run pnpm db:task:verify.`,
+    );
+  }
+
+  const inspections = JSON.parse(result.stdout) as TaskContainerInspection[];
+  const inspection = inspections[0];
+
+  if (!inspection) {
+    throw new Error(`Owned task container ${container} returned no inspection metadata.`);
+  }
+
+  return inspection;
+}
+
+function hasDatabaseEnvironment(environment: NodeJS.ProcessEnv): boolean {
+  return [
+    "DATABASE_URL",
+    "DATABASE_URL_TEST",
+    "GLANTRI_DB_APPLICATION_URL",
+    "GLANTRI_DB_CONTAINER",
+    "GLANTRI_DB_MODE",
+    "GLANTRI_DB_OWNER",
+    "GLANTRI_DB_TASK",
+  ].some((name) => Boolean(environment[name]));
+}
+
+function assertActiveEnvironmentMatchesFile(
+  configured: TaskDatabaseEnvironment,
+  active: NodeJS.ProcessEnv,
+): void {
+  const activeApplicationUrl = active.GLANTRI_DB_APPLICATION_URL ?? active.DATABASE_URL;
+
+  for (const name of [
+    "DATABASE_URL_TEST",
+    "GLANTRI_DB_CONTAINER",
+    "GLANTRI_DB_MODE",
+    "GLANTRI_DB_OWNER",
+    "GLANTRI_DB_TASK",
+  ] as const) {
+    if (active[name] !== configured[name]) {
+      throw new Error(
+        `${name} does not match the current worktree .env.task. Clear inherited values and use pnpm db:task:exec.`,
+      );
+    }
+  }
+
+  if (activeApplicationUrl !== configured.DATABASE_URL) {
+    throw new Error(
+      "DATABASE_URL does not match the current worktree application target. Clear inherited values and use pnpm db:task:exec.",
+    );
+  }
+}
+
+export function validateWorktreeDatabaseRuntimeEnvironment(
+  repositoryRoot: string,
+  configured: TaskDatabaseEnvironment,
+  active: NodeJS.ProcessEnv,
+): ValidatedCurrentWorktreeTaskDatabaseEnvironment {
+  validateCurrentWorktreeTaskDatabaseEnvironment(repositoryRoot, configured);
+  assertActiveEnvironmentMatchesFile(configured, active);
+
+  const applicationUrl = active.GLANTRI_DB_APPLICATION_URL ?? active.DATABASE_URL;
+  const activeValidated = validateCurrentWorktreeTaskDatabaseEnvironment(repositoryRoot, {
+    ...active,
+    DATABASE_URL: applicationUrl,
+  });
+
+  if (active.DATABASE_URL !== applicationUrl && active.DATABASE_URL !== active.DATABASE_URL_TEST) {
+    throw new Error(
+      "Database command target must be the explicitly owned application or test database.",
+    );
+  }
+
+  return activeValidated;
+}
+
+export function assertWorktreeDatabaseRuntimeSafety():
+  | ValidatedCurrentWorktreeTaskDatabaseEnvironment
+  | undefined {
   const repository =
     findRepositoryRoot(process.cwd()) ??
     (typeof __dirname === "string" ? findRepositoryRoot(__dirname) : null);
 
   if (!repository?.linked) {
-    return;
+    return undefined;
   }
 
   for (const path of [
@@ -43,25 +141,19 @@ export function assertWorktreeDatabaseRuntimeSafety(): void {
     }
   }
 
-  if (process.env.DATABASE_URL) {
-    const applicationUrl = process.env.GLANTRI_DB_APPLICATION_URL ?? process.env.DATABASE_URL;
-    const validated = validateTaskDatabaseEnvironment({
-      ...process.env,
-      DATABASE_URL: applicationUrl,
-    });
-
-    if (
-      process.env.GLANTRI_DB_APPLICATION_URL &&
-      process.env.DATABASE_URL !== applicationUrl &&
-      process.env.DATABASE_URL !== process.env.DATABASE_URL_TEST
-    ) {
-      throw new Error(
-        "Database command target must be the explicitly owned application or test database.",
-      );
-    }
-
-    if (validated.application.database === validated.test.database) {
-      throw new Error("Owned application and test databases must remain distinct.");
-    }
+  if (!hasDatabaseEnvironment(process.env)) {
+    return undefined;
   }
+
+  const environmentPath = resolve(repository.root, ".env.task");
+  const configured = readTaskDatabaseEnvironmentFile(environmentPath);
+  const activeValidated = validateWorktreeDatabaseRuntimeEnvironment(
+    repository.root,
+    configured,
+    process.env,
+  );
+
+  assertCurrentWorktreeTaskContainer(inspectContainer(activeValidated.container), activeValidated);
+
+  return activeValidated;
 }

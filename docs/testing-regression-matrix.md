@@ -46,6 +46,13 @@ host, or a database name without the `_test` suffix. The test setup resets
 service-owned tables between suites, so never bypass the guard or reuse local dev,
 production, or another worktree's target.
 
+The database safety regression suite also inventories every repository-owned
+direct `PrismaClient` construction and covers copied `.env.task` files, foreign
+full environments, missing ownership with a foreign test URL, container-label
+and cleanup mismatches, and unsafe task-environment permissions. These checks
+must remain green alongside a positive isolated target and two-worktree
+concurrency proof.
+
 ## Playwright Smoke Tests
 
 The browser smoke suite lives in `apps/web/e2e` and is wired into the CI

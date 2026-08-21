@@ -1,9 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 
-import {
-  validateTaskDatabaseEnvironment,
-  validateTestDatabaseTarget,
-} from "../databaseTargetSafety";
+import { validateTestDatabaseTarget } from "../databaseTargetSafety";
+import { assertWorktreeDatabaseRuntimeSafety } from "../worktreeDatabaseRuntimeSafety";
 
 let testClient: PrismaClient | undefined;
 
@@ -12,9 +10,9 @@ export function getTestPrismaClient(): PrismaClient | null {
     return null;
   }
 
-  if (process.env.GLANTRI_DB_MODE === "task") {
-    validateTaskDatabaseEnvironment(process.env);
-  } else {
+  const worktreeEnvironment = assertWorktreeDatabaseRuntimeSafety();
+
+  if (!worktreeEnvironment) {
     validateTestDatabaseTarget(process.env.DATABASE_URL_TEST, process.env.DATABASE_URL);
   }
 

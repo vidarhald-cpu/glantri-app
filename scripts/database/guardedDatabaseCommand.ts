@@ -7,9 +7,12 @@ import {
   formatDatabaseTarget,
   isProtectedSharedDatabase,
   parseDatabaseTarget,
-  validateTaskDatabaseEnvironment,
-  type TaskDatabaseEnvironment,
 } from "../../packages/database/src/databaseTargetSafety";
+import {
+  readTaskDatabaseEnvironmentFile,
+  validateCurrentWorktreeTaskDatabaseEnvironment,
+  type ValidatedCurrentWorktreeTaskDatabaseEnvironment,
+} from "../../packages/database/src/worktreeDatabaseOwnership";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..", "..");
@@ -93,22 +96,16 @@ function loadPrimaryEnvironment(): NodeJS.ProcessEnv {
 
 function loadWorktreeEnvironment(): {
   environment: NodeJS.ProcessEnv;
-  validated: ReturnType<typeof validateTaskDatabaseEnvironment>;
+  validated: ValidatedCurrentWorktreeTaskDatabaseEnvironment;
 } {
   const path = resolve(repoRoot, ".env.task");
-
-  if (!existsSync(path)) {
-    fail(
-      "Isolated worktree database ownership is missing. Run pnpm db:task:setup -- --task <issue>; never copy the normal checkout .env.",
-    );
-  }
-
-  const configured = parseEnvironmentFile(path) as TaskDatabaseEnvironment;
+  const configured = readTaskDatabaseEnvironmentFile(path);
 
   for (const name of [
     "DATABASE_URL",
     "DATABASE_URL_TEST",
     "GLANTRI_DB_MODE",
+    "GLANTRI_DB_TASK",
     "GLANTRI_DB_OWNER",
     "GLANTRI_DB_CONTAINER",
   ] as const) {
@@ -117,7 +114,7 @@ function loadWorktreeEnvironment(): {
     }
   }
 
-  const validated = validateTaskDatabaseEnvironment(configured);
+  const validated = validateCurrentWorktreeTaskDatabaseEnvironment(repoRoot, configured);
   return { environment: { ...process.env, ...configured }, validated };
 }
 
@@ -133,7 +130,7 @@ function printPrimaryPreflight(action: string, environment: NodeJS.ProcessEnv): 
 
 function printWorktreePreflight(
   action: string,
-  validated: ReturnType<typeof validateTaskDatabaseEnvironment>,
+  validated: ValidatedCurrentWorktreeTaskDatabaseEnvironment,
 ): void {
   console.log(
     `Database preflight: action=${action} owner=${validated.owner} ${formatDatabaseTarget(validated.application)}`,

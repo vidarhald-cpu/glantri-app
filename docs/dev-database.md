@@ -35,7 +35,7 @@ application database: glantri_task_issue_<task>_<worktree_key>
 test database: glantri_task_issue_<task>_<worktree_key>_test
 ```
 
-The worktree key comes from the parent directory assigned to the Git worktree. Docker chooses an unused loopback port. Names and ownership are deterministic; the port is recorded explicitly in the generated `.env.task`.
+The worktree key comes from the parent directory assigned to the Git worktree. Every operation derives that key again from the current linked worktree; values declared by `.env.task` are never accepted as proof on their own. Docker chooses an unused loopback port. Names and ownership are deterministic; the port is recorded explicitly in the generated `.env.task`.
 
 Set up and verify the target:
 
@@ -44,15 +44,16 @@ pnpm db:task:setup -- --task 312
 pnpm db:task:verify
 ```
 
-Setup creates an ignored, mode-`0600` `.env.task` with all five required values:
+Setup creates an ignored, mode-`0600` `.env.task` with all six required values:
 
 - `GLANTRI_DB_MODE=task`
+- `GLANTRI_DB_TASK=<issue>`
 - `GLANTRI_DB_OWNER`
 - `GLANTRI_DB_CONTAINER`
 - `DATABASE_URL`
 - `DATABASE_URL_TEST`
 
-Do not create this file by copying `.env`. The guard fails closed if it is missing, incomplete, points at the protected database, has database names that do not match its owner, aliases application and test databases, uses a non-local test host, or conflicts with inherited shell variables.
+Do not create this file by copying `.env` or another worktree's `.env.task`. The guard fails closed if it is missing, is not a regular mode-`0600` file, is incomplete, does not match the current worktree-derived task identity, points at the protected database, has database names that do not match its owner, aliases application and test databases, uses a non-local test host, or conflicts with inherited shell variables. Repeated setup refuses an existing file with unsafe permissions instead of silently retaining them.
 
 ## Task Database Commands
 
@@ -72,11 +73,11 @@ pnpm db:task:cleanup
 - `db:task:seed` seeds only the owned application database.
 - `db:task:test` migrates the owned test database, then runs the database integration suite with the explicit test URL.
 - `db:task:exec` supplies both owned URLs to application or other database-capable commands.
-- `db:task:cleanup` verifies the Docker ownership labels before removing the exact disposable container and `.env.task`.
+- `db:task:cleanup` re-derives current-worktree ownership and verifies the Docker task/worktree ownership labels before removing the exact disposable container and `.env.task`.
 
-Each migration, reset, seed, application, and integration-test path prints a preflight line containing only the ownership marker, host, port, and database name. Passwords are never printed. Direct Prisma commands are unsupported; Prisma's configuration applies the same worktree environment guard so they cannot use a copied `.env` or an inherited protected target.
+Each migration, reset, seed, application, client, and integration-test path validates the current `.env.task`, current-worktree identity, PostgreSQL 16 image, ownership labels, running state, and bound port before database access. It prints a preflight line containing only the ownership marker, host, port, and database name. Passwords are never printed. Direct Prisma commands are unsupported; Prisma's configuration and every repository-owned direct `PrismaClient` construction path apply the same worktree environment guard so they cannot use a copied environment or an inherited protected/foreign target.
 
-Two concurrent worktrees necessarily get different ownership markers, container names, ports, application databases, and test databases. A task must never reuse another worktree's `.env.task`, container, or database URL. Builder and independent QA each set up and clean up their own target.
+Two concurrent worktrees necessarily get different ownership markers, container names, ports, application databases, and test databases. A copied foreign `.env.task`, a foreign full shell environment, and a cleanup attempt through foreign ownership all fail before container or database access. Builder and independent QA each set up and clean up their own target.
 
 ## Protected Shared Database Backup Expectations
 

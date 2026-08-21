@@ -9,6 +9,7 @@ import {
 
 import { createPrismaCombatStatePersistenceRepository } from "../src/repositories/combatStatePersistenceRepository";
 import { createPrismaCombatStateReadRepository } from "../src/repositories/combatStateReadRepository";
+import { assertWorktreeDatabaseRuntimeSafety } from "../src/worktreeDatabaseRuntimeSafety";
 
 function median(values: number[]): number {
   const sorted = [...values].sort((left, right) => left - right);
@@ -128,6 +129,7 @@ function buildFixture(source: EncounterSession, archiveCount: number): Encounter
 }
 
 async function main(): Promise<void> {
+  assertWorktreeDatabaseRuntimeSafety();
   const sourceClient = new PrismaClient({
     datasources: { db: { url: requireUrl("DATABASE_URL") } },
   });

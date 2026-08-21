@@ -15,6 +15,7 @@ const taskEnvironment = {
   GLANTRI_DB_CONTAINER: "glantri-task-issue-312-a1b2-pg16",
   GLANTRI_DB_MODE: "task",
   GLANTRI_DB_OWNER: "issue-312-a1b2",
+  GLANTRI_DB_TASK: "312",
 };
 
 describe("database target safety", () => {
@@ -41,6 +42,7 @@ describe("database target safety", () => {
     [{ ...taskEnvironment, DATABASE_URL: undefined }, "DATABASE_URL is required"],
     [{ ...taskEnvironment, DATABASE_URL_TEST: undefined }, "DATABASE_URL_TEST is required"],
     [{ ...taskEnvironment, GLANTRI_DB_MODE: undefined }, "GLANTRI_DB_MODE"],
+    [{ ...taskEnvironment, GLANTRI_DB_TASK: undefined }, "GLANTRI_DB_TASK"],
     [{ ...taskEnvironment, GLANTRI_DB_OWNER: undefined }, "GLANTRI_DB_OWNER"],
     [
       { ...taskEnvironment, DATABASE_URL: "postgresql://postgres:x@localhost:5432/glantri" },

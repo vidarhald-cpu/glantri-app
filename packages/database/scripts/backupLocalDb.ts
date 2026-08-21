@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { validateTaskDatabaseEnvironment } from "../src/databaseTargetSafety";
+import { assertWorktreeDatabaseRuntimeSafety } from "../src/worktreeDatabaseRuntimeSafety";
 
 function loadDatabaseEnv(): void {
   const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -52,6 +52,7 @@ function runDumpCommand(
 
 async function main(): Promise<void> {
   loadDatabaseEnv();
+  const worktreeEnvironment = assertWorktreeDatabaseRuntimeSafety();
 
   const databaseUrl = getRequiredDatabaseUrl();
   const parsed = new URL(databaseUrl);
@@ -98,10 +99,7 @@ async function main(): Promise<void> {
   let dumpError = localDump.stderr;
 
   if (localDump.error?.code === "ENOENT") {
-    const container =
-      process.env.GLANTRI_DB_MODE === "task"
-        ? validateTaskDatabaseEnvironment(process.env).container
-        : "glantri-postgres";
+    const container = worktreeEnvironment?.container ?? "glantri-postgres";
     const dockerDumpArgs = dumpArgs.map((argument, index) => {
       if (dumpArgs[index - 1] === "--host") {
         return "localhost";

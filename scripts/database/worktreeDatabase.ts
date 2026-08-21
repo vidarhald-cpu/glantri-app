@@ -1,14 +1,24 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, lstatSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { basename, dirname, resolve } from "node:path";
+import { existsSync, lstatSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import {
   formatDatabaseTarget,
-  validateTaskDatabaseEnvironment,
   type TaskDatabaseEnvironment,
 } from "../../packages/database/src/databaseTargetSafety";
+import {
+  assertCurrentWorktreeTaskContainer,
+  assertTaskEnvironmentFileSecurity,
+  containerPort,
+  deriveCurrentWorktreeTaskDatabaseIdentity,
+  readTaskDatabaseEnvironmentFile,
+  validateCurrentWorktreeTaskDatabaseEnvironment,
+  type CurrentWorktreeTaskDatabaseIdentity,
+  type TaskContainerInspection,
+  type ValidatedCurrentWorktreeTaskDatabaseEnvironment,
+} from "../../packages/database/src/worktreeDatabaseOwnership";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..", "..");
@@ -16,19 +26,6 @@ const databasePackageDir = resolve(repoRoot, "packages", "database");
 const defaultEnvironmentFile = resolve(repoRoot, ".env.task");
 
 type TaskTarget = "application" | "test";
-
-interface DockerInspection {
-  Config?: {
-    Image?: string;
-    Labels?: Record<string, string>;
-  };
-  NetworkSettings?: {
-    Ports?: Record<string, Array<{ HostIp?: string; HostPort?: string }> | null>;
-  };
-  State?: {
-    Running?: boolean;
-  };
-}
 
 function fail(message: string): never {
   throw new Error(message);
@@ -58,44 +55,6 @@ function run(
   return options.capture ? result.stdout.trim() : "";
 }
 
-function parseEnvironmentFile(path: string): TaskDatabaseEnvironment {
-  if (!existsSync(path)) {
-    fail(
-      `Task database environment is missing at ${path}. Run pnpm db:task:setup -- --task <issue>.`,
-    );
-  }
-
-  const environment: Record<string, string> = {};
-
-  for (const rawLine of readFileSync(path, "utf8").split(/\r?\n/)) {
-    const line = rawLine.trim();
-
-    if (!line || line.startsWith("#")) {
-      continue;
-    }
-
-    const separator = line.indexOf("=");
-
-    if (separator < 1) {
-      fail(`Invalid task database environment entry in ${path}.`);
-    }
-
-    const key = line.slice(0, separator).trim();
-    let value = line.slice(separator + 1).trim();
-
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-
-    environment[key] = value;
-  }
-
-  return environment;
-}
-
 function isLinkedWorktree(): boolean {
   const gitMarker = resolve(repoRoot, ".git");
   return existsSync(gitMarker) && lstatSync(gitMarker).isFile();
@@ -116,7 +75,9 @@ function requireTaskIdentity(): {
   applicationDatabase: string;
   container: string;
   owner: string;
+  task: string;
   testDatabase: string;
+  worktreeKey: string;
 } {
   const task = getArgument("--task")?.trim();
 
@@ -124,21 +85,10 @@ function requireTaskIdentity(): {
     fail("--task is required and may contain only letters, numbers, and hyphens.");
   }
 
-  const worktreeKey = basename(dirname(repoRoot))
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-");
-  const owner = `issue-${task}-${worktreeKey}`;
-  const databaseOwner = owner.replace(/[^a-z0-9]+/g, "_");
-
-  return {
-    applicationDatabase: `glantri_task_${databaseOwner}`,
-    container: `glantri-task-${owner}-pg16`,
-    owner,
-    testDatabase: `glantri_task_${databaseOwner}_test`,
-  };
+  return deriveCurrentWorktreeTaskDatabaseIdentity(repoRoot, task);
 }
 
-function inspectContainer(container: string): DockerInspection | null {
+function inspectContainer(container: string): TaskContainerInspection | null {
   const result = spawnSync("docker", ["container", "inspect", container], {
     encoding: "utf8",
     stdio: "pipe",
@@ -152,13 +102,13 @@ function inspectContainer(container: string): DockerInspection | null {
     return null;
   }
 
-  const inspections = JSON.parse(result.stdout) as DockerInspection[];
+  const inspections = JSON.parse(result.stdout) as TaskContainerInspection[];
   return inspections[0] ?? null;
 }
 
 function assertOwnedContainer(
-  inspection: DockerInspection,
-  expected: { applicationDatabase: string; container: string; owner: string },
+  inspection: TaskContainerInspection,
+  expected: CurrentWorktreeTaskDatabaseIdentity,
 ): void {
   const labels = inspection.Config?.Labels ?? {};
 
@@ -166,23 +116,14 @@ function assertOwnedContainer(
     inspection.Config?.Image !== "postgres:16" ||
     labels["glantri.db.kind"] !== "disposable-task" ||
     labels["glantri.db.owner"] !== expected.owner ||
-    labels["glantri.db.database"] !== expected.applicationDatabase
+    labels["glantri.db.database"] !== expected.applicationDatabase ||
+    labels["glantri.db.task"] !== expected.task ||
+    labels["glantri.db.worktree"] !== expected.worktreeKey
   ) {
     fail(
       `Container ${expected.container} exists but is not the expected owned PostgreSQL 16 task target.`,
     );
   }
-}
-
-function containerPort(inspection: DockerInspection): string {
-  const bindings = inspection.NetworkSettings?.Ports?.["5432/tcp"];
-  const port = bindings?.[0]?.HostPort;
-
-  if (!port) {
-    fail("Task PostgreSQL container does not expose an explicit loopback port.");
-  }
-
-  return port;
 }
 
 function waitForPostgres(container: string): void {
@@ -228,6 +169,7 @@ function environmentText(environment: Required<TaskDatabaseEnvironment>): string
   return [
     "# Generated by pnpm db:task:setup. Disposable task database only.",
     `GLANTRI_DB_MODE=${environment.GLANTRI_DB_MODE}`,
+    `GLANTRI_DB_TASK=${environment.GLANTRI_DB_TASK}`,
     `GLANTRI_DB_OWNER=${environment.GLANTRI_DB_OWNER}`,
     `GLANTRI_DB_CONTAINER=${environment.GLANTRI_DB_CONTAINER}`,
     `DATABASE_URL=${environment.DATABASE_URL}`,
@@ -238,6 +180,7 @@ function environmentText(environment: Required<TaskDatabaseEnvironment>): string
 
 function writeTaskEnvironment(path: string, environment: Required<TaskDatabaseEnvironment>): void {
   writeFileSync(path, environmentText(environment), { encoding: "utf8", mode: 0o600 });
+  assertTaskEnvironmentFileSecurity(path);
 }
 
 function assertNoEnvironmentMismatch(environment: TaskDatabaseEnvironment): void {
@@ -245,6 +188,7 @@ function assertNoEnvironmentMismatch(environment: TaskDatabaseEnvironment): void
     "DATABASE_URL",
     "DATABASE_URL_TEST",
     "GLANTRI_DB_MODE",
+    "GLANTRI_DB_TASK",
     "GLANTRI_DB_OWNER",
     "GLANTRI_DB_CONTAINER",
   ] as const) {
@@ -261,12 +205,12 @@ function assertNoEnvironmentMismatch(environment: TaskDatabaseEnvironment): void
 
 function loadValidatedEnvironment(path = defaultEnvironmentFile): {
   environment: NodeJS.ProcessEnv;
-  validated: ReturnType<typeof validateTaskDatabaseEnvironment>;
+  validated: ValidatedCurrentWorktreeTaskDatabaseEnvironment;
 } {
   requireLinkedWorktree();
-  const configured = parseEnvironmentFile(path);
+  const configured = readTaskDatabaseEnvironmentFile(path);
   assertNoEnvironmentMismatch(configured);
-  const validated = validateTaskDatabaseEnvironment(configured);
+  const validated = validateCurrentWorktreeTaskDatabaseEnvironment(repoRoot, configured);
 
   return {
     environment: {
@@ -280,7 +224,7 @@ function loadValidatedEnvironment(path = defaultEnvironmentFile): {
 function printPreflight(
   action: string,
   target: TaskTarget,
-  validated: ReturnType<typeof validateTaskDatabaseEnvironment>,
+  validated: ValidatedCurrentWorktreeTaskDatabaseEnvironment,
 ): void {
   const databaseTarget = target === "application" ? validated.application : validated.test;
   console.log(
@@ -289,8 +233,8 @@ function printPreflight(
 }
 
 function verifyOwnedRunningContainer(
-  validated: ReturnType<typeof validateTaskDatabaseEnvironment>,
-): DockerInspection {
+  validated: ValidatedCurrentWorktreeTaskDatabaseEnvironment,
+): TaskContainerInspection {
   const inspection = inspectContainer(validated.container);
 
   if (!inspection) {
@@ -299,23 +243,7 @@ function verifyOwnedRunningContainer(
     );
   }
 
-  assertOwnedContainer(inspection, {
-    applicationDatabase: validated.application.database,
-    container: validated.container,
-    owner: validated.owner,
-  });
-
-  if (!inspection.State?.Running) {
-    fail(`Task container ${validated.container} is not running.`);
-  }
-
-  const boundPort = containerPort(inspection);
-
-  if (boundPort !== validated.application.port) {
-    fail(
-      `Task container port ${boundPort} does not match .env.task port ${validated.application.port}.`,
-    );
-  }
+  assertCurrentWorktreeTaskContainer(inspection, validated);
 
   return inspection;
 }
@@ -324,13 +252,17 @@ function setup(): void {
   requireLinkedWorktree();
   const identity = requireTaskIdentity();
   const existingEnvironment = existsSync(defaultEnvironmentFile)
-    ? parseEnvironmentFile(defaultEnvironmentFile)
+    ? readTaskDatabaseEnvironmentFile(defaultEnvironmentFile)
     : undefined;
 
   if (existingEnvironment) {
-    const existing = validateTaskDatabaseEnvironment(existingEnvironment);
+    const existing = validateCurrentWorktreeTaskDatabaseEnvironment(repoRoot, existingEnvironment);
 
-    if (existing.owner !== identity.owner || existing.container !== identity.container) {
+    if (
+      existing.owner !== identity.owner ||
+      existing.container !== identity.container ||
+      existing.task !== identity.task
+    ) {
       fail(
         `.env.task belongs to ${existing.owner}; cleanup that target before setting up ${identity.owner}.`,
       );
@@ -362,6 +294,10 @@ function setup(): void {
       `glantri.db.owner=${identity.owner}`,
       "--label",
       `glantri.db.database=${identity.applicationDatabase}`,
+      "--label",
+      `glantri.db.task=${identity.task}`,
+      "--label",
+      `glantri.db.worktree=${identity.worktreeKey}`,
       "-e",
       "POSTGRES_USER=postgres",
       "-e",
@@ -411,11 +347,12 @@ function setup(): void {
     GLANTRI_DB_CONTAINER: identity.container,
     GLANTRI_DB_MODE: "task",
     GLANTRI_DB_OWNER: identity.owner,
+    GLANTRI_DB_TASK: identity.task,
   };
 
-  validateTaskDatabaseEnvironment(environment);
+  validateCurrentWorktreeTaskDatabaseEnvironment(repoRoot, environment);
   writeTaskEnvironment(defaultEnvironmentFile, environment);
-  const validated = validateTaskDatabaseEnvironment(environment);
+  const validated = validateCurrentWorktreeTaskDatabaseEnvironment(repoRoot, environment);
   printPreflight("setup", "application", validated);
   printPreflight("setup", "test", validated);
   console.log(`Disposable PostgreSQL 16 task target ${identity.container} is ready.`);
@@ -424,7 +361,7 @@ function setup(): void {
 function migrateTarget(
   target: TaskTarget,
   environment: NodeJS.ProcessEnv,
-  validated: ReturnType<typeof validateTaskDatabaseEnvironment>,
+  validated: ValidatedCurrentWorktreeTaskDatabaseEnvironment,
 ): void {
   printPreflight("migrate", target, validated);
   const url = target === "application" ? environment.DATABASE_URL : environment.DATABASE_URL_TEST;
@@ -564,16 +501,14 @@ function verify(): void {
 }
 
 function cleanup(): void {
-  const configured = parseEnvironmentFile(defaultEnvironmentFile);
-  const validated = validateTaskDatabaseEnvironment(configured);
+  requireLinkedWorktree();
+  const configured = readTaskDatabaseEnvironmentFile(defaultEnvironmentFile);
+  assertNoEnvironmentMismatch(configured);
+  const validated = validateCurrentWorktreeTaskDatabaseEnvironment(repoRoot, configured);
   const inspection = inspectContainer(validated.container);
 
   if (inspection) {
-    assertOwnedContainer(inspection, {
-      applicationDatabase: validated.application.database,
-      container: validated.container,
-      owner: validated.owner,
-    });
+    assertCurrentWorktreeTaskContainer(inspection, validated);
     printPreflight("cleanup", "application", validated);
     printPreflight("cleanup", "test", validated);
     run("docker", ["rm", "-f", validated.container]);
