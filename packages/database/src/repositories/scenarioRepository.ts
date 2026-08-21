@@ -33,6 +33,22 @@ function asJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }
 
+function isCampaignRosterIdentityConflict(
+  error: unknown,
+): error is Prisma.PrismaClientKnownRequestError {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
+    return false;
+  }
+
+  const target = error.meta?.target;
+
+  return (
+    Array.isArray(target) &&
+    target.length === 3 &&
+    ["campaignId", "sourceType", "sourceId"].every((field) => target.includes(field))
+  );
+}
+
 function mapCampaign(record: {
   createdAt: Date;
   description: string;
@@ -809,13 +825,14 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
       return mapCampaignAsset(record);
     },
     async createCampaignRosterEntry(input) {
+      const identity = {
+        campaignId: input.campaignId,
+        sourceId: input.sourceId,
+        sourceType: input.sourceType,
+      };
       const existing = await prisma.campaignRosterEntry.findUnique({
         where: {
-          campaignId_sourceType_sourceId: {
-            campaignId: input.campaignId,
-            sourceId: input.sourceId,
-            sourceType: input.sourceType,
-          },
+          campaignId_sourceType_sourceId: identity,
         },
       });
 
@@ -823,19 +840,37 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
         return mapCampaignRosterEntry(existing);
       }
 
-      const record = await prisma.campaignRosterEntry.create({
-        data: {
-          campaignId: input.campaignId,
-          category: input.category,
-          createdByUserId: input.createdByUserId ?? null,
-          labelSnapshot: input.labelSnapshot ?? null,
-          notes: input.notes ?? null,
-          sourceId: input.sourceId,
-          sourceType: input.sourceType,
-        },
-      });
+      try {
+        const record = await prisma.campaignRosterEntry.create({
+          data: {
+            campaignId: input.campaignId,
+            category: input.category,
+            createdByUserId: input.createdByUserId ?? null,
+            labelSnapshot: input.labelSnapshot ?? null,
+            notes: input.notes ?? null,
+            sourceId: input.sourceId,
+            sourceType: input.sourceType,
+          },
+        });
 
-      return mapCampaignRosterEntry(record);
+        return mapCampaignRosterEntry(record);
+      } catch (error) {
+        if (!isCampaignRosterIdentityConflict(error)) {
+          throw error;
+        }
+
+        const canonical = await prisma.campaignRosterEntry.findUnique({
+          where: {
+            campaignId_sourceType_sourceId: identity,
+          },
+        });
+
+        if (!canonical) {
+          throw error;
+        }
+
+        return mapCampaignRosterEntry(canonical);
+      }
     },
     async deleteCampaignRosterEntry(entryId) {
       await prisma.campaignRosterEntry.delete({
