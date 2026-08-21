@@ -97,6 +97,27 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("loads Campaign-scoped privacy-safe Character roster candidates", async () => {
+    const characters = [
+      {
+        alreadyRostered: false,
+        id: "character-1",
+        name: "Ari",
+        ownerLabel: "Player One",
+      },
+    ];
+    const fetchMock = stubFetch({ characters });
+    const client = await loadClient();
+
+    await expect(client.loadCampaignCharacterRosterCandidates("campaign-1")).resolves.toEqual(
+      characters,
+    );
+    expectFetchCall(fetchMock, {
+      method: "GET",
+      url: "https://api.example.test/campaigns/campaign-1/roster-candidates/characters",
+    });
+  });
+
   it("requests a selected participant perspective for GM Player Combat history", async () => {
     const history = {
       activeRound: { events: [], roundNumber: 1, snapshots: [] },

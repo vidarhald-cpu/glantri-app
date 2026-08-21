@@ -15,6 +15,7 @@ interface SmokeTestState {
   delegatedScenarioDescription: string;
   delegatedScenarioId: string;
   delegatedScenarioName: string;
+  nonHolderCharacterId: string;
 }
 
 function loadTestState(): SmokeTestState {
@@ -81,6 +82,59 @@ test.describe("campaign workspace", () => {
     await expect(page.getByText("Smoke Test Scenario", { exact: true })).toBeVisible({
       timeout: 10_000,
     });
+  });
+
+  test("discovers and rosters another player's Character through the safe candidate view", async ({
+    page,
+  }) => {
+    const testState = loadTestState();
+    const createResponse = await page.request.post(`${API_URL}/campaigns`, {
+      data: { name: `Cross-player candidate ${Date.now()}` },
+    });
+    expect(createResponse.ok()).toBe(true);
+    const { campaign } = (await createResponse.json()) as { campaign: { id: string } };
+
+    const candidateResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/campaigns/${campaign.id}/roster-candidates/characters`) &&
+        response.status() === 200,
+    );
+    await page.goto(`/campaigns/${campaign.id}`);
+    const candidateResponse = await candidateResponsePromise;
+    const candidatePayload = (await candidateResponse.json()) as {
+      characters: Array<Record<string, unknown>>;
+    };
+    const otherPlayerCharacter = candidatePayload.characters.find(
+      (candidate) => candidate.id === testState.nonHolderCharacterId,
+    );
+
+    expect(otherPlayerCharacter).toEqual({
+      alreadyRostered: false,
+      id: testState.nonHolderCharacterId,
+      name: "Smoke Non-holder Character",
+      ownerLabel: "Smoke Non-holder",
+    });
+    expect(Object.keys(otherPlayerCharacter ?? {}).sort()).toEqual([
+      "alreadyRostered",
+      "id",
+      "name",
+      "ownerLabel",
+    ]);
+
+    const rosterToggle = page.getByRole("checkbox", {
+      name: "Toggle Smoke Non-holder Character campaign roster membership",
+    });
+    await expect(rosterToggle).toBeVisible({ timeout: 10_000 });
+    await expect(rosterToggle).not.toBeChecked();
+
+    const rosterResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/campaigns/${campaign.id}/roster`) &&
+        response.request().method() === "POST",
+    );
+    await rosterToggle.click();
+    expect((await rosterResponsePromise).status()).toBe(200);
+    await expect(rosterToggle).toBeChecked();
   });
 });
 

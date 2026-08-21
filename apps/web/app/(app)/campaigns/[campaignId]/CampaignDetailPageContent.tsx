@@ -7,10 +7,11 @@ import { defaultCanonicalContent } from "@glantri/content";
 import type {
   Campaign,
   CampaignAsset,
+  CampaignCharacterRosterCandidate,
   CampaignRosterEntry,
   ReusableEntity,
   Scenario,
-  ScenarioRelationship
+  ScenarioRelationship,
 } from "@glantri/domain";
 
 import {
@@ -19,16 +20,15 @@ import {
   createScenarioOnServer,
   loadCampaignAssets,
   loadCampaignById,
+  loadCampaignCharacterRosterCandidates,
   loadCampaignEntities,
   loadCampaigns,
   loadCampaignRoster,
   loadCampaignScenarioRelationships,
   loadCampaignScenarios,
-  loadServerCharacters,
   loadTemplates,
   removeCampaignRosterEntryOnServer,
-  type ServerCharacterRecord,
-  updateCampaignAssetVisibilityOnServer
+  updateCampaignAssetVisibilityOnServer,
 } from "@/lib/api/localServiceClient";
 import { getCampaignActorMetadata } from "@/lib/campaigns/campaignActors";
 import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
@@ -60,13 +60,13 @@ interface RosterCandidate {
 }
 
 const civilizationNameById = new Map(
-  defaultCanonicalContent.civilizations.map((civilization) => [civilization.id, civilization.name])
+  defaultCanonicalContent.civilizations.map((civilization) => [civilization.id, civilization.name]),
 );
 const civilizationNameByName = new Map(
   defaultCanonicalContent.civilizations.map((civilization) => [
     civilization.name.toLowerCase(),
-    civilization.name
-  ])
+    civilization.name,
+  ]),
 );
 const civilizationNamesBySocietyId = new Map<string, string[]>();
 
@@ -74,17 +74,20 @@ for (const civilization of defaultCanonicalContent.civilizations) {
   const existingNames = civilizationNamesBySocietyId.get(civilization.linkedSocietyId) ?? [];
   civilizationNamesBySocietyId.set(civilization.linkedSocietyId, [
     ...existingNames,
-    civilization.name
+    civilization.name,
   ]);
 }
 
-function buildRosterSourceKey(sourceType: CampaignRosterEntry["sourceType"], sourceId: string): string {
+function buildRosterSourceKey(
+  sourceType: CampaignRosterEntry["sourceType"],
+  sourceId: string,
+): string {
   return `${sourceType}:${sourceId}`;
 }
 
 function removeRosterSourceFromList(
   entries: CampaignRosterEntry[],
-  removedSource: Pick<CampaignRosterEntry, "campaignId" | "sourceId" | "sourceType">
+  removedSource: Pick<CampaignRosterEntry, "campaignId" | "sourceId" | "sourceType">,
 ): CampaignRosterEntry[] {
   const removedSourceKey = buildRosterSourceKey(removedSource.sourceType, removedSource.sourceId);
 
@@ -103,7 +106,7 @@ export function getRosterRemovalSource(input: {
 }): Pick<CampaignRosterEntry, "sourceId" | "sourceType"> {
   return {
     sourceId: input.rosterEntry?.sourceId ?? input.sourceId,
-    sourceType: input.rosterEntry?.sourceType ?? input.sourceType
+    sourceType: input.rosterEntry?.sourceType ?? input.sourceType,
   };
 }
 
@@ -128,7 +131,9 @@ function readStringList(value: unknown): string[] {
     return [];
   }
 
-  return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+  return value.filter(
+    (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+  );
 }
 
 function readSnapshotMetadata(snapshot: unknown): {
@@ -147,12 +152,13 @@ function readSnapshotMetadata(snapshot: unknown): {
       readOptionalString(snapshot.culture) ??
       readOptionalString(snapshot.societyId) ??
       readOptionalString(snapshot.society),
-    professionLabel: readOptionalString(snapshot.profession) ?? readOptionalString(snapshot.professionId),
+    professionLabel:
+      readOptionalString(snapshot.profession) ?? readOptionalString(snapshot.professionId),
     skillGroups: [
       ...readStringList(snapshot.skillGroups),
       ...readStringList(snapshot.skillGroupIds),
-      ...readStringList(snapshot.trainingPackages)
-    ]
+      ...readStringList(snapshot.trainingPackages),
+    ],
   };
 }
 
@@ -183,18 +189,19 @@ function getCivilizationDisplayName(value?: string): string {
 export default function CampaignDetailPageContent({
   campaignId,
   embedded = false,
-  onWorkspaceScenariosChanged
+  onWorkspaceScenariosChanged,
 }: CampaignDetailPageContentProps) {
   const [assets, setAssets] = useState<CampaignAsset[]>([]);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const [characters, setCharacters] = useState<ServerCharacterRecord[]>([]);
+  const [characters, setCharacters] = useState<CampaignCharacterRosterCandidate[]>([]);
   const [entities, setEntities] = useState<ReusableEntity[]>([]);
   const [error, setError] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [allRosterEntries, setAllRosterEntries] = useState<CampaignRosterEntry[]>([]);
   const [roster, setRoster] = useState<CampaignRosterEntry[]>([]);
-  const [rosterMembershipFilter, setRosterMembershipFilter] = useState<RosterMembershipFilter>("all");
+  const [rosterMembershipFilter, setRosterMembershipFilter] =
+    useState<RosterMembershipFilter>("all");
   const [rosterTypeFilter, setRosterTypeFilter] = useState<RosterTypeFilter>("all");
   const [rosterCivilizationFilter, setRosterCivilizationFilter] = useState("");
   const [rosterProfessionFilter, setRosterProfessionFilter] = useState("");
@@ -235,23 +242,23 @@ export default function CampaignDetailPageContent({
     const characterCandidates = characters.map((character): RosterCandidate => {
       const sourceKey = buildRosterSourceKey("character", character.id);
       const rosterEntry = rosterBySourceKey.get(sourceKey);
-      const skillGroups = character.build.progression.skillGroups.map((entry) => entry.groupId);
+      const member = character.alreadyRostered || Boolean(rosterEntry);
 
       return {
         category: "pc",
-        civilizationLabel: getCivilizationDisplayName(character.build.societyId),
-        membership: rosterEntry ? "inCampaign" : otherRosterSourceKeys.has(sourceKey) ? "otherCampaigns" : "available",
-        professionLabel: character.build.professionId ?? "—",
-        skillGroups,
+        civilizationLabel: "—",
+        membership: member ? "inCampaign" : "available",
+        professionLabel: "—",
+        skillGroups: [],
         typeFilter: "pcs",
         kindLabel: "Character",
-        member: Boolean(rosterEntry),
+        member,
         name: character.name,
-        ownerLabel: character.owner?.displayName ?? character.owner?.email ?? "—",
+        ownerLabel: character.ownerLabel,
         rosterEntry,
         sourceId: character.id,
         sourceType: "character",
-        typeLabel: "PC"
+        typeLabel: "PC",
       };
     });
     const entityCandidates = entities
@@ -267,7 +274,11 @@ export default function CampaignDetailPageContent({
         return {
           category: "npc",
           civilizationLabel: getCivilizationDisplayName(snapshotMetadata.civilizationLabel),
-          membership: rosterEntry ? "inCampaign" : otherRosterSourceKeys.has(sourceKey) ? "otherCampaigns" : "available",
+          membership: rosterEntry
+            ? "inCampaign"
+            : otherRosterSourceKeys.has(sourceKey)
+              ? "otherCampaigns"
+              : "available",
           professionLabel: metadata.profession ?? snapshotMetadata.professionLabel ?? "—",
           skillGroups: snapshotMetadata.skillGroups,
           typeFilter,
@@ -278,9 +289,9 @@ export default function CampaignDetailPageContent({
           rosterEntry,
           sourceId: entity.id,
           sourceType: "reusableEntity",
-          typeLabel: formatEntityKind(entity.kind)
+          typeLabel: formatEntityKind(entity.kind),
         };
-    });
+      });
     const templateCandidates = templates.map((template): RosterCandidate => {
       const sourceKey = buildRosterSourceKey("template", template.id);
       const rosterEntry = rosterBySourceKey.get(sourceKey);
@@ -290,7 +301,11 @@ export default function CampaignDetailPageContent({
       return {
         category: "template",
         civilizationLabel: getCivilizationDisplayName(snapshotMetadata.civilizationLabel),
-        membership: rosterEntry ? "inCampaign" : otherRosterSourceKeys.has(sourceKey) ? "otherCampaigns" : "available",
+        membership: rosterEntry
+          ? "inCampaign"
+          : otherRosterSourceKeys.has(sourceKey)
+            ? "otherCampaigns"
+            : "available",
         professionLabel: metadata.profession ?? snapshotMetadata.professionLabel ?? "—",
         skillGroups: snapshotMetadata.skillGroups,
         typeFilter: "templates",
@@ -301,12 +316,12 @@ export default function CampaignDetailPageContent({
         rosterEntry,
         sourceId: template.id,
         sourceType: "template",
-        typeLabel: "Template"
+        typeLabel: "Template",
       };
     });
 
     return [...characterCandidates, ...entityCandidates, ...templateCandidates].sort((a, b) =>
-      a.name.localeCompare(b.name)
+      a.name.localeCompare(b.name),
     );
   }, [characters, entities, otherRosterSourceKeys, rosterBySourceKey, templates]);
   const rosterTypeFilterOptions = useMemo(
@@ -317,23 +332,39 @@ export default function CampaignDetailPageContent({
         { id: "npcs" as const, label: "NPCs" },
         { id: "templates" as const, label: "Templates" },
         { id: "monsters" as const, label: "Monsters" },
-        { id: "other" as const, label: "Other" }
-      ].filter((option) => option.id === "all" || rosterCandidates.some((candidate) => candidate.typeFilter === option.id)),
-    [rosterCandidates]
+        { id: "other" as const, label: "Other" },
+      ].filter(
+        (option) =>
+          option.id === "all" ||
+          rosterCandidates.some((candidate) => candidate.typeFilter === option.id),
+      ),
+    [rosterCandidates],
   );
   const rosterCivilizationOptions = useMemo(
     () =>
-      [...new Set(rosterCandidates.map((candidate) => candidate.civilizationLabel).filter((value) => value !== "—"))].sort(),
-    [rosterCandidates]
+      [
+        ...new Set(
+          rosterCandidates
+            .map((candidate) => candidate.civilizationLabel)
+            .filter((value) => value !== "—"),
+        ),
+      ].sort(),
+    [rosterCandidates],
   );
   const rosterProfessionOptions = useMemo(
     () =>
-      [...new Set(rosterCandidates.map((candidate) => candidate.professionLabel).filter((value) => value !== "—"))].sort(),
-    [rosterCandidates]
+      [
+        ...new Set(
+          rosterCandidates
+            .map((candidate) => candidate.professionLabel)
+            .filter((value) => value !== "—"),
+        ),
+      ].sort(),
+    [rosterCandidates],
   );
   const rosterSkillGroupOptions = useMemo(
     () => [...new Set(rosterCandidates.flatMap((candidate) => candidate.skillGroups))].sort(),
-    [rosterCandidates]
+    [rosterCandidates],
   );
   const filteredRosterCandidates = useMemo(() => {
     const search = rosterSearch.trim().toLowerCase();
@@ -373,14 +404,14 @@ export default function CampaignDetailPageContent({
     rosterProfessionFilter,
     rosterSearch,
     rosterSkillGroupFilter,
-    rosterTypeFilter
+    rosterTypeFilter,
   ]);
   const orderedScenarios = useMemo(
     () =>
       [...scenarios].sort(
-        (first, second) => Date.parse(first.createdAt) - Date.parse(second.createdAt)
+        (first, second) => Date.parse(first.createdAt) - Date.parse(second.createdAt),
       ),
-    [scenarios]
+    [scenarios],
   );
 
   async function refreshPage() {
@@ -391,7 +422,7 @@ export default function CampaignDetailPageContent({
       nextAssets,
       nextTemplates,
       nextRoster,
-      nextCharacters
+      nextCharacters,
     ] = await Promise.all([
       loadCampaignById(campaignId),
       loadCampaignScenarios(campaignId),
@@ -399,17 +430,17 @@ export default function CampaignDetailPageContent({
       loadCampaignAssets(campaignId),
       loadTemplates(),
       loadCampaignRoster(campaignId),
-      loadServerCharacters()
+      loadCampaignCharacterRosterCandidates(campaignId),
     ]);
     const nextScenarioRelationships = await loadCampaignScenarioRelationships(campaignId).catch(
-      () => []
+      () => [],
     );
     const nextAllRosterEntries = await loadCampaigns()
       .then((campaigns) =>
-        Promise.allSettled(campaigns.map((entry) => loadCampaignRoster(entry.id)))
+        Promise.allSettled(campaigns.map((entry) => loadCampaignRoster(entry.id))),
       )
       .then((results) =>
-        results.flatMap((result) => (result.status === "fulfilled" ? result.value : []))
+        results.flatMap((result) => (result.status === "fulfilled" ? result.value : [])),
       )
       .catch(() => nextRoster);
 
@@ -423,7 +454,7 @@ export default function CampaignDetailPageContent({
     setRoster(nextRoster);
     setCharacters(nextCharacters);
     const globalTemplates = nextTemplates.filter(
-      (entity) => getCampaignActorMetadata(entity).actorClass === "template"
+      (entity) => getCampaignActorMetadata(entity).actorClass === "template",
     );
 
     setTemplates(globalTemplates);
@@ -448,7 +479,7 @@ export default function CampaignDetailPageContent({
         description: scenarioDescription,
         kind: "mixed",
         name: scenarioName,
-        status: "draft"
+        status: "draft",
       });
 
       setFeedback(`Created scenario ${scenario.name}.`);
@@ -471,15 +502,19 @@ export default function CampaignDetailPageContent({
           campaignId,
           category: candidate.category,
           sourceId: candidate.sourceId,
-          sourceType: candidate.sourceType
+          sourceType: candidate.sourceType,
         });
 
         setFeedback(`Linked ${entry.labelSnapshot ?? candidate.name} to the campaign roster.`);
         setRoster((current) =>
-          current.some((rosterEntry) => rosterEntry.id === entry.id) ? current : [...current, entry]
+          current.some((rosterEntry) => rosterEntry.id === entry.id)
+            ? current
+            : [...current, entry],
         );
         setAllRosterEntries((current) =>
-          current.some((rosterEntry) => rosterEntry.id === entry.id) ? current : [...current, entry]
+          current.some((rosterEntry) => rosterEntry.id === entry.id)
+            ? current
+            : [...current, entry],
         );
       } else {
         const rosterEntry =
@@ -495,13 +530,13 @@ export default function CampaignDetailPageContent({
         const removalSource = getRosterRemovalSource({
           rosterEntry,
           sourceId: candidate.sourceId,
-          sourceType: candidate.sourceType
+          sourceType: candidate.sourceType,
         });
 
         await removeCampaignRosterEntryOnServer({
           campaignId,
           sourceId: removalSource.sourceId,
-          sourceType: removalSource.sourceType
+          sourceType: removalSource.sourceType,
         });
 
         setFeedback(`Removed ${candidate.name} from the campaign roster.`);
@@ -509,21 +544,21 @@ export default function CampaignDetailPageContent({
           removeRosterSourceFromList(current, {
             campaignId,
             sourceId: removalSource.sourceId,
-            sourceType: removalSource.sourceType
-          })
+            sourceType: removalSource.sourceType,
+          }),
         );
         setAllRosterEntries((current) =>
           removeRosterSourceFromList(current, {
             campaignId,
             sourceId: removalSource.sourceId,
-            sourceType: removalSource.sourceType
-          })
+            sourceType: removalSource.sourceType,
+          }),
         );
       }
       await refreshPage();
     } catch (caughtError) {
       setError(
-        caughtError instanceof Error ? caughtError.message : "Unable to update campaign roster."
+        caughtError instanceof Error ? caughtError.message : "Unable to update campaign roster.",
       );
     }
   }
@@ -538,7 +573,7 @@ export default function CampaignDetailPageContent({
         storageUrl: assetUrl,
         title: assetTitle,
         type: assetType,
-        visibility: "hidden"
+        visibility: "hidden",
       });
 
       setFeedback(`Created asset ${asset.title}.`);
@@ -552,32 +587,35 @@ export default function CampaignDetailPageContent({
 
   async function handleAssetVisibilityChange(
     assetId: string,
-    visibility: CampaignAsset["visibility"]
+    visibility: CampaignAsset["visibility"],
   ) {
     try {
       setError(undefined);
       await updateCampaignAssetVisibilityOnServer({
         assetId,
-        visibility
+        visibility,
       });
       await refreshPage();
     } catch (caughtError) {
       setError(
-        caughtError instanceof Error ? caughtError.message : "Unable to update asset visibility."
+        caughtError instanceof Error ? caughtError.message : "Unable to update asset visibility.",
       );
     }
   }
 
   function getContinuationLabel(scenarioId: string): string {
     const relationship = scenarioRelationships.find(
-      (entry) => entry.relationType === "continues_from" && entry.toScenarioId === scenarioId
+      (entry) => entry.relationType === "continues_from" && entry.toScenarioId === scenarioId,
     );
 
     if (!relationship) {
       return "—";
     }
 
-    return scenarios.find((scenario) => scenario.id === relationship.fromScenarioId)?.name ?? "Earlier scenario";
+    return (
+      scenarios.find((scenario) => scenario.id === relationship.fromScenarioId)?.name ??
+      "Earlier scenario"
+    );
   }
 
   if (loading) {
@@ -604,7 +642,7 @@ export default function CampaignDetailPageContent({
             borderRadius: 12,
             display: "grid",
             gap: "0.5rem",
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           <h2 style={{ margin: 0 }}>Campaign flow</h2>
@@ -617,12 +655,20 @@ export default function CampaignDetailPageContent({
       {error ? <div>{error}</div> : null}
       {feedback ? <div>{feedback}</div> : null}
 
-      <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
+      <section
+        style={{
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "0.75rem",
+          padding: "1rem",
+        }}
+      >
         <div style={{ display: "grid", gap: "0.35rem" }}>
           <h2 style={{ margin: 0 }}>Campaign roster</h2>
           <p style={{ margin: 0 }}>
-            Campaign roster links make PCs, concrete NPCs, and templates available to this
-            campaign. Scenario participant snapshots are created later from the scenario screen.
+            Campaign roster links make PCs, concrete NPCs, and templates available to this campaign.
+            Scenario participant snapshots are created later from the scenario screen.
           </p>
         </div>
 
@@ -699,12 +745,62 @@ export default function CampaignDetailPageContent({
             <table style={{ borderCollapse: "collapse", minWidth: 720, width: "100%" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem 0.5rem 0", position: "sticky", textAlign: "center", top: 0 }}>Member</th>
-                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Name</th>
-                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Type</th>
-                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Civilization</th>
-                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Profession</th>
-                  <th style={{ background: "#fff", padding: "0.5rem 0", position: "sticky", top: 0 }}>Owner</th>
+                  <th
+                    style={{
+                      background: "#fff",
+                      padding: "0.5rem 0.75rem 0.5rem 0",
+                      position: "sticky",
+                      textAlign: "center",
+                      top: 0,
+                    }}
+                  >
+                    Member
+                  </th>
+                  <th
+                    style={{
+                      background: "#fff",
+                      padding: "0.5rem 0.75rem",
+                      position: "sticky",
+                      top: 0,
+                    }}
+                  >
+                    Name
+                  </th>
+                  <th
+                    style={{
+                      background: "#fff",
+                      padding: "0.5rem 0.75rem",
+                      position: "sticky",
+                      top: 0,
+                    }}
+                  >
+                    Type
+                  </th>
+                  <th
+                    style={{
+                      background: "#fff",
+                      padding: "0.5rem 0.75rem",
+                      position: "sticky",
+                      top: 0,
+                    }}
+                  >
+                    Civilization
+                  </th>
+                  <th
+                    style={{
+                      background: "#fff",
+                      padding: "0.5rem 0.75rem",
+                      position: "sticky",
+                      top: 0,
+                    }}
+                  >
+                    Profession
+                  </th>
+                  <th
+                    style={{ background: "#fff", padding: "0.5rem 0", position: "sticky", top: 0 }}
+                  >
+                    Owner
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -740,7 +836,15 @@ export default function CampaignDetailPageContent({
         )}
       </section>
 
-      <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
+      <section
+        style={{
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "0.75rem",
+          padding: "1rem",
+        }}
+      >
         <h2 style={{ margin: 0 }}>Create scenario</h2>
         <input
           onChange={(event) => setScenarioName(event.target.value)}
@@ -810,7 +914,7 @@ export default function CampaignDetailPageContent({
                         href={buildCampaignWorkspaceHref({
                           campaignId,
                           scenarioId: scenario.id,
-                          tab: "scenario"
+                          tab: "scenario",
                         })}
                       >
                         Open
@@ -826,7 +930,15 @@ export default function CampaignDetailPageContent({
         )}
       </section>
 
-      <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
+      <section
+        style={{
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "0.75rem",
+          padding: "1rem",
+        }}
+      >
         <h2 style={{ margin: 0 }}>Create campaign asset</h2>
         <input
           onChange={(event) => setAssetTitle(event.target.value)}
@@ -866,7 +978,7 @@ export default function CampaignDetailPageContent({
                 borderRadius: 12,
                 display: "grid",
                 gap: "0.35rem",
-                padding: "1rem"
+                padding: "1rem",
               }}
             >
               <strong>{asset.title}</strong>
@@ -878,7 +990,7 @@ export default function CampaignDetailPageContent({
                 onChange={(event) =>
                   void handleAssetVisibilityChange(
                     asset.id,
-                    event.target.value as CampaignAsset["visibility"]
+                    event.target.value as CampaignAsset["visibility"],
                   )
                 }
                 value={asset.visibility}

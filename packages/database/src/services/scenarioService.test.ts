@@ -1,14 +1,29 @@
 import { describe, expect, it } from "vitest";
 
-import type { ReusableEntity } from "@glantri/domain";
+import type { CampaignRosterEntry, ReusableEntity } from "@glantri/domain";
 
 import { ScenarioService } from "./scenarioService";
 import { createCharacterRecord, createScenarioRepositoryStub } from "./scenarioService.testHelpers";
 
+function rosterCharacters(rosterEntries: CampaignRosterEntry[], ...characterIds: string[]): void {
+  for (const characterId of characterIds) {
+    rosterEntries.push({
+      campaignId: "campaign-1",
+      category: "pc",
+      createdAt: "2026-04-21T00:00:00.000Z",
+      id: `roster-${characterId}`,
+      sourceId: characterId,
+      sourceType: "character",
+      updatedAt: "2026-04-21T00:00:00.000Z",
+    });
+  }
+}
+
 describe("ScenarioService controller assignment", () => {
   it("explicitly refreshes committed equipment while preserving live participant state", async () => {
-    const { repository } = createScenarioRepositoryStub();
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
     const character = createCharacterRecord({ id: "character-1", name: "Scyrian" });
+    rosterCharacters(rosterEntries, character.id);
     let equipmentState: Record<string, unknown> = {
       activeLoadoutByCharacterId: { "character-1": { activeAmmoItemIds: [] } },
       itemsById: {},
@@ -104,7 +119,7 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("prevents one player from being assigned to two active player characters in the same scenario", async () => {
-    const { repository } = createScenarioRepositoryStub();
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
     const characters = new Map([
       ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })],
       [
@@ -112,6 +127,7 @@ describe("ScenarioService controller assignment", () => {
         createCharacterRecord({ id: "character-2", name: "Bryn", ownerId: "user-2" }),
       ],
     ]);
+    rosterCharacters(rosterEntries, "character-1", "character-2");
     const service = new ScenarioService(
       repository,
       {
@@ -145,12 +161,13 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("uses Character ownership only while Scenario control is unassigned", async () => {
-    const { repository } = createScenarioRepositoryStub();
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
     const character = createCharacterRecord({
       id: "character-1",
       name: "Ari",
       ownerId: "owner-1",
     });
+    rosterCharacters(rosterEntries, character.id);
     const service = new ScenarioService(
       repository,
       {
@@ -240,6 +257,28 @@ describe("ScenarioService controller assignment", () => {
     });
 
     expect(participants).toHaveLength(2);
+  });
+
+  it("rejects an out-of-roster Character before reading or writing Character state", async () => {
+    const { participants, repository } = createScenarioRepositoryStub();
+    let characterReads = 0;
+    const service = new ScenarioService(repository, {
+      getCharacterById: async () => {
+        characterReads += 1;
+        return createCharacterRecord({ id: "character-1", name: "Ari" });
+      },
+    } as never);
+
+    await expect(
+      service.addCharacterParticipant({
+        characterId: "character-1",
+        joinSource: "gm_added",
+        scenarioId: "scenario-1",
+      }),
+    ).rejects.toThrow("Character is not in the campaign roster.");
+
+    expect(characterReads).toBe(0);
+    expect(participants).toEqual([]);
   });
 
   it("preserves temporary actor build, sheet, and equipment snapshots from entity input", async () => {
@@ -358,11 +397,12 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("enforces the active-control rule when participant metadata is reassigned", async () => {
-    const { repository } = createScenarioRepositoryStub();
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
     const characters = new Map([
       ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })],
       ["character-2", createCharacterRecord({ id: "character-2", name: "Bryn", ownerId: null })],
     ]);
+    rosterCharacters(rosterEntries, "character-1", "character-2");
     const service = new ScenarioService(
       repository,
       {

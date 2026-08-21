@@ -1,9 +1,11 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
+import { createPrismaCharacterRepository } from "../repositories/characterRepository";
 import { createPrismaScenarioRepository } from "../repositories/scenarioRepository";
-import { createTestUser } from "../testing/factories";
+import { createTestCharacter, createTestUser } from "../testing/factories";
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
-import { CampaignService } from "./campaignService";
+import { CampaignCharacterRosterCandidateNotFoundError, CampaignService } from "./campaignService";
+import { CharacterService } from "./characterService";
 
 const prisma = getTestPrismaClient();
 
@@ -57,6 +59,90 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(listB[0]?.name).toBe("Campaign B");
     });
 
+    it("discovers and idempotently rosters another user's finalized Character without changing ownership", async () => {
+      const gm = await createTestUser(prisma!, {
+        displayName: "Campaign GM",
+        roles: ["game_master"],
+      });
+      const player = await createTestUser(prisma!, { displayName: "Player One" });
+      const ownCharacter = await createTestCharacter(prisma!, gm.id, { name: "Ari" });
+      const otherCharacter = await createTestCharacter(prisma!, player.id, { name: "Bryn" });
+      const repo = createPrismaScenarioRepository(prisma!);
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const service = new CampaignService(repo, characterService);
+      const campaign = await service.createCampaign({
+        gmUserId: gm.id,
+        name: "Border Trouble",
+      });
+
+      await expect(
+        service.listCampaignCharacterRosterCandidates({
+          actorUserId: gm.id,
+          campaignId: campaign.id,
+        }),
+      ).resolves.toEqual([
+        {
+          alreadyRostered: false,
+          id: ownCharacter.id,
+          name: ownCharacter.name,
+          ownerLabel: "You",
+        },
+        {
+          alreadyRostered: false,
+          id: otherCharacter.id,
+          name: otherCharacter.name,
+          ownerLabel: "Player One",
+        },
+      ]);
+
+      const first = await service.addCampaignRosterEntry({
+        actorUserId: gm.id,
+        campaignId: campaign.id,
+        category: "pc",
+        createdByUserId: gm.id,
+        sourceId: otherCharacter.id,
+        sourceType: "character",
+      });
+      const duplicate = await service.addCampaignRosterEntry({
+        actorUserId: gm.id,
+        campaignId: campaign.id,
+        category: "pc",
+        createdByUserId: gm.id,
+        sourceId: otherCharacter.id,
+        sourceType: "character",
+      });
+
+      expect(duplicate.id).toBe(first.id);
+      await expect(
+        service.listCampaignCharacterRosterCandidates({
+          actorUserId: gm.id,
+          campaignId: campaign.id,
+        }),
+      ).resolves.toContainEqual({
+        alreadyRostered: true,
+        id: otherCharacter.id,
+        name: otherCharacter.name,
+        ownerLabel: "Player One",
+      });
+      await expect(
+        prisma!.character.findUnique({ where: { id: otherCharacter.id } }),
+      ).resolves.toMatchObject({ ownerId: player.id });
+      await expect(prisma!.campaignRosterEntry.count()).resolves.toBe(1);
+      await expect(prisma!.scenarioParticipant.count()).resolves.toBe(0);
+
+      await expect(
+        service.addCampaignRosterEntry({
+          actorUserId: gm.id,
+          campaignId: campaign.id,
+          category: "pc",
+          createdByUserId: gm.id,
+          sourceId: "local-draft-or-forged",
+          sourceType: "character",
+        }),
+      ).rejects.toBeInstanceOf(CampaignCharacterRosterCandidateNotFoundError);
+      await expect(prisma!.campaignRosterEntry.count()).resolves.toBe(1);
+    });
+
     it("atomically creates one generated campaign NPC and its roster membership", async () => {
       const gm = await createTestUser(prisma!, { roles: ["game_master"] });
       const repo = createPrismaScenarioRepository(prisma!);
@@ -88,6 +174,43 @@ if (!process.env.DATABASE_URL_TEST) {
         campaignId: campaign.id,
       });
       expect(result.rosterEntry.sourceId).toBe(result.entity.id);
+    });
+
+    it("returns one canonical roster entry for simultaneous equivalent Character adds", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const player = await createTestUser(prisma!, { displayName: "Player One" });
+      const character = await createTestCharacter(prisma!, player.id, { name: "Concurrent Hero" });
+      const repository = createPrismaScenarioRepository(prisma!);
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const service = new CampaignService(repository, characterService);
+      const campaign = await service.createCampaign({
+        gmUserId: gm.id,
+        name: "Concurrent Roster",
+      });
+      const request = {
+        actorUserId: gm.id,
+        campaignId: campaign.id,
+        category: "pc" as const,
+        createdByUserId: gm.id,
+        sourceId: character.id,
+        sourceType: "character" as const,
+      };
+
+      const [first, second] = await Promise.all([
+        service.addCampaignRosterEntry(request),
+        service.addCampaignRosterEntry(request),
+      ]);
+
+      expect(second).toEqual(first);
+      await expect(
+        prisma!.campaignRosterEntry.findMany({
+          where: {
+            campaignId: campaign.id,
+            sourceId: character.id,
+            sourceType: "character",
+          },
+        }),
+      ).resolves.toHaveLength(1);
     });
 
     it("enforces concrete NPC roster ownership and campaign binding before writing or labeling", async () => {
