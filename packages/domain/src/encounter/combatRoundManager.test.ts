@@ -12224,6 +12224,421 @@ describe("combat round manager", () => {
     expect(overrideToNoEffect.phaseResolutionResults[0]?.criticalRoll.finalCriticalRoll).toBe(-2);
   });
 
+  it("keeps the blunt arm 12 unconsciousness conflict inactive through review and commit", () => {
+    // AppFacing_Crits!A109:X109 explicitly denies automatic unconsciousness, while
+    // AppFacing_Effects!A341:AE341 authors an unconscious action state.
+    const pending = prepareFailedParryPendingDamage({ weaponDamageClass: "blunt" });
+    const withDefenderPendingAction = declareRoundAction({
+      actionId: "parry_attack",
+      participantId: "guard",
+      state: pending.state,
+    });
+    const afterLocation = recordTestHitLocation({
+      attackResult: pending.attackResult,
+      hitLocationRolls: [17],
+      state: withDefenderPendingAction,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [1, 1],
+      rolledByParticipantId: "gladiator",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+    const attackResultId = afterCritical.phaseResolutionResults[0]?.damageResult?.attackResultId;
+
+    if (!attackResultId) {
+      throw new Error("Expected blunt arm critical damage result.");
+    }
+
+    const reviewed = reviewCombatRoundDamageResult({
+      attackResultId,
+      reviewedAt: "2026-01-01T00:05:40.000Z",
+      reviewedByUserId: "gm-1",
+      review: {
+        additionalEffects: [],
+        finalCriticalRollOverride: 12,
+        operationalConsequences: [],
+        totalDamageOverride: 2,
+      },
+      state: afterCritical,
+    });
+    const reviewedDamage = reviewed.phaseResolutionResults[0]?.damageResult;
+
+    expect(reviewedDamage?.review?.additionalEffects).toContainEqual(
+      expect.objectContaining({
+        accepted: false,
+        kind: "note",
+        label: "Source-conflicted unconsciousness",
+        notes: expect.stringContaining("AppFacing_Crits!A109:X109"),
+        rowCategory: "special_note",
+        sourceCritKey: "blunt|arm|12",
+        sourceEffectKey: "blunt|arm|12|02",
+        sourceText: "-8",
+      }),
+    );
+    expect(reviewedDamage?.review?.additionalEffects).not.toContainEqual(
+      expect.objectContaining({ accepted: true, rowCategory: "no_combat_action" }),
+    );
+    expect(reviewedDamage?.review?.operationalConsequences).not.toContainEqual(
+      expect.objectContaining({ kind: "cancel_pending_action" }),
+    );
+    expect(reviewedDamage?.review?.operationalConsequences).not.toContainEqual(
+      expect.objectContaining({ accepted: true, label: "No combat action possible" }),
+    );
+
+    if (!reviewedDamage?.review) {
+      throw new Error("Expected source-conflict review proposal.");
+    }
+
+    const acceptanceAttempt = reviewCombatRoundDamageResult({
+      attackResultId,
+      reviewedAt: "2026-01-01T00:05:45.000Z",
+      reviewedByUserId: "gm-1",
+      review: {
+        ...reviewedDamage.review,
+        additionalEffects: reviewedDamage.review.additionalEffects.map((effect) =>
+          effect.sourceEffectKey === "blunt|arm|12|02" ? { ...effect, accepted: true } : effect,
+        ),
+      },
+      state: reviewed,
+    });
+    const attemptedConflict =
+      acceptanceAttempt.phaseResolutionResults[0]?.damageResult?.review?.additionalEffects.find(
+        (effect) => effect.sourceEffectKey === "blunt|arm|12|02",
+      );
+
+    expect(attemptedConflict).toMatchObject({
+      accepted: false,
+      sourceCritKey: "blunt|arm|12",
+      sourceEffectKey: "blunt|arm|12|02",
+      sourceText: "-8",
+    });
+
+    const reloadedReviewState = combatRoundStateSchema.parse(
+      JSON.parse(JSON.stringify(acceptanceAttempt)) as unknown,
+    );
+    const reloadedConflict =
+      reloadedReviewState.phaseResolutionResults[0]?.damageResult?.review?.additionalEffects.find(
+        (effect) => effect.sourceEffectKey === "blunt|arm|12|02",
+      );
+
+    expect(reloadedConflict?.accepted).toBe(false);
+
+    // Defense-in-depth: model an old-head/malformed serialized review that still says accepted.
+    const staleAcceptedState = combatRoundStateSchema.parse({
+      ...reloadedReviewState,
+      phaseResolutionResults: reloadedReviewState.phaseResolutionResults.map((result) => ({
+        ...result,
+        damageResult: result.damageResult?.review
+          ? {
+              ...result.damageResult,
+              review: {
+                ...result.damageResult.review,
+                additionalEffects: result.damageResult.review.additionalEffects.map((effect) =>
+                  effect.sourceEffectKey === "blunt|arm|12|02"
+                    ? { ...effect, accepted: true }
+                    : effect,
+                ),
+              },
+            }
+          : result.damageResult,
+      })),
+    });
+
+    expect(
+      staleAcceptedState.phaseResolutionResults[0]?.damageResult?.review?.additionalEffects.find(
+        (effect) => effect.sourceEffectKey === "blunt|arm|12|02",
+      )?.accepted,
+    ).toBe(true);
+
+    const staleReview = staleAcceptedState.phaseResolutionResults[0]?.damageResult?.review;
+
+    if (!staleReview) {
+      throw new Error("Expected stale source-conflict review.");
+    }
+
+    const replayedReview = reviewCombatRoundDamageResult({
+      attackResultId,
+      reviewedAt: "2026-01-01T00:05:50.000Z",
+      reviewedByUserId: "gm-1",
+      review: staleReview,
+      state: staleAcceptedState,
+    });
+
+    expect(
+      replayedReview.phaseResolutionResults[0]?.damageResult?.review?.additionalEffects.find(
+        (effect) => effect.sourceEffectKey === "blunt|arm|12|02",
+      )?.accepted,
+    ).toBe(false);
+
+    const committed = commitCombatRoundPhaseDamage({
+      attackerScenarioParticipantId: "scenario-gladiator",
+      attackResultId,
+      command: {
+        commandId: "commit-authentic-blunt-arm-12-source-conflict",
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      createdRevision: "revision-authentic-blunt-arm-12-source-conflict",
+      defenderScenarioParticipantId: "scenario-guard",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      state: staleAcceptedState,
+    });
+    const reloadedState = combatRoundStateSchema.parse(
+      JSON.parse(JSON.stringify(committed.state)) as unknown,
+    );
+    const retainedConflict =
+      reloadedState.phaseResolutionResults[0]?.damageResult?.review?.additionalEffects.find(
+        (effect) => effect.sourceEffectKey === "blunt|arm|12|02",
+      );
+
+    expect(committed.command.facts.cancelledActions ?? []).toEqual([]);
+    expect(committed.command.facts.additionalEffects ?? []).not.toContainEqual(
+      expect.objectContaining({ sourceEffectKey: "blunt|arm|12|02" }),
+    );
+    expect(committed.command.facts.createdAdditionalCombatEffectIds ?? []).not.toContainEqual(
+      expect.stringContaining("additional-critical-effect-blunt-arm-12-02"),
+    );
+    expect(committed.command.facts.createdCombatEffectIds ?? []).not.toContainEqual(
+      expect.stringContaining("additional-critical-effect-blunt-arm-12-02"),
+    );
+    expect(committed.command.facts.review).toMatchObject({
+      additionalEffects: expect.arrayContaining([
+        expect.objectContaining({
+          accepted: false,
+          sourceEffectKey: "blunt|arm|12|02",
+        }),
+      ]),
+    });
+    expect(committed.command.facts.operationalConsequences ?? []).not.toContainEqual(
+      expect.objectContaining({ kind: "cancel_pending_action" }),
+    );
+    expect(committed.combatEffects.effects).not.toContainEqual(
+      expect.objectContaining({
+        canonicalLifecycle: expect.objectContaining({
+          sourceReferences: expect.objectContaining({ rowId: "blunt|arm|12|02" }),
+        }),
+      }),
+    );
+    expect(
+      committed.combatEffects.effects.some((effect) =>
+        /unconscious|no combat action possible/i.test(effect.description ?? ""),
+      ),
+    ).toBe(false);
+    expect(retainedConflict).toMatchObject({
+      accepted: false,
+      sourceCritKey: "blunt|arm|12",
+      sourceEffectKey: "blunt|arm|12|02",
+      sourceText: "-8",
+    });
+  });
+
+  it("commits the edged arm 12 golden once with floor, provenance, reload, rejection, and undo", () => {
+    // AppFacing_Crits!A13:X13; AppFacing_Effects!A36:AE42.
+    const pending = prepareFailedParryPendingDamage({ weaponDamageClass: "edged" });
+    const afterLocation = recordTestHitLocation({
+      attackResult: pending.attackResult,
+      hitLocationRolls: [17],
+      state: pending.state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [1, 1],
+      rolledByParticipantId: "gladiator",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+    const attackResultId = afterCritical.phaseResolutionResults[0]?.damageResult?.attackResultId;
+
+    if (!attackResultId) {
+      throw new Error("Expected authentic critical damage result.");
+    }
+
+    const proposed = reviewCombatRoundDamageResult({
+      attackResultId,
+      reviewedAt: "2026-01-01T00:05:40.000Z",
+      reviewedByUserId: "gm-1",
+      review: {
+        additionalEffects: [],
+        finalCriticalRollOverride: 12,
+        operationalConsequences: [],
+        totalDamageOverride: 2,
+      },
+      state: afterCritical,
+    });
+    const proposedDamage = proposed.phaseResolutionResults[0]?.damageResult;
+
+    if (!proposedDamage?.review) {
+      throw new Error("Expected authentic critical review proposal.");
+    }
+
+    const proposedBleed = proposedDamage.review.additionalEffects.find(
+      (effect) => effect.sourceEffectKey === "sharp|arm|12|03",
+    );
+
+    if (proposedBleed?.rateValuePerRound === undefined) {
+      throw new Error("Expected rolled authentic bleed proposal.");
+    }
+
+    expect(proposedBleed.rateValuePerRound).toBe(
+      (proposedBleed.rollReports?.find((report) => report.purpose === "rate")?.total ?? 0) * 10,
+    );
+
+    const reviewed = reviewCombatRoundDamageResult({
+      attackResultId,
+      reviewedAt: "2026-01-01T00:05:50.000Z",
+      reviewedByUserId: "gm-1",
+      review: {
+        ...proposedDamage.review,
+        additionalEffects: proposedDamage.review.additionalEffects.map((effect) => ({
+          ...effect,
+          accepted:
+            effect.sourceEffectKey === "sharp|arm|12|03"
+              ? true
+              : effect.rowCategory === "special_note"
+                ? false
+                : effect.accepted,
+        })),
+      },
+      state: proposed,
+    });
+    const reviewedDamage = reviewed.phaseResolutionResults[0]?.damageResult;
+
+    if (!reviewedDamage) {
+      throw new Error("Expected reviewed authentic critical damage.");
+    }
+
+    expect(reviewedDamage.review?.criticalEffectProposal).toMatchObject({
+      critKey: "sharp|arm|12",
+      minDamageSourceEffectKey: "sharp|arm|12|01",
+      minTotalDamage: 5,
+    });
+    expect(reviewedDamage.review?.additionalEffects).toContainEqual(
+      expect.objectContaining({
+        accepted: true,
+        rateValuePerRound: proposedBleed.rateValuePerRound,
+        sourceEffectKey: "sharp|arm|12|03",
+      }),
+    );
+    expect(
+      reviewedDamage.review?.additionalEffects.filter(
+        (effect) => effect.rowCategory === "special_note",
+      ),
+    ).toEqual(expect.arrayContaining([expect.objectContaining({ accepted: false })]));
+    expect(getCombatRoundEffectiveDamageResult(reviewedDamage).effectiveTotalDamage).toBe(5);
+
+    const committed = commitCombatRoundPhaseDamage({
+      attackerScenarioParticipantId: "scenario-gladiator",
+      attackResultId,
+      command: {
+        commandId: "commit-authentic-sharp-arm-12",
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      createdRevision: "revision-authentic-sharp-arm-12",
+      defenderScenarioParticipantId: "scenario-guard",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      state: reviewed,
+    });
+    const damageRows = committed.combatEffects.effects.filter(
+      (effect) => effect.type === "physical_damage" || effect.type === "general_damage",
+    );
+    const bleed = committed.combatEffects.effects.find(
+      (effect) =>
+        effect.type === "bleed" && effect.modifierValue === proposedBleed.rateValuePerRound,
+    );
+
+    expect(damageRows).toHaveLength(1);
+    expect(damageRows[0]).toMatchObject({ damage: 5, generalDamage: 0 });
+    expect(bleed?.canonicalLifecycle).toMatchObject({
+      payload: { unit: "bleed_rate", value: proposedBleed.rateValuePerRound },
+      sourceReferences: {
+        resultId: "sharp|arm|12",
+        rowId: "sharp|arm|12|03",
+      },
+    });
+    expect(committed.combatEffects.effects).not.toContainEqual(
+      expect.objectContaining({
+        canonicalLifecycle: expect.objectContaining({
+          sourceReferences: expect.objectContaining({ rowId: "sharp|arm|12|06" }),
+        }),
+      }),
+    );
+
+    const reloadedState = combatRoundStateSchema.parse(
+      JSON.parse(JSON.stringify(committed.state)) as unknown,
+    );
+    const reloadedEffects = combatEffectsStateSchema.parse(
+      JSON.parse(JSON.stringify(committed.combatEffects)) as unknown,
+    );
+
+    expect(
+      reloadedEffects.effects.find((effect) => effect.id === bleed?.id)?.canonicalLifecycle,
+    ).toMatchObject({
+      sourceReferences: {
+        resultId: "sharp|arm|12",
+        rowId: "sharp|arm|12|03",
+      },
+    });
+    expect(() =>
+      commitCombatRoundPhaseDamage({
+        attackResultId,
+        command: {
+          commandId: "commit-authentic-sharp-arm-12-again",
+          createdAt: "2026-01-01T00:06:05.000Z",
+          createdByUserId: "gm-1",
+        },
+        defenderScenarioParticipantId: "scenario-guard",
+        state: reloadedState,
+      }),
+    ).toThrow();
+
+    const cleaned = removeCombatRoundCommittedDamageEffects({
+      combatEffects: reloadedEffects,
+      command: committed.command,
+    });
+
+    expect(cleaned.effects).toEqual([]);
+    expect(cleaned.events).toEqual([]);
+  });
+
   it("commits D1 damage rows and clears commit before clearing the proposal", () => {
     const state = initializeCombatRoundPhaseResolutionCursor({
       phase: "phase1",

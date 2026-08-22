@@ -196,12 +196,18 @@ export function buildDamagePersistentLifecycle(input: {
   notes?: string;
   phase?: "phase1" | "phase2";
   rowCategory?: string;
+  sourceCritKey?: string;
+  sourceEffectKey?: string;
   status: CombatEffectStatus;
   type: CombatEffect["type"];
 }): CanonicalCombatModifierEffect | undefined {
   const common = {
     context: input.context,
-    sourceReferences: { effectId: input.effectId },
+    sourceReferences: {
+      effectId: input.effectId,
+      resultId: input.sourceCritKey,
+      rowId: input.sourceEffectKey,
+    },
     status: input.status,
   };
   const applicability = activationApplicability(input);

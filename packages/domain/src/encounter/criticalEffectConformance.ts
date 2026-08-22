@@ -1,5 +1,7 @@
 import {
+  getCriticalEffectBleedRateSupport,
   getCriticalEffectProposalProjection,
+  getCriticalEffectSourceConflict,
   type CriticalEffectProposalProjection,
 } from "./criticalEffectProposal";
 import {
@@ -278,8 +280,11 @@ function classifyMapping(input: {
   }
 
   if (effect.type === "Stun") {
+    const sourceConflict = getCriticalEffectSourceConflict(effect);
+
     return {
       diagnostic:
+        sourceConflict ??
         "Stun facts are retained, but authored -1/-2/-4/-8 interpretation, stacking, and cause-specific recovery remain unresolved.",
       mappingStatus: "deferred_rule_decision",
       requiresExtension: false,
@@ -287,9 +292,21 @@ function classifyMapping(input: {
   }
 
   if (effect.type === "Bleed" || effect.type === "Internal bleed") {
+    const support = getCriticalEffectBleedRateSupport(effect);
+
+    if (support.status === "unsupported") {
+      return {
+        diagnostic: `${support.reason} The rate remains an inactive source-linked note; no lossy bleed value is sent to SU.`,
+        mappingStatus: "mechanically_unmapped",
+        requiresExtension: true,
+      };
+    }
+
     return {
       diagnostic:
-        "Typed bleed projection preserves the authored rate facts; unit/time arithmetic remains a separate deferred rule decision.",
+        support.mode === "fixed"
+          ? `Authored HP rate converts exactly to ${support.tenthsPerRound}/10 HP per round for the existing SU consumer.`
+          : "Authored HP rate is rolled once and converts exactly at 10 tenths per rolled HP for the existing SU consumer.",
       mappingStatus: "mapped",
       requiresExtension: false,
     };

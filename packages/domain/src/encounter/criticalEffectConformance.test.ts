@@ -134,6 +134,53 @@ describe("Critical effect source/conformance inventory", () => {
     expect(report.statusCounts.mechanically_unmapped).toBeGreaterThan(0);
   });
 
+  it("activates only bleed rates that convert exactly to the existing tenths consumer", () => {
+    const entries = buildCriticalEffectConformanceReport().effectEntries;
+    const halfHp = entries.find(({ effectKey }) => effectKey === "blunt|arm|12|03");
+    const oneHp = entries.find(({ effectKey }) => effectKey === "pointed_weapons|arm|10|03");
+    const rolledHp = entries.find(({ effectKey }) => effectKey === "sharp|arm|12|03");
+    const quarterHp = entries.find(
+      ({ effectKey }) => effectKey === "pointed_weapons|abdomen|05|03",
+    );
+
+    expect(halfHp).toMatchObject({
+      mappingStatus: "mapped",
+      proposalProjection: "review_effect:bleed",
+      requiresExtension: false,
+    });
+    expect(halfHp?.diagnostic).toContain("5/10 HP per round");
+    expect(oneHp?.diagnostic).toContain("10/10 HP per round");
+    expect(rolledHp).toMatchObject({
+      mappingStatus: "mapped",
+      proposalProjection: "review_effect:bleed",
+      requiresExtension: false,
+    });
+    expect(quarterHp).toMatchObject({
+      mappingStatus: "mechanically_unmapped",
+      proposalProjection: "review_effect:special_note",
+      requiresExtension: true,
+    });
+    expect(quarterHp?.diagnostic).toContain("inactive source-linked note");
+  });
+
+  it("keeps the blunt arm 12 unconsciousness source conflict inactive and source-linked", () => {
+    const conflict = buildCriticalEffectConformanceReport().effectEntries.find(
+      ({ effectKey }) => effectKey === "blunt|arm|12|02",
+    );
+
+    expect(conflict).toMatchObject({
+      critKey: "blunt|arm|12",
+      mappingStatus: "deferred_rule_decision",
+      proposalProjection: "review_effect:special_note",
+      requiresExtension: false,
+      sourceField: "shock_penalty",
+      sourceValue: "-8",
+    });
+    expect(conflict?.diagnostic).toContain("AppFacing_Crits!A109:X109");
+    expect(conflict?.diagnostic).toContain("AppFacing_Effects!A341:AE341");
+    expect(conflict?.diagnostic).toContain("no unconsciousness or combat-action blocking");
+  });
+
   it("does not let a mapped numeric facet suppress an independent mobility extension gap", () => {
     const entries = buildCriticalEffectConformanceReport().effectEntries;
     const numericMobilityEntries = entries.filter(
@@ -253,13 +300,13 @@ describe("Critical effect source/conformance inventory", () => {
     const report = buildCriticalEffectConformanceReport();
 
     expect(report.statusCounts).toEqual({
-      mapped: 215,
+      mapped: 174,
       projection_only: 523,
-      mechanically_unmapped: 362,
+      mechanically_unmapped: 403,
       deferred_rule_decision: 524,
       provenance_only: 555,
     });
-    expect(report.effectEntries.filter((entry) => entry.requiresExtension)).toHaveLength(885);
+    expect(report.effectEntries.filter((entry) => entry.requiresExtension)).toHaveLength(926);
   });
 
   it("renders the checked-in exhaustive report byte-for-byte deterministically", async () => {
