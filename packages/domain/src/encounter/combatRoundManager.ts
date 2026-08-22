@@ -228,11 +228,7 @@ import {
   buildCriticalEffectProposalFromDamageResult,
   buildCriticalEffectProposalSummary,
 } from "./criticalEffectProposal";
-import {
-  getCriticalResultWithEffects,
-  type CriticalEffectTemplate,
-  type CriticalResult,
-} from "./criticalEffectsTable";
+import { getCriticalResultWithEffects, type CriticalEffectTemplate } from "./criticalEffectsTable";
 import {
   getHitLocationFullLabel,
   hitLocationSchema,
@@ -1650,6 +1646,7 @@ export const combatRoundDamageResultSchema = z.object({
           family: z.string().min(1).optional(),
           location: z.string().min(1).optional(),
           minDamageReason: z.string().min(1).optional(),
+          minDamageSourceEffectKey: z.string().min(1).optional(),
           minTotalDamage: z.number().int().min(0).optional(),
           rollReports: z.array(combatRoundCriticalEffectRollReportSchema).default([]),
           title: z.string().min(1).optional(),
@@ -1749,14 +1746,8 @@ function getCombatRoundHandForHitLocation(
   return "unknown";
 }
 
-function getCriticalOperationalText(
-  effect: CriticalEffectTemplate,
-  result?: CriticalResult,
-): string {
+function getCriticalOperationalText(effect: CriticalEffectTemplate): string {
   return [
-    result?.title,
-    result?.bodyText,
-    ...(result?.sourceSpecialTags ?? []),
     effect.type,
     effect.group,
     effect.subtype,
@@ -1771,11 +1762,8 @@ function getCriticalOperationalText(
     .toLowerCase();
 }
 
-function criticalEffectImpliesDropItem(
-  effect: CriticalEffectTemplate,
-  result?: CriticalResult,
-): boolean {
-  const text = getCriticalOperationalText(effect, result);
+function criticalEffectImpliesDropItem(effect: CriticalEffectTemplate): boolean {
+  const text = getCriticalOperationalText(effect);
 
   return (
     criticalEffectHasStructuredDropItem(effect) ||
@@ -1790,11 +1778,8 @@ function criticalEffectHasStructuredDropItem(effect: CriticalEffectTemplate): bo
   return effect.specialFlag === "drop_item" || effect.sourceValue?.toLowerCase() === "drop_item";
 }
 
-function criticalEffectImpliesLossOfArmUse(
-  effect: CriticalEffectTemplate,
-  result?: CriticalResult,
-): boolean {
-  const text = getCriticalOperationalText(effect, result);
+function criticalEffectImpliesLossOfArmUse(effect: CriticalEffectTemplate): boolean {
+  const text = getCriticalOperationalText(effect);
   const target = effect.target?.toLowerCase() ?? "";
   const targetsArmOrHand =
     target.includes("arm") || target.includes("hand") || target.includes("lower_arm");
@@ -1809,14 +1794,8 @@ function criticalEffectImpliesLossOfArmUse(
   );
 }
 
-function criticalEffectBlocksCombatAction(
-  effect: CriticalEffectTemplate,
-  result?: CriticalResult,
-): boolean {
+function criticalEffectBlocksCombatAction(effect: CriticalEffectTemplate): boolean {
   const text = [
-    result?.title,
-    result?.bodyText,
-    ...(result?.sourceSpecialTags ?? []),
     effect.actionState,
     effect.durationRaw,
     effect.specialFlag,
@@ -1829,18 +1808,20 @@ function criticalEffectBlocksCombatAction(
   const actionState = effect.actionState?.toLowerCase();
   const sourceValue = effect.sourceValue?.toUpperCase();
   const specialFlag = effect.specialFlag?.toLowerCase();
-  const resultTags = result?.sourceSpecialTags ?? [];
+
+  if (actionState === "impaired" || actionState === "drop_and_disable") {
+    return false;
+  }
 
   return Boolean(
     actionState === "no_action" ||
     actionState === "no_meaningful_action" ||
     actionState === "unconscious" ||
+    actionState === "collapse" ||
+    actionState === "parry_only" ||
     sourceValue === "NO ACTION" ||
     specialFlag === "unconscious" ||
     specialFlag === "collapse" ||
-    resultTags.includes("unconscious") ||
-    resultTags.includes("collapse") ||
-    resultTags.includes("collapse_from_shock") ||
     text.includes("unconscious") ||
     text.includes("no action") ||
     text.includes("no actions") ||
@@ -1945,9 +1926,9 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
 
   const relevantEffects = resultWithEffects.effects.filter(
     (effect) =>
-      criticalEffectImpliesDropItem(effect, resultWithEffects.result) ||
-      criticalEffectImpliesLossOfArmUse(effect, resultWithEffects.result) ||
-      criticalEffectBlocksCombatAction(effect, resultWithEffects.result),
+      criticalEffectImpliesDropItem(effect) ||
+      criticalEffectImpliesLossOfArmUse(effect) ||
+      criticalEffectBlocksCombatAction(effect),
   );
 
   if (relevantEffects.length === 0) {
@@ -1955,22 +1936,16 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
   }
 
   const primaryEffect =
-    relevantEffects.find((effect) =>
-      criticalEffectBlocksCombatAction(effect, resultWithEffects.result),
-    ) ??
+    relevantEffects.find((effect) => criticalEffectBlocksCombatAction(effect)) ??
     relevantEffects.find(criticalEffectHasStructuredDropItem) ??
-    relevantEffects.find((effect) =>
-      criticalEffectImpliesDropItem(effect, resultWithEffects.result),
-    ) ??
+    relevantEffects.find((effect) => criticalEffectImpliesDropItem(effect)) ??
     relevantEffects[0];
   const actionBlockingEffect = relevantEffects.find((effect) =>
-    criticalEffectBlocksCombatAction(effect, resultWithEffects.result),
+    criticalEffectBlocksCombatAction(effect),
   );
   const dropEffect =
     relevantEffects.find(criticalEffectHasStructuredDropItem) ??
-    relevantEffects.find((effect) =>
-      criticalEffectImpliesDropItem(effect, resultWithEffects.result),
-    );
+    relevantEffects.find((effect) => criticalEffectImpliesDropItem(effect));
   const sourceText = resultWithEffects.result.bodyText;
   const participantId = input.damageResult.defenderParticipantId;
   const hand = getCombatRoundHandForHitLocation(input.damageResult.selectedHitLocation);
@@ -2108,7 +2083,7 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
         hand,
         id: `critical-operational-${sanitizeCombatRoundReviewIdPart(effect.effectKey)}-note`,
         kind: "note",
-        label: criticalEffectImpliesDropItem(effect, resultWithEffects.result)
+        label: criticalEffectImpliesDropItem(effect)
           ? "Critical indicates dropped item"
           : "Critical may cancel limb-dependent action",
         notes: "GM should choose the affected item/action if one is pending.",
@@ -2152,6 +2127,7 @@ function mergeCombatRoundCriticalEffectProposalIntoReview(input: {
     existingCommittedDamageAmount: getCombatRoundEffectiveDamageResult(input.damageResult)
       .effectiveTotalDamage,
     finalCriticalRoll: input.finalCriticalRoll,
+    preservedRollReports: input.damageResult.review?.criticalEffectProposal?.rollReports,
     rng: input.rng,
     selectedHitLocation: input.selectedHitLocation,
     weaponCriticalCode: input.weaponCriticalCode,
@@ -2162,14 +2138,34 @@ function mergeCombatRoundCriticalEffectProposalIntoReview(input: {
     proposal,
     state: input.state,
   });
+  const priorCriticalEffects = new Map(
+    (input.damageResult.review?.additionalEffects ?? [])
+      .filter(isCombatRoundCriticalTableReviewEffect)
+      .map((effect) => [effect.sourceEffectKey, effect] as const),
+  );
+  const proposedEffects = proposal.proposedEffects.map((effect) => {
+    const prior = priorCriticalEffects.get(effect.sourceEffectKey);
+
+    return prior ? { ...effect, accepted: prior.accepted } : effect;
+  });
+  const priorOperationalConsequences = new Map(
+    (input.damageResult.review?.operationalConsequences ?? [])
+      .filter(isCombatRoundCriticalTableOperationalConsequence)
+      .map((consequence) => [consequence.id, consequence] as const),
+  );
+  const reconciledOperationalConsequences = operationalConsequences.map((consequence) => {
+    const prior = priorOperationalConsequences.get(consequence.id);
+
+    return prior ? { ...consequence, accepted: prior.accepted } : consequence;
+  });
 
   return combatRoundDamageResultSchema.shape.review.unwrap().parse({
     ...existingReview,
-    additionalEffects: [...existingReview.additionalEffects, ...proposal.proposedEffects],
+    additionalEffects: [...existingReview.additionalEffects, ...proposedEffects],
     criticalEffectProposal: buildCriticalEffectProposalSummary(proposal),
     operationalConsequences: [
       ...(existingReview.operationalConsequences ?? []),
-      ...operationalConsequences,
+      ...reconciledOperationalConsequences,
     ],
   });
 }
@@ -10874,9 +10870,7 @@ export function getCombatRoundEffectiveDamageResult(
   const criticalMinimum = getCombatRoundCriticalMinimumTotalDamage(damageResult.review);
   const criticalMinTotalDamage = criticalMinimum.minTotalDamage;
   const criticalMinApplied =
-    !hasTotalDamageOverride &&
-    criticalMinTotalDamage !== undefined &&
-    criticalMinTotalDamage > preCriticalEffectiveDamage;
+    criticalMinTotalDamage !== undefined && criticalMinTotalDamage > preCriticalEffectiveDamage;
   const criticalMinExtra = criticalMinApplied
     ? criticalMinTotalDamage - preCriticalEffectiveDamage
     : undefined;
@@ -12842,6 +12836,8 @@ function buildCombatRoundDamageCommitRows(input: {
       notes: effect.notes,
       phase: input.initiativeGroup?.phase,
       rowCategory: effect.rowCategory,
+      sourceCritKey: effect.sourceCritKey,
+      sourceEffectKey: effect.sourceEffectKey,
       status,
       type: rowShape.type,
     });
@@ -16996,7 +16992,7 @@ function getCombatRoundPhaseDamageCommitReadinessDetail(input: {
     damageResult.review.totalDamageOverride < effectiveDamage.criticalMinTotalDamage
   ) {
     warnings.push(
-      `GM damage override ${damageResult.review.totalDamageOverride} is below critical minimum ${effectiveDamage.criticalMinTotalDamage}; the override will commit as final.`,
+      `GM damage override ${damageResult.review.totalDamageOverride} is below critical minimum ${effectiveDamage.criticalMinTotalDamage}; the critical minimum will commit as final.`,
     );
   }
 

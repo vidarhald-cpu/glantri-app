@@ -180,6 +180,26 @@ describe("persistent combat modifier producers", () => {
     },
   );
 
+  it("preserves exact critical result and effect keys through the canonical lifecycle", () => {
+    const lifecycle = buildDamagePersistentLifecycle({
+      context,
+      effectId: "critical-bleed-1",
+      isStunned: false,
+      label: "Bleed",
+      modifierValue: 5,
+      sourceCritKey: "blunt|arm|12",
+      sourceEffectKey: "blunt|arm|12|03",
+      status: "active",
+      type: "bleed",
+    });
+
+    expect(lifecycle?.sourceReferences).toMatchObject({
+      effectId: "critical-bleed-1",
+      resultId: "blunt|arm|12",
+      rowId: "blunt|arm|12|03",
+    });
+  });
+
   it("requires manual producers to supply an explicit typed payload, duration, and applicability", () => {
     const lifecycle = buildManualPersistentLifecycle({
       applicability: { combatWide: true, encounterId: "encounter-1", rollPurposes: [] },

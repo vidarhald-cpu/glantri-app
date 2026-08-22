@@ -1119,6 +1119,66 @@ describe("combat history projection", () => {
     expect(JSON.stringify(safeCommit)).not.toContain("rejectedRows");
   });
 
+  it("keeps authentic Critical provenance GM-only while both combatants see safe consequences", () => {
+    const committed = event({
+      attackerParticipantId: "aria",
+      defenderParticipantId: "borin",
+      facts: {
+        gmReview: {
+          acceptedSourceEffectKeys: ["sharp|arm|12|03"],
+          critKey: "sharp|arm|12",
+          rejectedSourceEffectKeys: ["sharp|arm|12|06", "sharp|arm|12|07"],
+        },
+        involvedOutcome: {
+          damage: 5,
+          effects: [{ label: "Bleed", rateValuePerRound: 30 }],
+        },
+        publicOutcome: {},
+        rollerPrivate: {},
+      },
+      type: "damage_committed",
+      visibility: {
+        identityRefs: [
+          { participantId: "aria", role: "attacker" },
+          { participantId: "borin", role: "defender" },
+        ],
+        involvedParticipantIds: ["aria", "borin"],
+        outcomeScope: "involved",
+      },
+    });
+    const attacker = projectCombatHistoryEvent({
+      event: committed,
+      participants,
+      viewer: player(["aria"], ["aria", "borin", "cyra"]),
+    });
+    const defender = projectCombatHistoryEvent({
+      event: committed,
+      participants,
+      viewer: player(["borin"], ["aria", "borin", "cyra"]),
+    });
+    const uninvolved = projectCombatHistoryEvent({
+      event: committed,
+      participants,
+      viewer: player(["cyra"], ["aria", "borin", "cyra"]),
+    });
+    const gm = projectCombatHistoryEvent({
+      event: committed,
+      participants,
+      viewer: { kind: "gm" },
+    });
+
+    for (const combatant of [attacker, defender]) {
+      expect(combatant?.facts.involvedOutcome).toEqual({
+        damage: 5,
+        effects: [{ label: "Bleed", rateValuePerRound: 30 }],
+      });
+      expect(combatant?.facts.gmReview).toBeUndefined();
+      expect(JSON.stringify(combatant)).not.toContain("sharp|arm|12");
+    }
+    expect(uninvolved).toBeUndefined();
+    expect(gm?.facts.gmReview).toMatchObject({ critKey: "sharp|arm|12" });
+  });
+
   it("projects the same public result note to GM and authorized player envelopes only", () => {
     const committed = event({
       actorParticipantId: "aria",

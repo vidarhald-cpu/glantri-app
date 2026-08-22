@@ -1,4 +1,5 @@
 import {
+  getCriticalEffectBleedRateSupport,
   getCriticalEffectProposalProjection,
   type CriticalEffectProposalProjection,
 } from "./criticalEffectProposal";
@@ -287,9 +288,21 @@ function classifyMapping(input: {
   }
 
   if (effect.type === "Bleed" || effect.type === "Internal bleed") {
+    const support = getCriticalEffectBleedRateSupport(effect);
+
+    if (support.status === "unsupported") {
+      return {
+        diagnostic: `${support.reason} The rate remains an inactive source-linked note; no lossy bleed value is sent to SU.`,
+        mappingStatus: "mechanically_unmapped",
+        requiresExtension: true,
+      };
+    }
+
     return {
       diagnostic:
-        "Typed bleed projection preserves the authored rate facts; unit/time arithmetic remains a separate deferred rule decision.",
+        support.mode === "fixed"
+          ? `Authored HP rate converts exactly to ${support.tenthsPerRound}/10 HP per round for the existing SU consumer.`
+          : "Authored HP rate is rolled once and converts exactly at 10 tenths per rolled HP for the existing SU consumer.",
       mappingStatus: "mapped",
       requiresExtension: false,
     };

@@ -33,6 +33,7 @@ export interface CriticalEffectProposalSummary {
   family?: CriticalFamily;
   location?: CriticalLocationScope;
   minDamageReason?: string;
+  minDamageSourceEffectKey?: string;
   minTotalDamage?: number;
   rollReports: readonly CriticalEffectProposalRollReport[];
   title?: string;
@@ -102,6 +103,7 @@ export interface CriticalEffectProposalResult {
     title: string;
   };
   minDamageReason?: string;
+  minDamageSourceEffectKey?: string;
   minTotalDamage?: number;
   proposedEffects: readonly CriticalEffectProposalAdditionalEffect[];
   rollReports: readonly CriticalEffectProposalRollReport[];
@@ -111,6 +113,7 @@ export interface CriticalEffectProposalResult {
 export interface CriticalEffectProposalInput {
   existingCommittedDamageAmount: number;
   finalCriticalRoll?: number;
+  preservedRollReports?: readonly CriticalEffectProposalRollReport[];
   rng?: () => number;
   selectedHitLocation?: HitLocation;
   weaponCriticalCode?: string;
@@ -118,6 +121,88 @@ export interface CriticalEffectProposalInput {
 }
 
 const SUPPORTED_DICE_SIDES = new Set([3, 4, 6, 8, 10, 20]);
+
+export type CriticalEffectBleedRateSupport =
+  | {
+      mode: "fixed";
+      status: "supported";
+      tenthsPerRound: number;
+    }
+  | {
+      mode: "rolled";
+      status: "supported";
+      tenthsPerRolledHp: number;
+    }
+  | {
+      reason: string;
+      status: "unsupported";
+    };
+
+function normalizeDiceFormula(value: string): string {
+  return value.trim().toLowerCase().replace(/^1d/, "d");
+}
+
+/**
+ * Critical source rates are authored in HP per round. The live SU consumer stores integer tenths
+ * of HP per round, so only exact integer-tenths conversions may become active mechanics.
+ */
+export function getCriticalEffectBleedRateSupport(
+  effect: CriticalEffectTemplate,
+): CriticalEffectBleedRateSupport {
+  const rateRaw = normalizeEffectText(effect.rateRaw);
+
+  if (effect.type !== "Bleed" && effect.type !== "Internal bleed") {
+    return {
+      reason: "The source effect is not a bleed row.",
+      status: "unsupported",
+    };
+  }
+
+  if (!rateRaw || effect.rateMode === "death_timer") {
+    return {
+      reason: "The authored bleed rate is not an HP-per-round value supported by SU.",
+      status: "unsupported",
+    };
+  }
+
+  if (effect.rateMode === "fixed_fraction") {
+    const match = /^(\d+(?:\.\d+)?)\s*HP\s*\/\s*(?:(\d+)\s*)?rounds?$/i.exec(rateRaw);
+
+    if (match) {
+      const hp = Number(match[1]);
+      const rounds = match[2] ? Number(match[2]) : 1;
+      const tenthsPerRound = (hp * 10) / rounds;
+
+      if (tenthsPerRound > 0 && Number.isInteger(tenthsPerRound)) {
+        return {
+          mode: "fixed",
+          status: "supported",
+          tenthsPerRound,
+        };
+      }
+    }
+  }
+
+  if (effect.rateMode === "roll_once_per_round_rate" && effect.rateRollFormula) {
+    const match = /^(\d*d\d+)\s*HP\s*\/\s*round$/i.exec(rateRaw);
+
+    if (
+      match &&
+      normalizeDiceFormula(match[1] ?? "") === normalizeDiceFormula(effect.rateRollFormula)
+    ) {
+      return {
+        mode: "rolled",
+        status: "supported",
+        tenthsPerRolledHp: 10,
+      };
+    }
+  }
+
+  return {
+    reason: `Authored rate '${rateRaw}' cannot be represented exactly as integer tenths per round.`,
+    status: "unsupported",
+  };
+}
 
 function addMappingWarning(
   label: string,
@@ -165,8 +250,33 @@ function rollFormula(input: {
   };
 }
 
+function isValidPreservedRollReport(input: {
+  report: CriticalEffectProposalRollReport;
+  requirement: CriticalEffectRollRequirement;
+}): boolean {
+  const match = /^(\d*)d(\d+)$/i.exec(input.requirement.formula.trim());
+
+  if (!match) {
+    return false;
+  }
+
+  const count = match[1] ? Number(match[1]) : 1;
+  const sides = Number(match[2]);
+
+  return Boolean(
+    input.report.purpose === input.requirement.purpose &&
+    input.report.sourceField === input.requirement.sourceField &&
+    normalizeDiceFormula(input.report.formula) ===
+      normalizeDiceFormula(input.requirement.formula) &&
+    input.report.rolls.length === count &&
+    input.report.rolls.every((roll) => Number.isInteger(roll) && roll >= 1 && roll <= sides) &&
+    input.report.rolls.reduce((sum, roll) => sum + roll, 0) === input.report.total,
+  );
+}
+
 function getEffectRollReports(input: {
   effect: CriticalEffectTemplate;
+  preservedRollReports?: readonly CriticalEffectProposalRollReport[];
   rng: () => number;
   warnings: string[];
 }): CriticalEffectProposalRollReport[] {
@@ -181,6 +291,17 @@ function getEffectRollReports(input: {
     }
 
     rolledRequirementKeys.add(requirementKey);
+
+    const preserved = input.preservedRollReports?.find(
+      (candidate) =>
+        candidate.effectKey === input.effect.effectKey &&
+        isValidPreservedRollReport({ report: candidate, requirement }),
+    );
+
+    if (preserved) {
+      reports.push(preserved);
+      continue;
+    }
 
     const report = rollFormula({
       effectKey: input.effect.effectKey,
@@ -251,6 +372,8 @@ function buildEffectNotes(input: {
   const actionState = formatCriticalEffectActionState(input.effect);
   const durationReport = input.rollReports.find((report) => report.purpose === "duration");
   const rateReport = input.rollReports.find((report) => report.purpose === "rate");
+  const bleedRateSupport = getCriticalEffectBleedRateSupport(input.effect);
+  const rateValuePerRound = getCriticalEffectRateValuePerRound(input.effect, input.rollReports);
   const formatRollReport = (report: CriticalEffectProposalRollReport): string => {
     const purpose = report.purpose.charAt(0).toUpperCase() + report.purpose.slice(1);
     const rolls = report.rolls.length > 1 ? ` (${report.rolls.join(" + ")})` : "";
@@ -261,11 +384,14 @@ function buildEffectNotes(input: {
   if (input.effect.type === "Bleed" || input.effect.type === "Internal bleed") {
     const bleedLabel = input.effect.type === "Internal bleed" ? "Internal bleed" : "Bleed";
     const rate =
-      rateReport !== undefined
-        ? `${rateReport.total}/10 HP / round`
+      rateValuePerRound !== undefined
+        ? `${rateValuePerRound}/10 HP per round`
         : normalizeEffectText(input.effect.rateRaw);
 
     details.push(rate ? `${bleedLabel}: ${rate}` : bleedLabel);
+    if (bleedRateSupport.status === "unsupported") {
+      details.push(`Not calculated by the app: ${bleedRateSupport.reason}`);
+    }
   } else if (actionState) {
     details.push(actionState.endsWith(".") ? actionState : `${actionState}.`);
   } else if (input.effect.subtype === "loss_of_use") {
@@ -417,13 +543,23 @@ function getCriticalEffectRateValuePerRound(
   effect: CriticalEffectTemplate,
   rollReports: readonly CriticalEffectProposalRollReport[],
 ): number | undefined {
+  const support = getCriticalEffectBleedRateSupport(effect);
+
+  if (support.status === "unsupported") {
+    return undefined;
+  }
+
+  if (support.mode === "fixed") {
+    return support.tenthsPerRound;
+  }
+
   const rateReport = rollReports.find((report) => report.purpose === "rate");
 
   if (rateReport) {
-    return rateReport.total;
+    return rateReport.total * support.tenthsPerRolledHp;
   }
 
-  return effect.rateValuePerRound;
+  return undefined;
 }
 
 function isCriticalEffectMinimumDamageFloor(effect: CriticalEffectTemplate): boolean {
@@ -437,14 +573,12 @@ function isCriticalEffectDropItemTag(effect: CriticalEffectTemplate): boolean {
 function criticalEffectBlocksOrLimitsAction(effect: CriticalEffectTemplate): boolean {
   const actionState = effect.actionState?.toLowerCase();
   const sourceValue = effect.sourceValue?.toUpperCase();
-  const text = [
-    effect.actionState,
-    effect.durationRaw,
-    effect.specialFlag,
-    effect.sourceField,
-    effect.sourceValue,
-    effect.implementationNote,
-  ]
+
+  if (actionState === "impaired" || actionState === "drop_and_disable") {
+    return false;
+  }
+
+  const text = [effect.actionState, effect.durationRaw, effect.specialFlag, effect.sourceValue]
     .filter((entry): entry is string => Boolean(entry))
     .join(" ")
     .toLowerCase();
@@ -484,6 +618,14 @@ export function getCriticalEffectProposalProjection(
   }
 
   if (effect.type === "Bleed") {
+    if (getCriticalEffectBleedRateSupport(effect).status === "unsupported") {
+      return {
+        kind: "note",
+        representation: "review_effect",
+        rowCategory: "special_note",
+      };
+    }
+
     return {
       kind: "special",
       representation: "review_effect",
@@ -492,6 +634,14 @@ export function getCriticalEffectProposalProjection(
   }
 
   if (effect.type === "Internal bleed") {
+    if (getCriticalEffectBleedRateSupport(effect).status === "unsupported") {
+      return {
+        kind: "note",
+        representation: "review_effect",
+        rowCategory: "special_note",
+      };
+    }
+
     return {
       kind: "special",
       representation: "review_effect",
@@ -504,6 +654,14 @@ export function getCriticalEffectProposalProjection(
       kind: "special",
       representation: "review_effect",
       rowCategory: "no_combat_action",
+    };
+  }
+
+  if (effect.type === "Stun") {
+    return {
+      kind: "note",
+      representation: "review_effect",
+      rowCategory: "special_note",
     };
   }
 
@@ -545,16 +703,6 @@ export function getCriticalEffectProposalProjection(
         rowCategory: "general_modifier",
       };
     }
-
-    if (effect.type === "Stun") {
-      return {
-        kind: "modifier",
-        modifierBucket: "general",
-        modifierValue,
-        representation: "review_effect",
-        rowCategory: "general_modifier",
-      };
-    }
   }
 
   return {
@@ -571,7 +719,7 @@ function mapCriticalEffectTemplateToReviewEffect(input: {
 }): CriticalEffectProposalAdditionalEffect | undefined {
   const projection = getCriticalEffectProposalProjection(input.effect);
   const common = {
-    accepted: true,
+    accepted: projection.rowCategory !== "special_note",
     durationRounds: getCriticalEffectStoredDurationRounds(input.effect, input.rollReports),
     effectOrder: input.effect.effectOrder,
     id: `critical-effect-${input.effect.effectKey.replace(/[^A-Za-z0-9_-]+/g, "-")}`,
@@ -682,6 +830,7 @@ export function buildCriticalEffectProposalFromDamageResult(
   const rollReports: CriticalEffectProposalRollReport[] = [];
   let minTotalDamage: number | undefined;
   let minDamageReason: string | undefined;
+  let minDamageSourceEffectKey: string | undefined;
   const proposedEffects = resultWithEffects.effects.flatMap((effect) => {
     if (
       isCriticalEffectMinimumDamageFloor(effect) &&
@@ -690,15 +839,40 @@ export function buildCriticalEffectProposalFromDamageResult(
     ) {
       minTotalDamage = effect.minTotalDamage;
       minDamageReason = effect.minDamageReason;
+      minDamageSourceEffectKey = effect.effectKey;
     }
 
-    const effectRollReports = getEffectRollReports({ effect, rng, warnings });
+    const effectRollReports = getEffectRollReports({
+      effect,
+      preservedRollReports: input.preservedRollReports,
+      rng,
+      warnings,
+    });
     rollReports.push(...effectRollReports);
     const reviewEffect = mapCriticalEffectTemplateToReviewEffect({
       effect,
       existingCommittedDamageAmount: input.existingCommittedDamageAmount,
       rollReports: effectRollReports,
     });
+
+    const projection = getCriticalEffectProposalProjection(effect);
+    if (
+      projection.representation === "review_effect" &&
+      projection.rowCategory === "special_note"
+    ) {
+      const bleedSupport = getCriticalEffectBleedRateSupport(effect);
+      warnings.push(
+        effect.type === "Bleed" || effect.type === "Internal bleed"
+          ? `Critical effect ${effect.effectKey} remains an inactive note: ${
+              bleedSupport.status === "unsupported"
+                ? bleedSupport.reason
+                : "bleed mechanics are unsupported."
+            }`
+          : effect.type === "Stun"
+            ? `Critical effect ${effect.effectKey} remains an inactive note because authored Stun penalty interpretation is unresolved.`
+            : `Critical effect ${effect.effectKey} remains an inactive note because its mechanics are unsupported or ambiguous.`,
+      );
+    }
 
     return reviewEffect ? [reviewEffect] : [];
   });
@@ -714,6 +888,7 @@ export function buildCriticalEffectProposalFromDamageResult(
       title: resultWithEffects.result.title,
     },
     minDamageReason,
+    minDamageSourceEffectKey,
     minTotalDamage,
     proposedEffects,
     rollReports,
@@ -732,6 +907,7 @@ export function buildCriticalEffectProposalSummary(
     family: proposal.criticalResult?.family,
     location: proposal.criticalResult?.location,
     minDamageReason: proposal.minDamageReason,
+    minDamageSourceEffectKey: proposal.minDamageSourceEffectKey,
     minTotalDamage: proposal.minTotalDamage,
     rollReports: proposal.rollReports,
     title: proposal.criticalResult?.title,
