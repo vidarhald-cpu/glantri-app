@@ -15,6 +15,12 @@ const scenario: Scenario = {
     combatStatus: "not_started",
     phase: 1,
     roundNumber: 1,
+    session: {
+      appliedRequestIds: [],
+      availableObjects: [],
+      gmPrivateNotes: "",
+      version: 1,
+    },
   },
   name: "Night at the Keep",
   status: "prepared",

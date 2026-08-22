@@ -40,11 +40,13 @@ export const scenarioEncounterManagementProjectionSchema = z
     campaignId: idSchema.optional(),
     createdAt: z.string().min(1),
     description: z.string().optional(),
+    gmPrivateClosingNote: z.string().optional(),
     id: idSchema,
     kind: encounterKindSchema,
     participantCount: z.number().int().nonnegative(),
     participantMembershipMode: encounterParticipantMembershipModeSchema.optional(),
     participantMemberships: z.array(scenarioEncounterManagementMembershipSchema),
+    playerOutcome: z.string().optional(),
     scenarioId: idSchema.optional(),
     status: encounterStatusSchema,
     timelineLabel: z.string().optional(),
@@ -300,6 +302,7 @@ const persistedCombatReadSessionSchema = z
 const persistedScenarioEncounterManagementSchema = z
   .object({
     description: z.string().optional(),
+    gmPrivateClosingNote: z.string().optional(),
     kind: encounterKindSchema.default("combat"),
     participantMembershipMode: encounterParticipantMembershipModeSchema.optional(),
     participants: z
@@ -312,6 +315,7 @@ const persistedScenarioEncounterManagementSchema = z
           .passthrough(),
       )
       .default([]),
+    playerOutcome: z.string().optional(),
     timelineLabel: z.string().optional(),
   })
   .passthrough();
@@ -530,11 +534,13 @@ export function buildScenarioEncounterManagementProjectionFromPersistedSession(i
     campaignId: metadata.campaignId,
     createdAt: metadata.createdAt,
     description: session.description,
+    gmPrivateClosingNote: session.gmPrivateClosingNote,
     id: metadata.encounterId,
     kind: session.kind,
     participantCount: participantMemberships.length,
     participantMembershipMode: session.participantMembershipMode,
     participantMemberships,
+    playerOutcome: session.playerOutcome,
     scenarioId: metadata.scenarioId,
     status: metadata.status,
     timelineLabel: session.timelineLabel,

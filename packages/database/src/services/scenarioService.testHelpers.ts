@@ -214,6 +214,19 @@ export function createScenarioRepositoryStub() {
     listScenarioParticipants: async (scenarioId) =>
       participants.filter((participant) => participant.scenarioId === scenarioId),
     updateScenarioLiveState: async () => scenario,
+    updateScenarioSessionState: async (input) => {
+      scenario.liveState = {
+        combatStatus: scenario.liveState?.combatStatus ?? "not_started",
+        phase: scenario.liveState?.phase ?? 1,
+        roundNumber: scenario.liveState?.roundNumber ?? 1,
+        session: input.session,
+      };
+      scenario.updatedAt = "2026-04-21T00:00:01.000Z";
+      return scenario;
+    },
+    pickUpScenarioAvailableItem: async () => {
+      throw new Error("Not implemented in test stub.");
+    },
     updateScenarioParticipantState: async (participantId, state) => {
       const participant = participants.find((entry) => entry.id === participantId);
 

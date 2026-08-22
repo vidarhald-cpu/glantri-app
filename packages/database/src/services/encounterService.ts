@@ -9,6 +9,7 @@ import {
 
 import {
   createPrismaEncounterRepository,
+  EncounterPresenceError,
   type EncounterRepository,
 } from "../repositories/encounterRepository";
 import { CombatPersistenceError } from "../repositories/combatStatePersistenceRepository";
@@ -44,7 +45,12 @@ export class EncounterCombatWriteError extends Error {
 
 export class EncounterWriteError extends Error {
   constructor(
-    readonly code: "stale_revision" | "transaction_conflict",
+    readonly code:
+      | "inactive_participant"
+      | "invalid_active_membership"
+      | "participant_already_active"
+      | "stale_revision"
+      | "transaction_conflict",
     message: string,
     cause?: unknown,
   ) {
@@ -93,6 +99,11 @@ export class EncounterService {
   }
 
   async updateEncounter(input: {
+    objectiveEvent?: {
+      actorUserId?: string | null;
+      eventType: string;
+      summary: string;
+    };
     campaignId?: string | null;
     encounterId: string;
     expectedRevision?: string;
@@ -106,6 +117,9 @@ export class EncounterService {
         error instanceof CombatPersistenceError &&
         (error.code === "stale_revision" || error.code === "transaction_conflict")
       ) {
+        throw new EncounterWriteError(error.code, error.message, error);
+      }
+      if (error instanceof EncounterPresenceError) {
         throw new EncounterWriteError(error.code, error.message, error);
       }
       throw error;

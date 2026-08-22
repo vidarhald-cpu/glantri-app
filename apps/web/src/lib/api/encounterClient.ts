@@ -137,6 +137,7 @@ export async function createEncounterOnServer(input: {
     `/scenarios/${input.scenarioId}/encounters`,
     {
       body: JSON.stringify({
+        expectedRevision: input.session.updatedAt,
         session: input.session,
       }),
       method: "POST",
@@ -200,12 +201,18 @@ export async function updateEncounterOnServer(input: {
 
 export async function updateEncounterStatusOnServer(input: {
   encounterId: string;
+  expectedRevision: string;
+  gmPrivateClosingNote?: string;
+  playerOutcome?: string;
   status: EncounterStatus;
 }): Promise<EncounterSession> {
   const payload = await sendJson<{ encounter: EncounterSession }>(
     `/encounters/${input.encounterId}/status`,
     {
       body: JSON.stringify({
+        expectedRevision: input.expectedRevision,
+        gmPrivateClosingNote: input.gmPrivateClosingNote,
+        playerOutcome: input.playerOutcome,
         status: input.status,
       }),
       method: "PATCH",
@@ -217,6 +224,7 @@ export async function updateEncounterStatusOnServer(input: {
 
 export async function updateEncounterParticipantsOnServer(input: {
   encounterId: string;
+  expectedRevision: string;
   participantMembershipMode?: EncounterParticipantMembershipMode;
   participants: EncounterParticipant[];
 }): Promise<EncounterSession> {
@@ -224,6 +232,7 @@ export async function updateEncounterParticipantsOnServer(input: {
     `/encounters/${input.encounterId}/participants`,
     {
       body: JSON.stringify({
+        expectedRevision: input.expectedRevision,
         participantMembershipMode: input.participantMembershipMode,
         participants: input.participants,
       }),

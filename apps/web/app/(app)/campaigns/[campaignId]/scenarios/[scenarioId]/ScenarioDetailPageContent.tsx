@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { AuthUser } from "@glantri/auth";
 import type {
+  CampaignAsset,
   CampaignRosterEntry,
   EncounterKind,
   EncounterParticipant,
@@ -15,6 +16,7 @@ import type {
   ScenarioEventLog,
   ScenarioEncounterManagementProjection,
   ScenarioParticipant,
+  ScenarioSessionView,
 } from "@glantri/domain";
 import { createEncounterSession } from "@glantri/rules-engine";
 
@@ -24,6 +26,7 @@ import {
   createEncounterOnServer,
   loadAuthUsers,
   loadCampaignEntities,
+  loadCampaignAssets,
   loadCampaignRoster,
   loadEncounterById,
   loadServerCharacters,
@@ -32,11 +35,14 @@ import {
   loadScenarioById,
   loadScenarioEventLogs,
   loadScenarioParticipants,
+  loadScenarioSession,
   updateEncounterParticipantsOnServer,
   updateEncounterStatusOnServer,
   updateScenarioParticipantMetadataOnServer,
   updateScenarioOnServer,
+  updateScenarioSessionOnServer,
 } from "@/lib/api/localServiceClient";
+import { loadCampaignItems, type CampaignEquipmentState } from "@/lib/api/equipmentClient";
 import { refreshScenarioParticipantEquipmentOnServer } from "@/lib/api/scenarioClient";
 import {
   buildScenarioActorInputFromTemplate,
@@ -46,6 +52,7 @@ import RememberedCampaignWorkspaceEffect from "@/lib/campaigns/RememberedCampaig
 import type { ServerCharacterRecord } from "@/lib/api/localServiceClient";
 import { getScenarioCharacterDefaultControllerId } from "@/lib/campaigns/scenarioCharacters";
 import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
+import { ScenarioSessionManagement } from "@/features/scenarios/ScenarioSessionManagement";
 
 import { ScenarioCampaignRosterPickerSection } from "./components/ScenarioCampaignRosterPickerSection";
 import { ScenarioEncounterAssignmentSection } from "./components/ScenarioEncounterAssignmentSection";
@@ -79,6 +86,11 @@ export default function ScenarioDetailPageContent({
   scenarioId,
 }: ScenarioDetailPageContentProps) {
   const [assignableUsers, setAssignableUsers] = useState<AuthUser[]>([]);
+  const [campaignAssets, setCampaignAssets] = useState<CampaignAsset[]>([]);
+  const [campaignEquipment, setCampaignEquipment] = useState<CampaignEquipmentState>({
+    itemsById: {},
+    templatesById: {},
+  });
   const [encounters, setEncounters] = useState<ScenarioEncounterManagementProjection[]>([]);
   const [entities, setEntities] = useState<ReusableEntity[]>([]);
   const [error, setError] = useState<string>();
@@ -89,6 +101,7 @@ export default function ScenarioDetailPageContent({
   const [playerCharacters, setPlayerCharacters] = useState<ServerCharacterRecord[]>([]);
   const [roster, setRoster] = useState<CampaignRosterEntry[]>([]);
   const [scenario, setScenario] = useState<Scenario | null>(null);
+  const [scenarioSession, setScenarioSession] = useState<ScenarioSessionView>();
   const [templates, setTemplates] = useState<ReusableEntity[]>([]);
 
   const [encounterTitle, setEncounterTitle] = useState("");
@@ -509,6 +522,7 @@ export default function ScenarioDetailPageContent({
   }) {
     await updateEncounterParticipantsOnServer({
       encounterId: input.encounter.id,
+      expectedRevision: input.encounter.updatedAt,
       participantMembershipMode: "explicit",
       participants: input.participants,
     });
@@ -529,6 +543,9 @@ export default function ScenarioDetailPageContent({
       nextUsers,
       nextPlayerCharacters,
       nextRoster,
+      nextSession,
+      nextAssets,
+      nextCampaignItems,
     ] = await Promise.all([
       loadScenarioById(scenarioId),
       loadScenarioParticipants(scenarioId),
@@ -539,6 +556,9 @@ export default function ScenarioDetailPageContent({
       loadAuthUsers(),
       loadServerCharacters(),
       loadCampaignRoster(campaignId),
+      loadScenarioSession(scenarioId),
+      loadCampaignAssets(campaignId),
+      loadCampaignItems(campaignId),
     ]);
 
     const globalTemplates = nextTemplates.filter(
@@ -554,6 +574,9 @@ export default function ScenarioDetailPageContent({
     setAssignableUsers(nextUsers);
     setPlayerCharacters(nextPlayerCharacters);
     setRoster(nextRoster);
+    setScenarioSession(nextSession);
+    setCampaignAssets(nextAssets);
+    setCampaignEquipment(nextCampaignItems.state);
     setScenarioName(nextScenario.name);
     setScenarioDescription(nextScenario.description);
     setScenarioStatus(nextScenario.status);
@@ -586,6 +609,31 @@ export default function ScenarioDetailPageContent({
       onWorkspaceEncountersChanged?.();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to create encounter.");
+    }
+  }
+
+  async function handleSaveScenarioSession(input: {
+    gmPrivateNotes: string;
+    references: NonNullable<Scenario["liveState"]>["session"]["availableObjects"];
+  }) {
+    if (!scenarioSession) return;
+    try {
+      setError(undefined);
+      setFeedback(undefined);
+      await updateScenarioSessionOnServer({
+        availableObjects: input.references,
+        expectedRevision: scenarioSession.revision,
+        gmPrivateNotes: input.gmPrivateNotes,
+        scenarioId,
+      });
+      setFeedback("Saved Scenario session preparation.");
+      await refreshScenario();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to save Scenario session preparation.",
+      );
     }
   }
 
@@ -730,12 +778,16 @@ export default function ScenarioDetailPageContent({
   async function handleUpdateEncounterStatus(
     encounter: ScenarioEncounterManagementProjection,
     status: EncounterStatus,
+    closing?: { gmPrivateClosingNote?: string; playerOutcome?: string },
   ) {
     try {
       setError(undefined);
       setFeedback(undefined);
       const updated = await updateEncounterStatusOnServer({
         encounterId: encounter.id,
+        expectedRevision: encounter.updatedAt,
+        gmPrivateClosingNote: closing?.gmPrivateClosingNote,
+        playerOutcome: closing?.playerOutcome,
         status,
       });
 
@@ -977,6 +1029,47 @@ export default function ScenarioDetailPageContent({
         scenarioStatus={scenarioStatus}
       />
 
+      {scenarioSession ? (
+        <ScenarioSessionManagement
+          campaignId={campaignId}
+          initialReferences={scenario.liveState?.session.availableObjects ?? []}
+          key={scenarioSession.revision}
+          onSave={(input) => void handleSaveScenarioSession(input)}
+          session={scenarioSession}
+          sourceOptions={[
+            ...campaignAssets
+              .filter((asset) => asset.visibility === "visible_to_all")
+              .map((asset) => ({
+                label: `Asset: ${asset.title}`,
+                sourceId: asset.id,
+                sourceKind: "campaign_asset" as const,
+              })),
+            ...Object.values(campaignEquipment.itemsById)
+              .filter((item) => Boolean(item.holderCharacterId))
+              .map((item) => ({
+                label: `Item: ${
+                  item.displayName ||
+                  campaignEquipment.templatesById[item.templateId]?.name ||
+                  "Item"
+                }`,
+                sourceId: item.id,
+                sourceKind: "campaign_item" as const,
+              })),
+            ...entities
+              .filter((entity) =>
+                roster.some(
+                  (entry) => entry.sourceType === "reusableEntity" && entry.sourceId === entity.id,
+                ),
+              )
+              .map((entity) => ({
+                label: `Reference: ${entity.name}`,
+                sourceId: entity.id,
+                sourceKind: "reusable_entity" as const,
+              })),
+          ]}
+        />
+      ) : null}
+
       <ScenarioEncountersSection
         campaignId={campaignId}
         encounterDescription={encounterDescription}
@@ -988,8 +1081,8 @@ export default function ScenarioDetailPageContent({
         onKindChange={setEncounterKind}
         onTimelineLabelChange={setEncounterTimelineLabel}
         onTitleChange={setEncounterTitle}
-        onUpdateEncounterStatus={(encounter, status) =>
-          void handleUpdateEncounterStatus(encounter, status)
+        onUpdateEncounterStatus={(encounter, status, closing) =>
+          void handleUpdateEncounterStatus(encounter, status, closing)
         }
         orderedEncounters={orderedEncounters}
         scenarioId={scenarioId}

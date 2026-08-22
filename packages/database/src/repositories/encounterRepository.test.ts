@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { EncounterSession } from "@glantri/domain";
+import { encounterSessionSchema, type EncounterSession } from "@glantri/domain";
 
 const mocks = vi.hoisted(() => ({
   prisma: {
+    $queryRaw: vi.fn(),
     $transaction: vi.fn(),
     encounter: {
       create: vi.fn(),
@@ -12,6 +13,8 @@ const mocks = vi.hoisted(() => ({
       findUniqueOrThrow: vi.fn(),
       update: vi.fn(),
     },
+    scenarioEventLog: { create: vi.fn() },
+    scenarioParticipant: { findMany: vi.fn() },
   },
 }));
 
@@ -19,7 +22,7 @@ vi.mock("../client", () => ({
   prisma: mocks.prisma,
 }));
 
-import { createPrismaEncounterRepository } from "./encounterRepository";
+import { createPrismaEncounterRepository, EncounterPresenceError } from "./encounterRepository";
 
 const baseSession: EncounterSession = {
   actionLog: [],
@@ -30,13 +33,16 @@ const baseSession: EncounterSession = {
   id: "encounter-1",
   kind: "roleplay",
   participants: [],
-  status: "active",
+  status: "planned",
   title: "Courtyard",
   turnOrderMode: "manual",
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
 
 describe("encounterRepository trusted identifiers", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
   it("uses trusted scenario and campaign ids when creating an encounter", async () => {
     const repository = createPrismaEncounterRepository();
     mocks.prisma.encounter.create.mockImplementation(async ({ data }) => ({
@@ -156,9 +162,7 @@ describe("encounterRepository trusted identifiers", () => {
       },
     ]);
 
-    await expect(
-      repository.listEncounterSummariesByScenario("scenario-1"),
-    ).resolves.toEqual([
+    await expect(repository.listEncounterSummariesByScenario("scenario-1")).resolves.toEqual([
       {
         campaignId: "campaign-1",
         createdAt: baseSession.createdAt,
@@ -182,5 +186,62 @@ describe("encounterRepository trusted identifiers", () => {
       },
       where: { scenarioId: "scenario-1" },
     });
+  });
+
+  it("rejects an overlapping active participant before writing the Encounter", async () => {
+    const repository = createPrismaEncounterRepository();
+    const active = encounterSessionSchema.parse({
+      ...baseSession,
+      participantMembershipMode: "explicit",
+      participants: [
+        {
+          id: "encounter-participant-a",
+          label: "Player A",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-a",
+        },
+      ],
+      scenarioId: "scenario-1",
+      status: "active",
+    });
+    mocks.prisma.$transaction.mockImplementation(async (callback) => callback(mocks.prisma));
+    mocks.prisma.encounter.findUniqueOrThrow.mockResolvedValue({
+      activeCombatState: null,
+      archivedCombatRounds: [],
+      campaignId: "campaign-1",
+      combatArchiveCount: 0,
+      combatStorageMode: "legacy",
+      createdAt: new Date(baseSession.createdAt),
+      id: active.id,
+      name: active.title,
+      scenarioId: "scenario-1",
+      sessionJson: baseSession,
+      status: "planned",
+      updatedAt: new Date(baseSession.updatedAt),
+    });
+    mocks.prisma.scenarioParticipant.findMany.mockResolvedValue([{ id: "participant-a" }]);
+    mocks.prisma.encounter.findMany.mockResolvedValue([
+      {
+        id: "encounter-2",
+        name: "Courtyard",
+        sessionJson: { ...active, id: "encounter-2", title: "Courtyard" },
+        status: "active",
+      },
+    ]);
+
+    await expect(
+      repository.updateEncounter({
+        encounterId: active.id,
+        expectedRevision: active.updatedAt,
+        scenarioId: "scenario-1",
+        session: active,
+      }),
+    ).rejects.toEqual(
+      expect.objectContaining<Partial<EncounterPresenceError>>({
+        code: "participant_already_active",
+      }),
+    );
+    expect(mocks.prisma.encounter.update).not.toHaveBeenCalled();
+    expect(mocks.prisma.scenarioEventLog.create).not.toHaveBeenCalled();
   });
 });

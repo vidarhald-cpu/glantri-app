@@ -8,6 +8,10 @@ import {
   scenarioParticipantSchema,
   scenarioRelationshipSchema,
   scenarioSchema,
+  scenarioSessionStateSchema,
+  createScenarioLiveState,
+  getStorageAssignmentForLocation,
+  type CanonicalEquipmentItem,
   type Campaign,
   type CampaignAsset,
   type CampaignRosterEntry,
@@ -24,13 +28,30 @@ import {
   type ScenarioParticipantState,
   type ScenarioRelationship,
   type ScenarioRelationshipType,
+  type ScenarioSessionState,
 } from "@glantri/domain";
+import { createDefaultEquipmentLocations } from "@glantri/content";
 import { Prisma, PrismaClient } from "@prisma/client";
 
 import { prisma as defaultPrisma } from "../client";
+import { createPrismaCharacterEquipmentRepository } from "./characterEquipmentRepository";
 
 function asJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
+}
+
+export class ScenarioPersistenceError extends Error {
+  constructor(
+    readonly code: "stale_revision" | "transaction_conflict",
+    message: string,
+    cause?: unknown,
+  ) {
+    super(message);
+    this.name = "ScenarioPersistenceError";
+    if (cause !== undefined) {
+      Object.defineProperty(this, "cause", { enumerable: false, value: cause });
+    }
+  }
 }
 
 function isCampaignRosterIdentityConflict(
@@ -367,6 +388,21 @@ export interface ScenarioRepository {
   ): Promise<ScenarioParticipant | null>;
   listScenarioParticipants(scenarioId: string): Promise<ScenarioParticipant[]>;
   updateScenarioLiveState(scenarioId: string, liveState: ScenarioLiveState): Promise<Scenario>;
+  updateScenarioSessionState(input: {
+    expectedRevision: string;
+    scenarioId: string;
+    session: ScenarioSessionState;
+  }): Promise<Scenario>;
+  pickUpScenarioAvailableItem(input: {
+    actorUserId: string;
+    audienceParticipantIds: string[];
+    availabilityId: string;
+    expectedRevision: string;
+    requestId: string;
+    scenarioId: string;
+    summary: string;
+    targetCharacterId: string;
+  }): Promise<{ idempotent: boolean; item: CanonicalEquipmentItem; scenario: Scenario }>;
   updateScenarioParticipantState(
     participantId: string,
     state: ScenarioParticipantState,
@@ -745,6 +781,192 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
       });
 
       return mapScenario(record);
+    },
+    async updateScenarioSessionState(input) {
+      try {
+        return await prisma.$transaction(
+          async (transaction) => {
+            await transaction.$queryRaw(
+              Prisma.sql`SELECT "id" FROM "Scenario" WHERE "id" = ${input.scenarioId} FOR UPDATE`,
+            );
+            const existing = await transaction.scenario.findUnique({
+              where: { id: input.scenarioId },
+            });
+            if (!existing) {
+              throw new Error("Scenario not found.");
+            }
+            if (existing.updatedAt.toISOString() !== input.expectedRevision) {
+              throw new ScenarioPersistenceError(
+                "stale_revision",
+                "The Scenario changed. Refresh and review the latest session state.",
+              );
+            }
+            const liveState = scenarioLiveStateSchema.parse(
+              existing.liveStateJson ?? createScenarioLiveState(),
+            );
+            const record = await transaction.scenario.update({
+              data: {
+                liveStateJson: asJson({
+                  ...liveState,
+                  session: scenarioSessionStateSchema.parse(input.session),
+                }),
+              },
+              where: { id: input.scenarioId },
+            });
+            return mapScenario(record);
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        if (error instanceof ScenarioPersistenceError) throw error;
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+          throw new ScenarioPersistenceError(
+            "transaction_conflict",
+            "The Scenario changed while saving. Refresh and try again.",
+            error,
+          );
+        }
+        throw error;
+      }
+    },
+    async pickUpScenarioAvailableItem(input) {
+      try {
+        return await prisma.$transaction(
+          async (transaction) => {
+            await transaction.$queryRaw(
+              Prisma.sql`SELECT "id" FROM "Scenario" WHERE "id" = ${input.scenarioId} FOR UPDATE`,
+            );
+            const existing = await transaction.scenario.findUnique({
+              where: { id: input.scenarioId },
+            });
+            if (!existing) throw new Error("Scenario not found.");
+            const liveState = scenarioLiveStateSchema.parse(
+              existing.liveStateJson ?? createScenarioLiveState(),
+            );
+            const reference = liveState.session.availableObjects.find(
+              (candidate) => candidate.id === input.availabilityId,
+            );
+            const equipmentRepository = createPrismaCharacterEquipmentRepository(transaction);
+
+            if (liveState.session.appliedRequestIds.includes(input.requestId)) {
+              const transferEvents = await transaction.scenarioEventLog.findMany({
+                orderBy: { createdAt: "desc" },
+                select: { actorUserId: true, participantId: true, payloadJson: true },
+                where: {
+                  eventType: "item_transferred",
+                  scenarioId: input.scenarioId,
+                },
+              });
+              const transferredItem = transferEvents.find((event) => {
+                const payload = event.payloadJson;
+                return (
+                  event.actorUserId === input.actorUserId &&
+                  event.participantId === input.audienceParticipantIds[0] &&
+                  payload !== null &&
+                  typeof payload === "object" &&
+                  !Array.isArray(payload) &&
+                  "requestId" in payload &&
+                  payload.requestId === input.requestId &&
+                  "availabilityId" in payload &&
+                  payload.availabilityId === input.availabilityId
+                );
+              });
+              const payload =
+                transferredItem?.payloadJson &&
+                typeof transferredItem.payloadJson === "object" &&
+                !Array.isArray(transferredItem.payloadJson)
+                  ? transferredItem.payloadJson
+                  : {};
+              const itemId =
+                "itemId" in payload && typeof payload.itemId === "string"
+                  ? payload.itemId
+                  : undefined;
+              const item = itemId
+                ? await equipmentRepository.getCanonicalEquipmentItemById(itemId)
+                : null;
+              if (!item) throw new Error("The completed pickup could not be reloaded.");
+              return { idempotent: true, item, scenario: mapScenario(existing) };
+            }
+
+            if (existing.updatedAt.toISOString() !== input.expectedRevision) {
+              throw new ScenarioPersistenceError(
+                "stale_revision",
+                "The Scenario changed. Refresh before picking up the Item.",
+              );
+            }
+            if (
+              !reference ||
+              reference.sourceKind !== "campaign_item" ||
+              reference.visibility !== "players" ||
+              !reference.expectedHolderCharacterId
+            ) {
+              throw new Error("Available Item not found.");
+            }
+            const targetParticipant = await transaction.scenarioParticipant.findFirst({
+              where: {
+                characterId: input.targetCharacterId,
+                id: { in: input.audienceParticipantIds },
+                isActive: true,
+                scenarioId: input.scenarioId,
+              },
+            });
+            if (!targetParticipant) throw new Error("Choose an active Character participant.");
+
+            const targetLocation = createDefaultEquipmentLocations(input.targetCharacterId).find(
+              (location) => location.type === "person_system",
+            );
+            if (!targetLocation) throw new Error("The receiving Character has no valid storage.");
+            const item = await equipmentRepository.transferCampaignEquipmentItem({
+              campaignId: existing.campaignId,
+              itemId: reference.sourceId,
+              sourceCharacterId: reference.expectedHolderCharacterId,
+              targetCharacterId: input.targetCharacterId,
+              targetStorageAssignment: getStorageAssignmentForLocation(targetLocation),
+            });
+            const session = scenarioSessionStateSchema.parse({
+              ...liveState.session,
+              appliedRequestIds: [
+                ...liveState.session.appliedRequestIds.filter((id) => id !== input.requestId),
+                input.requestId,
+              ].slice(-100),
+              availableObjects: liveState.session.availableObjects.filter(
+                (candidate) => candidate.id !== input.availabilityId,
+              ),
+            });
+            const updated = await transaction.scenario.update({
+              data: { liveStateJson: asJson({ ...liveState, session }) },
+              where: { id: input.scenarioId },
+            });
+            await transaction.scenarioEventLog.create({
+              data: {
+                actorUserId: input.actorUserId,
+                eventType: "item_transferred",
+                participantId: targetParticipant.id,
+                payloadJson: asJson({
+                  audienceParticipantIds: input.audienceParticipantIds,
+                  availabilityId: input.availabilityId,
+                  itemId: item.id,
+                  requestId: input.requestId,
+                }),
+                scenarioId: input.scenarioId,
+                summary: input.summary,
+              },
+            });
+            return { idempotent: false, item, scenario: mapScenario(updated) };
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        if (error instanceof ScenarioPersistenceError) throw error;
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+          throw new ScenarioPersistenceError(
+            "transaction_conflict",
+            "The Item changed while it was being picked up. Refresh and try again.",
+            error,
+          );
+        }
+        throw error;
+      }
     },
     async updateScenarioParticipantState(participantId, state) {
       const record = await prisma.scenarioParticipant.update({

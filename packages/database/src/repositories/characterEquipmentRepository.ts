@@ -423,7 +423,7 @@ export function createPrismaCharacterEquipmentRepository(
       return mapCanonicalEquipmentItem(updated);
     },
     async transferCampaignEquipmentItem(input) {
-      return prisma.$transaction(async (transaction) => {
+      const persist = async (transaction: Prisma.TransactionClient) => {
         await transaction.$queryRaw(
           Prisma.sql`SELECT "id" FROM "CharacterEquipmentItem" WHERE "id" = ${input.itemId} FOR UPDATE`,
         );
@@ -552,7 +552,12 @@ export function createPrismaCharacterEquipmentRepository(
         }
 
         return mapCanonicalEquipmentItem(updated);
-      });
+      };
+      return transactionClient
+        ? persist(transactionClient)
+        : prisma.$transaction(persist, {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          });
     },
     async getCombatItemInteractionRecords(campaignId) {
       const items = await prisma.characterEquipmentItem.findMany({

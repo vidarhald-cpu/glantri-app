@@ -73,6 +73,11 @@ export interface EncounterRepository {
   listEncountersByScenario(scenarioId: string): Promise<EncounterSession[]>;
   listEncounterSummariesByScenario(scenarioId: string): Promise<EncounterSessionSummary[]>;
   updateEncounter(input: {
+    objectiveEvent?: {
+      actorUserId?: string | null;
+      eventType: string;
+      summary: string;
+    };
     campaignId?: string | null;
     encounterId: string;
     expectedRevision?: string;
@@ -92,6 +97,103 @@ export interface EncounterRepository {
       state: ScenarioParticipantState;
     }>;
   }): Promise<EncounterSession>;
+}
+
+export class EncounterPresenceError extends Error {
+  constructor(
+    readonly code:
+      | "inactive_participant"
+      | "invalid_active_membership"
+      | "participant_already_active",
+    message: string,
+  ) {
+    super(message);
+    this.name = "EncounterPresenceError";
+  }
+}
+
+function explicitScenarioParticipantIds(encounter: EncounterSession): string[] {
+  if (encounter.participantMembershipMode !== "explicit") {
+    throw new EncounterPresenceError(
+      "invalid_active_membership",
+      "An active Encounter must use an explicit participant list.",
+    );
+  }
+  const participantIds = encounter.participants.map(
+    (participant) => participant.scenarioParticipantId,
+  );
+  if (participantIds.some((participantId) => !participantId)) {
+    throw new EncounterPresenceError(
+      "invalid_active_membership",
+      "Every active Encounter participant must belong to the Scenario.",
+    );
+  }
+  const uniqueIds = new Set(participantIds as string[]);
+  if (uniqueIds.size !== participantIds.length || uniqueIds.size === 0) {
+    throw new EncounterPresenceError(
+      "invalid_active_membership",
+      "Choose one or more distinct Scenario participants before starting the Encounter.",
+    );
+  }
+  return [...uniqueIds];
+}
+
+async function assertActiveEncounterPresence(input: {
+  encounter: EncounterSession;
+  scenarioId: string;
+  transaction: Prisma.TransactionClient;
+}): Promise<string[]> {
+  if (input.encounter.status !== "active") return [];
+  const participantIds = explicitScenarioParticipantIds(input.encounter);
+
+  await input.transaction.$queryRaw(
+    Prisma.sql`SELECT "id" FROM "Scenario" WHERE "id" = ${input.scenarioId} FOR UPDATE`,
+  );
+  const activeParticipants = await input.transaction.scenarioParticipant.findMany({
+    select: { id: true },
+    where: {
+      id: { in: participantIds },
+      isActive: true,
+      scenarioId: input.scenarioId,
+    },
+  });
+  if (activeParticipants.length !== participantIds.length) {
+    throw new EncounterPresenceError(
+      "inactive_participant",
+      "Refresh the Scenario and choose active participants before starting the Encounter.",
+    );
+  }
+
+  const otherActiveRecords = await input.transaction.encounter.findMany({
+    select: { id: true, name: true, sessionJson: true, status: true },
+    where: {
+      id: { not: input.encounter.id },
+      scenarioId: input.scenarioId,
+      status: "active",
+    },
+  });
+  for (const record of otherActiveRecords) {
+    const parsed = encounterSessionSchema.parse({
+      ...(record.sessionJson && typeof record.sessionJson === "object" ? record.sessionJson : {}),
+      id: record.id,
+      scenarioId: input.scenarioId,
+      status: record.status,
+      title: record.name,
+    });
+    if (parsed.participantMembershipMode !== "explicit") continue;
+    const otherIds = new Set(
+      parsed.participants.flatMap((participant) =>
+        participant.scenarioParticipantId ? [participant.scenarioParticipantId] : [],
+      ),
+    );
+    if (participantIds.some((participantId) => otherIds.has(participantId))) {
+      throw new EncounterPresenceError(
+        "participant_already_active",
+        "A selected participant is already active in another Encounter.",
+      );
+    }
+  }
+  return participantIds;
 }
 
 export function createPrismaEncounterRepository(
@@ -170,7 +272,38 @@ export function createPrismaEncounterRepository(
       return records.map(mapEncounterSummary);
     },
     async updateEncounter(input) {
-      return combatPersistenceRepository.updateEncounterPreservingSplitCombat(input);
+      let audienceParticipantIds: string[] = [];
+      return combatPersistenceRepository.updateEncounterPreservingSplitCombat({
+        ...input,
+        afterPersist: async (transaction, encounter) => {
+          if (!input.objectiveEvent || !encounter.scenarioId) return;
+          await transaction.scenarioEventLog.create({
+            data: {
+              actorUserId: input.objectiveEvent.actorUserId ?? null,
+              eventType: input.objectiveEvent.eventType,
+              payloadJson: asJson({
+                audienceParticipantIds,
+                encounterId: encounter.id,
+              }),
+              scenarioId: encounter.scenarioId,
+              summary: input.objectiveEvent.summary,
+            },
+          });
+        },
+        beforePersist: async (transaction, encounter) => {
+          if (!encounter.scenarioId) return;
+          audienceParticipantIds =
+            encounter.status === "active"
+              ? await assertActiveEncounterPresence({
+                  encounter,
+                  scenarioId: encounter.scenarioId,
+                  transaction,
+                })
+              : encounter.participants.flatMap((participant) =>
+                  participant.scenarioParticipantId ? [participant.scenarioParticipantId] : [],
+                );
+        },
+      });
     },
     async updateCombatEncounter(input) {
       return combatPersistenceRepository.updateCombatEncounter(input);

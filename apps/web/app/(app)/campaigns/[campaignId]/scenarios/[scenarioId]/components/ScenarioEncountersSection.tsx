@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
 import type {
   EncounterKind,
@@ -24,6 +25,7 @@ interface ScenarioEncountersSectionProps {
   onUpdateEncounterStatus: (
     encounter: ScenarioEncounterManagementProjection,
     status: EncounterStatus,
+    closing?: { gmPrivateClosingNote?: string; playerOutcome?: string },
   ) => void;
   orderedEncounters: ScenarioEncounterManagementProjection[];
   scenarioId: string;
@@ -43,6 +45,8 @@ export function ScenarioEncountersSection({
   orderedEncounters,
   scenarioId,
 }: ScenarioEncountersSectionProps) {
+  const [closingNotes, setClosingNotes] = useState<Record<string, string>>({});
+  const [outcomes, setOutcomes] = useState<Record<string, string>>({});
   return (
     <section
       style={{
@@ -158,29 +162,81 @@ export function ScenarioEncountersSection({
                     </div>
                   </td>
                   <td style={{ padding: "0.6rem 0" }}>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
-                      {encounter.status === "active" ? (
-                        <button
-                          onClick={() => onUpdateEncounterStatus(encounter, "paused")}
-                          type="button"
-                        >
-                          Pause
-                        </button>
-                      ) : encounter.status !== "archived" && encounter.status !== "complete" ? (
-                        <button
-                          onClick={() => onUpdateEncounterStatus(encounter, "active")}
-                          type="button"
-                        >
-                          {encounter.status === "paused" ? "Resume" : "Start"}
-                        </button>
-                      ) : null}
-                      {encounter.status !== "archived" ? (
-                        <button
-                          onClick={() => onUpdateEncounterStatus(encounter, "archived")}
-                          type="button"
-                        >
-                          Archive
-                        </button>
+                    <div style={{ display: "grid", gap: "0.5rem" }}>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+                        {encounter.status === "active" ? (
+                          <button
+                            onClick={() => onUpdateEncounterStatus(encounter, "paused")}
+                            type="button"
+                          >
+                            Pause
+                          </button>
+                        ) : encounter.status !== "archived" && encounter.status !== "complete" ? (
+                          <button
+                            onClick={() => onUpdateEncounterStatus(encounter, "active")}
+                            type="button"
+                          >
+                            {encounter.status === "paused" ? "Resume" : "Start"}
+                          </button>
+                        ) : null}
+                        {encounter.status !== "archived" ? (
+                          <button
+                            onClick={() => onUpdateEncounterStatus(encounter, "archived")}
+                            type="button"
+                          >
+                            Archive
+                          </button>
+                        ) : null}
+                      </div>
+                      {encounter.status === "active" || encounter.status === "paused" ? (
+                        <div style={{ display: "grid", gap: "0.35rem", minWidth: 230 }}>
+                          <label htmlFor={`encounter-outcome-${encounter.id}`}>
+                            Player-visible outcome
+                          </label>
+                          <textarea
+                            id={`encounter-outcome-${encounter.id}`}
+                            onChange={(event) =>
+                              setOutcomes((current) => ({
+                                ...current,
+                                [encounter.id]: event.target.value,
+                              }))
+                            }
+                            rows={2}
+                            value={outcomes[encounter.id] ?? encounter.playerOutcome ?? ""}
+                          />
+                          <label htmlFor={`encounter-private-note-${encounter.id}`}>
+                            Private GM closing note (optional)
+                          </label>
+                          <textarea
+                            id={`encounter-private-note-${encounter.id}`}
+                            onChange={(event) =>
+                              setClosingNotes((current) => ({
+                                ...current,
+                                [encounter.id]: event.target.value,
+                              }))
+                            }
+                            rows={2}
+                            value={
+                              closingNotes[encounter.id] ?? encounter.gmPrivateClosingNote ?? ""
+                            }
+                          />
+                          <button
+                            disabled={
+                              (outcomes[encounter.id] ?? encounter.playerOutcome ?? "").trim()
+                                .length === 0
+                            }
+                            onClick={() =>
+                              onUpdateEncounterStatus(encounter, "complete", {
+                                gmPrivateClosingNote:
+                                  closingNotes[encounter.id] ?? encounter.gmPrivateClosingNote,
+                                playerOutcome: outcomes[encounter.id] ?? encounter.playerOutcome,
+                              })
+                            }
+                            type="button"
+                          >
+                            Close encounter
+                          </button>
+                        </div>
                       ) : null}
                     </div>
                   </td>

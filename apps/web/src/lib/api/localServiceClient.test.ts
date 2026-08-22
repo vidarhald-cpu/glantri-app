@@ -460,12 +460,14 @@ describe("localServiceClient wire contract", () => {
     await expect(
       client.updateEncounterStatusOnServer({
         encounterId: "encounter-1",
+        expectedRevision: "revision-1",
         status: "paused",
       }),
     ).resolves.toEqual(encounter);
 
     expectFetchCall(fetchMock, {
       body: {
+        expectedRevision: "revision-1",
         status: "paused",
       },
       method: "PATCH",
@@ -504,6 +506,7 @@ describe("localServiceClient wire contract", () => {
     await expect(
       client.updateEncounterParticipantsOnServer({
         encounterId: "encounter-1",
+        expectedRevision: "revision-1",
         participantMembershipMode: "explicit",
         participants,
       }),
@@ -511,6 +514,7 @@ describe("localServiceClient wire contract", () => {
 
     expectFetchCall(fetchMock, {
       body: {
+        expectedRevision: "revision-1",
         participantMembershipMode: "explicit",
         participants,
       },

@@ -34,6 +34,12 @@ function scenario(input: { id: string; name: string; status?: Scenario["status"]
       combatStatus: "in_progress",
       phase: 2,
       roundNumber: 4,
+      session: {
+        appliedRequestIds: [],
+        availableObjects: [],
+        gmPrivateNotes: "",
+        version: 1,
+      },
     },
     mapAssetId: "private-map",
     name: input.name,

@@ -292,6 +292,12 @@ describe("gmEncounter", () => {
           combatStatus: "in_progress",
           phase: 2,
           roundNumber: 3,
+          session: {
+            appliedRequestIds: [],
+            availableObjects: [],
+            gmPrivateNotes: "",
+            version: 1,
+          },
         },
       }),
     ).toEqual({
