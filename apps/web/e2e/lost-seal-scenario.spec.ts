@@ -19,6 +19,21 @@ async function json<T>(response: Awaited<ReturnType<APIRequestContext["get"]>>):
   return response.json() as Promise<T>;
 }
 
+async function markParticipantGmOnly(participantId: string): Promise<void> {
+  if (!process.env.DATABASE_URL) {
+    if (process.env.CI !== "true") {
+      throw new Error("Lost Seal privacy setup requires the guarded task database environment.");
+    }
+    process.env.DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/glantri_test";
+  }
+
+  await prisma.scenarioParticipant.update({
+    data: { visibilityOverridesJson: { visibility: "gm_only" } },
+    where: { id: participantId },
+  });
+  await prisma.$disconnect();
+}
+
 test.describe("Lost Seal Scenario happy path", () => {
   test.use({ storageState: "e2e/.auth/gm.json" });
 
@@ -79,11 +94,7 @@ test.describe("Lost Seal Scenario happy path", () => {
         { data: { characterId: characterBId, controlledByUserId: playerBUser.user.id } },
       ),
     );
-    await prisma.scenarioParticipant.update({
-      data: { visibilityOverridesJson: { visibility: "gm_only" } },
-      where: { id: participantB.participant.id },
-    });
-    await prisma.$disconnect();
+    await markParticipantGmOnly(participantB.participant.id);
 
     const hiddenParticipantName = participantB.participant.snapshot.displayName;
     const nonexistentParticipantName = "Nonexistent Lost Seal Participant";
