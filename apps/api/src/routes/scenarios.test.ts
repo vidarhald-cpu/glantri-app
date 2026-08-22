@@ -5836,7 +5836,7 @@ describe("scenarios route contract", () => {
     );
   });
 
-  it("omits disjoint Encounter and history metadata from another involved player's session", async () => {
+  it("keeps hidden participants equivalent to nonexistent participants before and after close and reconnect", async () => {
     const encounterA = encounterSessionSchema.parse({
       createdAt: "2026-08-22T10:00:00.000Z",
       id: "encounter-a",
@@ -5912,10 +5912,21 @@ describe("scenarios route contract", () => {
         scenarioId: "scenario-1",
         snapshot: { displayName: "Player B" },
         sourceType: "character",
+        visibilityOverrides: { visibility: "gm_only" },
+      },
+      {
+        controlledByUserId: "hidden-player",
+        id: "participant-hidden",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "Hidden Steward" },
+        sourceType: "character",
+        visibilityOverrides: { visibility: "hidden" },
       },
     ]);
     mocks.encounterService.listEncountersByScenario.mockResolvedValue([encounterA, encounterB]);
-    mocks.scenarioService.listScenarioEventLogs.mockResolvedValue([
+    const initialEventLogs = [
       {
         createdAt: "2026-08-22T10:01:30.000Z",
         eventType: "encounter_skill_outcome",
@@ -5926,39 +5937,105 @@ describe("scenarios route contract", () => {
       },
       {
         createdAt: "2026-08-22T10:01:40.000Z",
-        eventType: "encounter_closed",
+        eventType: "encounter_skill_outcome",
         id: "event-b",
-        payload: { audienceParticipantIds: ["participant-b"], privateNote: "culprit" },
+        payload: { audienceParticipantIds: ["participant-a"] },
         scenarioId: "scenario-1",
         summary: "Player B learned the culprit.",
       },
-    ]);
+      {
+        createdAt: "2026-08-22T10:01:50.000Z",
+        eventType: "participant_added",
+        id: "event-hidden",
+        participantId: "participant-hidden",
+        scenarioId: "scenario-1",
+        summary: "Added Hidden Steward to the scenario.",
+      },
+    ];
+    mocks.scenarioService.listScenarioEventLogs.mockResolvedValue(initialEventLogs);
     mocks.scenarioService.resolveScenarioAvailableObjects.mockResolvedValue([]);
     const app = await buildScenarioTestApp();
 
-    const response = await app.inject({
+    const directScenarioResponse = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1",
+    });
+    const responseBeforeClose = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/session",
+    });
+
+    mocks.encounterService.listEncountersByScenario.mockResolvedValue([
+      encounterA,
+      { ...encounterB, status: "complete", updatedAt: "2026-08-22T10:03:00.000Z" },
+    ]);
+    mocks.scenarioService.listScenarioEventLogs.mockResolvedValue([
+      ...initialEventLogs,
+      {
+        createdAt: "2026-08-22T10:03:00.000Z",
+        eventType: "encounter_closed",
+        id: "event-b-closed",
+        payload: { audienceParticipantIds: ["participant-a"] },
+        scenarioId: "scenario-1",
+        summary: "Player B left the closed Courtyard encounter.",
+      },
+    ]);
+    const responseAfterClose = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/session",
+    });
+    const responseAfterReconnect = await app.inject({
       method: "GET",
       url: "/scenarios/scenario-1/session",
     });
 
     await app.close();
-    expect(response.statusCode, response.body).toBe(200);
-    expect(response.json().session.encounters).toEqual([
+    expect(directScenarioResponse.statusCode, directScenarioResponse.body).toBe(200);
+    for (const privateKey of [
+      "session",
+      "appliedRequestIds",
+      "availableObjects",
+      "gmPrivateNotes",
+      "version",
+    ]) {
+      expect(directScenarioResponse.body).not.toContain(`"${privateKey}"`);
+    }
+
+    expect(responseBeforeClose.statusCode, responseBeforeClose.body).toBe(200);
+    expect(responseBeforeClose.json().session.encounters).toEqual([
       expect.objectContaining({ id: "encounter-a", title: "Library" }),
     ]);
-    expect(response.json().session.history).toEqual([
+    expect(responseBeforeClose.json().session.history).toEqual([
       expect.objectContaining({ id: "event-a", summary: "Player A found a clue." }),
     ]);
-    for (const hidden of [
-      "Secret Courtyard",
-      "participant-b",
-      "steward",
-      "private-request",
-      "hiddenTotal",
-      "privateNote",
-      "culprit",
-    ]) {
-      expect(response.body).not.toContain(hidden);
+    for (const response of [responseBeforeClose, responseAfterClose, responseAfterReconnect]) {
+      expect(response.statusCode, response.body).toBe(200);
+      const payload = response.json().session;
+      for (const participantId of [
+        "participant-b",
+        "participant-hidden",
+        "nonexistent-participant",
+      ]) {
+        expect(
+          payload.participants.find((entry: { id: string }) => entry.id === participantId),
+        ).toBe(undefined);
+      }
+      for (const hidden of [
+        "Secret Courtyard",
+        "participant-b",
+        "participant-hidden",
+        "Player B",
+        "Hidden Steward",
+        "nonexistent-participant",
+        "Nonexistent Participant",
+        "steward",
+        "private-request",
+        "hiddenTotal",
+        "privateNote",
+        "culprit",
+      ]) {
+        expect(response.body).not.toContain(hidden);
+      }
     }
   });
 

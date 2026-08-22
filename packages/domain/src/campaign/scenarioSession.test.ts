@@ -10,7 +10,12 @@ import {
 
 const now = "2026-08-22T10:00:00.000Z";
 
-function participant(id: string, userId: string, name: string) {
+function participant(
+  id: string,
+  userId: string,
+  name: string,
+  visibility?: "hidden" | "visible_to_all" | "gm_only",
+) {
   return scenarioParticipantSchema.parse({
     characterId: `character-${id}`,
     controlledByUserId: userId,
@@ -29,6 +34,7 @@ function participant(id: string, userId: string, name: string) {
       resources: {},
     },
     updatedAt: now,
+    visibilityOverrides: visibility ? { visibility } : undefined,
   });
 }
 
@@ -144,6 +150,121 @@ describe("Scenario session privacy projection", () => {
     expect(JSON.stringify(history)).not.toContain("privateCalculation");
   });
 
+  it("omits hidden and GM-only participants and every typed event that identifies them", () => {
+    const scenario = scenarioSchema.parse({
+      campaignId: "campaign-1",
+      createdAt: now,
+      id: "scenario-1",
+      name: "Lost Seal",
+      status: "live",
+      updatedAt: now,
+    });
+    const participants = [
+      participant("participant-a", "user-a", "Player A", "visible_to_all"),
+      participant("participant-hidden", "user-hidden", "Hidden Steward", "hidden"),
+      participant("participant-gm", "user-gm-only", "Veiled Witness", "gm_only"),
+    ];
+    const eventLogs = [
+      {
+        createdAt: now,
+        eventType: "participant_added",
+        id: "hidden-added",
+        participantId: "participant-hidden",
+        scenarioId: "scenario-1",
+        summary: "Added Hidden Steward to the scenario.",
+      },
+      {
+        createdAt: now,
+        eventType: "encounter_skill_outcome",
+        id: "gm-only-skill",
+        payload: { audienceParticipantIds: ["participant-a"] },
+        scenarioId: "scenario-1",
+        summary: "Veiled Witness used Investigation: success.",
+      },
+      {
+        createdAt: now,
+        eventType: "item_transferred",
+        id: "hidden-payload",
+        payload: {
+          audienceParticipantIds: ["participant-a"],
+          sourceParticipantId: "participant-hidden",
+        },
+        scenarioId: "scenario-1",
+        summary: "An item changed hands.",
+      },
+      {
+        createdAt: now,
+        eventType: "encounter_closed",
+        id: "public-close",
+        payload: { audienceParticipantIds: ["participant-a"] },
+        scenarioId: "scenario-1",
+        summary: "The library investigation closed.",
+      },
+    ];
+
+    const playerView = buildScenarioSessionView({
+      availableObjects: [],
+      encounters: [],
+      eventLogs,
+      participants,
+      scenario,
+      userId: "user-a",
+      viewerMode: "player",
+    });
+    const gmView = buildScenarioSessionView({
+      availableObjects: [],
+      encounters: [],
+      eventLogs,
+      participants,
+      scenario,
+      userId: "the-gm",
+      viewerMode: "gm",
+    });
+
+    expect(playerView.participants.map((entry) => entry.id)).toEqual(["participant-a"]);
+    expect(playerView.history.map((entry) => entry.id)).toEqual(["public-close"]);
+    expect(JSON.stringify(playerView)).not.toMatch(
+      /participant-hidden|participant-gm|Hidden Steward|Veiled Witness/,
+    );
+    expect(gmView.participants.map((entry) => entry.id)).toEqual([
+      "participant-a",
+      "participant-hidden",
+      "participant-gm",
+    ]);
+    expect(gmView.history.map((entry) => entry.id)).toEqual([
+      "gm-only-skill",
+      "hidden-added",
+      "hidden-payload",
+      "public-close",
+    ]);
+  });
+
+  it("lets a controller see their own hidden participant without exposing it to other players", () => {
+    const scenario = scenarioSchema.parse({
+      campaignId: "campaign-1",
+      createdAt: now,
+      id: "scenario-1",
+      name: "Lost Seal",
+      status: "live",
+      updatedAt: now,
+    });
+    const hidden = participant("participant-hidden", "user-hidden", "Hidden Steward", "gm_only");
+
+    const view = buildScenarioSessionView({
+      availableObjects: [],
+      encounters: [],
+      eventLogs: [],
+      participants: [hidden],
+      scenario,
+      userId: "user-hidden",
+      viewerMode: "player",
+    });
+
+    expect(view.participants).toEqual([
+      expect.objectContaining({ id: "participant-hidden", isControlledByViewer: true }),
+    ]);
+  });
+
   it("removes GM notes, retry identities, hidden references, and holder snapshots", () => {
     const scenario = scenarioSchema.parse({
       campaignId: "campaign-1",
@@ -178,7 +299,11 @@ describe("Scenario session privacy projection", () => {
 
     const safe = buildPlayerSafeScenario(scenario);
     const serialized = JSON.stringify(safe);
-    expect(safe.liveState?.session.availableObjects).toHaveLength(1);
+    expect(safe.liveState).not.toHaveProperty("session");
+    expect(serialized).not.toContain("appliedRequestIds");
+    expect(serialized).not.toContain("availableObjects");
+    expect(serialized).not.toContain("gmPrivateNotes");
+    expect(serialized).not.toContain("version");
     expect(serialized).not.toContain("secret-request");
     expect(serialized).not.toContain("source-character");
     expect(serialized).not.toContain("gm-object");

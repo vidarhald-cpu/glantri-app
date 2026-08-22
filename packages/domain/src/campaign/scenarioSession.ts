@@ -127,15 +127,51 @@ function eventEncounterId(event: ScenarioEventLog): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+function valueReferencesParticipant(value: unknown, participantIds: ReadonlySet<string>): boolean {
+  if (typeof value === "string") return participantIds.has(value);
+  if (Array.isArray(value)) {
+    return value.some((entry) => valueReferencesParticipant(entry, participantIds));
+  }
+  if (!value || typeof value !== "object") return false;
+  return Object.values(value).some((entry) => valueReferencesParticipant(entry, participantIds));
+}
+
+function eventIdentifiesExcludedParticipant(input: {
+  event: ScenarioEventLog;
+  participantIds: ReadonlySet<string>;
+  participantNames: ReadonlySet<string>;
+}): boolean {
+  if (input.event.participantId && input.participantIds.has(input.event.participantId)) return true;
+  if (valueReferencesParticipant(input.event.payload, input.participantIds)) return true;
+
+  const normalizedSummary = input.event.summary.toLocaleLowerCase();
+  return [...input.participantNames].some((name) =>
+    normalizedSummary.includes(name.toLocaleLowerCase()),
+  );
+}
+
 export function projectScenarioObjectiveHistory(input: {
   controlledParticipantIds: ReadonlySet<string>;
   eventLogs: ScenarioEventLog[];
+  excludedParticipantIds?: ReadonlySet<string>;
+  excludedParticipantNames?: ReadonlySet<string>;
   viewerMode: "gm" | "player";
 }): z.infer<typeof scenarioSessionHistoryEventSchema>[] {
   return input.eventLogs
     .flatMap((event) => {
       const parsedType = scenarioObjectiveHistoryEventTypeSchema.safeParse(event.eventType);
       if (!parsedType.success || !playerSafeHistoryTypes.has(parsedType.data)) return [];
+
+      if (
+        input.viewerMode === "player" &&
+        eventIdentifiesExcludedParticipant({
+          event,
+          participantIds: input.excludedParticipantIds ?? new Set(),
+          participantNames: input.excludedParticipantNames ?? new Set(),
+        })
+      ) {
+        return [];
+      }
 
       const audience = eventAudienceParticipantIds(event);
       if (
@@ -178,6 +214,19 @@ export function buildScenarioSessionView(input: {
       )
       .map((participant) => participant.id),
   );
+  const excludedParticipants =
+    input.viewerMode === "player"
+      ? input.participants.filter(
+          (participant) =>
+            !controlledParticipantIds.has(participant.id) &&
+            (participant.visibilityOverrides?.visibility === "hidden" ||
+              participant.visibilityOverrides?.visibility === "gm_only"),
+        )
+      : [];
+  const excludedParticipantIds = new Set(excludedParticipants.map((participant) => participant.id));
+  const excludedParticipantNames = new Set(
+    excludedParticipants.map((participant) => participant.snapshot.displayName),
+  );
   const accessibleEncounters = input.encounters.filter(
     (encounter) =>
       encounter.status !== "archived" &&
@@ -208,9 +257,9 @@ export function buildScenarioSessionView(input: {
     const controlled = controlledParticipantIds.has(participant.id);
     if (
       input.viewerMode === "player" &&
-      activeEncounter &&
-      !accessibleEncounterIds.has(activeEncounter.id) &&
-      !controlled
+      !controlled &&
+      (excludedParticipantIds.has(participant.id) ||
+        (activeEncounter && !accessibleEncounterIds.has(activeEncounter.id)))
     ) {
       return [];
     }
@@ -253,6 +302,8 @@ export function buildScenarioSessionView(input: {
     history: projectScenarioObjectiveHistory({
       controlledParticipantIds,
       eventLogs: input.eventLogs,
+      excludedParticipantIds,
+      excludedParticipantNames,
       viewerMode: input.viewerMode,
     }),
     participants,
@@ -268,24 +319,16 @@ export function buildScenarioSessionView(input: {
   });
 }
 
-export function buildPlayerSafeScenario(scenario: Scenario): Scenario {
+export type PlayerSafeScenario = Omit<Scenario, "liveState"> & {
+  liveState?: Omit<NonNullable<Scenario["liveState"]>, "session">;
+};
+
+export function buildPlayerSafeScenario(scenario: Scenario): PlayerSafeScenario {
   if (!scenario.liveState) return scenario;
+  const { session: _session, ...playerLiveState } = scenario.liveState;
   return {
     ...scenario,
-    liveState: {
-      ...scenario.liveState,
-      session: {
-        appliedRequestIds: [],
-        availableObjects: scenario.liveState.session.availableObjects
-          .filter((reference) => reference.visibility === "players")
-          .map((reference) => ({
-            ...reference,
-            expectedHolderCharacterId: undefined,
-          })),
-        gmPrivateNotes: "",
-        version: 1,
-      },
-    },
+    liveState: playerLiveState,
   };
 }
 

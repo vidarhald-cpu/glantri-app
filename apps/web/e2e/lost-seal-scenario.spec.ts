@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { prisma } from "@glantri/database";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -70,11 +71,58 @@ test.describe("Lost Seal Scenario happy path", () => {
         { data: { characterId: characterAId, controlledByUserId: playerAUser.user.id } },
       ),
     );
-    const participantB = await json<{ participant: { id: string } }>(
+    const participantB = await json<{
+      participant: { id: string; snapshot: { displayName: string } };
+    }>(
       await page.request.post(
         `${API_URL}/scenarios/${scenario.scenario.id}/participants/character`,
         { data: { characterId: characterBId, controlledByUserId: playerBUser.user.id } },
       ),
+    );
+    await prisma.scenarioParticipant.update({
+      data: { visibilityOverridesJson: { visibility: "gm_only" } },
+      where: { id: participantB.participant.id },
+    });
+    await prisma.$disconnect();
+
+    const hiddenParticipantName = participantB.participant.snapshot.displayName;
+    const nonexistentParticipantName = "Nonexistent Lost Seal Participant";
+    const initialDirectPlayerScenario = await playerAContext.request.get(
+      `${API_URL}/scenarios/${scenario.scenario.id}`,
+    );
+    expect(initialDirectPlayerScenario.status()).toBe(200);
+    const initialDirectPlayerScenarioPayload = await initialDirectPlayerScenario.text();
+    for (const privateKey of [
+      "session",
+      "appliedRequestIds",
+      "availableObjects",
+      "gmPrivateNotes",
+      "version",
+    ]) {
+      expect(initialDirectPlayerScenarioPayload).not.toContain(`"${privateKey}"`);
+    }
+    const initialPlayerSession = await playerAContext.request.get(
+      `${API_URL}/scenarios/${scenario.scenario.id}/session`,
+    );
+    expect(initialPlayerSession.status()).toBe(200);
+    const initialPlayerSessionPayload = await initialPlayerSession.text();
+    for (const privateIdentity of [
+      participantB.participant.id,
+      hiddenParticipantName,
+      "nonexistent-participant",
+      nonexistentParticipantName,
+    ]) {
+      expect(initialPlayerSessionPayload).not.toContain(privateIdentity);
+    }
+
+    const playerAPage = await playerAContext.newPage();
+    await playerAPage.goto(
+      `/campaigns/${campaign.campaign.id}/scenarios/${scenario.scenario.id}/player`,
+    );
+    await expect(playerAPage.getByRole("heading", { name: "Lost Seal" })).toBeVisible();
+    await expect(playerAPage.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
+    await expect(playerAPage.getByText(nonexistentParticipantName, { exact: false })).toHaveCount(
+      0,
     );
     const itemResponse = await json<{
       state: { itemsById: Record<string, { displayName?: string | null; id: string }> };
@@ -239,13 +287,9 @@ test.describe("Lost Seal Scenario happy path", () => {
     );
     expect(skillRoll.status(), await skillRoll.text()).toBe(200);
 
-    const playerAPage = await playerAContext.newPage();
-    await playerAPage.goto(
-      `/campaigns/${campaign.campaign.id}/scenarios/${scenario.scenario.id}/player`,
-    );
-    await expect(playerAPage.getByRole("heading", { name: "Lost Seal" })).toBeVisible();
     await expect(playerAPage.getByText("Encounter: Seal Library Investigation")).toBeVisible();
     await expect(playerAPage.getByText("Courtyard Ambush")).toHaveCount(0);
+    await expect(playerAPage.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
     const pickUp = playerAPage.getByRole("button", { name: /Pick up as Smoke Character/ });
     await pickUp.focus();
     await expect(pickUp).toBeFocused();
@@ -259,6 +303,7 @@ test.describe("Lost Seal Scenario happy path", () => {
     await playerAPage.reload();
     await expect(playerAPage.getByText(/picked up Lost Seal/)).toBeVisible();
     await expect(playerAPage.getByText("Courtyard Ambush")).toHaveCount(0);
+    await expect(playerAPage.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
 
     const playerBSession = await playerBContext.request.get(
       `${API_URL}/scenarios/${scenario.scenario.id}/session`,
@@ -266,6 +311,8 @@ test.describe("Lost Seal Scenario happy path", () => {
     expect(playerBSession.status()).toBe(200);
     const playerBPayload = await playerBSession.text();
     expect(playerBPayload).toContain("Courtyard Ambush");
+    expect(playerBPayload).toContain(participantB.participant.id);
+    expect(playerBPayload).toContain(hiddenParticipantName);
     expect(playerBPayload).not.toContain("Seal Library Investigation");
     expect(playerBPayload).not.toContain("steward");
     expect(playerBPayload).not.toContain("investigation-roll");
@@ -328,6 +375,27 @@ test.describe("Lost Seal Scenario happy path", () => {
     ).text();
     expect(finalPlayerPayload).not.toContain("steward remains");
     expect(finalPlayerPayload).not.toContain("Their patron");
+    for (const privateIdentity of [
+      participantB.participant.id,
+      hiddenParticipantName,
+      "nonexistent-participant",
+      nonexistentParticipantName,
+    ]) {
+      expect(finalPlayerPayload).not.toContain(privateIdentity);
+    }
+    await expect(playerAPage.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
+    await playerAPage.close();
+    const reconnectedPlayerAPage = await playerAContext.newPage();
+    await reconnectedPlayerAPage.goto(
+      `/campaigns/${campaign.campaign.id}/scenarios/${scenario.scenario.id}/player`,
+    );
+    await expect(reconnectedPlayerAPage.getByRole("heading", { name: "Lost Seal" })).toBeVisible();
+    await expect(
+      reconnectedPlayerAPage.getByText(hiddenParticipantName, { exact: false }),
+    ).toHaveCount(0);
+    await expect(
+      reconnectedPlayerAPage.getByText(nonexistentParticipantName, { exact: false }),
+    ).toHaveCount(0);
 
     await page.goto(`/campaigns/${campaign.campaign.id}/scenarios/${scenario.scenario.id}`);
     await expect(page.getByRole("heading", { name: "Session preparation" })).toBeVisible();
