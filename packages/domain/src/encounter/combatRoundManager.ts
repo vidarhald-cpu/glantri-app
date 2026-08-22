@@ -228,6 +228,7 @@ import {
   buildCriticalEffectProposalFromDamageResult,
   buildCriticalEffectProposalSummary,
   getCriticalEffectSourceConflict,
+  isCriticalEffectSourceConflictKey,
 } from "./criticalEffectProposal";
 import { getCriticalResultWithEffects, type CriticalEffectTemplate } from "./criticalEffectsTable";
 import {
@@ -1706,6 +1707,33 @@ function isCombatRoundCriticalTableOperationalConsequence(
   return Boolean(consequence.sourceCritKey || consequence.sourceEffectKey);
 }
 
+function enforceCombatRoundCriticalSourceConflictRejections(
+  review: CombatRoundDamageReview,
+): CombatRoundDamageReview {
+  return {
+    ...review,
+    additionalEffects: review.additionalEffects.map((effect) =>
+      isCriticalEffectSourceConflictKey(effect.sourceEffectKey)
+        ? { ...effect, accepted: false }
+        : effect,
+    ),
+    operationalConsequences: review.operationalConsequences.map((consequence) =>
+      isCriticalEffectSourceConflictKey(consequence.sourceEffectKey)
+        ? { ...consequence, accepted: false }
+        : consequence,
+    ),
+  };
+}
+
+function getAcceptedCombatRoundDamageReviewAdditionalEffects(
+  review?: CombatRoundDamageReview,
+): CombatRoundDamageReviewAdditionalEffect[] {
+  return (review?.additionalEffects ?? []).filter(
+    (effect) =>
+      effect.accepted !== false && !isCriticalEffectSourceConflictKey(effect.sourceEffectKey),
+  );
+}
+
 function removeCombatRoundCriticalEffectProposalFromReview(
   review?: CombatRoundDamageReview,
 ): CombatRoundDamageReview | undefined {
@@ -2128,14 +2156,17 @@ function mergeCombatRoundCriticalEffectProposalIntoReview(input: {
     total: number;
   };
 }): CombatRoundDamageReview {
+  const sourceConflictSafeReview = input.damageResult.review
+    ? enforceCombatRoundCriticalSourceConflictRejections(input.damageResult.review)
+    : undefined;
   const existingReview = removeCombatRoundCriticalEffectProposalFromReview(
-    input.damageResult.review,
+    sourceConflictSafeReview,
   ) ?? { additionalEffects: [], operationalConsequences: [] };
   const proposal = buildCriticalEffectProposalFromDamageResult({
     existingCommittedDamageAmount: getCombatRoundEffectiveDamageResult(input.damageResult)
       .effectiveTotalDamage,
     finalCriticalRoll: input.finalCriticalRoll,
-    preservedRollReports: input.damageResult.review?.criticalEffectProposal?.rollReports,
+    preservedRollReports: sourceConflictSafeReview?.criticalEffectProposal?.rollReports,
     rng: input.rng,
     selectedHitLocation: input.selectedHitLocation,
     weaponCriticalCode: input.weaponCriticalCode,
@@ -2147,7 +2178,7 @@ function mergeCombatRoundCriticalEffectProposalIntoReview(input: {
     state: input.state,
   });
   const priorCriticalEffects = new Map(
-    (input.damageResult.review?.additionalEffects ?? [])
+    (sourceConflictSafeReview?.additionalEffects ?? [])
       .filter(isCombatRoundCriticalTableReviewEffect)
       .map((effect) => [effect.sourceEffectKey, effect] as const),
   );
@@ -2157,7 +2188,7 @@ function mergeCombatRoundCriticalEffectProposalIntoReview(input: {
     return prior ? { ...effect, accepted: prior.accepted } : effect;
   });
   const priorOperationalConsequences = new Map(
-    (input.damageResult.review?.operationalConsequences ?? [])
+    (sourceConflictSafeReview?.operationalConsequences ?? [])
       .filter(isCombatRoundCriticalTableOperationalConsequence)
       .map((consequence) => [consequence.id, consequence] as const),
   );
@@ -2167,15 +2198,17 @@ function mergeCombatRoundCriticalEffectProposalIntoReview(input: {
     return prior ? { ...consequence, accepted: prior.accepted } : consequence;
   });
 
-  return combatRoundDamageResultSchema.shape.review.unwrap().parse({
-    ...existingReview,
-    additionalEffects: [...existingReview.additionalEffects, ...proposedEffects],
-    criticalEffectProposal: buildCriticalEffectProposalSummary(proposal),
-    operationalConsequences: [
-      ...(existingReview.operationalConsequences ?? []),
-      ...reconciledOperationalConsequences,
-    ],
-  });
+  return enforceCombatRoundCriticalSourceConflictRejections(
+    combatRoundDamageResultSchema.shape.review.unwrap().parse({
+      ...existingReview,
+      additionalEffects: [...existingReview.additionalEffects, ...proposedEffects],
+      criticalEffectProposal: buildCriticalEffectProposalSummary(proposal),
+      operationalConsequences: [
+        ...(existingReview.operationalConsequences ?? []),
+        ...reconciledOperationalConsequences,
+      ],
+    }),
+  );
 }
 
 export const combatRoundDamageSubstateSchema = z.enum([
@@ -11682,11 +11715,13 @@ export function reviewCombatRoundDamageResult(input: {
   state: CombatRoundState;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
-  const nextReview = combatRoundDamageResultSchema.shape.review.unwrap().parse({
-    ...input.review,
-    reviewedAt: input.reviewedAt,
-    reviewedByUserId: input.reviewedByUserId,
-  });
+  const nextReview = enforceCombatRoundCriticalSourceConflictRejections(
+    combatRoundDamageResultSchema.shape.review.unwrap().parse({
+      ...input.review,
+      reviewedAt: input.reviewedAt,
+      reviewedByUserId: input.reviewedByUserId,
+    }),
+  );
   const nextResults = normalized.phaseResolutionResults.map((result) => {
     if (result.attackResultId !== input.attackResultId || !result.damageResult) {
       return result;
@@ -12231,7 +12266,8 @@ function getAcceptedCombatRoundOperationalConsequences(
   damageResult: CombatRoundDamageResult,
 ): CombatRoundDamageReviewOperationalConsequence[] {
   return (damageResult.review?.operationalConsequences ?? []).filter(
-    (consequence) => consequence.accepted,
+    (consequence) =>
+      consequence.accepted && !isCriticalEffectSourceConflictKey(consequence.sourceEffectKey),
   );
 }
 
@@ -12621,8 +12657,8 @@ function formatCombatRoundDamageCommitDescription(input: {
   const notes = input.damageResult.review?.notes?.trim()
     ? ` GM review: ${input.damageResult.review.notes.trim()}`
     : "";
-  const acceptedAdditionalEffects = (input.damageResult.review?.additionalEffects ?? []).filter(
-    (effect) => effect.accepted !== false,
+  const acceptedAdditionalEffects = getAcceptedCombatRoundDamageReviewAdditionalEffects(
+    input.damageResult.review,
   );
   const additionalEffects = acceptedAdditionalEffects.length
     ? ` Accepted rows: ${acceptedAdditionalEffects.map((effect) => effect.label).join(", ")}.`
@@ -12723,8 +12759,8 @@ function buildCombatRoundDamageCommitRows(input: {
     roundNumber: input.command.roundNumber,
   };
   const eventId = buildCombatRoundDamageCommitEventId(idInput);
-  const reviewAdditionalEffects = (input.damageResult.review?.additionalEffects ?? []).filter(
-    (effect) => effect.accepted !== false,
+  const reviewAdditionalEffects = getAcceptedCombatRoundDamageReviewAdditionalEffects(
+    input.damageResult.review,
   );
   const reviewOperationalConsequences = getAcceptedCombatRoundOperationalConsequences(
     input.damageResult,
@@ -16624,16 +16660,14 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
           }),
         ]
       : [];
-  const createdAdditionalCombatEffectIds = (input.damageResult.review?.additionalEffects ?? [])
-    .filter((effect) => effect.accepted !== false)
-    .map((effect) =>
-      buildCombatRoundDamageCommitEffectId({
-        ...idInput,
-        kind: `additional-${effect.id}`,
-      }),
-    );
-  const acceptedAdditionalEffects = (input.damageResult.review?.additionalEffects ?? []).filter(
-    (effect) => effect.accepted !== false,
+  const acceptedAdditionalEffects = getAcceptedCombatRoundDamageReviewAdditionalEffects(
+    input.damageResult.review,
+  );
+  const createdAdditionalCombatEffectIds = acceptedAdditionalEffects.map((effect) =>
+    buildCombatRoundDamageCommitEffectId({
+      ...idInput,
+      kind: `additional-${effect.id}`,
+    }),
   );
   const operationalEffectConsequences = getCombatRoundOperationalConsequencesCommittedAsEffects({
     additionalEffects: acceptedAdditionalEffects,
@@ -16658,9 +16692,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
     facts: {
       attackResultId: input.damageResult.attackResultId,
       attackerParticipantId: input.damageResult.attackerParticipantId,
-      additionalEffects: (input.damageResult.review?.additionalEffects ?? []).filter(
-        (effect) => effect.accepted !== false,
-      ),
+      additionalEffects: acceptedAdditionalEffects,
       cancelledActions,
       createdAdditionalCombatEffectIds,
       createdCombatEffectEventId,
@@ -16715,7 +16747,9 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
       maxDamageCap: effectiveDamage.effectiveMaxDamageCap,
       rawTotalDamage: effectiveDamage.effectiveRawTotalDamage,
       operationalConsequences: acceptedOperationalConsequences,
-      review: input.damageResult.review,
+      review: input.damageResult.review
+        ? enforceCombatRoundCriticalSourceConflictRejections(input.damageResult.review)
+        : undefined,
       status: "committed",
       totalDamage: effectiveDamage.effectiveTotalDamage,
       ...(afterCursor.participantId
@@ -16775,6 +16809,14 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
               proposedEffects: [],
               status: "committed",
             },
+            damageResult: result.damageResult?.review
+              ? {
+                  ...result.damageResult,
+                  review: enforceCombatRoundCriticalSourceConflictRejections(
+                    result.damageResult.review,
+                  ),
+                }
+              : result.damageResult,
             updatedAt: input.command.createdAt,
           })
         : result,
@@ -16800,7 +16842,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
           operationalConsequences: command.facts.operationalConsequences,
           review: input.damageResult.review
             ? (({ notes: _publicCombatNote, ...diagnostics }) => diagnostics)(
-                input.damageResult.review,
+                enforceCombatRoundCriticalSourceConflictRejections(input.damageResult.review),
               )
             : undefined,
         },

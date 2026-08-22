@@ -12304,6 +12304,91 @@ describe("combat round manager", () => {
       expect.objectContaining({ accepted: true, label: "No combat action possible" }),
     );
 
+    if (!reviewedDamage?.review) {
+      throw new Error("Expected source-conflict review proposal.");
+    }
+
+    const acceptanceAttempt = reviewCombatRoundDamageResult({
+      attackResultId,
+      reviewedAt: "2026-01-01T00:05:45.000Z",
+      reviewedByUserId: "gm-1",
+      review: {
+        ...reviewedDamage.review,
+        additionalEffects: reviewedDamage.review.additionalEffects.map((effect) =>
+          effect.sourceEffectKey === "blunt|arm|12|02" ? { ...effect, accepted: true } : effect,
+        ),
+      },
+      state: reviewed,
+    });
+    const attemptedConflict =
+      acceptanceAttempt.phaseResolutionResults[0]?.damageResult?.review?.additionalEffects.find(
+        (effect) => effect.sourceEffectKey === "blunt|arm|12|02",
+      );
+
+    expect(attemptedConflict).toMatchObject({
+      accepted: false,
+      sourceCritKey: "blunt|arm|12",
+      sourceEffectKey: "blunt|arm|12|02",
+      sourceText: "-8",
+    });
+
+    const reloadedReviewState = combatRoundStateSchema.parse(
+      JSON.parse(JSON.stringify(acceptanceAttempt)) as unknown,
+    );
+    const reloadedConflict =
+      reloadedReviewState.phaseResolutionResults[0]?.damageResult?.review?.additionalEffects.find(
+        (effect) => effect.sourceEffectKey === "blunt|arm|12|02",
+      );
+
+    expect(reloadedConflict?.accepted).toBe(false);
+
+    // Defense-in-depth: model an old-head/malformed serialized review that still says accepted.
+    const staleAcceptedState = combatRoundStateSchema.parse({
+      ...reloadedReviewState,
+      phaseResolutionResults: reloadedReviewState.phaseResolutionResults.map((result) => ({
+        ...result,
+        damageResult: result.damageResult?.review
+          ? {
+              ...result.damageResult,
+              review: {
+                ...result.damageResult.review,
+                additionalEffects: result.damageResult.review.additionalEffects.map((effect) =>
+                  effect.sourceEffectKey === "blunt|arm|12|02"
+                    ? { ...effect, accepted: true }
+                    : effect,
+                ),
+              },
+            }
+          : result.damageResult,
+      })),
+    });
+
+    expect(
+      staleAcceptedState.phaseResolutionResults[0]?.damageResult?.review?.additionalEffects.find(
+        (effect) => effect.sourceEffectKey === "blunt|arm|12|02",
+      )?.accepted,
+    ).toBe(true);
+
+    const staleReview = staleAcceptedState.phaseResolutionResults[0]?.damageResult?.review;
+
+    if (!staleReview) {
+      throw new Error("Expected stale source-conflict review.");
+    }
+
+    const replayedReview = reviewCombatRoundDamageResult({
+      attackResultId,
+      reviewedAt: "2026-01-01T00:05:50.000Z",
+      reviewedByUserId: "gm-1",
+      review: staleReview,
+      state: staleAcceptedState,
+    });
+
+    expect(
+      replayedReview.phaseResolutionResults[0]?.damageResult?.review?.additionalEffects.find(
+        (effect) => effect.sourceEffectKey === "blunt|arm|12|02",
+      )?.accepted,
+    ).toBe(false);
+
     const committed = commitCombatRoundPhaseDamage({
       attackerScenarioParticipantId: "scenario-gladiator",
       attackResultId,
@@ -12316,7 +12401,7 @@ describe("combat round manager", () => {
       defenderScenarioParticipantId: "scenario-guard",
       encounterId: "encounter-1",
       scenarioId: "scenario-1",
-      state: reviewed,
+      state: staleAcceptedState,
     });
     const reloadedState = combatRoundStateSchema.parse(
       JSON.parse(JSON.stringify(committed.state)) as unknown,
@@ -12327,6 +12412,23 @@ describe("combat round manager", () => {
       );
 
     expect(committed.command.facts.cancelledActions ?? []).toEqual([]);
+    expect(committed.command.facts.additionalEffects ?? []).not.toContainEqual(
+      expect.objectContaining({ sourceEffectKey: "blunt|arm|12|02" }),
+    );
+    expect(committed.command.facts.createdAdditionalCombatEffectIds ?? []).not.toContainEqual(
+      expect.stringContaining("additional-critical-effect-blunt-arm-12-02"),
+    );
+    expect(committed.command.facts.createdCombatEffectIds ?? []).not.toContainEqual(
+      expect.stringContaining("additional-critical-effect-blunt-arm-12-02"),
+    );
+    expect(committed.command.facts.review).toMatchObject({
+      additionalEffects: expect.arrayContaining([
+        expect.objectContaining({
+          accepted: false,
+          sourceEffectKey: "blunt|arm|12|02",
+        }),
+      ]),
+    });
     expect(committed.command.facts.operationalConsequences ?? []).not.toContainEqual(
       expect.objectContaining({ kind: "cancel_pending_action" }),
     );

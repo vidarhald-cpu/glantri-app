@@ -572,11 +572,16 @@ function isCriticalEffectDropItemTag(effect: CriticalEffectTemplate): boolean {
 
 const BLUNT_ARM_12_UNCONSCIOUSNESS_SOURCE_CONFLICT =
   "Source conflict: AppFacing_Crits!A109:X109 says the opponent is not automatically unconscious, while AppFacing_Effects!A341:AE341 authors an unconscious action state. Retained as an inactive GM-review note; no unconsciousness or combat-action blocking is applied.";
+const CRITICAL_EFFECT_SOURCE_CONFLICT_KEYS = new Set(["blunt|arm|12|02"]);
+
+export function isCriticalEffectSourceConflictKey(effectKey?: string): boolean {
+  return effectKey !== undefined && CRITICAL_EFFECT_SOURCE_CONFLICT_KEYS.has(effectKey);
+}
 
 export function getCriticalEffectSourceConflict(
   effect: CriticalEffectTemplate,
 ): string | undefined {
-  return effect.effectKey === "blunt|arm|12|02"
+  return isCriticalEffectSourceConflictKey(effect.effectKey)
     ? BLUNT_ARM_12_UNCONSCIOUSNESS_SOURCE_CONFLICT
     : undefined;
 }
