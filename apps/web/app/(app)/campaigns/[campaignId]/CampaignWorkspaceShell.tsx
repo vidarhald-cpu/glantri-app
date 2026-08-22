@@ -46,6 +46,7 @@ import {
 import { buildGmCharacterWorkspaceCandidates } from "@/lib/campaigns/characterWorkspace";
 import EncounterDetail from "@/features/encounters/EncounterDetail";
 import CampaignDetailPageContent from "./CampaignDetailPageContent";
+import CampaignWorkspaceLoadErrorState from "./CampaignWorkspaceLoadErrorState";
 import CharacterWorkspacePanel from "./CharacterWorkspacePanel";
 import WorkspaceParticipantInspectionHeader from "./WorkspaceParticipantInspectionHeader";
 import ScenarioDetailPageContent from "./scenarios/[scenarioId]/ScenarioDetailPageContent";
@@ -104,9 +105,11 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   const [activeEncounter, setActiveEncounter] = useState<EncounterSession>();
   const [encounterSummaries, setEncounterSummaries] = useState<EncounterSessionSummary[]>([]);
   const [error, setError] = useState<string>();
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
   const [scenarioParticipants, setScenarioParticipants] = useState<ScenarioParticipant[]>([]);
   const [scenarios, setScenarios] = useState<Array<Scenario | PlayerAccessibleScenario>>([]);
+  const [workspaceLoadError, setWorkspaceLoadError] = useState(false);
   const activeEncounterIdRef = useRef<string | undefined>(undefined);
   const activeEncounterRef = useRef<EncounterSession | undefined>(undefined);
   const activeEncounterRequestIdRef = useRef(0);
@@ -159,6 +162,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
 
     let cancelled = false;
     setLoading(true);
+    setAccessMode(canManageCampaignWorkspace(currentUser) ? "gm" : "player");
 
     async function initializeWorkspace() {
       try {
@@ -189,13 +193,12 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
           }),
         );
         setError(undefined);
-      } catch (caughtError) {
+        setWorkspaceLoadError(false);
+      } catch {
         if (cancelled) return;
 
-        setError(
-          caughtError instanceof Error ? caughtError.message : "Unable to load campaign workspace.",
-        );
-        setAccessMode("none");
+        setError(undefined);
+        setWorkspaceLoadError(true);
         setAccessibleCampaign(null);
         setScenarios([]);
         setScenarioParticipants([]);
@@ -211,7 +214,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
     return () => {
       cancelled = true;
     };
-  }, [campaignId, currentUser, sessionLoading]);
+  }, [campaignId, currentUser, loadAttempt, sessionLoading]);
 
   const workspaceState = useMemo(
     () =>
@@ -517,15 +520,15 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   }
 
   useEffect(() => {
-    if (accessMode === "none") {
+    if (accessMode === "none" || workspaceLoadError) {
       return;
     }
 
     rememberedCampaignSelection.setValue(campaignId);
-  }, [accessMode, campaignId, rememberedCampaignSelection]);
+  }, [accessMode, campaignId, rememberedCampaignSelection, workspaceLoadError]);
 
   useEffect(() => {
-    if (sessionLoading || loading) {
+    if (sessionLoading || loading || workspaceLoadError) {
       return;
     }
 
@@ -592,6 +595,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
     searchParams,
     searchParamString,
     sessionLoading,
+    workspaceLoadError,
     tabs,
     workspaceState.activeEncounterId,
     workspaceState.activeScenarioId,
@@ -660,7 +664,14 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
 
       {error ? <section style={panelStyle}>{error}</section> : null}
 
-      {!loading && accessMode === "none" ? (
+      {workspaceLoadError ? (
+        <CampaignWorkspaceLoadErrorState
+          onRetry={() => setLoadAttempt((current) => current + 1)}
+          retrying={loading}
+        />
+      ) : null}
+
+      {!loading && !workspaceLoadError && accessMode === "none" ? (
         <section style={panelStyle}>
           <strong>Campaign unavailable</strong>
           <div>This campaign is not accessible for the current player account.</div>
@@ -668,7 +679,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         </section>
       ) : null}
 
-      {accessMode !== "none" && workspaceState.activeTab === "campaign" ? (
+      {!workspaceLoadError && accessMode !== "none" && workspaceState.activeTab === "campaign" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
           {canAccessGmEncounter ? (
             <CampaignDetailPageContent
@@ -707,13 +718,13 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         </section>
       ) : null}
 
-      {accessMode !== "none" && workspaceState.activeTab === "items" ? (
+      {!workspaceLoadError && accessMode !== "none" && workspaceState.activeTab === "items" ? (
         canAccessGmEncounter ? (
           <CampaignItemsWorkspace campaignId={campaignId} />
         ) : null
       ) : null}
 
-      {accessMode !== "none" && workspaceState.activeTab === "scenario" ? (
+      {!workspaceLoadError && accessMode !== "none" && workspaceState.activeTab === "scenario" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
           {workspaceState.activeScenarioId ? (
             canAccessGmEncounter ? (
@@ -755,7 +766,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         </section>
       ) : null}
 
-      {accessMode !== "none" && workspaceState.activeTab === "encounter" ? (
+      {!workspaceLoadError && accessMode !== "none" && workspaceState.activeTab === "encounter" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
           {workspaceState.activeScenarioId &&
           workspaceState.activeEncounterId &&
@@ -784,7 +795,9 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         </section>
       ) : null}
 
-      {accessMode !== "none" && workspaceState.activeTab === "skill-rolls" ? (
+      {!workspaceLoadError &&
+      accessMode !== "none" &&
+      workspaceState.activeTab === "skill-rolls" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
           {workspaceState.activeScenarioId &&
           workspaceState.activeEncounterId &&
@@ -838,7 +851,9 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         </section>
       ) : null}
 
-      {accessMode !== "none" && workspaceState.activeTab === "player-skill-rolls" ? (
+      {!workspaceLoadError &&
+      accessMode !== "none" &&
+      workspaceState.activeTab === "player-skill-rolls" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
           {workspaceState.activeScenarioId &&
           workspaceState.activeEncounterId &&
@@ -914,7 +929,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         </section>
       ) : null}
 
-      {accessMode !== "none" && workspaceState.activeTab === "character" ? (
+      {!workspaceLoadError && accessMode !== "none" && workspaceState.activeTab === "character" ? (
         <CharacterWorkspacePanel
           activeEncounter={selectedActiveEncounter}
           currentRoundNumber={activeScenarioRoundNumber}
@@ -934,7 +949,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         />
       ) : null}
 
-      {accessMode !== "none" && workspaceState.activeTab === "combat" ? (
+      {!workspaceLoadError && accessMode !== "none" && workspaceState.activeTab === "combat" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
           {canAccessGmEncounter && selectedActiveEncounter ? (
             <>
@@ -1024,7 +1039,9 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         </section>
       ) : null}
 
-      {accessMode !== "none" && workspaceState.activeTab === "player-combat" ? (
+      {!workspaceLoadError &&
+      accessMode !== "none" &&
+      workspaceState.activeTab === "player-combat" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
           {canAccessGmEncounter && workspaceState.activeScenarioId && selectedActiveEncounter ? (
             <>

@@ -124,6 +124,19 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).not.toContain("loadScenarioEncounters");
   });
 
+  it("keeps operational Campaign load failure separate from access denial", () => {
+    const source = readSource();
+
+    expect(source).toContain("CampaignWorkspaceLoadErrorState");
+    expect(source).toContain("setWorkspaceLoadError(true)");
+    expect(source).toContain("setLoadAttempt((current) => current + 1)");
+    expect(source).not.toContain('setAccessMode("none")');
+    expect(source).toContain(
+      'setAccessMode(canManageCampaignWorkspace(currentUser) ? "gm" : "player")',
+    );
+    expect(source).toContain('accessMode === "none"');
+  });
+
   it("does not eagerly load a full encounter on Campaign, Items, or Scenario tabs", () => {
     const source = readSource();
 

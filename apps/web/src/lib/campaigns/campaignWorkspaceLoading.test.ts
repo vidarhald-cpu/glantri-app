@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Campaign, Scenario, ScenarioParticipant } from "@glantri/domain";
 
-import { loadCampaignWorkspaceInitialData } from "./campaignWorkspaceLoading";
+import {
+  CAMPAIGN_WORKSPACE_LOAD_ERROR_MESSAGE,
+  CampaignWorkspaceLoadError,
+  loadCampaignWorkspaceInitialData,
+} from "./campaignWorkspaceLoading";
 
 const campaign = {
   id: "campaign-1",
@@ -44,10 +48,7 @@ describe("campaign workspace initial loading", () => {
 
     expect(loadAccess).toHaveBeenCalledTimes(1);
     expect(loadEncounterSummaries).toHaveBeenCalledTimes(2);
-    expect(loadEncounterSummaries.mock.calls).toEqual([
-      ["scenario-1"],
-      ["scenario-2"],
-    ]);
+    expect(loadEncounterSummaries.mock.calls).toEqual([["scenario-1"], ["scenario-2"]]);
     expect(loadParticipants).toHaveBeenCalledTimes(2);
     expect(loadMyParticipant).not.toHaveBeenCalled();
     expect(result.encounterSummaries).toHaveLength(2);
@@ -76,5 +77,21 @@ describe("campaign workspace initial loading", () => {
     expect(loadMyParticipant).toHaveBeenCalledTimes(1);
     expect(loadParticipants).not.toHaveBeenCalled();
     expect(result.participants).toEqual([playerParticipant]);
+  });
+
+  it("replaces raw Campaign repository diagnostics with one recoverable client error", async () => {
+    const rawDiagnostic =
+      "Invalid `prisma.scenario.findMany()` invocation in /srv/glantri/scenarioRepository.ts: Value 'paused' not found in enum ScenarioStatus";
+
+    const result = loadCampaignWorkspaceInitialData({
+      loadAccess: vi.fn().mockRejectedValue(new Error(rawDiagnostic)),
+      loadEncounterSummaries: vi.fn(),
+      loadMyParticipant: vi.fn(),
+      loadParticipants: vi.fn(),
+    });
+
+    await expect(result).rejects.toEqual(expect.any(CampaignWorkspaceLoadError));
+    await expect(result).rejects.toThrow(CAMPAIGN_WORKSPACE_LOAD_ERROR_MESSAGE);
+    await expect(result).rejects.not.toThrow(/prisma|\/srv\/|findMany|ScenarioStatus|paused/i);
   });
 });
