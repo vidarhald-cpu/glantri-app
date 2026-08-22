@@ -87,4 +87,50 @@ describe("combat participant candidates", () => {
       attack.map((candidate) => candidate.participantId),
     );
   });
+
+  it("keeps identities omitted by the player projection out of target options across refreshes", () => {
+    const sharedEncounter = {
+      participants: [
+        ...encounter.participants,
+        {
+          id: "encounter-hidden",
+          label: "Hidden Steward",
+          scenarioParticipantId: "hidden-steward",
+        },
+        {
+          id: "encounter-gm-only",
+          label: "GM Only Witness",
+          scenarioParticipantId: "gm-only-witness",
+        },
+      ],
+    };
+    const playerProjectionIds = new Set(["aria", "borin"]);
+    const buildTargetOptions = () =>
+      buildCombatParticipantCandidates({
+        actingParticipantId: "aria",
+        encounter: sharedEncounter,
+        purpose: "attack_target" as const,
+        visibleParticipantIds: playerProjectionIds,
+      })
+        .filter((candidate) => candidate.selectable)
+        .map(({ displayName, participantId }) => ({ displayName, participantId }));
+
+    const initial = buildTargetOptions();
+    const afterReloadOrPoll = buildTargetOptions();
+
+    expect(initial).toEqual(afterReloadOrPoll);
+    expect(initial).toEqual([{ displayName: "Borin", participantId: "encounter-borin" }]);
+    expect(JSON.stringify(initial)).not.toContain("Hidden Steward");
+    expect(JSON.stringify(initial)).not.toContain("GM Only Witness");
+    expect(initial).toEqual(
+      buildCombatParticipantCandidates({
+        actingParticipantId: "aria",
+        encounter,
+        purpose: "attack_target",
+        visibleParticipantIds: playerProjectionIds,
+      })
+        .filter((candidate) => candidate.selectable)
+        .map(({ displayName, participantId }) => ({ displayName, participantId })),
+    );
+  });
 });

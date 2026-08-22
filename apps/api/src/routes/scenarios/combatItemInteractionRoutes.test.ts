@@ -113,7 +113,7 @@ function encounterWithHiddenRecipient() {
     ],
     roleplayState: {
       visibility: {
-        "participant-1": { "participant-1": true },
+        "participant-1": { "participant-1": true, "participant-2": true },
       },
     },
   });
@@ -202,6 +202,7 @@ function services(currentEncounter = encounterWithActions()): CombatItemInteract
           role: "player_character",
           scenarioId: "scenario-1",
           snapshot: { displayName: "Bram" },
+          visibilityOverrides: { visibility: "gm_only" },
         },
         {
           characterId: "character-3",

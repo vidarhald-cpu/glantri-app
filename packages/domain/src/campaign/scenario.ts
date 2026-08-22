@@ -775,9 +775,20 @@ function isPlayerControlledScenarioParticipant(input: {
 export function buildScenarioPlayerVisibleParticipants(input: {
   controlledParticipantId?: string;
   participants: ScenarioParticipant[];
+  userId?: string;
+  viewerMode?: "gm" | "player";
 }): ScenarioPlayerVisibleParticipant[] {
   return input.participants
-    .filter((participant) => participant.isActive)
+    .filter((participant) => {
+      if (!participant.isActive) return false;
+      if (input.viewerMode !== "player") return true;
+
+      const controlledByViewer =
+        participant.id === input.controlledParticipantId ||
+        participant.controlledByUserId === input.userId;
+      const visibility = participant.visibilityOverrides?.visibility;
+      return controlledByViewer || (visibility !== "hidden" && visibility !== "gm_only");
+    })
     .map((participant) =>
       scenarioPlayerVisibleParticipantSchema.parse({
         displayName: participant.snapshot.displayName,
@@ -818,6 +829,7 @@ export function buildScenarioPlayerProjection(input: {
   participants: ScenarioParticipant[];
   scenario: Scenario;
   userId: string;
+  viewerMode: "gm" | "player";
 }): ScenarioPlayerProjection {
   const controlledParticipant = input.participants.find((participant) =>
     isPlayerControlledScenarioParticipant({
@@ -826,12 +838,15 @@ export function buildScenarioPlayerProjection(input: {
     }),
   );
 
-  const visibleParticipants = controlledParticipant
-    ? buildScenarioPlayerVisibleParticipants({
-        controlledParticipantId: controlledParticipant.id,
-        participants: input.participants,
-      })
-    : [];
+  const visibleParticipants =
+    controlledParticipant || input.viewerMode === "gm"
+      ? buildScenarioPlayerVisibleParticipants({
+          controlledParticipantId: controlledParticipant?.id,
+          participants: input.participants,
+          userId: input.userId,
+          viewerMode: input.viewerMode,
+        })
+      : [];
 
   return scenarioPlayerProjectionSchema.parse({
     actionStub: {

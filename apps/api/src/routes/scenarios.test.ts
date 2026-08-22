@@ -6039,6 +6039,114 @@ describe("scenarios route contract", () => {
     }
   });
 
+  it("projects player Combat participants with viewer-aware hidden and GM-only privacy", async () => {
+    const scenario = {
+      campaignId: "campaign-1",
+      description: "Recover the Lost Seal.",
+      id: "scenario-1",
+      kind: "mixed",
+      name: "Lost Seal",
+      status: "live",
+    };
+    const controlledState = {
+      ...makeCombatScenarioParticipant().state,
+      health: {
+        bleeding: 0,
+        currentHp: 10,
+        dead: false,
+        maxHp: 10,
+        unconscious: false,
+        wounds: 0,
+      },
+    };
+    const participants = [
+      makeCombatScenarioParticipant({
+        id: "participant-a",
+        snapshot: { displayName: "Player A" },
+        state: controlledState,
+        visibilityOverrides: { visibility: "hidden" },
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "visible-player",
+        id: "participant-visible",
+        snapshot: { displayName: "Visible Ally" },
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "hidden-player",
+        id: "participant-hidden",
+        snapshot: { displayName: "Hidden Steward" },
+        visibilityOverrides: { visibility: "hidden" },
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "player-b",
+        id: "participant-gm-only",
+        snapshot: { displayName: "GM Only Witness" },
+        state: controlledState,
+        visibilityOverrides: { visibility: "gm_only" },
+      }),
+    ];
+    mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue(participants);
+    const app = await buildScenarioTestApp();
+
+    const playerResponse = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/player-projection",
+    });
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue(participants.slice(0, 2));
+    const nonexistentEquivalent = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/player-projection",
+    });
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue(participants);
+    mocks.requireAuthenticatedUser.mockResolvedValue({ ...mocks.playerUser, id: "player-b" });
+    const controllingPlayerResponse = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/player-projection",
+    });
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.adminUser);
+    const gmResponse = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/player-projection",
+    });
+
+    await app.close();
+    expect(playerResponse.statusCode, playerResponse.body).toBe(200);
+    expect(playerResponse.json()).toEqual(nonexistentEquivalent.json());
+    expect(
+      playerResponse
+        .json()
+        .projection.visibleParticipants.map(
+          (participant: { displayName: string }) => participant.displayName,
+        ),
+    ).toEqual(["Player A", "Visible Ally"]);
+    for (const hiddenIdentity of [
+      "participant-hidden",
+      "Hidden Steward",
+      "participant-gm-only",
+      "GM Only Witness",
+    ]) {
+      expect(playerResponse.body).not.toContain(hiddenIdentity);
+    }
+    expect(controllingPlayerResponse.statusCode, controllingPlayerResponse.body).toBe(200);
+    expect(controllingPlayerResponse.body).toContain("participant-gm-only");
+    expect(controllingPlayerResponse.body).toContain("GM Only Witness");
+    expect(controllingPlayerResponse.body).not.toContain("participant-hidden");
+    expect(gmResponse.statusCode, gmResponse.body).toBe(200);
+    expect(
+      gmResponse
+        .json()
+        .projection.visibleParticipants.map(
+          (participant: { displayName: string }) => participant.displayName,
+        ),
+    ).toEqual(["Player A", "Visible Ally", "Hidden Steward", "GM Only Witness"]);
+  });
+
   it("returns a compact canonical active-encounter revision", async () => {
     mocks.requireAuthenticatedUser.mockResolvedValue(mocks.adminUser);
     mocks.encounterService.getEncounterSummaryById.mockResolvedValue({
@@ -8232,7 +8340,7 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
-  it("uses player-safe participant visibility when resolving a Disarm declaration", async () => {
+  it("uses Scenario participant visibility when resolving a player Disarm declaration", async () => {
     const actingParticipant = makeCombatScenarioParticipant({
       characterId: "character-1",
       controlledByUserId: "player-1",
@@ -8242,6 +8350,7 @@ describe("scenarios route contract", () => {
       characterId: "character-hidden",
       controlledByUserId: "player-hidden",
       id: "participant-hidden",
+      visibilityOverrides: { visibility: "gm_only" },
     });
     setupCombatDeclarationRoute({
       encounter: {
@@ -8249,7 +8358,7 @@ describe("scenarios route contract", () => {
           visibility: {
             "encounter-participant-1": {
               "encounter-participant-1": true,
-              "encounter-target-hidden": false,
+              "encounter-target-hidden": true,
             },
           },
         },

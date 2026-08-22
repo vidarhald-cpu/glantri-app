@@ -121,6 +121,29 @@ test.describe("Lost Seal Scenario happy path", () => {
     ]) {
       expect(initialPlayerSessionPayload).not.toContain(privateIdentity);
     }
+    const initialPlayerCombatProjection = await playerAContext.request.get(
+      `${API_URL}/scenarios/${scenario.scenario.id}/player-projection`,
+    );
+    expect(initialPlayerCombatProjection.status()).toBe(200);
+    const initialPlayerCombatProjectionPayload = await initialPlayerCombatProjection.text();
+    for (const privateIdentity of [
+      participantB.participant.id,
+      hiddenParticipantName,
+      "nonexistent-participant",
+      nonexistentParticipantName,
+    ]) {
+      expect(initialPlayerCombatProjectionPayload).not.toContain(privateIdentity);
+    }
+    const initialPlayerBCombatProjection = await playerBContext.request.get(
+      `${API_URL}/scenarios/${scenario.scenario.id}/player-projection`,
+    );
+    expect(initialPlayerBCombatProjection.status()).toBe(200);
+    expect(await initialPlayerBCombatProjection.text()).toContain(hiddenParticipantName);
+    const initialGmCombatProjection = await page.request.get(
+      `${API_URL}/scenarios/${scenario.scenario.id}/player-projection`,
+    );
+    expect(initialGmCombatProjection.status()).toBe(200);
+    expect(await initialGmCombatProjection.text()).toContain(hiddenParticipantName);
 
     const playerAPage = await playerAContext.newPage();
     await playerAPage.goto(
@@ -375,7 +398,95 @@ test.describe("Lost Seal Scenario happy path", () => {
         )
       ).status(),
     ).toBe(200);
+
+    const sharedCombat = await json<{ encounter: { id: string; updatedAt: string } }>(
+      await page.request.post(`${API_URL}/scenarios/${scenario.scenario.id}/encounters`, {
+        data: {
+          session: {
+            campaignId: campaign.campaign.id,
+            createdAt: new Date().toISOString(),
+            id: `lost-seal-shared-combat-${Date.now()}`,
+            kind: "combat",
+            participantMembershipMode: "explicit",
+            participants: [
+              {
+                characterId: characterAId,
+                id: "shared-combat-player-a",
+                label: "Smoke Character",
+                participantType: "scenario",
+                scenarioParticipantId: participantA.participant.id,
+              },
+              {
+                characterId: characterBId,
+                id: "shared-combat-player-b",
+                label: hiddenParticipantName,
+                participantType: "scenario",
+                scenarioParticipantId: participantB.participant.id,
+              },
+            ],
+            scenarioId: scenario.scenario.id,
+            status: "planned",
+            title: "Seal Vault Confrontation",
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      }),
+    );
+    const activeSharedCombat = await json<{ encounter: { id: string; updatedAt: string } }>(
+      await page.request.patch(`${API_URL}/encounters/${sharedCombat.encounter.id}/status`, {
+        data: { expectedRevision: sharedCombat.encounter.updatedAt, status: "active" },
+      }),
+    );
+    const postClosePlayerProjection = await playerAContext.request.get(
+      `${API_URL}/scenarios/${scenario.scenario.id}/player-projection`,
+    );
+    expect(postClosePlayerProjection.status()).toBe(200);
+    const postClosePlayerProjectionPayload = await postClosePlayerProjection.text();
+    for (const privateIdentity of [
+      participantB.participant.id,
+      hiddenParticipantName,
+      "nonexistent-participant",
+      nonexistentParticipantName,
+    ]) {
+      expect(postClosePlayerProjectionPayload).not.toContain(privateIdentity);
+    }
+
+    const playerCombatHref = `/campaigns/${campaign.campaign.id}?tab=player-combat&scenarioId=${scenario.scenario.id}&encounterId=${activeSharedCombat.encounter.id}`;
+    await playerAPage.setViewportSize({ height: 900, width: 1280 });
+    await playerAPage.goto(playerCombatHref);
+    await expect(
+      playerAPage.getByRole("heading", { name: "Combat — Smoke Character" }),
+    ).toBeVisible();
+    await expect(playerAPage.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
+    await expect(
+      playerAPage.locator("option").filter({ hasText: hiddenParticipantName }),
+    ).toHaveCount(0);
     await playerAPage.reload();
+    await expect(
+      playerAPage.getByRole("heading", { name: "Combat — Smoke Character" }),
+    ).toBeVisible();
+    await expect(playerAPage.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
+    await playerAPage.setViewportSize({ height: 844, width: 390 });
+    await playerAPage.reload();
+    await expect(
+      playerAPage.getByRole("heading", { name: "Combat — Smoke Character" }),
+    ).toBeVisible();
+    await expect(playerAPage.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
+    await expect(
+      playerAPage.locator("option").filter({ hasText: hiddenParticipantName }),
+    ).toHaveCount(0);
+    await playerAPage.waitForResponse(
+      (response) =>
+        response.url().includes(`/encounters/${activeSharedCombat.encounter.id}/revision`) &&
+        response.status() === 200,
+      { timeout: 10_000 },
+    );
+    await expect(playerAPage.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
+
+    await playerAPage.reload();
+    await playerAPage.goto(
+      `/campaigns/${campaign.campaign.id}/scenarios/${scenario.scenario.id}/player`,
+    );
     await expect(playerAPage.getByText("Outcome: The seal was recovered.")).toBeVisible();
     const finalPlayerPayload = await (
       await playerAContext.request.get(`${API_URL}/scenarios/${scenario.scenario.id}/session`)
@@ -393,12 +504,15 @@ test.describe("Lost Seal Scenario happy path", () => {
     await expect(playerAPage.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
     await playerAPage.close();
     const reconnectedPlayerAPage = await playerAContext.newPage();
-    await reconnectedPlayerAPage.goto(
-      `/campaigns/${campaign.campaign.id}/scenarios/${scenario.scenario.id}/player`,
-    );
-    await expect(reconnectedPlayerAPage.getByRole("heading", { name: "Lost Seal" })).toBeVisible();
+    await reconnectedPlayerAPage.goto(playerCombatHref);
+    await expect(
+      reconnectedPlayerAPage.getByRole("heading", { name: "Combat — Smoke Character" }),
+    ).toBeVisible();
     await expect(
       reconnectedPlayerAPage.getByText(hiddenParticipantName, { exact: false }),
+    ).toHaveCount(0);
+    await expect(
+      reconnectedPlayerAPage.locator("option").filter({ hasText: hiddenParticipantName }),
     ).toHaveCount(0);
     await expect(
       reconnectedPlayerAPage.getByText(nonexistentParticipantName, { exact: false }),

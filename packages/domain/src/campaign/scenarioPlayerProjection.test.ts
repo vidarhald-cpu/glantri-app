@@ -39,6 +39,7 @@ function createParticipant(input: {
   snapshotBuild?: CharacterBuild;
   sourceType?: ScenarioParticipant["sourceType"];
   state?: ScenarioParticipant["state"];
+  visibility?: "hidden" | "visible_to_all" | "gm_only";
 }): ScenarioParticipant {
   return {
     characterId: input.characterId,
@@ -83,6 +84,7 @@ function createParticipant(input: {
       snapshotVersion: 1,
     },
     updatedAt: "2026-04-21T00:00:00.000Z",
+    visibilityOverrides: input.visibility ? { visibility: input.visibility } : undefined,
   };
 }
 
@@ -193,6 +195,7 @@ describe("buildScenarioPlayerProjection", () => {
       ],
       scenario,
       userId: "player-1",
+      viewerMode: "player",
     });
 
     expect(projection.hasControlledParticipant).toBe(true);
@@ -277,6 +280,7 @@ describe("buildScenarioPlayerProjection", () => {
       ],
       scenario,
       userId: "player-1",
+      viewerMode: "player",
     });
 
     expect(projection.controlledParticipant?.combatContext?.modifierBuckets).toMatchObject({
@@ -301,11 +305,76 @@ describe("buildScenarioPlayerProjection", () => {
       ],
       scenario,
       userId: "player-1",
+      viewerMode: "player",
     });
 
     expect(projection.hasControlledParticipant).toBe(false);
     expect(projection.controlledParticipant).toBeUndefined();
     expect(projection.visibleParticipants).toEqual([]);
     expect(projection.actionStub.canDeclareActions).toBe(false);
+  });
+
+  it("omits hidden and GM-only identities while retaining the viewer's own controlled participant", () => {
+    const participants = [
+      createParticipant({
+        controlledByUserId: "player-1",
+        displayName: "Veiled Hero",
+        id: "participant-self",
+        role: "player_character",
+        visibility: "hidden",
+      }),
+      createParticipant({
+        displayName: "Visible Guard",
+        id: "participant-visible",
+        role: "ally",
+      }),
+      createParticipant({
+        displayName: "Hidden Steward",
+        id: "participant-hidden",
+        role: "npc",
+        visibility: "hidden",
+      }),
+      createParticipant({
+        displayName: "GM Only Witness",
+        id: "participant-gm-only",
+        role: "npc",
+        visibility: "gm_only",
+      }),
+    ];
+
+    const playerProjection = buildScenarioPlayerProjection({
+      participants,
+      scenario,
+      userId: "player-1",
+      viewerMode: "player",
+    });
+    const nonexistentEquivalent = buildScenarioPlayerProjection({
+      participants: participants.slice(0, 2),
+      scenario,
+      userId: "player-1",
+      viewerMode: "player",
+    });
+    const gmProjection = buildScenarioPlayerProjection({
+      participants,
+      scenario,
+      userId: "gm-1",
+      viewerMode: "gm",
+    });
+
+    expect(playerProjection.visibleParticipants).toEqual(nonexistentEquivalent.visibleParticipants);
+    expect(playerProjection.visibleParticipants.map(({ displayName }) => displayName)).toEqual([
+      "Veiled Hero",
+      "Visible Guard",
+    ]);
+    expect(JSON.stringify(playerProjection)).not.toContain("participant-hidden");
+    expect(JSON.stringify(playerProjection)).not.toContain("Hidden Steward");
+    expect(JSON.stringify(playerProjection)).not.toContain("participant-gm-only");
+    expect(JSON.stringify(playerProjection)).not.toContain("GM Only Witness");
+    expect(gmProjection.visibleParticipants.map(({ displayName }) => displayName)).toEqual([
+      "Veiled Hero",
+      "Visible Guard",
+      "Hidden Steward",
+      "GM Only Witness",
+    ]);
   });
 });

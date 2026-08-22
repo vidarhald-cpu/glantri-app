@@ -275,6 +275,7 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
         participants,
         scenario: scenario!,
         userId: user.id,
+        viewerMode: access.mode,
       });
 
       return { projection };

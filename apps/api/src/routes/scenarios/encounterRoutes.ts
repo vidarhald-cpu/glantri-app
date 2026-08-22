@@ -5865,11 +5865,22 @@ function buildPlayerSafeCombatScopeForParticipants(input: {
   const hasVisibilityRows = Object.keys(visibility ?? {}).length > 0;
   const visibleParticipantIds = new Set(
     membership.participants
-      .filter(
-        (participant) =>
-          input.controlledEncounterParticipants.some(
-            (controlled) => controlled.id === participant.id,
-          ) ||
+      .filter((participant) => {
+        const controlled = input.controlledEncounterParticipants.some(
+          (candidate) => candidate.id === participant.id,
+        );
+        if (controlled) return true;
+
+        const aliases = getCombatDistanceParticipantAliases(participant);
+        const scenarioParticipant = input.scenarioParticipants.find(
+          (candidate) =>
+            aliases.includes(candidate.id) ||
+            Boolean(candidate.characterId && aliases.includes(candidate.characterId)),
+        );
+        const scenarioVisibility = scenarioParticipant?.visibilityOverrides?.visibility;
+        if (scenarioVisibility === "hidden" || scenarioVisibility === "gm_only") return false;
+
+        return (
           !hasVisibilityRows ||
           input.controlledEncounterParticipants.some((viewer) =>
             hasCombatDistanceVisibility({
@@ -5877,8 +5888,9 @@ function buildPlayerSafeCombatScopeForParticipants(input: {
               viewer,
               visibility,
             }),
-          ),
-      )
+          )
+        );
+      })
       .flatMap((participant) => getCombatDistanceParticipantAliases(participant)),
   );
 

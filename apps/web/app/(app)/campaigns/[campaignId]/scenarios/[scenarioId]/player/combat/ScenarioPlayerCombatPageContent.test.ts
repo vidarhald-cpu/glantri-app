@@ -68,6 +68,17 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("revision: encounterSession.updatedAt");
   });
 
+  it("uses only the server player projection for non-GM participant and target visibility", () => {
+    const source = readSource();
+
+    expect(source).toContain("return projection?.visibleParticipants ?? []");
+    expect(source).toContain(
+      "playerPerspectiveVisibleParticipants.flatMap((participant) => [participant.id])",
+    );
+    expect(source).toContain(".filter((candidate) => candidate.selectable)");
+    expect(source).not.toContain("projection.visibleParticipants.concat");
+  });
+
   it("shows passive exact-identity recent-result feedback for player and GM rolls", () => {
     const source = readSource();
 
