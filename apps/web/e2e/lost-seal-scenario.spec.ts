@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { prisma } from "@glantri/database";
+import { setScenarioParticipantVisibilityForTest } from "@glantri/database/testing/scenarioPrivacy";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -27,11 +27,7 @@ async function markParticipantGmOnly(participantId: string): Promise<void> {
     process.env.DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/glantri_test";
   }
 
-  await prisma.scenarioParticipant.update({
-    data: { visibilityOverridesJson: { visibility: "gm_only" } },
-    where: { id: participantId },
-  });
-  await prisma.$disconnect();
+  await setScenarioParticipantVisibilityForTest({ participantId, visibility: "gm_only" });
 }
 
 test.describe("Lost Seal Scenario happy path", () => {
