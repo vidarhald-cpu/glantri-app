@@ -163,6 +163,24 @@ describe("Critical effect source/conformance inventory", () => {
     expect(quarterHp?.diagnostic).toContain("inactive source-linked note");
   });
 
+  it("keeps the blunt arm 12 unconsciousness source conflict inactive and source-linked", () => {
+    const conflict = buildCriticalEffectConformanceReport().effectEntries.find(
+      ({ effectKey }) => effectKey === "blunt|arm|12|02",
+    );
+
+    expect(conflict).toMatchObject({
+      critKey: "blunt|arm|12",
+      mappingStatus: "deferred_rule_decision",
+      proposalProjection: "review_effect:special_note",
+      requiresExtension: false,
+      sourceField: "shock_penalty",
+      sourceValue: "-8",
+    });
+    expect(conflict?.diagnostic).toContain("AppFacing_Crits!A109:X109");
+    expect(conflict?.diagnostic).toContain("AppFacing_Effects!A341:AE341");
+    expect(conflict?.diagnostic).toContain("no unconsciousness or combat-action blocking");
+  });
+
   it("does not let a mapped numeric facet suppress an independent mobility extension gap", () => {
     const entries = buildCriticalEffectConformanceReport().effectEntries;
     const numericMobilityEntries = entries.filter(

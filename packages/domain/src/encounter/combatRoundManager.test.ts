@@ -12224,6 +12224,132 @@ describe("combat round manager", () => {
     expect(overrideToNoEffect.phaseResolutionResults[0]?.criticalRoll.finalCriticalRoll).toBe(-2);
   });
 
+  it("keeps the blunt arm 12 unconsciousness conflict inactive through review and commit", () => {
+    // AppFacing_Crits!A109:X109 explicitly denies automatic unconsciousness, while
+    // AppFacing_Effects!A341:AE341 authors an unconscious action state.
+    const pending = prepareFailedParryPendingDamage({ weaponDamageClass: "blunt" });
+    const withDefenderPendingAction = declareRoundAction({
+      actionId: "parry_attack",
+      participantId: "guard",
+      state: pending.state,
+    });
+    const afterLocation = recordTestHitLocation({
+      attackResult: pending.attackResult,
+      hitLocationRolls: [17],
+      state: withDefenderPendingAction,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [1, 1],
+      rolledByParticipantId: "gladiator",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+    const attackResultId = afterCritical.phaseResolutionResults[0]?.damageResult?.attackResultId;
+
+    if (!attackResultId) {
+      throw new Error("Expected blunt arm critical damage result.");
+    }
+
+    const reviewed = reviewCombatRoundDamageResult({
+      attackResultId,
+      reviewedAt: "2026-01-01T00:05:40.000Z",
+      reviewedByUserId: "gm-1",
+      review: {
+        additionalEffects: [],
+        finalCriticalRollOverride: 12,
+        operationalConsequences: [],
+        totalDamageOverride: 2,
+      },
+      state: afterCritical,
+    });
+    const reviewedDamage = reviewed.phaseResolutionResults[0]?.damageResult;
+
+    expect(reviewedDamage?.review?.additionalEffects).toContainEqual(
+      expect.objectContaining({
+        accepted: false,
+        kind: "note",
+        label: "Source-conflicted unconsciousness",
+        notes: expect.stringContaining("AppFacing_Crits!A109:X109"),
+        rowCategory: "special_note",
+        sourceCritKey: "blunt|arm|12",
+        sourceEffectKey: "blunt|arm|12|02",
+        sourceText: "-8",
+      }),
+    );
+    expect(reviewedDamage?.review?.additionalEffects).not.toContainEqual(
+      expect.objectContaining({ accepted: true, rowCategory: "no_combat_action" }),
+    );
+    expect(reviewedDamage?.review?.operationalConsequences).not.toContainEqual(
+      expect.objectContaining({ kind: "cancel_pending_action" }),
+    );
+    expect(reviewedDamage?.review?.operationalConsequences).not.toContainEqual(
+      expect.objectContaining({ accepted: true, label: "No combat action possible" }),
+    );
+
+    const committed = commitCombatRoundPhaseDamage({
+      attackerScenarioParticipantId: "scenario-gladiator",
+      attackResultId,
+      command: {
+        commandId: "commit-authentic-blunt-arm-12-source-conflict",
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      createdRevision: "revision-authentic-blunt-arm-12-source-conflict",
+      defenderScenarioParticipantId: "scenario-guard",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      state: reviewed,
+    });
+    const reloadedState = combatRoundStateSchema.parse(
+      JSON.parse(JSON.stringify(committed.state)) as unknown,
+    );
+    const retainedConflict =
+      reloadedState.phaseResolutionResults[0]?.damageResult?.review?.additionalEffects.find(
+        (effect) => effect.sourceEffectKey === "blunt|arm|12|02",
+      );
+
+    expect(committed.command.facts.cancelledActions ?? []).toEqual([]);
+    expect(committed.command.facts.operationalConsequences ?? []).not.toContainEqual(
+      expect.objectContaining({ kind: "cancel_pending_action" }),
+    );
+    expect(committed.combatEffects.effects).not.toContainEqual(
+      expect.objectContaining({
+        canonicalLifecycle: expect.objectContaining({
+          sourceReferences: expect.objectContaining({ rowId: "blunt|arm|12|02" }),
+        }),
+      }),
+    );
+    expect(
+      committed.combatEffects.effects.some((effect) =>
+        /unconscious|no combat action possible/i.test(effect.description ?? ""),
+      ),
+    ).toBe(false);
+    expect(retainedConflict).toMatchObject({
+      accepted: false,
+      sourceCritKey: "blunt|arm|12",
+      sourceEffectKey: "blunt|arm|12|02",
+      sourceText: "-8",
+    });
+  });
+
   it("commits the edged arm 12 golden once with floor, provenance, reload, rejection, and undo", () => {
     // AppFacing_Crits!A13:X13; AppFacing_Effects!A36:AE42.
     const pending = prepareFailedParryPendingDamage({ weaponDamageClass: "edged" });

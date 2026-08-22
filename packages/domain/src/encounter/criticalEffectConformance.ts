@@ -1,6 +1,7 @@
 import {
   getCriticalEffectBleedRateSupport,
   getCriticalEffectProposalProjection,
+  getCriticalEffectSourceConflict,
   type CriticalEffectProposalProjection,
 } from "./criticalEffectProposal";
 import {
@@ -279,8 +280,11 @@ function classifyMapping(input: {
   }
 
   if (effect.type === "Stun") {
+    const sourceConflict = getCriticalEffectSourceConflict(effect);
+
     return {
       diagnostic:
+        sourceConflict ??
         "Stun facts are retained, but authored -1/-2/-4/-8 interpretation, stacking, and cause-specific recovery remain unresolved.",
       mappingStatus: "deferred_rule_decision",
       requiresExtension: false,

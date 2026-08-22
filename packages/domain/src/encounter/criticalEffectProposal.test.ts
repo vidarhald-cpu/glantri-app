@@ -320,6 +320,30 @@ describe("critical effect proposal generation", () => {
     expect(proposal.proposedEffects).toContainEqual(
       expect.objectContaining({
         accepted: false,
+        kind: "note",
+        label: "Source-conflicted unconsciousness",
+        notes: expect.stringContaining("AppFacing_Crits!A109:X109"),
+        rowCategory: "special_note",
+        sourceCritKey: "blunt|arm|12",
+        sourceEffectKey: "blunt|arm|12|02",
+        sourceText: "-8",
+      }),
+    );
+    expect(proposal.proposedEffects).not.toContainEqual(
+      expect.objectContaining({
+        accepted: true,
+        rowCategory: "no_combat_action",
+        sourceEffectKey: "blunt|arm|12|02",
+      }),
+    );
+    expect(proposal.warnings).toContainEqual(
+      expect.stringMatching(
+        /blunt\|arm\|12\|02.*AppFacing_Crits!A109:X109.*AppFacing_Effects!A341:AE341/,
+      ),
+    );
+    expect(proposal.proposedEffects).toContainEqual(
+      expect.objectContaining({
+        accepted: false,
         rowCategory: "special_note",
         sourceEffectKey: "blunt|arm|12|06",
       }),

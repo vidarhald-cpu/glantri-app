@@ -227,6 +227,7 @@ import { lookupCombatCriticalModifier } from "./critical";
 import {
   buildCriticalEffectProposalFromDamageResult,
   buildCriticalEffectProposalSummary,
+  getCriticalEffectSourceConflict,
 } from "./criticalEffectProposal";
 import { getCriticalResultWithEffects, type CriticalEffectTemplate } from "./criticalEffectsTable";
 import {
@@ -1795,6 +1796,10 @@ function criticalEffectImpliesLossOfArmUse(effect: CriticalEffectTemplate): bool
 }
 
 function criticalEffectBlocksCombatAction(effect: CriticalEffectTemplate): boolean {
+  if (getCriticalEffectSourceConflict(effect)) {
+    return false;
+  }
+
   const text = [
     effect.actionState,
     effect.durationRaw,
@@ -1924,11 +1929,16 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
     return [];
   }
 
+  const hasActionBlockingSourceConflict = resultWithEffects.effects.some((effect) =>
+    Boolean(getCriticalEffectSourceConflict(effect)),
+  );
+  const effectBlocksCombatAction = (effect: CriticalEffectTemplate) =>
+    !hasActionBlockingSourceConflict && criticalEffectBlocksCombatAction(effect);
   const relevantEffects = resultWithEffects.effects.filter(
     (effect) =>
       criticalEffectImpliesDropItem(effect) ||
       criticalEffectImpliesLossOfArmUse(effect) ||
-      criticalEffectBlocksCombatAction(effect),
+      effectBlocksCombatAction(effect),
   );
 
   if (relevantEffects.length === 0) {
@@ -1936,13 +1946,11 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
   }
 
   const primaryEffect =
-    relevantEffects.find((effect) => criticalEffectBlocksCombatAction(effect)) ??
+    relevantEffects.find(effectBlocksCombatAction) ??
     relevantEffects.find(criticalEffectHasStructuredDropItem) ??
     relevantEffects.find((effect) => criticalEffectImpliesDropItem(effect)) ??
     relevantEffects[0];
-  const actionBlockingEffect = relevantEffects.find((effect) =>
-    criticalEffectBlocksCombatAction(effect),
-  );
+  const actionBlockingEffect = relevantEffects.find(effectBlocksCombatAction);
   const dropEffect =
     relevantEffects.find(criticalEffectHasStructuredDropItem) ??
     relevantEffects.find((effect) => criticalEffectImpliesDropItem(effect));

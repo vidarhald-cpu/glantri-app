@@ -570,6 +570,17 @@ function isCriticalEffectDropItemTag(effect: CriticalEffectTemplate): boolean {
   return effect.specialFlag === "drop_item" || effect.sourceValue?.toLowerCase() === "drop_item";
 }
 
+const BLUNT_ARM_12_UNCONSCIOUSNESS_SOURCE_CONFLICT =
+  "Source conflict: AppFacing_Crits!A109:X109 says the opponent is not automatically unconscious, while AppFacing_Effects!A341:AE341 authors an unconscious action state. Retained as an inactive GM-review note; no unconsciousness or combat-action blocking is applied.";
+
+export function getCriticalEffectSourceConflict(
+  effect: CriticalEffectTemplate,
+): string | undefined {
+  return effect.effectKey === "blunt|arm|12|02"
+    ? BLUNT_ARM_12_UNCONSCIOUSNESS_SOURCE_CONFLICT
+    : undefined;
+}
+
 function criticalEffectBlocksOrLimitsAction(effect: CriticalEffectTemplate): boolean {
   const actionState = effect.actionState?.toLowerCase();
   const sourceValue = effect.sourceValue?.toUpperCase();
@@ -602,6 +613,14 @@ export function getCriticalEffectProposalProjection(
   effect: CriticalEffectTemplate,
 ): CriticalEffectProposalProjection {
   const modifierValue = normalizePenalty(effect.penaltyPct);
+
+  if (getCriticalEffectSourceConflict(effect)) {
+    return {
+      kind: "note",
+      representation: "review_effect",
+      rowCategory: "special_note",
+    };
+  }
 
   if (isCriticalEffectMinimumDamageFloor(effect)) {
     return {
@@ -718,19 +737,24 @@ function mapCriticalEffectTemplateToReviewEffect(input: {
   rollReports: readonly CriticalEffectProposalRollReport[];
 }): CriticalEffectProposalAdditionalEffect | undefined {
   const projection = getCriticalEffectProposalProjection(input.effect);
+  const sourceConflict = getCriticalEffectSourceConflict(input.effect);
   const common = {
     accepted: projection.rowCategory !== "special_note",
     durationRounds: getCriticalEffectStoredDurationRounds(input.effect, input.rollReports),
     effectOrder: input.effect.effectOrder,
     id: `critical-effect-${input.effect.effectKey.replace(/[^A-Za-z0-9_-]+/g, "-")}`,
-    label: getCriticalEffectLabel(input.effect),
+    label: sourceConflict
+      ? "Source-conflicted unconsciousness"
+      : getCriticalEffectLabel(input.effect),
     minDamageReason: input.effect.minDamageReason,
     minTotalDamage: input.effect.minTotalDamage,
-    notes: buildEffectNotes({
-      effect: input.effect,
-      existingCommittedDamageAmount: input.existingCommittedDamageAmount,
-      rollReports: input.rollReports,
-    }),
+    notes:
+      sourceConflict ??
+      buildEffectNotes({
+        effect: input.effect,
+        existingCommittedDamageAmount: input.existingCommittedDamageAmount,
+        rollReports: input.rollReports,
+      }),
     rollReports: input.rollReports,
     sourceCritKey: input.effect.critKey,
     sourceEffectKey: input.effect.effectKey,
@@ -861,16 +885,19 @@ export function buildCriticalEffectProposalFromDamageResult(
       projection.rowCategory === "special_note"
     ) {
       const bleedSupport = getCriticalEffectBleedRateSupport(effect);
+      const sourceConflict = getCriticalEffectSourceConflict(effect);
       warnings.push(
-        effect.type === "Bleed" || effect.type === "Internal bleed"
-          ? `Critical effect ${effect.effectKey} remains an inactive note: ${
-              bleedSupport.status === "unsupported"
-                ? bleedSupport.reason
-                : "bleed mechanics are unsupported."
-            }`
-          : effect.type === "Stun"
-            ? `Critical effect ${effect.effectKey} remains an inactive note because authored Stun penalty interpretation is unresolved.`
-            : `Critical effect ${effect.effectKey} remains an inactive note because its mechanics are unsupported or ambiguous.`,
+        sourceConflict
+          ? `Critical effect ${effect.effectKey} remains an inactive note. ${sourceConflict}`
+          : effect.type === "Bleed" || effect.type === "Internal bleed"
+            ? `Critical effect ${effect.effectKey} remains an inactive note: ${
+                bleedSupport.status === "unsupported"
+                  ? bleedSupport.reason
+                  : "bleed mechanics are unsupported."
+              }`
+            : effect.type === "Stun"
+              ? `Critical effect ${effect.effectKey} remains an inactive note because authored Stun penalty interpretation is unresolved.`
+              : `Critical effect ${effect.effectKey} remains an inactive note because its mechanics are unsupported or ambiguous.`,
       );
     }
 
