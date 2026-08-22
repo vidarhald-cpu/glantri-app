@@ -1,4 +1,7 @@
 export { prisma } from "./client";
+export * from "./migrationCompatibility";
+export { migrationCompatibilityPrisma } from "./migrationCompatibilityClient";
+export { knownDatabaseMigrations } from "./migrationManifest";
 export * from "./services/authService";
 export * from "./services/campaignService";
 export * from "./services/characterService";

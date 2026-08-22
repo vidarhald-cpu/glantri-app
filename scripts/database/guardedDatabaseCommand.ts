@@ -17,6 +17,7 @@ import {
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..", "..");
 const databasePackageDir = resolve(repoRoot, "packages", "database");
+const migrationCompatibilityChecker = resolve(scriptDir, "checkMigrationCompatibility.ts");
 
 function fail(message: string): never {
   throw new Error(message);
@@ -155,6 +156,10 @@ function requireConfirmation(): void {
   }
 }
 
+function runMigrationCompatibilityCheck(environment: NodeJS.ProcessEnv): void {
+  run("node", ["--import", "tsx", migrationCompatibilityChecker], { env: environment });
+}
+
 function main(): void {
   const command = process.argv[2];
 
@@ -200,6 +205,7 @@ function main(): void {
     }
     case "dev": {
       const environment = guardedEnvironment("application-dev");
+      runMigrationCompatibilityCheck(environment);
       run("pnpm", ["exec", "turbo", "dev"], { env: environment });
       return;
     }
@@ -220,6 +226,7 @@ function main(): void {
     }
     case "migrate": {
       const environment = guardedEnvironment("migrate");
+      runMigrationCompatibilityCheck(environment);
       run("pnpm", ["exec", "prisma", "migrate", "dev"], {
         cwd: databasePackageDir,
         env: environment,
@@ -239,14 +246,20 @@ function main(): void {
     }
     case "seed": {
       const environment = guardedEnvironment("seed");
+      runMigrationCompatibilityCheck(environment);
       run("node", ["--import", "tsx", "./scripts/seedLocalDev.ts"], {
         cwd: databasePackageDir,
         env: environment,
       });
       return;
     }
+    case "readiness": {
+      const environment = guardedEnvironment("release-readiness");
+      runMigrationCompatibilityCheck(environment);
+      return;
+    }
     default:
-      fail("Expected one of: up, down, migrate, backup, reset, seed, dev.");
+      fail("Expected one of: up, down, migrate, backup, reset, seed, dev, readiness.");
   }
 }
 

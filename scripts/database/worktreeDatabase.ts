@@ -24,6 +24,7 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..", "..");
 const databasePackageDir = resolve(repoRoot, "packages", "database");
 const defaultEnvironmentFile = resolve(repoRoot, ".env.task");
+const migrationCompatibilityChecker = resolve(scriptDir, "checkMigrationCompatibility.ts");
 
 type TaskTarget = "application" | "test";
 
@@ -365,6 +366,13 @@ function migrateTarget(
 ): void {
   printPreflight("migrate", target, validated);
   const url = target === "application" ? environment.DATABASE_URL : environment.DATABASE_URL_TEST;
+  run("node", ["--import", "tsx", migrationCompatibilityChecker], {
+    env: {
+      ...environment,
+      DATABASE_URL: url,
+      GLANTRI_DB_APPLICATION_URL: environment.DATABASE_URL,
+    },
+  });
   run("pnpm", ["exec", "prisma", "migrate", "deploy"], {
     cwd: databasePackageDir,
     env: {
@@ -423,6 +431,7 @@ function seed(): void {
   const { environment, validated } = loadValidatedEnvironment();
   verifyOwnedRunningContainer(validated);
   printPreflight("seed", "application", validated);
+  run("node", ["--import", "tsx", migrationCompatibilityChecker], { env: environment });
   run("node", ["--import", "tsx", "./scripts/seedLocalDev.ts"], {
     cwd: databasePackageDir,
     env: { ...environment, DATABASE_URL: environment.DATABASE_URL },
@@ -463,6 +472,7 @@ function execute(): void {
   verifyOwnedRunningContainer(validated);
   printPreflight("application", "application", validated);
   printPreflight("application-test", "test", validated);
+  run("node", ["--import", "tsx", migrationCompatibilityChecker], { env: environment });
   run(process.argv[separator + 1]!, process.argv.slice(separator + 2), { env: environment });
 }
 
