@@ -195,6 +195,8 @@ function visibleTaskIdentity(
     executionGroupId,
     healthRollId: task.identity.healthRollId,
     hitLocationResultId: task.identity.hitLocationResultId,
+    initiativeGroupId: task.kind === "attack" ? task.identity.initiativeGroupId : undefined,
+    initiativeValue: task.kind === "attack" ? task.identity.initiativeValue : undefined,
     opportunityId: attackLineageVisible ? task.identity.opportunityId : undefined,
     offensiveParryAttemptId: task.identity.offensiveParryAttemptId,
     observationAttemptId: task.identity.observationAttemptId,
