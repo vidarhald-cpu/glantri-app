@@ -439,6 +439,18 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(slowContext).not.toContain("loadEncounterById");
     expect(slowContext).not.toContain("loadCombatHistory");
     expect(source).toContain("pollPlayerCombatSnapshot({");
+    expect(source).toContain("loadProjection: () => loadScenarioPlayerProjection(scenarioId)");
+    expect(source).toContain("setProjection(result.projection)");
+    expect(source).toContain("setRevisionBoundHistory(undefined)");
+    expect(source).toContain("setCombatItemOptions(undefined)");
+    expect(source).toContain("historyCoordinator.clear()");
+    expect(source).toContain("acceptedProjectionKey: acceptedProjectionKeyRef.current");
+    expect(source).toContain("onProjectionChanged: (nextProjection) => {");
+    expect(source).toContain("const refreshRequestId = refreshCoordinator.begin()");
+    expect(source).toContain("!refreshCoordinator.isCurrent(refreshRequestId)");
+    expect(source).toContain("refreshCoordinator.invalidate()");
+    expect(source).toContain("setEncounterSession(undefined)");
+    expect(source).toContain("key={`${encounterSession.id}:${projectionCacheKey}`}");
     expect(source).toContain("loadRevision: loadEncounterRevision");
     expect(source).toContain("setRevisionBoundHistory(result.history)");
     expect(source).toContain("setSelectableParticipants([...result.participants])");

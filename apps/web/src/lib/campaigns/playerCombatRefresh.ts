@@ -3,6 +3,7 @@ import type {
   EncounterSession,
   EncounterSessionRevision,
   ScenarioParticipant,
+  ScenarioPlayerProjection,
 } from "@glantri/domain";
 
 import { pollActiveEncounterRevision } from "./activeEncounterPolling";
@@ -37,24 +38,49 @@ export interface RevisionKeyedCombatHistory {
 }
 
 export type PlayerCombatSnapshotPollResult =
-  | { kind: "unchanged" }
+  | { kind: "unchanged"; projection: ScenarioPlayerProjection }
   | { kind: "stale" }
   | {
       encounter: EncounterSession;
       history: RevisionKeyedCombatHistory;
       kind: "updated";
       participants: readonly ScenarioParticipant[];
+      projection: ScenarioPlayerProjection;
     };
+
+export function getPlayerCombatProjectionCacheKey(projection: ScenarioPlayerProjection): string {
+  return JSON.stringify(projection);
+}
+
+export function createPlayerCombatRefreshRequestCoordinator() {
+  let latestRequestId = 0;
+
+  return {
+    begin() {
+      latestRequestId += 1;
+      return latestRequestId;
+    },
+    invalidate() {
+      latestRequestId += 1;
+    },
+    isCurrent(requestId: number) {
+      return requestId === latestRequestId;
+    },
+  };
+}
 
 /** Loads one player-safe operational snapshot and adopts nothing until every revision agrees. */
 export async function pollPlayerCombatSnapshot(input: {
   acceptedRevision?: string;
+  acceptedProjectionKey?: string;
   encounterId: string;
   loadEncounter: (encounterId: string) => Promise<EncounterSession>;
   loadHistory: (encounter: EncounterSession) => Promise<RevisionKeyedCombatHistory>;
   loadParticipants: (scenarioId: string) => Promise<ScenarioParticipant[]>;
+  loadProjection: () => Promise<ScenarioPlayerProjection>;
   loadRevision: (encounterId: string) => Promise<EncounterSessionRevision>;
   onNewerRevision?: (revision: EncounterSessionRevision) => void;
+  onProjectionChanged?: (projection: ScenarioPlayerProjection) => void;
 }): Promise<PlayerCombatSnapshotPollResult> {
   const encounterResult = await pollActiveEncounterRevision({
     acceptedRevision: input.acceptedRevision,
@@ -63,36 +89,80 @@ export async function pollPlayerCombatSnapshot(input: {
     loadRevision: input.loadRevision,
     onNewerRevision: input.onNewerRevision,
   });
-  if (encounterResult.kind !== "updated") return encounterResult;
+  if (encounterResult.kind === "stale") return encounterResult;
+  if (encounterResult.kind === "unchanged") {
+    const projection = await input.loadProjection();
+    if (
+      !input.acceptedProjectionKey ||
+      getPlayerCombatProjectionCacheKey(projection) === input.acceptedProjectionKey
+    ) {
+      return { kind: "unchanged", projection };
+    }
+
+    input.onProjectionChanged?.(projection);
+    const encounter = await input.loadEncounter(input.encounterId);
+    if (
+      encounter.id !== input.encounterId ||
+      encounter.updatedAt !== input.acceptedRevision ||
+      !encounter.scenarioId
+    ) {
+      return { kind: "stale" };
+    }
+    return loadCoherentPlayerCombatSnapshot({
+      encounter,
+      input,
+      projection,
+      scenarioId: encounter.scenarioId,
+    });
+  }
   if (!encounterResult.encounter.scenarioId) return { kind: "stale" };
 
+  const projection = await input.loadProjection();
+  return loadCoherentPlayerCombatSnapshot({
+    encounter: encounterResult.encounter,
+    input,
+    projection,
+    scenarioId: encounterResult.encounter.scenarioId,
+  });
+}
+
+async function loadCoherentPlayerCombatSnapshot(input: {
+  encounter: EncounterSession;
+  input: {
+    encounterId: string;
+    loadHistory: (encounter: EncounterSession) => Promise<RevisionKeyedCombatHistory>;
+    loadParticipants: (scenarioId: string) => Promise<ScenarioParticipant[]>;
+    loadRevision: (encounterId: string) => Promise<EncounterSessionRevision>;
+  };
+  projection: ScenarioPlayerProjection;
+  scenarioId: string;
+}): Promise<PlayerCombatSnapshotPollResult> {
   const [history, participants, confirmedRevision] = await Promise.all([
-    input.loadHistory(encounterResult.encounter),
-    input.loadParticipants(encounterResult.encounter.scenarioId),
-    input.loadRevision(input.encounterId),
+    input.input.loadHistory(input.encounter),
+    input.input.loadParticipants(input.scenarioId),
+    input.input.loadRevision(input.input.encounterId),
   ]);
   if (
-    confirmedRevision.encounterId !== input.encounterId ||
-    confirmedRevision.revision !== encounterResult.encounter.updatedAt ||
-    history.identity.encounterId !== input.encounterId ||
+    confirmedRevision.encounterId !== input.input.encounterId ||
+    confirmedRevision.revision !== input.encounter.updatedAt ||
+    history.identity.encounterId !== input.input.encounterId ||
     history.identity.revision !== confirmedRevision.revision ||
-    history.history.sourceEncounterId !== input.encounterId ||
+    history.history.sourceEncounterId !== input.input.encounterId ||
     history.history.sourceUpdatedAt !== confirmedRevision.revision
   ) {
     return { kind: "stale" };
   }
 
   return {
-    encounter: encounterResult.encounter,
+    encounter: input.encounter,
     history,
     kind: "updated",
     participants,
+    projection: input.projection,
   };
 }
 
-export function getPlayerCombatHistoryRequestKey(
-  identity: PlayerCombatHistoryIdentity,
-): string {
+export function getPlayerCombatHistoryRequestKey(identity: PlayerCombatHistoryIdentity): string {
   return [
     identity.encounterId,
     identity.revision,
@@ -106,8 +176,8 @@ export function isMatchingPlayerCombatHistory(input: {
 }): boolean {
   return Boolean(
     input.candidate &&
-      getPlayerCombatHistoryRequestKey(input.candidate.identity) ===
-        getPlayerCombatHistoryRequestKey(input.identity),
+    getPlayerCombatHistoryRequestKey(input.candidate.identity) ===
+      getPlayerCombatHistoryRequestKey(input.identity),
   );
 }
 

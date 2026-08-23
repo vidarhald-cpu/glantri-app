@@ -19,7 +19,10 @@ async function json<T>(response: Awaited<ReturnType<APIRequestContext["get"]>>):
   return response.json() as Promise<T>;
 }
 
-async function markParticipantGmOnly(participantId: string): Promise<void> {
+async function setParticipantVisibility(
+  participantId: string,
+  visibility: "gm_only" | "hidden" | "visible_to_all",
+): Promise<void> {
   if (!process.env.DATABASE_URL) {
     if (process.env.CI !== "true") {
       throw new Error("Lost Seal privacy setup requires the guarded task database environment.");
@@ -27,7 +30,7 @@ async function markParticipantGmOnly(participantId: string): Promise<void> {
     process.env.DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/glantri_test";
   }
 
-  await setScenarioParticipantVisibilityForTest({ participantId, visibility: "gm_only" });
+  await setScenarioParticipantVisibilityForTest({ participantId, visibility });
 }
 
 test.describe("Lost Seal Scenario happy path", () => {
@@ -37,6 +40,7 @@ test.describe("Lost Seal Scenario happy path", () => {
     browser,
     page,
   }) => {
+    test.setTimeout(90_000);
     const { characterId: characterAId, nonHolderCharacterId: characterBId } = loadCharacters();
     const playerAContext = await browser.newContext({ storageState: "e2e/.auth/player.json" });
     const playerBContext = await browser.newContext({
@@ -90,7 +94,7 @@ test.describe("Lost Seal Scenario happy path", () => {
         { data: { characterId: characterBId, controlledByUserId: playerBUser.user.id } },
       ),
     );
-    await markParticipantGmOnly(participantB.participant.id);
+    await setParticipantVisibility(participantB.participant.id, "gm_only");
 
     const hiddenParticipantName = participantB.participant.snapshot.displayName;
     const nonexistentParticipantName = "Nonexistent Lost Seal Participant";
@@ -451,37 +455,67 @@ test.describe("Lost Seal Scenario happy path", () => {
       expect(postClosePlayerProjectionPayload).not.toContain(privateIdentity);
     }
 
+    await setParticipantVisibility(participantB.participant.id, "visible_to_all");
+
     const playerCombatHref = `/campaigns/${campaign.campaign.id}?tab=player-combat&scenarioId=${scenario.scenario.id}&encounterId=${activeSharedCombat.encounter.id}`;
     await playerAPage.setViewportSize({ height: 900, width: 1280 });
     await playerAPage.goto(playerCombatHref);
     await expect(
       playerAPage.getByRole("heading", { name: "Combat — Smoke Character" }),
     ).toBeVisible();
-    await expect(playerAPage.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
+    await expect(
+      playerAPage.getByText(hiddenParticipantName, { exact: false }).first(),
+    ).toBeVisible();
     await expect(
       playerAPage.locator("option").filter({ hasText: hiddenParticipantName }),
-    ).toHaveCount(0);
-    await playerAPage.reload();
-    await expect(
-      playerAPage.getByRole("heading", { name: "Combat — Smoke Character" }),
-    ).toBeVisible();
-    await expect(playerAPage.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
+    ).not.toHaveCount(0);
+
+    async function restrictDuringOpenCombat(visibility: "gm_only" | "hidden") {
+      const cleanProjectionResponse = playerAPage.waitForResponse(
+        async (response) =>
+          response.url().includes(`/scenarios/${scenario.scenario.id}/player-projection`) &&
+          response.status() === 200 &&
+          !(await response.text()).includes(participantB.participant.id),
+        { timeout: 12_000 },
+      );
+      const successfulRevisionResponse = playerAPage.waitForResponse(
+        (response) =>
+          response.url().includes(`/encounters/${activeSharedCombat.encounter.id}/revision`) &&
+          response.status() === 200,
+        { timeout: 12_000 },
+      );
+      await setParticipantVisibility(participantB.participant.id, visibility);
+      await Promise.all([cleanProjectionResponse, successfulRevisionResponse]);
+      await expect(playerAPage.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
+      await expect(
+        playerAPage.locator("option").filter({ hasText: hiddenParticipantName }),
+      ).toHaveCount(0);
+    }
+
+    async function restoreVisibleParticipant() {
+      const visibleProjectionResponse = playerAPage.waitForResponse(
+        async (response) =>
+          response.url().includes(`/scenarios/${scenario.scenario.id}/player-projection`) &&
+          response.status() === 200 &&
+          (await response.text()).includes(participantB.participant.id),
+        { timeout: 12_000 },
+      );
+      await setParticipantVisibility(participantB.participant.id, "visible_to_all");
+      await visibleProjectionResponse;
+      await expect(
+        playerAPage.getByText(hiddenParticipantName, { exact: false }).first(),
+      ).toBeVisible();
+      await expect(
+        playerAPage.locator("option").filter({ hasText: hiddenParticipantName }),
+      ).not.toHaveCount(0);
+    }
+
+    await restrictDuringOpenCombat("gm_only");
+    await restoreVisibleParticipant();
     await playerAPage.setViewportSize({ height: 844, width: 390 });
-    await playerAPage.reload();
-    await expect(
-      playerAPage.getByRole("heading", { name: "Combat — Smoke Character" }),
-    ).toBeVisible();
-    await expect(playerAPage.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
-    await expect(
-      playerAPage.locator("option").filter({ hasText: hiddenParticipantName }),
-    ).toHaveCount(0);
-    await playerAPage.waitForResponse(
-      (response) =>
-        response.url().includes(`/encounters/${activeSharedCombat.encounter.id}/revision`) &&
-        response.status() === 200,
-      { timeout: 10_000 },
-    );
-    await expect(playerAPage.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
+    await restrictDuringOpenCombat("hidden");
+    await restoreVisibleParticipant();
+    await restrictDuringOpenCombat("gm_only");
 
     await playerAPage.reload();
     await playerAPage.goto(

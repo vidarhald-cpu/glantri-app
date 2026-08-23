@@ -8,16 +8,15 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createPlayerCombatHistoryRequestCoordinator,
+  createPlayerCombatRefreshRequestCoordinator,
+  getPlayerCombatProjectionCacheKey,
   isMatchingPlayerCombatHistory,
   loadPlayerCombatSlowContext,
   pollPlayerCombatSnapshot,
   shouldAcceptPlayerCombatEncounter,
 } from "./playerCombatRefresh";
 
-function history(input: {
-  encounterId: string;
-  revision: string;
-}): CombatHistoryProjection {
+function history(input: { encounterId: string; revision: string }): CombatHistoryProjection {
   return {
     activeRound: { events: [], observationRelationships: [], roundNumber: 1, snapshots: [] },
     archivedRounds: [],
@@ -54,6 +53,7 @@ describe("player combat refresh coordination", () => {
       updatedAt: nextEncounter.updatedAt,
     });
     const participants = [{ id: "participant-1" }] as unknown as ScenarioParticipant[];
+    const projection = { scenario: { id: "scenario-1" } } as never;
 
     await expect(
       pollPlayerCombatSnapshot({
@@ -65,6 +65,7 @@ describe("player combat refresh coordination", () => {
           identity: { encounterId: "encounter-1", revision: nextEncounter.updatedAt },
         }),
         loadParticipants: vi.fn().mockResolvedValue(participants),
+        loadProjection: vi.fn().mockResolvedValue(projection),
         loadRevision,
       }),
     ).resolves.toEqual({
@@ -75,6 +76,7 @@ describe("player combat refresh coordination", () => {
       },
       kind: "updated",
       participants,
+      projection,
     });
     expect(loadRevision).toHaveBeenCalledTimes(2);
   });
@@ -84,6 +86,8 @@ describe("player combat refresh coordination", () => {
     const loadEncounter = vi.fn();
     const loadHistory = vi.fn();
     const loadParticipants = vi.fn();
+    const projection = { scenario: { id: "scenario-1" } } as never;
+    const loadProjection = vi.fn().mockResolvedValue(projection);
     const unchangedRevision = vi.fn().mockResolvedValue({
       encounterId: "encounter-1",
       revision,
@@ -93,16 +97,19 @@ describe("player combat refresh coordination", () => {
     await expect(
       pollPlayerCombatSnapshot({
         acceptedRevision: revision,
+        acceptedProjectionKey: getPlayerCombatProjectionCacheKey(projection),
         encounterId: "encounter-1",
         loadEncounter,
         loadHistory,
         loadParticipants,
+        loadProjection,
         loadRevision: unchangedRevision,
       }),
-    ).resolves.toEqual({ kind: "unchanged" });
+    ).resolves.toEqual({ kind: "unchanged", projection });
     expect(loadEncounter).not.toHaveBeenCalled();
     expect(loadHistory).not.toHaveBeenCalled();
     expect(loadParticipants).not.toHaveBeenCalled();
+    expect(loadProjection).toHaveBeenCalledTimes(1);
 
     const nextEncounter = {
       ...encounter("encounter-1", "2026-01-01T00:03:00.000Z"),
@@ -118,6 +125,7 @@ describe("player combat refresh coordination", () => {
           identity: { encounterId: "encounter-1", revision },
         }),
         loadParticipants: vi.fn().mockResolvedValue([]),
+        loadProjection: vi.fn().mockResolvedValue(projection),
         loadRevision: vi.fn().mockResolvedValue({
           encounterId: "encounter-1",
           revision: nextEncounter.updatedAt,
@@ -126,6 +134,87 @@ describe("player combat refresh coordination", () => {
         }),
       }),
     ).resolves.toEqual({ kind: "stale" });
+  });
+
+  it("reloads a coherent player-safe snapshot when only Scenario visibility changes", async () => {
+    const revision = "2026-01-01T00:02:00.000Z";
+    const nextEncounter = {
+      ...encounter("encounter-1", revision),
+      scenarioId: "scenario-1",
+    };
+    const visibleProjection = {
+      scenario: { id: "scenario-1" },
+      visibleParticipants: [{ id: "participant-hidden-next" }],
+    } as never;
+    const restrictedProjection = {
+      scenario: { id: "scenario-1" },
+      visibleParticipants: [],
+    } as never;
+    const onProjectionChanged = vi.fn();
+    const refreshedHistory = {
+      history: history({ encounterId: "encounter-1", revision }),
+      identity: { encounterId: "encounter-1", revision },
+    };
+
+    await expect(
+      pollPlayerCombatSnapshot({
+        acceptedProjectionKey: getPlayerCombatProjectionCacheKey(visibleProjection),
+        acceptedRevision: revision,
+        encounterId: "encounter-1",
+        loadEncounter: vi.fn().mockResolvedValue(nextEncounter),
+        loadHistory: vi.fn().mockResolvedValue(refreshedHistory),
+        loadParticipants: vi.fn().mockResolvedValue([]),
+        loadProjection: vi.fn().mockResolvedValue(restrictedProjection),
+        loadRevision: vi.fn().mockResolvedValue({
+          encounterId: "encounter-1",
+          revision,
+          status: "active",
+          updatedAt: revision,
+        }),
+        onProjectionChanged,
+      }),
+    ).resolves.toEqual({
+      encounter: nextEncounter,
+      history: refreshedHistory,
+      kind: "updated",
+      participants: [],
+      projection: restrictedProjection,
+    });
+    expect(onProjectionChanged).toHaveBeenCalledWith(restrictedProjection);
+  });
+
+  it("changes the projection cache identity when a visible participant is revoked", () => {
+    const visible = {
+      controlledParticipantId: "participant-a",
+      scenario: { id: "scenario-1" },
+      visibleParticipants: [
+        { displayName: "Player A", id: "participant-a" },
+        { displayName: "Hidden next poll", id: "participant-b" },
+      ],
+    };
+    const restricted = {
+      ...visible,
+      visibleParticipants: [visible.visibleParticipants[0]],
+    };
+
+    expect(getPlayerCombatProjectionCacheKey(restricted as never)).not.toBe(
+      getPlayerCombatProjectionCacheKey(visible as never),
+    );
+    expect(getPlayerCombatProjectionCacheKey(structuredClone(visible) as never)).toBe(
+      getPlayerCombatProjectionCacheKey(visible as never),
+    );
+  });
+
+  it("rejects delayed projection refreshes after a newer request or invalidation", () => {
+    const coordinator = createPlayerCombatRefreshRequestCoordinator();
+    const delayedVisibleResponse = coordinator.begin();
+    const newerRestrictedResponse = coordinator.begin();
+
+    expect(coordinator.isCurrent(delayedVisibleResponse)).toBe(false);
+    expect(coordinator.isCurrent(newerRestrictedResponse)).toBe(true);
+
+    coordinator.invalidate();
+    expect(coordinator.isCurrent(newerRestrictedResponse)).toBe(false);
   });
 
   it("loads each slow-changing context source exactly once", async () => {
@@ -180,9 +269,7 @@ describe("player combat refresh coordination", () => {
         history({
           encounterId,
           revision:
-            options.perspectiveParticipantId === "participant-a"
-              ? "revision-a"
-              : "revision-b",
+            options.perspectiveParticipantId === "participant-a" ? "revision-a" : "revision-b",
         }),
     );
     const coordinator = createPlayerCombatHistoryRequestCoordinator({ loadHistory });
