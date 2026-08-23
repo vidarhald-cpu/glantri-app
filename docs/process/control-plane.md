@@ -22,6 +22,8 @@ Chat is useful for exploration and product discussion but is not durable project
 
 Historical issues, milestones, and Claude-created architecture work are preserved as input. They do not become the current operational backlog until triaged and deliberately adopted.
 
+The [strategic development areas](../product/development-areas.md) overview is a discovery aid for current focus, planned areas, and existing proposals. It is a dated snapshot; live GitHub issues and PRs remain authoritative for status and dispatch.
+
 ## Documentation loading and maintenance
 
 Mandatory agent reading is an architectural and resource cost. Only information required for safe, effective execution belongs in the always-read layer.
@@ -91,6 +93,41 @@ The personal Google Drive connector has been deliberately disconnected. Current 
 Destructive and external actions remain governed by the task contract and the authority model. Installing, discovering, or being able to invoke a tool does not grant authority to push, open or update a PR, merge, deploy, delete, publish, change accounts or permissions, or alter GitHub, production, or Azure configuration.
 
 ## Work lifecycle
+
+### Concept-to-execution readiness flow
+
+New product directions use this maturity and authority flow:
+
+```text
+Idea / Proposal
+        ↓
+Architecture review
+        ↓
+Design
+        ↓
+Ready
+        ↓
+Authorized
+        ↓
+Active
+```
+
+Ideas and proposals may originate with product owners, players or other contributors, or
+external AI-assisted contributors. They must be captured in a durable proposal/design
+record and reviewed through the applicable product and architecture authority. Proposal,
+architecture, and design work creates no implementation authority.
+
+`Ready` begins only when a bounded implementation contract is complete and current. It
+still requires a separate, explicit product-owner/control-plane `Authorized` decision.
+`Active` begins only when the assigned Builder posts the normal issue-level `ACTIVE` claim
+with the exact baseline and ownership required by the claim protocol.
+
+This flow describes how a concept becomes dispatchable; it does not replace the GitHub
+Project lifecycle below. Early records normally move through `Inbox`, `Triage`, and
+`Needs decision` while proposal, architecture, and design mature. A complete contract may
+reach Project `Ready`; authorization remains a separate durable dispatch fact; and the
+issue moves to `In progress` only after the `ACTIVE` claim. The status and claim semantics
+established by #324, #325, and #330 remain canonical.
 
 Use these Project statuses:
 
