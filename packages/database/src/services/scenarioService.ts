@@ -1,17 +1,23 @@
 import type {
   ReusableEntity,
   Scenario,
+  ScenarioAvailableObjectReference,
   ScenarioRelationship,
   ScenarioParticipant,
   ScenarioParticipantRole,
+  ScenarioSessionAvailableObject,
 } from "@glantri/domain";
 import {
   createParticipantSnapshotFromCharacter,
   createParticipantSnapshotFromEntity,
+  formatScenarioAvailableObjectReferenceType,
+  scenarioAvailableObjectReferenceSchema,
+  scenarioSessionStateSchema,
 } from "@glantri/domain";
 
 import {
   createPrismaScenarioRepository,
+  ScenarioPersistenceError,
   type ScenarioRepository,
 } from "../repositories/scenarioRepository";
 import { CharacterEquipmentReadModelService } from "./characterEquipmentReadModelService";
@@ -21,6 +27,20 @@ import {
   resolveEntityParticipantSource,
   userHasPlayerScenarioAccess,
 } from "./scenarioParticipantSupport";
+
+export class ScenarioSessionWriteError extends Error {
+  constructor(
+    readonly code: "stale_revision" | "transaction_conflict",
+    message: string,
+    cause?: unknown,
+  ) {
+    super(message);
+    this.name = "ScenarioSessionWriteError";
+    if (cause !== undefined) {
+      Object.defineProperty(this, "cause", { enumerable: false, value: cause });
+    }
+  }
+}
 
 export class ScenarioService {
   constructor(
@@ -112,6 +132,203 @@ export class ScenarioService {
     status?: Scenario["status"];
   }): Promise<Scenario> {
     return this.repository.updateScenario(input);
+  }
+
+  async updateScenarioSessionState(input: {
+    availableObjects: ScenarioAvailableObjectReference[];
+    expectedRevision: string;
+    gmPrivateNotes: string;
+    scenarioId: string;
+  }): Promise<Scenario> {
+    const scenario = await this.getScenarioById(input.scenarioId);
+    if (!scenario) throw new Error("Scenario not found.");
+    const currentItems = await this.equipmentService.getCampaignEquipmentState(scenario.campaignId);
+    const assets = await this.repository.listCampaignAssets(scenario.campaignId);
+    const roster = await this.repository.listCampaignRosterEntries(scenario.campaignId);
+    const seenIds = new Set<string>();
+    const availableObjects: ScenarioAvailableObjectReference[] = [];
+
+    for (const submitted of input.availableObjects) {
+      const reference = scenarioAvailableObjectReferenceSchema.parse(submitted);
+      if (seenIds.has(reference.id)) throw new Error("Available object identities must be unique.");
+      seenIds.add(reference.id);
+
+      if (reference.sourceKind === "campaign_asset") {
+        const asset = assets.find((candidate) => candidate.id === reference.sourceId);
+        if (!asset) throw new Error("Choose an asset from this Campaign.");
+        if (reference.visibility === "players" && asset.visibility !== "visible_to_all") {
+          throw new Error("Reveal this Campaign asset before making it available to players.");
+        }
+        availableObjects.push({ ...reference, expectedHolderCharacterId: undefined });
+        continue;
+      }
+
+      if (reference.sourceKind === "campaign_item") {
+        const item = currentItems.itemsById[reference.sourceId];
+        if (!item || item.campaignContextId !== scenario.campaignId) {
+          throw new Error("Choose an Item from this Campaign.");
+        }
+        const expectedHolderCharacterId =
+          reference.expectedHolderCharacterId ?? item.holderCharacterId ?? undefined;
+        if (!expectedHolderCharacterId) {
+          throw new Error("Only an Item currently held by a Character can be made available.");
+        }
+        availableObjects.push({ ...reference, expectedHolderCharacterId });
+        continue;
+      }
+
+      const rosterEntry = roster.find(
+        (entry) => entry.sourceType === "reusableEntity" && entry.sourceId === reference.sourceId,
+      );
+      if (!rosterEntry || !(await this.repository.getReusableEntityById(reference.sourceId))) {
+        throw new Error("Choose a reference from this Campaign roster.");
+      }
+      availableObjects.push({ ...reference, expectedHolderCharacterId: undefined });
+    }
+
+    const session = scenarioSessionStateSchema.parse({
+      ...(scenario.liveState?.session ?? {}),
+      availableObjects,
+      gmPrivateNotes: input.gmPrivateNotes.trim(),
+    });
+    try {
+      return await this.repository.updateScenarioSessionState({
+        expectedRevision: input.expectedRevision,
+        scenarioId: input.scenarioId,
+        session,
+      });
+    } catch (error) {
+      if (error instanceof ScenarioPersistenceError) {
+        throw new ScenarioSessionWriteError(error.code, error.message, error);
+      }
+      throw error;
+    }
+  }
+
+  async resolveScenarioAvailableObjects(input: {
+    scenario: Scenario;
+    viewerMode: "gm" | "player";
+  }): Promise<ScenarioSessionAvailableObject[]> {
+    const references = input.scenario.liveState?.session.availableObjects ?? [];
+    const [assets, equipment, roster] = await Promise.all([
+      this.repository.listCampaignAssets(input.scenario.campaignId),
+      this.equipmentService.getCampaignEquipmentState(input.scenario.campaignId),
+      this.repository.listCampaignRosterEntries(input.scenario.campaignId),
+    ]);
+    const entities = await Promise.all(
+      references
+        .filter((reference) => reference.sourceKind === "reusable_entity")
+        .map((reference) => this.repository.getReusableEntityById(reference.sourceId)),
+    );
+    const entitiesById = new Map(
+      entities.flatMap((entity) => (entity ? [[entity.id, entity]] : [])),
+    );
+
+    return references.flatMap<ScenarioSessionAvailableObject>((reference) => {
+      if (input.viewerMode === "player" && reference.visibility !== "players") return [];
+      if (reference.sourceKind === "campaign_asset") {
+        const asset = assets.find((candidate) => candidate.id === reference.sourceId);
+        if (!asset || (input.viewerMode === "player" && asset.visibility !== "visible_to_all")) {
+          return [];
+        }
+        return [
+          {
+            canPickUp: false,
+            description: asset.description,
+            id: reference.id,
+            name: asset.title,
+            referenceType: formatScenarioAvailableObjectReferenceType({
+              assetType: asset.type,
+              sourceKind: reference.sourceKind,
+            }),
+            sourceKind: reference.sourceKind,
+          },
+        ];
+      }
+      if (reference.sourceKind === "campaign_item") {
+        const item = equipment.itemsById[reference.sourceId];
+        if (!item || item.campaignContextId !== input.scenario.campaignId) return [];
+        const template = equipment.templatesById[item.templateId];
+        return [
+          {
+            canPickUp:
+              Boolean(item.holderCharacterId) &&
+              item.holderCharacterId === reference.expectedHolderCharacterId,
+            id: reference.id,
+            name: item.displayName || template?.name || "Item",
+            referenceType: "Item",
+            sourceKind: reference.sourceKind,
+          },
+        ];
+      }
+      const entity = entitiesById.get(reference.sourceId);
+      const inRoster = roster.some(
+        (entry) => entry.sourceType === "reusableEntity" && entry.sourceId === reference.sourceId,
+      );
+      if (!entity || !inRoster) return [];
+      return [
+        {
+          canPickUp: false,
+          description: entity.description,
+          id: reference.id,
+          name: entity.name,
+          referenceType: "Reference",
+          sourceKind: reference.sourceKind,
+        },
+      ];
+    });
+  }
+
+  async pickUpScenarioAvailableItem(input: {
+    actorUserId: string;
+    availabilityId: string;
+    expectedRevision: string;
+    requestId: string;
+    scenarioId: string;
+    targetParticipantId: string;
+    viewerMode: "gm" | "player";
+  }) {
+    const scenario = await this.repository.getScenarioById(input.scenarioId);
+    if (!scenario) throw new Error("Scenario not found.");
+    const participant = await this.repository.getScenarioParticipantById(
+      input.targetParticipantId,
+      input.scenarioId,
+    );
+    if (!participant?.isActive || !participant.characterId) {
+      throw new Error("Choose an active Character participant.");
+    }
+    if (input.viewerMode === "player") {
+      const character = await this.characterService.getCharacterById(participant.characterId);
+      const controlledByViewer =
+        participant.controlledByUserId === input.actorUserId ||
+        (!participant.controlledByUserId && character?.ownerId === input.actorUserId);
+      if (!controlledByViewer) throw new Error("Available Item not found.");
+    }
+    const availableObject = (
+      await this.resolveScenarioAvailableObjects({ scenario, viewerMode: input.viewerMode })
+    ).find((candidate) => candidate.id === input.availabilityId);
+    const alreadyApplied = scenario.liveState?.session.appliedRequestIds.includes(input.requestId);
+    if ((!availableObject || availableObject.sourceKind !== "campaign_item") && !alreadyApplied) {
+      throw new Error("Available Item not found.");
+    }
+
+    try {
+      return await this.repository.pickUpScenarioAvailableItem({
+        actorUserId: input.actorUserId,
+        audienceParticipantIds: [participant.id],
+        availabilityId: input.availabilityId,
+        expectedRevision: input.expectedRevision,
+        requestId: input.requestId,
+        scenarioId: input.scenarioId,
+        summary: `${participant.snapshot.displayName} picked up ${availableObject?.name ?? "an Item"}.`,
+        targetCharacterId: participant.characterId,
+      });
+    } catch (error) {
+      if (error instanceof ScenarioPersistenceError) {
+        throw new ScenarioSessionWriteError(error.code, error.message, error);
+      }
+      throw error;
+    }
   }
 
   async addCharacterParticipant(input: {
@@ -362,7 +579,12 @@ export class ScenarioService {
     const scenario = await this.repository.getScenarioById(input.scenarioId);
 
     await this.repository.createScenarioEventLog({
-      eventType: "participant_metadata_updated",
+      eventType:
+        input.isActive === undefined || input.isActive === existingParticipant.isActive
+          ? "participant_metadata_updated"
+          : input.isActive
+            ? "participant_activated"
+            : "participant_deactivated",
       participantId: participant.id,
       payload: {
         controlledByUserId: participant.controlledByUserId ?? null,
@@ -375,7 +597,10 @@ export class ScenarioService {
       phase: scenario?.liveState?.phase,
       roundNumber: scenario?.liveState?.roundNumber,
       scenarioId: input.scenarioId,
-      summary: `Updated control and grouping for ${participant.snapshot.displayName}.`,
+      summary:
+        input.isActive === undefined || input.isActive === existingParticipant.isActive
+          ? `Updated control and grouping for ${participant.snapshot.displayName}.`
+          : `${input.isActive ? "Activated" : "Deactivated"} ${participant.snapshot.displayName} in the Scenario.`,
     });
 
     return participant;

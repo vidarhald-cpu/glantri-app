@@ -7,6 +7,7 @@ import { createTestCharacter, createTestUser } from "../testing/factories";
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
 import { CampaignService } from "./campaignService";
 import { CharacterEquipmentReadModelService } from "./characterEquipmentReadModelService";
+import { CharacterEquipmentWriteService } from "./characterEquipmentWriteService";
 import { CharacterService } from "./characterService";
 import { ScenarioService } from "./scenarioService";
 
@@ -162,6 +163,158 @@ if (!process.env.DATABASE_URL_TEST) {
           userId: delegatedController.id,
         }),
       ).resolves.toBe(true);
+    });
+
+    it("atomically picks up a canonical Item once and preserves availability on stale failure", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const sourceOwner = await createTestUser(prisma!);
+      const targetOwner = await createTestUser(prisma!);
+      const source = await createTestCharacter(prisma!, sourceOwner.id, { name: "Steward" });
+      const target = await createTestCharacter(prisma!, targetOwner.id, { name: "Player A" });
+      const repository = createPrismaScenarioRepository(prisma!);
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const equipmentRepository = createPrismaCharacterEquipmentRepository(prisma!);
+      const equipmentReadService = new CharacterEquipmentReadModelService(equipmentRepository);
+      const equipmentWriteService = new CharacterEquipmentWriteService(equipmentRepository);
+      const campaignService = new CampaignService(repository, characterService);
+      const service = new ScenarioService(repository, characterService, equipmentReadService);
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Lost Seal",
+        status: "active",
+      });
+      for (const character of [source, target]) {
+        await campaignService.addCampaignRosterEntry({
+          campaignId: campaign.id,
+          category: "pc",
+          sourceId: character.id,
+          sourceType: "character",
+        });
+        await equipmentWriteService.ensureCharacterEquipmentInitialized(character.id);
+      }
+      const scenario = await service.createScenario({
+        campaignId: campaign.id,
+        name: "Lost Seal",
+        status: "live",
+      });
+      const targetParticipant = await service.addCharacterParticipant({
+        characterId: target.id,
+        controlledByUserId: targetOwner.id,
+        joinSource: "gm_added",
+        scenarioId: scenario.id,
+      });
+      const createSeal = (name: string) =>
+        equipmentWriteService.createCampaignEquipmentItem({
+          campaignId: campaign.id,
+          displayName: name,
+          holderCharacterId: source.id,
+          itemFacts: {
+            activeMechanics: [],
+            descriptiveTraits: [],
+            templateOverrides: [],
+            unsupportedCapabilities: [],
+            version: 1,
+          },
+          templateId: "weapon-template-dagger",
+        });
+      const seal = await createSeal("Lost Seal");
+      const prepared = await service.updateScenarioSessionState({
+        availableObjects: [
+          {
+            addedAt: "2026-08-22T10:00:00.000Z",
+            id: "available-seal",
+            sourceId: seal.id,
+            sourceKind: "campaign_item",
+            visibility: "players",
+          },
+        ],
+        expectedRevision: scenario.updatedAt,
+        gmPrivateNotes: "The steward is nervous.",
+        scenarioId: scenario.id,
+      });
+      const pickedUp = await service.pickUpScenarioAvailableItem({
+        actorUserId: targetOwner.id,
+        availabilityId: "available-seal",
+        expectedRevision: prepared.updatedAt,
+        requestId: "pickup-request-1",
+        scenarioId: scenario.id,
+        targetParticipantId: targetParticipant.id,
+        viewerMode: "player",
+      });
+      expect(pickedUp.idempotent).toBe(false);
+      expect(pickedUp.scenario.liveState?.session.availableObjects).toEqual([]);
+      expect(await equipmentRepository.getCanonicalEquipmentItemById(seal.id)).toMatchObject({
+        holderCharacterId: target.id,
+      });
+      const retried = await service.pickUpScenarioAvailableItem({
+        actorUserId: targetOwner.id,
+        availabilityId: "available-seal",
+        expectedRevision: prepared.updatedAt,
+        requestId: "pickup-request-1",
+        scenarioId: scenario.id,
+        targetParticipantId: targetParticipant.id,
+        viewerMode: "player",
+      });
+      expect(retried.idempotent).toBe(true);
+      await expect(
+        service.pickUpScenarioAvailableItem({
+          actorUserId: gm.id,
+          availabilityId: "available-seal",
+          expectedRevision: prepared.updatedAt,
+          requestId: "pickup-request-1",
+          scenarioId: scenario.id,
+          targetParticipantId: targetParticipant.id,
+          viewerMode: "gm",
+        }),
+      ).rejects.toThrow("completed pickup could not be reloaded");
+      expect(
+        (await service.listScenarioEventLogs(scenario.id)).filter(
+          (event) => event.eventType === "item_transferred",
+        ),
+      ).toHaveLength(1);
+
+      const staleSeal = await createSeal("Stale Seal");
+      const latestScenario = await service.getScenarioById(scenario.id);
+      const stalePrepared = await service.updateScenarioSessionState({
+        availableObjects: [
+          {
+            addedAt: "2026-08-22T10:10:00.000Z",
+            id: "available-stale-seal",
+            sourceId: staleSeal.id,
+            sourceKind: "campaign_item",
+            visibility: "players",
+          },
+        ],
+        expectedRevision: latestScenario!.updatedAt,
+        gmPrivateNotes: "",
+        scenarioId: scenario.id,
+      });
+      await equipmentWriteService.transferCampaignEquipmentItem({
+        campaignId: campaign.id,
+        itemId: staleSeal.id,
+        sourceCharacterId: source.id,
+        targetCharacterId: target.id,
+      });
+      await expect(
+        service.pickUpScenarioAvailableItem({
+          actorUserId: targetOwner.id,
+          availabilityId: "available-stale-seal",
+          expectedRevision: stalePrepared.updatedAt,
+          requestId: "pickup-request-stale",
+          scenarioId: scenario.id,
+          targetParticipantId: targetParticipant.id,
+          viewerMode: "player",
+        }),
+      ).rejects.toThrow("no longer held");
+      const afterFailure = await service.getScenarioById(scenario.id);
+      expect(afterFailure?.liveState?.session.availableObjects).toEqual([
+        expect.objectContaining({ id: "available-stale-seal" }),
+      ]);
+      expect(
+        (await service.listScenarioEventLogs(scenario.id)).filter(
+          (event) => event.eventType === "item_transferred",
+        ),
+      ).toHaveLength(1);
     });
   });
 }

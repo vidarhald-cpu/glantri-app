@@ -9,17 +9,18 @@ function readSource(): string {
   return readFileSync(sourcePath, "utf8");
 }
 
-describe("ScenarioPlayerPageContent player-facing cleanup", () => {
-  it("shows only scenario briefing and actionable encounter access", () => {
+describe("ScenarioPlayerPageContent Scenario session", () => {
+  it("uses the privacy-safe session view with reconnect and stale-response protection", () => {
     const source = readSource();
 
-    expect(source).toContain("Open encounter");
-    expect(source).toContain("You are not assigned to this encounter.");
-    expect(source).toContain("No active encounter is currently available.");
-    expect(source).toContain("isUserAssignedToEffectiveEncounter");
-    expect(source).toContain("loadScenarioMyParticipant");
-    expect(source).toContain("nextScenarioParticipant ? [nextScenarioParticipant] : []");
+    expect(source).toContain("loadScenarioSession");
+    expect(source).toContain("ScenarioSessionPanel");
+    expect(source).toContain("pickUpScenarioAvailableItemOnServer");
+    expect(source).toContain("shouldAcceptScenarioSessionResponse");
+    expect(source).toContain('window.addEventListener("focus"');
+    expect(source).toContain("window.setInterval");
     expect(source).not.toContain("loadScenarioParticipants");
+    expect(source).not.toContain("loadScenarioPlayerProjection");
     expect(source).not.toContain("Combat status:");
     expect(source).not.toContain("Round:");
     expect(source).not.toContain("Phase:");

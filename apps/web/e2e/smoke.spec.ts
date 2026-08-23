@@ -197,6 +197,7 @@ test.describe("player Campaign Home privacy", () => {
     await page.setViewportSize({ height: 844, width: 390 });
     const endpoints = [
       `/scenarios/${testState.delegatedScenarioId}`,
+      `/scenarios/${testState.delegatedScenarioId}/session`,
       `/scenarios/${testState.delegatedScenarioId}/player-projection`,
       `/scenarios/${testState.delegatedScenarioId}/encounters`,
       `/encounters/${testState.delegatedEncounterId}`,
@@ -215,9 +216,9 @@ test.describe("player Campaign Home privacy", () => {
     await page.goto(
       `/campaigns/${testState.delegatedCampaignId}/scenarios/${testState.delegatedScenarioId}/player`,
     );
-    await expect(page.getByText("No encounter is currently available.")).toBeVisible({
-      timeout: 10_000,
-    });
+    await expect(
+      page.locator("strong").filter({ hasText: "No active scenario is currently available." }),
+    ).toBeVisible({ timeout: 10_000 });
     const pageText = await page.locator("body").innerText();
     expect(pageText).not.toContain(testState.delegatedScenarioName);
     expect(pageText).not.toContain(testState.delegatedScenarioDescription);

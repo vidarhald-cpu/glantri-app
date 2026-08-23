@@ -8,8 +8,16 @@ import {
 import { assignRoleplayStatCheck, recordRoleplayStatCheckResult } from "@glantri/rules-engine";
 
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
+import { createPrismaCharacterEquipmentRepository } from "../repositories/characterEquipmentRepository";
+import { createPrismaCharacterRepository } from "../repositories/characterRepository";
 import { createPrismaEncounterRepository } from "../repositories/encounterRepository";
+import { createPrismaScenarioRepository } from "../repositories/scenarioRepository";
+import { createTestCharacter, createTestUser } from "../testing/factories";
+import { CampaignService } from "./campaignService";
+import { CharacterEquipmentReadModelService } from "./characterEquipmentReadModelService";
+import { CharacterService } from "./characterService";
 import { EncounterWriteError, EncounterService } from "./encounterService";
+import { ScenarioService } from "./scenarioService";
 
 const prisma = getTestPrismaClient();
 
@@ -29,7 +37,7 @@ function buildPendingStatCheck() {
       },
     ],
     scenarioId: "scenario-roleplay-concurrency",
-    status: "active",
+    status: "planned",
     title: "Council chamber",
     updatedAt: "2026-08-13T10:00:00.000Z",
   });
@@ -129,6 +137,130 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(candidates).toContain(acceptedResult?.rollD20);
       expect(durableResult?.rollD20).toBe(acceptedResult?.rollD20);
       expect(durableResult?.pendingRollId).toBe(acceptedResult?.pendingRollId);
+    });
+
+    it("allows disjoint active Encounters and atomically accepts only one overlapping start", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const ownerA = await createTestUser(prisma!);
+      const ownerB = await createTestUser(prisma!);
+      const characterA = await createTestCharacter(prisma!, ownerA.id, { name: "Player A" });
+      const characterB = await createTestCharacter(prisma!, ownerB.id, { name: "Player B" });
+      const scenarioRepository = createPrismaScenarioRepository(prisma!);
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const equipmentService = new CharacterEquipmentReadModelService(
+        createPrismaCharacterEquipmentRepository(prisma!),
+      );
+      const campaignService = new CampaignService(scenarioRepository, characterService);
+      const scenarioService = new ScenarioService(
+        scenarioRepository,
+        characterService,
+        equipmentService,
+      );
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Lost Seal",
+        status: "active",
+      });
+      for (const character of [characterA, characterB]) {
+        await campaignService.addCampaignRosterEntry({
+          campaignId: campaign.id,
+          category: "pc",
+          sourceId: character.id,
+          sourceType: "character",
+        });
+      }
+      const scenario = await scenarioService.createScenario({
+        campaignId: campaign.id,
+        name: "Lost Seal",
+        status: "live",
+      });
+      const participantA = await scenarioService.addCharacterParticipant({
+        characterId: characterA.id,
+        controlledByUserId: ownerA.id,
+        joinSource: "gm_added",
+        scenarioId: scenario.id,
+      });
+      const participantB = await scenarioService.addCharacterParticipant({
+        characterId: characterB.id,
+        controlledByUserId: ownerB.id,
+        joinSource: "gm_added",
+        scenarioId: scenario.id,
+      });
+      const service = new EncounterService(
+        createPrismaEncounterRepository(prisma!),
+        scenarioRepository,
+      );
+      const makeEncounter = async (id: string, participantId: string) =>
+        service.createEncounter({
+          campaignId: campaign.id,
+          scenarioId: scenario.id,
+          session: encounterSessionSchema.parse({
+            createdAt: "2026-08-22T10:00:00.000Z",
+            id,
+            participantMembershipMode: "explicit",
+            participants: [
+              {
+                id: `${id}-participant`,
+                label: id,
+                participantType: "scenario",
+                scenarioParticipantId: participantId,
+              },
+            ],
+            scenarioId: scenario.id,
+            status: "planned",
+            title: id,
+            updatedAt: "2026-08-22T10:00:00.000Z",
+          }),
+        });
+      const [library, courtyard] = await Promise.all([
+        makeEncounter("library", participantA.id),
+        makeEncounter("courtyard", participantB.id),
+      ]);
+      const disjointStarts = await Promise.all([
+        service.updateEncounter({
+          encounterId: library.id,
+          expectedRevision: library.updatedAt,
+          scenarioId: scenario.id,
+          session: { ...library, status: "active" },
+        }),
+        service.updateEncounter({
+          encounterId: courtyard.id,
+          expectedRevision: courtyard.updatedAt,
+          scenarioId: scenario.id,
+          session: { ...courtyard, status: "active" },
+        }),
+      ]);
+      expect(disjointStarts.map((encounter) => encounter.status)).toEqual(["active", "active"]);
+
+      const pausedLibrary = await service.updateEncounter({
+        encounterId: library.id,
+        expectedRevision: disjointStarts[0].updatedAt,
+        scenarioId: scenario.id,
+        session: { ...disjointStarts[0], status: "paused" },
+      });
+      const [vault, chapel] = await Promise.all([
+        makeEncounter("vault", participantA.id),
+        makeEncounter("chapel", participantA.id),
+      ]);
+      const overlappingStarts = await Promise.allSettled(
+        [vault, chapel].map((encounter) =>
+          service.updateEncounter({
+            encounterId: encounter.id,
+            expectedRevision: encounter.updatedAt,
+            scenarioId: scenario.id,
+            session: { ...encounter, status: "active" },
+          }),
+        ),
+      );
+      expect(pausedLibrary.status).toBe("paused");
+      expect(overlappingStarts.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      const rejected = overlappingStarts.find(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      );
+      expect(rejected?.reason).toBeInstanceOf(EncounterWriteError);
+      expect(rejected?.reason).toMatchObject({
+        code: expect.stringMatching(/^(participant_already_active|transaction_conflict)$/),
+      });
     });
   });
 }

@@ -226,6 +226,8 @@ import { buildCombatParryModifierRequest } from "@/lib/campaigns/combatParryModi
 import { projectCombatActionGeneratedModifiers } from "@/features/combat-round-manager/combatDistanceModifierProjection";
 import {
   createPlayerCombatHistoryRequestCoordinator,
+  createPlayerCombatRefreshRequestCoordinator,
+  getPlayerCombatProjectionCacheKey,
   isMatchingPlayerCombatHistory,
   loadPlayerCombatSlowContext,
   pollPlayerCombatSnapshot,
@@ -1112,6 +1114,7 @@ export default function ScenarioPlayerCombatPageContent({
   const [combatLogSelection, setCombatLogSelection] = useState<CombatLogPresentationSelection>();
   const acceptedEncounterRef = useRef<EncounterSession | undefined>(undefined);
   const acceptedHistoryRef = useRef<RevisionKeyedCombatHistory | undefined>(undefined);
+  const acceptedProjectionKeyRef = useRef<string | undefined>(undefined);
   const encounterRequestIdRef = useRef(0);
   const selectedParticipantIdRef = useRef("");
   const historyCoordinatorRef = useRef<
@@ -1123,6 +1126,13 @@ export default function ScenarioPlayerCombatPageContent({
     });
   }
   const historyCoordinator = historyCoordinatorRef.current;
+  const refreshCoordinatorRef = useRef<
+    ReturnType<typeof createPlayerCombatRefreshRequestCoordinator> | undefined
+  >(undefined);
+  if (!refreshCoordinatorRef.current) {
+    refreshCoordinatorRef.current = createPlayerCombatRefreshRequestCoordinator();
+  }
+  const refreshCoordinator = refreshCoordinatorRef.current;
   const [historyInspection, setHistoryInspection] = useState<CombatHistoryInspectionSelection>();
   const [trackerPositionRequest, setTrackerPositionRequest] = useState(0);
   const trackerRef = useRef<HTMLDivElement | null>(null);
@@ -1314,6 +1324,7 @@ export default function ScenarioPlayerCombatPageContent({
 
     if (!currentUser) {
       setProjection(undefined);
+      acceptedProjectionKeyRef.current = undefined;
       setContent(undefined);
       setSlowContextReady(false);
       setLoading(false);
@@ -1347,6 +1358,7 @@ export default function ScenarioPlayerCombatPageContent({
         });
 
         if (cancelled) return;
+        acceptedProjectionKeyRef.current = getPlayerCombatProjectionCacheKey(nextProjection);
         setProjection(nextProjection);
         setContent(nextContent);
         setSelectableParticipants(nextParticipants);
@@ -1411,6 +1423,7 @@ export default function ScenarioPlayerCombatPageContent({
               : loadScenarioMyParticipant(scenarioId).then((participant) =>
                   participant ? [participant] : [],
                 ),
+          loadProjection: () => loadScenarioPlayerProjection(scenarioId),
           loadRevision: loadEncounterRevision,
         });
       const first = await loadSnapshot();
@@ -1428,6 +1441,8 @@ export default function ScenarioPlayerCombatPageContent({
         }
         acceptedEncounterRef.current = result.encounter;
         acceptedHistoryRef.current = result.history;
+        acceptedProjectionKeyRef.current = getPlayerCombatProjectionCacheKey(result.projection);
+        setProjection(result.projection);
         setEncounterSession(result.encounter);
         setSelectableParticipants([...result.participants]);
         setRevisionBoundHistory(result.history);
@@ -1482,8 +1497,10 @@ export default function ScenarioPlayerCombatPageContent({
     async function refreshActiveCombatRevision() {
       if (refreshInFlight) return;
       refreshInFlight = true;
+      const refreshRequestId = refreshCoordinator.begin();
       try {
         const result = await pollPlayerCombatSnapshot({
+          acceptedProjectionKey: acceptedProjectionKeyRef.current,
           acceptedRevision: acceptedEncounterRef.current?.updatedAt,
           encounterId: polledEncounterId,
           loadEncounter: loadEncounterById,
@@ -1500,12 +1517,38 @@ export default function ScenarioPlayerCombatPageContent({
               : loadScenarioMyParticipant(scenarioId).then((participant) =>
                   participant ? [participant] : [],
                 ),
+          loadProjection: () => loadScenarioPlayerProjection(scenarioId),
           loadRevision: loadEncounterRevision,
           onNewerRevision: () => {
             if (!disposed) setRevisionRefreshPending(true);
           },
+          onProjectionChanged: (nextProjection) => {
+            if (disposed || !refreshCoordinator.isCurrent(refreshRequestId)) return;
+            acceptedProjectionKeyRef.current = getPlayerCombatProjectionCacheKey(nextProjection);
+            acceptedHistoryRef.current = undefined;
+            setProjection(nextProjection);
+            setRevisionBoundHistory(undefined);
+            setCombatItemOptions(undefined);
+            historyCoordinator.clear();
+          },
         });
-        if (disposed || result.kind === "stale") return;
+        if (
+          disposed ||
+          !refreshCoordinator.isCurrent(refreshRequestId) ||
+          result.kind === "stale"
+        ) {
+          return;
+        }
+        const nextProjectionKey = getPlayerCombatProjectionCacheKey(result.projection);
+        const projectionChanged = nextProjectionKey !== acceptedProjectionKeyRef.current;
+        acceptedProjectionKeyRef.current = nextProjectionKey;
+        if (projectionChanged) {
+          acceptedHistoryRef.current = undefined;
+          setRevisionBoundHistory(undefined);
+          setCombatItemOptions(undefined);
+          historyCoordinator.clear();
+        }
+        setProjection(result.projection);
         if (result.kind === "unchanged") {
           const current = acceptedEncounterRef.current;
           if (current && (await ensureCombatHistory(current))) {
@@ -1527,7 +1570,7 @@ export default function ScenarioPlayerCombatPageContent({
         setRevisionBoundHistory(result.history);
         setError(undefined);
       } catch (caughtError) {
-        if (!disposed) {
+        if (!disposed && refreshCoordinator.isCurrent(refreshRequestId)) {
           if (caughtError instanceof ApiRequestError && caughtError.status === 404) {
             acceptedEncounterRef.current = undefined;
             acceptedHistoryRef.current = undefined;
@@ -1542,7 +1585,9 @@ export default function ScenarioPlayerCombatPageContent({
         }
       } finally {
         refreshInFlight = false;
-        if (!disposed) setRevisionRefreshPending(false);
+        if (!disposed && refreshCoordinator.isCurrent(refreshRequestId)) {
+          setRevisionRefreshPending(false);
+        }
       }
     }
 
@@ -1559,6 +1604,7 @@ export default function ScenarioPlayerCombatPageContent({
 
     return () => {
       disposed = true;
+      refreshCoordinator.invalidate();
       window.clearInterval(intervalId);
       window.removeEventListener("focus", refreshVisibleCombat);
       document.removeEventListener("visibilitychange", refreshVisibleCombat);
@@ -1573,9 +1619,14 @@ export default function ScenarioPlayerCombatPageContent({
     getHistoryIdentity,
     historyCoordinator,
     isGameMaster,
+    refreshCoordinator,
     scenarioId,
     sessionLoading,
   ]);
+
+  const projectionCacheKey = projection
+    ? getPlayerCombatProjectionCacheKey(projection)
+    : "projection-unavailable";
 
   useEffect(() => {
     if (!encounterId || !encounterSession) {
@@ -1604,7 +1655,7 @@ export default function ScenarioPlayerCombatPageContent({
     return () => {
       cancelled = true;
     };
-  }, [encounterId, encounterSession?.updatedAt]);
+  }, [encounterId, encounterSession?.updatedAt, projectionCacheKey]);
 
   const accessibleParticipants = useMemo(() => {
     if (!projection) {
@@ -5030,6 +5081,7 @@ export default function ScenarioPlayerCombatPageContent({
         <GenericCombatActionPanel
           encounter={encounterSession}
           isGm={isGameMaster}
+          key={`${encounterSession.id}:${projectionCacheKey}`}
           onEncounterUpdated={(nextEncounter) => {
             acceptEncounterSession(nextEncounter);
           }}

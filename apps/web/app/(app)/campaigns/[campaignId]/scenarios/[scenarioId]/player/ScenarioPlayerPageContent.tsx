@@ -1,22 +1,20 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type {
   EncounterSession,
   EncounterSessionSummary,
-  ScenarioParticipant,
-  ScenarioPlayerProjection,
+  ScenarioSessionView,
 } from "@glantri/domain";
 
+import { ScenarioSessionPanel } from "@/features/scenarios/ScenarioSessionPanel";
 import {
-  loadScenarioMyParticipant,
-  loadScenarioPlayerProjection,
+  loadScenarioSession,
+  pickUpScenarioAvailableItemOnServer,
 } from "@/lib/api/localServiceClient";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
-import { isUserAssignedToEffectiveEncounter } from "@/lib/campaigns/encounterParticipantFallback";
-import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
+import { shouldAcceptScenarioSessionResponse } from "@/lib/campaigns/scenarioSessionRefresh";
 
 interface ScenarioPlayerPageContentProps {
   campaignId?: string;
@@ -30,171 +28,120 @@ const panelStyle = {
   borderRadius: 12,
   display: "grid",
   gap: "0.75rem",
-  padding: "1rem"
+  padding: "1rem",
 } as const;
 
 export default function ScenarioPlayerPageContent({
   campaignId,
-  encounters = [],
-  scenarioId
+  scenarioId,
 }: ScenarioPlayerPageContentProps) {
   const { currentUser, loading: sessionLoading } = useSessionUser();
   const [error, setError] = useState<string>();
+  const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
-  const [projection, setProjection] = useState<ScenarioPlayerProjection>();
-  const [scenarioParticipants, setScenarioParticipants] = useState<ScenarioParticipant[]>([]);
+  const [session, setSession] = useState<ScenarioSessionView>();
+  const sessionRef = useRef<ScenarioSessionView | undefined>(undefined);
+
+  function acceptSession(incoming: ScenarioSessionView) {
+    if (!shouldAcceptScenarioSessionResponse(sessionRef.current, incoming)) return;
+    sessionRef.current = incoming;
+    setSession(incoming);
+  }
 
   useEffect(() => {
-    if (sessionLoading) {
-      return;
-    }
-
+    if (sessionLoading) return;
     if (!currentUser) {
-      setProjection(undefined);
+      setSession(undefined);
       setLoading(false);
       return;
     }
 
     let cancelled = false;
-
-    async function refreshProjection() {
-      setLoading(true);
-
+    async function refresh(initial = false) {
+      if (initial) setLoading(true);
       try {
-        const [nextProjection, nextScenarioParticipant] = await Promise.all([
-          loadScenarioPlayerProjection(scenarioId),
-          loadScenarioMyParticipant(scenarioId),
-        ]);
-
-        if (cancelled) {
-          return;
-        }
-
-        setProjection(nextProjection);
-        setScenarioParticipants(nextScenarioParticipant ? [nextScenarioParticipant] : []);
-        setError(undefined);
-      } catch (caughtError) {
-        if (cancelled) {
-          return;
-        }
-
-        setError(
-          caughtError instanceof Error
-            ? caughtError.message
-            : "Unable to load the player scenario view."
-        );
-      } finally {
+        const nextSession = await loadScenarioSession(scenarioId);
         if (!cancelled) {
-          setLoading(false);
+          acceptSession(nextSession);
+          setError(undefined);
         }
+      } catch (caughtError) {
+        if (!cancelled) {
+          setError(
+            caughtError instanceof Error
+              ? caughtError.message
+              : "Unable to load the player Scenario view.",
+          );
+        }
+      } finally {
+        if (!cancelled && initial) setLoading(false);
       }
     }
 
-    void refreshProjection();
-
+    void refresh(true);
+    const interval = window.setInterval(() => void refresh(false), 4_000);
+    const handleFocus = () => void refresh(false);
+    window.addEventListener("focus", handleFocus);
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
     };
   }, [currentUser, scenarioId, sessionLoading]);
 
-  if (sessionLoading || loading) {
-    return <section>Loading scenario player view...</section>;
+  async function handlePickUp(availabilityId: string, targetParticipantId: string) {
+    if (!session) return;
+    try {
+      setError(undefined);
+      const result = await pickUpScenarioAvailableItemOnServer({
+        availabilityId,
+        expectedRevision: session.revision,
+        requestId: crypto.randomUUID(),
+        scenarioId,
+        targetParticipantId,
+      });
+      acceptSession(result.session);
+      setFeedback(result.idempotent ? "Pickup already completed." : "Item picked up.");
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to pick up the Item.");
+    }
   }
 
+  if (sessionLoading || loading) return <section>Loading Scenario view...</section>;
   if (!currentUser) {
     return (
       <section style={{ display: "grid", gap: "1rem", maxWidth: 960 }}>
         <h1 style={{ marginBottom: "0.5rem" }}>Scenario view</h1>
-        <div style={panelStyle}>Sign in to open the player scenario view.</div>
+        <div style={panelStyle}>Sign in to open the player Scenario view.</div>
       </section>
     );
   }
-
-  if (error) {
+  if (!session) {
     return (
       <section style={{ display: "grid", gap: "1rem", maxWidth: 960 }}>
         <h1 style={{ marginBottom: "0.5rem" }}>Scenario view</h1>
-        <div style={panelStyle}>{error}</div>
+        <div style={panelStyle}>{error || "Scenario view unavailable."}</div>
       </section>
     );
   }
-
-  if (!projection) {
-    return (
-      <section style={{ display: "grid", gap: "1rem", maxWidth: 960 }}>
-        <h1 style={{ marginBottom: "0.5rem" }}>Scenario view</h1>
-        <div style={panelStyle}>Scenario projection unavailable.</div>
-      </section>
-    );
-  }
-
-  const playerAvailableEncounters = encounters.filter((encounter) => {
-    if (
-      "viewerAssigned" in encounter &&
-      encounter.viewerAssigned !== undefined
-    ) {
-      return encounter.viewerAssigned;
-    }
-
-    return "participants" in encounter
-      ? isUserAssignedToEffectiveEncounter({
-          encounter,
-          scenarioParticipants,
-          userId: currentUser.id,
-        })
-      : false;
-  });
-  const hasUnavailableEncounters = encounters.length > 0 && playerAvailableEncounters.length === 0;
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 960 }}>
       <div style={{ display: "grid", gap: "0.5rem" }}>
-        <h1 style={{ margin: 0 }}>{projection.scenario.name}</h1>
+        <h1 style={{ margin: 0 }}>{session.scenario.name}</h1>
         <p style={{ margin: 0 }}>
-          {projection.scenario.description || "No scenario briefing has been written yet."}
+          {session.scenario.description || "No Scenario briefing has been written yet."}
         </p>
       </div>
-
-      <section style={panelStyle}>
-        <h2 style={{ margin: 0 }}>Encounter</h2>
-        {playerAvailableEncounters.length > 0 ? (
-          <div style={{ display: "grid", gap: "0.6rem" }}>
-            {playerAvailableEncounters.map((encounter) => (
-              <div
-                key={encounter.id}
-                style={{
-                  background: "#ffffff",
-                  border: "1px solid #ddd7c9",
-                  borderRadius: 10,
-                  display: "grid",
-                  gap: "0.25rem",
-                  padding: "0.75rem",
-                }}
-              >
-                <strong>{encounter.title}</strong>
-                {campaignId ? (
-                  <Link
-                    href={buildCampaignWorkspaceHref({
-                      campaignId,
-                      encounterId: encounter.id,
-                      scenarioId,
-                      tab: "encounter",
-                    })}
-                  >
-                    Open encounter
-                  </Link>
-                ) : (
-                  <div>Open encounter from the campaign workspace.</div>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : hasUnavailableEncounters ? (
-          <div>You are not assigned to this encounter.</div>
-        ) : (
-          <div>No active encounter is currently available.</div>
-        )}
-      </section>
+      {error ? <div role="alert">{error}</div> : null}
+      {feedback ? <div role="status">{feedback}</div> : null}
+      <ScenarioSessionPanel
+        campaignId={campaignId}
+        onPickUp={(availabilityId, targetParticipantId) =>
+          void handlePickUp(availabilityId, targetParticipantId)
+        }
+        session={session}
+      />
     </section>
   );
 }

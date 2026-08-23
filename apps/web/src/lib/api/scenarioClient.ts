@@ -2,11 +2,13 @@ import type {
   CampaignAsset,
   JoinableScenarioRecord,
   Scenario,
+  ScenarioAvailableObjectReference,
   ScenarioEventLog,
   ScenarioLiveState,
   ScenarioParticipant,
   ScenarioPlayerProjection,
-  ScenarioPlayerVisibleParticipant
+  ScenarioSessionView,
+  ScenarioPlayerVisibleParticipant,
 } from "@glantri/domain";
 
 import { sendJson } from "./apiClient";
@@ -52,13 +54,15 @@ export interface ScenarioParticipantFromEntityInput {
   tacticalGroupId?: string | null;
 }
 
-export async function loadJoinableScenarios(characterId?: string): Promise<JoinableScenarioRecord[]> {
+export async function loadJoinableScenarios(
+  characterId?: string,
+): Promise<JoinableScenarioRecord[]> {
   const query = characterId ? `?characterId=${encodeURIComponent(characterId)}` : "";
   const payload = await sendJson<{ joinableScenarios: JoinableScenarioRecord[] }>(
     `/scenarios/joinable${query}`,
     {
-      method: "GET"
-    }
+      method: "GET",
+    },
   );
 
   return payload.joinableScenarios;
@@ -66,23 +70,68 @@ export async function loadJoinableScenarios(characterId?: string): Promise<Joina
 
 export async function loadScenarioById(scenarioId: string): Promise<Scenario> {
   const payload = await sendJson<{ scenario: Scenario }>(`/scenarios/${scenarioId}`, {
-    method: "GET"
+    method: "GET",
   });
 
   return payload.scenario;
 }
 
 export async function loadScenarioPlayerProjection(
-  scenarioId: string
+  scenarioId: string,
 ): Promise<ScenarioPlayerProjection> {
   const payload = await sendJson<{ projection: ScenarioPlayerProjection }>(
     `/scenarios/${scenarioId}/player-projection`,
     {
-      method: "GET"
-    }
+      method: "GET",
+    },
   );
 
   return payload.projection;
+}
+
+export async function loadScenarioSession(scenarioId: string): Promise<ScenarioSessionView> {
+  const payload = await sendJson<{ session: ScenarioSessionView }>(
+    `/scenarios/${scenarioId}/session`,
+    { method: "GET" },
+  );
+  return payload.session;
+}
+
+export async function updateScenarioSessionOnServer(input: {
+  availableObjects: ScenarioAvailableObjectReference[];
+  expectedRevision: string;
+  gmPrivateNotes: string;
+  scenarioId: string;
+}): Promise<Scenario> {
+  const payload = await sendJson<{ scenario: Scenario }>(`/scenarios/${input.scenarioId}/session`, {
+    body: JSON.stringify({
+      availableObjects: input.availableObjects,
+      expectedRevision: input.expectedRevision,
+      gmPrivateNotes: input.gmPrivateNotes,
+    }),
+    method: "PATCH",
+  });
+  return payload.scenario;
+}
+
+export async function pickUpScenarioAvailableItemOnServer(input: {
+  availabilityId: string;
+  expectedRevision: string;
+  requestId: string;
+  scenarioId: string;
+  targetParticipantId: string;
+}): Promise<{ idempotent: boolean; session: ScenarioSessionView }> {
+  return sendJson<{ idempotent: boolean; session: ScenarioSessionView }>(
+    `/scenarios/${input.scenarioId}/available-objects/${input.availabilityId}/pick-up`,
+    {
+      body: JSON.stringify({
+        expectedRevision: input.expectedRevision,
+        requestId: input.requestId,
+        targetParticipantId: input.targetParticipantId,
+      }),
+      method: "POST",
+    },
+  );
 }
 
 export async function updateScenarioOnServer(input: {
@@ -99,9 +148,9 @@ export async function updateScenarioOnServer(input: {
       kind: input.kind,
       mapAssetId: input.mapAssetId,
       name: input.name,
-      status: input.status
+      status: input.status,
     }),
-    method: "PUT"
+    method: "PUT",
   });
 
   return payload.scenario;
@@ -115,10 +164,10 @@ export async function updateScenarioLiveStateOnServer(input: {
     `/scenarios/${input.scenarioId}/live-state`,
     {
       body: JSON.stringify({
-        liveState: input.liveState
+        liveState: input.liveState,
       }),
-      method: "PUT"
-    }
+      method: "PUT",
+    },
   );
 
   return payload.scenario;
@@ -128,42 +177,44 @@ export async function loadScenarioParticipants(scenarioId: string): Promise<Scen
   const payload = await sendJson<{ participants: ScenarioParticipant[] }>(
     `/scenarios/${scenarioId}/participants`,
     {
-      method: "GET"
-    }
+      method: "GET",
+    },
   );
 
   return payload.participants;
 }
 
 export async function loadScenarioMyParticipant(
-  scenarioId: string
+  scenarioId: string,
 ): Promise<ScenarioParticipant | null> {
   const payload = await sendJson<{ participant: ScenarioParticipant | null }>(
     `/scenarios/${scenarioId}/my-participant`,
     {
-      method: "GET"
-    }
+      method: "GET",
+    },
   );
 
   return payload.participant;
 }
 
 export async function loadScenarioVisibleParticipants(
-  scenarioId: string
+  scenarioId: string,
 ): Promise<ScenarioPlayerVisibleParticipant[]> {
   const payload = await sendJson<{ participants: ScenarioPlayerVisibleParticipant[] }>(
     `/scenarios/${scenarioId}/participants`,
     {
-      method: "GET"
-    }
+      method: "GET",
+    },
   );
 
   return payload.participants;
 }
 
-export async function addScenarioParticipantFromCharacterOnServer(input: {
-  scenarioId: string;
-} & ScenarioParticipantFromCharacterInput): Promise<ScenarioParticipant> {
+export async function addScenarioParticipantFromCharacterOnServer(
+  input: {
+    scenarioId: string;
+  } & ScenarioParticipantFromCharacterInput,
+): Promise<ScenarioParticipant> {
   const payload = await sendJson<{ participant: ScenarioParticipant }>(
     `/scenarios/${input.scenarioId}/participants/character`,
     {
@@ -175,18 +226,20 @@ export async function addScenarioParticipantFromCharacterOnServer(input: {
         joinSource: input.joinSource,
         role: input.role,
         roleTag: input.roleTag,
-        tacticalGroupId: input.tacticalGroupId
+        tacticalGroupId: input.tacticalGroupId,
       }),
-      method: "POST"
-    }
+      method: "POST",
+    },
   );
 
   return payload.participant;
 }
 
-export async function addScenarioParticipantFromEntityOnServer(input: {
-  scenarioId: string;
-} & ScenarioParticipantFromEntityInput): Promise<ScenarioParticipant> {
+export async function addScenarioParticipantFromEntityOnServer(
+  input: {
+    scenarioId: string;
+  } & ScenarioParticipantFromEntityInput,
+): Promise<ScenarioParticipant> {
   const payload = await sendJson<{ participant: ScenarioParticipant }>(
     `/scenarios/${input.scenarioId}/participants/entity`,
     {
@@ -200,10 +253,10 @@ export async function addScenarioParticipantFromEntityOnServer(input: {
         joinSource: input.joinSource,
         role: input.role,
         roleTag: input.roleTag,
-        tacticalGroupId: input.tacticalGroupId
+        tacticalGroupId: input.tacticalGroupId,
       }),
-      method: "POST"
-    }
+      method: "POST",
+    },
   );
 
   return payload.participant;
@@ -218,10 +271,10 @@ export async function updateScenarioParticipantStateOnServer(input: {
     `/scenarios/${input.scenarioId}/participants/${input.participantId}/state`,
     {
       body: JSON.stringify({
-        state: input.state
+        state: input.state,
       }),
-      method: "PUT"
-    }
+      method: "PUT",
+    },
   );
 
   return payload.participant;
@@ -258,11 +311,10 @@ export async function updateScenarioParticipantMetadataOnServer(input: {
         factionId: input.factionId === undefined ? undefined : input.factionId,
         isActive: input.isActive === undefined ? undefined : input.isActive,
         roleTag: input.roleTag === undefined ? undefined : input.roleTag,
-        tacticalGroupId:
-          input.tacticalGroupId === undefined ? undefined : input.tacticalGroupId
+        tacticalGroupId: input.tacticalGroupId === undefined ? undefined : input.tacticalGroupId,
       }),
-      method: "PUT"
-    }
+      method: "PUT",
+    },
   );
 
   return payload.participant;
@@ -276,10 +328,10 @@ export async function updateCampaignAssetVisibilityOnServer(input: {
     `/campaign-assets/${input.assetId}/visibility`,
     {
       body: JSON.stringify({
-        visibility: input.visibility
+        visibility: input.visibility,
       }),
-      method: "PUT"
-    }
+      method: "PUT",
+    },
   );
 
   return payload.asset;
@@ -289,8 +341,8 @@ export async function loadScenarioEventLogs(scenarioId: string): Promise<Scenari
   const payload = await sendJson<{ eventLogs: ScenarioEventLog[] }>(
     `/scenarios/${scenarioId}/events`,
     {
-      method: "GET"
-    }
+      method: "GET",
+    },
   );
 
   return payload.eventLogs;

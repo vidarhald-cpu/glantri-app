@@ -58,7 +58,10 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
   });
 
   it("keeps summary editing together and removes prominent scenario-level live state", () => {
-    const source = readScenarioDetailSources();
+    const source = [
+      readScenarioDetailSource(),
+      readComponentSource("ScenarioSummarySection.tsx"),
+    ].join("\n");
 
     expect(source).toContain("Scenario summary");
     expect(source).toContain('aria-label="Scenario summary"');

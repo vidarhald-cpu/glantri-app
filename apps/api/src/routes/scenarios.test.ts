@@ -146,10 +146,14 @@ const mocks = vi.hoisted(() => {
     listScenariosByCampaignPlayerAccess: vi.fn(),
     listScenariosByCampaignPlayerControl: vi.fn(),
     listScenariosByCampaign: vi.fn(),
+    listScenarioEventLogs: vi.fn(),
     listScenarioParticipants: vi.fn(),
+    pickUpScenarioAvailableItem: vi.fn(),
     recordScenarioEvent: vi.fn(),
+    resolveScenarioAvailableObjects: vi.fn(),
     refreshCharacterParticipantEquipmentSnapshot: vi.fn(),
     updateScenario: vi.fn(),
+    updateScenarioSessionState: vi.fn(),
     userHasPlayerScenarioAccess: vi.fn(),
   };
   return {
@@ -195,6 +199,15 @@ vi.mock("@glantri/database", () => ({
     }
   },
   EncounterService: vi.fn(() => mocks.encounterService),
+  ScenarioSessionWriteError: class ScenarioSessionWriteError extends Error {
+    constructor(
+      readonly code: "stale_revision" | "transaction_conflict",
+      message: string,
+    ) {
+      super(message);
+      this.name = "ScenarioSessionWriteError";
+    }
+  },
   ScenarioService: vi.fn(() => mocks.scenarioService),
 }));
 
@@ -5545,15 +5558,38 @@ describe("scenarios route contract", () => {
       name: "Border Trouble",
       status: "active",
     };
-    const encounter = {
+    const encounter = encounterSessionSchema.parse({
+      createdAt: "2026-01-01T00:00:00.000Z",
       id: "encounter-1",
-      name: "Courtyard",
+      participantMembershipMode: "explicit",
+      participants: [
+        {
+          id: "encounter-player",
+          label: "Player",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-1",
+        },
+      ],
       scenarioId: "scenario-1",
-    };
+      status: "active",
+      title: "Courtyard",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
     mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
     mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
     mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
     mocks.encounterService.listEncountersByScenario.mockResolvedValue([encounter]);
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      {
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "Player" },
+        sourceType: "character",
+      },
+    ]);
     const app = await buildScenarioTestApp();
 
     const response = await app.inject({
@@ -5565,7 +5601,7 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      encounters: [encounter],
+      encounters: [expect.objectContaining({ id: "encounter-1", title: "Courtyard" })],
     });
     expect(mocks.scenarioService.userHasPlayerScenarioAccess).toHaveBeenCalledWith({
       scenarioId: "scenario-1",
@@ -5735,6 +5771,36 @@ describe("scenarios route contract", () => {
       id: "campaign-1",
     });
     mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.encounterService.getEncounterById.mockResolvedValue(
+      encounterSessionSchema.parse({
+        createdAt: "2026-01-01T00:00:00.000Z",
+        id: "encounter-1",
+        participantMembershipMode: "explicit",
+        participants: [
+          {
+            id: "encounter-player",
+            label: "Player",
+            participantType: "scenario",
+            scenarioParticipantId: "participant-1",
+          },
+        ],
+        scenarioId: "scenario-1",
+        status: "active",
+        title: "Courtyard",
+        updatedAt: "2026-01-01T00:05:00.000Z",
+      }),
+    );
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      {
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "Player" },
+        sourceType: "character",
+      },
+    ]);
     mocks.encounterService.listEncountersByScenario.mockResolvedValue([encounter]);
     mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
       {
@@ -5768,6 +5834,317 @@ describe("scenarios route contract", () => {
     expect(mocks.combatStateReadService.listEncounterAccessMetadataByScenario).toHaveBeenCalledWith(
       "scenario-1",
     );
+  });
+
+  it("keeps hidden participants equivalent to nonexistent participants before and after close and reconnect", async () => {
+    const encounterA = encounterSessionSchema.parse({
+      createdAt: "2026-08-22T10:00:00.000Z",
+      id: "encounter-a",
+      kind: "roleplay",
+      participantMembershipMode: "explicit",
+      participants: [
+        {
+          id: "encounter-participant-a",
+          label: "Player A",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-a",
+        },
+      ],
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Library",
+      updatedAt: "2026-08-22T10:01:00.000Z",
+    });
+    const encounterB = encounterSessionSchema.parse({
+      ...encounterA,
+      id: "encounter-b",
+      participants: [
+        {
+          id: "encounter-participant-b",
+          label: "Player B",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-b",
+        },
+      ],
+      title: "Secret Courtyard",
+    });
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      createdAt: "2026-08-22T09:00:00.000Z",
+      description: "Find the Lost Seal.",
+      id: "scenario-1",
+      kind: "mixed",
+      liveState: {
+        combatStatus: "not_started",
+        phase: 1,
+        roundNumber: 1,
+        session: {
+          appliedRequestIds: ["private-request"],
+          availableObjects: [],
+          gmPrivateNotes: "The steward has the seal.",
+          version: 1,
+        },
+      },
+      name: "Lost Seal",
+      status: "live",
+      updatedAt: "2026-08-22T10:02:00.000Z",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      {
+        controlledByUserId: "player-1",
+        id: "participant-a",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "Player A" },
+        sourceType: "character",
+      },
+      {
+        controlledByUserId: "player-b",
+        id: "participant-b",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "Player B" },
+        sourceType: "character",
+        visibilityOverrides: { visibility: "gm_only" },
+      },
+      {
+        controlledByUserId: "hidden-player",
+        id: "participant-hidden",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "Hidden Steward" },
+        sourceType: "character",
+        visibilityOverrides: { visibility: "hidden" },
+      },
+    ]);
+    mocks.encounterService.listEncountersByScenario.mockResolvedValue([encounterA, encounterB]);
+    const initialEventLogs = [
+      {
+        createdAt: "2026-08-22T10:01:30.000Z",
+        eventType: "encounter_skill_outcome",
+        id: "event-a",
+        payload: { audienceParticipantIds: ["participant-a"], hiddenTotal: 99 },
+        scenarioId: "scenario-1",
+        summary: "Player A found a clue.",
+      },
+      {
+        createdAt: "2026-08-22T10:01:40.000Z",
+        eventType: "encounter_skill_outcome",
+        id: "event-b",
+        payload: { audienceParticipantIds: ["participant-a"] },
+        scenarioId: "scenario-1",
+        summary: "Player B learned the culprit.",
+      },
+      {
+        createdAt: "2026-08-22T10:01:50.000Z",
+        eventType: "participant_added",
+        id: "event-hidden",
+        participantId: "participant-hidden",
+        scenarioId: "scenario-1",
+        summary: "Added Hidden Steward to the scenario.",
+      },
+    ];
+    mocks.scenarioService.listScenarioEventLogs.mockResolvedValue(initialEventLogs);
+    mocks.scenarioService.resolveScenarioAvailableObjects.mockResolvedValue([]);
+    const app = await buildScenarioTestApp();
+
+    const directScenarioResponse = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1",
+    });
+    const responseBeforeClose = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/session",
+    });
+
+    mocks.encounterService.listEncountersByScenario.mockResolvedValue([
+      encounterA,
+      { ...encounterB, status: "complete", updatedAt: "2026-08-22T10:03:00.000Z" },
+    ]);
+    mocks.scenarioService.listScenarioEventLogs.mockResolvedValue([
+      ...initialEventLogs,
+      {
+        createdAt: "2026-08-22T10:03:00.000Z",
+        eventType: "encounter_closed",
+        id: "event-b-closed",
+        payload: { audienceParticipantIds: ["participant-a"] },
+        scenarioId: "scenario-1",
+        summary: "Player B left the closed Courtyard encounter.",
+      },
+    ]);
+    const responseAfterClose = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/session",
+    });
+    const responseAfterReconnect = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/session",
+    });
+
+    await app.close();
+    expect(directScenarioResponse.statusCode, directScenarioResponse.body).toBe(200);
+    for (const privateKey of [
+      "session",
+      "appliedRequestIds",
+      "availableObjects",
+      "gmPrivateNotes",
+      "version",
+    ]) {
+      expect(directScenarioResponse.body).not.toContain(`"${privateKey}"`);
+    }
+
+    expect(responseBeforeClose.statusCode, responseBeforeClose.body).toBe(200);
+    expect(responseBeforeClose.json().session.encounters).toEqual([
+      expect.objectContaining({ id: "encounter-a", title: "Library" }),
+    ]);
+    expect(responseBeforeClose.json().session.history).toEqual([
+      expect.objectContaining({ id: "event-a", summary: "Player A found a clue." }),
+    ]);
+    for (const response of [responseBeforeClose, responseAfterClose, responseAfterReconnect]) {
+      expect(response.statusCode, response.body).toBe(200);
+      const payload = response.json().session;
+      for (const participantId of [
+        "participant-b",
+        "participant-hidden",
+        "nonexistent-participant",
+      ]) {
+        expect(
+          payload.participants.find((entry: { id: string }) => entry.id === participantId),
+        ).toBe(undefined);
+      }
+      for (const hidden of [
+        "Secret Courtyard",
+        "participant-b",
+        "participant-hidden",
+        "Player B",
+        "Hidden Steward",
+        "nonexistent-participant",
+        "Nonexistent Participant",
+        "steward",
+        "private-request",
+        "hiddenTotal",
+        "privateNote",
+        "culprit",
+      ]) {
+        expect(response.body).not.toContain(hidden);
+      }
+    }
+  });
+
+  it("projects player Combat participants with viewer-aware hidden and GM-only privacy", async () => {
+    const scenario = {
+      campaignId: "campaign-1",
+      description: "Recover the Lost Seal.",
+      id: "scenario-1",
+      kind: "mixed",
+      name: "Lost Seal",
+      status: "live",
+    };
+    const controlledState = {
+      ...makeCombatScenarioParticipant().state,
+      health: {
+        bleeding: 0,
+        currentHp: 10,
+        dead: false,
+        maxHp: 10,
+        unconscious: false,
+        wounds: 0,
+      },
+    };
+    const participants = [
+      makeCombatScenarioParticipant({
+        id: "participant-a",
+        snapshot: { displayName: "Player A" },
+        state: controlledState,
+        visibilityOverrides: { visibility: "hidden" },
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "visible-player",
+        id: "participant-visible",
+        snapshot: { displayName: "Visible Ally" },
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "hidden-player",
+        id: "participant-hidden",
+        snapshot: { displayName: "Hidden Steward" },
+        visibilityOverrides: { visibility: "hidden" },
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "player-b",
+        id: "participant-gm-only",
+        snapshot: { displayName: "GM Only Witness" },
+        state: controlledState,
+        visibilityOverrides: { visibility: "gm_only" },
+      }),
+    ];
+    mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue(participants);
+    const app = await buildScenarioTestApp();
+
+    const playerResponse = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/player-projection",
+    });
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue(participants.slice(0, 2));
+    const nonexistentEquivalent = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/player-projection",
+    });
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue(participants);
+    mocks.requireAuthenticatedUser.mockResolvedValue({ ...mocks.playerUser, id: "player-b" });
+    const controllingPlayerResponse = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/player-projection",
+    });
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.adminUser);
+    const gmResponse = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/player-projection",
+    });
+
+    await app.close();
+    expect(playerResponse.statusCode, playerResponse.body).toBe(200);
+    expect(playerResponse.json()).toEqual(nonexistentEquivalent.json());
+    expect(
+      playerResponse
+        .json()
+        .projection.visibleParticipants.map(
+          (participant: { displayName: string }) => participant.displayName,
+        ),
+    ).toEqual(["Player A", "Visible Ally"]);
+    for (const hiddenIdentity of [
+      "participant-hidden",
+      "Hidden Steward",
+      "participant-gm-only",
+      "GM Only Witness",
+    ]) {
+      expect(playerResponse.body).not.toContain(hiddenIdentity);
+    }
+    expect(controllingPlayerResponse.statusCode, controllingPlayerResponse.body).toBe(200);
+    expect(controllingPlayerResponse.body).toContain("participant-gm-only");
+    expect(controllingPlayerResponse.body).toContain("GM Only Witness");
+    expect(controllingPlayerResponse.body).not.toContain("participant-hidden");
+    expect(gmResponse.statusCode, gmResponse.body).toBe(200);
+    expect(
+      gmResponse
+        .json()
+        .projection.visibleParticipants.map(
+          (participant: { displayName: string }) => participant.displayName,
+        ),
+    ).toEqual(["Player A", "Visible Ally", "Hidden Steward", "GM Only Witness"]);
   });
 
   it("returns a compact canonical active-encounter revision", async () => {
@@ -5833,6 +6210,36 @@ describe("scenarios route contract", () => {
       id: "campaign-1",
     });
     mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.encounterService.getEncounterById.mockResolvedValue(
+      encounterSessionSchema.parse({
+        createdAt: "2026-01-01T00:00:00.000Z",
+        id: "encounter-1",
+        participantMembershipMode: "explicit",
+        participants: [
+          {
+            id: "encounter-player",
+            label: "Player",
+            participantType: "scenario",
+            scenarioParticipantId: "participant-1",
+          },
+        ],
+        scenarioId: "scenario-1",
+        status: "active",
+        title: "Courtyard",
+        updatedAt: "2026-01-01T00:05:00.000Z",
+      }),
+    );
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      {
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "Player" },
+        sourceType: "character",
+      },
+    ]);
     const app = await buildScenarioTestApp();
 
     const response = await app.inject({
@@ -6642,11 +7049,13 @@ describe("scenarios route contract", () => {
       title: "Courtyard",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
-    const encounter = {
+    const encounter = encounterSessionSchema.parse({
       ...bodySession,
       campaignId: "campaign-1",
+      participants: [],
       scenarioId: "scenario-1",
-    };
+      status: "setup",
+    });
     mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
     mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
     mocks.encounterService.createEncounter.mockResolvedValue(encounter);
@@ -6673,6 +7082,7 @@ describe("scenarios route contract", () => {
         currentRound: 1,
         id: "encounter-1",
         scenarioId: "scenario-evil",
+        status: "setup",
       }),
     });
   });
@@ -6735,6 +7145,8 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith({
       campaignId: "campaign-1",
       encounterId: "encounter-1",
+      expectedRevision: "2026-01-01T00:00:00.000Z",
+      objectiveEvent: undefined,
       scenarioId: "scenario-1",
       session: expect.objectContaining({
         campaignId: "campaign-evil",
@@ -6773,6 +7185,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "PATCH",
       payload: {
+        expectedRevision: existingEncounter.updatedAt,
         status: "paused",
       },
       url: "/encounters/encounter-1/status",
@@ -6785,20 +7198,19 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith({
       campaignId: "campaign-1",
       encounterId: "encounter-1",
+      expectedRevision: existingEncounter.updatedAt,
+      objectiveEvent: {
+        actorUserId: "gm-1",
+        eventType: "encounter_paused",
+        summary: "Paused encounter Courtyard.",
+      },
       scenarioId: "scenario-1",
       session: expect.objectContaining({
         combatRoundState: existingEncounter.combatRoundState,
         status: "paused",
       }),
     });
-    expect(mocks.scenarioService.recordScenarioEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        payload: expect.objectContaining({
-          previousStatus: "active",
-          status: "paused",
-        }),
-      }),
-    );
+    expect(mocks.scenarioService.recordScenarioEvent).not.toHaveBeenCalled();
   });
 
   it("archives an encounter through the narrow status payload", async () => {
@@ -6828,6 +7240,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "PATCH",
       payload: {
+        expectedRevision: existingEncounter.updatedAt,
         status: "archived",
       },
       url: "/encounters/encounter-1/status",
@@ -6840,6 +7253,8 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith({
       campaignId: "campaign-1",
       encounterId: "encounter-1",
+      expectedRevision: existingEncounter.updatedAt,
+      objectiveEvent: undefined,
       scenarioId: "scenario-1",
       session: expect.objectContaining({
         combatRoundState: existingEncounter.combatRoundState,
@@ -6886,6 +7301,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "PATCH",
       payload: {
+        expectedRevision: existingEncounter.updatedAt,
         participantMembershipMode: "explicit",
         participants,
       },
@@ -6899,6 +7315,12 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith({
       campaignId: "campaign-1",
       encounterId: "encounter-1",
+      expectedRevision: existingEncounter.updatedAt,
+      objectiveEvent: {
+        actorUserId: "gm-1",
+        eventType: "encounter_participants_updated",
+        summary: "Updated encounter Courtyard participants.",
+      },
       scenarioId: "scenario-1",
       session: expect.objectContaining({
         combatRoundState: existingEncounter.combatRoundState,
@@ -6950,6 +7372,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "PATCH",
       payload: {
+        expectedRevision: existingEncounter.updatedAt,
         participantMembershipMode: "explicit",
         participants: [],
       },
@@ -6963,6 +7386,12 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith({
       campaignId: "campaign-1",
       encounterId: "encounter-1",
+      expectedRevision: existingEncounter.updatedAt,
+      objectiveEvent: {
+        actorUserId: "gm-1",
+        eventType: "encounter_participants_updated",
+        summary: "Updated encounter Courtyard participants.",
+      },
       scenarioId: "scenario-1",
       session: expect.objectContaining({
         combatRoundState: existingEncounter.combatRoundState,
@@ -7422,7 +7851,8 @@ describe("scenarios route contract", () => {
     expect(automatic.json().encounter.roleplayState.actionLog[0].rollD20).toBeUndefined();
     expect(JSON.stringify(first.json())).not.toContain("stat-check-other");
     expect(JSON.stringify(first.json())).not.toContain('"statLabel":"Will"');
-    expect(second.statusCode).toBe(409);
+    expect(second.statusCode).toBe(200);
+    expect(second.json().idempotent).toBe(true);
     expect(concurrent.map((response) => response.statusCode).sort()).toEqual([200, 409]);
     const accepted = concurrent.find((response) => response.statusCode === 200)!;
     const rejected = concurrent.find((response) => response.statusCode === 409)!;
@@ -7910,7 +8340,7 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
-  it("uses player-safe participant visibility when resolving a Disarm declaration", async () => {
+  it("uses Scenario participant visibility when resolving a player Disarm declaration", async () => {
     const actingParticipant = makeCombatScenarioParticipant({
       characterId: "character-1",
       controlledByUserId: "player-1",
@@ -7920,6 +8350,7 @@ describe("scenarios route contract", () => {
       characterId: "character-hidden",
       controlledByUserId: "player-hidden",
       id: "participant-hidden",
+      visibilityOverrides: { visibility: "gm_only" },
     });
     setupCombatDeclarationRoute({
       encounter: {
@@ -7927,7 +8358,7 @@ describe("scenarios route contract", () => {
           visibility: {
             "encounter-participant-1": {
               "encounter-participant-1": true,
-              "encounter-target-hidden": false,
+              "encounter-target-hidden": true,
             },
           },
         },
@@ -23310,7 +23741,8 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(409);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().idempotent).toBe(true);
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 

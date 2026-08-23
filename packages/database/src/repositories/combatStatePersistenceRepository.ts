@@ -255,6 +255,8 @@ export interface CombatStatePersistenceRepository {
     }>;
   }): Promise<EncounterSession>;
   updateEncounterPreservingSplitCombat(input: {
+    afterPersist?: (transaction: TransactionClient, encounter: EncounterSession) => Promise<void>;
+    beforePersist?: (transaction: TransactionClient, encounter: EncounterSession) => Promise<void>;
     campaignId?: string | null;
     encounterId: string;
     expectedRevision?: string;
@@ -486,6 +488,8 @@ export function createPrismaCombatStatePersistenceRepository(
               );
             }
 
+            await input.beforePersist?.(transaction, normalized);
+
             if (storageMode === COMBAT_STORAGE_MODE_LEGACY) {
               const data = {
                 campaignId: normalized.campaignId ?? null,
@@ -518,11 +522,13 @@ export function createPrismaCombatStatePersistenceRepository(
                     data,
                     where: { id: input.encounterId },
                   }));
-              return encounterSessionSchema.parse({
+              const saved = encounterSessionSchema.parse({
                 ...normalized,
                 createdAt: record.createdAt.toISOString(),
                 updatedAt: record.updatedAt.toISOString(),
               });
+              await input.afterPersist?.(transaction, saved);
+              return saved;
             }
 
             if (!existing.activeCombatState) {
@@ -570,7 +576,7 @@ export function createPrismaCombatStatePersistenceRepository(
               where: { encounterId: input.encounterId },
             });
 
-            return composeEncounterSessionFromSplitCombatPersistence({
+            const saved = composeEncounterSessionFromSplitCombatPersistence({
               activeCombatState: existing.activeCombatState.stateJson,
               archivedRounds: existing.archivedCombatRounds.map((round) => round.roundJson),
               metadata: {
@@ -583,6 +589,8 @@ export function createPrismaCombatStatePersistenceRepository(
               },
               sessionWithoutCombatState: parts.sessionWithoutCombatState,
             });
+            await input.afterPersist?.(transaction, saved);
+            return saved;
           },
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         );

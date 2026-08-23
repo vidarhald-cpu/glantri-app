@@ -5865,11 +5865,22 @@ function buildPlayerSafeCombatScopeForParticipants(input: {
   const hasVisibilityRows = Object.keys(visibility ?? {}).length > 0;
   const visibleParticipantIds = new Set(
     membership.participants
-      .filter(
-        (participant) =>
-          input.controlledEncounterParticipants.some(
-            (controlled) => controlled.id === participant.id,
-          ) ||
+      .filter((participant) => {
+        const controlled = input.controlledEncounterParticipants.some(
+          (candidate) => candidate.id === participant.id,
+        );
+        if (controlled) return true;
+
+        const aliases = getCombatDistanceParticipantAliases(participant);
+        const scenarioParticipant = input.scenarioParticipants.find(
+          (candidate) =>
+            aliases.includes(candidate.id) ||
+            Boolean(candidate.characterId && aliases.includes(candidate.characterId)),
+        );
+        const scenarioVisibility = scenarioParticipant?.visibilityOverrides?.visibility;
+        if (scenarioVisibility === "hidden" || scenarioVisibility === "gm_only") return false;
+
+        return (
           !hasVisibilityRows ||
           input.controlledEncounterParticipants.some((viewer) =>
             hasCombatDistanceVisibility({
@@ -5877,8 +5888,9 @@ function buildPlayerSafeCombatScopeForParticipants(input: {
               viewer,
               visibility,
             }),
-          ),
-      )
+          )
+        );
+      })
       .flatMap((participant) => getCombatDistanceParticipantAliases(participant)),
   );
 
@@ -6625,9 +6637,11 @@ export function buildPlayerSafeEncounterForUser(input: {
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
 }): EncounterSession {
+  const { gmPrivateClosingNote: _gmPrivateClosingNote, ...playerSafeEncounter } = input.encounter;
+
   if (!Array.isArray(input.encounter.participants)) {
     return {
-      ...input.encounter,
+      ...playerSafeEncounter,
       combatRoundState: buildPlayerSafeCombatRoundStateForUser(input),
       roleplayState: input.encounter.roleplayState
         ? buildPlayerSafeRoleplayStateForUser(input)
@@ -6639,7 +6653,7 @@ export function buildPlayerSafeEncounterForUser(input: {
   const { visibleParticipantIds } = buildPlayerSafeCombatScopeForUser(input);
 
   return {
-    ...input.encounter,
+    ...playerSafeEncounter,
     combatRoundState: buildPlayerSafeCombatRoundStateForUser(input),
     participants: membership.participants
       .filter((participant) =>
@@ -7213,13 +7227,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
 
         return {
-          encounters: encounters.map((enc) =>
-            buildPlayerSafeEncounterForUser({
-              encounter: enc,
-              scenarioParticipants,
-              userId: user.id,
-            }),
-          ),
+          encounters: encounters
+            .filter((encounter) =>
+              isUserAssignedToEncounterMembership({
+                encounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+            )
+            .map((encounter) =>
+              buildPlayerSafeEncounterForUser({
+                encounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+            ),
         };
       }
 
@@ -7268,20 +7290,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         ]);
 
         return {
-          encounters: encounterMetadata.map((source) =>
-            buildEncounterSessionSummaryFromMetadataView(source.metadata, {
-              viewerAssigned: isUserAssignedToEncounterMembership({
-                encounter: {
-                  participantMembershipMode: source.participantMembershipMode,
-                  participants: source.participants,
-                  scenarioId: source.metadata.scenarioId,
-                  status: source.metadata.status,
-                },
-                scenarioParticipants,
-                userId: user.id,
-              }),
-            }),
-          ),
+          encounters: encounterMetadata.flatMap((source) => {
+            const viewerAssigned = isUserAssignedToEncounterMembership({
+              encounter: {
+                participantMembershipMode: source.participantMembershipMode,
+                participants: source.participants,
+                scenarioId: source.metadata.scenarioId,
+                status: source.metadata.status,
+              },
+              scenarioParticipants,
+              userId: user.id,
+            });
+            return viewerAssigned
+              ? [
+                  buildEncounterSessionSummaryFromMetadataView(source.metadata, {
+                    viewerAssigned: true,
+                  }),
+                ]
+              : [];
+          }),
         };
       }
 
@@ -7332,6 +7359,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           ...encounterSession,
           combatRoundState: undefined,
           currentRound: 1,
+          status:
+            encounterSession.status === "setup" || encounterSession.status === "planned"
+              ? encounterSession.status
+              : "planned",
         }),
       });
       const scenarioParticipants =
@@ -7346,6 +7377,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         actorUserId: user.id,
         eventType: "encounter_created",
         payload: {
+          audienceParticipantIds: encounter.participants.flatMap((participant) =>
+            participant.scenarioParticipantId ? [participant.scenarioParticipantId] : [],
+          ),
           encounterId: encounter.id,
           kind: encounter.kind,
           status: encounter.status,
@@ -7421,6 +7455,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         : encounter;
 
       if (access.mode === "player") {
+        if (
+          !isUserAssignedToEncounterMembership({
+            encounter: normalizedEncounter,
+            scenarioParticipants,
+            userId: user.id,
+          })
+        ) {
+          return reply.code(404).send({ error: "Encounter not found." });
+        }
         return {
           encounter: buildPlayerSafeEncounterForUser({
             encounter: normalizedEncounter,
@@ -7473,6 +7516,23 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (access.mode === "player") {
+        const [fullEncounter, scenarioParticipants] = await Promise.all([
+          encounterService.getEncounterById(encounterId),
+          scenarioService.listScenarioParticipants(encounter.scenarioId),
+        ]);
+        if (
+          !fullEncounter ||
+          !isUserAssignedToEncounterMembership({
+            encounter: fullEncounter,
+            scenarioParticipants,
+            userId: user.id,
+          })
+        ) {
+          return reply.code(404).send({ error: "Encounter not found." });
+        }
+      }
+
       return {
         encounter: buildEncounterSessionRevisionFromMetadataView(encounter),
       };
@@ -7514,6 +7574,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const scenarioParticipants = await scenarioService.listScenarioParticipants(
         historySource.scenarioId,
       );
+      if (
+        access.mode === "player" &&
+        !isUserAssignedToEncounterMembership({
+          encounter: historySource,
+          scenarioParticipants,
+          userId: user.id,
+        })
+      ) {
+        return reply.code(404).send({ error: "Encounter not found." });
+      }
       const membership = resolveEncounterParticipantMembership({
         encounter: historySource,
         scenarioParticipants,
@@ -7668,27 +7738,51 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const body = parseBodyObject(request.body, "Encounter payload");
       const encounterSession = encounterSessionSchema.parse(body.session);
+      const expectedRevision =
+        parseOptionalString(body, "expectedRevision") ?? encounterSession.updatedAt;
+      if (!expectedRevision) throw new Error("Refresh the Encounter before saving.");
+      const statusChanged = encounterSession.status !== existingEncounter.status;
+      const participantsChanged =
+        encounterSession.participantMembershipMode !==
+          existingEncounter.participantMembershipMode ||
+        JSON.stringify(encounterSession.participants) !==
+          JSON.stringify(existingEncounter.participants);
+      const eventType = statusChanged
+        ? encounterSession.status === "active"
+          ? existingEncounter.status === "paused"
+            ? "encounter_resumed"
+            : "encounter_started"
+          : encounterSession.status === "paused"
+            ? "encounter_paused"
+            : encounterSession.status === "complete"
+              ? "encounter_closed"
+              : undefined
+        : participantsChanged
+          ? "encounter_participants_updated"
+          : undefined;
       const encounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
         encounterId,
+        expectedRevision,
+        objectiveEvent: eventType
+          ? {
+              actorUserId: user.id,
+              eventType,
+              summary:
+                eventType === "encounter_closed"
+                  ? `Closed encounter ${encounterSession.title}: ${encounterSession.playerOutcome ?? "No outcome recorded."}`
+                  : `Updated encounter ${encounterSession.title}.`,
+            }
+          : undefined,
         scenarioId: existingEncounter.scenarioId,
         session: encounterSession,
       });
 
-      await scenarioService.recordScenarioEvent({
-        actorUserId: user.id,
-        eventType: "encounter_updated",
-        payload: {
-          encounterId: encounter.id,
-          participantCount: encounter.participants.length,
-          status: encounter.status,
-        },
-        scenarioId: existingEncounter.scenarioId,
-        summary: `Updated encounter ${encounter.title}.`,
-      });
-
       return { encounter };
     } catch (error) {
+      if (error instanceof EncounterWriteError) {
+        return reply.code(409).send({ error: error.message });
+      }
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to update encounter.",
       });
@@ -7732,32 +7826,55 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const body = parseBodyObject(request.body, "Encounter status payload");
       const status = encounterStatusSchema.parse(body.status);
+      const expectedRevision = parseOptionalString(body, "expectedRevision");
+      if (!expectedRevision) throw new Error("Refresh the Encounter before changing its status.");
+      const playerOutcome = parseOptionalString(body, "playerOutcome")?.trim();
+      const gmPrivateClosingNote = parseOptionalString(body, "gmPrivateClosingNote")?.trim();
+      if (status === "complete" && !playerOutcome) {
+        throw new Error("Record the player-visible outcome before closing the Encounter.");
+      }
       const encounterSession = encounterSessionSchema.parse({
         ...existingEncounter,
+        gmPrivateClosingNote:
+          status === "complete"
+            ? gmPrivateClosingNote || undefined
+            : existingEncounter.gmPrivateClosingNote,
+        playerOutcome: status === "complete" ? playerOutcome : existingEncounter.playerOutcome,
         status,
-        updatedAt: new Date().toISOString(),
       });
+      const eventType =
+        status === "active"
+          ? existingEncounter.status === "paused"
+            ? "encounter_resumed"
+            : "encounter_started"
+          : status === "paused"
+            ? "encounter_paused"
+            : status === "complete"
+              ? "encounter_closed"
+              : undefined;
       const encounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
         encounterId,
+        expectedRevision,
+        objectiveEvent: eventType
+          ? {
+              actorUserId: user.id,
+              eventType,
+              summary:
+                eventType === "encounter_closed"
+                  ? `Closed encounter ${existingEncounter.title}: ${playerOutcome}.`
+                  : `${eventType === "encounter_paused" ? "Paused" : eventType === "encounter_resumed" ? "Resumed" : "Started"} encounter ${existingEncounter.title}.`,
+            }
+          : undefined,
         scenarioId: existingEncounter.scenarioId,
         session: encounterSession,
       });
 
-      await scenarioService.recordScenarioEvent({
-        actorUserId: user.id,
-        eventType: "encounter_updated",
-        payload: {
-          encounterId: encounter.id,
-          previousStatus: existingEncounter.status,
-          status: encounter.status,
-        },
-        scenarioId: existingEncounter.scenarioId,
-        summary: `Updated encounter ${encounter.title} status to ${encounter.status}.`,
-      });
-
       return { encounter };
     } catch (error) {
+      if (error instanceof EncounterWriteError) {
+        return reply.code(409).send({ error: error.message });
+      }
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to update encounter status.",
       });
@@ -7808,33 +7925,33 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const participantMembershipMode = encounterParticipantMembershipModeSchema.parse(
         body.participantMembershipMode ?? "explicit",
       );
+      const expectedRevision = parseOptionalString(body, "expectedRevision");
+      if (!expectedRevision) {
+        throw new Error("Refresh the Encounter before changing participants.");
+      }
       const encounterSession = encounterSessionSchema.parse({
         ...existingEncounter,
         participantMembershipMode,
         participants: body.participants,
-        updatedAt: new Date().toISOString(),
       });
       const encounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
         encounterId,
+        expectedRevision,
+        objectiveEvent: {
+          actorUserId: user.id,
+          eventType: "encounter_participants_updated",
+          summary: `Updated encounter ${existingEncounter.title} participants.`,
+        },
         scenarioId: existingEncounter.scenarioId,
         session: encounterSession,
       });
 
-      await scenarioService.recordScenarioEvent({
-        actorUserId: user.id,
-        eventType: "encounter_updated",
-        payload: {
-          encounterId: encounter.id,
-          participantCount: encounter.participants.length,
-          status: encounter.status,
-        },
-        scenarioId: existingEncounter.scenarioId,
-        summary: `Updated encounter ${encounter.title} participants.`,
-      });
-
       return { encounter };
     } catch (error) {
+      if (error instanceof EncounterWriteError) {
+        return reply.code(409).send({ error: error.message });
+      }
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to update encounter participants.",
       });
@@ -18956,8 +19073,34 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const pendingStatCheck = state.pendingStatChecks.find(
         (check) => check.id === body.pendingRollId,
       );
+      const exactExistingResult = state.actionLog.find(
+        (entry) =>
+          (entry.type === "stat_check_result" || entry.type === "gm_skill_roll") &&
+          entry.pendingRollId === body.pendingRollId,
+      );
+      const gmAuthorizedOperation = access.mode === "gm";
 
       if ((!pendingSkillRoll && !pendingStatCheck) || pendingSkillRoll?.silent) {
+        if (
+          exactExistingResult &&
+          (gmAuthorizedOperation ||
+            isUserAssignedToEncounterMembership({
+              encounter,
+              scenarioParticipants,
+              userId: user.id,
+            }))
+        ) {
+          return {
+            encounter: gmAuthorizedOperation
+              ? encounter
+              : buildPlayerSafeEncounterForUser({
+                  encounter,
+                  scenarioParticipants,
+                  userId: user.id,
+                }),
+            idempotent: true,
+          };
+        }
         return reply.code(403).send({
           error: "Roll is not available to this player.",
         });
@@ -18989,14 +19132,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               entry.skillId === pendingSkillRoll.skillId))
         );
       });
-
-      if (existingResult) {
-        return reply.code(409).send({
-          error: "Roll has already been submitted.",
-        });
-      }
-
-      const gmAuthorizedOperation = access.mode === "gm";
 
       if (
         !gmAuthorizedOperation &&
@@ -19032,7 +19167,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (existingResult) {
+        return {
+          encounter: gmAuthorizedOperation
+            ? encounter
+            : buildPlayerSafeEncounterForUser({
+                encounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+          idempotent: true,
+        };
+      }
+
       let nextEncounter: EncounterSession;
+      let objectiveSummary: string | undefined;
 
       if (pendingStatCheck) {
         const preview = buildRoleplayCalculationPreview({
@@ -19146,11 +19295,27 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           useGenMod: pendingRoll.useGenMod,
           useObSkillMod: pendingRoll.useObSkillMod,
         });
+        objectiveSummary = `${participant.label} used ${pendingRoll.skillLabel}: ${
+          preview.fumble
+            ? "fumble"
+            : preview.success
+              ? "success"
+              : preview.partial
+                ? "partial success"
+                : "failure"
+        }.`;
       }
       const savedEncounter = await encounterService.updateEncounter({
         campaignId: encounter.campaignId,
         encounterId,
-        expectedRevision: pendingStatCheck ? body.expectedRevision : undefined,
+        expectedRevision: body.expectedRevision,
+        objectiveEvent: objectiveSummary
+          ? {
+              actorUserId: user.id,
+              eventType: "encounter_skill_outcome",
+              summary: objectiveSummary,
+            }
+          : undefined,
         scenarioId: encounter.scenarioId,
         session: {
           ...nextEncounter,

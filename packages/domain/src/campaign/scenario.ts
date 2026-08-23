@@ -30,6 +30,12 @@ export const campaignStatusSchema = z.enum(["draft", "active", "archived"]);
 export const scenarioKindSchema = z.enum(["combat", "social", "travel", "mixed"]);
 export const scenarioStatusSchema = z.enum(["draft", "prepared", "live", "completed", "archived"]);
 export const scenarioCombatStatusSchema = z.enum(["not_started", "in_progress", "paused", "ended"]);
+export const scenarioAvailableObjectSourceKindSchema = z.enum([
+  "campaign_asset",
+  "campaign_item",
+  "reusable_entity",
+]);
+export const scenarioAvailableObjectVisibilitySchema = z.enum(["players", "gm_only"]);
 export const scenarioParticipantSourceTypeSchema = z.enum(["character", "entity"]);
 export const scenarioParticipantRoleSchema = z.enum([
   "player_character",
@@ -56,6 +62,22 @@ export const campaignSettingsSchema = z.object({
   defaultVisibility: scenarioVisibilitySchema.default("hidden"),
 });
 
+export const scenarioAvailableObjectReferenceSchema = z.object({
+  addedAt: timestampSchema,
+  expectedHolderCharacterId: idSchema.optional(),
+  id: idSchema,
+  sourceId: idSchema,
+  sourceKind: scenarioAvailableObjectSourceKindSchema,
+  visibility: scenarioAvailableObjectVisibilitySchema.default("players"),
+});
+
+export const scenarioSessionStateSchema = z.object({
+  appliedRequestIds: z.array(idSchema).default([]),
+  availableObjects: z.array(scenarioAvailableObjectReferenceSchema).default([]),
+  gmPrivateNotes: z.string().default(""),
+  version: z.literal(1).default(1),
+});
+
 export const campaignSchema = z.object({
   createdAt: timestampSchema,
   description: z.string().default(""),
@@ -76,6 +98,12 @@ export const scenarioLiveStateSchema = z.object({
   endedAt: timestampSchema.optional(),
   phase: z.union([z.literal(1), z.literal(2)]).default(1),
   roundNumber: z.number().int().positive().default(1),
+  session: scenarioSessionStateSchema.default({
+    appliedRequestIds: [],
+    availableObjects: [],
+    gmPrivateNotes: "",
+    version: 1,
+  }),
   startedAt: timestampSchema.optional(),
 });
 
@@ -413,6 +441,12 @@ export type CampaignStatus = z.infer<typeof campaignStatusSchema>;
 export type ScenarioKind = z.infer<typeof scenarioKindSchema>;
 export type ScenarioStatus = z.infer<typeof scenarioStatusSchema>;
 export type ScenarioCombatStatus = z.infer<typeof scenarioCombatStatusSchema>;
+export type ScenarioAvailableObjectSourceKind = z.infer<
+  typeof scenarioAvailableObjectSourceKindSchema
+>;
+export type ScenarioAvailableObjectVisibility = z.infer<
+  typeof scenarioAvailableObjectVisibilitySchema
+>;
 export type ScenarioParticipantSourceType = z.infer<typeof scenarioParticipantSourceTypeSchema>;
 export type ScenarioParticipantRole = z.infer<typeof scenarioParticipantRoleSchema>;
 export type ScenarioParticipantJoinSource = z.infer<typeof scenarioParticipantJoinSourceSchema>;
@@ -424,6 +458,10 @@ export type CampaignRosterCategory = z.infer<typeof campaignRosterCategorySchema
 export type CampaignSettings = z.infer<typeof campaignSettingsSchema>;
 export type Campaign = z.infer<typeof campaignSchema>;
 export type ScenarioLiveState = z.infer<typeof scenarioLiveStateSchema>;
+export type ScenarioSessionState = z.infer<typeof scenarioSessionStateSchema>;
+export type ScenarioAvailableObjectReference = z.infer<
+  typeof scenarioAvailableObjectReferenceSchema
+>;
 export type Scenario = z.infer<typeof scenarioSchema>;
 export type ScenarioParticipantPosition = z.infer<typeof scenarioParticipantPositionSchema>;
 export type ScenarioParticipantModifier = z.infer<typeof scenarioParticipantModifierSchema>;
@@ -737,9 +775,20 @@ function isPlayerControlledScenarioParticipant(input: {
 export function buildScenarioPlayerVisibleParticipants(input: {
   controlledParticipantId?: string;
   participants: ScenarioParticipant[];
+  userId?: string;
+  viewerMode?: "gm" | "player";
 }): ScenarioPlayerVisibleParticipant[] {
   return input.participants
-    .filter((participant) => participant.isActive)
+    .filter((participant) => {
+      if (!participant.isActive) return false;
+      if (input.viewerMode !== "player") return true;
+
+      const controlledByViewer =
+        participant.id === input.controlledParticipantId ||
+        participant.controlledByUserId === input.userId;
+      const visibility = participant.visibilityOverrides?.visibility;
+      return controlledByViewer || (visibility !== "hidden" && visibility !== "gm_only");
+    })
     .map((participant) =>
       scenarioPlayerVisibleParticipantSchema.parse({
         displayName: participant.snapshot.displayName,
@@ -780,6 +829,7 @@ export function buildScenarioPlayerProjection(input: {
   participants: ScenarioParticipant[];
   scenario: Scenario;
   userId: string;
+  viewerMode: "gm" | "player";
 }): ScenarioPlayerProjection {
   const controlledParticipant = input.participants.find((participant) =>
     isPlayerControlledScenarioParticipant({
@@ -788,12 +838,15 @@ export function buildScenarioPlayerProjection(input: {
     }),
   );
 
-  const visibleParticipants = controlledParticipant
-    ? buildScenarioPlayerVisibleParticipants({
-        controlledParticipantId: controlledParticipant.id,
-        participants: input.participants,
-      })
-    : [];
+  const visibleParticipants =
+    controlledParticipant || input.viewerMode === "gm"
+      ? buildScenarioPlayerVisibleParticipants({
+          controlledParticipantId: controlledParticipant?.id,
+          participants: input.participants,
+          userId: input.userId,
+          viewerMode: input.viewerMode,
+        })
+      : [];
 
   return scenarioPlayerProjectionSchema.parse({
     actionStub: {

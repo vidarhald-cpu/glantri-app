@@ -68,6 +68,17 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("revision: encounterSession.updatedAt");
   });
 
+  it("uses only the server player projection for non-GM participant and target visibility", () => {
+    const source = readSource();
+
+    expect(source).toContain("return projection?.visibleParticipants ?? []");
+    expect(source).toContain(
+      "playerPerspectiveVisibleParticipants.flatMap((participant) => [participant.id])",
+    );
+    expect(source).toContain(".filter((candidate) => candidate.selectable)");
+    expect(source).not.toContain("projection.visibleParticipants.concat");
+  });
+
   it("shows passive exact-identity recent-result feedback for player and GM rolls", () => {
     const source = readSource();
 
@@ -428,6 +439,18 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(slowContext).not.toContain("loadEncounterById");
     expect(slowContext).not.toContain("loadCombatHistory");
     expect(source).toContain("pollPlayerCombatSnapshot({");
+    expect(source).toContain("loadProjection: () => loadScenarioPlayerProjection(scenarioId)");
+    expect(source).toContain("setProjection(result.projection)");
+    expect(source).toContain("setRevisionBoundHistory(undefined)");
+    expect(source).toContain("setCombatItemOptions(undefined)");
+    expect(source).toContain("historyCoordinator.clear()");
+    expect(source).toContain("acceptedProjectionKey: acceptedProjectionKeyRef.current");
+    expect(source).toContain("onProjectionChanged: (nextProjection) => {");
+    expect(source).toContain("const refreshRequestId = refreshCoordinator.begin()");
+    expect(source).toContain("!refreshCoordinator.isCurrent(refreshRequestId)");
+    expect(source).toContain("refreshCoordinator.invalidate()");
+    expect(source).toContain("setEncounterSession(undefined)");
+    expect(source).toContain("key={`${encounterSession.id}:${projectionCacheKey}`}");
     expect(source).toContain("loadRevision: loadEncounterRevision");
     expect(source).toContain("setRevisionBoundHistory(result.history)");
     expect(source).toContain("setSelectableParticipants([...result.participants])");
