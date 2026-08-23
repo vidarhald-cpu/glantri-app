@@ -145,10 +145,34 @@ function hidesAttackLineage(
   );
 }
 
+function mayReceiveCanonicalAttackIdentity(input: {
+  canonicalTaskId: string | undefined;
+  task: CombatProgressionTask;
+  viewer: CombatProgressionPresentationViewer;
+}): boolean {
+  if (input.viewer.kind === "gm") return true;
+  if (
+    input.task.kind !== "attack" ||
+    input.task.id !== input.canonicalTaskId ||
+    input.task.state !== "executable" ||
+    input.task.expectedCommand !== "roll_attack" ||
+    !input.task.allowedActors.includes("combatant") ||
+    input.task.owner?.kind !== "combatant" ||
+    !input.viewer.controlledParticipantIds.has(input.task.owner.participantId)
+  ) {
+    return false;
+  }
+  const attackerParticipantId = input.task.identity.attackerParticipantId;
+  return Boolean(
+    attackerParticipantId && input.viewer.controlledParticipantIds.has(attackerParticipantId),
+  );
+}
+
 function visibleTaskIdentity(
   task: CombatProgressionPresentationTask,
   viewer: CombatProgressionPresentationViewer,
   executionGroupId = task.identity.executionGroupId,
+  mayReceiveAttackIdentity = true,
 ): CombatProgressionPresentationTask["identity"] {
   if (viewer.kind === "gm") return task.identity;
   const participantVisible = (participantId: string | undefined) =>
@@ -166,6 +190,21 @@ function visibleTaskIdentity(
         : undefined,
       executionGroupId,
       parryPurpose: task.identity.parryPurpose,
+      participantId: participantVisible(task.identity.participantId)
+        ? task.identity.participantId
+        : undefined,
+      phase: task.identity.phase,
+    };
+  }
+  if (task.kind === "attack" && !mayReceiveAttackIdentity) {
+    return {
+      attackerParticipantId: participantVisible(task.identity.attackerParticipantId)
+        ? task.identity.attackerParticipantId
+        : undefined,
+      defenderParticipantId: participantVisible(task.identity.defenderParticipantId)
+        ? task.identity.defenderParticipantId
+        : undefined,
+      executionGroupId,
       participantId: participantVisible(task.identity.participantId)
         ? task.identity.participantId
         : undefined,
@@ -314,25 +353,48 @@ export function projectCombatProgressionPresentation(input: {
           .map(presentationTask)
           .map((task, taskIndex) => {
             const hiddenLineage = hidesAttackLineage(task, input.viewer);
-            const taskId = hiddenLineage ? `${projectedGroupId}:task:${taskIndex}` : task.id;
-            const executionGroupId = hiddenLineage ? projectedGroupId : task.executionGroupId;
+            const canonicalSourceTask = group.tasks.find((candidate) => candidate.id === task.id);
+            const mayReceiveAttackIdentity = canonicalSourceTask
+              ? mayReceiveCanonicalAttackIdentity({
+                  canonicalTaskId: canonical?.task.id,
+                  task: canonicalSourceTask,
+                  viewer: input.viewer,
+                })
+              : false;
+            const restrictedAttackLineage = task.kind === "attack" && !mayReceiveAttackIdentity;
+            const redactExecutableLineage = hiddenLineage || restrictedAttackLineage;
+            const taskId = redactExecutableLineage
+              ? `${projectedGroupId}:task:${taskIndex}`
+              : task.id;
+            const executionGroupId = redactExecutableLineage
+              ? projectedGroupId
+              : task.executionGroupId;
             const automation = visibleAutomation(task, input.viewer);
             const presented: CombatProgressionPresentationTask = {
               ...task,
-              actorAccess: hiddenLineage
+              actorAccess: redactExecutableLineage
                 ? { combatant: false, gm: task.actorAccess.gm }
                 : task.actorAccess,
-              automation: hiddenLineage
+              automation: redactExecutableLineage
                 ? {
                     ...automation,
-                    eligibility: "not_allowed",
-                    stopReason: "hidden_information",
+                    ...(hiddenLineage
+                      ? {
+                          eligibility: "not_allowed" as const,
+                          stopReason: "hidden_information" as const,
+                        }
+                      : undefined),
                     taskId,
                   }
                 : automation,
               executionGroupId,
               id: taskId,
-              identity: visibleTaskIdentity(task, input.viewer, executionGroupId),
+              identity: visibleTaskIdentity(
+                task,
+                input.viewer,
+                executionGroupId,
+                mayReceiveAttackIdentity,
+              ),
               owner:
                 task.owner?.kind === "combatant"
                   ? visibleIdentity(task.owner, input.viewer)
@@ -340,7 +402,7 @@ export function projectCombatProgressionPresentation(input: {
               opponent: visibleIdentity(task.opponent, input.viewer),
               presentationContext: task.presentationContext
                 ? {
-                    ...(hiddenLineage
+                    ...(redactExecutableLineage
                       ? {
                           actionKind: task.presentationContext.actionKind,
                           attackOutcome: task.presentationContext.attackOutcome,
@@ -350,16 +412,16 @@ export function projectCombatProgressionPresentation(input: {
                     actor: visibleIdentity(task.presentationContext.actor, input.viewer),
                     responder: visibleIdentity(task.presentationContext.responder, input.viewer),
                     target: visibleIdentity(task.presentationContext.target, input.viewer),
-                    weapon: hiddenLineage ? undefined : task.presentationContext.weapon,
+                    weapon: redactExecutableLineage ? undefined : task.presentationContext.weapon,
                   }
                 : undefined,
-              processId: hiddenLineage ? projectedProcessId : task.processId,
-              stageId: hiddenLineage ? projectedStageId : task.stageId,
+              processId: redactExecutableLineage ? projectedProcessId : task.processId,
+              stageId: redactExecutableLineage ? projectedStageId : task.stageId,
               trackerFacet: {
                 ...task.trackerFacet,
                 owner: visibleIdentity(task.trackerFacet.owner, input.viewer),
               },
-              transition: hiddenLineage ? undefined : task.transition,
+              transition: redactExecutableLineage ? undefined : task.transition,
             };
             presentedByCanonicalTaskId.set(task.id, presented);
             return presented;

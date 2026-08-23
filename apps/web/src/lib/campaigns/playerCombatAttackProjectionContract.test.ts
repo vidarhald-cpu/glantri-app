@@ -112,6 +112,19 @@ const projectedTask = projectCombatProgressionPresentation({
 
 if (!projectedTask) throw new Error("Expected the Player-safe attack task fixture to project.");
 
+const waitingPlayerProjectedTask = projectCombatProgressionPresentation({
+  projection: canonicalProjection,
+  viewer: {
+    controlledParticipantIds: new Set(["encounter-defender"]),
+    kind: "player",
+    visibleParticipantIds: new Set(["encounter-attacker", "encounter-defender"]),
+  },
+}).processes[0]?.stages[0]?.tasks[0];
+
+if (!waitingPlayerProjectedTask) {
+  throw new Error("Expected the waiting Player-safe attack task fixture to project.");
+}
+
 const validation = {
   actionId: "attack_parry",
   attackContextAvailability: "complete",
@@ -163,6 +176,38 @@ describe("Player-safe attack projection to request contract", () => {
       initiativeValue: 7,
       modifierValidationTaskId: "attack-task",
     });
+  });
+
+  it("keeps another participant's shared waiting state non-actionable at both consumers", () => {
+    expect(waitingPlayerProjectedTask).toMatchObject({
+      actorAccess: { combatant: false },
+      automation: { authority: { kind: "unknown" }, eligibility: "unsupported" },
+      identity: {
+        attackerParticipantId: "encounter-attacker",
+        defenderParticipantId: "encounter-defender",
+        phase: "phase1",
+      },
+    });
+    expect(waitingPlayerProjectedTask.id).not.toBe(projectedTask.id);
+    expect(waitingPlayerProjectedTask.identity.executionGroupId).not.toBe(
+      projectedTask.identity.executionGroupId,
+    );
+    expect(waitingPlayerProjectedTask.identity).not.toHaveProperty("attackIndex");
+    expect(waitingPlayerProjectedTask.identity).not.toHaveProperty("attackModeId");
+    expect(waitingPlayerProjectedTask.identity).not.toHaveProperty("initiativeGroupId");
+    expect(waitingPlayerProjectedTask.identity).not.toHaveProperty("initiativeValue");
+    expect(waitingPlayerProjectedTask.identity).not.toHaveProperty("opportunityId");
+
+    const waitingInput = { ...contractInput, task: waitingPlayerProjectedTask };
+    expect(
+      projectPlayerCombatAttackContextAvailability({
+        ...waitingInput,
+        attackSourceAvailable: true,
+        historyRevision: "revision-2",
+        refreshPending: false,
+      }),
+    ).toMatchObject({ status: "stale" });
+    expect(buildPlayerCombatAttackModifierRequest(waitingInput)).toBeUndefined();
   });
 
   it.each([

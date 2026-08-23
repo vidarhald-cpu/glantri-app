@@ -2674,6 +2674,44 @@ describe("authorizeCombatProgressionTask", () => {
     });
     expect(playerAttackTask?.identity).toEqual(gmAttackTask?.identity);
 
+    const waitingPlayerProjection = projectCombatProgressionPresentation({
+      projection: buildCombatProgressionProjection(sequential),
+      viewer: {
+        controlledParticipantIds: new Set(["guard"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["hero", "guard"]),
+      },
+    });
+    const waitingPlayerAttackTask = waitingPlayerProjection.processes.flatMap((process) =>
+      process.stages.flatMap((stage) => stage.tasks),
+    )[0];
+    expect(waitingPlayerAttackTask).toMatchObject({
+      actorAccess: { combatant: false },
+      automation: { authority: { kind: "unknown" }, eligibility: "unsupported" },
+      identity: {
+        attackerParticipantId: "hero",
+        defenderParticipantId: "guard",
+        phase: "phase1",
+      },
+      kind: "attack",
+      owner: { participantId: "hero" },
+    });
+    expect(waitingPlayerAttackTask?.id).not.toBe(gmAttackTask?.id);
+    expect(waitingPlayerAttackTask?.identity.executionGroupId).not.toBe(
+      gmAttackTask?.identity.executionGroupId,
+    );
+    expect(waitingPlayerAttackTask?.identity).not.toHaveProperty("attackIndex");
+    expect(waitingPlayerAttackTask?.identity).not.toHaveProperty("attackModeId");
+    expect(waitingPlayerAttackTask?.identity).not.toHaveProperty("initiativeGroupId");
+    expect(waitingPlayerAttackTask?.identity).not.toHaveProperty("initiativeValue");
+    expect(waitingPlayerAttackTask?.identity).not.toHaveProperty("opportunityId");
+    expect(JSON.stringify(waitingPlayerAttackTask)).not.toContain(
+      "round:2:participant:hero:phase1:attack_1",
+    );
+    expect(waitingPlayerProjection.canonicalOperationalPosition?.task).toBe(
+      waitingPlayerAttackTask,
+    );
+
     const hiddenOpponentTask = projectCombatProgressionPresentation({
       projection: buildCombatProgressionProjection(sequential),
       viewer: {

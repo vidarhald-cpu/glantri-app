@@ -19236,6 +19236,51 @@ describe("scenarios route contract", () => {
       taskId: expect.any(String),
     });
 
+    mocks.requireAuthenticatedUser.mockResolvedValue({
+      ...mocks.playerUser,
+      email: "other-player@example.test",
+      id: "other-player",
+    });
+    const waitingPlayerHistoryResponse = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1/combat-history",
+    });
+    expect(
+      waitingPlayerHistoryResponse.statusCode,
+      JSON.stringify(waitingPlayerHistoryResponse.json()),
+    ).toBe(200);
+    const waitingPlayerHistory = waitingPlayerHistoryResponse.json().history;
+    const waitingPlayerAttackTask = waitingPlayerHistory.progression.processes
+      .flatMap((process: { stages: Array<{ tasks: Array<Record<string, unknown>> }> }) =>
+        process.stages.flatMap((stage) => stage.tasks),
+      )
+      .find((task: { kind?: string }) => task.kind === "attack");
+    expect(waitingPlayerHistory.currentAttackModifierValidation).toBeUndefined();
+    expect(waitingPlayerAttackTask).toMatchObject({
+      actorAccess: { combatant: false },
+      identity: {
+        attackerParticipantId: "encounter-participant-1",
+        defenderParticipantId: "encounter-participant-2",
+        phase: "phase1",
+      },
+      kind: "attack",
+      owner: { participantId: "encounter-participant-1" },
+    });
+    expect(waitingPlayerAttackTask.id).not.toBe(projectedAttackTask.id);
+    expect(waitingPlayerAttackTask.identity.executionGroupId).not.toBe(
+      projectedAttackTask.identity.executionGroupId,
+    );
+    expect(waitingPlayerAttackTask.identity).not.toHaveProperty("attackIndex");
+    expect(waitingPlayerAttackTask.identity).not.toHaveProperty("attackModeId");
+    expect(waitingPlayerAttackTask.identity).not.toHaveProperty("initiativeGroupId");
+    expect(waitingPlayerAttackTask.identity).not.toHaveProperty("initiativeValue");
+    expect(waitingPlayerAttackTask.identity).not.toHaveProperty("opportunityId");
+    expect(JSON.stringify(waitingPlayerAttackTask)).not.toContain(projectedAttackTask.id);
+    expect(JSON.stringify(waitingPlayerAttackTask)).not.toContain(
+      projectedAttackTask.identity.opportunityId,
+    );
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
+
     const beforeCommandCount = roundState.commands.length;
     const randomSpy = vi.spyOn(Math, "random").mockReturnValueOnce(0.95).mockReturnValue(0.5);
     const attackResponse = await app.inject({

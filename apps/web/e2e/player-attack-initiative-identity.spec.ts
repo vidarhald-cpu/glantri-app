@@ -231,6 +231,9 @@ test.describe("Player attack initiative identity", () => {
     const unrelatedContext = await browser.newContext({
       storageState: "e2e/.auth/unrelated.json",
     });
+    const anonymousContext = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
     const playerAUser = await json<{ user: { id: string } }>(
       await playerAContext.request.get(`${API_URL}/auth/me`),
     );
@@ -278,13 +281,18 @@ test.describe("Player attack initiative identity", () => {
         { data: { characterId: "smoke-char-00002", controlledByUserId: playerBUser.user.id } },
       ),
     );
+    let participantARevision: string | undefined;
     for (const participantId of [participantA.participant.id, participantB.participant.id]) {
-      await json(
+      const refreshed = await json<{ participant: { id: string; updatedAt: string } }>(
         await gmPage.request.post(
           `${API_URL}/scenarios/${scenario.scenario.id}/participants/${participantId}/refresh-character-equipment`,
         ),
       );
+      if (refreshed.participant.id === participantA.participant.id) {
+        participantARevision = refreshed.participant.updatedAt;
+      }
     }
+    expect(participantARevision).toBeTruthy();
     const sentinel = await json<{ participant: { id: string } }>(
       await gmPage.request.post(
         `${API_URL}/scenarios/${scenario.scenario.id}/participants/entity`,
@@ -392,14 +400,176 @@ test.describe("Player attack initiative identity", () => {
     );
     expect(playerHistory.ok(), await playerHistory.text()).toBe(true);
     const playerHistoryText = await playerHistory.text();
+    const playerHistoryBody = JSON.parse(playerHistoryText) as {
+      history: {
+        currentAttackModifierValidation?: Record<string, unknown>;
+        progression: {
+          processes: Array<{
+            stages: Array<{ tasks: Array<Record<string, unknown>> }>;
+          }>;
+        };
+      };
+    };
+    const findAttackTask = (history: typeof playerHistoryBody.history) =>
+      history.progression.processes
+        .flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+        .find((task) => task.kind === "attack");
+    const playerAAttackTask = findAttackTask(playerHistoryBody.history);
+    const playerAValidation = playerHistoryBody.history.currentAttackModifierValidation;
+    expect(playerAAttackTask).toMatchObject({
+      actorAccess: { combatant: true },
+      identity: {
+        attackIndex: 1,
+        attackerParticipantId: encounterParticipantIds.attackerAId,
+        defenderParticipantId: encounterParticipantIds.sentinelId,
+        initiativeGroupId: expect.stringContaining(":initiative:7"),
+        initiativeValue: 7,
+        opportunityId: expect.stringContaining(":attack_1"),
+      },
+    });
+    expect(playerAValidation).toMatchObject({
+      attackContextAvailability: "complete",
+      initiativeGroupId: expect.stringContaining(":initiative:7"),
+      initiativeValue: 7,
+      taskId: playerAAttackTask?.id,
+    });
     expect(playerHistoryText).not.toContain(hiddenWitness.participant.id);
     expect(playerHistoryText).not.toContain(`Hidden initiative witness ${suffix}`);
     expect(playerHistoryText).not.toContain("defenderCalculation");
     expect(playerHistoryText).not.toContain("defenderInventory");
+
+    const playerBHistoryResponse = await playerBContext.request.get(
+      `${API_URL}/encounters/${encounterId}/combat-history`,
+    );
+    expect(playerBHistoryResponse.ok(), await playerBHistoryResponse.text()).toBe(true);
+    const playerBHistoryText = await playerBHistoryResponse.text();
+    const playerBHistoryBody = JSON.parse(playerBHistoryText) as typeof playerHistoryBody;
+    const playerBAttackTask = findAttackTask(playerBHistoryBody.history);
+    expect(playerBHistoryBody.history.currentAttackModifierValidation).toBeUndefined();
+    expect(playerBAttackTask).toMatchObject({
+      actorAccess: { combatant: false },
+      automation: { authority: { kind: "unknown" }, eligibility: "unsupported" },
+      identity: {
+        attackerParticipantId: encounterParticipantIds.attackerAId,
+        defenderParticipantId: encounterParticipantIds.sentinelId,
+        phase: "phase1",
+      },
+    });
+    expect(playerBAttackTask?.id).not.toBe(playerAAttackTask?.id);
+    expect((playerBAttackTask?.identity as Record<string, unknown>).executionGroupId).not.toBe(
+      (playerAAttackTask?.identity as Record<string, unknown>).executionGroupId,
+    );
+    for (const actionableField of [
+      "attackIndex",
+      "attackModeId",
+      "initiativeGroupId",
+      "initiativeValue",
+      "opportunityId",
+      "weaponSourceId",
+      "weaponTemplateId",
+    ]) {
+      expect(playerBAttackTask?.identity).not.toHaveProperty(actionableField);
+    }
+    expect(JSON.stringify(playerBAttackTask)).not.toContain(String(playerAAttackTask?.id));
+    expect(JSON.stringify(playerBAttackTask)).not.toContain(
+      String((playerAAttackTask?.identity as Record<string, unknown>).opportunityId),
+    );
+    expect(playerBHistoryText).not.toContain(hiddenWitness.participant.id);
+    expect(playerBHistoryText).not.toContain(`Hidden initiative witness ${suffix}`);
+    expect(playerBHistoryText).not.toContain("defenderCalculation");
+    expect(playerBHistoryText).not.toContain("defenderInventory");
+
     const foreignProbe = await unrelatedContext.request.get(
       `${API_URL}/encounters/${encounterId}/combat-history`,
     );
     expect(foreignProbe.status()).toBe(404);
+    const anonymousProbe = await anonymousContext.request.get(
+      `${API_URL}/encounters/${encounterId}/combat-history`,
+    );
+    expect(anonymousProbe.status()).toBe(401);
+
+    const waitingPlayerPage = await playerBContext.newPage();
+    await waitingPlayerPage.goto(
+      `/campaigns/${campaign.campaign.id}/scenarios/${scenario.scenario.id}/player/combat`,
+    );
+    await expect(waitingPlayerPage.getByRole("button", { name: /Roll.*attack/i })).toHaveCount(0);
+    await expect(waitingPlayerPage.getByText(`Hidden initiative witness ${suffix}`)).toHaveCount(0);
+    await waitingPlayerPage.reload();
+    await waitingPlayerPage.waitForTimeout(2_500);
+    await expect(waitingPlayerPage.getByRole("button", { name: /Roll.*attack/i })).toHaveCount(0);
+    await waitingPlayerPage.close();
+    const reconnectedWaitingPlayerPage = await playerBContext.newPage();
+    await reconnectedWaitingPlayerPage.goto(
+      `/campaigns/${campaign.campaign.id}/scenarios/${scenario.scenario.id}/player/combat`,
+    );
+    await expect(
+      reconnectedWaitingPlayerPage.getByRole("button", { name: /Roll.*attack/i }),
+    ).toHaveCount(0);
+    await expect(
+      reconnectedWaitingPlayerPage.getByText(`Hidden initiative witness ${suffix}`),
+    ).toHaveCount(0);
+    await reconnectedWaitingPlayerPage.close();
+
+    const playerBPolledHistoryResponse = await playerBContext.request.get(
+      `${API_URL}/encounters/${encounterId}/combat-history`,
+    );
+    const playerBPolledHistory = (
+      await json<typeof playerHistoryBody>(playerBPolledHistoryResponse)
+    ).history;
+    expect(playerBPolledHistory.currentAttackModifierValidation).toBeUndefined();
+    expect(findAttackTask(playerBPolledHistory)?.identity).not.toHaveProperty("initiativeGroupId");
+
+    for (const context of [unrelatedContext, anonymousContext]) {
+      const deniedPage = await context.newPage();
+      await deniedPage.goto(
+        `/campaigns/${campaign.campaign.id}/scenarios/${scenario.scenario.id}/player/combat`,
+      );
+      await expect(deniedPage.getByRole("button", { name: /Roll.*attack/i })).toHaveCount(0);
+      await expect(deniedPage.getByText(`Hidden initiative witness ${suffix}`)).toHaveCount(0);
+      await deniedPage.close();
+    }
+
+    const before = await json<{
+      encounter: { combatRoundState: CombatRoundState; updatedAt: string };
+    }>(await gmPage.request.get(`${API_URL}/encounters/${encounterId}`));
+    const beforeCommandCount = before.encounter.combatRoundState.commands.length;
+    const actorIdentity = playerAAttackTask?.identity as Record<string, unknown>;
+    const forgedPayload = {
+      actionId: actorIdentity.actionId,
+      attackIndex: actorIdentity.attackIndex,
+      attackModeId: actorIdentity.attackModeId,
+      declarationId: actorIdentity.declarationId,
+      defenderParticipantId: actorIdentity.defenderParticipantId,
+      effectCutoffInitiativeGroupId: playerAValidation?.effectCutoffInitiativeGroupId,
+      executionGroupId: playerAAttackTask?.executionGroupId,
+      expectedParticipantRevision: participantARevision,
+      expectedRevision: playerAValidation?.expectedRevision,
+      initiativeGroupId: playerAValidation?.initiativeGroupId,
+      initiativeValue: playerAValidation?.initiativeValue,
+      modifierValidationTaskId: playerAValidation?.taskId,
+      opportunityId: actorIdentity.opportunityId,
+      phase: actorIdentity.phase,
+      scenarioParticipantId: participantA.participant.id,
+      taskId: playerAAttackTask?.id,
+      weaponInstanceId: actorIdentity.weaponInstanceId,
+      weaponSourceId: actorIdentity.weaponSourceId,
+      weaponSourceSlot: actorIdentity.weaponSourceSlot,
+      weaponTemplateId: actorIdentity.weaponTemplateId,
+    };
+    const forgedAttackResponse = await playerBContext.request.post(
+      `${API_URL}/encounters/${encounterId}/combat-round/roll-attack`,
+      { data: forgedPayload },
+    );
+    expect(forgedAttackResponse.status()).toBe(403);
+    const afterForge = await json<{ encounter: { combatRoundState: CombatRoundState } }>(
+      await gmPage.request.get(`${API_URL}/encounters/${encounterId}`),
+    );
+    expect(afterForge.encounter.combatRoundState.commands).toHaveLength(beforeCommandCount);
+    expect(
+      afterForge.encounter.combatRoundState.participants.find(
+        (participant) => participant.participantId === encounterParticipantIds.attackerAId,
+      )?.attackResults.phase1,
+    ).toBeUndefined();
 
     const playerPage = await playerAContext.newPage();
     await playerPage.goto(
@@ -414,10 +584,6 @@ test.describe("Player attack initiative identity", () => {
     await expect(rollAttack).toBeEnabled();
     await expect(playerPage.getByText(`Hidden initiative witness ${suffix}`)).toHaveCount(0);
 
-    const before = await json<{
-      encounter: { combatRoundState: CombatRoundState; updatedAt: string };
-    }>(await gmPage.request.get(`${API_URL}/encounters/${encounterId}`));
-    const beforeCommandCount = before.encounter.combatRoundState.commands.length;
     const attackRequests: Array<Record<string, unknown>> = [];
     playerPage.on("request", (request) => {
       if (request.method() === "POST" && request.url().includes("/combat-round/roll-attack")) {
@@ -470,9 +636,116 @@ test.describe("Player attack initiative identity", () => {
     );
     expect(afterReplay.encounter.combatRoundState.commands).toHaveLength(beforeCommandCount + 1);
 
+    const completedPlayerEncounter = await json<{ encounter: EncounterSession }>(
+      await gmPage.request.get(`${API_URL}/encounters/${encounterId}`),
+    );
+    await json(
+      await gmPage.request.put(`${API_URL}/encounters/${encounterId}`, {
+        data: {
+          expectedRevision: completedPlayerEncounter.encounter.updatedAt,
+          session: {
+            ...completedPlayerEncounter.encounter,
+            status: "complete",
+          },
+        },
+      }),
+    );
+
+    const gmEncounterId = `issue-352-gm-parity-${suffix}`;
+    const gmEncounterCreatedAt = new Date().toISOString();
+    const gmCreatedEncounter = await json<{ encounter: EncounterSession }>(
+      await gmPage.request.post(`${API_URL}/scenarios/${scenario.scenario.id}/encounters`, {
+        data: {
+          session: {
+            campaignId: campaign.campaign.id,
+            combatRoundState,
+            createdAt: gmEncounterCreatedAt,
+            currentRound: 1,
+            id: gmEncounterId,
+            kind: "combat",
+            participantMembershipMode: "explicit",
+            participants: createdEncounter.encounter.participants,
+            scenarioId: scenario.scenario.id,
+            status: "active",
+            title: `Issue 352 GM parity ${suffix}`,
+            updatedAt: gmEncounterCreatedAt,
+          },
+        },
+      }),
+    );
+    await json(
+      await gmPage.request.put(`${API_URL}/encounters/${gmEncounterId}`, {
+        data: {
+          expectedRevision: gmCreatedEncounter.encounter.updatedAt,
+          session: {
+            ...gmCreatedEncounter.encounter,
+            combatRoundState,
+            currentRound: 1,
+            status: "active",
+          },
+        },
+      }),
+    );
+    const gmHistoryBody = await json<typeof playerHistoryBody>(
+      await gmPage.request.get(`${API_URL}/encounters/${gmEncounterId}/combat-history`),
+    );
+    const gmAttackTask = findAttackTask(gmHistoryBody.history);
+    const gmValidation = gmHistoryBody.history.currentAttackModifierValidation;
+    expect(gmAttackTask).toMatchObject({
+      actorAccess: { combatant: true, gm: true },
+      id: playerAAttackTask?.id,
+      identity: playerAAttackTask?.identity,
+    });
+    expect(gmValidation).toMatchObject({
+      attackContextAvailability: "complete",
+      initiativeGroupId: expect.stringContaining(":initiative:7"),
+      initiativeValue: 7,
+      taskId: gmAttackTask?.id,
+    });
+    const gmIdentity = gmAttackTask?.identity as Record<string, unknown>;
+    const gmAttackPayload = {
+      ...attackRequests[0],
+      actionId: gmIdentity.actionId,
+      attackIndex: gmIdentity.attackIndex,
+      attackModeId: gmIdentity.attackModeId,
+      declarationId: gmIdentity.declarationId,
+      defenderParticipantId: gmIdentity.defenderParticipantId,
+      effectCutoffInitiativeGroupId: gmValidation?.effectCutoffInitiativeGroupId,
+      executionGroupId: gmAttackTask?.executionGroupId,
+      expectedRevision: gmValidation?.expectedRevision,
+      initiativeGroupId: gmValidation?.initiativeGroupId,
+      initiativeValue: gmValidation?.initiativeValue,
+      modifierValidationTaskId: gmValidation?.taskId,
+      opportunityId: gmIdentity.opportunityId,
+      taskId: gmAttackTask?.id,
+    };
+    const gmBefore = await json<{ encounter: { combatRoundState: CombatRoundState } }>(
+      await gmPage.request.get(`${API_URL}/encounters/${gmEncounterId}`),
+    );
+    const gmAttackResponse = await gmPage.request.post(
+      `${API_URL}/encounters/${gmEncounterId}/combat-round/roll-attack`,
+      { data: gmAttackPayload },
+    );
+    expect(gmAttackResponse.ok(), await gmAttackResponse.text()).toBe(true);
+    const gmAfter = await json<{ encounter: { combatRoundState: CombatRoundState } }>(
+      await gmPage.request.get(`${API_URL}/encounters/${gmEncounterId}`),
+    );
+    expect(gmAfter.encounter.combatRoundState.commands).toHaveLength(
+      gmBefore.encounter.combatRoundState.commands.length + 1,
+    );
+    expect(gmAfter.encounter.combatRoundState.commands.at(-1)).toMatchObject({
+      participantId: encounterParticipantIds.attackerAId,
+      type: "roll_attack",
+    });
+    expect(gmAfter.encounter.combatRoundState.currentCursor).toMatchObject({
+      participantId: encounterParticipantIds.sentinelId,
+      step: "P1",
+    });
+
     await playerPage.close();
     await playerAContext.close();
     await playerBContext.close();
     await unrelatedContext.close();
+    await anonymousContext.close();
   });
 });
