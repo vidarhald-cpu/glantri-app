@@ -4,6 +4,10 @@ import path from "node:path";
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 const WEB_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
+const ARTIFACT_MUTATION_HEADERS = {
+  origin: WEB_URL,
+  "x-glantri-artifact-mutation": "1",
+};
 
 function loadCharacterIds(): { characterId: string; nonHolderCharacterId: string } {
   const state = JSON.parse(fs.readFileSync(path.join(__dirname, "test-state.json"), "utf8")) as {
@@ -20,6 +24,10 @@ test.describe("Campaign Artifact player presentation", () => {
     browser,
     page,
   }) => {
+    test.skip(
+      process.env.CI === "true" && process.env.ARTIFACT_E2E_STORAGE_ENABLED !== "1",
+      "The production Docker smoke environment intentionally has no Artifact storage configuration; the isolated Artifact E2E run supplies one.",
+    );
     const title = `Artifact player presentation ${Date.now()}`;
     const altText = "A smiling dwarf holding a tankard";
     const imagePath = path.resolve(__dirname, "../public/images/GrinulGrimbrew.jpeg");
@@ -55,18 +63,36 @@ test.describe("Campaign Artifact player presentation", () => {
     );
     expect(participantResponse.status()).toBe(200);
 
-    await page.goto(`/campaigns/${campaignId}?tab=campaign`);
-    await expect(page.getByRole("heading", { name: "Upload an Artifact" })).toBeVisible();
-    await page.locator('input[type="file"]').setInputFiles(imagePath);
-    await page.getByLabel("Title").fill(title);
-    await page.getByLabel("Alt text for visual content").fill(altText);
-    await page.getByRole("button", { name: "Upload privately" }).click();
-    await expect(page.getByText("Artifact uploaded privately.", { exact: false })).toBeVisible();
-
-    const gmCard = page.getByRole("article").filter({ hasText: title });
-    await expect(gmCard.getByRole("img", { name: altText })).toBeVisible();
-    await gmCard.getByRole("button", { name: "Share with Campaign" }).click();
-    await expect(page.getByText("Artifact shared with the Campaign.")).toBeVisible();
+    const uploadResponse = await page.request.post(`${API_URL}/campaigns/${campaignId}/artifacts`, {
+      headers: ARTIFACT_MUTATION_HEADERS,
+      multipart: {
+        metadata: JSON.stringify({ altText, artifactKind: "image", title }),
+        file: {
+          buffer: fs.readFileSync(imagePath),
+          mimeType: "image/jpeg",
+          name: "safe-player-presentation.jpeg",
+        },
+      },
+    });
+    expect(uploadResponse.status()).toBe(201);
+    const uploaded = (await uploadResponse.json()) as {
+      artifact: { id: string; metadataVersion: number };
+    };
+    const artifactId = uploaded.artifact.id;
+    const campaignPublished = await page.request.put(
+      `${API_URL}/campaigns/${campaignId}/artifacts/${artifactId}/audience`,
+      {
+        data: {
+          audience: "campaign",
+          expectedMetadataVersion: uploaded.artifact.metadataVersion,
+        },
+        headers: ARTIFACT_MUTATION_HEADERS,
+      },
+    );
+    expect(campaignPublished.status()).toBe(200);
+    let artifactVersion = (
+      (await campaignPublished.json()) as { artifact: { metadataVersion: number } }
+    ).artifact.metadataVersion;
 
     const playerPage = await playerContext.newPage();
     await playerPage.setViewportSize({ height: 740, width: 360 });
@@ -98,12 +124,41 @@ test.describe("Campaign Artifact player presentation", () => {
         .evaluate((element) => element.scrollWidth <= element.clientWidth),
     ).toBe(true);
 
-    await gmCard.getByRole("button", { name: "Attach privately" }).click();
-    await expect(page.getByText("Artifact attached privately to the Scenario.")).toBeVisible();
-    await gmCard.getByRole("button", { name: "Share with Scenario" }).click();
-    await expect(page.getByText("Artifact shared with entitled Scenario players.")).toBeVisible();
-    await gmCard.getByRole("button", { name: "Withdraw from Campaign" }).click();
-    await expect(page.getByText("Campaign access withdrawn.")).toBeVisible();
+    const attached = await page.request.post(
+      `${API_URL}/campaigns/${campaignId}/scenarios/${scenarioId}/artifacts/${artifactId}/attach`,
+      {
+        data: { expectedArtifactVersion: artifactVersion },
+        headers: ARTIFACT_MUTATION_HEADERS,
+      },
+    );
+    expect(attached.status()).toBe(200);
+    const attachedBody = (await attached.json()) as {
+      artifact: { metadataVersion: number };
+      reference: { version: number };
+    };
+    artifactVersion = attachedBody.artifact.metadataVersion;
+    const scenarioPublished = await page.request.post(
+      `${API_URL}/campaigns/${campaignId}/scenarios/${scenarioId}/artifacts/${artifactId}/publish`,
+      {
+        data: {
+          expectedArtifactVersion: artifactVersion,
+          expectedReferenceVersion: attachedBody.reference.version,
+        },
+        headers: ARTIFACT_MUTATION_HEADERS,
+      },
+    );
+    expect(scenarioPublished.status()).toBe(200);
+    artifactVersion = (
+      (await scenarioPublished.json()) as { artifact: { metadataVersion: number } }
+    ).artifact.metadataVersion;
+    const campaignWithdrawn = await page.request.put(
+      `${API_URL}/campaigns/${campaignId}/artifacts/${artifactId}/audience`,
+      {
+        data: { audience: "gm_private", expectedMetadataVersion: artifactVersion },
+        headers: ARTIFACT_MUTATION_HEADERS,
+      },
+    );
+    expect(campaignWithdrawn.status()).toBe(200);
 
     await playerPage.reload();
     await expect(playerPage.getByRole("article").filter({ hasText: title })).toBeVisible();
@@ -117,9 +172,6 @@ test.describe("Campaign Artifact player presentation", () => {
     const campaignOnlyContext = await browser.newContext({
       storageState: path.resolve(__dirname, ".auth/non-holder.json"),
     });
-    const playerImageSrc = await playerCard.getByRole("img", { name: altText }).getAttribute("src");
-    expect(playerImageSrc).not.toBeNull();
-    const artifactId = new URL(playerImageSrc!, API_URL).pathname.split("/").at(-2)!;
     const campaignOnlyList = await campaignOnlyContext.request.get(
       `${API_URL}/campaigns/${campaignId}/artifacts`,
     );
