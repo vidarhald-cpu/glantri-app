@@ -22,7 +22,11 @@ const task = {
   expectedCommand: "roll_attack",
   id: "attack-task",
   identity: {
+    attackerParticipantId: "combatant-attacker",
+    defenderParticipantId: "combatant-defender",
     executionGroupId: "attack-group",
+    initiativeGroupId: "round:1:phase:phase1:initiative:7",
+    initiativeValue: 7,
     opportunityId: "attack-opportunity",
     phase: "phase1",
   },
@@ -47,8 +51,11 @@ const validation = {
   attackerModifierFingerprint: "v1:attacker",
   attackerParticipantId: "combatant-attacker",
   defenderParticipantId: "combatant-defender",
+  effectCutoffInitiativeGroupId: task.identity.initiativeGroupId,
   encounterId: "encounter-1",
   expectedRevision: "revision-2",
+  initiativeGroupId: task.identity.initiativeGroupId,
+  initiativeValue: task.identity.initiativeValue,
   obSkillRaw: 0,
   opportunityId: "attack-opportunity",
   pairKey: "participant-attacker::participant-defender",
@@ -93,6 +100,29 @@ describe("player combat attack-context availability", () => {
         ...completeInput,
         defenderParticipantId: "combatant-someone-else",
       }),
+    ).toMatchObject({ status: "stale" });
+  });
+
+  it.each([
+    ["task", { validation: { ...validation, taskId: "future-attack-task" } }],
+    ["opportunity", { validation: { ...validation, opportunityId: "future-opportunity" } }],
+    [
+      "initiative group",
+      { validation: { ...validation, initiativeGroupId: "round:1:phase:phase1:initiative:6" } },
+    ],
+    ["initiative value", { validation: { ...validation, initiativeValue: 6 } }],
+    [
+      "effect cutoff",
+      {
+        validation: {
+          ...validation,
+          effectCutoffInitiativeGroupId: "round:1:phase:phase1:initiative:6",
+        },
+      },
+    ],
+  ])("treats a mismatched %s identity as stale", (_label, override) => {
+    expect(
+      projectPlayerCombatAttackContextAvailability({ ...completeInput, ...override }),
     ).toMatchObject({ status: "stale" });
   });
 

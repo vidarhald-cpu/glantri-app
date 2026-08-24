@@ -19205,33 +19205,122 @@ describe("scenarios route contract", () => {
       url: "/encounters/encounter-1/combat-history",
     });
     const validation = historyResponse.json().history.currentAttackModifierValidation;
+    const projectedAttackTask = historyResponse
+      .json()
+      .history.progression.processes.flatMap(
+        (process: { stages: Array<{ tasks: Array<Record<string, unknown>> }> }) =>
+          process.stages.flatMap((stage) => stage.tasks),
+      )
+      .find((task: { kind?: string }) => task.kind === "attack");
+    expect(projectedAttackTask).toMatchObject({
+      identity: {
+        attackIndex: 1,
+        attackerParticipantId: "encounter-participant-1",
+        defenderParticipantId: "encounter-participant-2",
+        initiativeGroupId: "round:1:phase:phase1:initiative:6",
+        initiativeValue: 6,
+        opportunityId: "round:1:participant:encounter-participant-1:phase1:attack_1",
+      },
+      kind: "attack",
+      owner: { participantId: "encounter-participant-1" },
+    });
     expect(validation).toMatchObject({
       attackContextAvailability: "complete",
       attackerParticipantId: "encounter-participant-1",
       defenderParticipantId: "encounter-participant-2",
+      effectCutoffInitiativeGroupId: projectedAttackTask.identity.initiativeGroupId,
       expectedRevision: expect.any(String),
+      initiativeGroupId: projectedAttackTask.identity.initiativeGroupId,
+      initiativeValue: projectedAttackTask.identity.initiativeValue,
+      opportunityId: projectedAttackTask.identity.opportunityId,
       taskId: expect.any(String),
     });
 
+    mocks.requireAuthenticatedUser.mockResolvedValue({
+      ...mocks.playerUser,
+      email: "other-player@example.test",
+      id: "other-player",
+    });
+    const waitingPlayerHistoryResponse = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1/combat-history",
+    });
+    expect(
+      waitingPlayerHistoryResponse.statusCode,
+      JSON.stringify(waitingPlayerHistoryResponse.json()),
+    ).toBe(200);
+    const waitingPlayerHistory = waitingPlayerHistoryResponse.json().history;
+    const waitingPlayerAttackTask = waitingPlayerHistory.progression.processes
+      .flatMap((process: { stages: Array<{ tasks: Array<Record<string, unknown>> }> }) =>
+        process.stages.flatMap((stage) => stage.tasks),
+      )
+      .find((task: { kind?: string }) => task.kind === "attack");
+    expect(waitingPlayerHistory.currentAttackModifierValidation).toBeUndefined();
+    expect(waitingPlayerAttackTask).toMatchObject({
+      actorAccess: { combatant: false },
+      identity: {
+        attackerParticipantId: "encounter-participant-1",
+        defenderParticipantId: "encounter-participant-2",
+        phase: "phase1",
+      },
+      kind: "attack",
+      owner: { participantId: "encounter-participant-1" },
+    });
+    expect(waitingPlayerAttackTask.id).not.toBe(projectedAttackTask.id);
+    expect(waitingPlayerAttackTask.identity.executionGroupId).not.toBe(
+      projectedAttackTask.identity.executionGroupId,
+    );
+    expect(waitingPlayerAttackTask.identity).not.toHaveProperty("attackIndex");
+    expect(waitingPlayerAttackTask.identity).not.toHaveProperty("attackModeId");
+    expect(waitingPlayerAttackTask.identity).not.toHaveProperty("initiativeGroupId");
+    expect(waitingPlayerAttackTask.identity).not.toHaveProperty("initiativeValue");
+    expect(waitingPlayerAttackTask.identity).not.toHaveProperty("opportunityId");
+    expect(JSON.stringify(waitingPlayerAttackTask)).not.toContain(projectedAttackTask.id);
+    expect(JSON.stringify(waitingPlayerAttackTask)).not.toContain(
+      projectedAttackTask.identity.opportunityId,
+    );
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
+
+    const beforeCommandCount = roundState.commands.length;
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValueOnce(0.95).mockReturnValue(0.5);
     const attackResponse = await app.inject({
       method: "POST",
       payload: {
         attackerModifierFingerprint: validation.attackerModifierFingerprint,
         defenderScenarioParticipantId: "participant-2",
+        effectCutoffInitiativeGroupId: validation.effectCutoffInitiativeGroupId,
+        executionGroupId: projectedAttackTask.executionGroupId,
         expectedRevision: validation.expectedRevision,
+        initiativeGroupId: validation.initiativeGroupId,
+        initiativeValue: validation.initiativeValue,
         modifierValidationTaskId: validation.taskId,
         ob: 10,
         obSkillRaw: validation.obSkillRaw,
+        opportunityId: projectedAttackTask.identity.opportunityId,
         phase: "phase1",
         scenarioParticipantId: "participant-1",
+        taskId: projectedAttackTask.id,
       },
       url: "/encounters/encounter-1/combat-round/roll-attack",
     });
+    randomSpy.mockRestore();
 
     await app.close();
 
     expect(attackResponse.statusCode).toBe(200);
     expect(mocks.encounterService.updateEncounter).toHaveBeenCalledTimes(1);
+    const updatedState = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session
+      .combatRoundState as CombatRoundState;
+    expect(updatedState.commands).toHaveLength(beforeCommandCount + 1);
+    expect(updatedState.commands.at(-1)).toMatchObject({
+      participantId: "encounter-participant-1",
+      type: "roll_attack",
+    });
+    expect(updatedState.participants[0]?.attackResults.phase1).toBeDefined();
+    expect(updatedState.currentCursor).toMatchObject({
+      participantId: "encounter-participant-2",
+      step: "P1",
+    });
   });
 
   it("ignores legacy client defender fingerprints and resolves the contribution set server-side", async () => {

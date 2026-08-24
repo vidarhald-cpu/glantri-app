@@ -22,9 +22,12 @@ const task = {
   expectedCommand: "roll_attack",
   id: "attack-task",
   identity: {
+    attackerParticipantId: "encounter-attacker",
+    defenderParticipantId: "encounter-defender",
     executionGroupId: "attack-group",
     initiativeGroupId: "round:1:phase:phase1:initiative:7",
     initiativeValue: 7,
+    opportunityId: "attack-opportunity",
     phase: "phase1",
   },
   kind: "attack",
@@ -89,12 +92,23 @@ describe("buildPlayerCombatAttackModifierRequest", () => {
     ],
     ["revision", { encounterRevision: "2026-07-20T09:59:59.000Z" }],
     ["task", { task: { ...task, id: "future-attack-task" } }],
+    ["opportunity", { validation: { ...validation, opportunityId: "future-attack-opportunity" } }],
     [
       "initiative group",
       {
         validation: {
           ...validation,
           initiativeGroupId: "round:1:phase:phase1:initiative:6",
+        },
+      },
+    ],
+    ["initiative value", { validation: { ...validation, initiativeValue: 6 } }],
+    [
+      "effect cutoff",
+      {
+        validation: {
+          ...validation,
+          effectCutoffInitiativeGroupId: "round:1:phase:phase1:initiative:6",
         },
       },
     ],

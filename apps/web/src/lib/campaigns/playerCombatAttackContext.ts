@@ -3,6 +3,8 @@ import type {
   CombatProgressionPresentationTask,
 } from "@glantri/domain";
 
+import { hasMatchingPlayerCombatAttackIdentity } from "./playerCombatAttackRequest";
+
 export type PlayerCombatAttackContextAvailability =
   | { status: "not_applicable" }
   | { message: "Loading attack context…"; status: "loading" }
@@ -59,15 +61,7 @@ export function projectPlayerCombatAttackContextAvailability(input: {
       status: "unavailable_required",
     };
   }
-  if (
-    validation.expectedRevision !== input.encounterRevision ||
-    validation.encounterId !== input.encounterId ||
-    validation.taskId !== task.id ||
-    validation.opportunityId !== task.identity.opportunityId ||
-    validation.phase !== task.identity.phase ||
-    validation.attackerParticipantId !== input.attackerParticipantId ||
-    validation.defenderParticipantId !== input.defenderParticipantId
-  ) {
+  if (!hasMatchingPlayerCombatAttackIdentity({ ...input, phase: task.identity.phase })) {
     return { message: "Attack context changed. Refreshing…", status: "stale" };
   }
   if (validation.attackContextAvailability !== "complete") {
