@@ -93,7 +93,7 @@ function formatEffectValue(effect: CombatSituationLifecycleEffect): string | und
     case "damage":
       return `${effect.payload.value} HP`;
     case "bleed_rate":
-      return `${effect.payload.value} HP/round`;
+      return `${effect.payload.value}/10 HP per round`;
     case "integer_count":
       return String(effect.payload.value);
   }

@@ -7683,9 +7683,27 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         roundState: state,
         scenarioParticipants,
       });
+      const continuingConsequences = membership.participants.flatMap((participant) => {
+        const scenarioParticipant = findScenarioParticipantForEncounterParticipant({
+          encounterParticipant: participant,
+          scenarioParticipants,
+        });
+        if (!scenarioParticipant) return [];
+
+        return [
+          {
+            effects: (scenarioParticipant.state.combatEffects?.effects ?? []).flatMap((effect) =>
+              effect.canonicalLifecycle ? [effect.canonicalLifecycle] : [],
+            ),
+            ownerParticipantId: scenarioParticipant.id,
+            participantId: participant.id,
+          },
+        ];
+      });
 
       return {
         history: projectCombatHistory({
+          continuingConsequences,
           currentAttackModifierValidation,
           currentParryModifierValidation,
           participants,

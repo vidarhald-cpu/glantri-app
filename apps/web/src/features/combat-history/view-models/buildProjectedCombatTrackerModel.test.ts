@@ -51,6 +51,7 @@ function history(events: ProjectedCombatHistoryEvent[]): CombatHistoryProjection
   return {
     activeRound: { events, observationRelationships: [], roundNumber: 1, snapshots: [snapshot()] },
     archivedRounds: [],
+    currentConsequences: [],
     rows: [{ displayName: "Aria", participantId: "aria" }],
   };
 }

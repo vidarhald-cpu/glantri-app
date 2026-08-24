@@ -68,6 +68,16 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("revision: encounterSession.updatedAt");
   });
 
+  it("renders revision-bound continuing consequences for only the selected participant", () => {
+    const source = readSource();
+
+    expect(source).toContain("combatHistory?.currentConsequences");
+    expect(source).toContain(
+      "consequence.participantId === selectedRoundParticipant?.participantId",
+    );
+    expect(source).toContain("<PlayerCombatCurrentConsequences consequences={currentConsequences}");
+  });
+
   it("uses only the server player projection for non-GM participant and target visibility", () => {
     const source = readSource();
 

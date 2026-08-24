@@ -7,6 +7,7 @@ import {
   PlayerCombatActionSelectorPanel,
   PlayerCombatAttackModeSelector,
   PlayerCombatCommittedDefenseReview,
+  PlayerCombatCurrentConsequences,
   PlayerCombatModifierPanel,
   PlayerCombatObservationProgress,
   PlayerCombatOpponentSelector,
@@ -14,6 +15,42 @@ import {
 
 afterEach(() => {
   cleanup();
+});
+
+describe("PlayerCombatCurrentConsequences", () => {
+  it("updates the current consequence across polling without rendering private provenance", () => {
+    const consequence = {
+      detail: "External bleeding",
+      durationLabel: "Until cleared",
+      participantId: "encounter-participant-1",
+      summary: "Bleed 5/10 HP per round",
+    };
+    const { container, rerender } = render(
+      <PlayerCombatCurrentConsequences consequences={[consequence]} />,
+    );
+
+    expect(screen.getByRole("region", { name: "Current consequences" })).toBeInTheDocument();
+    expect(screen.getByText("Bleed 5/10 HP per round")).toBeInTheDocument();
+    expect(screen.getByText("Until cleared · External bleeding")).toBeInTheDocument();
+    [
+      "pointed_weapons|arm|12|03",
+      "private-critical-command",
+      "private-critical-effect",
+      "encounter-participant-1",
+    ].forEach((secret) => expect(container.textContent).not.toContain(secret));
+
+    rerender(
+      <PlayerCombatCurrentConsequences
+        consequences={[{ ...consequence, detail: "Bleeding continues" }]}
+      />,
+    );
+    expect(screen.getByText("Until cleared · Bleeding continues")).toBeInTheDocument();
+    expect(screen.queryByText("Until cleared · External bleeding")).not.toBeInTheDocument();
+
+    rerender(<PlayerCombatCurrentConsequences consequences={[]} />);
+    expect(screen.queryByRole("region", { name: "Current consequences" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Bleed 5/10 HP per round")).not.toBeInTheDocument();
+  });
 });
 
 describe("PlayerCombatActionSelectorPanel", () => {
