@@ -24,9 +24,17 @@ The API authenticates every metadata, publication, reference, and content operat
 
 Supported bytes are exactly PNG, JPEG, WebP, and PDF, at most 25 MiB. The server streams with bounded memory, validates declared type against signature, calculates SHA-256, rejects empty or unlisted/spoofed content, and compensates storage/database failure without a readable partial state. Original filenames are sanitized GM/audit metadata only and never influence keys, paths, logs, or response headers.
 
+Multipart acceptance is two-phase: the service stores a pending object under a known opaque key, but does not mark it ready until the complete multipart iterator has accepted every part and the request terminator. Parser failure, a forbidden trailing part, abort, validation failure, an ambiguous provider result, or ready-state commit failure deletes that known key idempotently and records retryable cleanup if deletion fails. A pending or failed row is never content-readable.
+
+An authorized content read verifies both stored length and the full SHA-256 digest through the storage port before returning a stream. A missing object, size mismatch, digest mismatch, or provider failure produces only the same sanitized recoverable storage response; integrity details and locators remain server-only.
+
 Player/common projections contain only safe identity, kind, deliberately shared title/description/alt text, and media type. They exclude storage provider/key/URL, legacy URL, original filename, digest, creator, provenance URI, audit, and hidden counts. Scenario publication snapshots its title/caption/alt presentation. Later metadata edits do not rewrite the snapshot.
 
 Lifecycle is `active | archived | deleted`; storage state is `pending | ready | failed | legacy_reference | deleted`; audience is `gm_private | campaign | scenario`. Metadata uses a positive optimistic version. Archive prevents new publication while preserving existing references. Delete requires Campaign and Scenario publication withdrawal, tombstones access immediately, and retries private object cleanup safely. An immutable GM-only audit records upload, metadata, audience, Scenario reference, lifecycle, deletion, and cleanup transitions without bytes or locators.
+
+Campaign publication and Scenario-reference publication are independent access channels. The persisted audience is the compatibility projection of their combined state: `campaign` while Campaign publication remains, otherwise `scenario` while any Scenario reference remains published, otherwise `gm_private`. Reference mutations reserve the Artifact metadata version transactionally, then recompute the projection from the persisted reference facts. Withdrawing one channel therefore cannot revoke the other, including stale or concurrent mutations.
+
+Visual Artifacts require non-empty safe alt text before either player channel can publish. Metadata removal is rejected while Campaign publication or any published Scenario reference remains, with the no-publication condition included in the optimistic database mutation to close races. Entitled players receive the safe common projection and authenticated content action in the Campaign workspace; players without Campaign or relevant Scenario access receive privacy-equivalent absence.
 
 ## Alternatives considered
 

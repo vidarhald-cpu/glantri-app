@@ -54,10 +54,10 @@ export class LocalArtifactBinaryStore implements ArtifactBinaryStore {
 
   async read(input: { key: string; signal?: AbortSignal }): Promise<ArtifactBinaryReadResult> {
     validateKey(input.key);
-    const details = await this.stat(input.key);
-    if (!details) throw new Error("Artifact object not found.");
+    const details = await stat(this.resolveKey(input.key));
+    if (!details.isFile()) throw new Error("Artifact object not found.");
     return {
-      byteSize: details.byteSize,
+      byteSize: details.size,
       content: createReadStream(this.resolveKey(input.key), { signal: input.signal }),
     };
   }
@@ -66,7 +66,10 @@ export class LocalArtifactBinaryStore implements ArtifactBinaryStore {
     validateKey(key);
     try {
       const details = await stat(this.resolveKey(key));
-      return details.isFile() ? { byteSize: details.size } : null;
+      if (!details.isFile()) return null;
+      const digest = createHash("sha256");
+      for await (const chunk of createReadStream(this.resolveKey(key))) digest.update(chunk);
+      return { byteSize: details.size, sha256Digest: digest.digest("hex") };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw error;

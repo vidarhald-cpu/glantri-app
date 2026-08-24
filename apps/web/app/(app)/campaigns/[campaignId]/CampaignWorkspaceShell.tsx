@@ -58,6 +58,7 @@ import { selectLatestCombatViewRevision } from "@/features/combat-history";
 import { loadCampaignWorkspaceInitialData } from "@/lib/campaigns/campaignWorkspaceLoading";
 import { pollGmCombatSnapshot } from "@/lib/campaigns/gmCombatRefresh";
 import CampaignItemsWorkspace from "@/features/equipment/campaign-items/CampaignItemsWorkspace";
+import { ArtifactPanel } from "@/features/artifacts";
 
 interface CampaignWorkspaceShellProps {
   campaignId: string;
@@ -688,31 +689,35 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
               onWorkspaceScenariosChanged={setScenarios}
             />
           ) : (
-            <section style={panelStyle}>
-              <h2 style={{ margin: 0 }}>{accessibleCampaign?.name ?? "Campaign"}</h2>
-              <div>
-                {accessibleCampaign?.description || "No campaign description has been written yet."}
-              </div>
-              <section style={{ display: "grid", gap: "0.5rem" }}>
-                <h3 style={{ margin: 0 }}>Available scenarios</h3>
-                {scenarios.length > 0 ? (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                    {scenarios.map((scenario) => (
-                      <Link
-                        key={scenario.id}
-                        href={buildWorkspaceHref({
-                          scenarioId: scenario.id,
-                          tab: "scenario",
-                        })}
-                      >
-                        {scenario.name}
-                      </Link>
-                    ))}
-                  </div>
-                ) : (
-                  <div>No active scenario is currently available.</div>
-                )}
+            <section style={{ display: "grid", gap: "1rem" }}>
+              <section style={panelStyle}>
+                <h2 style={{ margin: 0 }}>{accessibleCampaign?.name ?? "Campaign"}</h2>
+                <div>
+                  {accessibleCampaign?.description ||
+                    "No campaign description has been written yet."}
+                </div>
+                <section style={{ display: "grid", gap: "0.5rem" }}>
+                  <h3 style={{ margin: 0 }}>Available scenarios</h3>
+                  {scenarios.length > 0 ? (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                      {scenarios.map((scenario) => (
+                        <Link
+                          key={scenario.id}
+                          href={buildWorkspaceHref({
+                            scenarioId: scenario.id,
+                            tab: "scenario",
+                          })}
+                        >
+                          {scenario.name}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <div>No active scenario is currently available.</div>
+                  )}
+                </section>
               </section>
+              <ArtifactPanel campaignId={campaignId} scenarios={[]} />
             </section>
           )}
         </section>

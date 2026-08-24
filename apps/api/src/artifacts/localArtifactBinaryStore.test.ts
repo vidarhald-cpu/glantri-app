@@ -29,7 +29,10 @@ describe("LocalArtifactBinaryStore", () => {
     expect(await readFile(path.join(root, key))).toEqual(bytes);
     expect((await stat(root)).mode & 0o777).toBe(0o700);
     expect((await stat(path.join(root, key))).mode & 0o777).toBe(0o600);
-    expect(await store.stat(key)).toEqual({ byteSize: bytes.length });
+    expect(await store.stat(key)).toEqual({
+      byteSize: bytes.length,
+      sha256Digest: result.sha256Digest,
+    });
     await expect(
       store.put({ content: stream([Buffer.from("replacement")]), key }),
     ).rejects.toThrow();

@@ -129,7 +129,11 @@ export class ArtifactRepository {
 
   async markFailed(input: { artifactId: string; cleanupPending: boolean }): Promise<void> {
     await this.client.campaignAsset.updateMany({
-      data: { storageDeletePending: input.cleanupPending, storageState: "failed" },
+      data: {
+        storageDeletePending: input.cleanupPending,
+        ...(!input.cleanupPending ? { storageKey: null } : {}),
+        storageState: "failed",
+      },
       where: { id: input.artifactId, storageState: "pending" },
     });
   }
@@ -184,7 +188,6 @@ export class ArtifactRepository {
       },
       where: {
         artifact: {
-          audience: "scenario",
           lifecycleState: { in: ["active", "archived"] },
           storageState: "ready",
         },
@@ -209,6 +212,7 @@ export class ArtifactRepository {
     campaignId: string;
     description?: string | null;
     expectedVersion: number;
+    protectPlayerVisualAlt?: boolean;
     title?: string;
   }): Promise<ArtifactRecord | null> {
     return this.client.$transaction(async (tx) => {
@@ -224,6 +228,12 @@ export class ArtifactRepository {
           id: input.artifactId,
           lifecycleState: { not: "deleted" },
           metadataVersion: input.expectedVersion,
+          ...(input.protectPlayerVisualAlt
+            ? {
+                artifactReferences: { none: { state: "published" } },
+                audience: { not: "campaign" },
+              }
+            : {}),
         },
       });
       if (result.count !== 1) return null;
@@ -250,11 +260,23 @@ export class ArtifactRepository {
     expectedVersion: number;
   }): Promise<ArtifactRecord | null> {
     return this.client.$transaction(async (tx) => {
+      const remainingPublished =
+        input.audience === "gm_private"
+          ? await tx.scenarioArtifactReference.count({
+              where: { artifactId: input.artifactId, state: "published" },
+            })
+          : 0;
+      const persistedAudience =
+        input.audience === "campaign"
+          ? "campaign"
+          : remainingPublished > 0
+            ? "scenario"
+            : "gm_private";
       const result = await tx.campaignAsset.updateMany({
         data: {
-          audience: input.audience,
+          audience: persistedAudience,
           metadataVersion: { increment: 1 },
-          visibility: input.audience === "campaign" ? "visible_to_all" : "gm_only",
+          visibility: persistedAudience === "campaign" ? "visible_to_all" : "gm_only",
         },
         where: {
           campaignId: input.campaignId,
@@ -274,7 +296,7 @@ export class ArtifactRepository {
         actorUserId: input.actorUserId,
         artifactId: artifact.id,
         campaignId: artifact.campaignId,
-        metadata: { audience: input.audience },
+        metadata: { audience: persistedAudience, campaignPublished: input.audience === "campaign" },
       });
       return artifact;
     });
@@ -323,6 +345,17 @@ export class ArtifactRepository {
       });
       const expectedReferenceVersion = input.expectedReferenceVersion ?? 0;
       if ((existing?.version ?? 0) !== expectedReferenceVersion) return null;
+      if (input.action !== "attach" && !existing) return null;
+
+      const reserved = await tx.campaignAsset.updateMany({
+        data: { metadataVersion: { increment: 1 } },
+        where: {
+          campaignId: input.campaignId,
+          id: input.artifactId,
+          metadataVersion: input.expectedArtifactVersion,
+        },
+      });
+      if (reserved.count !== 1) return null;
 
       let reference;
       if (input.action === "attach") {
@@ -352,42 +385,43 @@ export class ArtifactRepository {
                 titleSnapshot: input.title ?? artifact.title,
               },
             });
-      } else if (!existing) {
-        return null;
-      } else if (input.action === "publish") {
-        reference = await tx.scenarioArtifactReference.update({
-          data: {
-            altTextSnapshot: input.altText ?? existing.altTextSnapshot ?? artifact.altText,
-            captionSnapshot: input.caption ?? existing.captionSnapshot,
-            publishedAt: new Date(),
-            publishedByUserId: input.actorUserId,
-            sortOrder: input.sortOrder ?? existing.sortOrder,
-            state: "published",
-            titleSnapshot: input.title ?? existing.titleSnapshot,
-            version: { increment: 1 },
-            withdrawnAt: null,
-          },
-          where: { id: existing.id },
-        });
       } else {
-        reference = await tx.scenarioArtifactReference.update({
-          data: { state: "withdrawn", version: { increment: 1 }, withdrawnAt: new Date() },
-          where: { id: existing.id },
-        });
+        if (!existing) throw new Error("Scenario Artifact reference disappeared.");
+        reference =
+          input.action === "publish"
+            ? await tx.scenarioArtifactReference.update({
+                data: {
+                  altTextSnapshot: input.altText ?? existing.altTextSnapshot ?? artifact.altText,
+                  captionSnapshot: input.caption ?? existing.captionSnapshot,
+                  publishedAt: new Date(),
+                  publishedByUserId: input.actorUserId,
+                  sortOrder: input.sortOrder ?? existing.sortOrder,
+                  state: "published",
+                  titleSnapshot: input.title ?? existing.titleSnapshot,
+                  version: { increment: 1 },
+                  withdrawnAt: null,
+                },
+                where: { id: existing.id },
+              })
+            : await tx.scenarioArtifactReference.update({
+                data: { state: "withdrawn", version: { increment: 1 }, withdrawnAt: new Date() },
+                where: { id: existing.id },
+              });
       }
 
-      const remainingPublished =
-        input.action === "withdraw"
-          ? await tx.scenarioArtifactReference.count({
-              where: { artifactId: artifact.id, state: "published" },
-            })
-          : 1;
+      const remainingPublished = await tx.scenarioArtifactReference.count({
+        where: { artifactId: artifact.id, state: "published" },
+      });
+      const persistedAudience =
+        artifact.audience === "campaign"
+          ? "campaign"
+          : remainingPublished > 0
+            ? "scenario"
+            : "gm_private";
       const updatedArtifact = await tx.campaignAsset.update({
         data: {
-          audience:
-            input.action === "withdraw" && remainingPublished === 0 ? "gm_private" : "scenario",
-          metadataVersion: { increment: 1 },
-          visibility: "gm_only",
+          audience: persistedAudience,
+          visibility: persistedAudience === "campaign" ? "visible_to_all" : "gm_only",
         },
         select: artifactSelect,
         where: { id: artifact.id },
@@ -512,6 +546,14 @@ export class ArtifactRepository {
       orderBy: [{ scenarioId: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
       where: { campaignId },
     });
+  }
+
+  async hasPublishedReferences(artifactId: string): Promise<boolean> {
+    return (
+      (await this.client.scenarioArtifactReference.count({
+        where: { artifactId, state: "published" },
+      })) > 0
+    );
   }
 
   async listBlackboardCandidates(campaignId: string): Promise<ArtifactRecord[]> {

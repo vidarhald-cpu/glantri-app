@@ -98,6 +98,16 @@ function ensureVisualAlt(record: ArtifactRecord, altText?: string | null): void 
   }
 }
 
+export interface StagedArtifactUpload {
+  actorUserId: string;
+  artifactId: string;
+  byteSize: number;
+  campaignId: string;
+  mediaType: string;
+  sha256Digest: string;
+  storageKey: string;
+}
+
 export class ArtifactService {
   constructor(
     private readonly store: ArtifactBinaryStore,
@@ -119,6 +129,24 @@ export class ArtifactService {
     userId: string;
     signal?: AbortSignal;
   }): Promise<ArtifactGmDto> {
+    const staged = await this.stageUpload(input);
+    try {
+      return await this.finalizeStagedUpload(staged);
+    } catch (error) {
+      await this.abortStagedUpload(staged);
+      throw error;
+    }
+  }
+
+  async stageUpload(input: {
+    campaignId: string;
+    content: AsyncIterable<Uint8Array>;
+    declaredMediaType: string;
+    metadata: ArtifactUploadMetadata;
+    originalFilename?: string;
+    userId: string;
+    signal?: AbortSignal;
+  }): Promise<StagedArtifactUpload> {
     await this.requireOwningGm(input.campaignId, input.userId);
     const artifactId = randomUUID();
     const storageKey = randomUUID().replaceAll("-", "");
@@ -145,14 +173,12 @@ export class ArtifactService {
       title: input.metadata.title,
     });
 
-    let stored = false;
     try {
       const putResult = await this.store.put({
         content: validated.content,
         key: storageKey,
         signal: input.signal,
       });
-      stored = true;
       const validation = await validated.result;
       if (
         putResult.byteSize !== validation.byteSize ||
@@ -160,28 +186,36 @@ export class ArtifactService {
       ) {
         throw new Error("Artifact storage integrity check failed.");
       }
-      return toGmDto(
-        await this.repository.markReady({
-          actorUserId: input.userId,
-          artifactId,
-          byteSize: validation.byteSize,
-          mediaType: validation.mediaType,
-          sha256Digest: validation.sha256Digest,
-        }),
-      );
+      return {
+        actorUserId: input.userId,
+        artifactId,
+        byteSize: validation.byteSize,
+        campaignId: input.campaignId,
+        mediaType: validation.mediaType,
+        sha256Digest: validation.sha256Digest,
+        storageKey,
+      };
     } catch (error) {
       await validated.result.catch(() => undefined);
-      let cleanupPending = false;
-      if (stored) {
-        try {
-          await this.store.delete(storageKey);
-        } catch {
-          cleanupPending = true;
-        }
-      }
-      await this.repository.markFailed({ artifactId, cleanupPending });
+      await this.failPendingUpload({ artifactId, storageKey });
       throw error;
     }
+  }
+
+  async finalizeStagedUpload(staged: StagedArtifactUpload): Promise<ArtifactGmDto> {
+    return toGmDto(
+      await this.repository.markReady({
+        actorUserId: staged.actorUserId,
+        artifactId: staged.artifactId,
+        byteSize: staged.byteSize,
+        mediaType: staged.mediaType,
+        sha256Digest: staged.sha256Digest,
+      }),
+    );
+  }
+
+  async abortStagedUpload(staged: StagedArtifactUpload): Promise<void> {
+    await this.failPendingUpload({ artifactId: staged.artifactId, storageKey: staged.storageKey });
   }
 
   async listForGm(campaignId: string, userId: string): Promise<ArtifactGmDto[]> {
@@ -265,14 +299,28 @@ export class ArtifactService {
     if (artifact.storageProvider !== this.store.provider) {
       throw new ArtifactStorageUnavailableError();
     }
-    const stat = await this.store.stat(artifact.storageKey);
-    if (!stat || stat.byteSize !== Number(artifact.byteSize)) {
+    try {
+      const stat = await this.store.stat(artifact.storageKey);
+      if (
+        !stat ||
+        stat.byteSize !== Number(artifact.byteSize) ||
+        !artifact.sha256Digest ||
+        stat.sha256Digest !== artifact.sha256Digest
+      ) {
+        throw new ArtifactStorageUnavailableError("Artifact content is temporarily unavailable.");
+      }
+      const body = await this.store.read({ key: artifact.storageKey, signal: input.signal });
+      if (body.byteSize !== stat.byteSize) {
+        throw new ArtifactStorageUnavailableError("Artifact content is temporarily unavailable.");
+      }
+      return {
+        body,
+        mediaType: artifact.mediaTypeDetected ?? "application/octet-stream",
+      };
+    } catch (error) {
+      if (error instanceof ArtifactStorageUnavailableError) throw error;
       throw new ArtifactStorageUnavailableError("Artifact content is temporarily unavailable.");
     }
-    return {
-      body: await this.store.read({ key: artifact.storageKey, signal: input.signal }),
-      mediaType: artifact.mediaTypeDetected ?? "application/octet-stream",
-    };
   }
 
   async updateMetadata(input: {
@@ -282,6 +330,22 @@ export class ArtifactService {
     userId: string;
   }): Promise<ArtifactGmDto> {
     await this.requireOwningGm(input.campaignId, input.userId);
+    let protectPlayerVisualAlt = false;
+    if (input.update.altText !== undefined && !input.update.altText?.trim()) {
+      const current = await this.repository.get(input.campaignId, input.artifactId);
+      if (!current) throw new ArtifactNotFoundError();
+      const visual = ["map", "image", "portrait"].includes(current.artifactKind ?? "image");
+      protectPlayerVisualAlt = visual;
+      if (
+        visual &&
+        (current.audience === "campaign" ||
+          (await this.repository.hasPublishedReferences(input.artifactId)))
+      ) {
+        throw new ArtifactLifecycleError(
+          "Keep alt text while visual content is shared with players.",
+        );
+      }
+    }
     const artifact = await this.repository.updateMetadata({
       actorUserId: input.userId,
       altText: input.update.altText,
@@ -289,6 +353,7 @@ export class ArtifactService {
       campaignId: input.campaignId,
       description: input.update.description,
       expectedVersion: input.update.expectedMetadataVersion,
+      protectPlayerVisualAlt,
       title: input.update.title,
     });
     if (!artifact) throw new ArtifactConflictError();
@@ -506,5 +571,18 @@ export class ArtifactService {
     if ((await this.repository.getCampaignOwner(campaignId)) !== userId) {
       throw new ArtifactNotFoundError();
     }
+  }
+
+  private async failPendingUpload(input: {
+    artifactId: string;
+    storageKey: string;
+  }): Promise<void> {
+    let cleanupPending = false;
+    try {
+      await this.store.delete(input.storageKey);
+    } catch {
+      cleanupPending = true;
+    }
+    await this.repository.markFailed({ artifactId: input.artifactId, cleanupPending });
   }
 }

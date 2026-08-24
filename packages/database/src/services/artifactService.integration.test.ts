@@ -19,12 +19,14 @@ class MemoryStore implements ArtifactBinaryStore {
   readonly provider = "local" as const;
   readonly objects = new Map<string, Buffer>();
   failDelete = false;
+  failPutAfterPersist = false;
 
   async put(input: { content: AsyncIterable<Uint8Array>; key: string }) {
     const chunks: Buffer[] = [];
     for await (const chunk of input.content) chunks.push(Buffer.from(chunk));
     const bytes = Buffer.concat(chunks);
     this.objects.set(input.key, bytes);
+    if (this.failPutAfterPersist) throw new Error("injected ambiguous put failure");
     const { createHash } = await import("node:crypto");
     return {
       byteSize: bytes.length,
@@ -38,7 +40,12 @@ class MemoryStore implements ArtifactBinaryStore {
   }
   async stat(key: string) {
     const bytes = this.objects.get(key);
-    return bytes ? { byteSize: bytes.length } : null;
+    if (!bytes) return null;
+    const { createHash } = await import("node:crypto");
+    return {
+      byteSize: bytes.length,
+      sha256Digest: createHash("sha256").update(bytes).digest("hex"),
+    };
   }
   async delete(key: string) {
     if (this.failDelete) throw new Error("injected delete failure");
@@ -100,6 +107,184 @@ if (!prisma) {
       expect(Buffer.concat(chunks)).toEqual(png);
       expect(store.objects.size).toBe(1);
       expect(await service.listAudit(campaign.id, artifact.id, gm.id)).toHaveLength(1);
+    });
+
+    it("cleans an ambiguous put failure by known key and retains retry-safe cleanup state", async () => {
+      const gm = await createTestUser(prisma, { roles: ["game_master"] });
+      const campaign = await createTestCampaign(prisma, gm.id, { status: "active" });
+      const store = new MemoryStore();
+      const service = new ArtifactService(store, new ArtifactRepository(prisma));
+      store.failPutAfterPersist = true;
+
+      await expect(
+        service.upload({
+          campaignId: campaign.id,
+          content: stream([Buffer.from("89504e470d0a1a0a00000000", "hex")]),
+          declaredMediaType: "image/png",
+          metadata: {
+            altText: "A pass",
+            artifactKind: "map",
+            provenanceKind: "user_upload",
+            title: "Ambiguous",
+          },
+          userId: gm.id,
+        }),
+      ).rejects.toThrow("ambiguous put failure");
+      expect(store.objects.size).toBe(0);
+
+      store.failDelete = true;
+      await expect(
+        service.upload({
+          campaignId: campaign.id,
+          content: stream([Buffer.from("89504e470d0a1a0a00000000", "hex")]),
+          declaredMediaType: "image/png",
+          metadata: {
+            altText: "A pass",
+            artifactKind: "map",
+            provenanceKind: "user_upload",
+            title: "Retry cleanup",
+          },
+          userId: gm.id,
+        }),
+      ).rejects.toThrow("ambiguous put failure");
+      const failed = (await service.listForGm(campaign.id, gm.id)).find(
+        (candidate) => candidate.title === "Retry cleanup",
+      );
+      expect(failed).toMatchObject({ cleanupRequired: true, storageState: "failed" });
+      expect(store.objects.size).toBe(1);
+
+      store.failDelete = false;
+      store.failPutAfterPersist = false;
+      await expect(
+        service.retryCleanup({ artifactId: failed!.id, campaignId: campaign.id, userId: gm.id }),
+      ).resolves.toMatchObject({ cleanupRequired: false });
+      expect(store.objects.size).toBe(0);
+    });
+
+    it("rejects same-length content corruption using the immutable digest", async () => {
+      const gm = await createTestUser(prisma, { roles: ["game_master"] });
+      const campaign = await createTestCampaign(prisma, gm.id, { status: "active" });
+      const store = new MemoryStore();
+      const service = new ArtifactService(store, new ArtifactRepository(prisma));
+      const bytes = Buffer.from("89504e470d0a1a0a00000000", "hex");
+      const uploaded = await service.upload({
+        campaignId: campaign.id,
+        content: stream([bytes]),
+        declaredMediaType: "image/png",
+        metadata: {
+          altText: "A pass",
+          artifactKind: "map",
+          provenanceKind: "user_upload",
+          title: "Integrity",
+        },
+        userId: gm.id,
+      });
+      const [key] = store.objects.keys();
+      store.objects.set(key!, Buffer.alloc(bytes.length, 7));
+
+      await expect(
+        service.readContent({
+          artifactId: uploaded.id,
+          campaignId: campaign.id,
+          userId: gm.id,
+        }),
+      ).rejects.toThrow("temporarily unavailable");
+    });
+
+    it("keeps Campaign and Scenario publication independent and preserves visual alt text", async () => {
+      const gm = await createTestUser(prisma, { roles: ["game_master"] });
+      const campaign = await createTestCampaign(prisma, gm.id, { status: "active" });
+      const scenario = await prisma.scenario.create({
+        data: {
+          campaignId: campaign.id,
+          description: "",
+          kind: "mixed",
+          name: "The pass",
+          status: "live",
+        },
+      });
+      const store = new MemoryStore();
+      const scenarioRepository = createPrismaScenarioRepository(prisma);
+      const service = new ArtifactService(
+        store,
+        new ArtifactRepository(prisma),
+        new CampaignService(scenarioRepository),
+        new ScenarioService(scenarioRepository),
+      );
+      const uploaded = await service.upload({
+        campaignId: campaign.id,
+        content: stream([Buffer.from("89504e470d0a1a0a00000000", "hex")]),
+        declaredMediaType: "image/png",
+        metadata: {
+          altText: "A pass",
+          artifactKind: "map",
+          provenanceKind: "user_upload",
+          title: "Two channels",
+        },
+        userId: gm.id,
+      });
+      const attached = await service.mutateScenarioReference({
+        action: "attach",
+        artifactId: uploaded.id,
+        campaignId: campaign.id,
+        expectedArtifactVersion: uploaded.metadataVersion,
+        scenarioId: scenario.id,
+        userId: gm.id,
+      });
+      const scenarioPublished = await service.mutateScenarioReference({
+        action: "publish",
+        artifactId: uploaded.id,
+        campaignId: campaign.id,
+        expectedArtifactVersion: attached.artifact.metadataVersion,
+        expectedReferenceVersion: attached.reference.version,
+        scenarioId: scenario.id,
+        userId: gm.id,
+      });
+      const campaignPublished = await service.setAudience({
+        artifactId: uploaded.id,
+        audience: "campaign",
+        campaignId: campaign.id,
+        expectedVersion: scenarioPublished.artifact.metadataVersion,
+        userId: gm.id,
+      });
+      const scenarioWithdrawn = await service.mutateScenarioReference({
+        action: "withdraw",
+        artifactId: uploaded.id,
+        campaignId: campaign.id,
+        expectedArtifactVersion: campaignPublished.metadataVersion,
+        expectedReferenceVersion: scenarioPublished.reference.version,
+        scenarioId: scenario.id,
+        userId: gm.id,
+      });
+      expect(scenarioWithdrawn.artifact.audience).toBe("campaign");
+
+      const scenarioRepublished = await service.mutateScenarioReference({
+        action: "publish",
+        artifactId: uploaded.id,
+        campaignId: campaign.id,
+        expectedArtifactVersion: scenarioWithdrawn.artifact.metadataVersion,
+        expectedReferenceVersion: scenarioWithdrawn.reference.version,
+        scenarioId: scenario.id,
+        userId: gm.id,
+      });
+      expect(scenarioRepublished.artifact.audience).toBe("campaign");
+      const campaignWithdrawn = await service.setAudience({
+        artifactId: uploaded.id,
+        audience: "gm_private",
+        campaignId: campaign.id,
+        expectedVersion: scenarioRepublished.artifact.metadataVersion,
+        userId: gm.id,
+      });
+      expect(campaignWithdrawn.audience).toBe("scenario");
+      await expect(
+        service.updateMetadata({
+          artifactId: uploaded.id,
+          campaignId: campaign.id,
+          update: { altText: null, expectedMetadataVersion: campaignWithdrawn.metadataVersion },
+          userId: gm.id,
+        }),
+      ).rejects.toBeInstanceOf(ArtifactLifecycleError);
+      expect((await service.getForGm(campaign.id, uploaded.id, gm.id)).altText).toBe("A pass");
     });
 
     it("preserves legacy rows as GM-only re-upload-required metadata without a readable locator", async () => {

@@ -57,7 +57,13 @@ describe("AzureArtifactBinaryStore contract", () => {
     await expect(store.put({ content: stream([Buffer.from("replacement")]), key })).rejects.toThrow(
       "already exists",
     );
-    expect(await store.stat(key)).toEqual({ byteSize: bytes.length });
+    expect(await store.stat(key)).toEqual({
+      byteSize: bytes.length,
+      sha256Digest: put.sha256Digest,
+    });
+    fake.objects.set(key, Buffer.from("x".repeat(bytes.length)));
+    expect((await store.stat(key))?.sha256Digest).not.toBe(put.sha256Digest);
+    fake.objects.set(key, bytes);
 
     const read = await store.read({ key });
     const chunks: Uint8Array[] = [];

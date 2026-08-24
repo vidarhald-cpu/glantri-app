@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
@@ -25,11 +25,21 @@ async function sessionCookie(userId: string): Promise<string> {
 
 function multipartPayload(input: {
   bytes: Buffer;
+  ending?: "complete" | "malformed" | "trailing-field";
   filename: string;
   mediaType: string;
   metadata: unknown;
 }) {
   const boundary = "glantri-artifact-boundary";
+  const ending = input.ending ?? "complete";
+  const suffix =
+    ending === "malformed"
+      ? Buffer.alloc(0)
+      : ending === "trailing-field"
+        ? Buffer.from(
+            `\r\n--${boundary}\r\nContent-Disposition: form-data; name="forbidden"\r\n\r\nlate\r\n--${boundary}--\r\n`,
+          )
+        : Buffer.from(`\r\n--${boundary}--\r\n`);
   return {
     boundary,
     payload: Buffer.concat([
@@ -39,7 +49,7 @@ function multipartPayload(input: {
           `Content-Type: ${input.mediaType}\r\n\r\n`,
       ),
       input.bytes,
-      Buffer.from(`\r\n--${boundary}--\r\n`),
+      suffix,
     ]),
   };
 }
@@ -67,6 +77,41 @@ if (!hasTaskApplicationDatabase) {
       await resetTestDatabase(prisma);
       await rm(root, { force: true, recursive: true });
       vi.unstubAllEnvs();
+    });
+
+    it("rejects trailing forbidden and malformed multipart without committing readable state", async () => {
+      const gm = await createTestUser(prisma, { roles: ["game_master"] });
+      const campaign = await createTestCampaign(prisma, gm.id, { status: "active" });
+      const gmCookie = await sessionCookie(gm.id);
+
+      for (const ending of ["trailing-field", "malformed"] as const) {
+        const upload = multipartPayload({
+          bytes: Buffer.from("89504e470d0a1a0a00000000", "hex"),
+          ending,
+          filename: "map.png",
+          mediaType: "image/png",
+          metadata: { altText: "A pass", artifactKind: "map", title: "Rejected map" },
+        });
+        const response = await app.inject({
+          headers: {
+            "content-type": `multipart/form-data; boundary=${upload.boundary}`,
+            cookie: gmCookie,
+            origin: "http://localhost:3350",
+            "x-glantri-artifact-mutation": "1",
+          },
+          method: "POST",
+          payload: upload.payload,
+          url: `/campaigns/${campaign.id}/artifacts`,
+        });
+
+        expect(response.statusCode, `${ending}: ${response.body}`).toBe(400);
+        expect(
+          await prisma.campaignAsset.count({
+            where: { campaignId: campaign.id, storageState: "ready" },
+          }),
+        ).toBe(0);
+        expect(await readdir(root)).toEqual([]);
+      }
     });
 
     it("keeps a private upload absent across player, foreign GM, and unauthenticated probes", async () => {
@@ -199,6 +244,23 @@ if (!hasTaskApplicationDatabase) {
       expect(pdf.statusCode).toBe(200);
       expect(pdf.headers["content-disposition"]).toMatch(/^attachment; filename="artifact-/);
       expect(pdf.headers["content-security-policy"]).toContain("sandbox");
+
+      const stored = await prisma.campaignAsset.findUniqueOrThrow({
+        select: { byteSize: true, storageKey: true },
+        where: { id: artifact.id },
+      });
+      await writeFile(
+        path.join(root, stored.storageKey!),
+        Buffer.alloc(Number(stored.byteSize), 120),
+      );
+      const corrupted = await app.inject({
+        headers: { cookie: playerCookie },
+        method: "GET",
+        url: `/campaigns/${campaign.id}/artifacts/${artifact.id}/content`,
+      });
+      expect(corrupted.statusCode).toBe(503);
+      expect(corrupted.json()).toEqual({ error: "Artifact storage is temporarily unavailable." });
+      expect(corrupted.body).not.toMatch(/digest|storageKey|storageUrl|private\/tmp/i);
 
       const withdraw = await app.inject({
         headers: {
@@ -342,6 +404,10 @@ if (!hasTaskApplicationDatabase) {
         url: `/campaigns/${campaign.id}/scenarios/${scenario.id}/artifacts/${artifact.id}/publish`,
       });
       expect(published.statusCode, published.body).toBe(200);
+      const publishedBody = published.json() as {
+        artifact: { metadataVersion: number };
+        reference: { version: number };
+      };
       const playerARead = await app.inject({
         headers: { cookie: playerACookie },
         method: "GET",
@@ -352,6 +418,88 @@ if (!hasTaskApplicationDatabase) {
         (await app.inject({ headers: { cookie: playerBCookie }, method: "GET", url: contentUrl }))
           .statusCode,
       ).toBe(404);
+
+      const campaignPublished = await app.inject({
+        headers: mutationHeaders,
+        method: "PUT",
+        payload: {
+          audience: "campaign",
+          expectedMetadataVersion: publishedBody.artifact.metadataVersion,
+        },
+        url: `/campaigns/${campaign.id}/artifacts/${artifact.id}/audience`,
+      });
+      expect(campaignPublished.statusCode, campaignPublished.body).toBe(200);
+      const campaignPublishedBody = campaignPublished.json().artifact as {
+        metadataVersion: number;
+      };
+      const scenarioWithdrawn = await app.inject({
+        headers: mutationHeaders,
+        method: "POST",
+        payload: {
+          expectedArtifactVersion: campaignPublishedBody.metadataVersion,
+          expectedReferenceVersion: publishedBody.reference.version,
+        },
+        url: `/campaigns/${campaign.id}/scenarios/${scenario.id}/artifacts/${artifact.id}/withdraw`,
+      });
+      expect(scenarioWithdrawn.statusCode, scenarioWithdrawn.body).toBe(200);
+      const scenarioWithdrawnBody = scenarioWithdrawn.json() as {
+        artifact: { metadataVersion: number };
+        reference: { version: number };
+      };
+      expect(
+        await Promise.all(
+          [playerACookie, playerBCookie].map(
+            async (cookie) =>
+              (await app.inject({ headers: { cookie }, method: "GET", url: contentUrl }))
+                .statusCode,
+          ),
+        ),
+      ).toEqual([200, 200]);
+
+      const scenarioRepublished = await app.inject({
+        headers: mutationHeaders,
+        method: "POST",
+        payload: {
+          expectedArtifactVersion: scenarioWithdrawnBody.artifact.metadataVersion,
+          expectedReferenceVersion: scenarioWithdrawnBody.reference.version,
+        },
+        url: `/campaigns/${campaign.id}/scenarios/${scenario.id}/artifacts/${artifact.id}/publish`,
+      });
+      expect(scenarioRepublished.statusCode, scenarioRepublished.body).toBe(200);
+      const scenarioRepublishedBody = scenarioRepublished.json() as {
+        artifact: { metadataVersion: number };
+      };
+      const campaignWithdrawn = await app.inject({
+        headers: mutationHeaders,
+        method: "PUT",
+        payload: {
+          audience: "gm_private",
+          expectedMetadataVersion: scenarioRepublishedBody.artifact.metadataVersion,
+        },
+        url: `/campaigns/${campaign.id}/artifacts/${artifact.id}/audience`,
+      });
+      expect(campaignWithdrawn.statusCode, campaignWithdrawn.body).toBe(200);
+      const campaignWithdrawnBody = campaignWithdrawn.json().artifact as {
+        metadataVersion: number;
+      };
+      expect(
+        (await app.inject({ headers: { cookie: playerACookie }, method: "GET", url: contentUrl }))
+          .statusCode,
+      ).toBe(200);
+      expect(
+        (await app.inject({ headers: { cookie: playerBCookie }, method: "GET", url: contentUrl }))
+          .statusCode,
+      ).toBe(404);
+      const removePublishedAlt = await app.inject({
+        headers: mutationHeaders,
+        method: "PATCH",
+        payload: {
+          altText: null,
+          expectedMetadataVersion: campaignWithdrawnBody.metadataVersion,
+        },
+        url: `/campaigns/${campaign.id}/artifacts/${artifact.id}`,
+      });
+      expect(removePublishedAlt.statusCode, removePublishedAlt.body).toBe(400);
       expect(
         await Promise.all([
           prisma.character.count(),

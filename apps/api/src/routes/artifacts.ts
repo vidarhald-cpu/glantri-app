@@ -60,7 +60,18 @@ function sendError(request: FastifyRequest, reply: FastifyReply, error: unknown)
   if (
     (error as { name?: string }).name === "ZodError" ||
     error instanceof SyntaxError ||
-    (error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE"
+    [
+      "FST_FIELDS_LIMIT",
+      "FST_FILES_LIMIT",
+      "FST_INVALID_MULTIPART_CONTENT_TYPE",
+      "FST_PARTS_LIMIT",
+      "FST_REQ_FILE_TOO_LARGE",
+      "ERR_STREAM_PREMATURE_CLOSE",
+    ].includes((error as { code?: string }).code ?? "") ||
+    (error instanceof Error &&
+      (error.message === "Unexpected end of form" ||
+        /unexpected end of multipart data/i.test(error.message) ||
+        error.message === "Multipart: Boundary not found"))
   ) {
     return reply.code(400).send({ error: "Invalid Artifact request." });
   }
@@ -182,32 +193,44 @@ export const artifactRoutes: FastifyPluginAsync = async (app) => {
       const campaignId = routeId(request, "campaignId");
       await getArtifactService().assertOwningGm(campaignId, user.id);
       let metadata: ReturnType<typeof artifactUploadMetadataSchema.parse> | undefined;
-      let artifact;
-      for await (const part of request.parts()) {
-        if (part.type === "field") {
-          if (part.fieldname !== "metadata" || typeof part.value !== "string" || metadata) {
-            throw new ArtifactUploadValidationError("Invalid Artifact upload fields.");
+      let staged: Awaited<ReturnType<ArtifactService["stageUpload"]>> | undefined;
+      try {
+        for await (const part of request.parts()) {
+          if (part.type === "field") {
+            if (part.fieldname !== "metadata" || typeof part.value !== "string" || metadata) {
+              throw new ArtifactUploadValidationError("Invalid Artifact upload fields.");
+            }
+            metadata = artifactUploadMetadataSchema.parse(JSON.parse(part.value));
+            continue;
           }
-          metadata = artifactUploadMetadataSchema.parse(JSON.parse(part.value));
-          continue;
+          if (part.fieldname !== "file" || !metadata || staged) {
+            part.file.resume();
+            throw new ArtifactUploadValidationError("Send Artifact metadata before one file.");
+          }
+          staged = await getArtifactService().stageUpload({
+            campaignId,
+            content: part.file,
+            declaredMediaType: part.mimetype,
+            metadata,
+            originalFilename: part.filename,
+            userId: user.id,
+          });
+          if (part.file.truncated) {
+            throw new ArtifactUploadValidationError("The uploaded file exceeds the 25 MiB limit.");
+          }
         }
-        if (part.fieldname !== "file" || !metadata || artifact) {
-          part.file.resume();
-          throw new ArtifactUploadValidationError("Send Artifact metadata before one file.");
-        }
-        artifact = await getArtifactService().upload({
-          campaignId,
-          content: part.file,
-          declaredMediaType: part.mimetype,
-          metadata,
-          originalFilename: part.filename,
-          userId: user.id,
-        });
-        if (part.file.truncated) {
-          throw new ArtifactUploadValidationError("The uploaded file exceeds the 25 MiB limit.");
-        }
+      } catch (error) {
+        if (staged) await getArtifactService().abortStagedUpload(staged);
+        throw error;
       }
-      if (!artifact) throw new ArtifactUploadValidationError("Choose a file to upload.");
+      if (!staged) throw new ArtifactUploadValidationError("Choose a file to upload.");
+      let artifact;
+      try {
+        artifact = await getArtifactService().finalizeStagedUpload(staged);
+      } catch (error) {
+        await getArtifactService().abortStagedUpload(staged);
+        throw error;
+      }
       return reply.code(201).send({ artifact });
     } catch (error) {
       return sendError(request, reply, error);

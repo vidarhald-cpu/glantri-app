@@ -57,8 +57,19 @@ export class AzureArtifactBinaryStore implements ArtifactBinaryStore {
   async stat(key: string): Promise<ArtifactBinaryStatResult | null> {
     validateKey(key);
     try {
-      const properties = await this.container.getBlobClient(key).getProperties();
-      return { byteSize: properties.contentLength ?? 0 };
+      const response = await this.container.getBlobClient(key).download();
+      if (!response.readableStreamBody) throw new Error("Artifact object body unavailable.");
+      const digest = createHash("sha256");
+      let byteSize = 0;
+      for await (const rawChunk of response.readableStreamBody) {
+        const chunk = Buffer.from(rawChunk);
+        byteSize += chunk.byteLength;
+        digest.update(chunk);
+      }
+      if (response.contentLength !== undefined && response.contentLength !== byteSize) {
+        throw new Error("Artifact object size changed during integrity verification.");
+      }
+      return { byteSize, sha256Digest: digest.digest("hex") };
     } catch (error) {
       if ((error as { statusCode?: number }).statusCode === 404) return null;
       throw error;

@@ -12,6 +12,7 @@ export interface ArtifactBinaryReadResult {
 
 export interface ArtifactBinaryStatResult {
   byteSize: number;
+  sha256Digest: string;
 }
 
 export interface ArtifactBinaryStore {

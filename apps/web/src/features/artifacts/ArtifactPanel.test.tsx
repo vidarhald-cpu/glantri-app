@@ -79,6 +79,10 @@ describe("ArtifactPanel", () => {
     });
     render(<ArtifactPanel campaignId="campaign-1" scenarios={[]} />);
     expect(await screen.findByText("Shared pass map")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "The pass" })).toHaveAttribute(
+      "src",
+      "/content/artifact-1",
+    );
     expect(screen.queryByText(/Private to GM/)).not.toBeInTheDocument();
     expect(screen.queryByText(/digest|storage|filename/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /share/i })).not.toBeInTheDocument();
