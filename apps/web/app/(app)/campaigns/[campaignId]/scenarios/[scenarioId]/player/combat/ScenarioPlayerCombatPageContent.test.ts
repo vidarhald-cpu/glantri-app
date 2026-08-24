@@ -68,13 +68,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("revision: encounterSession.updatedAt");
   });
 
-  it("renders revision-bound continuing consequences for only the selected participant", () => {
+  it("renders the server-filtered revision-bound continuing consequences", () => {
     const source = readSource();
 
     expect(source).toContain("combatHistory?.currentConsequences");
-    expect(source).toContain(
-      "consequence.participantId === selectedRoundParticipant?.participantId",
-    );
+    expect(source).not.toContain("consequence.participantId");
     expect(source).toContain("<PlayerCombatCurrentConsequences consequences={currentConsequences}");
   });
 

@@ -137,7 +137,6 @@ describe("combat history projection", () => {
       {
         detail: "External bleeding",
         durationLabel: "Until cleared",
-        participantId: "aria",
         summary: "Bleed 5/10 HP per round",
       },
     ]);
@@ -150,6 +149,7 @@ describe("combat history projection", () => {
       "private-critical-event",
       "private-critical-effect",
       "Another character's private consequence",
+      "aria",
       "scenario-participant-aria",
     ].forEach((secret) => expect(serialized).not.toContain(secret));
   });

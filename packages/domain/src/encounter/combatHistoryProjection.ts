@@ -317,7 +317,6 @@ export interface CombatHistoryContinuingConsequenceInput {
 export interface ProjectedCombatContinuingConsequence {
   detail?: string;
   durationLabel?: string;
-  participantId: string;
   summary: string;
 }
 
@@ -408,10 +407,12 @@ function projectCombatContinuingConsequences(input: {
         const value = formatContinuingConsequenceValue(projected);
         return [
           {
-            detail: projected.publicNote,
-            durationLabel: formatContinuingConsequenceDuration(projected),
+            consequence: {
+              detail: projected.publicNote,
+              durationLabel: formatContinuingConsequenceDuration(projected),
+              summary: [projected.publicLabel, value].filter(Boolean).join(" "),
+            },
             participantId: entry.participantId,
-            summary: [projected.publicLabel, value].filter(Boolean).join(" "),
           },
         ];
       }),
@@ -419,8 +420,9 @@ function projectCombatContinuingConsequences(input: {
     .sort(
       (left, right) =>
         left.participantId.localeCompare(right.participantId) ||
-        left.summary.localeCompare(right.summary),
-    );
+        left.consequence.summary.localeCompare(right.consequence.summary),
+    )
+    .map(({ consequence }) => consequence);
 }
 
 /**

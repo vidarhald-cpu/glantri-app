@@ -61,7 +61,6 @@ describe("player combat refresh coordination", () => {
     const projection = { scenario: { id: "scenario-1" } } as never;
     const currentConsequences = [
       {
-        participantId: "encounter-participant-1",
         summary: "Bleed 5/10 HP per round",
       },
     ];
@@ -143,7 +142,6 @@ describe("player combat refresh coordination", () => {
           history: history({
             currentConsequences: [
               {
-                participantId: "encounter-participant-1",
                 summary: "Stale consequence must not be adopted",
               },
             ],

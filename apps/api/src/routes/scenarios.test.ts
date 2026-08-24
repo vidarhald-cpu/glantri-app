@@ -6743,7 +6743,6 @@ describe("scenarios route contract", () => {
     const expected = {
       detail: "External bleeding",
       durationLabel: "Until cleared",
-      participantId: "encounter-participant-1",
       summary: "Bleed 5/10 HP per round",
     };
     expect(gmResponse.statusCode, gmResponse.body).toBe(200);
@@ -6752,14 +6751,18 @@ describe("scenarios route contract", () => {
     expect(gmResponse.json().history.currentConsequences).toEqual([expected]);
     expect(affectedResponse.json().history.currentConsequences).toEqual([expected]);
     expect(otherResponse.json().history.currentConsequences).toEqual([]);
-    const affectedPayload = affectedResponse.body;
-    [
-      "pointed_weapons",
-      "private-critical-command",
-      "private-critical-event",
-      "private-critical-effect",
-      "resolved-private-critical-effect",
-    ].forEach((secret) => expect(affectedPayload).not.toContain(secret));
+    [gmResponse, affectedResponse, otherResponse].forEach((response) => {
+      const consequencePayload = JSON.stringify(response.json().history.currentConsequences);
+      [
+        "encounter-participant-1",
+        "participant-1",
+        "pointed_weapons",
+        "private-critical-command",
+        "private-critical-event",
+        "private-critical-effect",
+        "resolved-private-critical-effect",
+      ].forEach((secret) => expect(consequencePayload).not.toContain(secret));
+    });
   });
 
   it("keeps opponent declaration content private during DE while preserving safe completion", async () => {

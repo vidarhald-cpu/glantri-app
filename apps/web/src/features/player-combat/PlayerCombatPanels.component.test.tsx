@@ -22,7 +22,6 @@ describe("PlayerCombatCurrentConsequences", () => {
     const consequence = {
       detail: "External bleeding",
       durationLabel: "Until cleared",
-      participantId: "encounter-participant-1",
       summary: "Bleed 5/10 HP per round",
     };
     const { container, rerender } = render(

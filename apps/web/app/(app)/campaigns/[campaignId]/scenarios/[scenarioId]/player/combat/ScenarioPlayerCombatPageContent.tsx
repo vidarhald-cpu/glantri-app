@@ -2619,13 +2619,7 @@ export default function ScenarioPlayerCombatPageContent({
       selectedRoundParticipant?.participantId,
     ],
   );
-  const currentConsequences = useMemo(
-    () =>
-      (combatHistory?.currentConsequences ?? []).filter(
-        (consequence) => consequence.participantId === selectedRoundParticipant?.participantId,
-      ),
-    [combatHistory?.currentConsequences, selectedRoundParticipant?.participantId],
-  );
+  const currentConsequences = combatHistory?.currentConsequences ?? [];
   const modifierOpponentId = liveCombatModifiers.opponentParticipantId;
   const modifierSituationContext = {
     opponentParticipantId: modifierOpponentId,
