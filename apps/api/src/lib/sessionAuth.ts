@@ -38,7 +38,7 @@ export function applyLocalCors(app: FastifyInstance): void {
       reply.header("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
       reply.header(
         "access-control-allow-headers",
-        "content-type,x-glantri-combat-command,x-glantri-combat-correlation-id,x-glantri-combat-response",
+        "content-type,x-glantri-artifact-mutation,x-glantri-combat-command,x-glantri-combat-correlation-id,x-glantri-combat-response",
       );
       reply.header("vary", "origin");
     }
@@ -54,7 +54,7 @@ const isProduction = process.env.NODE_ENV === "production";
 export function buildSessionCookie(token: string, expiresAt: string): string {
   const maxAgeSeconds = Math.max(
     0,
-    Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)
+    Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000),
   );
 
   const parts = [
@@ -62,7 +62,7 @@ export function buildSessionCookie(token: string, expiresAt: string): string {
     "HttpOnly",
     "Path=/",
     isProduction ? "SameSite=None" : "SameSite=Lax",
-    `Max-Age=${maxAgeSeconds}`
+    `Max-Age=${maxAgeSeconds}`,
   ];
 
   if (isProduction) {
@@ -78,7 +78,7 @@ export function buildExpiredSessionCookie(): string {
     "HttpOnly",
     "Path=/",
     isProduction ? "SameSite=None" : "SameSite=Lax",
-    "Max-Age=0"
+    "Max-Age=0",
   ];
 
   if (isProduction) {
@@ -95,7 +95,7 @@ export function getSessionTokenFromRequest(request: FastifyRequest): string | un
 
 export async function getAuthenticatedUser(
   request: FastifyRequest,
-  authService = new AuthService()
+  authService = new AuthService(),
 ): Promise<AuthUser | null> {
   const token = getSessionTokenFromRequest(request);
 
@@ -109,14 +109,14 @@ export async function getAuthenticatedUser(
 export async function requireAuthenticatedUser(
   request: FastifyRequest,
   reply: FastifyReply,
-  authService = new AuthService()
+  authService = new AuthService(),
 ): Promise<AuthUser | null> {
   const user = await getAuthenticatedUser(request, authService);
   recordCombatPerformanceCheckpoint("authentication_complete");
 
   if (!user) {
     await reply.code(401).send({
-      error: "Authentication required."
+      error: "Authentication required.",
     });
     return null;
   }
@@ -127,7 +127,7 @@ export async function requireAuthenticatedUser(
 export async function requireAdminUser(
   request: FastifyRequest,
   reply: FastifyReply,
-  authService = new AuthService()
+  authService = new AuthService(),
 ): Promise<AuthUser | null> {
   const user = await requireAuthenticatedUser(request, reply, authService);
 
@@ -137,7 +137,7 @@ export async function requireAdminUser(
 
   if (!canAccessAdmin(user.roles)) {
     await reply.code(403).send({
-      error: "Admin or GM role required."
+      error: "Admin or GM role required.",
     });
     return null;
   }
@@ -148,7 +148,7 @@ export async function requireAdminUser(
 export async function requireStrictAdminUser(
   request: FastifyRequest,
   reply: FastifyReply,
-  authService = new AuthService()
+  authService = new AuthService(),
 ): Promise<AuthUser | null> {
   const user = await requireAuthenticatedUser(request, reply, authService);
 
@@ -158,7 +158,7 @@ export async function requireStrictAdminUser(
 
   if (!isAdmin(user.roles)) {
     await reply.code(403).send({
-      error: "Admin role required."
+      error: "Admin role required.",
     });
     return null;
   }

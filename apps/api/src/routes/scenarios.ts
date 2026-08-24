@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 
+import { artifactRoutes } from "./artifacts";
 import { campaignRoutes } from "./scenarios/campaignRoutes";
 import { campaignItemRoutes } from "./scenarios/campaignItemRoutes";
 import { combatItemInteractionRoutes } from "./scenarios/combatItemInteractionRoutes";
@@ -9,6 +10,7 @@ import { scenarioRoutes } from "./scenarios/scenarioRoutes";
 import { templateRoutes } from "./scenarios/templateRoutes";
 
 export const scenariosRoutes: FastifyPluginAsync = async (app) => {
+  await app.register(artifactRoutes);
   await app.register(templateRoutes);
   await app.register(campaignRoutes);
   await app.register(campaignItemRoutes);

@@ -51,6 +51,8 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("visibilitychange");
     expect(source).toContain("const searchParamString = searchParams.toString()");
     expect(source).not.toContain("Accessible scenarios:");
+    expect(source).toContain("ArtifactPanel");
+    expect(source).toMatch(/canAccessGmEncounter[\s\S]*?<ArtifactPanel campaignId=\{campaignId\}/);
   });
 
   it("routes the workspace Character tab through the encounter-context panel", () => {
