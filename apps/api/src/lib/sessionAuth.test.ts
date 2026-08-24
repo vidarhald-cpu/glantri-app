@@ -30,7 +30,9 @@ describe("session auth HTTP contract", () => {
     expect(response.statusCode).toBe(204);
     expect(response.headers["access-control-allow-origin"]).toBe("https://web.example.test");
     expect(response.headers["access-control-allow-credentials"]).toBe("true");
-    expect(response.headers["access-control-allow-methods"]).toBe("GET,POST,PUT,PATCH,DELETE,OPTIONS");
+    expect(response.headers["access-control-allow-methods"]).toBe(
+      "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+    );
     expect(response.headers["access-control-allow-headers"]).toBe(
       "content-type,x-glantri-artifact-mutation,x-glantri-combat-command,x-glantri-combat-correlation-id,x-glantri-combat-response",
     );

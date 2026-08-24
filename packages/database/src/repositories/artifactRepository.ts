@@ -162,9 +162,7 @@ export class ArtifactRepository {
     });
   }
 
-  async listScenarioPublished(
-    campaignId: string,
-  ): Promise<
+  async listScenarioPublished(campaignId: string): Promise<
     Array<{
       artifact: ArtifactRecord;
       scenarioId: string;

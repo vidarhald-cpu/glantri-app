@@ -4,7 +4,7 @@ import { checkReadiness } from "./lib/readiness";
 import { buildApiServer } from "./app";
 
 vi.mock("./lib/readiness", () => ({
-  checkReadiness: vi.fn()
+  checkReadiness: vi.fn(),
 }));
 
 describe("api app health contract", () => {
@@ -62,7 +62,7 @@ describe("api app health contract", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/ready"
+      url: "/ready",
     });
 
     await app.close();
@@ -70,7 +70,7 @@ describe("api app health contract", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       service: "@glantri/api",
-      status: "ready"
+      status: "ready",
     });
     vi.unstubAllEnvs();
   });
@@ -78,14 +78,14 @@ describe("api app health contract", () => {
   it("reports application not ready on /ready when database checks fail", async () => {
     vi.mocked(checkReadiness).mockResolvedValueOnce({
       status: "not_ready",
-      reason: "database_unavailable"
+      reason: "database_unavailable",
     });
     vi.stubEnv("LOG_LEVEL", "silent");
     const app = buildApiServer();
 
     const response = await app.inject({
       method: "GET",
-      url: "/ready"
+      url: "/ready",
     });
 
     await app.close();
@@ -94,7 +94,7 @@ describe("api app health contract", () => {
     expect(response.json()).toEqual({
       service: "@glantri/api",
       status: "not_ready",
-      reason: "database_unavailable"
+      reason: "database_unavailable",
     });
     vi.unstubAllEnvs();
   });
