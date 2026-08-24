@@ -10,7 +10,6 @@ import {
   buildPlayerAccessibleCampaign,
   buildPlayerAccessibleScenario,
   buildPlayerCampaignHomeRecord,
-  campaignAssetTypeSchema,
   campaignRosterCategorySchema,
   campaignRosterSourceTypeSchema,
   campaignSettingsSchema,
@@ -19,7 +18,6 @@ import {
   reusableEntityKindSchema,
   scenarioKindSchema,
   scenarioStatusSchema,
-  scenarioVisibilitySchema,
 } from "@glantri/domain";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
@@ -759,22 +757,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       return;
     }
 
-    try {
-      const campaignId = parseId(request.params, "campaignId", "Campaign id");
-      const campaign = await campaignService.getCampaignById(campaignId);
-
-      if (!campaign || campaign.gmUserId !== user.id) {
-        return reply.code(404).send({
-          error: "Campaign not found.",
-        });
-      }
-
-      const assets = await campaignService.listCampaignAssets(campaignId);
-
-      return { assets };
-    } catch (error) {
-      return sendCampaignLoadFailure(request, reply, error);
-    }
+    return reply.code(410).send({ error: "Use the authenticated Campaign Artifacts view." });
   });
 
   app.post("/campaigns/:campaignId/assets", async (request, reply) => {
@@ -784,34 +767,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       return;
     }
 
-    try {
-      const campaignId = parseId(request.params, "campaignId", "Campaign id");
-      const campaign = await campaignService.getCampaignById(campaignId);
-
-      if (!campaign || campaign.gmUserId !== user.id) {
-        return reply.code(404).send({
-          error: "Campaign not found.",
-        });
-      }
-
-      const body = parseBodyObject(request.body, "Campaign asset payload");
-      const asset = await campaignService.createCampaignAsset({
-        campaignId,
-        createdByUserId: user.id,
-        description: parseOptionalString(body, "description"),
-        mimeType: parseOptionalString(body, "mimeType"),
-        storageUrl: parseRequiredString(body, "storageUrl"),
-        title: parseRequiredString(body, "title"),
-        type: campaignAssetTypeSchema.parse(body.type),
-        visibility: scenarioVisibilitySchema.parse(body.visibility),
-      });
-
-      return { asset };
-    } catch (error) {
-      return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to create campaign asset.",
-      });
-    }
+    return reply.code(410).send({ error: "Upload through the Campaign Artifacts view." });
   });
 
   app.put("/campaign-assets/:assetId/visibility", async (request, reply) => {
@@ -821,27 +777,6 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       return;
     }
 
-    try {
-      const assetId = parseId(request.params, "assetId", "Asset id");
-      const existingAsset = await campaignService.getCampaignAssetById(assetId);
-
-      if (!existingAsset) {
-        return reply.code(404).send({
-          error: "Campaign asset not found.",
-        });
-      }
-
-      const body = parseBodyObject(request.body, "Asset visibility payload");
-      const asset = await campaignService.updateCampaignAssetVisibility({
-        assetId,
-        visibility: scenarioVisibilitySchema.parse(body.visibility),
-      });
-
-      return { asset };
-    } catch (error) {
-      return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to update asset visibility.",
-      });
-    }
+    return reply.code(410).send({ error: "Use explicit Artifact sharing controls." });
   });
 };

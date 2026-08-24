@@ -2,6 +2,20 @@
  * @deprecated Import directly from the domain client instead (authClient, campaignClient, etc.).
  */
 export { API_BASE_URL } from "./apiConfig";
+export {
+  artifactContentUrl,
+  deleteArtifact,
+  fetchArtifactBlob,
+  isManagedArtifact,
+  loadArtifacts,
+  mutateScenarioArtifact,
+  retryArtifactCleanup,
+  setArtifactAudience,
+  setArtifactLifecycle,
+  updateArtifactMetadata,
+  uploadArtifact,
+  type ArtifactListResult,
+} from "./artifactClient";
 export { ApiRequestError, type ApiErrorPayload, parseResponse, sendJson } from "./apiClient";
 export {
   bootstrapGameMasterRole,

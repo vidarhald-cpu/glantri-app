@@ -9,6 +9,7 @@ coverage
 .env
 .env.local
 .env.task
+.local-artifacts/
 .DS_Store
 *.log
 /tmp/combat-performance/

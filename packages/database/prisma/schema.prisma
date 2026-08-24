@@ -237,6 +237,9 @@ model User {
   campaigns   Campaign[]
   characters  Character[]
   createdAssets CampaignAsset[]
+  artifactAuditEvents ArtifactAuditEvent[] @relation("ArtifactAuditActor")
+  attachedArtifactReferences ScenarioArtifactReference[] @relation("ScenarioArtifactAttachedBy")
+  publishedArtifactReferences ScenarioArtifactReference[] @relation("ScenarioArtifactPublishedBy")
   controlledScenarioParticipants ScenarioParticipant[] @relation("ScenarioParticipantController")
   reusableEntities ReusableEntity[]
   roles       UserRole[]
@@ -369,6 +372,8 @@ model Campaign {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   assets      CampaignAsset[]
+  artifactAuditEvents ArtifactAuditEvent[]
+  artifactReferences ScenarioArtifactReference[]
   equipmentItems CharacterEquipmentItem[]
   gmUser      User            @relation(fields: [gmUserId], references: [id], onDelete: Cascade)
   rosterEntries CampaignRosterEntry[]
@@ -393,7 +398,9 @@ model Scenario {
   participants  ScenarioParticipant[]
   relationshipsFrom ScenarioRelationship[] @relation("ScenarioRelationshipFrom")
   relationshipsTo   ScenarioRelationship[] @relation("ScenarioRelationshipTo")
+  artifactReferences ScenarioArtifactReference[]
 
+  @@unique([campaignId, id])
   @@index([campaignId])
   @@index([campaignId, status])
 }
@@ -478,14 +485,77 @@ model CampaignAsset {
   storageUrl  String
   mimeType    String?
   visibility  ScenarioVisibility
+  artifactKind String?
+  altText String?
+  originalFilename String?
+  provenanceKind String?
+  sourceLabel String?
+  sourceUri String?
+  mediaTypeDetected String?
+  byteSize BigInt?
+  sha256Digest String?
+  metadataVersion Int @default(1)
+  lifecycleState String @default("active")
+  audience String @default("gm_private")
+  storageProvider String @default("legacy")
+  storageKey String?
+  storageState String @default("legacy_reference")
+  storageDeletePending Boolean @default(false)
+  deletedAt DateTime?
   createdByUserId String
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
   campaign    Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   createdByUser User             @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
   mappedScenarios Scenario[]     @relation("ScenarioMapAsset")
+  artifactReferences ScenarioArtifactReference[]
+  auditEvents ArtifactAuditEvent[]
 
+  @@unique([campaignId, id])
   @@index([campaignId])
+}
+
+model ScenarioArtifactReference {
+  id String @id @default(cuid())
+  campaignId String
+  scenarioId String
+  artifactId String
+  state String @default("attached")
+  titleSnapshot String
+  captionSnapshot String?
+  altTextSnapshot String?
+  sortOrder Int?
+  attachedByUserId String
+  publishedByUserId String?
+  version Int @default(1)
+  publishedAt DateTime?
+  withdrawnAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  scenario Scenario @relation(fields: [campaignId, scenarioId], references: [campaignId, id], onDelete: Cascade)
+  artifact CampaignAsset @relation(fields: [campaignId, artifactId], references: [campaignId, id], onDelete: Cascade)
+  attachedByUser User @relation("ScenarioArtifactAttachedBy", fields: [attachedByUserId], references: [id], onDelete: Restrict)
+  publishedByUser User? @relation("ScenarioArtifactPublishedBy", fields: [publishedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([scenarioId, artifactId])
+  @@index([campaignId, artifactId, state])
+  @@index([campaignId, scenarioId, state])
+}
+
+model ArtifactAuditEvent {
+  id String @id @default(cuid())
+  campaignId String
+  artifactId String
+  actorUserId String
+  action String
+  metadataJson Json?
+  createdAt DateTime @default(now())
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  artifact CampaignAsset @relation(fields: [campaignId, artifactId], references: [campaignId, id], onDelete: Cascade)
+  actorUser User @relation("ArtifactAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([campaignId, artifactId, createdAt])
 }
 
 model CampaignRosterEntry {

@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { AuthUser } from "@glantri/auth";
 import type {
-  CampaignAsset,
   CampaignRosterEntry,
   EncounterKind,
   EncounterParticipant,
@@ -26,7 +25,6 @@ import {
   createEncounterOnServer,
   loadAuthUsers,
   loadCampaignEntities,
-  loadCampaignAssets,
   loadCampaignRoster,
   loadEncounterById,
   loadServerCharacters,
@@ -86,7 +84,6 @@ export default function ScenarioDetailPageContent({
   scenarioId,
 }: ScenarioDetailPageContentProps) {
   const [assignableUsers, setAssignableUsers] = useState<AuthUser[]>([]);
-  const [campaignAssets, setCampaignAssets] = useState<CampaignAsset[]>([]);
   const [campaignEquipment, setCampaignEquipment] = useState<CampaignEquipmentState>({
     itemsById: {},
     templatesById: {},
@@ -544,7 +541,6 @@ export default function ScenarioDetailPageContent({
       nextPlayerCharacters,
       nextRoster,
       nextSession,
-      nextAssets,
       nextCampaignItems,
     ] = await Promise.all([
       loadScenarioById(scenarioId),
@@ -557,7 +553,6 @@ export default function ScenarioDetailPageContent({
       loadServerCharacters(),
       loadCampaignRoster(campaignId),
       loadScenarioSession(scenarioId),
-      loadCampaignAssets(campaignId),
       loadCampaignItems(campaignId),
     ]);
 
@@ -575,7 +570,6 @@ export default function ScenarioDetailPageContent({
     setPlayerCharacters(nextPlayerCharacters);
     setRoster(nextRoster);
     setScenarioSession(nextSession);
-    setCampaignAssets(nextAssets);
     setCampaignEquipment(nextCampaignItems.state);
     setScenarioName(nextScenario.name);
     setScenarioDescription(nextScenario.description);
@@ -1037,13 +1031,6 @@ export default function ScenarioDetailPageContent({
           onSave={(input) => void handleSaveScenarioSession(input)}
           session={scenarioSession}
           sourceOptions={[
-            ...campaignAssets
-              .filter((asset) => asset.visibility === "visible_to_all")
-              .map((asset) => ({
-                label: `Asset: ${asset.title}`,
-                sourceId: asset.id,
-                sourceKind: "campaign_asset" as const,
-              })),
             ...Object.values(campaignEquipment.itemsById)
               .filter((item) => Boolean(item.holderCharacterId))
               .map((item) => ({
