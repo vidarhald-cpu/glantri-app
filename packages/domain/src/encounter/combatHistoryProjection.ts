@@ -244,6 +244,8 @@ export interface CombatHistoryProjection {
   archivedRounds: ProjectedCombatHistoryRound[];
   /** Fiction-facing event stream projected for this viewer. */
   combatLog?: CombatLogProjection;
+  /** Active, privacy-safe consequences that still affect the viewer's current combat state. */
+  currentConsequences: ProjectedCombatContinuingConsequence[];
   /** Player-safe canonical modifier totals bound to the currently executable attack task. */
   currentAttackModifierValidation?: CombatAttackModifierValidationProjection;
   /** Player-safe canonical modifier totals bound to the currently executable parry task. */
@@ -304,6 +306,123 @@ export interface CombatParryModifierValidationProjection {
 export interface CombatHistoryParticipantInput {
   displayName: string;
   participantId: string;
+}
+
+export interface CombatHistoryContinuingConsequenceInput {
+  effects: readonly CanonicalCombatModifierEffect[];
+  ownerParticipantId: string;
+  participantId: string;
+}
+
+export interface ProjectedCombatContinuingConsequence {
+  detail?: string;
+  durationLabel?: string;
+  summary: string;
+}
+
+function formatContinuingConsequenceValue(
+  effect: PlayerSafeCanonicalCombatModifierEffect,
+): string | undefined {
+  if (effect.payload.kind !== "numeric") return undefined;
+
+  switch (effect.payload.unit) {
+    case "bleed_rate":
+      return `${effect.payload.value}/10 HP per round`;
+    case "damage":
+      return `${effect.payload.value} HP`;
+    case "percentage":
+      return `${effect.payload.value >= 0 ? "+" : ""}${effect.payload.value}%`;
+    case "flat_db":
+    case "initiative_value":
+      return `${effect.payload.value >= 0 ? "+" : ""}${effect.payload.value}`;
+    case "integer_count":
+      return String(effect.payload.value);
+  }
+}
+
+function formatContinuingConsequenceDuration(
+  effect: PlayerSafeCanonicalCombatModifierEffect,
+): string | undefined {
+  const duration = effect.lifecycle.duration;
+
+  switch (duration.kind) {
+    case "rounds":
+      return `${duration.remaining} ${duration.remaining === 1 ? "round" : "rounds"} remaining`;
+    case "phase":
+      return duration.phase === "phase1" ? "Phase 1" : "Phase 2";
+    case "attack_opportunity_count":
+      return `${duration.remaining} ${duration.remaining === 1 ? "attack" : "attacks"} remaining`;
+    case "until_check":
+      return "Until checked";
+    case "until_condition":
+      return "Until cleared";
+    case "indefinite":
+    case "legacy_untyped":
+    case "manual":
+    case "relationship":
+      return undefined;
+  }
+}
+
+function projectCombatContinuingConsequences(input: {
+  consequences: readonly CombatHistoryContinuingConsequenceInput[];
+  viewer: CombatHistoryViewer;
+}): ProjectedCombatContinuingConsequence[] {
+  return input.consequences
+    .filter(
+      (entry) =>
+        input.viewer.kind === "gm" ||
+        input.viewer.controlledParticipantIds.has(entry.participantId),
+    )
+    .flatMap((entry) =>
+      entry.effects.flatMap((effect) => {
+        if (effect.ownerParticipantId !== entry.ownerParticipantId) return [];
+
+        const viewer =
+          input.viewer.kind === "gm"
+            ? {
+                controlledParticipantIds: new Set<string>(),
+                isGm: true,
+                visibleParticipantIds: new Set<string>(),
+              }
+            : {
+                // Canonical effects are owned by Scenario participant IDs while Combat history
+                // is keyed by Encounter participant IDs. Trust the owner of the persisted state,
+                // not an owner identity supplied inside an individual effect.
+                controlledParticipantIds: new Set([
+                  ...input.viewer.controlledParticipantIds,
+                  entry.ownerParticipantId,
+                ]),
+                isGm: false,
+                visibleParticipantIds: input.viewer.visibleParticipantIds,
+              };
+        const projected = projectPlayerSafeCanonicalCombatModifierEffect({ effect, viewer });
+        if (!projected || projected.lifecycle.state !== "active") return [];
+
+        const continuing =
+          projected.payload.kind === "restriction" ||
+          projected.payload.contributionScope === "state";
+        if (!continuing) return [];
+
+        const value = formatContinuingConsequenceValue(projected);
+        return [
+          {
+            consequence: {
+              detail: projected.publicNote,
+              durationLabel: formatContinuingConsequenceDuration(projected),
+              summary: [projected.publicLabel, value].filter(Boolean).join(" "),
+            },
+            participantId: entry.participantId,
+          },
+        ];
+      }),
+    )
+    .sort(
+      (left, right) =>
+        left.participantId.localeCompare(right.participantId) ||
+        left.consequence.summary.localeCompare(right.consequence.summary),
+    )
+    .map(({ consequence }) => consequence);
 }
 
 /**
@@ -898,6 +1017,7 @@ export function getCombatRoundEventsWithDerivedResultCoverage(input: {
 }
 
 export function projectCombatHistory(input: {
+  continuingConsequences?: readonly CombatHistoryContinuingConsequenceInput[];
   currentAttackModifierValidation?: CombatAttackModifierValidationProjection;
   currentParryModifierValidation?: CombatParryModifierValidationProjection;
   participants: readonly CombatHistoryParticipantInput[];
@@ -976,6 +1096,10 @@ export function projectCombatHistory(input: {
           }),
         }
       : {}),
+    currentConsequences: projectCombatContinuingConsequences({
+      consequences: input.continuingConsequences ?? [],
+      viewer: input.viewer,
+    }),
     currentAttackModifierValidation: input.currentAttackModifierValidation,
     currentParryModifierValidation: input.currentParryModifierValidation,
     progression,

@@ -105,6 +105,7 @@ import {
   type PlayerCombatDistancePreferenceOption,
   PlayerCombatDefenseStatsTable,
   PlayerCombatCommittedDefenseReview,
+  PlayerCombatCurrentConsequences,
   PlayerCombatModifierPanel,
   PlayerCombatObservationProgress,
   PlayerCombatOpponentSelector,
@@ -2605,7 +2606,11 @@ export default function ScenarioPlayerCombatPageContent({
           selectedRoundParticipant?.participantId,
         ].filter((id): id is string => Boolean(id)),
         unbalancedConditions: combatRoundState?.unbalancedConditions,
-      }),
+      }).filter(
+        (effect) =>
+          effect.lifecycle.state !== "active" ||
+          (effect.payload.kind === "numeric" && effect.payload.contributionScope !== "state"),
+      ),
     [
       combatRoundState?.continuedContacts,
       combatRoundState?.unbalancedConditions,
@@ -2614,6 +2619,7 @@ export default function ScenarioPlayerCombatPageContent({
       selectedRoundParticipant?.participantId,
     ],
   );
+  const currentConsequences = combatHistory?.currentConsequences ?? [];
   const modifierOpponentId = liveCombatModifiers.opponentParticipantId;
   const modifierSituationContext = {
     opponentParticipantId: modifierOpponentId,
@@ -5847,6 +5853,7 @@ export default function ScenarioPlayerCombatPageContent({
             ) : recentResultPresentation ? (
               <CombatStepResultList presentation={recentResultPresentation} title="Recent result" />
             ) : null}
+            <PlayerCombatCurrentConsequences consequences={currentConsequences} />
           </div>
         </section>
       ) : (

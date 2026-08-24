@@ -320,7 +320,9 @@ describe("buildCombatSituationAwarenessModel", () => {
       "Stunned",
       "Unbalanced",
     ]);
-    expect(model.conditions.find((row) => row.label === "Bleeding")?.valueLabel).toBe("2 HP/round");
+    expect(model.conditions.find((row) => row.label === "Bleeding")?.valueLabel).toBe(
+      "2/10 HP per round",
+    );
     expect(model.restrictions).toEqual([
       expect.objectContaining({ label: "No combat action", valueLabel: undefined }),
     ]);

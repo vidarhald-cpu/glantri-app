@@ -15,6 +15,7 @@ import {
   type ScenarioCombatModifierEntry,
   type CombatObservationRelationship,
   type PlayerSafeCombatDefenseReview,
+  type ProjectedCombatContinuingConsequence,
   type ScenarioParticipantCombatContext,
   type ScenarioParticipantParryDirection,
   type ScenarioParticipantTargetLocation,
@@ -154,6 +155,47 @@ interface PlayerCombatModifierPanelProps {
   /** Bounded archived-snapshot compatibility; live observation rows use derivedEntries. */
   observationRelationships?: readonly CombatObservationRelationship[];
   observationTargetLabels?: Readonly<Record<string, string>>;
+}
+
+export function PlayerCombatCurrentConsequences({
+  consequences,
+}: {
+  consequences: readonly ProjectedCombatContinuingConsequence[];
+}) {
+  if (consequences.length === 0) return null;
+
+  return (
+    <section
+      aria-label="Current consequences"
+      style={{
+        borderTop: "1px solid #d7d1c2",
+        display: "grid",
+        gap: "0.45rem",
+        paddingTop: "0.6rem",
+      }}
+    >
+      <strong>Current consequences</strong>
+      <ul style={{ display: "grid", gap: "0.45rem", margin: 0, paddingLeft: "1.2rem" }}>
+        {consequences.map((consequence, index) => (
+          <li key={`${consequence.summary}:${consequence.durationLabel ?? ""}:${index}`}>
+            <span>{consequence.summary}</span>
+            {consequence.durationLabel || consequence.detail ? (
+              <span
+                style={{
+                  color: "#5e5a50",
+                  display: "block",
+                  fontSize: "0.82rem",
+                  marginTop: "0.1rem",
+                }}
+              >
+                {[consequence.durationLabel, consequence.detail].filter(Boolean).join(" · ")}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 interface PlayerCombatObservationProgressProps {

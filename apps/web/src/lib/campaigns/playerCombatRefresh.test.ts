@@ -16,10 +16,15 @@ import {
   shouldAcceptPlayerCombatEncounter,
 } from "./playerCombatRefresh";
 
-function history(input: { encounterId: string; revision: string }): CombatHistoryProjection {
+function history(input: {
+  currentConsequences?: CombatHistoryProjection["currentConsequences"];
+  encounterId: string;
+  revision: string;
+}): CombatHistoryProjection {
   return {
     activeRound: { events: [], observationRelationships: [], roundNumber: 1, snapshots: [] },
     archivedRounds: [],
+    currentConsequences: input.currentConsequences ?? [],
     rows: [],
     sourceEncounterId: input.encounterId,
     sourceUpdatedAt: input.revision,
@@ -54,6 +59,11 @@ describe("player combat refresh coordination", () => {
     });
     const participants = [{ id: "participant-1" }] as unknown as ScenarioParticipant[];
     const projection = { scenario: { id: "scenario-1" } } as never;
+    const currentConsequences = [
+      {
+        summary: "Bleed 5/10 HP per round",
+      },
+    ];
 
     await expect(
       pollPlayerCombatSnapshot({
@@ -61,7 +71,11 @@ describe("player combat refresh coordination", () => {
         encounterId: "encounter-1",
         loadEncounter: vi.fn().mockResolvedValue(nextEncounter),
         loadHistory: vi.fn().mockResolvedValue({
-          history: history({ encounterId: "encounter-1", revision: nextEncounter.updatedAt }),
+          history: history({
+            currentConsequences,
+            encounterId: "encounter-1",
+            revision: nextEncounter.updatedAt,
+          }),
           identity: { encounterId: "encounter-1", revision: nextEncounter.updatedAt },
         }),
         loadParticipants: vi.fn().mockResolvedValue(participants),
@@ -71,7 +85,11 @@ describe("player combat refresh coordination", () => {
     ).resolves.toEqual({
       encounter: nextEncounter,
       history: {
-        history: history({ encounterId: "encounter-1", revision: nextEncounter.updatedAt }),
+        history: history({
+          currentConsequences,
+          encounterId: "encounter-1",
+          revision: nextEncounter.updatedAt,
+        }),
         identity: { encounterId: "encounter-1", revision: nextEncounter.updatedAt },
       },
       kind: "updated",
@@ -121,7 +139,15 @@ describe("player combat refresh coordination", () => {
         encounterId: "encounter-1",
         loadEncounter: vi.fn().mockResolvedValue(nextEncounter),
         loadHistory: vi.fn().mockResolvedValue({
-          history: history({ encounterId: "encounter-1", revision }),
+          history: history({
+            currentConsequences: [
+              {
+                summary: "Stale consequence must not be adopted",
+              },
+            ],
+            encounterId: "encounter-1",
+            revision,
+          }),
           identity: { encounterId: "encounter-1", revision },
         }),
         loadParticipants: vi.fn().mockResolvedValue([]),

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canonicalCombatModifierEffectSchema,
+  buildDamagePersistentLifecycle,
   combatRoundCommandSchema,
   combatRoundStateSchema,
   combatStepEventSchema,
@@ -68,6 +69,91 @@ const player = (controlled: string[], visible: string[]) => ({
 });
 
 describe("combat history projection", () => {
+  it("keeps an active typed Critical consequence visible only to the affected Player and GM", () => {
+    const activeBleed = buildDamagePersistentLifecycle({
+      context: {
+        commandId: "private-critical-command",
+        createdAt: "2026-08-24T08:00:00.000Z",
+        createdRevision: "revision-1",
+        createdSequence: 12,
+        encounterId: "encounter-1",
+        eventId: "private-critical-event",
+        ownerParticipantId: "scenario-participant-aria",
+        roundNumber: 1,
+      },
+      effectId: "private-critical-effect",
+      isStunned: false,
+      label: "External bleed",
+      modifierValue: 5,
+      notes: "External bleeding",
+      sourceCritKey: "pointed_weapons|arm|12",
+      sourceEffectKey: "pointed_weapons|arm|12|03",
+      status: "active",
+      type: "bleed",
+    });
+    expect(activeBleed).toBeDefined();
+    const resolvedBleed = {
+      ...activeBleed!,
+      id: "resolved-private-critical-effect",
+      lifecycle: { ...activeBleed!.lifecycle, state: "resolved" as const },
+    };
+    const misattachedBleed = {
+      ...activeBleed!,
+      id: "misattached-private-critical-effect",
+      ownerParticipantId: "scenario-participant-borin",
+      publicNote: "Another character's private consequence",
+    };
+    const state = combatRoundStateSchema.parse({
+      encounterId: "encounter-1",
+      participants: [
+        { label: "Aria", participantId: "aria" },
+        { label: "Borin", participantId: "borin" },
+      ],
+      roundNumber: 2,
+    });
+    const projectionInput = {
+      continuingConsequences: [
+        {
+          effects: [activeBleed!, resolvedBleed, misattachedBleed],
+          ownerParticipantId: "scenario-participant-aria",
+          participantId: "aria",
+        },
+      ],
+      participants,
+      source: historySource(state, "revision-2"),
+    };
+
+    const affectedPlayer = projectCombatHistory({
+      ...projectionInput,
+      viewer: player(["aria"], ["aria", "borin"]),
+    });
+    const otherPlayer = projectCombatHistory({
+      ...projectionInput,
+      viewer: player(["borin"], ["aria", "borin"]),
+    });
+    const gm = projectCombatHistory({ ...projectionInput, viewer: { kind: "gm" } });
+
+    expect(affectedPlayer.currentConsequences).toEqual([
+      {
+        detail: "External bleeding",
+        durationLabel: "Until cleared",
+        summary: "Bleed 5/10 HP per round",
+      },
+    ]);
+    expect(gm.currentConsequences).toEqual(affectedPlayer.currentConsequences);
+    expect(otherPlayer.currentConsequences).toEqual([]);
+    const serialized = JSON.stringify(affectedPlayer.currentConsequences);
+    [
+      "pointed_weapons",
+      "private-critical-command",
+      "private-critical-event",
+      "private-critical-effect",
+      "Another character's private consequence",
+      "aria",
+      "scenario-participant-aria",
+    ].forEach((secret) => expect(serialized).not.toContain(secret));
+  });
+
   it("projects only defender-safe committed defense facts and orders tied events by sequence", () => {
     const defenseEvent = (sequence: number, aware: boolean) =>
       event({

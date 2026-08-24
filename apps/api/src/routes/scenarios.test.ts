@@ -5663,6 +5663,7 @@ describe("scenarios route contract", () => {
     ["Scenario projection", "/scenarios/scenario-1/player-projection", "Scenario not found."],
     ["Scenario encounters", "/scenarios/scenario-1/encounters", "Scenario not found."],
     ["Encounter", "/encounters/encounter-1", "Encounter not found."],
+    ["Combat history", "/encounters/encounter-1/combat-history", "Encounter not found."],
   ])("fails closed for delegated-owner %s direct reads", async (_label, url, error) => {
     mocks.scenarioService.getScenarioById.mockResolvedValue({
       campaignId: "campaign-1",
@@ -6631,6 +6632,137 @@ describe("scenarios route contract", () => {
     });
     expect(response.json().history.progression).toBeDefined();
     expect(JSON.stringify(response.json().history.progression)).not.toContain("diagnostics");
+  });
+
+  it("projects an active typed Critical consequence only to its affected Player and the GM", async () => {
+    const activeBleed = buildDamagePersistentLifecycle({
+      context: {
+        commandId: "private-critical-command",
+        createdAt: "2026-08-24T08:00:00.000Z",
+        createdRevision: "revision-1",
+        createdSequence: 12,
+        encounterId: "encounter-1",
+        eventId: "private-critical-event",
+        ownerParticipantId: "participant-1",
+        roundNumber: 1,
+      },
+      effectId: "private-critical-effect",
+      isStunned: false,
+      label: "External bleed",
+      modifierValue: 5,
+      notes: "External bleeding",
+      sourceCritKey: "pointed_weapons|arm|12",
+      sourceEffectKey: "pointed_weapons|arm|12|03",
+      status: "active",
+      type: "bleed",
+    });
+    expect(activeBleed).toBeDefined();
+    const resolvedBleed = {
+      ...activeBleed!,
+      id: "resolved-private-critical-effect",
+      lifecycle: { ...activeBleed!.lifecycle, state: "resolved" as const },
+    };
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const encounter = makeCombatEncounter({
+      combatRoundState: {
+        encounterId: "encounter-1",
+        participants: encounterParticipants.map((participant) => ({
+          label: participant.label,
+          participantId: participant.id,
+        })),
+        roundNumber: 2,
+      },
+      currentRound: 2,
+      participants: encounterParticipants,
+    });
+    const firstBase = makeCombatScenarioParticipant({ id: "participant-1" });
+    const secondBase = makeCombatScenarioParticipant({
+      controlledByUserId: "other-player",
+      id: "participant-2",
+      snapshot: { displayName: "City guard" },
+    });
+    setupCombatDeclarationRoute({
+      encounter,
+      participants: [
+        {
+          ...firstBase,
+          state: {
+            ...firstBase.state,
+            combatEffects: {
+              effects: [
+                {
+                  canonicalLifecycle: activeBleed,
+                  createdAt: "2026-08-24T08:00:00.000Z",
+                  effectGroup: "bleed",
+                  id: "private-critical-effect",
+                  modifierValue: 5,
+                  roundNumber: 1,
+                  sourceEventId: "private-critical-event",
+                  status: "active",
+                  targetParticipantId: "participant-1",
+                  type: "bleed",
+                  updatedAt: "2026-08-24T08:00:00.000Z",
+                },
+                {
+                  canonicalLifecycle: resolvedBleed,
+                  createdAt: "2026-08-24T08:00:00.000Z",
+                  effectGroup: "bleed",
+                  id: "resolved-private-critical-effect",
+                  modifierValue: 5,
+                  roundNumber: 1,
+                  sourceEventId: "resolved-private-critical-event",
+                  status: "resolved",
+                  targetParticipantId: "participant-1",
+                  type: "bleed",
+                  updatedAt: "2026-08-24T08:01:00.000Z",
+                },
+              ],
+              events: [],
+            },
+          },
+        },
+        secondBase,
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const [gmResponse, affectedResponse, otherResponse] = await Promise.all([
+      app.inject({ method: "GET", url: "/encounters/encounter-1/combat-history" }),
+      app.inject({
+        method: "GET",
+        url: "/encounters/encounter-1/combat-history?perspectiveParticipantId=participant-1",
+      }),
+      app.inject({
+        method: "GET",
+        url: "/encounters/encounter-1/combat-history?perspectiveParticipantId=participant-2",
+      }),
+    ]);
+    await app.close();
+
+    const expected = {
+      detail: "External bleeding",
+      durationLabel: "Until cleared",
+      summary: "Bleed 5/10 HP per round",
+    };
+    expect(gmResponse.statusCode, gmResponse.body).toBe(200);
+    expect(affectedResponse.statusCode, affectedResponse.body).toBe(200);
+    expect(otherResponse.statusCode, otherResponse.body).toBe(200);
+    expect(gmResponse.json().history.currentConsequences).toEqual([expected]);
+    expect(affectedResponse.json().history.currentConsequences).toEqual([expected]);
+    expect(otherResponse.json().history.currentConsequences).toEqual([]);
+    [gmResponse, affectedResponse, otherResponse].forEach((response) => {
+      const consequencePayload = JSON.stringify(response.json().history.currentConsequences);
+      [
+        "encounter-participant-1",
+        "participant-1",
+        "pointed_weapons",
+        "private-critical-command",
+        "private-critical-event",
+        "private-critical-effect",
+        "resolved-private-critical-effect",
+      ].forEach((secret) => expect(consequencePayload).not.toContain(secret));
+    });
   });
 
   it("keeps opponent declaration content private during DE while preserving safe completion", async () => {
