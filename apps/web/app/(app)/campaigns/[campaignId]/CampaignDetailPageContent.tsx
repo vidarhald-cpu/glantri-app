@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from "react";
 import { defaultCanonicalContent } from "@glantri/content";
 import type {
   Campaign,
-  CampaignAsset,
   CampaignCharacterRosterCandidate,
   CampaignRosterEntry,
   ReusableEntity,
@@ -16,9 +15,7 @@ import type {
 
 import {
   addCampaignRosterEntryOnServer,
-  createCampaignAssetOnServer,
   createScenarioOnServer,
-  loadCampaignAssets,
   loadCampaignById,
   loadCampaignCharacterRosterCandidates,
   loadCampaignEntities,
@@ -28,10 +25,10 @@ import {
   loadCampaignScenarios,
   loadTemplates,
   removeCampaignRosterEntryOnServer,
-  updateCampaignAssetVisibilityOnServer,
 } from "@/lib/api/localServiceClient";
 import { getCampaignActorMetadata } from "@/lib/campaigns/campaignActors";
 import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
+import { ArtifactPanel } from "@/features/artifacts";
 
 interface CampaignDetailPageContentProps {
   campaignId: string;
@@ -191,7 +188,6 @@ export default function CampaignDetailPageContent({
   embedded = false,
   onWorkspaceScenariosChanged,
 }: CampaignDetailPageContentProps) {
-  const [assets, setAssets] = useState<CampaignAsset[]>([]);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [characters, setCharacters] = useState<CampaignCharacterRosterCandidate[]>([]);
   const [entities, setEntities] = useState<ReusableEntity[]>([]);
@@ -215,9 +211,6 @@ export default function CampaignDetailPageContent({
   const [scenarioDescription, setScenarioDescription] = useState("");
   const [continuesFromScenarioId, setContinuesFromScenarioId] = useState("");
 
-  const [assetTitle, setAssetTitle] = useState("");
-  const [assetUrl, setAssetUrl] = useState("");
-  const [assetType, setAssetType] = useState<CampaignAsset["type"]>("document");
   const rosterBySourceKey = useMemo(() => {
     const entries = new Map<string, CampaignRosterEntry>();
 
@@ -415,23 +408,15 @@ export default function CampaignDetailPageContent({
   );
 
   async function refreshPage() {
-    const [
-      nextCampaign,
-      nextScenarios,
-      nextEntities,
-      nextAssets,
-      nextTemplates,
-      nextRoster,
-      nextCharacters,
-    ] = await Promise.all([
-      loadCampaignById(campaignId),
-      loadCampaignScenarios(campaignId),
-      loadCampaignEntities(campaignId),
-      loadCampaignAssets(campaignId),
-      loadTemplates(),
-      loadCampaignRoster(campaignId),
-      loadCampaignCharacterRosterCandidates(campaignId),
-    ]);
+    const [nextCampaign, nextScenarios, nextEntities, nextTemplates, nextRoster, nextCharacters] =
+      await Promise.all([
+        loadCampaignById(campaignId),
+        loadCampaignScenarios(campaignId),
+        loadCampaignEntities(campaignId),
+        loadTemplates(),
+        loadCampaignRoster(campaignId),
+        loadCampaignCharacterRosterCandidates(campaignId),
+      ]);
     const nextScenarioRelationships = await loadCampaignScenarioRelationships(campaignId).catch(
       () => [],
     );
@@ -449,7 +434,6 @@ export default function CampaignDetailPageContent({
     setScenarioRelationships(nextScenarioRelationships);
     onWorkspaceScenariosChanged?.(nextScenarios);
     setEntities(nextEntities);
-    setAssets(nextAssets);
     setAllRosterEntries(nextAllRosterEntries);
     setRoster(nextRoster);
     setCharacters(nextCharacters);
@@ -559,46 +543,6 @@ export default function CampaignDetailPageContent({
     } catch (caughtError) {
       setError(
         caughtError instanceof Error ? caughtError.message : "Unable to update campaign roster.",
-      );
-    }
-  }
-
-  async function handleCreateAsset() {
-    try {
-      setError(undefined);
-      setFeedback(undefined);
-
-      const asset = await createCampaignAssetOnServer({
-        campaignId,
-        storageUrl: assetUrl,
-        title: assetTitle,
-        type: assetType,
-        visibility: "hidden",
-      });
-
-      setFeedback(`Created asset ${asset.title}.`);
-      setAssetTitle("");
-      setAssetUrl("");
-      await refreshPage();
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Unable to create asset.");
-    }
-  }
-
-  async function handleAssetVisibilityChange(
-    assetId: string,
-    visibility: CampaignAsset["visibility"],
-  ) {
-    try {
-      setError(undefined);
-      await updateCampaignAssetVisibilityOnServer({
-        assetId,
-        visibility,
-      });
-      await refreshPage();
-    } catch (caughtError) {
-      setError(
-        caughtError instanceof Error ? caughtError.message : "Unable to update asset visibility.",
       );
     }
   }
@@ -930,81 +874,7 @@ export default function CampaignDetailPageContent({
         )}
       </section>
 
-      <section
-        style={{
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.75rem",
-          padding: "1rem",
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Create campaign asset</h2>
-        <input
-          onChange={(event) => setAssetTitle(event.target.value)}
-          placeholder="Asset title"
-          value={assetTitle}
-        />
-        <input
-          onChange={(event) => setAssetUrl(event.target.value)}
-          placeholder="Storage URL"
-          value={assetUrl}
-        />
-        <select
-          onChange={(event) => setAssetType(event.target.value as CampaignAsset["type"])}
-          value={assetType}
-        >
-          <option value="document">Document</option>
-          <option value="map">Map</option>
-          <option value="image">Image</option>
-          <option value="handout">Handout</option>
-          <option value="drawing">Drawing</option>
-        </select>
-        <div>
-          <button onClick={() => void handleCreateAsset()} type="button">
-            Create asset
-          </button>
-        </div>
-      </section>
-
-      <section style={{ display: "grid", gap: "0.75rem" }}>
-        <h2 style={{ margin: 0 }}>Campaign assets</h2>
-        {assets.length > 0 ? (
-          assets.map((asset) => (
-            <div
-              key={asset.id}
-              style={{
-                border: "1px solid #d9ddd8",
-                borderRadius: 12,
-                display: "grid",
-                gap: "0.35rem",
-                padding: "1rem",
-              }}
-            >
-              <strong>{asset.title}</strong>
-              <div>
-                {asset.type} · {asset.visibility}
-              </div>
-              <div>{asset.storageUrl}</div>
-              <select
-                onChange={(event) =>
-                  void handleAssetVisibilityChange(
-                    asset.id,
-                    event.target.value as CampaignAsset["visibility"],
-                  )
-                }
-                value={asset.visibility}
-              >
-                <option value="hidden">Hidden</option>
-                <option value="visible_to_all">Visible to all</option>
-                <option value="gm_only">GM only</option>
-              </select>
-            </div>
-          ))
-        ) : (
-          <div>No assets yet.</div>
-        )}
-      </section>
+      <ArtifactPanel campaignId={campaignId} scenarios={scenarios} />
     </section>
   );
 }

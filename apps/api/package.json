@@ -11,6 +11,9 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@azure/identity": "^4",
+    "@azure/storage-blob": "^12",
+    "@fastify/multipart": "^9",
     "@glantri/auth": "workspace:*",
     "@glantri/content": "workspace:*",
     "@glantri/database": "workspace:*",

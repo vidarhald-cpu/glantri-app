@@ -1,5 +1,8 @@
 export { prisma } from "./client";
 export * from "./services/authService";
+export * from "./services/artifactService";
+export * from "./artifacts/artifactBinaryStore";
+export * from "./artifacts/artifactUploadValidation";
 export * from "./services/campaignService";
 export * from "./services/characterService";
 export * from "./services/chargenRuleSetService";

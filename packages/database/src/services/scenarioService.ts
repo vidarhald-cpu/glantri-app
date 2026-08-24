@@ -155,7 +155,9 @@ export class ScenarioService {
 
       if (reference.sourceKind === "campaign_asset") {
         const asset = assets.find((candidate) => candidate.id === reference.sourceId);
-        if (!asset) throw new Error("Choose an asset from this Campaign.");
+        if (!asset || !asset.storageUrl.startsWith("artifact-internal:")) {
+          throw new Error("Choose a secure Artifact from this Campaign.");
+        }
         if (reference.visibility === "players" && asset.visibility !== "visible_to_all") {
           throw new Error("Reveal this Campaign asset before making it available to players.");
         }
@@ -228,7 +230,11 @@ export class ScenarioService {
       if (input.viewerMode === "player" && reference.visibility !== "players") return [];
       if (reference.sourceKind === "campaign_asset") {
         const asset = assets.find((candidate) => candidate.id === reference.sourceId);
-        if (!asset || (input.viewerMode === "player" && asset.visibility !== "visible_to_all")) {
+        if (
+          !asset ||
+          !asset.storageUrl.startsWith("artifact-internal:") ||
+          (input.viewerMode === "player" && asset.visibility !== "visible_to_all")
+        ) {
           return [];
         }
         return [
