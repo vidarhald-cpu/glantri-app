@@ -85,4 +85,10 @@ export const invalidSkillCatalogueAuthoringDocuments = [
   invalidDocument("catalogue:invalid:related-arithmetic", (document) => {
     (document.relationships[1] as unknown as { factor: number }).factor = 0.5;
   }),
+  invalidDocument("catalogue:invalid:collection-kind-mismatch", (document) => {
+    (document.skills[4] as unknown as { kind: string }).kind = "domain";
+  }),
+  invalidDocument("catalogue:invalid:specialization-transfer-unrelated", (document) => {
+    document.relationships[4]!.sourceCompetencyId = "language:proposal:old-serevan";
+  }),
 ] as const;

@@ -41,6 +41,10 @@ interface RecordEntry<T extends AuthoredRecord = AuthoredRecord> {
   record: T;
 }
 
+interface CollectionRecordEntry<T extends AuthoredRecord = AuthoredRecord> extends RecordEntry<T> {
+  expectedKinds: readonly string[];
+}
+
 const STABLE_AUTHORING_ID_PATTERN = /^[a-z][a-z0-9-]*(?::[a-z0-9][a-z0-9-]*)+$/;
 const STATUS_SET = new Set<string>(SKILL_CATALOGUE_AUTHORING_STATUSES);
 const STAGE_SET = new Set<string>(DEVELOPMENT_STAGES);
@@ -96,34 +100,60 @@ function compareDiagnostics(
   );
 }
 
-function getRecordEntries(document: SkillCatalogueAuthoringDocument): RecordEntry[] {
+function getRecordEntries(document: SkillCatalogueAuthoringDocument): CollectionRecordEntry[] {
   return [
-    ...document.domains.map((record, index) => ({ path: `domains[${index}]`, record })),
-    ...document.categories.map((record, index) => ({ path: `categories[${index}]`, record })),
-    ...document.skills.map((record, index) => ({ path: `skills[${index}]`, record })),
+    ...document.domains.map((record, index) => ({
+      expectedKinds: ["domain"],
+      path: `domains[${index}]`,
+      record,
+    })),
+    ...document.categories.map((record, index) => ({
+      expectedKinds: ["category"],
+      path: `categories[${index}]`,
+      record,
+    })),
+    ...document.skills.map((record, index) => ({
+      expectedKinds: ["skill"],
+      path: `skills[${index}]`,
+      record,
+    })),
     ...document.specializations.map((record, index) => ({
+      expectedKinds: ["specialization"],
       path: `specializations[${index}]`,
       record,
     })),
     ...document.spokenLanguages.map((record, index) => ({
+      expectedKinds: ["spoken-language"],
       path: `spokenLanguages[${index}]`,
       record,
     })),
-    ...document.scripts.map((record, index) => ({ path: `scripts[${index}]`, record })),
+    ...document.scripts.map((record, index) => ({
+      expectedKinds: ["script"],
+      path: `scripts[${index}]`,
+      record,
+    })),
     ...document.writtenTraditions.map((record, index) => ({
+      expectedKinds: ["written-tradition"],
       path: `writtenTraditions[${index}]`,
       record,
     })),
-    ...document.families.map((record, index) => ({ path: `families[${index}]`, record })),
+    ...document.families.map((record, index) => ({
+      expectedKinds: ["language-family", "script-family"],
+      path: `families[${index}]`,
+      record,
+    })),
     ...document.learningGroups.map((record, index) => ({
+      expectedKinds: ["learning-group"],
       path: `learningGroups[${index}]`,
       record,
     })),
     ...document.relationships.map((record, index) => ({
+      expectedKinds: ["inclusion", "prerequisite", "related"],
       path: `relationships[${index}]`,
       record,
     })),
     ...document.applicabilityProfiles.map((record, index) => ({
+      expectedKinds: ["applicability-profile"],
       path: `applicabilityProfiles[${index}]`,
       record,
     })),
@@ -134,19 +164,18 @@ function getCompetencyEntries(
   document: SkillCatalogueAuthoringDocument,
 ): RecordEntry<SkillCatalogueCompetencyAuthoringRecord>[] {
   return [
-    ...document.skills.map((record, index) => ({ path: `skills[${index}]`, record })),
-    ...document.specializations.map((record, index) => ({
-      path: `specializations[${index}]`,
-      record,
-    })),
-    ...document.spokenLanguages.map((record, index) => ({
-      path: `spokenLanguages[${index}]`,
-      record,
-    })),
-    ...document.writtenTraditions.map((record, index) => ({
-      path: `writtenTraditions[${index}]`,
-      record,
-    })),
+    ...document.skills.flatMap((record, index) =>
+      record.kind === "skill" ? [{ path: `skills[${index}]`, record }] : [],
+    ),
+    ...document.specializations.flatMap((record, index) =>
+      record.kind === "specialization" ? [{ path: `specializations[${index}]`, record }] : [],
+    ),
+    ...document.spokenLanguages.flatMap((record, index) =>
+      record.kind === "spoken-language" ? [{ path: `spokenLanguages[${index}]`, record }] : [],
+    ),
+    ...document.writtenTraditions.flatMap((record, index) =>
+      record.kind === "written-tradition" ? [{ path: `writtenTraditions[${index}]`, record }] : [],
+    ),
   ];
 }
 
@@ -212,7 +241,15 @@ export function validateSkillCatalogueAuthoringDocument(
   const recordEntries = getRecordEntries(document);
   const recordById = new Map<string, AuthoredRecord>();
 
-  for (const { path, record } of recordEntries) {
+  for (const { expectedKinds, path, record } of recordEntries) {
+    if (!expectedKinds.includes(record.kind)) {
+      add(
+        "COLLECTION_KIND_MISMATCH",
+        `${path}.kind`,
+        `Authoring collection entry "${path}" must declare ${expectedKinds.map((kind) => `kind "${kind}"`).join(" or ")}; received "${String(record.kind)}".`,
+      );
+    }
+
     if (!STABLE_AUTHORING_ID_PATTERN.test(record.id)) {
       add(
         "INVALID_STABLE_ID",
@@ -264,14 +301,27 @@ export function validateSkillCatalogueAuthoringDocument(
     }
   }
 
-  const domainById = new Map(document.domains.map((domain) => [domain.id, domain]));
-  const categoryById = new Map(document.categories.map((category) => [category.id, category]));
+  const domains = document.domains.filter((record) => record.kind === "domain");
+  const categories = document.categories.filter((record) => record.kind === "category");
+  const scripts = document.scripts.filter((record) => record.kind === "script");
+  const families = document.families.filter(
+    (record) => record.kind === "language-family" || record.kind === "script-family",
+  );
+  const relationships = document.relationships.filter(
+    (record) =>
+      record.kind === "inclusion" || record.kind === "prerequisite" || record.kind === "related",
+  );
+  const spokenLanguages = document.spokenLanguages.filter(
+    (record) => record.kind === "spoken-language",
+  );
+  const domainById = new Map(domains.map((domain) => [domain.id, domain]));
+  const categoryById = new Map(categories.map((category) => [category.id, category]));
   const competencyEntries = getCompetencyEntries(document);
   const competencyById = new Map(competencyEntries.map(({ record }) => [record.id, record]));
-  const relationshipById = new Map(document.relationships.map((edge) => [edge.id, edge]));
-  const familyById = new Map(document.families.map((family) => [family.id, family]));
-  const languageById = new Map(document.spokenLanguages.map((language) => [language.id, language]));
-  const scriptById = new Map(document.scripts.map((script) => [script.id, script]));
+  const relationshipById = new Map(relationships.map((edge) => [edge.id, edge]));
+  const familyById = new Map(families.map((family) => [family.id, family]));
+  const languageById = new Map(spokenLanguages.map((language) => [language.id, language]));
+  const scriptById = new Map(scripts.map((script) => [script.id, script]));
 
   const validateNonMechanicalIdentity = (entry: RecordEntry) => {
     const { path, record } = entry;
@@ -300,10 +350,12 @@ export function validateSkillCatalogueAuthoringDocument(
     }
   };
 
-  document.domains.forEach((record, index) =>
-    validateNonMechanicalIdentity({ path: `domains[${index}]`, record }),
-  );
+  document.domains.forEach((record, index) => {
+    if (record.kind !== "domain") return;
+    validateNonMechanicalIdentity({ path: `domains[${index}]`, record });
+  });
   document.categories.forEach((record, index) => {
+    if (record.kind !== "category") return;
     const path = `categories[${index}]`;
     validateNonMechanicalIdentity({ path, record });
 
@@ -325,10 +377,12 @@ export function validateSkillCatalogueAuthoringDocument(
       }
     }
   });
-  document.scripts.forEach((record, index) =>
-    validateNonMechanicalIdentity({ path: `scripts[${index}]`, record }),
-  );
+  document.scripts.forEach((record, index) => {
+    if (record.kind !== "script") return;
+    validateNonMechanicalIdentity({ path: `scripts[${index}]`, record });
+  });
   document.families.forEach((record, index) => {
+    if (record.kind !== "language-family" && record.kind !== "script-family") return;
     const path = `families[${index}]`;
     validateNonMechanicalIdentity({ path, record });
 
@@ -428,6 +482,7 @@ export function validateSkillCatalogueAuthoringDocument(
   }
 
   document.spokenLanguages.forEach((language, index) => {
+    if (language.kind !== "spoken-language") return;
     for (const familyId of language.familyIds) {
       if (familyById.get(familyId)?.kind !== "language-family") {
         add(
@@ -440,6 +495,7 @@ export function validateSkillCatalogueAuthoringDocument(
   });
 
   document.scripts.forEach((script, index) => {
+    if (script.kind !== "script") return;
     for (const familyId of script.familyIds) {
       if (familyById.get(familyId)?.kind !== "script-family") {
         add(
@@ -452,6 +508,7 @@ export function validateSkillCatalogueAuthoringDocument(
   });
 
   document.writtenTraditions.forEach((tradition, index) => {
+    if (tradition.kind !== "written-tradition") return;
     const path = `writtenTraditions[${index}]`;
 
     if (!languageById.has(tradition.spokenLanguageId)) {
@@ -472,6 +529,13 @@ export function validateSkillCatalogueAuthoringDocument(
   });
 
   document.relationships.forEach((relationship, index) => {
+    if (
+      relationship.kind !== "inclusion" &&
+      relationship.kind !== "prerequisite" &&
+      relationship.kind !== "related"
+    ) {
+      return;
+    }
     const path = `relationships[${index}]`;
     const looseRelationship = relationship as unknown as Record<string, unknown>;
     const source = competencyById.get(relationship.sourceCompetencyId);
@@ -552,7 +616,9 @@ export function validateSkillCatalogueAuthoringDocument(
   });
 
   document.specializations.forEach((specialization, index) => {
+    if (specialization.kind !== "specialization") return;
     const path = `specializations[${index}]`;
+    const validBaseSkillIds = new Set<string>();
 
     if (specialization.basePrerequisiteEdgeIds.length === 0) {
       add(
@@ -576,6 +642,8 @@ export function validateSkillCatalogueAuthoringDocument(
           `${path}.basePrerequisiteEdgeIds`,
           `Specialization "${specialization.name}" (${specialization.id}) prerequisite edge "${edgeId}" must run from a concrete base skill to this specialization.`,
         );
+      } else {
+        validBaseSkillIds.add(source.id);
       }
     }
 
@@ -589,21 +657,25 @@ export function validateSkillCatalogueAuthoringDocument(
 
     for (const edgeId of specialization.transferEdgeIds) {
       const edge = relationshipById.get(edgeId);
-      const connectsSpecialization =
-        edge?.sourceCompetencyId === specialization.id ||
-        edge?.targetCompetencyId === specialization.id;
+      const otherEndpointId =
+        edge?.sourceCompetencyId === specialization.id
+          ? edge.targetCompetencyId
+          : edge?.targetCompetencyId === specialization.id
+            ? edge.sourceCompetencyId
+            : undefined;
 
-      if (edge?.kind !== "related" || !connectsSpecialization) {
+      if (edge?.kind !== "related" || !otherEndpointId || !validBaseSkillIds.has(otherEndpointId)) {
         add(
           "SPECIALIZATION_INVALID_TRANSFER_EDGE",
           `${path}.transferEdgeIds`,
-          `Specialization "${specialization.name}" (${specialization.id}) transfer edge "${edgeId}" must be a separate related edge connected to the specialization.`,
+          `Specialization "${specialization.name}" (${specialization.id}) transfer edge "${edgeId}" must explicitly connect this specialization with one of its valid authored base skills.`,
         );
       }
     }
   });
 
   document.learningGroups.forEach((group, index) => {
+    if (group.kind !== "learning-group") return;
     const path = `learningGroups[${index}]`;
 
     if (
@@ -658,6 +730,7 @@ export function validateSkillCatalogueAuthoringDocument(
   });
 
   document.applicabilityProfiles.forEach((profile, profileIndex) => {
+    if (profile.kind !== "applicability-profile") return;
     const path = `applicabilityProfiles[${profileIndex}]`;
 
     if (!STAGE_SET.has(String(profile.developmentStage))) {
