@@ -79,7 +79,7 @@ CREATE TABLE "CampaignBlackboardEntryEvent" (
     CONSTRAINT "bb_entry_event_pkey" PRIMARY KEY ("campaignId", "entryId", "entryVersion"),
     CONSTRAINT "bb_entry_event_version_check" CHECK ("entryVersion" >= 1),
     CONSTRAINT "bb_entry_event_action_check" CHECK ("action" IN ('initial','correction','replacement','refresh','retraction','archive')),
-    CONSTRAINT "bb_entry_event_revision_check" CHECK (("action" IN ('initial','correction','replacement','refresh') AND "revisionNumber" >= 1) OR ("action" IN ('retraction','archive') AND "revisionNumber" IS NULL)),
+    CONSTRAINT "bb_entry_event_revision_check" CHECK (("action" IN ('initial','correction','replacement','refresh') AND "revisionNumber" IS NOT NULL AND "revisionNumber" >= 1) OR ("action" IN ('retraction','archive') AND "revisionNumber" IS NULL)),
     CONSTRAINT "bb_entry_event_actor_label_check" CHECK (char_length(btrim("actorLabelSnapshot")) BETWEEN 1 AND 200)
 );
 CREATE INDEX "bb_entry_event_revision_idx" ON "CampaignBlackboardEntryEvent"("campaignId", "entryId", "revisionNumber");

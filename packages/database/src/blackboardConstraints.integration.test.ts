@@ -155,6 +155,9 @@ if (!prisma) {
     expect(byName.get("bb_entry_event_revision_fk")?.definition).toContain(
       'FOREIGN KEY ("campaignId", "entryId", "revisionNumber") REFERENCES "CampaignBlackboardEntryRevision"("campaignId", "entryId", "revisionNumber")',
     );
+    expect(byName.get("bb_entry_event_revision_check")?.definition).toContain(
+      '"revisionNumber" IS NOT NULL',
+    );
     expect(byName.get("bb_revision_unit_version_fk")?.definition).toContain(
       'FOREIGN KEY ("campaignId", "entryId", "unitKey", "unitVersion") REFERENCES "CampaignBlackboardDetailUnitVersion"("campaignId", "entryId", "unitKey", "unitVersion")',
     );
@@ -436,26 +439,85 @@ if (!prisma) {
       title: "Entry B",
     });
 
-    const insertEvent = (revisionNumber: number) =>
-      prisma.campaignBlackboardEntryEvent.create({
-        data: {
-          action: "correction",
-          actorLabelSnapshot: "Constraint GM",
-          actorUserId: gm.id,
-          campaignId: campaign.id,
-          entryId: entryA.entry.id,
-          entryVersion: 2,
-          revisionNumber,
-        },
-      });
+    const insertRawEvent = (
+      entryVersion: number,
+      action: "initial" | "correction" | "replacement" | "refresh" | "retraction" | "archive",
+      revisionNumber: number | null,
+    ) =>
+      prisma.$executeRaw(Prisma.sql`
+        INSERT INTO "CampaignBlackboardEntryEvent" (
+          "campaignId",
+          "entryId",
+          "entryVersion",
+          "action",
+          "actorUserId",
+          "actorLabelSnapshot",
+          "revisionNumber"
+        ) VALUES (
+          ${campaign.id},
+          ${entryA.entry.id},
+          ${entryVersion},
+          ${action},
+          ${gm.id},
+          ${"Constraint GM"},
+          ${revisionNumber}
+        )
+      `);
 
-    await expect(insertEvent(999)).rejects.toThrow();
-    await expect(insertEvent(2)).rejects.toThrow();
+    await expect(insertRawEvent(2, "correction", 999)).rejects.toThrow();
+    await expect(insertRawEvent(2, "correction", 2)).rejects.toThrow();
     expect(
       await prisma.campaignBlackboardEntryEvent.count({
         where: { campaignId: campaign.id, entryId: entryA.entry.id },
       }),
     ).toBe(1);
+
+    for (const [revisionNumber, changeKind] of [
+      [2, "correction"],
+      [3, "replacement"],
+      [4, "refresh"],
+    ] as const) {
+      await prisma.campaignBlackboardEntryRevision.create({
+        data: {
+          actorLabelSnapshot: "Constraint GM",
+          actorUserId: gm.id,
+          campaignId: campaign.id,
+          category: "clue_fact",
+          changeKind,
+          clueFact: `Valid revision ${revisionNumber}`,
+          entryId: entryA.entry.id,
+          revisionNumber,
+          title: "Entry A",
+        },
+      });
+      await expect(insertRawEvent(revisionNumber, changeKind, revisionNumber)).resolves.toBe(1);
+    }
+
+    const initialEvent = await prisma.campaignBlackboardEntryEvent.findUniqueOrThrow({
+      where: {
+        campaignId_entryId_entryVersion: {
+          campaignId: campaign.id,
+          entryId: entryA.entry.id,
+          entryVersion: 1,
+        },
+      },
+    });
+    expect(initialEvent).toMatchObject({ action: "initial", revisionNumber: 1 });
+
+    for (const [index, action] of (
+      ["initial", "correction", "replacement", "refresh"] as const
+    ).entries()) {
+      await expect(insertRawEvent(10 + index, action, null)).rejects.toThrow();
+    }
+    for (const [index, action] of (["retraction", "archive"] as const).entries()) {
+      await expect(insertRawEvent(20 + index, action, null)).resolves.toBe(1);
+      await expect(insertRawEvent(30 + index, action, 1)).rejects.toThrow();
+    }
+    expect(
+      await prisma.campaignBlackboardEntryEvent.count({
+        where: { campaignId: campaign.id, entryId: entryA.entry.id },
+      }),
+    ).toBe(6);
   });
 
   it("rejects headless/mismatched grant audit and partial membership deletion at commit", async () => {
