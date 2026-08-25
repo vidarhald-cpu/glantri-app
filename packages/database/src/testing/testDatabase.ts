@@ -40,6 +40,8 @@ export async function resetTestDatabase(prisma: PrismaClient): Promise<void> {
   await prisma.scenarioParticipant.deleteMany({});
   await prisma.scenarioRelationship.deleteMany({});
   await prisma.campaignRosterEntry.deleteMany({});
+  await prisma.campaignBlackboardEntry.deleteMany({});
+  await prisma.campaignBlackboardLayout.deleteMany({});
   await prisma.characterLoadout.deleteMany({});
   await prisma.characterEquipmentItem.deleteMany({});
   await prisma.characterStorageLocation.deleteMany({});

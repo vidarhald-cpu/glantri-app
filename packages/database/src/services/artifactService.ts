@@ -10,7 +10,9 @@ import {
   type ArtifactMetadataUpdate,
   type ArtifactUploadMetadata,
   type ScenarioArtifactReferenceDto,
+  type ArtifactBlackboardCandidate,
 } from "@glantri/domain";
+import type { Prisma } from "@prisma/client";
 
 import {
   ArtifactStorageUnavailableError,
@@ -106,6 +108,19 @@ export interface StagedArtifactUpload {
   mediaType: string;
   sha256Digest: string;
   storageKey: string;
+}
+
+/** Narrow transaction-scoped resolver used by Blackboard publication only. */
+export class ArtifactBlackboardResolver {
+  constructor(private readonly repository = new ArtifactRepository()) {}
+
+  resolve(
+    tx: Prisma.TransactionClient,
+    campaignId: string,
+    artifactId: string,
+  ): Promise<ArtifactBlackboardCandidate | null> {
+    return this.repository.resolveBlackboardCandidate(tx, campaignId, artifactId);
+  }
 }
 
 export class ArtifactService {
@@ -556,15 +571,17 @@ export class ArtifactService {
         throw new ArtifactNotFoundError();
       }
     }
-    return (await this.repository.listBlackboardCandidates(campaignId)).map((record) =>
-      artifactBlackboardCandidateSchema.parse({
-        altText: optionalString(record.altText),
-        artifactKind: record.artifactKind,
-        id: record.id,
-        mediaType: record.mediaTypeDetected,
-        title: record.title,
-      }),
-    );
+    return (await this.repository.listBlackboardCandidates(campaignId))
+      .filter((record) => Boolean(record.altText?.trim()))
+      .map((record) =>
+        artifactBlackboardCandidateSchema.parse({
+          altText: optionalString(record.altText),
+          artifactKind: record.artifactKind,
+          id: record.id,
+          mediaType: record.mediaTypeDetected,
+          title: record.title,
+        }),
+      );
   }
 
   private async requireOwningGm(campaignId: string, userId: string): Promise<void> {

@@ -30,7 +30,7 @@ describe("api app health contract", () => {
     expect(response.headers["access-control-allow-credentials"]).toBe("true");
     expect(response.headers["access-control-allow-methods"]).toContain("POST");
     expect(response.headers["access-control-allow-headers"]).toBe(
-      "content-type,x-glantri-artifact-mutation,x-glantri-combat-command,x-glantri-combat-correlation-id,x-glantri-combat-response",
+      "content-type,x-glantri-artifact-mutation,x-glantri-blackboard-mutation,x-glantri-combat-command,x-glantri-combat-correlation-id,x-glantri-combat-response",
     );
     expect(response.headers.vary).toBe("origin");
     vi.unstubAllEnvs();

@@ -1,4 +1,6 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
+
+import type { ArtifactBlackboardCandidate } from "@glantri/domain";
 
 import { prisma } from "../client";
 
@@ -562,6 +564,7 @@ export class ArtifactRepository {
       select: artifactSelect,
       where: {
         artifactKind: { in: ["map", "image"] },
+        altText: { not: null },
         audience: "campaign",
         campaignId,
         lifecycleState: "active",
@@ -569,6 +572,74 @@ export class ArtifactRepository {
         storageState: "ready",
       },
     });
+  }
+
+  async resolveBlackboardCandidate(
+    tx: TransactionClient,
+    campaignId: string,
+    artifactId: string,
+  ): Promise<ArtifactBlackboardCandidate | null> {
+    const rows = await tx.$queryRaw<
+      Array<{
+        altText: string;
+        artifactKind: "map" | "image";
+        id: string;
+        mediaType: "image/png" | "image/jpeg" | "image/webp";
+        title: string;
+      }>
+    >(Prisma.sql`
+      SELECT
+        "id",
+        "artifactKind",
+        "title",
+        "altText",
+        "mediaTypeDetected" AS "mediaType"
+      FROM "CampaignAsset"
+      WHERE "campaignId" = ${campaignId}
+        AND "id" = ${artifactId}
+        AND "artifactKind" IN ('map', 'image')
+        AND "audience" = 'campaign'
+        AND "lifecycleState" = 'active'
+        AND "storageState" = 'ready'
+        AND "mediaTypeDetected" IN ('image/png', 'image/jpeg', 'image/webp')
+        AND "altText" IS NOT NULL
+        AND char_length(btrim("altText")) BETWEEN 1 AND 1000
+      FOR UPDATE
+    `);
+    return rows[0] ?? null;
+  }
+
+  async getBlackboardCandidate(
+    campaignId: string,
+    artifactId: string,
+  ): Promise<ArtifactBlackboardCandidate | null> {
+    const rows = await this.client.$queryRaw<
+      Array<{
+        altText: string;
+        artifactKind: "map" | "image";
+        id: string;
+        mediaType: "image/png" | "image/jpeg" | "image/webp";
+        title: string;
+      }>
+    >(Prisma.sql`
+      SELECT
+        "id",
+        "artifactKind",
+        "title",
+        "altText",
+        "mediaTypeDetected" AS "mediaType"
+      FROM "CampaignAsset"
+      WHERE "campaignId" = ${campaignId}
+        AND "id" = ${artifactId}
+        AND "artifactKind" IN ('map', 'image')
+        AND "audience" = 'campaign'
+        AND "lifecycleState" = 'active'
+        AND "storageState" = 'ready'
+        AND "mediaTypeDetected" IN ('image/png', 'image/jpeg', 'image/webp')
+        AND "altText" IS NOT NULL
+        AND char_length(btrim("altText")) BETWEEN 1 AND 1000
+    `);
+    return rows[0] ?? null;
   }
 
   private async appendAudit(
