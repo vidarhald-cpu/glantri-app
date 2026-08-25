@@ -337,6 +337,38 @@ describe("Skill Catalogue authoring rejection diagnostics", () => {
     },
   );
 
+  it.each(["blank-label", "invalid-status", "invalid-enforcement"] as const)(
+    "does not establish a specialization base from an invalid prerequisite: %s",
+    (invalidStructure) => {
+      const document = structuredClone(
+        representativeSkillCatalogueAuthoringDocument,
+      ) as Mutable<SkillCatalogueAuthoringDocument>;
+      const prerequisite = document.relationships[3] as unknown as {
+        enforcement: string;
+        threshold: { label: string; status: string };
+      };
+
+      if (invalidStructure === "blank-label") prerequisite.threshold.label = "";
+      if (invalidStructure === "invalid-status") prerequisite.threshold.status = "resolved";
+      if (invalidStructure === "invalid-enforcement") prerequisite.enforcement = "runtime";
+
+      const first = validateSkillCatalogueAuthoringDocument(document);
+      const second = validateSkillCatalogueAuthoringDocument(structuredClone(document));
+
+      expect(first.diagnostics).toEqual(second.diagnostics);
+      expect(first.diagnostics.map(({ code, path }) => ({ code, path }))).toEqual([
+        {
+          code: "PREREQUISITE_THRESHOLD_STRUCTURE_INVALID",
+          path: "relationships[3].threshold",
+        },
+        {
+          code: "SPECIALIZATION_INVALID_TRANSFER_EDGE",
+          path: "specializations[0].transferEdgeIds",
+        },
+      ]);
+    },
+  );
+
   it("returns deterministic author-readable errors", () => {
     for (const document of invalidSkillCatalogueAuthoringDocuments) {
       const first = validateSkillCatalogueAuthoringDocument(document);

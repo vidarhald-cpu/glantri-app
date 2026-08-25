@@ -642,7 +642,11 @@ export function validateSkillCatalogueAuthoringDocument(
           `${path}.basePrerequisiteEdgeIds`,
           `Specialization "${specialization.name}" (${specialization.id}) prerequisite edge "${edgeId}" must run from a concrete base skill to this specialization.`,
         );
-      } else {
+      } else if (
+        edge.enforcement === "not-implemented" &&
+        edge.threshold?.status === "placeholder" &&
+        isNonBlank(edge.threshold?.label)
+      ) {
         validBaseSkillIds.add(source.id);
       }
     }
