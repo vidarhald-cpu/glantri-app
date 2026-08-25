@@ -59,9 +59,9 @@ CREATE TABLE "CampaignBlackboardEntryRevision" (
       OR
       ("category" = 'document_text' AND "clueFact" IS NULL AND ("contextText" IS NULL OR char_length("contextText") <= 2000) AND "documentText" IS NOT NULL AND char_length(btrim("documentText")) BETWEEN 1 AND 20000 AND "imageCaption" IS NULL AND "sourceArtifactIdSnapshot" IS NULL AND "sourceArtifactKind" IS NULL AND "sourceArtifactTitle" IS NULL AND "sourceArtifactAltText" IS NULL AND "sourceArtifactMediaType" IS NULL AND "recapText" IS NULL AND "approvedByUserId" IS NULL AND "approvedByLabelSnapshot" IS NULL AND "approvedAt" IS NULL)
       OR
-      ("category" = 'image_map' AND "clueFact" IS NULL AND "contextText" IS NULL AND "documentText" IS NULL AND ("imageCaption" IS NULL OR char_length("imageCaption") <= 2000) AND "sourceArtifactIdSnapshot" IS NOT NULL AND "sourceArtifactKind" IN ('map','image') AND char_length(btrim("sourceArtifactTitle")) BETWEEN 1 AND 200 AND char_length(btrim("sourceArtifactAltText")) BETWEEN 1 AND 1000 AND "sourceArtifactMediaType" IN ('image/png','image/jpeg','image/webp') AND "recapText" IS NULL AND "approvedByUserId" IS NULL AND "approvedByLabelSnapshot" IS NULL AND "approvedAt" IS NULL)
+      ("category" = 'image_map' AND "clueFact" IS NULL AND "contextText" IS NULL AND "documentText" IS NULL AND ("imageCaption" IS NULL OR char_length("imageCaption") <= 2000) AND "sourceArtifactIdSnapshot" IS NOT NULL AND char_length(btrim("sourceArtifactIdSnapshot")) >= 1 AND "sourceArtifactKind" IS NOT NULL AND "sourceArtifactKind" IN ('map','image') AND "sourceArtifactTitle" IS NOT NULL AND char_length(btrim("sourceArtifactTitle")) BETWEEN 1 AND 200 AND "sourceArtifactAltText" IS NOT NULL AND char_length(btrim("sourceArtifactAltText")) BETWEEN 1 AND 1000 AND "sourceArtifactMediaType" IS NOT NULL AND "sourceArtifactMediaType" IN ('image/png','image/jpeg','image/webp') AND "recapText" IS NULL AND "approvedByUserId" IS NULL AND "approvedByLabelSnapshot" IS NULL AND "approvedAt" IS NULL)
       OR
-      ("category" = 'recap' AND "clueFact" IS NULL AND "contextText" IS NULL AND "documentText" IS NULL AND "imageCaption" IS NULL AND "sourceArtifactIdSnapshot" IS NULL AND "sourceArtifactKind" IS NULL AND "sourceArtifactTitle" IS NULL AND "sourceArtifactAltText" IS NULL AND "sourceArtifactMediaType" IS NULL AND "recapText" IS NOT NULL AND char_length(btrim("recapText")) BETWEEN 1 AND 20000 AND "approvedByUserId" IS NOT NULL AND char_length(btrim("approvedByLabelSnapshot")) BETWEEN 1 AND 200 AND "approvedAt" IS NOT NULL)
+      ("category" = 'recap' AND "clueFact" IS NULL AND "contextText" IS NULL AND "documentText" IS NULL AND "imageCaption" IS NULL AND "sourceArtifactIdSnapshot" IS NULL AND "sourceArtifactKind" IS NULL AND "sourceArtifactTitle" IS NULL AND "sourceArtifactAltText" IS NULL AND "sourceArtifactMediaType" IS NULL AND "recapText" IS NOT NULL AND char_length(btrim("recapText")) BETWEEN 1 AND 20000 AND "approvedByUserId" IS NOT NULL AND "approvedByLabelSnapshot" IS NOT NULL AND char_length(btrim("approvedByLabelSnapshot")) BETWEEN 1 AND 200 AND "approvedAt" IS NOT NULL)
     )
 );
 
@@ -82,6 +82,7 @@ CREATE TABLE "CampaignBlackboardEntryEvent" (
     CONSTRAINT "bb_entry_event_revision_check" CHECK (("action" IN ('initial','correction','replacement','refresh') AND "revisionNumber" >= 1) OR ("action" IN ('retraction','archive') AND "revisionNumber" IS NULL)),
     CONSTRAINT "bb_entry_event_actor_label_check" CHECK (char_length(btrim("actorLabelSnapshot")) BETWEEN 1 AND 200)
 );
+CREATE INDEX "bb_entry_event_revision_idx" ON "CampaignBlackboardEntryEvent"("campaignId", "entryId", "revisionNumber");
 
 CREATE TABLE "CampaignBlackboardArtifactSourceLink" (
     "campaignId" TEXT NOT NULL,
@@ -208,6 +209,7 @@ ALTER TABLE "CampaignBlackboardEntry" ADD CONSTRAINT "bb_entry_current_revision_
 
 ALTER TABLE "CampaignBlackboardEntryEvent" ADD CONSTRAINT "bb_entry_event_entry_fk" FOREIGN KEY ("campaignId", "entryId") REFERENCES "CampaignBlackboardEntry"("campaignId", "id") ON DELETE CASCADE ON UPDATE RESTRICT;
 ALTER TABLE "CampaignBlackboardEntryEvent" ADD CONSTRAINT "bb_entry_event_actor_fk" FOREIGN KEY ("actorUserId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE RESTRICT;
+ALTER TABLE "CampaignBlackboardEntryEvent" ADD CONSTRAINT "bb_entry_event_revision_fk" FOREIGN KEY ("campaignId", "entryId", "revisionNumber") REFERENCES "CampaignBlackboardEntryRevision"("campaignId", "entryId", "revisionNumber") ON DELETE NO ACTION ON UPDATE RESTRICT DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "CampaignBlackboardArtifactSourceLink" ADD CONSTRAINT "bb_artifact_source_revision_fk" FOREIGN KEY ("campaignId", "entryId", "revisionNumber") REFERENCES "CampaignBlackboardEntryRevision"("campaignId", "entryId", "revisionNumber") ON DELETE CASCADE ON UPDATE RESTRICT;
 ALTER TABLE "CampaignBlackboardArtifactSourceLink" ADD CONSTRAINT "bb_artifact_source_asset_fk" FOREIGN KEY ("campaignId", "artifactId") REFERENCES "CampaignAsset"("campaignId", "id") ON DELETE CASCADE ON UPDATE RESTRICT;

@@ -635,6 +635,7 @@ model CampaignBlackboardEntryEvent {
   revisionNumber     Int?
 
   @@id([campaignId, entryId, entryVersion], map: "bb_entry_event_pkey")
+  @@index([campaignId, entryId, revisionNumber], map: "bb_entry_event_revision_idx")
 }
 
 model CampaignBlackboardArtifactSourceLink {

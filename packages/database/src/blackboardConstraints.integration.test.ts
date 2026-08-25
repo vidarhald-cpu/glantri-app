@@ -64,6 +64,7 @@ if (!prisma) {
       "bb_entry_event_actor_label_check",
       "bb_entry_event_entry_fk",
       "bb_entry_event_pkey",
+      "bb_entry_event_revision_fk",
       "bb_entry_event_revision_check",
       "bb_entry_event_version_check",
       "bb_entry_revision_check",
@@ -122,6 +123,7 @@ if (!prisma) {
     expect([...byName.keys()]).toEqual(expectedConstraintNames);
     for (const name of [
       "bb_entry_current_revision_fk",
+      "bb_entry_event_revision_fk",
       "bb_grant_event_revision_unit_fk",
       "bb_grant_stream_current_event_fk",
       "bb_grant_stream_unit_version_fk",
@@ -137,6 +139,10 @@ if (!prisma) {
       confdeltype: "a",
       confupdtype: "r",
     });
+    expect(byName.get("bb_entry_event_revision_fk")).toMatchObject({
+      confdeltype: "a",
+      confupdtype: "r",
+    });
     expect(byName.get("bb_entry_current_revision_fk")?.definition).toContain(
       '("campaignId", id, "currentRevisionNumber")',
     );
@@ -145,6 +151,9 @@ if (!prisma) {
     );
     expect(byName.get("bb_revision_entry_category_fk")?.definition).toContain(
       'FOREIGN KEY ("campaignId", "entryId", category) REFERENCES "CampaignBlackboardEntry"("campaignId", id, category)',
+    );
+    expect(byName.get("bb_entry_event_revision_fk")?.definition).toContain(
+      'FOREIGN KEY ("campaignId", "entryId", "revisionNumber") REFERENCES "CampaignBlackboardEntryRevision"("campaignId", "entryId", "revisionNumber")',
     );
     expect(byName.get("bb_revision_unit_version_fk")?.definition).toContain(
       'FOREIGN KEY ("campaignId", "entryId", "unitKey", "unitVersion") REFERENCES "CampaignBlackboardDetailUnitVersion"("campaignId", "entryId", "unitKey", "unitVersion")',
@@ -167,6 +176,7 @@ if (!prisma) {
       expect.arrayContaining([
         "bb_entry_campaign_id_id_category_key",
         "bb_entry_campaign_id_id_key",
+        "bb_entry_event_revision_idx",
         "bb_grant_event_head_key",
         "bb_revision_unit_exact_key",
         "bb_revision_unit_sort_key",
@@ -182,6 +192,28 @@ if (!prisma) {
     expect(indexesByName.get("bb_grant_event_head_key")).toContain(
       '("campaignId", "entryId", "targetCharacterIdSnapshot", "unitKey", "unitVersion", "streamVersion", "resultState", "entryRevisionNumber")',
     );
+    expect(indexesByName.get("bb_entry_event_revision_idx")).toContain(
+      '("campaignId", "entryId", "revisionNumber")',
+    );
+
+    const revisionContentDefinition = byName.get("bb_revision_content_check")?.definition;
+    for (const requiredImageField of [
+      "sourceArtifactIdSnapshot",
+      "sourceArtifactKind",
+      "sourceArtifactTitle",
+      "sourceArtifactAltText",
+      "sourceArtifactMediaType",
+    ]) {
+      expect(revisionContentDefinition).toContain(`"${requiredImageField}" IS NOT NULL`);
+    }
+    for (const requiredRecapField of [
+      "recapText",
+      "approvedByUserId",
+      "approvedByLabelSnapshot",
+      "approvedAt",
+    ]) {
+      expect(revisionContentDefinition).toContain(`"${requiredRecapField}" IS NOT NULL`);
+    }
 
     const columns = await prisma.$queryRaw<Array<{ column_name: string; is_nullable: string }>>(
       Prisma.sql`
@@ -197,6 +229,233 @@ if (!prisma) {
     expect(
       columns.find((column) => column.column_name === "targetCharacterIdSnapshot")?.is_nullable,
     ).toBe("NO");
+  });
+
+  it("rejects incomplete and cross-category revision rows without CHECK UNKNOWN gaps", async () => {
+    const gm = await createTestUser(prisma, {
+      displayName: "Constraint GM",
+      roles: ["game_master"],
+    });
+    const campaign = await createTestCampaign(prisma, gm.id, { status: "active" });
+    const now = new Date();
+
+    const seedEntry = async (
+      entryId: string,
+      category: string,
+      content: Partial<Prisma.CampaignBlackboardEntryRevisionUncheckedCreateInput>,
+    ) => {
+      await prisma.$transaction(async (tx) => {
+        await tx.campaignBlackboardEntry.create({
+          data: {
+            campaignId: campaign.id,
+            category,
+            createdByLabelSnapshot: "Constraint GM",
+            createdByUserId: gm.id,
+            currentRevisionNumber: 1,
+            entryVersion: 1,
+            id: entryId,
+            state: "published",
+            stateChangedAt: now,
+            stateChangedByLabelSnapshot: "Constraint GM",
+            stateChangedByUserId: gm.id,
+          },
+        });
+        await tx.campaignBlackboardEntryRevision.create({
+          data: {
+            actorLabelSnapshot: "Constraint GM",
+            actorUserId: gm.id,
+            campaignId: campaign.id,
+            category,
+            changeKind: "initial",
+            entryId,
+            revisionNumber: 1,
+            title: "Valid title",
+            ...content,
+          },
+        });
+        await tx.campaignBlackboardEntryEvent.create({
+          data: {
+            action: "initial",
+            actorLabelSnapshot: "Constraint GM",
+            actorUserId: gm.id,
+            campaignId: campaign.id,
+            entryId,
+            entryVersion: 1,
+            revisionNumber: 1,
+          },
+        });
+      });
+    };
+
+    await seedEntry("constraint-clue", "clue_fact", { clueFact: "Valid fact" });
+    await seedEntry("constraint-document", "document_text", { documentText: "Valid document" });
+    await seedEntry("constraint-image", "image_map", {
+      sourceArtifactAltText: "A safe map description",
+      sourceArtifactIdSnapshot: "artifact-1",
+      sourceArtifactKind: "map",
+      sourceArtifactMediaType: "image/png",
+      sourceArtifactTitle: "Safe map",
+    });
+    await seedEntry("constraint-recap", "recap", {
+      approvedAt: now,
+      approvedByLabelSnapshot: "Constraint GM",
+      approvedByUserId: gm.id,
+      recapText: "Valid recap",
+    });
+
+    const insertRevision = (
+      entryId: string,
+      category: string,
+      content: Partial<Prisma.CampaignBlackboardEntryRevisionUncheckedCreateInput>,
+    ) =>
+      prisma.campaignBlackboardEntryRevision.create({
+        data: {
+          actorLabelSnapshot: "Constraint GM",
+          actorUserId: gm.id,
+          campaignId: campaign.id,
+          category,
+          changeKind: "correction",
+          entryId,
+          revisionNumber: 2,
+          title: "Adversarial row",
+          ...content,
+        },
+      });
+
+    const validImage = {
+      sourceArtifactAltText: "A safe image description",
+      sourceArtifactIdSnapshot: "artifact-2",
+      sourceArtifactKind: "image",
+      sourceArtifactMediaType: "image/webp",
+      sourceArtifactTitle: "Safe image",
+    };
+    const validRecap = {
+      approvedAt: now,
+      approvedByLabelSnapshot: "Constraint GM",
+      approvedByUserId: gm.id,
+      recapText: "Approved recap",
+    };
+    const invalidRows: Array<
+      [
+        label: string,
+        entryId: string,
+        category: string,
+        content: Partial<Prisma.CampaignBlackboardEntryRevisionUncheckedCreateInput>,
+      ]
+    > = [
+      ["clue without fact", "constraint-clue", "clue_fact", {}],
+      [
+        "clue with document field",
+        "constraint-clue",
+        "clue_fact",
+        { clueFact: "Fact", documentText: "Forbidden" },
+      ],
+      ["document without text", "constraint-document", "document_text", {}],
+      [
+        "document with clue field",
+        "constraint-document",
+        "document_text",
+        { clueFact: "Forbidden", documentText: "Document" },
+      ],
+      [
+        "image with only the source id snapshot",
+        "constraint-image",
+        "image_map",
+        { sourceArtifactIdSnapshot: "artifact-only" },
+      ],
+      [
+        "image with blank source id snapshot",
+        "constraint-image",
+        "image_map",
+        { ...validImage, sourceArtifactIdSnapshot: "   " },
+      ],
+      [
+        "image with a recap field",
+        "constraint-image",
+        "image_map",
+        { ...validImage, recapText: "Forbidden" },
+      ],
+      [
+        "recap without approval label snapshot",
+        "constraint-recap",
+        "recap",
+        {
+          approvedAt: now,
+          approvedByUserId: gm.id,
+          recapText: "Missing approval label",
+        },
+      ],
+      ["recap without text", "constraint-recap", "recap", { ...validRecap, recapText: undefined }],
+      [
+        "recap without approving user",
+        "constraint-recap",
+        "recap",
+        { ...validRecap, approvedByUserId: undefined },
+      ],
+      [
+        "recap without approval time",
+        "constraint-recap",
+        "recap",
+        { ...validRecap, approvedAt: undefined },
+      ],
+      [
+        "recap with image source field",
+        "constraint-recap",
+        "recap",
+        { ...validRecap, sourceArtifactIdSnapshot: "forbidden" },
+      ],
+    ];
+
+    for (const [label, entryId, category, content] of invalidRows) {
+      await expect(insertRevision(entryId, category, content), label).rejects.toThrow();
+    }
+    expect(await prisma.campaignBlackboardEntryRevision.count()).toBe(4);
+  });
+
+  it("binds revision-bearing lifecycle events to the exact Campaign entry revision", async () => {
+    const gm = await createTestUser(prisma, {
+      displayName: "Constraint GM",
+      roles: ["game_master"],
+    });
+    const campaign = await createTestCampaign(prisma, gm.id, { status: "active" });
+    const entryA = (await service.createEntry(campaign.id, gm.id, {
+      category: "clue_fact",
+      fact: "Entry A",
+      title: "Entry A",
+    })) as { entry: { id: string } };
+    const entryB = (await service.createEntry(campaign.id, gm.id, {
+      category: "clue_fact",
+      fact: "Entry B",
+      title: "Entry B",
+    })) as { entry: { id: string } };
+    await service.reviseEntry(campaign.id, entryB.entry.id, gm.id, {
+      category: "clue_fact",
+      changeKind: "correction",
+      expectedEntryVersion: 1,
+      fact: "Entry B revision 2",
+      title: "Entry B",
+    });
+
+    const insertEvent = (revisionNumber: number) =>
+      prisma.campaignBlackboardEntryEvent.create({
+        data: {
+          action: "correction",
+          actorLabelSnapshot: "Constraint GM",
+          actorUserId: gm.id,
+          campaignId: campaign.id,
+          entryId: entryA.entry.id,
+          entryVersion: 2,
+          revisionNumber,
+        },
+      });
+
+    await expect(insertEvent(999)).rejects.toThrow();
+    await expect(insertEvent(2)).rejects.toThrow();
+    expect(
+      await prisma.campaignBlackboardEntryEvent.count({
+        where: { campaignId: campaign.id, entryId: entryA.entry.id },
+      }),
+    ).toBe(1);
   });
 
   it("rejects headless/mismatched grant audit and partial membership deletion at commit", async () => {
