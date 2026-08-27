@@ -5,7 +5,9 @@ import {
   SKILL_CATALOGUE_AUTHORING_SCHEMA_VERSION,
   SKILL_CATALOGUE_AUTHORING_STATUSES,
   type ProvisionalSkillEconomicWeight,
+  type SkillApplicabilityOverrideBasis,
   type SkillCatalogueRecordMetadata,
+  type SkillDomainApplicabilityOverrideAuthoringRecord,
 } from "./skillCatalogueAuthoring";
 
 describe("Skill Catalogue authoring contracts", () => {
@@ -53,5 +55,22 @@ describe("Skill Catalogue authoring contracts", () => {
     expect(canonical.status).not.toBe(legacy.status);
     expect(canonical.provenance.kind).toBe("decision");
     expect(legacy.provenance.kind).toBe("legacy");
+  });
+
+  it("types inert text/tradition exceptions and domain-scoped DS/AB overrides", () => {
+    const bases: SkillApplicabilityOverrideBasis[] = ["text", "tradition"];
+    const domainOverride: SkillDomainApplicabilityOverrideAuthoringRecord = {
+      accessBand: "AB3",
+      attributionId: "profile-trait:proposal:healing-school",
+      availability: "restricted",
+      basis: "tradition",
+      domainId: "domain:proposal:healing",
+      explanation: "Authoring provenance only; this grants no competence or eligibility.",
+    };
+
+    expect(bases).toEqual(["text", "tradition"]);
+    expect(domainOverride).toMatchObject({ accessBand: "AB3", basis: "tradition" });
+    expectTypeOf(domainOverride).not.toHaveProperty("competencyId");
+    expectTypeOf(domainOverride).not.toHaveProperty("eligibility");
   });
 });

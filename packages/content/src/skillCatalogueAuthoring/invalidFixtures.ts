@@ -64,6 +64,20 @@ export const invalidSkillCatalogueAuthoringDocuments = [
     profile.defaults[0]!.competencyId = "skill:missing:physic";
     profile.overrides[0]!.attributionId = "";
   }),
+  invalidDocument("catalogue:invalid:applicability-basis", (document) => {
+    (document.applicabilityProfiles[0]!.overrides[0] as unknown as { basis: string }).basis =
+      "rumor";
+  }),
+  invalidDocument("catalogue:invalid:domain-applicability", (document) => {
+    document.applicabilityProfiles[0]!.domainOverrides.push({
+      accessBand: "DS2" as "AB1",
+      attributionId: "profile-trait:invalid:wrong-domain-kind",
+      availability: "restricted",
+      basis: "profile",
+      domainId: "skill:proposal:first-aid",
+      explanation: "This invalid probe targets a competency instead of a domain.",
+    });
+  }),
   invalidDocument("catalogue:invalid:undifferentiated-proposal", (document) => {
     delete (document.skills[0] as unknown as { metadata?: unknown }).metadata;
   }),

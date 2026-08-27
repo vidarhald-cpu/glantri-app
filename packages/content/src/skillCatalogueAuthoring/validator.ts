@@ -64,6 +64,8 @@ const APPLICABILITY_OVERRIDE_BASES = new Set([
   "institution",
   "profile",
   "teacher",
+  "text",
+  "tradition",
 ]);
 const PROVENANCE_KIND_BY_STATUS = {
   canonical: "decision",
@@ -651,14 +653,6 @@ export function validateSkillCatalogueAuthoringDocument(
       }
     }
 
-    if (specialization.transferEdgeIds.length === 0) {
-      add(
-        "SPECIALIZATION_TRANSFER_SLOT_MISSING",
-        `${path}.transferEdgeIds`,
-        `Specialization "${specialization.name}" (${specialization.id}) needs a separately authored related-transfer edge slot.`,
-      );
-    }
-
     for (const edgeId of specialization.transferEdgeIds) {
       const edge = relationshipById.get(edgeId);
       const otherEndpointId =
@@ -784,6 +778,31 @@ export function validateSkillCatalogueAuthoringDocument(
       }
     });
 
+    profile.domainOverrides.forEach((override, overrideIndex) => {
+      const overridePath = `${path}.domainOverrides[${overrideIndex}]`;
+
+      if (!ACCESS_BAND_SET.has(String(override.accessBand))) {
+        add(
+          "INVALID_ACCESS_BAND",
+          `${overridePath}.accessBand`,
+          `Domain-scoped applicability override in "${profile.name}" (${profile.id}) must use AB1-AB4; received "${String(override.accessBand)}".`,
+        );
+      }
+
+      if (
+        !domainById.has(override.domainId) ||
+        !APPLICABILITY_OVERRIDE_BASES.has(String(override.basis)) ||
+        !isNonBlank(override.attributionId) ||
+        !isNonBlank(override.explanation)
+      ) {
+        add(
+          "DOMAIN_APPLICABILITY_OVERRIDE_REFERENCE_INVALID",
+          overridePath,
+          `Domain-scoped applicability override in "${profile.name}" needs a valid domain plus an explicit profile/contact/teacher/institution/biography/text/tradition attribution and explanation.`,
+        );
+      }
+    });
+
     profile.overrides.forEach((override, overrideIndex) => {
       if (
         !APPLICABILITY_OVERRIDE_BASES.has(String(override.basis)) ||
@@ -794,7 +813,7 @@ export function validateSkillCatalogueAuthoringDocument(
         add(
           "APPLICABILITY_OVERRIDE_REFERENCE_INVALID",
           `${path}.overrides[${overrideIndex}]`,
-          `Applicability override in "${profile.name}" needs a valid competency plus an explicit profile/contact/teacher/institution/biography attribution and explanation.`,
+          `Applicability override in "${profile.name}" needs a valid competency plus an explicit profile/contact/teacher/institution/biography/text/tradition attribution and explanation.`,
         );
       }
     });

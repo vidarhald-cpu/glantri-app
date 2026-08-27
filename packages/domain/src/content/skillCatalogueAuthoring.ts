@@ -208,11 +208,29 @@ export interface SkillAccessBandDefaultAuthoringRecord {
   routeDescription: string;
 }
 
+export type SkillApplicabilityOverrideBasis =
+  | "biography"
+  | "contact"
+  | "institution"
+  | "profile"
+  | "teacher"
+  | "text"
+  | "tradition";
+
 export interface SkillApplicabilityOverrideAuthoringRecord {
   attributionId: string;
   availability: "available" | "restricted" | "unavailable";
-  basis: "biography" | "contact" | "institution" | "profile" | "teacher";
+  basis: SkillApplicabilityOverrideBasis;
   competencyId: string;
+  explanation: string;
+}
+
+export interface SkillDomainApplicabilityOverrideAuthoringRecord {
+  accessBand: AccessBand;
+  attributionId: string;
+  availability: "available" | "restricted" | "unavailable";
+  basis: SkillApplicabilityOverrideBasis;
+  domainId: string;
   explanation: string;
 }
 
@@ -220,6 +238,7 @@ export interface SkillApplicabilityProfileAuthoringRecord extends SkillCatalogue
   accessBandDefaults: readonly SkillAccessBandDefaultAuthoringRecord[];
   defaults: readonly SkillApplicabilityDefaultAuthoringRecord[];
   developmentStage: DevelopmentStage;
+  domainOverrides: readonly SkillDomainApplicabilityOverrideAuthoringRecord[];
   eligibilityEnforcement: "not-implemented";
   kind: "applicability-profile";
   overrides: readonly SkillApplicabilityOverrideAuthoringRecord[];

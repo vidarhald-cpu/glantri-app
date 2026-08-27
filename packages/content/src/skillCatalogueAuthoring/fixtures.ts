@@ -569,6 +569,7 @@ export const representativeSkillCatalogueAuthoringDocument: SkillCatalogueAuthor
           competencyIds: ["skill:proposal:surgery"],
         },
       ],
+      domainOverrides: [],
       overrides: [
         {
           basis: "teacher",
@@ -614,6 +615,7 @@ export const representativeSkillCatalogueAuthoringDocument: SkillCatalogueAuthor
           ],
         },
       ],
+      domainOverrides: [],
       overrides: [
         {
           basis: "profile",

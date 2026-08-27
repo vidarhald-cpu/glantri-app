@@ -90,6 +90,103 @@ describe("representative Skill Catalogue authoring document", () => {
     expect(transfer).toMatchObject({ calibration: "unresolved", effect: "transfer" });
   });
 
+  it("allows a valid specialization to omit transfer edges without inventing a reverse relation", () => {
+    const document = structuredClone(
+      representativeSkillCatalogueAuthoringDocument,
+    ) as Mutable<SkillCatalogueAuthoringDocument>;
+    const specialization = document.specializations[0]!;
+    const prerequisiteId = specialization.basePrerequisiteEdgeIds[0]!;
+    const transferIds = new Set(specialization.transferEdgeIds);
+
+    specialization.transferEdgeIds = [];
+    document.relationships = document.relationships.filter(
+      (relationship) => !transferIds.has(relationship.id),
+    );
+
+    expect(validateSkillCatalogueAuthoringDocument(document)).toMatchObject({
+      diagnostics: [],
+      valid: true,
+    });
+    expect(specialization.basePrerequisiteEdgeIds).toEqual([prerequisiteId]);
+    expect(
+      document.relationships.some(
+        (relationship) =>
+          relationship.kind === "related" &&
+          (relationship.sourceCompetencyId === specialization.id ||
+            relationship.targetCompetencyId === specialization.id),
+      ),
+    ).toBe(false);
+  });
+
+  it("expresses accepted v0.2 specialization probes without authored transfer edges", () => {
+    const document = structuredClone(
+      representativeSkillCatalogueAuthoringDocument,
+    ) as Mutable<SkillCatalogueAuthoringDocument>;
+    const probes = [
+      {
+        baseId: "skill:probe:fibre-working",
+        baseName: "Fibre Working",
+        specializationId: "specialization:probe:cordage-ropemaking",
+        specializationName: "Cordage / Ropemaking",
+        task: "Prepare fibre and twist or lay it into society-appropriate cordage.",
+      },
+      {
+        baseId: "skill:probe:tailoring",
+        baseName: "Tailoring",
+        specializationId: "specialization:probe:sailmaking",
+        specializationName: "Sailmaking",
+        task: "Cut, reinforce, fit, and repair sails within a tailoring foundation.",
+      },
+      {
+        baseId: "skill:probe:battle-tactics",
+        baseName: "Battle Tactics",
+        specializationId: "specialization:probe:siege-operations",
+        specializationName: "Siege Operations",
+        task: "Apply battle tactics to assault, defence, breach, sortie, and reserve sequencing.",
+      },
+    ] as const;
+
+    for (const probe of probes) {
+      const base = structuredClone(document.skills[3]!);
+      base.id = probe.baseId;
+      base.name = probe.baseName;
+      base.description = `A non-canonical conformance probe for the ${probe.baseName} task foundation.`;
+      base.taskEnvelope.coreTasks = [probe.task];
+      document.skills.push(base);
+
+      const specialization = structuredClone(document.specializations[0]!);
+      specialization.id = probe.specializationId;
+      specialization.name = probe.specializationName;
+      specialization.description = `A non-canonical specialization probe rooted in ${probe.baseName}.`;
+      specialization.taskEnvelope.coreTasks = [probe.task];
+      specialization.basePrerequisiteEdgeIds = [
+        `relationship:probe:${probe.baseId.split(":").at(-1)}-prerequisite-${probe.specializationId
+          .split(":")
+          .at(-1)}`,
+      ];
+      specialization.transferEdgeIds = [];
+      document.specializations.push(specialization);
+
+      const prerequisite = structuredClone(document.relationships[3]!);
+      prerequisite.id = specialization.basePrerequisiteEdgeIds[0]!;
+      prerequisite.name = `${probe.baseName} prerequisite for ${probe.specializationName}`;
+      prerequisite.sourceCompetencyId = base.id;
+      prerequisite.targetCompetencyId = specialization.id;
+      document.relationships.push(prerequisite);
+    }
+
+    expect(validateSkillCatalogueAuthoringDocument(document)).toMatchObject({
+      diagnostics: [],
+      valid: true,
+    });
+    expect(
+      document.specializations.slice(-probes.length).map((specialization) => ({
+        name: specialization.name,
+        transferEdgeIds: specialization.transferEdgeIds,
+      })),
+    ).toEqual(probes.map((probe) => ({ name: probe.specializationName, transferEdgeIds: [] })));
+  });
+
   it("accepts either explicitly authored transfer direction without synthesizing a reverse edge", () => {
     const document = structuredClone(
       representativeSkillCatalogueAuthoringDocument,
@@ -226,6 +323,68 @@ describe("representative Skill Catalogue authoring document", () => {
     ).toBe(true);
   });
 
+  it("accepts inert text and tradition applicability exception bases", () => {
+    const document = structuredClone(
+      representativeSkillCatalogueAuthoringDocument,
+    ) as Mutable<SkillCatalogueAuthoringDocument>;
+    const profile = document.applicabilityProfiles[1]!;
+    const source = profile.overrides[0]!;
+
+    profile.overrides.push(
+      {
+        ...structuredClone(source),
+        attributionId: "text:probe:field-surgery-manual",
+        basis: "text",
+        explanation: "A named text supplies an authored access exception without competence.",
+      },
+      {
+        ...structuredClone(source),
+        attributionId: "tradition:probe:campaign-operators",
+        basis: "tradition",
+        explanation: "A named tradition supplies an authored access exception without competence.",
+      },
+    );
+
+    expect(validateSkillCatalogueAuthoringDocument(document)).toMatchObject({
+      diagnostics: [],
+      valid: true,
+    });
+    expect(profile.overrides.slice(-2).map((override) => override.basis)).toEqual([
+      "text",
+      "tradition",
+    ]);
+  });
+
+  it("accepts a first-class domain-scoped DS/AB override without expanding competencies", () => {
+    const document = structuredClone(
+      representativeSkillCatalogueAuthoringDocument,
+    ) as Mutable<SkillCatalogueAuthoringDocument>;
+    const profile = document.applicabilityProfiles[0]!;
+    const competencyDefaultCount = profile.defaults.length;
+    const competencyOverrideCount = profile.overrides.length;
+
+    profile.domainOverrides.push({
+      accessBand: "AB3",
+      attributionId: "profile-trait:probe:river-clan-healing-school",
+      availability: "restricted",
+      basis: "profile",
+      domainId: "domain:proposal:healing",
+      explanation:
+        "This profile varies Healing-domain availability and access without inferring skill entries.",
+    });
+
+    expect(validateSkillCatalogueAuthoringDocument(document)).toMatchObject({
+      diagnostics: [],
+      valid: true,
+    });
+    expect(profile).toMatchObject({
+      developmentStage: "DS2",
+      eligibilityEnforcement: "not-implemented",
+    });
+    expect(profile.defaults).toHaveLength(competencyDefaultCount);
+    expect(profile.overrides).toHaveLength(competencyOverrideCount);
+  });
+
   it("keeps proposal, evidence, and legacy records explicit and outside runtime content", () => {
     const statuses = new Set([
       ...representativeSkillCatalogueAuthoringDocument.skills.map((skill) => skill.metadata.status),
@@ -263,7 +422,6 @@ describe("Skill Catalogue authoring rejection diagnostics", () => {
     ["catalogue:invalid:missing-relationship-target", "RELATIONSHIP_UNKNOWN_TARGET"],
     ["catalogue:invalid:partial-inclusion", "INCLUSION_NOT_EXACT_100_PERCENT"],
     ["catalogue:invalid:specialization-prerequisite", "SPECIALIZATION_INVALID_BASE_PREREQUISITE"],
-    ["catalogue:invalid:specialization-prerequisite", "SPECIALIZATION_TRANSFER_SLOT_MISSING"],
     ["catalogue:invalid:written-tradition-binding", "WRITTEN_TRADITION_UNKNOWN_LANGUAGE"],
     ["catalogue:invalid:written-tradition-binding", "WRITTEN_TRADITION_UNKNOWN_SCRIPT"],
     ["catalogue:invalid:learning-group", "LEARNING_GROUP_CONTEXT_MISSING"],
@@ -272,6 +430,9 @@ describe("Skill Catalogue authoring rejection diagnostics", () => {
     ["catalogue:invalid:applicability", "INVALID_ACCESS_BAND"],
     ["catalogue:invalid:applicability", "APPLICABILITY_DEFAULT_REFERENCE_INVALID"],
     ["catalogue:invalid:applicability", "APPLICABILITY_OVERRIDE_REFERENCE_INVALID"],
+    ["catalogue:invalid:applicability-basis", "APPLICABILITY_OVERRIDE_REFERENCE_INVALID"],
+    ["catalogue:invalid:domain-applicability", "INVALID_ACCESS_BAND"],
+    ["catalogue:invalid:domain-applicability", "DOMAIN_APPLICABILITY_OVERRIDE_REFERENCE_INVALID"],
     ["catalogue:invalid:undifferentiated-proposal", "AUTHORING_STATUS_OR_PROVENANCE_MISSING"],
     ["catalogue:invalid:live-pricing", "ECONOMIC_WEIGHT_NOT_INERT"],
     ["catalogue:invalid:live-pricing", "LIVE_PRICING_FIELD_FORBIDDEN"],
@@ -286,6 +447,78 @@ describe("Skill Catalogue authoring rejection diagnostics", () => {
       expect.arrayContaining([expect.objectContaining({ code, documentId })]),
     );
   });
+
+  it.each([
+    ["missing", "domain:missing:healing"],
+    ["wrong-kind", "skill:proposal:first-aid"],
+  ] as const)("rejects a %s domain-scoped applicability target", (_case, domainId) => {
+    const document = structuredClone(
+      representativeSkillCatalogueAuthoringDocument,
+    ) as Mutable<SkillCatalogueAuthoringDocument>;
+    const profile = document.applicabilityProfiles[0]!;
+    profile.domainOverrides.push({
+      accessBand: "AB2",
+      attributionId: "profile-trait:invalid:domain-target",
+      availability: "restricted",
+      basis: "profile",
+      domainId,
+      explanation: "Negative probe for deterministic domain target validation.",
+    });
+
+    const first = validateSkillCatalogueAuthoringDocument(document);
+    const second = validateSkillCatalogueAuthoringDocument(structuredClone(document));
+
+    expect(first.diagnostics).toEqual(second.diagnostics);
+    expect(first.diagnostics).toEqual([
+      {
+        code: "DOMAIN_APPLICABILITY_OVERRIDE_REFERENCE_INVALID",
+        documentId: representativeSkillCatalogueAuthoringDocument.id,
+        message: `Domain-scoped applicability override in "${profile.name}" needs a valid domain plus an explicit profile/contact/teacher/institution/biography/text/tradition attribution and explanation.`,
+        path: "applicabilityProfiles[0].domainOverrides[0]",
+      },
+    ]);
+  });
+
+  it.each(["missing", "invalid"] as const)(
+    "rejects a specialization with %s prerequisite structure even when transfer is omitted",
+    (prerequisiteCase) => {
+      const document = structuredClone(
+        representativeSkillCatalogueAuthoringDocument,
+      ) as Mutable<SkillCatalogueAuthoringDocument>;
+      const specialization = document.specializations[0]!;
+      specialization.transferEdgeIds = [];
+
+      if (prerequisiteCase === "missing") {
+        specialization.basePrerequisiteEdgeIds = [];
+      } else {
+        const prerequisite = document.relationships[3] as unknown as {
+          threshold: { label: string };
+        };
+        prerequisite.threshold.label = "";
+      }
+
+      const diagnostics = validateSkillCatalogueAuthoringDocument(document).diagnostics;
+      expect(diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code:
+              prerequisiteCase === "missing"
+                ? "SPECIALIZATION_BASE_PREREQUISITE_MISSING"
+                : "PREREQUISITE_THRESHOLD_STRUCTURE_INVALID",
+            path:
+              prerequisiteCase === "missing"
+                ? "specializations[0].basePrerequisiteEdgeIds"
+                : "relationships[3].threshold",
+          }),
+        ]),
+      );
+      expect(diagnostics).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: "SPECIALIZATION_TRANSFER_SLOT_MISSING" }),
+        ]),
+      );
+    },
+  );
 
   it.each([
     ["domains", ["domain"], "skill"],
