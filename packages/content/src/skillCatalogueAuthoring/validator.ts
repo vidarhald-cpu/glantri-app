@@ -67,6 +67,7 @@ const APPLICABILITY_OVERRIDE_BASES = new Set([
   "text",
   "tradition",
 ]);
+const APPLICABILITY_AVAILABILITIES = new Set(["available", "restricted", "unavailable"]);
 const PROVENANCE_KIND_BY_STATUS = {
   canonical: "decision",
   evidence: "evidence",
@@ -778,8 +779,30 @@ export function validateSkillCatalogueAuthoringDocument(
       }
     });
 
-    profile.domainOverrides.forEach((override, overrideIndex) => {
+    const looseProfile = profile as unknown as Record<string, unknown>;
+    const domainOverrides = Array.isArray(looseProfile.domainOverrides)
+      ? (looseProfile.domainOverrides as SkillCatalogueAuthoringDocument["applicabilityProfiles"][number]["domainOverrides"])
+      : [];
+    const exactDomainOverrides = new Set<string>();
+
+    if (!Array.isArray(looseProfile.domainOverrides)) {
+      add(
+        "DOMAIN_APPLICABILITY_OVERRIDES_INVALID",
+        `${path}.domainOverrides`,
+        `Applicability profile "${profile.name}" (${profile.id}) must provide domainOverrides as an array; received ${looseProfile.domainOverrides === undefined ? "missing" : typeof looseProfile.domainOverrides}.`,
+      );
+    }
+
+    domainOverrides.forEach((override, overrideIndex) => {
       const overridePath = `${path}.domainOverrides[${overrideIndex}]`;
+      const exactOverride = JSON.stringify([
+        override.domainId,
+        override.accessBand,
+        override.attributionId,
+        override.availability,
+        override.basis,
+        override.explanation,
+      ]);
 
       if (!ACCESS_BAND_SET.has(String(override.accessBand))) {
         add(
@@ -789,10 +812,35 @@ export function validateSkillCatalogueAuthoringDocument(
         );
       }
 
+      if (!APPLICABILITY_AVAILABILITIES.has(String(override.availability))) {
+        add(
+          "INVALID_APPLICABILITY_AVAILABILITY",
+          `${overridePath}.availability`,
+          `Domain-scoped applicability override in "${profile.name}" (${profile.id}) must use available, restricted, or unavailable; received "${String(override.availability)}".`,
+        );
+      }
+
+      if (!STABLE_AUTHORING_ID_PATTERN.test(override.attributionId)) {
+        add(
+          "INVALID_APPLICABILITY_ATTRIBUTION_ID",
+          `${overridePath}.attributionId`,
+          `Domain-scoped applicability override in "${profile.name}" (${profile.id}) needs a stable lowercase namespaced attribution identity; received "${String(override.attributionId)}".`,
+        );
+      }
+
+      if (exactDomainOverrides.has(exactOverride)) {
+        add(
+          "DUPLICATE_DOMAIN_APPLICABILITY_OVERRIDE",
+          overridePath,
+          `An exact domain-scoped applicability override is duplicated in "${profile.name}" (${profile.id}); nested overrides have no broader authored slot identity or precedence semantics.`,
+        );
+      } else {
+        exactDomainOverrides.add(exactOverride);
+      }
+
       if (
         !domainById.has(override.domainId) ||
         !APPLICABILITY_OVERRIDE_BASES.has(String(override.basis)) ||
-        !isNonBlank(override.attributionId) ||
         !isNonBlank(override.explanation)
       ) {
         add(
@@ -804,15 +852,32 @@ export function validateSkillCatalogueAuthoringDocument(
     });
 
     profile.overrides.forEach((override, overrideIndex) => {
+      const overridePath = `${path}.overrides[${overrideIndex}]`;
+
+      if (!APPLICABILITY_AVAILABILITIES.has(String(override.availability))) {
+        add(
+          "INVALID_APPLICABILITY_AVAILABILITY",
+          `${overridePath}.availability`,
+          `Applicability override in "${profile.name}" (${profile.id}) must use available, restricted, or unavailable; received "${String(override.availability)}".`,
+        );
+      }
+
+      if (!STABLE_AUTHORING_ID_PATTERN.test(override.attributionId)) {
+        add(
+          "INVALID_APPLICABILITY_ATTRIBUTION_ID",
+          `${overridePath}.attributionId`,
+          `Applicability override in "${profile.name}" (${profile.id}) needs a stable lowercase namespaced attribution identity; received "${String(override.attributionId)}".`,
+        );
+      }
+
       if (
         !APPLICABILITY_OVERRIDE_BASES.has(String(override.basis)) ||
         !competencyById.has(override.competencyId) ||
-        !isNonBlank(override.attributionId) ||
         !isNonBlank(override.explanation)
       ) {
         add(
           "APPLICABILITY_OVERRIDE_REFERENCE_INVALID",
-          `${path}.overrides[${overrideIndex}]`,
+          overridePath,
           `Applicability override in "${profile.name}" needs a valid competency plus an explicit profile/contact/teacher/institution/biography/text/tradition attribution and explanation.`,
         );
       }

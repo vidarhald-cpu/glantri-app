@@ -429,7 +429,7 @@ describe("Skill Catalogue authoring rejection diagnostics", () => {
     ["catalogue:invalid:applicability", "INVALID_DEVELOPMENT_STAGE"],
     ["catalogue:invalid:applicability", "INVALID_ACCESS_BAND"],
     ["catalogue:invalid:applicability", "APPLICABILITY_DEFAULT_REFERENCE_INVALID"],
-    ["catalogue:invalid:applicability", "APPLICABILITY_OVERRIDE_REFERENCE_INVALID"],
+    ["catalogue:invalid:applicability", "INVALID_APPLICABILITY_ATTRIBUTION_ID"],
     ["catalogue:invalid:applicability-basis", "APPLICABILITY_OVERRIDE_REFERENCE_INVALID"],
     ["catalogue:invalid:domain-applicability", "INVALID_ACCESS_BAND"],
     ["catalogue:invalid:domain-applicability", "DOMAIN_APPLICABILITY_OVERRIDE_REFERENCE_INVALID"],
@@ -519,6 +519,172 @@ describe("Skill Catalogue authoring rejection diagnostics", () => {
       );
     },
   );
+
+  it.each(["domain", "competency"] as const)(
+    "rejects unknown %s applicability availability deterministically without mutation",
+    (overrideKind) => {
+      const document = structuredClone(
+        representativeSkillCatalogueAuthoringDocument,
+      ) as Mutable<SkillCatalogueAuthoringDocument>;
+      const profile = document.applicabilityProfiles[0]!;
+
+      if (overrideKind === "domain") {
+        profile.domainOverrides.push({
+          accessBand: "AB2",
+          attributionId: "profile-trait:invalid:unknown-availability",
+          availability: "sometimes" as "available",
+          basis: "profile",
+          domainId: "domain:proposal:healing",
+          explanation: "Negative probe for the closed applicability availability vocabulary.",
+        });
+      } else {
+        (profile.overrides[0] as unknown as { availability: string }).availability = "sometimes";
+      }
+
+      const before = JSON.stringify(document);
+      const first = validateSkillCatalogueAuthoringDocument(document);
+      const second = validateSkillCatalogueAuthoringDocument(document);
+
+      expect(first.diagnostics).toEqual(second.diagnostics);
+      expect(JSON.stringify(document)).toBe(before);
+      expect(first.diagnostics).toEqual([
+        expect.objectContaining({
+          code: "INVALID_APPLICABILITY_AVAILABILITY",
+          path:
+            overrideKind === "domain"
+              ? "applicabilityProfiles[0].domainOverrides[0].availability"
+              : "applicabilityProfiles[0].overrides[0].availability",
+        }),
+      ]);
+    },
+  );
+
+  it.each(["domain", "competency"] as const)(
+    "rejects malformed %s applicability attribution identity deterministically",
+    (overrideKind) => {
+      const document = structuredClone(
+        representativeSkillCatalogueAuthoringDocument,
+      ) as Mutable<SkillCatalogueAuthoringDocument>;
+      const profile = document.applicabilityProfiles[0]!;
+
+      if (overrideKind === "domain") {
+        profile.domainOverrides.push({
+          accessBand: "AB2",
+          attributionId: "not namespaced",
+          availability: "restricted",
+          basis: "profile",
+          domainId: "domain:proposal:healing",
+          explanation: "Negative probe for stable authored attribution identity validation.",
+        });
+      } else {
+        profile.overrides[0]!.attributionId = "not namespaced";
+      }
+
+      const before = JSON.stringify(document);
+      const first = validateSkillCatalogueAuthoringDocument(document);
+      const second = validateSkillCatalogueAuthoringDocument(document);
+
+      expect(first.diagnostics).toEqual(second.diagnostics);
+      expect(JSON.stringify(document)).toBe(before);
+      expect(first.diagnostics).toEqual([
+        expect.objectContaining({
+          code: "INVALID_APPLICABILITY_ATTRIBUTION_ID",
+          path:
+            overrideKind === "domain"
+              ? "applicabilityProfiles[0].domainOverrides[0].attributionId"
+              : "applicabilityProfiles[0].overrides[0].attributionId",
+        }),
+      ]);
+    },
+  );
+
+  it("rejects exact duplicate domain applicability overrides deterministically", () => {
+    const document = structuredClone(
+      representativeSkillCatalogueAuthoringDocument,
+    ) as Mutable<SkillCatalogueAuthoringDocument>;
+    const profile = document.applicabilityProfiles[0]!;
+    const override = {
+      accessBand: "AB2" as const,
+      attributionId: "profile-trait:invalid:duplicate-domain-override",
+      availability: "restricted" as const,
+      basis: "profile" as const,
+      domainId: "domain:proposal:healing",
+      explanation: "Negative probe for duplicate domain override identity validation.",
+    };
+    profile.domainOverrides.push(structuredClone(override), structuredClone(override));
+
+    const before = JSON.stringify(document);
+    const first = validateSkillCatalogueAuthoringDocument(document);
+    const second = validateSkillCatalogueAuthoringDocument(document);
+
+    expect(first.diagnostics).toEqual(second.diagnostics);
+    expect(JSON.stringify(document)).toBe(before);
+    expect(first.diagnostics).toEqual([
+      expect.objectContaining({
+        code: "DUPLICATE_DOMAIN_APPLICABILITY_OVERRIDE",
+        path: "applicabilityProfiles[0].domainOverrides[1]",
+      }),
+    ]);
+  });
+
+  it("does not invent broader domain applicability override slot uniqueness", () => {
+    const document = structuredClone(
+      representativeSkillCatalogueAuthoringDocument,
+    ) as Mutable<SkillCatalogueAuthoringDocument>;
+    const profile = document.applicabilityProfiles[0]!;
+    const override = {
+      accessBand: "AB2" as const,
+      attributionId: "profile-trait:probe:shared-domain-attribution",
+      availability: "restricted" as const,
+      basis: "profile" as const,
+      domainId: "domain:proposal:healing",
+      explanation: "One distinct authored statement sharing a target and attribution.",
+    };
+    profile.domainOverrides.push(override, {
+      ...override,
+      explanation: "A second distinct authored statement sharing a target and attribution.",
+    });
+
+    const before = JSON.stringify(document);
+    expect(validateSkillCatalogueAuthoringDocument(document)).toMatchObject({
+      diagnostics: [],
+      valid: true,
+    });
+    expect(JSON.stringify(document)).toBe(before);
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["non-array", "not-an-array"],
+  ] as const)("returns a deterministic diagnostic for %s domainOverrides", (_case, value) => {
+    const document = structuredClone(
+      representativeSkillCatalogueAuthoringDocument,
+    ) as unknown as Record<string, unknown>;
+    const profiles = document.applicabilityProfiles as Record<string, unknown>[];
+
+    if (value === undefined) {
+      delete profiles[0]!.domainOverrides;
+    } else {
+      profiles[0]!.domainOverrides = value;
+    }
+
+    const before = JSON.stringify(document);
+    const first = validateSkillCatalogueAuthoringDocument(
+      document as unknown as SkillCatalogueAuthoringDocument,
+    );
+    const second = validateSkillCatalogueAuthoringDocument(
+      document as unknown as SkillCatalogueAuthoringDocument,
+    );
+
+    expect(first.diagnostics).toEqual(second.diagnostics);
+    expect(JSON.stringify(document)).toBe(before);
+    expect(first.diagnostics).toEqual([
+      expect.objectContaining({
+        code: "DOMAIN_APPLICABILITY_OVERRIDES_INVALID",
+        path: "applicabilityProfiles[0].domainOverrides",
+      }),
+    ]);
+  });
 
   it.each([
     ["domains", ["domain"], "skill"],
