@@ -186,6 +186,16 @@ function isNonBlank(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function describeRuntimeShape(value: unknown): string {
+  if (value === undefined) return "missing";
+  if (value === null) return "null";
+  return Array.isArray(value) ? "array" : typeof value;
+}
+
 export function validateSkillCatalogueAuthoringDocument(
   document: SkillCatalogueAuthoringDocument,
 ): SkillCatalogueAuthoringValidationResult {
@@ -781,28 +791,32 @@ export function validateSkillCatalogueAuthoringDocument(
 
     const looseProfile = profile as unknown as Record<string, unknown>;
     const domainOverrides = Array.isArray(looseProfile.domainOverrides)
-      ? (looseProfile.domainOverrides as SkillCatalogueAuthoringDocument["applicabilityProfiles"][number]["domainOverrides"])
+      ? looseProfile.domainOverrides
       : [];
-    const exactDomainOverrides = new Set<string>();
+    const seenDomainOverrideTargets = new Set<string>();
 
     if (!Array.isArray(looseProfile.domainOverrides)) {
       add(
         "DOMAIN_APPLICABILITY_OVERRIDES_INVALID",
         `${path}.domainOverrides`,
-        `Applicability profile "${profile.name}" (${profile.id}) must provide domainOverrides as an array; received ${looseProfile.domainOverrides === undefined ? "missing" : typeof looseProfile.domainOverrides}.`,
+        `Applicability profile "${profile.name}" (${profile.id}) must provide domainOverrides as an array; received ${describeRuntimeShape(looseProfile.domainOverrides)}.`,
       );
     }
 
-    domainOverrides.forEach((override, overrideIndex) => {
+    domainOverrides.forEach((overrideCandidate, overrideIndex) => {
       const overridePath = `${path}.domainOverrides[${overrideIndex}]`;
-      const exactOverride = JSON.stringify([
-        override.domainId,
-        override.accessBand,
-        override.attributionId,
-        override.availability,
-        override.basis,
-        override.explanation,
-      ]);
+
+      if (!isRecord(overrideCandidate)) {
+        add(
+          "DOMAIN_APPLICABILITY_OVERRIDE_ENTRY_INVALID",
+          overridePath,
+          `Domain-scoped applicability override in "${profile.name}" (${profile.id}) must be an authored record; received ${describeRuntimeShape(overrideCandidate)}.`,
+        );
+        return;
+      }
+
+      const override = overrideCandidate;
+      const domainId = override.domainId;
 
       if (!ACCESS_BAND_SET.has(String(override.accessBand))) {
         add(
@@ -820,7 +834,10 @@ export function validateSkillCatalogueAuthoringDocument(
         );
       }
 
-      if (!STABLE_AUTHORING_ID_PATTERN.test(override.attributionId)) {
+      if (
+        typeof override.attributionId !== "string" ||
+        !STABLE_AUTHORING_ID_PATTERN.test(override.attributionId)
+      ) {
         add(
           "INVALID_APPLICABILITY_ATTRIBUTION_ID",
           `${overridePath}.attributionId`,
@@ -828,18 +845,21 @@ export function validateSkillCatalogueAuthoringDocument(
         );
       }
 
-      if (exactDomainOverrides.has(exactOverride)) {
-        add(
-          "DUPLICATE_DOMAIN_APPLICABILITY_OVERRIDE",
-          overridePath,
-          `An exact domain-scoped applicability override is duplicated in "${profile.name}" (${profile.id}); nested overrides have no broader authored slot identity or precedence semantics.`,
-        );
-      } else {
-        exactDomainOverrides.add(exactOverride);
+      if (typeof domainId === "string") {
+        if (seenDomainOverrideTargets.has(domainId)) {
+          add(
+            "DUPLICATE_DOMAIN_APPLICABILITY_OVERRIDE",
+            overridePath,
+            `Applicability profile "${profile.name}" (${profile.id}) has more than one domain-scoped override for domain "${domainId}"; override precedence is not authored.`,
+          );
+        } else {
+          seenDomainOverrideTargets.add(domainId);
+        }
       }
 
       if (
-        !domainById.has(override.domainId) ||
+        typeof domainId !== "string" ||
+        !domainById.has(domainId) ||
         !APPLICABILITY_OVERRIDE_BASES.has(String(override.basis)) ||
         !isNonBlank(override.explanation)
       ) {
@@ -851,8 +871,31 @@ export function validateSkillCatalogueAuthoringDocument(
       }
     });
 
-    profile.overrides.forEach((override, overrideIndex) => {
+    const competencyOverrides = Array.isArray(looseProfile.overrides) ? looseProfile.overrides : [];
+    const seenCompetencyOverrideTargets = new Set<string>();
+
+    if (!Array.isArray(looseProfile.overrides)) {
+      add(
+        "APPLICABILITY_OVERRIDES_INVALID",
+        `${path}.overrides`,
+        `Applicability profile "${profile.name}" (${profile.id}) must provide overrides as an array; received ${describeRuntimeShape(looseProfile.overrides)}.`,
+      );
+    }
+
+    competencyOverrides.forEach((overrideCandidate, overrideIndex) => {
       const overridePath = `${path}.overrides[${overrideIndex}]`;
+
+      if (!isRecord(overrideCandidate)) {
+        add(
+          "APPLICABILITY_OVERRIDE_ENTRY_INVALID",
+          overridePath,
+          `Applicability override in "${profile.name}" (${profile.id}) must be an authored record; received ${describeRuntimeShape(overrideCandidate)}.`,
+        );
+        return;
+      }
+
+      const override = overrideCandidate;
+      const competencyId = override.competencyId;
 
       if (!APPLICABILITY_AVAILABILITIES.has(String(override.availability))) {
         add(
@@ -862,7 +905,10 @@ export function validateSkillCatalogueAuthoringDocument(
         );
       }
 
-      if (!STABLE_AUTHORING_ID_PATTERN.test(override.attributionId)) {
+      if (
+        typeof override.attributionId !== "string" ||
+        !STABLE_AUTHORING_ID_PATTERN.test(override.attributionId)
+      ) {
         add(
           "INVALID_APPLICABILITY_ATTRIBUTION_ID",
           `${overridePath}.attributionId`,
@@ -870,9 +916,22 @@ export function validateSkillCatalogueAuthoringDocument(
         );
       }
 
+      if (typeof competencyId === "string") {
+        if (seenCompetencyOverrideTargets.has(competencyId)) {
+          add(
+            "DUPLICATE_APPLICABILITY_OVERRIDE",
+            overridePath,
+            `Applicability profile "${profile.name}" (${profile.id}) has more than one override for competency "${competencyId}"; override precedence is not authored.`,
+          );
+        } else {
+          seenCompetencyOverrideTargets.add(competencyId);
+        }
+      }
+
       if (
         !APPLICABILITY_OVERRIDE_BASES.has(String(override.basis)) ||
-        !competencyById.has(override.competencyId) ||
+        typeof competencyId !== "string" ||
+        !competencyById.has(competencyId) ||
         !isNonBlank(override.explanation)
       ) {
         add(

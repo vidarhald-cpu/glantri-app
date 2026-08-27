@@ -634,7 +634,7 @@ export const representativeSkillCatalogueAuthoringDocument: SkillCatalogueAuthor
         {
           basis: "teacher",
           attributionId: "teacher:proposal:campaign-surgeon",
-          competencyId: "specialization:proposal:campaign-wound-surgery",
+          competencyId: "skill:proposal:surgery",
           availability: "available",
           explanation: "A named teacher supplies specialized training; no competence is granted.",
         },
