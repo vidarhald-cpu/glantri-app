@@ -112,7 +112,7 @@ export const scenarioArtifactReferenceDtoSchema = z.object({
 });
 
 export const artifactBlackboardCandidateSchema = z.object({
-  altText: z.string().optional(),
+  altText: z.string().trim().min(1).max(1000),
   artifactKind: z.enum(["map", "image"]),
   id: idSchema,
   mediaType: z.enum(["image/png", "image/jpeg", "image/webp"]),

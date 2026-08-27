@@ -34,7 +34,7 @@ describe("session auth HTTP contract", () => {
       "GET,POST,PUT,PATCH,DELETE,OPTIONS",
     );
     expect(response.headers["access-control-allow-headers"]).toBe(
-      "content-type,x-glantri-artifact-mutation,x-glantri-combat-command,x-glantri-combat-correlation-id,x-glantri-combat-response",
+      "content-type,x-glantri-artifact-mutation,x-glantri-blackboard-mutation,x-glantri-combat-command,x-glantri-combat-correlation-id,x-glantri-combat-response",
     );
     expect(response.headers.vary).toBe("origin");
   });

@@ -576,6 +576,171 @@ model CampaignRosterEntry {
   @@unique([campaignId, sourceType, sourceId])
 }
 
+model CampaignBlackboardEntry {
+  id                          String   @id
+  campaignId                  String
+  category                    String
+  createdByUserId             String
+  createdByLabelSnapshot      String
+  state                       String
+  entryVersion                Int
+  currentRevisionNumber       Int
+  stateChangedByUserId        String
+  stateChangedByLabelSnapshot String
+  stateChangedAt              DateTime
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  @@unique([campaignId, id], map: "bb_entry_campaign_id_id_key")
+  @@unique([campaignId, id, category], map: "bb_entry_campaign_id_id_category_key")
+  @@index([campaignId, state])
+}
+
+model CampaignBlackboardEntryRevision {
+  campaignId               String
+  entryId                  String
+  revisionNumber           Int
+  category                 String
+  changeKind               String
+  actorUserId              String
+  actorLabelSnapshot       String
+  changedAt                DateTime @default(now())
+  title                    String
+  clueFact                 String?
+  contextText              String?
+  documentText             String?
+  imageCaption             String?
+  sourceArtifactIdSnapshot String?
+  sourceArtifactKind       String?
+  sourceArtifactTitle      String?
+  sourceArtifactAltText    String?
+  sourceArtifactMediaType  String?
+  recapText                String?
+  approvedByUserId         String?
+  approvedByLabelSnapshot  String?
+  approvedAt               DateTime?
+
+  @@id([campaignId, entryId, revisionNumber], map: "bb_revision_pkey")
+  @@index([campaignId, entryId, changedAt])
+}
+
+model CampaignBlackboardEntryEvent {
+  campaignId         String
+  entryId            String
+  entryVersion       Int
+  action             String
+  actorUserId        String
+  actorLabelSnapshot String
+  occurredAt         DateTime @default(now())
+  revisionNumber     Int?
+
+  @@id([campaignId, entryId, entryVersion], map: "bb_entry_event_pkey")
+  @@index([campaignId, entryId, revisionNumber], map: "bb_entry_event_revision_idx")
+}
+
+model CampaignBlackboardArtifactSourceLink {
+  campaignId     String
+  entryId        String
+  revisionNumber Int
+  artifactId     String
+
+  @@id([campaignId, entryId, revisionNumber], map: "bb_artifact_source_link_pkey")
+  @@index([campaignId, artifactId])
+}
+
+model CampaignBlackboardDetailUnitLineage {
+  campaignId String
+  entryId    String
+  unitKey    String
+
+  @@id([campaignId, entryId, unitKey], map: "bb_unit_lineage_pkey")
+}
+
+model CampaignBlackboardDetailUnitVersion {
+  campaignId             String
+  entryId                String
+  unitKey                String
+  unitVersion            Int
+  labelSnapshot          String?
+  detailText             String
+  createdByUserId        String
+  createdByLabelSnapshot String
+  createdAt              DateTime @default(now())
+
+  @@id([campaignId, entryId, unitKey, unitVersion], map: "bb_unit_version_pkey")
+}
+
+model CampaignBlackboardRevisionDetailUnit {
+  campaignId     String
+  entryId        String
+  revisionNumber Int
+  unitKey        String
+  unitVersion    Int
+  sortOrder      Int
+
+  @@id([campaignId, entryId, revisionNumber, unitKey], map: "bb_revision_unit_pkey")
+  @@unique([campaignId, entryId, revisionNumber, unitKey, unitVersion], map: "bb_revision_unit_exact_key")
+  @@unique([campaignId, entryId, revisionNumber, sortOrder], map: "bb_revision_unit_sort_key")
+}
+
+model CampaignBlackboardDetailGrantStream {
+  campaignId                 String
+  entryId                    String
+  targetCharacterIdSnapshot String
+  unitKey                    String
+  unitVersion                Int
+  liveCharacterId            String?
+  state                      String
+  streamVersion              Int
+  currentEntryRevisionNumber Int
+
+  @@id([campaignId, entryId, targetCharacterIdSnapshot, unitKey, unitVersion], map: "bb_grant_stream_pkey")
+  @@index([liveCharacterId])
+}
+
+model CampaignBlackboardDetailGrantEvent {
+  campaignId                    String
+  entryId                       String
+  targetCharacterIdSnapshot     String
+  unitKey                       String
+  unitVersion                   Int
+  streamVersion                 Int
+  resultState                   String
+  entryRevisionNumber           Int
+  actorUserId                   String
+  actorLabelSnapshot            String
+  targetCharacterLabelSnapshot String
+  occurredAt                    DateTime @default(now())
+
+  @@id([campaignId, entryId, targetCharacterIdSnapshot, unitKey, unitVersion, streamVersion], map: "bb_grant_event_pkey")
+  @@unique([campaignId, entryId, targetCharacterIdSnapshot, unitKey, unitVersion, streamVersion, resultState, entryRevisionNumber], map: "bb_grant_event_head_key")
+}
+
+model CampaignBlackboardLayout {
+  campaignId    String   @id
+  layoutVersion Int
+  updatedAt     DateTime @updatedAt
+}
+
+model CampaignBlackboardPlacement {
+  campaignId             String
+  entryId                String
+  x                      Int
+  y                      Int
+  width                  Int
+  height                 Int
+  layer                  Int
+  groupId                String?
+  rowVersion             Int
+  updatedByUserId        String
+  updatedByLabelSnapshot String
+  updatedAt              DateTime @updatedAt
+
+  @@id([campaignId, entryId], map: "bb_placement_pkey")
+  @@index([campaignId, layer, entryId])
+  @@index([campaignId, groupId])
+}
+
 model ScenarioEventLog {
   id            String   @id @default(cuid())
   scenarioId     String

@@ -8,6 +8,7 @@ export * from "./character/progression";
 export * from "./character/statLayers";
 export * from "./campaign/scenario";
 export * from "./campaign/artifact";
+export * from "./campaign/blackboard";
 export * from "./campaign/scenarioSession";
 export * from "./campaign/playerCampaignHome";
 export * from "./combat/context";
