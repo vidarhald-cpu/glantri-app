@@ -59,6 +59,7 @@ import { loadCampaignWorkspaceInitialData } from "@/lib/campaigns/campaignWorksp
 import { pollGmCombatSnapshot } from "@/lib/campaigns/gmCombatRefresh";
 import CampaignItemsWorkspace from "@/features/equipment/campaign-items/CampaignItemsWorkspace";
 import { ArtifactPanel } from "@/features/artifacts";
+import { BlackboardWorkspace } from "@/features/blackboard";
 
 interface CampaignWorkspaceShellProps {
   campaignId: string;
@@ -727,6 +728,10 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         canAccessGmEncounter ? (
           <CampaignItemsWorkspace campaignId={campaignId} />
         ) : null
+      ) : null}
+
+      {!workspaceLoadError && accessMode !== "none" && workspaceState.activeTab === "blackboard" ? (
+        <BlackboardWorkspace campaignId={campaignId} isGameMaster={canAccessGmEncounter} />
       ) : null}
 
       {!workspaceLoadError && accessMode !== "none" && workspaceState.activeTab === "scenario" ? (

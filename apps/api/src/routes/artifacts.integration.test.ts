@@ -197,8 +197,9 @@ if (!hasTaskApplicationDatabase) {
       });
       const gmCookie = await sessionCookie(gm.id);
       const playerCookie = await sessionCookie(player.id);
+      const originalBytes = Buffer.from("%PDF-1.7\n1 0 obj\n%%EOF\n");
       const upload = multipartPayload({
-        bytes: Buffer.from("%PDF-1.7\n1 0 obj\n%%EOF\n"),
+        bytes: originalBytes,
         filename: "handout.pdf",
         mediaType: "application/pdf",
         metadata: { artifactKind: "handout", title: "The sealed letter" },
@@ -261,6 +262,15 @@ if (!hasTaskApplicationDatabase) {
       expect(corrupted.statusCode).toBe(503);
       expect(corrupted.json()).toEqual({ error: "Artifact storage is temporarily unavailable." });
       expect(corrupted.body).not.toMatch(/digest|storageKey|storageUrl|private\/tmp/i);
+
+      await writeFile(path.join(root, stored.storageKey!), originalBytes);
+      const recovered = await app.inject({
+        headers: { cookie: playerCookie },
+        method: "GET",
+        url: `/campaigns/${campaign.id}/artifacts/${artifact.id}/content`,
+      });
+      expect(recovered.statusCode).toBe(200);
+      expect(recovered.rawPayload).toEqual(originalBytes);
 
       const withdraw = await app.inject({
         headers: {

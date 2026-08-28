@@ -6,6 +6,7 @@ import {
   blackboardPlacementUpdateSchema,
   blackboardRevisionSchema,
   serializeBlackboardCommonDto,
+  serializeBlackboardViewerCapabilities,
 } from "./blackboard";
 
 describe("Campaign Blackboard domain contract", () => {
@@ -107,5 +108,18 @@ describe("Campaign Blackboard domain contract", () => {
     });
     expect(result.catalogue.map((entry) => entry.id)).toEqual(["a", "b"]);
     expect(JSON.stringify(result)).not.toMatch(/role|character|unit|grant|audit/i);
+  });
+
+  it("serializes only bounded viewer action capabilities without owner identity", () => {
+    const result = serializeBlackboardViewerCapabilities([
+      { canCorrect: false, canRemove: false, entryId: "entry-b" },
+      { canCorrect: true, canRemove: true, entryId: "entry-a" },
+    ]);
+
+    expect(result.entries).toEqual([
+      { canCorrect: true, canRemove: true, entryId: "entry-a" },
+      { canCorrect: false, canRemove: false, entryId: "entry-b" },
+    ]);
+    expect(JSON.stringify(result)).not.toMatch(/owner|userId|label|content|source/i);
   });
 });

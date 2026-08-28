@@ -230,5 +230,139 @@ if (!hasTaskApplicationDatabase) {
       expect(candidates.json<{ artifacts: unknown[] }>().artifacts).toHaveLength(1);
       expect(candidates.body).not.toMatch(/storageUrl|storageKey|originalFilename|digest/);
     });
+
+    it("projects exact viewer capabilities without owner identity or display-label authority", async () => {
+      const gm = await createTestUser(prisma, {
+        displayName: "Capability GM",
+        roles: ["game_master"],
+      });
+      const playerA = await createTestUser(prisma, { displayName: "Same Player" });
+      const playerB = await createTestUser(prisma, { displayName: "Same Player" });
+      const foreign = await createTestUser(prisma, { displayName: "Same Player" });
+      const campaign = await createTestCampaign(prisma, gm.id, { status: "active" });
+      const [characterA, characterB] = await Promise.all([
+        createTestCharacter(prisma, playerA.id, { name: "Ari" }),
+        createTestCharacter(prisma, playerB.id, { name: "Bea" }),
+      ]);
+      await prisma.campaignRosterEntry.createMany({
+        data: [characterA, characterB].map((character) => ({
+          campaignId: campaign.id,
+          category: "pc",
+          sourceId: character.id,
+          sourceType: "character",
+        })),
+      });
+      const [gmCookie, playerACookie, playerBCookie, foreignCookie] = await Promise.all([
+        sessionCookie(gm.id),
+        sessionCookie(playerA.id),
+        sessionCookie(playerB.id),
+        sessionCookie(foreign.id),
+      ]);
+
+      const ownedCreate = await app.inject({
+        headers: mutationHeaders(playerACookie),
+        method: "POST",
+        payload: { category: "clue_fact", fact: "The gate is open.", title: "Gate" },
+        url: `/campaigns/${campaign.id}/blackboard/entries`,
+      });
+      expect(ownedCreate.statusCode, ownedCreate.body).toBe(201);
+      const ownedEntry = ownedCreate.json<{ entry: { id: string } }>().entry;
+      const recapCreate = await app.inject({
+        headers: mutationHeaders(gmCookie),
+        method: "POST",
+        payload: { category: "recap", recapText: "The party arrived.", title: "Arrival" },
+        url: `/campaigns/${campaign.id}/blackboard/entries`,
+      });
+      expect(recapCreate.statusCode, recapCreate.body).toBe(201);
+      const recapEntry = recapCreate.json<{ entry: { id: string } }>().entry;
+
+      const boardResponses = await Promise.all(
+        [gmCookie, playerACookie, playerBCookie].map((cookie) =>
+          app.inject({
+            headers: { cookie },
+            method: "GET",
+            url: `/campaigns/${campaign.id}/blackboard`,
+          }),
+        ),
+      );
+      expect(boardResponses[0]!.body).toBe(boardResponses[1]!.body);
+      expect(boardResponses[1]!.body).toBe(boardResponses[2]!.body);
+
+      const [gmCapabilities, playerACapabilities, playerBCapabilities] = await Promise.all(
+        [gmCookie, playerACookie, playerBCookie].map((cookie) =>
+          app.inject({
+            headers: { cookie },
+            method: "GET",
+            url: `/campaigns/${campaign.id}/blackboard/capabilities`,
+          }),
+        ),
+      );
+      const capabilityFor = (response: (typeof boardResponses)[number], entryId: string) =>
+        response
+          .json<{
+            entries: Array<{ canCorrect: boolean; canRemove: boolean; entryId: string }>;
+          }>()
+          .entries.find((entry) => entry.entryId === entryId);
+
+      expect(capabilityFor(gmCapabilities, ownedEntry.id)).toEqual({
+        canCorrect: true,
+        canRemove: true,
+        entryId: ownedEntry.id,
+      });
+      expect(capabilityFor(gmCapabilities, recapEntry.id)).toMatchObject({
+        canCorrect: true,
+        canRemove: true,
+      });
+      expect(capabilityFor(playerACapabilities, ownedEntry.id)).toMatchObject({
+        canCorrect: true,
+        canRemove: true,
+      });
+      expect(capabilityFor(playerACapabilities, recapEntry.id)).toMatchObject({
+        canCorrect: false,
+        canRemove: false,
+      });
+      expect(capabilityFor(playerBCapabilities, ownedEntry.id)).toMatchObject({
+        canCorrect: false,
+        canRemove: false,
+      });
+      expect(playerBCapabilities.body).not.toMatch(/owner|userId|displayName|Same Player/i);
+
+      const revisionsBefore = await prisma.campaignBlackboardEntryRevision.count();
+      const deniedCorrection = await app.inject({
+        headers: mutationHeaders(playerBCookie),
+        method: "POST",
+        payload: {
+          category: "clue_fact",
+          changeKind: "correction",
+          expectedEntryVersion: 1,
+          fact: "This must not be accepted.",
+          title: "Gate",
+        },
+        url: `/campaigns/${campaign.id}/blackboard/entries/${ownedEntry.id}/revisions`,
+      });
+      expect(deniedCorrection.statusCode).toBe(404);
+      expect(await prisma.campaignBlackboardEntryRevision.count()).toBe(revisionsBefore);
+
+      const [foreignCapabilities, anonymousCapabilities, missingCapabilities] = await Promise.all([
+        app.inject({
+          headers: { cookie: foreignCookie },
+          method: "GET",
+          url: `/campaigns/${campaign.id}/blackboard/capabilities`,
+        }),
+        app.inject({
+          method: "GET",
+          url: `/campaigns/${campaign.id}/blackboard/capabilities`,
+        }),
+        app.inject({
+          headers: { cookie: playerACookie },
+          method: "GET",
+          url: "/campaigns/nonexistent/blackboard/capabilities",
+        }),
+      ]);
+      expect(foreignCapabilities.statusCode).toBe(404);
+      expect(foreignCapabilities.body).toBe(anonymousCapabilities.body);
+      expect(missingCapabilities.body).toBe(anonymousCapabilities.body);
+      expect(foreignCapabilities.json()).toEqual({ error: "Blackboard unavailable." });
+    });
   });
 }
