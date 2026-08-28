@@ -24,6 +24,12 @@ describe("rules documentation registry", () => {
           title: "Chargen Calculations",
         }),
         expect.objectContaining({
+          fileName: "pilot-skill-rules-v1.md",
+          id: "pilot-skill-rules-v1",
+          section: "Skills",
+          title: "Pilot Skill Rules v1",
+        }),
+        expect.objectContaining({
           fileName: "equipment-encumbrance-calculations.md",
           id: "equipment-encumbrance-calculations",
           section: "Equipment",
@@ -73,6 +79,7 @@ describe("rules documentation registry", () => {
   it("orders Chargen Calculations first", () => {
     expect(getRulesDocuments().map((document) => document.title)).toEqual([
       "Chargen Calculations",
+      "Pilot Skill Rules v1",
       "Character Sheet Calculations",
       "Character Progression Calculations",
       "Equipment & Encumbrance Calculations",
@@ -88,6 +95,27 @@ describe("rules documentation registry", () => {
       id: "chargen-calculations",
       title: "Chargen Calculations",
     });
+  });
+
+  it("loads the canonical Pilot Skill Rules v1 formulas and Gate A evidence", async () => {
+    const model = await getRulesDocumentationPageModel({
+      selectedDocumentId: "pilot-skill-rules-v1",
+    });
+
+    expect(model.selectedDocument.title).toBe("Pilot Skill Rules v1");
+    expect(model.selectedDocument.markdown).toContain("# Pilot Skill Rules v1");
+    expect(model.selectedDocument.markdown).toContain(
+      "direct Skill cost = Skill weight × directly acquired ranks",
+    );
+    expect(model.selectedDocument.markdown).toContain(
+      "group bundle cost = ceil(2/3 × weightedUseful)",
+    );
+    expect(model.selectedDocument.markdown).toContain("non-recursive-temporary-pilot-limitation");
+    expect(model.selectedDocument.markdown).toContain("Typical prerequisite thresholds");
+    expect(model.selectedDocument.markdown).toContain("grants exactly zero competence");
+    expect(model.selectedDocument.markdown).toContain("Mandatory spoken language");
+    expect(model.selectedDocument.markdown).toContain("Deliberate optimizer");
+    expect(model.selectedDocument.markdown).toContain("Configuration Formation `47`, Flex `5`");
   });
 
   it("loads the character progression document with roll and threshold content", async () => {
