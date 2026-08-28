@@ -56,6 +56,36 @@ Database-capable Builder/QA work must name an isolated disposable target before 
 - Intended computerized correction/simplification:
 - Rule status: sourced, conflicted, approved deviation, or provisional:
 
+### Rule/reference documentation applicability
+
+- Applicability: `Required` / `Regression only` / `Not applicable` / `Needs decision`:
+- Canonical current-behavior reference(s):
+- Decision and source-provenance reference(s):
+- Admin reader-facing surface and registration impact:
+- Same-PR update or documented split exception:
+
+Mark this `Required` when the task changes a material Glantri rule, calculation, formula,
+mechanically active table, derived value, or user/admin-facing system interpretation. The
+implementation is incomplete until its canonical repository documentation is current. Update it
+in the same implementation workstream and PR by default. A split requires an explicit reason,
+owner, linked work item or PR, merge order, and evidence that no stale required reference will be
+accepted or left reader-visible between changes.
+
+Keep current implemented/accepted behavior in [rules documentation](../rules/README.md), material
+rulings in `docs/decisions/`, and historical source artifacts and coordinates as provenance; link
+these sources instead of copying the same decision, rule, or provenance across doc trees. Where
+the established Admin Rules Docs surface is the reader-facing route, keep its
+[document registry](../../apps/web/src/lib/rulesDocs.ts) current in the implementing change. Do
+not register internal-only notes merely to satisfy this check, and identify provisional or
+deferred behavior clearly in any current-behavior reference.
+
+A behavior-preserving internal refactor may use `Regression only` when named existing
+documentation and registration must remain accurate, or `Not applicable` when it cannot make a
+rule/reference stale; give the concrete reason. Use `Needs decision` when the intended documented
+meaning or canonical location is materially ambiguous. Missing, stale, duplicated, or
+reader-inaccessible required documentation is an acceptance failure for the implementing task,
+not optional polish or an unowned follow-up.
+
 ### Contracts affected
 
 List API, schema, persistence, event, command, synchronization, and UI read-model changes.
@@ -230,6 +260,7 @@ Passing automated tests is necessary where specified but does not override an ob
 - Migration/compatibility checks:
 - Database target evidence: sanitized host, port, database names, ownership marker, PostgreSQL version, and cleanup result:
 - Performance/security checks:
+- Rule/reference documentation and Admin registration evidence:
 - Required CI jobs:
 - Product-owner acceptance script:
 
@@ -249,6 +280,8 @@ For an authorized Builder/QA loop, use the standard exact-SHA Builder and indepe
 
 - Result and files changed.
 - Decision records created/updated.
+- Rule/reference documentation applicability result, changed canonical references, and Admin
+  registration evidence or explicit non-applicability/split-exception rationale.
 - Verification evidence.
 - Acceptance result by applicable dimension: Functional, Mechanical/rules, Presentation, Information-flow/privacy, and Product quality.
 - Perspective-matrix evidence and product-owner manual script for relevant user-visible work.
@@ -258,6 +291,11 @@ For an authorized Builder/QA loop, use the standard exact-SHA Builder and indepe
 - Remaining risks and follow-ups.
 
 A task is not `Ready` when a materially applicable acceptance dimension is omitted, when a perspective-sensitive workflow lacks a perspective matrix, or when a consequential presentation/privacy choice remains hidden inside implementation language. Categories that are genuinely irrelevant may be `Not applicable` with a reason. A material unresolved product preference, rules meaning, or visibility choice moves the task to `Needs decision`.
+
+Required rule/reference documentation is part of acceptance: Builder evidence and independent QA
+must block handoff when the canonical current-behavior reference or its applicable Admin
+registration is missing or stale. An exception recorded under the applicability check changes the
+delivery shape, not the freshness requirement.
 
 ### Applicability examples
 
