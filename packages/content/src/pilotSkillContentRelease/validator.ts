@@ -450,7 +450,7 @@ export function validatePilotSkillContentRelease(
   const competencyIds = new Set(release.competencies.map(({ id }) => id));
   const specializationIds = new Set(release.specializations.map(({ id }) => id));
   const competenceIds = new Set([...competencyIds, ...specializationIds]);
-  const relationshipIds = new Set(release.relationships.map(({ id }) => id));
+  const relationshipById = new Map(release.relationships.map((entry) => [entry.id, entry]));
   const historyById = new Map(release.histories.map((entry) => [entry.id, entry]));
   const backgroundById = new Map(release.backgrounds.map((entry) => [entry.id, entry]));
   const professionIds = new Set(release.professions.map(({ id }) => id));
@@ -547,12 +547,25 @@ export function validatePilotSkillContentRelease(
         path: `specializations[${index}].transfer.relationshipIds`,
         values: entry.transfer.relationshipIds,
       });
-      entry.transfer.relationshipIds.forEach((id) => {
-        if (!relationshipIds.has(id)) {
+      const prerequisiteIds = new Set(entry.prerequisites.map(({ competencyId }) => competencyId));
+      entry.transfer.relationshipIds.forEach((id, relationshipIndex) => {
+        const transferRelationship = relationshipById.get(id);
+        if (!transferRelationship) {
           add(
             "PILOT_CONTENT_UNKNOWN_SPECIALIZATION_TRANSFER",
-            `specializations[${index}].transfer`,
+            `specializations[${index}].transfer.relationshipIds[${relationshipIndex}]`,
             `Unknown relationship "${id}".`,
+          );
+          return;
+        }
+        if (
+          transferRelationship.targetCompetencyId !== entry.id ||
+          !prerequisiteIds.has(transferRelationship.sourceCompetencyId)
+        ) {
+          add(
+            "PILOT_CONTENT_SPECIALIZATION_TRANSFER_TOPOLOGY_INVALID",
+            `specializations[${index}].transfer.relationshipIds[${relationshipIndex}]`,
+            `Relationship "${id}" must connect a declared prerequisite to Specialization "${entry.id}"; found "${transferRelationship.sourceCompetencyId}" -> "${transferRelationship.targetCompetencyId}".`,
           );
         }
       });
@@ -629,6 +642,31 @@ export function validatePilotSkillContentRelease(
           `Attribution "${override.attributionId}" does not resolve to a known ${override.availability} source for profile "${entry.id}".`,
         );
       }
+      if (override.availability === "restricted" && restrictedSource?.profileId === entry.id) {
+        const exceptionScope = new Set([
+          ...restrictedSource.competencyIds,
+          ...restrictedSource.historyIds.flatMap((historyId) => {
+            const sourceHistory = historyById.get(historyId);
+            return sourceHistory
+              ? [
+                  ...sourceHistory.fixedCompetencyIds,
+                  ...sourceHistory.selectionSlots.flatMap(
+                    ({ candidateCompetencyIds }) => candidateCompetencyIds,
+                  ),
+                ]
+              : [];
+          }),
+        ]);
+        override.competencyIds.forEach((competencyId, competencyIndex) => {
+          if (!exceptionScope.has(competencyId)) {
+            add(
+              "PILOT_CONTENT_ATTRIBUTION_SCOPE_MISMATCH",
+              `${path}.competencyIds[${competencyIndex}]`,
+              `Restricted competency "${competencyId}" is outside attributed exception "${restrictedSource.id}" scope.`,
+            );
+          }
+        });
+      }
     });
   });
 
@@ -685,12 +723,31 @@ export function validatePilotSkillContentRelease(
         `Access exception "${entry.id}" needs a known profile and must grant zero competence.`,
       );
     }
+    const exceptionProfile = release.profiles.find(({ id }) => id === entry.profileId);
+    const attributableCompetencyIds = new Set(
+      exceptionProfile?.overrides
+        .filter(
+          (override) =>
+            (override.availability === "restricted" && override.attributionId === entry.id) ||
+            override.availability === "unavailable",
+        )
+        .flatMap(({ competencyIds }) => competencyIds) ?? [],
+    );
     entry.competencyIds.forEach((id) => {
       if (!competenceIds.has(id)) {
         add(
           "PILOT_CONTENT_UNKNOWN_EXCEPTION_COMPETENCY",
           `accessExceptions[${index}]`,
           `Unknown exception competency "${id}".`,
+        );
+      }
+    });
+    entry.competencyIds.forEach((id, competencyIndex) => {
+      if (!attributableCompetencyIds.has(id)) {
+        add(
+          "PILOT_CONTENT_ACCESS_EXCEPTION_SCOPE_MISMATCH",
+          `accessExceptions[${index}].competencyIds[${competencyIndex}]`,
+          `Exception competency "${id}" is outside the restricted or unavailable scope for profile "${entry.profileId}".`,
         );
       }
     });
@@ -712,19 +769,30 @@ export function validatePilotSkillContentRelease(
       path: `characters[${index}].accessExceptionIds`,
       values: entry.accessExceptionIds,
     });
-    if (!backgroundById.has(entry.backgroundId) || !professionIds.has(entry.professionId)) {
+    const characterBackground = backgroundById.get(entry.backgroundId);
+    if (!characterBackground || !professionIds.has(entry.professionId)) {
       add(
         "PILOT_CONTENT_CHARACTER_CONTEXT_UNKNOWN",
         `characters[${index}]`,
         `Character "${entry.id}" needs a known profession and background.`,
       );
     }
-    entry.accessExceptionIds.forEach((id) => {
-      if (!exceptionIds.has(id)) {
+    entry.accessExceptionIds.forEach((id, exceptionIndex) => {
+      const characterException = accessExceptionById.get(id);
+      if (!exceptionIds.has(id) || !characterException) {
         add(
           "PILOT_CONTENT_CHARACTER_EXCEPTION_UNKNOWN",
-          `characters[${index}]`,
+          `characters[${index}].accessExceptionIds[${exceptionIndex}]`,
           `Unknown access exception "${id}".`,
+        );
+      } else if (
+        characterBackground &&
+        characterException.profileId !== characterBackground.profileId
+      ) {
+        add(
+          "PILOT_CONTENT_CHARACTER_EXCEPTION_PROFILE_MISMATCH",
+          `characters[${index}].accessExceptionIds[${exceptionIndex}]`,
+          `Access exception "${id}" belongs to profile "${characterException.profileId}", not Character background profile "${characterBackground.profileId}".`,
         );
       }
     });
@@ -736,17 +804,43 @@ export function validatePilotSkillContentRelease(
         ({ competencyId }) => competencyId,
       ),
     });
-    [...entry.directAcquisitions, ...entry.specializationAcquisitions].forEach(
-      ({ competencyId }) => {
-        if (!competenceIds.has(competencyId)) {
-          add(
-            "PILOT_CONTENT_CHARACTER_ACQUISITION_UNKNOWN",
-            `characters[${index}]`,
-            `Unknown acquired competency "${competencyId}".`,
-          );
-        }
-      },
-    );
+    entry.directAcquisitions.forEach(({ competencyId }, acquisitionIndex) => {
+      if (specializationIds.has(competencyId)) {
+        add(
+          "PILOT_CONTENT_CHARACTER_ACQUISITION_KIND_INVALID",
+          `characters[${index}].directAcquisitions[${acquisitionIndex}].competencyId`,
+          `Direct acquisition target "${competencyId}" is a Specialization identity.`,
+        );
+      } else if (!competencyIds.has(competencyId)) {
+        add(
+          "PILOT_CONTENT_CHARACTER_ACQUISITION_UNKNOWN",
+          `characters[${index}].directAcquisitions[${acquisitionIndex}].competencyId`,
+          `Unknown acquired competency "${competencyId}".`,
+        );
+      }
+    });
+    entry.specializationAcquisitions.forEach(({ competencyId }, acquisitionIndex) => {
+      if (competencyIds.has(competencyId)) {
+        add(
+          "PILOT_CONTENT_CHARACTER_ACQUISITION_KIND_INVALID",
+          `characters[${index}].specializationAcquisitions[${acquisitionIndex}].competencyId`,
+          `Specialization acquisition target "${competencyId}" is an ordinary competency identity.`,
+        );
+      } else if (!specializationIds.has(competencyId)) {
+        add(
+          "PILOT_CONTENT_CHARACTER_ACQUISITION_UNKNOWN",
+          `characters[${index}].specializationAcquisitions[${acquisitionIndex}].competencyId`,
+          `Unknown acquired Specialization "${competencyId}".`,
+        );
+      }
+    });
+    addDuplicateTargetDiagnostics({
+      add,
+      code: "PILOT_CONTENT_DUPLICATE_CHARACTER_HISTORY",
+      label: `Character "${entry.id}" history`,
+      path: `characters[${index}].histories`,
+      values: entry.histories.map(({ historyId }) => historyId),
+    });
     entry.histories.forEach((selection, selectionIndex) => {
       const selectedHistory = historyById.get(selection.historyId);
       if (

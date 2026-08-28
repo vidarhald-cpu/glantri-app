@@ -221,6 +221,81 @@ describe("canonical bounded pilot Skill content release", () => {
     expect(pilotSkillContentReleaseV1.policies.accessGrantsCompetence).toBe(0);
   });
 
+  it("keeps accepted transfer, acquisition, history, and exception topology coherent", () => {
+    const relationshipById = new Map(
+      pilotSkillContentReleaseV1.relationships.map((relationship) => [
+        relationship.id,
+        relationship,
+      ]),
+    );
+    for (const specialization of pilotSkillContentReleaseV1.specializations) {
+      if (specialization.transfer.kind !== "explicit-relationships") continue;
+      const prerequisiteIds = new Set(
+        specialization.prerequisites.map(({ competencyId }) => competencyId),
+      );
+      for (const relationshipId of specialization.transfer.relationshipIds) {
+        const relationship = relationshipById.get(relationshipId)!;
+        expect(relationship.targetCompetencyId).toBe(specialization.id);
+        expect(prerequisiteIds).toContain(relationship.sourceCompetencyId);
+      }
+    }
+
+    const competencyIds = new Set(pilotSkillContentReleaseV1.competencies.map(({ id }) => id));
+    const specializationIds = new Set(
+      pilotSkillContentReleaseV1.specializations.map(({ id }) => id),
+    );
+    const backgroundById = new Map(
+      pilotSkillContentReleaseV1.backgrounds.map((background) => [background.id, background]),
+    );
+    const exceptionById = new Map<string, PilotSkillContentRelease["accessExceptions"][number]>(
+      pilotSkillContentReleaseV1.accessExceptions.map((exception) => [exception.id, exception]),
+    );
+    for (const character of pilotSkillContentReleaseV1.characters) {
+      expect(new Set(character.histories.map(({ historyId }) => historyId)).size).toBe(
+        character.histories.length,
+      );
+      expect(
+        character.directAcquisitions.every(({ competencyId }) => competencyIds.has(competencyId)),
+      ).toBe(true);
+      expect(
+        character.specializationAcquisitions.every(({ competencyId }) =>
+          specializationIds.has(competencyId),
+        ),
+      ).toBe(true);
+      const profileId = backgroundById.get(character.backgroundId)!.profileId;
+      expect(
+        character.accessExceptionIds.every(
+          (exceptionId) => exceptionById.get(exceptionId)!.profileId === profileId,
+        ),
+      ).toBe(true);
+    }
+
+    const historyById = new Map(
+      pilotSkillContentReleaseV1.histories.map((history) => [history.id, history]),
+    );
+    for (const profile of pilotSkillContentReleaseV1.profiles) {
+      for (const override of profile.overrides) {
+        if (override.availability !== "restricted") continue;
+        const exception = exceptionById.get(override.attributionId)!;
+        const exceptionScope = new Set([
+          ...exception.competencyIds,
+          ...exception.historyIds.flatMap((historyId) => {
+            const history = historyById.get(historyId)!;
+            return [
+              ...history.fixedCompetencyIds,
+              ...history.selectionSlots.flatMap(
+                ({ candidateCompetencyIds }) => candidateCompetencyIds,
+              ),
+            ];
+          }),
+        ]);
+        expect(
+          override.competencyIds.every((competencyId) => exceptionScope.has(competencyId)),
+        ).toBe(true);
+      }
+    }
+  });
+
   it("rejects every prior QA enum and access mutation without throwing or mutating input", () => {
     const cases: Array<[string, (release: PilotSkillContentRelease) => void]> = [
       [
@@ -456,6 +531,99 @@ describe("canonical bounded pilot Skill content release", () => {
           selected.push(selected[0]!);
         },
         name: "duplicate resolved choice target",
+      },
+    ];
+
+    for (const { code, mutate, name } of cases) {
+      const invalid = structuredClone(pilotSkillContentReleaseV1) as PilotSkillContentRelease;
+      mutate(invalid);
+      resignPilotRelease(invalid);
+      const before = JSON.stringify(invalid);
+      const expectedDigest = `sha256:${createHash("sha256")
+        .update(serializePilotSkillContentReleasePayload(invalid))
+        .digest("hex")}`;
+      expect(invalid.manifest.payloadDigest, name).toBe(expectedDigest);
+      expect(() => validatePilotSkillContentRelease(invalid), name).not.toThrow();
+      const first = validatePilotSkillContentRelease(invalid);
+      expect(first.valid, name).toBe(false);
+      expect(first.diagnostics, name).toEqual(
+        expect.arrayContaining([expect.objectContaining({ code })]),
+      );
+      expect(first.diagnostics, name).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: "PILOT_CONTENT_DIGEST_MISMATCH" }),
+        ]),
+      );
+      expect(first, name).toEqual(validatePilotSkillContentRelease(invalid));
+      expect(first.diagnostics, name).toEqual(
+        [...first.diagnostics].sort(
+          (left, right) =>
+            left.code.localeCompare(right.code) ||
+            left.path.localeCompare(right.path) ||
+            left.message.localeCompare(right.message),
+        ),
+      );
+      expect(JSON.stringify(invalid), name).toBe(before);
+    }
+  });
+
+  it("rejects re-signed semantic kind, topology, profile, history, and scope violations", () => {
+    const cases: Array<{
+      code: string;
+      mutate: (release: PilotSkillContentRelease) => void;
+      name: string;
+    }> = [
+      {
+        code: "PILOT_CONTENT_DUPLICATE_CHARACTER_HISTORY",
+        mutate: (release) =>
+          Object.assign(release.characters[0]!.histories[1]!, {
+            historyId: release.characters[0]!.histories[0]!.historyId,
+          }),
+        name: "duplicate Character history identity",
+      },
+      {
+        code: "PILOT_CONTENT_SPECIALIZATION_TRANSFER_TOPOLOGY_INVALID",
+        mutate: (release) => {
+          const specialization = release.specializations.find(
+            ({ id }) => id === "spec:diagnostic-medicine",
+          )!;
+          Object.assign(specialization.transfer, {
+            relationshipIds: ["rel:trade:bargaining"],
+          });
+        },
+        name: "unrelated Specialization transfer relationship",
+      },
+      {
+        code: "PILOT_CONTENT_CHARACTER_ACQUISITION_KIND_INVALID",
+        mutate: (release) =>
+          Object.assign(release.characters[0]!.directAcquisitions[0]!, {
+            competencyId: "spec:diagnostic-medicine",
+          }),
+        name: "Specialization used as a direct acquisition",
+      },
+      {
+        code: "PILOT_CONTENT_CHARACTER_ACQUISITION_KIND_INVALID",
+        mutate: (release) =>
+          Object.assign(release.characters[0]!.specializationAcquisitions[0]!, {
+            competencyId: "skill:sword",
+          }),
+        name: "ordinary Skill used as a Specialization acquisition",
+      },
+      {
+        code: "PILOT_CONTENT_CHARACTER_EXCEPTION_PROFILE_MISMATCH",
+        mutate: (release) =>
+          Object.assign(release.characters[1]!, {
+            accessExceptionIds: ["access:iest-contact-copper-latch"],
+          }),
+        name: "Character exception from an incompatible background profile",
+      },
+      {
+        code: "PILOT_CONTENT_ATTRIBUTION_SCOPE_MISMATCH",
+        mutate: (release) =>
+          Object.assign(release.accessExceptions[0]!, {
+            competencyIds: ["skill:medicine"],
+          }),
+        name: "exception scope inconsistent with its restricted override",
       },
     ];
 
