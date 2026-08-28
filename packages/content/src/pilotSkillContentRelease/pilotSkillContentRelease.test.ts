@@ -12,7 +12,7 @@ import {
 describe("canonical bounded pilot Skill content release", () => {
   it("has one stable, versioned identity and a byte-reproducible payload digest", () => {
     expect(pilotSkillContentReleaseV1).toMatchObject({
-      contentVersion: "pilot-skills-content/1.0.0",
+      contentVersion: "pilot-skills-content/1.0.1",
       id: "content-release:pilot-skills:1",
       rulesVersion: "pilot-skill-rules/v1",
       schemaVersion: "pilot-skill-content-release/v1",
@@ -147,11 +147,217 @@ describe("canonical bounded pilot Skill content release", () => {
     ).toBe(false);
   });
 
+  it("retains the accepted Mogreb, Iest, Olog, N'Kolo, and Scythian DS/AB facts exactly", () => {
+    const profile = (id: string) =>
+      pilotSkillContentReleaseV1.profiles.find((entry) => entry.id === id)!;
+    const route = (profileId: string, routeId: string) =>
+      profile(profileId).normalRoutes.find((entry) => entry.id === routeId)!;
+
+    expect(route("profile:mogreb-temple-state", "route:mogreb-household-first-aid")).toEqual(
+      expect.objectContaining({ accessBand: "AB1", competencyIds: ["skill:first-aid"] }),
+    );
+    expect(route("profile:mogreb-temple-state", "route:mogreb-temple").accessBand).toBe("AB3");
+
+    expect(route("profile:iest-commercial-city", "route:iest-street")).toEqual(
+      expect.objectContaining({ accessBand: "AB1" }),
+    );
+    expect(route("profile:iest-commercial-city", "route:iest-ordinary-trade-craft")).toEqual(
+      expect.objectContaining({
+        accessBand: "AB2",
+        competencyIds: ["skill:trade", "skill:smithing"],
+      }),
+    );
+
+    expect(route("profile:olog-court-bureaucratic", "route:olog-routine-office")).toEqual(
+      expect.objectContaining({
+        accessBand: "AB2",
+        competencyIds: expect.arrayContaining([
+          "skill:administration",
+          "skill:law:olog-princely",
+          "written:ologian:church-ologian",
+        ]),
+      }),
+    );
+    expect(route("profile:olog-court-bureaucratic", "route:olog-princely-chancery")).toEqual(
+      expect.objectContaining({
+        accessBand: "AB3",
+        competencyIds: expect.arrayContaining(["spec:court-administration"]),
+      }),
+    );
+
+    expect(
+      profile("profile:nkolo-imperial-road").normalRoutes.map(({ accessBand }) => accessBand),
+    ).toEqual(["AB1", "AB1", "AB2", "AB2"]);
+    expect(route("profile:nkolo-imperial-road", "route:nkolo-desert-tradition")).toEqual(
+      expect.objectContaining({
+        accessBand: "AB2",
+        competencyIds: ["spec:desert-wayfinding"],
+      }),
+    );
+
+    const scythianUnavailable = profile("profile:scythian-pastoral-clan").overrides.find(
+      ({ availability }) => availability === "unavailable",
+    )!;
+    expect(scythianUnavailable.competencyIds).toEqual(
+      expect.arrayContaining([
+        "written:ologian:church-ologian",
+        "skill:administration",
+        "skill:law:olog-princely",
+        "spec:court-administration",
+      ]),
+    );
+    expect(
+      pilotSkillContentReleaseV1.accessExceptions.every(
+        ({ grantsCompetence }) => grantsCompetence === 0,
+      ),
+    ).toBe(true);
+    expect(pilotSkillContentReleaseV1.policies.accessGrantsCompetence).toBe(0);
+  });
+
+  it("rejects every prior QA enum and access mutation without throwing or mutating input", () => {
+    const cases: Array<[string, (release: PilotSkillContentRelease) => void]> = [
+      [
+        "relationship strength",
+        (release) => Object.assign(release.relationships[0]!, { strength: 60 }),
+      ],
+      [
+        "profile access band",
+        (release) => Object.assign(release.profiles[0]!, { accessBand: "AB9" }),
+      ],
+      [
+        "route access band",
+        (release) => Object.assign(release.profiles[0]!.normalRoutes[0]!, { accessBand: "AB9" }),
+      ],
+      [
+        "development stage",
+        (release) => Object.assign(release.profiles[0]!, { developmentStage: "DS9" }),
+      ],
+      [
+        "override availability",
+        (release) =>
+          Object.assign(release.profiles[1]!.overrides[0]!, { availability: "sometimes" }),
+      ],
+      [
+        "exception basis",
+        (release) => Object.assign(release.accessExceptions[0]!, { basis: "travel" }),
+      ],
+      ["competency weight", (release) => Object.assign(release.competencies[0]!, { weight: 4 })],
+      [
+        "specialization weight",
+        (release) => Object.assign(release.specializations[0]!, { acquisitionWeight: 3 }),
+      ],
+      [
+        "transfer kind",
+        (release) => Object.assign(release.specializations[0]!.transfer, { kind: "recursive" }),
+      ],
+      [
+        "relationship direction",
+        (release) => Object.assign(release.relationships[0]!, { direction: "bidirectional" }),
+      ],
+      [
+        "relationship reverse edge",
+        (release) => Object.assign(release.relationships[0]!, { reverseEdge: "inferred" }),
+      ],
+      [
+        "relationship rules version",
+        (release) =>
+          Object.assign(release.relationships[0]!, { rulesVersion: "pilot-skill-rules/v2" }),
+      ],
+      [
+        "competency kind",
+        (release) => Object.assign(release.competencies[0]!, { kind: "category" }),
+      ],
+      [
+        "exception competence",
+        (release) => Object.assign(release.accessExceptions[0]!, { grantsCompetence: 1 }),
+      ],
+      [
+        "language grant rule",
+        (release) =>
+          Object.assign(release.backgrounds[0]!, { startingSpokenLanguageRule: "education" }),
+      ],
+      ["policy", (release) => Object.assign(release.policies, { professionMechanics: "grants" })],
+      ["release status", (release) => Object.assign(release, { status: "draft" })],
+      [
+        "manifest serialization",
+        (release) => Object.assign(release.manifest, { serialization: "json" }),
+      ],
+    ];
+
+    for (const [name, mutate] of cases) {
+      const invalid = structuredClone(pilotSkillContentReleaseV1) as PilotSkillContentRelease;
+      mutate(invalid);
+      const before = JSON.stringify(invalid);
+      expect(() => validatePilotSkillContentRelease(invalid), name).not.toThrow();
+      const first = validatePilotSkillContentRelease(invalid);
+      expect(first.valid, name).toBe(false);
+      expect(first, name).toEqual(validatePilotSkillContentRelease(invalid));
+      expect(JSON.stringify(invalid), name).toBe(before);
+    }
+  });
+
+  it("returns sorted deterministic shape diagnostics for null collections and entries", () => {
+    const collectionNames = [
+      "accessExceptions",
+      "backgrounds",
+      "characters",
+      "competencies",
+      "histories",
+      "professions",
+      "profiles",
+      "relationships",
+      "specializations",
+    ] as const;
+    const invalidInputs: unknown[] = [null];
+    for (const collectionName of collectionNames) {
+      const nullCollection = structuredClone(pilotSkillContentReleaseV1);
+      Object.assign(nullCollection, { [collectionName]: null });
+      invalidInputs.push(nullCollection);
+      const nonArrayCollection = structuredClone(pilotSkillContentReleaseV1);
+      Object.assign(nonArrayCollection, { [collectionName]: {} });
+      invalidInputs.push(nonArrayCollection);
+      const nullEntry = structuredClone(pilotSkillContentReleaseV1);
+      Object.assign(nullEntry, { [collectionName]: [null] });
+      invalidInputs.push(nullEntry);
+    }
+
+    for (const invalid of invalidInputs) {
+      const before = JSON.stringify(invalid);
+      expect(() => validatePilotSkillContentRelease(invalid)).not.toThrow();
+      const first = validatePilotSkillContentRelease(invalid);
+      expect(first.valid).toBe(false);
+      expect(first).toEqual(validatePilotSkillContentRelease(invalid));
+      expect(first.diagnostics).toEqual(
+        [...first.diagnostics].sort(
+          (left, right) =>
+            left.code.localeCompare(right.code) ||
+            left.path.localeCompare(right.path) ||
+            left.message.localeCompare(right.message),
+        ),
+      );
+      expect(JSON.stringify(invalid)).toBe(before);
+    }
+  });
+
+  it("binds the manifest digest to every canonical payload field", () => {
+    const invalid = structuredClone(pilotSkillContentReleaseV1) as PilotSkillContentRelease;
+    Object.assign(invalid.competencies[0]!, { description: "Mutated while retaining old digest." });
+    const before = JSON.stringify(invalid);
+    const result = validatePilotSkillContentRelease(invalid);
+    expect(result.valid).toBe(false);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "PILOT_CONTENT_DIGEST_MISMATCH" })]),
+    );
+    expect(JSON.stringify(invalid)).toBe(before);
+  });
+
   it("returns deterministic diagnostics without mutating an invalid release", () => {
     const invalid = structuredClone(
       pilotSkillContentReleaseV1,
     ) as unknown as PilotSkillContentRelease;
     (invalid.characters[0] as { professionId: string }).professionId = "profession:missing";
+    Object.assign(invalid.competencies[1]!, { id: invalid.competencies[0]!.id });
+    Object.assign(invalid.relationships[0]!, { targetCompetencyId: "skill:missing" });
     const before = JSON.stringify(invalid);
     const first = validatePilotSkillContentRelease(invalid);
     const second = validatePilotSkillContentRelease(invalid);
@@ -160,6 +366,9 @@ describe("canonical bounded pilot Skill content release", () => {
     expect(first.diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: "PILOT_CONTENT_CHARACTER_CONTEXT_UNKNOWN" }),
+        expect.objectContaining({ code: "PILOT_CONTENT_DIGEST_MISMATCH" }),
+        expect.objectContaining({ code: "PILOT_CONTENT_DUPLICATE_ID" }),
+        expect.objectContaining({ code: "PILOT_CONTENT_UNKNOWN_RELATIONSHIP_ENDPOINT" }),
       ]),
     );
     expect(JSON.stringify(invalid)).toBe(before);

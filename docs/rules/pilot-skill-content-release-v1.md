@@ -7,11 +7,11 @@ This is the canonical reference for the bounded content release accepted in
 and implemented by [issue #382](https://github.com/vidarhald-cpu/glantri-app/issues/382).
 
 - Release ID: `content-release:pilot-skills:1`
-- Content version: `pilot-skills-content/1.0.0`
+- Content version: `pilot-skills-content/1.0.1`
 - Schema: `pilot-skill-content-release/v1`
 - Rules version consumed: `pilot-skill-rules/v1`
 - Canonical payload digest:
-  `sha256:533be510b4496595c177ed7c80a6cb7afb79fcc361f9d987c83687f591ce8b00`
+  `sha256:f524303b274b546c42daac06b65403957e896f35609d42ce7456ff5781c9f419`
 - Deterministic serialization: `canonical-json-lexicographic-keys/v1`
 
 The machine-readable release is in `packages/content/src/pilotSkillContentRelease`. It is separate
@@ -135,8 +135,21 @@ never creates ownership.
 ## Society, access, and language facts
 
 The bounded profiles are Glantri DS4/AB2, Mogreb DS3/AB3, Iest DS6/AB1, Olog DS5/AB3, Lankhmar
-DS5/AB2, N'Kolo DS4/AB2, and Scythians DS2/AB1. Their machine-readable normal routes name only the
-accepted pilot competencies.
+DS5/AB2, N'Kolo DS4/AB2, and Scythians DS2/AB1. Their machine-readable routes retain the accepted
+band distinctions:
+
+- Mogreb has lower-band household First Aid at AB1 alongside the AB3 temple healing and
+  medical-text route.
+- Iest street/social practice is AB1, while the ordinary Trade and Smithing route is AB2.
+- Olog routine Law, Administration, bookkeeping, and written tradition are AB2; princely-chancery
+  and clerk-school practice, including Court Administration, are AB3.
+- N'Kolo caravan/animal and outdoor/scout practice are AB1; frontier-levy practice and the named
+  Desert Wayfinding tradition are AB2.
+- Scythian home-profile unavailability explicitly includes Written Ologian, routine Administration,
+  Olog Princely Law, and Court Administration. The narrow fosterage exception still excludes the
+  latter two.
+
+Every listed route or override is access metadata only and grants zero competence or XP.
 
 Four narrow exceptions are retained:
 

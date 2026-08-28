@@ -665,6 +665,12 @@ const profiles = (
       "AB3",
       [
         [
+          "route:mogreb-household-first-aid",
+          "AB1",
+          "Lower-band household First Aid practice.",
+          ["skill:first-aid"],
+        ],
+        [
           "route:mogreb-temple",
           "AB3",
           "Temple healing and medical-text instruction.",
@@ -695,8 +701,14 @@ const profiles = (
         [
           "route:iest-street",
           "AB1",
-          "Street, social, and ordinary trade routes.",
+          "Street and social routes.",
           ["skill:streetwise", "skill:underworld", "skill:deception", "skill:insight"],
+        ],
+        [
+          "route:iest-ordinary-trade-craft",
+          "AB2",
+          "Ordinary trade and craft routes.",
+          ["skill:trade", "skill:smithing"],
         ],
       ],
       [
@@ -715,14 +727,23 @@ const profiles = (
       "AB3",
       [
         [
-          "route:olog-chancery",
-          "AB3",
-          "Chancery, clerk-school, writing, Law, and Administration routes.",
+          "route:olog-routine-office",
+          "AB2",
+          "Routine Law, Administration, bookkeeping, and written-tradition routes.",
           [
             "skill:administration",
             "skill:law:olog-princely",
-            "skill:research",
             "skill:bookkeeping",
+            "written:ologian:church-ologian",
+          ],
+        ],
+        [
+          "route:olog-princely-chancery",
+          "AB3",
+          "Princely chancery, clerk-school, and Court Administration routes.",
+          [
+            "skill:administration",
+            "skill:research",
             "written:ologian:church-ologian",
             "spec:court-administration",
           ],
@@ -773,15 +794,27 @@ const profiles = (
       [
         [
           "route:nkolo-road-caravan",
+          "AB1",
+          "Caravan exchange and animal routes.",
+          ["skill:trade", "skill:bargaining", "skill:animal-handling"],
+        ],
+        [
+          "route:nkolo-outdoor-scout",
+          "AB1",
+          "Route, outdoor, and scout practice.",
+          ["skill:wayfinding", "skill:survival", "skill:tracking", "skill:perception"],
+        ],
+        [
+          "route:nkolo-frontier-levy",
           "AB2",
-          "Caravan, outdoor, animal, levy, and named desert-route traditions.",
-          [
-            "skill:trade",
-            "skill:wayfinding",
-            "skill:animal-handling",
-            "skill:spear",
-            "spec:desert-wayfinding",
-          ],
+          "Frontier-levy weapon, field, watch, and casualty-stabilization routes.",
+          ["skill:spear", "skill:survival", "skill:perception", "skill:first-aid"],
+        ],
+        [
+          "route:nkolo-desert-tradition",
+          "AB2",
+          "Named caravan desert-route tradition.",
+          ["spec:desert-wayfinding"],
         ],
       ],
       [],
@@ -815,6 +848,8 @@ const profiles = (
             "skill:administration",
             "skill:customs",
             "skill:insight",
+            "skill:law:olog-princely",
+            "spec:court-administration",
           ],
           "Olog court and text practices are unavailable in the home profile.",
         ],
@@ -1131,7 +1166,7 @@ export const pilotSkillContentReleaseV1 = {
     }),
   ),
   competencies,
-  contentVersion: "pilot-skills-content/1.0.0",
+  contentVersion: "pilot-skills-content/1.0.1",
   histories,
   id: "content-release:pilot-skills:1",
   manifest: {
@@ -1146,7 +1181,7 @@ export const pilotSkillContentReleaseV1 = {
       relationships: 15,
       specializations: 8,
     },
-    payloadDigest: "sha256:533be510b4496595c177ed7c80a6cb7afb79fcc361f9d987c83687f591ce8b00",
+    payloadDigest: "sha256:f524303b274b546c42daac06b65403957e896f35609d42ce7456ff5781c9f419",
     serialization: "canonical-json-lexicographic-keys/v1",
   },
   policies: {

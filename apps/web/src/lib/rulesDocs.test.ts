@@ -134,9 +134,13 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.title).toBe("Pilot Skill Content Release v1");
     expect(model.selectedDocument.markdown).toContain("# Pilot Skill Content Release v1");
     expect(model.selectedDocument.markdown).toContain("content-release:pilot-skills:1");
-    expect(model.selectedDocument.markdown).toContain("pilot-skills-content/1.0.0");
+    expect(model.selectedDocument.markdown).toContain("pilot-skills-content/1.0.1");
     expect(model.selectedDocument.markdown).toContain(
-      "533be510b4496595c177ed7c80a6cb7afb79fcc361f9d987c83687f591ce8b00",
+      "f524303b274b546c42daac06b65403957e896f35609d42ce7456ff5781c9f419",
+    );
+    expect(model.selectedDocument.markdown).toContain("ordinary Trade and Smithing route is AB2");
+    expect(model.selectedDocument.markdown).toContain(
+      "Olog Princely Law, and Court Administration",
     );
     expect(model.selectedDocument.markdown).toContain("from the synthetic Gate A fixtures");
     expect(model.selectedDocument.markdown).toContain(
