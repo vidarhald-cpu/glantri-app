@@ -5,6 +5,51 @@ D1/D2 now uses that table to create GM-reviewable proposals after the attacker h
 critical die. The proposals are editable draft rows; they are not committed until the GM accepts them
 through the normal phase-damage commit.
 
+## C1 representative fixture authority
+
+Issue #377 freezes 34 representative C1 Critical definitions under fixture version
+`c1-2026-08-28`. They are the small review set accepted from the #371 calibration ruling, not a
+bulk activation of the 608-result catalogue. The exact key-to-coverage and source-range review table
+is recorded in [the C1 fixture audit](../audits/c1-critical-fixtures.md).
+
+The representative fixtures preserve the stable `family|location|NN` identities and record the
+canonical suggested name/description, damage floor, one Stun at most, action-state conditions,
+immediate operations, exact Bleed rate and type, treatment classification, unresolved information,
+authority, runtime support, and initiative interpretation. They remain an inert rules/content and
+golden-test surface. Existing D1/D2 lookup, proposal, persistence, and round-progression paths do not
+consume the new fixture set, and specialized families remain unreachable from ordinary Combat lookup.
+
+The accepted C1 rules are:
+
+- One Critical creates at most one Stun. A numeric Stun applies its authored `-1`, `-2`, `-4`, or
+  `-8` to OB/Skill, DB/Parry, and Initiative only. Separate Critical-source Stuns retain independent
+  identity and add without a generic cap. Severity 5 is an explicit action state, not another numeric
+  rung, and Stun never progresses automatically into unconsciousness.
+- A consequence accepted at initiative `N` does not affect an equal-initiative action at `N`.
+  Equal initiative is simultaneous. An immediate consequence applies only to a still-unresolved,
+  incompatible action at a strictly later initiative position. Explicit next-round onset overrides
+  that default. This ordering is canonical and is not a GM-editable suggestion.
+- Conditions and operations are separate. `collapse`, `unconscious`, `prone`, `fall_to_ground`, and
+  `drop_held_item` do not imply one another. Functional loss is target-specific unless an explicit
+  result imposes a global action restriction.
+- Ordinary Bleed exists and can be treated immediately, but its first periodic HP loss is at SU of
+  the following round after one full three-second interval. Each external/internal source retains
+  identity. Rates use exact rational arithmetic, add before whole-HP application, and carry exact
+  remainder. Approved whole-body variable rates roll once when accepted and retain the numerator.
+- External Bleed uses `active -> controlled -> staunched -> resolved`; internal Bleed uses
+  `active -> stabilised -> resolved`. These states concern the periodic-loss process, not healing of
+  the underlying injury.
+- First Aid, Medicine, or Surgery is named only where the accepted treatment map explicitly supports
+  it. Equipment, time, assistance, stabilization, and controlled removal remain separate facts.
+  Generic `treatment` text remains GM-managed and creates no Skill check.
+- Mortality, death clocks, permanent characteristic/function loss, recovery, hidden diagnoses, and
+  legacy checks are information-only or unresolved in C1. Descriptive prose cannot activate those
+  mechanics.
+
+Descriptions are project-authored canonical GM suggestions. A GM may later adjudicate permitted
+instance wording and suggested magnitudes, but that does not rewrite the frozen fixture canon or its
+non-editable timing.
+
 ## Reproducing the Critical table
 
 The committed table data is generated from the approved Critical workbook snapshot under
@@ -178,6 +223,11 @@ At SU:
 - Health checks use open-ended `1d20 + Health`; the GM can edit the difficulty before rolling.
 - A successful Health check reduces the relevant bleed row by `1`. If that reduces the bleed value
   to `0`, the bleed row is expired. A failed check does not reduce bleed automatically.
+
+The Health-check reduction above describes the current legacy runtime path only. It is not canonical
+for the accepted C1 fixtures and is not evidence that their exact rational Bleeds are activated.
+Canonical C1 treatment uses only the explicit First Aid/Medicine/Surgery or GM-managed classification
+described above; no universal self-staunch Health roll is approved.
 
 Start next round remains blocked until participant SU reviews and accepted health checks are
 complete. Undoing SU review commands restores previous durations/statuses and removes only the
