@@ -7,6 +7,7 @@ import {
   buildEncounterSessionSummary,
   encounterSessionSchema,
   encounterSessionSummarySchema,
+  roleplayStateSchema,
   buildPlayerSafeRoleplayState,
   buildPlayerSafeRoleplayStateForUser,
   formatEncounterParticipantMembershipLabel,
@@ -532,7 +533,7 @@ describe("encounter session normalization invariants", () => {
           scenarioParticipantId: "scenario-participant-spy",
         }),
       ],
-      roleplayState: {
+      roleplayState: roleplayStateSchema.parse({
         actionLog: [
           {
             autoSuccess: false,
@@ -616,7 +617,7 @@ describe("encounter session normalization invariants", () => {
             "scenario-scenario-participant-guard": true,
           },
         },
-      },
+      }),
     });
 
     const safeState = buildPlayerSafeRoleplayStateForUser({
@@ -644,5 +645,344 @@ describe("encounter session normalization invariants", () => {
     expect(identityFreeSafeState.actionLog).toEqual([]);
     expect(JSON.stringify(safeState)).not.toContain("GM-only hidden identity");
     expect(JSON.stringify(safeState)).not.toContain("guard-stat-check");
+  });
+
+  it("projects Skill rolls by owner, public rank visibility, and uninvolved perspective", () => {
+    const ownerParticipant = scenarioParticipant({
+      controlledByUserId: "player-owner",
+      id: "scenario-owner",
+      name: "Owner hero",
+    });
+    const otherParticipant = scenarioParticipant({
+      controlledByUserId: "player-other",
+      id: "scenario-other",
+      name: "Other hero",
+    });
+    const observerParticipant = scenarioParticipant({
+      controlledByUserId: "player-observer",
+      id: "scenario-observer",
+      name: "Observer hero",
+    });
+    const scenarioParticipants = [ownerParticipant, otherParticipant, observerParticipant];
+    const session = encounter({
+      participantMembershipMode: "explicit",
+      participants: [
+        encounterParticipant({
+          id: "encounter-owner",
+          label: "Owner hero",
+          scenarioParticipantId: ownerParticipant.id,
+        }),
+        encounterParticipant({
+          id: "encounter-other",
+          label: "Other hero",
+          scenarioParticipantId: otherParticipant.id,
+        }),
+        encounterParticipant({
+          id: "encounter-observer",
+          label: "Observer hero",
+          scenarioParticipantId: observerParticipant.id,
+        }),
+      ],
+      roleplayState: roleplayStateSchema.parse({
+        actionLog: [
+          {
+            calculationText: "owner-private-calculation",
+            createdAt: "2026-01-01T00:12:00.000Z",
+            dieResult: 18,
+            id: "owner-current-result",
+            numericSubtotal: 42,
+            otherMod: 9,
+            participantId: "encounter-owner",
+            pendingRollId: "owner-private-pending",
+            rollD20: 18,
+            rollSetId: "private-current-stack",
+            skillId: "perception",
+            skillLabel: "Perception",
+            skillValue: 15,
+            summary: "Owner hero rolled Perception.",
+            type: "gm_skill_roll",
+          },
+          {
+            calculationText: "other-private-calculation",
+            createdAt: "2026-01-01T00:11:00.000Z",
+            dieResult: 17,
+            id: "other-current-result",
+            numericSubtotal: 35,
+            otherMod: 7,
+            participantId: "encounter-other",
+            pendingRollId: "other-private-pending",
+            rollD20: 17,
+            rollSetId: "private-current-stack",
+            skillId: "tracking",
+            skillLabel: "Tracking",
+            skillValue: 11,
+            summary: "Other hero rolled Tracking.",
+            type: "gm_skill_roll",
+          },
+          {
+            createdAt: "2026-01-01T00:10:00.000Z",
+            id: "other-private-assignment",
+            participantId: "encounter-other",
+            pendingRollId: "other-private-pending",
+            rollSetId: "private-current-stack",
+            skillId: "tracking",
+            skillLabel: "Tracking",
+            summary: "Assigned Tracking roll.",
+            type: "skill_roll_assigned",
+          },
+          {
+            calculationText: "historical-private-calculation",
+            createdAt: "2026-01-01T00:09:00.000Z",
+            dieResult: 20,
+            id: "other-historical-result",
+            numericSubtotal: 99,
+            participantId: "encounter-other",
+            rollSetId: "private-historical-stack",
+            skillId: "stealth",
+            skillLabel: "Stealth",
+            summary: "Other hero rolled Stealth.",
+            type: "gm_skill_roll",
+          },
+          {
+            calculationText: "opposed-private-calculation",
+            createdAt: "2026-01-01T00:08:00.000Z",
+            dieResult: 16,
+            id: "other-opposed-result",
+            mode: "opposed",
+            numericSubtotal: 51,
+            participantId: "encounter-other",
+            rollSetId: "private-opposed-stack",
+            side: "actor",
+            skillId: "dodge",
+            skillLabel: "Dodge",
+            summary: "Other hero rolled Dodge.",
+            type: "gm_skill_roll",
+          },
+          {
+            calculationText: "silent-private-calculation",
+            createdAt: "2026-01-01T00:07:00.000Z",
+            dieResult: 19,
+            id: "other-silent-result",
+            numericSubtotal: 88,
+            participantId: "encounter-other",
+            rollSetId: "private-current-stack",
+            silent: true,
+            skillId: "listen",
+            skillLabel: "Listen",
+            summary: "Other hero silently rolled Listen.",
+            type: "gm_skill_roll",
+          },
+          {
+            createdAt: "2026-01-01T00:06:00.000Z",
+            id: "owner-stat-result",
+            participantId: "encounter-owner",
+            pendingRollId: "owner-stat-check",
+            statId: "dex",
+            statLabel: "Dex",
+            statValue: 14,
+            summary: "Owner hero rolled Dex Stat check.",
+            type: "stat_check_result",
+          },
+          {
+            createdAt: "2026-01-01T00:05:00.000Z",
+            id: "other-stat-result",
+            participantId: "encounter-other",
+            pendingRollId: "other-stat-check",
+            statId: "will",
+            statLabel: "Will",
+            statValue: 18,
+            summary: "Other hero rolled Will Stat check.",
+            type: "stat_check_result",
+          },
+        ],
+        currentRankedRollStackId: "private-current-stack",
+        pendingSkillRolls: [
+          {
+            assignedAt: "2026-01-01T00:04:00.000Z",
+            id: "owner-private-pending",
+            otherMod: 9,
+            participantId: "encounter-owner",
+            rollSetId: "private-current-stack",
+            skillId: "perception",
+            skillLabel: "Perception",
+            skillValue: 15,
+          },
+          {
+            assignedAt: "2026-01-01T00:03:00.000Z",
+            id: "other-private-pending",
+            otherMod: 7,
+            participantId: "encounter-other",
+            rollSetId: "private-current-stack",
+            skillId: "tracking",
+            skillLabel: "Tracking",
+            skillValue: 11,
+          },
+          {
+            assignedAt: "2026-01-01T00:02:00.000Z",
+            id: "owner-silent-pending",
+            participantId: "encounter-owner",
+            rollSetId: "private-current-stack",
+            silent: true,
+            skillId: "stealth",
+            skillLabel: "Stealth",
+          },
+        ],
+        pendingStatChecks: [
+          {
+            assignedAt: "2026-01-01T00:01:00.000Z",
+            difficulty: "medium",
+            id: "owner-stat-check",
+            participantId: "encounter-owner",
+            statId: "dex",
+            statLabel: "Dex",
+            statValue: 14,
+          },
+          {
+            assignedAt: "2026-01-01T00:00:00.000Z",
+            difficulty: "hard",
+            id: "other-stat-check",
+            participantId: "encounter-other",
+            statId: "will",
+            statLabel: "Will",
+            statValue: 18,
+          },
+        ],
+        visibility: {
+          "encounter-other": { "encounter-owner": true },
+          "encounter-owner": { "encounter-other": true },
+        },
+      }),
+    });
+
+    const project = (userId: string) =>
+      buildPlayerSafeRoleplayStateForUser({ encounter: session, scenarioParticipants, userId });
+    const owner = project("player-owner");
+    const other = project("player-other");
+    const observer = project("player-observer");
+    const ownerPublicOtherResult = owner.actionLog.find(
+      (entry) => entry.id === "other-current-result",
+    );
+    const otherPublicOwnerResult = other.actionLog.find(
+      (entry) => entry.id === "owner-current-result",
+    );
+
+    expect(owner.pendingSkillRolls.map((roll) => roll.id)).toEqual(["owner-private-pending"]);
+    expect(owner.pendingStatChecks.map((check) => check.id)).toEqual(["owner-stat-check"]);
+    expect(owner.actionLog.map((entry) => entry.id)).toEqual(
+      expect.arrayContaining(["owner-current-result", "owner-stat-result", "other-current-result"]),
+    );
+    expect(owner.actionLog.map((entry) => entry.id)).not.toEqual(
+      expect.arrayContaining([
+        "other-private-assignment",
+        "other-historical-result",
+        "other-opposed-result",
+        "other-silent-result",
+        "other-stat-result",
+      ]),
+    );
+    expect(owner.actionLog.find((entry) => entry.id === "owner-current-result")).toMatchObject({
+      calculationText: "owner-private-calculation",
+      dieResult: 18,
+      pendingRollId: "owner-private-pending",
+    });
+    expect(ownerPublicOtherResult).toMatchObject({
+      numericSubtotal: 35,
+      participantId: "encounter-other",
+      skillId: "tracking",
+      skillLabel: "Tracking",
+      summary: "Public Skill result.",
+    });
+    expect(ownerPublicOtherResult).not.toHaveProperty("calculationText");
+    expect(ownerPublicOtherResult).not.toHaveProperty("dieResult");
+    expect(ownerPublicOtherResult).not.toHaveProperty("otherMod");
+    expect(ownerPublicOtherResult).not.toHaveProperty("pendingRollId");
+    expect(ownerPublicOtherResult).not.toHaveProperty("skillValue");
+
+    expect(other.pendingSkillRolls.map((roll) => roll.id)).toEqual(["other-private-pending"]);
+    expect(otherPublicOwnerResult).toMatchObject({
+      numericSubtotal: 42,
+      participantId: "encounter-owner",
+      skillLabel: "Perception",
+      summary: "Public Skill result.",
+    });
+    expect(otherPublicOwnerResult).not.toHaveProperty("calculationText");
+    expect(otherPublicOwnerResult).not.toHaveProperty("dieResult");
+    expect(otherPublicOwnerResult).not.toHaveProperty("pendingRollId");
+
+    expect(observer.pendingSkillRolls).toEqual([]);
+    expect(observer.pendingStatChecks).toEqual([]);
+    expect(observer.actionLog).toEqual([]);
+    expect(observer.currentRankedRollStackId).toBe("player-safe-empty-ranked-roll-stack");
+    expect(JSON.stringify(observer)).not.toContain("private-current-stack");
+    expect(JSON.stringify(observer)).not.toContain("private-pending");
+    expect(JSON.stringify(observer)).not.toContain("private-calculation");
+    expect(JSON.stringify(observer)).not.toContain("other-current-result");
+
+    expect(project("player-owner")).toEqual(owner);
+    expect(project("player-other")).toEqual(other);
+    expect(project("player-observer")).toEqual(observer);
+    const staleRestrictedSession = encounter({
+      ...session,
+      roleplayState: roleplayStateSchema.parse({
+        actionLog: [
+          {
+            calculationText: "stale-legacy-opposed-calculation",
+            createdAt: "2025-12-31T23:59:30.000Z",
+            dieResult: 19,
+            id: "stale-legacy-opposed-result",
+            numericSubtotal: 81,
+            participantId: "encounter-other",
+            rollSetId: "stale-private-stack",
+            skillId: "stealth",
+            skillLabel: "Stealth",
+            summary: "Legacy opposed result.",
+            type: "gm_skill_roll",
+          },
+          {
+            calculationText: "stale-private-calculation",
+            createdAt: "2025-12-31T23:59:00.000Z",
+            dieResult: 20,
+            id: "stale-private-result",
+            mode: "opposed",
+            numericSubtotal: 77,
+            participantId: "encounter-other",
+            rollSetId: "stale-private-stack",
+            side: "actor",
+            skillId: "stealth",
+            skillLabel: "Stealth",
+            summary: "Other hero rolled Stealth.",
+            type: "gm_skill_roll",
+          },
+        ],
+        currentRankedRollStackId: "stale-private-stack",
+        pendingSkillRolls: [
+          {
+            assignedAt: "2025-12-31T23:58:00.000Z",
+            id: "stale-private-pending",
+            participantId: "encounter-other",
+            rollSetId: "stale-private-stack",
+            skillId: "stealth",
+            skillLabel: "Stealth",
+          },
+        ],
+        visibility: session.roleplayState?.visibility,
+      }),
+      updatedAt: "2025-12-31T23:59:00.000Z",
+    });
+    const staleOwner = buildPlayerSafeRoleplayStateForUser({
+      encounter: staleRestrictedSession,
+      scenarioParticipants,
+      userId: "player-owner",
+    });
+    expect(staleOwner.actionLog).toEqual([]);
+    expect(staleOwner.pendingSkillRolls).toEqual([]);
+    expect(staleOwner.currentRankedRollStackId).toBe("player-safe-empty-ranked-roll-stack");
+    expect(JSON.stringify(staleOwner)).not.toContain("stale-private");
+    expect(buildPlayerSafeRoleplayState(session.roleplayState!)).toMatchObject({
+      actionLog: [],
+      currentRankedRollStackId: "player-safe-empty-ranked-roll-stack",
+      pendingSkillRolls: [],
+      pendingStatChecks: [],
+    });
   });
 });
