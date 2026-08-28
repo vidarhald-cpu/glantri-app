@@ -689,15 +689,37 @@ export function buildEncounterSessionRevision(
 
 export function buildPlayerSafeRoleplayState(state: RoleplayState): RoleplayState {
   return {
-    actionLog: state.actionLog.filter(
-      (entry) => !entry.silent && !entry.type.startsWith("stat_check_"),
-    ),
+    actionLog: [],
+    currentRankedRollStackId: PLAYER_SAFE_EMPTY_RANKED_ROLL_STACK_ID,
     gmMessage: state.gmMessage,
     participantDescriptions: {},
-    pendingSkillRolls: state.pendingSkillRolls.filter((roll) => !roll.silent),
+    pendingSkillRolls: [],
     pendingStatChecks: [],
     visibility: {},
   };
+}
+
+const PLAYER_SAFE_EMPTY_RANKED_ROLL_STACK_ID = "player-safe-empty-ranked-roll-stack";
+const PLAYER_SAFE_PUBLIC_RANKED_ROLL_STACK_ID = "player-safe-public-ranked-roll-stack";
+
+function buildPublicRankedSkillResult(input: {
+  entry: RoleplayActionLogEntry;
+  rollStackId: string;
+}): RoleplayActionLogEntry {
+  return roleplayActionLogEntrySchema.parse({
+    createdAt: "1970-01-01T00:00:00.000Z",
+    fumble: input.entry.fumble,
+    id: input.entry.id,
+    mode: "difficulty",
+    numericSubtotal: input.entry.numericSubtotal,
+    participantId: input.entry.participantId,
+    rollSetId: input.rollStackId,
+    silent: false,
+    skillId: input.entry.skillId,
+    skillLabel: input.entry.skillLabel,
+    summary: "Public Skill result.",
+    type: "gm_skill_roll",
+  });
 }
 
 function getEncounterParticipantIdentityKeys(participant: EncounterParticipant): string[] {
@@ -809,17 +831,79 @@ export function buildPlayerSafeRoleplayStateForUser(input: {
       controlledParticipants.some((controlled) => controlled.id === participant.id)
     );
   };
+  const isVisibleParticipantId = (participantId?: string): boolean => {
+    const participant = resolveEncounterParticipantByRollParticipantId({
+      participantId,
+      participants: membership.participants,
+    });
+
+    return (
+      participant != null && visibleParticipants.some((visible) => visible.id === participant.id)
+    );
+  };
+  const currentRankedRollStackId = state.currentRankedRollStackId;
+  const opposedRollSetIds = new Set(
+    [
+      ...state.pendingSkillRolls
+        .filter((roll) => roll.mode === "opposed")
+        .map((roll) => roll.rollSetId),
+      ...state.actionLog
+        .filter((entry) => entry.mode === "opposed" || Boolean(entry.side))
+        .map((entry) => entry.rollSetId),
+    ].filter((rollSetId): rollSetId is string => Boolean(rollSetId)),
+  );
+  const pendingSkillRolls = state.pendingSkillRolls.filter(
+    (roll) => !roll.silent && isControlledParticipantId(roll.participantId),
+  );
+  const controlledActionLog = state.actionLog.filter(
+    (entry) =>
+      !entry.silent &&
+      isControlledParticipantId(entry.participantId) &&
+      (entry.type === "skill_roll_assigned" ||
+        entry.type === "gm_skill_roll" ||
+        entry.type.startsWith("stat_check_")),
+  );
+  const ownsCurrentRankedRollStack = Boolean(
+    currentRankedRollStackId &&
+    (pendingSkillRolls.some((roll) => roll.rollSetId === currentRankedRollStackId) ||
+      controlledActionLog.some((entry) => entry.rollSetId === currentRankedRollStackId)),
+  );
+  const publicRankedRollStackId = ownsCurrentRankedRollStack
+    ? currentRankedRollStackId!
+    : PLAYER_SAFE_PUBLIC_RANKED_ROLL_STACK_ID;
+  const publicRankedSkillResults = currentRankedRollStackId
+    ? state.actionLog
+        .filter(
+          (entry) =>
+            entry.type === "gm_skill_roll" &&
+            entry.mode !== "opposed" &&
+            !entry.side &&
+            !entry.silent &&
+            entry.rollSetId === currentRankedRollStackId &&
+            !opposedRollSetIds.has(entry.rollSetId) &&
+            entry.numericSubtotal != null &&
+            !isControlledParticipantId(entry.participantId) &&
+            isVisibleParticipantId(entry.participantId),
+        )
+        .map((entry) =>
+          buildPublicRankedSkillResult({
+            entry,
+            rollStackId: publicRankedRollStackId,
+          }),
+        )
+    : [];
 
   return {
-    actionLog: state.actionLog.filter(
-      (entry) =>
-        !entry.silent &&
-        (!entry.type.startsWith("stat_check_") || isControlledParticipantId(entry.participantId)),
+    actionLog: [...controlledActionLog, ...publicRankedSkillResults].sort((left, right) =>
+      right.createdAt.localeCompare(left.createdAt),
     ),
-    currentRankedRollStackId: state.currentRankedRollStackId,
+    currentRankedRollStackId:
+      ownsCurrentRankedRollStack || publicRankedSkillResults.length > 0
+        ? publicRankedRollStackId
+        : PLAYER_SAFE_EMPTY_RANKED_ROLL_STACK_ID,
     gmMessage: state.gmMessage,
     participantDescriptions,
-    pendingSkillRolls: state.pendingSkillRolls.filter((roll) => !roll.silent),
+    pendingSkillRolls,
     pendingStatChecks: state.pendingStatChecks.filter((check) =>
       isControlledParticipantId(check.participantId),
     ),

@@ -4,6 +4,7 @@ import type {
   RoleplayPendingSkillRoll,
   ScenarioParticipant,
 } from "@glantri/domain";
+import { buildPlayerSafeRoleplayStateForUser } from "@glantri/domain";
 import { describe, expect, it } from "vitest";
 
 import { buildPlayerGeneralEncounterView } from "./playerGeneralEncounter";
@@ -711,6 +712,108 @@ describe("playerGeneralEncounter", () => {
       total: 30,
     });
     expect(JSON.stringify(view.rankedResults)).not.toContain("historical-visible-result");
+  });
+
+  it("renders server-projected owner and public results without restoring observer-private facts", () => {
+    const baseEncounter = makeEncounter();
+    const encounter = {
+      ...baseEncounter,
+      participants: [
+        ...baseEncounter.participants,
+        {
+          id: "scenario-observer",
+          label: "Observer hero",
+          participantType: "scenario",
+          scenarioParticipantId: "observer",
+        },
+      ],
+      roleplayState: {
+        ...baseEncounter.roleplayState,
+        actionLog: [
+          makeRoleplayActionLogEntry({
+            calculationText: "other-private-calculation",
+            createdAt: "2026-01-01T00:05:00.000Z",
+            dieResult: 17,
+            id: "other-current-result",
+            numericSubtotal: 35,
+            otherMod: 7,
+            participantId: "scenario-npc-visible",
+            pendingRollId: "other-private-pending",
+            rollD20: 17,
+            rollSetId: "roll-set-visible",
+            skillId: "tracking",
+            skillLabel: "Tracking",
+            skillValue: 11,
+            summary: "Other hero rolled Tracking.",
+            type: "gm_skill_roll",
+          }),
+          ...(baseEncounter.roleplayState?.actionLog ?? []),
+        ],
+        currentRankedRollStackId: "roll-set-visible",
+        visibility: {
+          "scenario-npc-visible": { "scenario-pc-1": true },
+          "scenario-pc-1": { "scenario-npc-visible": true },
+        },
+      },
+    } as EncounterSession;
+    const scenarioParticipants = [
+      makeScenarioParticipant({
+        controlledByUserId: "player-1",
+        id: "pc-1",
+        name: "Player hero",
+      }),
+      makeScenarioParticipant({
+        controlledByUserId: "player-2",
+        id: "npc-visible",
+        name: "Other hero",
+      }),
+      makeScenarioParticipant({
+        controlledByUserId: "player-observer",
+        id: "observer",
+        name: "Observer hero",
+      }),
+    ];
+    const projectFor = (userId: string): EncounterSession => ({
+      ...encounter,
+      roleplayState: buildPlayerSafeRoleplayStateForUser({
+        encounter,
+        scenarioParticipants,
+        userId,
+      }),
+    });
+    const buildView = (userId: string) =>
+      buildPlayerGeneralEncounterView({
+        currentUserId: userId,
+        encounter: projectFor(userId),
+        scenarioParticipants,
+      });
+    const ownerView = buildView("player-1");
+    const otherView = buildView("player-2");
+    const observerView = buildView("player-observer");
+
+    expect(ownerView.assignedRolls[0]).toMatchObject({
+      id: "visible-roll",
+      result: { dieResult: 14, id: "visible-result", total: 30 },
+      skillLabel: "Perception",
+    });
+    expect(
+      ownerView.rankedResults.map((result) => `${result.participantName}:${result.total}`),
+    ).toEqual(["Street merchant:35", "Player hero:30"]);
+    expect(otherView.assignedRolls).toEqual([]);
+    expect(
+      otherView.rankedResults.map((result) => `${result.participantName}:${result.total}`),
+    ).toEqual(["Street merchant:35", "Player hero:30"]);
+    expect(JSON.stringify(ownerView)).not.toContain("other-private-pending");
+    expect(JSON.stringify(ownerView)).not.toContain("other-private-calculation");
+    expect(observerView.assignedRolls).toEqual([]);
+    expect(observerView.rankedResults).toEqual([]);
+    expect(observerView.characterLog).toEqual([]);
+    expect(JSON.stringify(observerView)).not.toContain("visible-result");
+    expect(JSON.stringify(observerView)).not.toContain("other-current-result");
+
+    expect(buildView("player-1")).toEqual(ownerView);
+    expect(buildView("player-2")).toEqual(otherView);
+    expect(buildView("player-observer")).toEqual(observerView);
   });
 
   it("ranks all visible non-opposed current stack results once", () => {

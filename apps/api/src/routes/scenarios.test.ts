@@ -6428,6 +6428,228 @@ describe("scenarios route contract", () => {
     expect(JSON.stringify(response.json())).not.toContain("Hidden spy detail");
   });
 
+  it("serializes owner, GM, public peer, and observer Skill-roll perspectives", async () => {
+    const encounter = encounterSessionSchema.parse({
+      createdAt: "2026-01-01T00:00:00.000Z",
+      id: "encounter-1",
+      kind: "roleplay",
+      participantMembershipMode: "explicit",
+      participants: [
+        {
+          id: "encounter-owner",
+          label: "Owner hero",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-owner",
+        },
+        {
+          id: "encounter-other",
+          label: "Other hero",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-other",
+        },
+        {
+          id: "encounter-observer",
+          label: "Observer hero",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-observer",
+        },
+      ],
+      roleplayState: {
+        actionLog: [
+          {
+            calculationText: "owner-private-calculation",
+            createdAt: "2026-01-01T00:02:00.000Z",
+            dieResult: 18,
+            id: "owner-public-result",
+            numericSubtotal: 42,
+            otherMod: 9,
+            participantId: "encounter-owner",
+            pendingRollId: "owner-private-pending",
+            rollD20: 18,
+            rollSetId: "private-current-stack",
+            skillId: "perception",
+            skillLabel: "Perception",
+            skillValue: 15,
+            summary: "Owner hero rolled Perception.",
+            type: "gm_skill_roll",
+          },
+          {
+            createdAt: "2026-01-01T00:01:00.000Z",
+            id: "owner-private-assignment",
+            participantId: "encounter-owner",
+            pendingRollId: "owner-private-pending",
+            rollSetId: "private-current-stack",
+            skillId: "perception",
+            skillLabel: "Perception",
+            summary: "Assigned Perception roll.",
+            type: "skill_roll_assigned",
+          },
+          {
+            calculationText: "silent-private-calculation",
+            createdAt: "2026-01-01T00:00:30.000Z",
+            dieResult: 20,
+            id: "owner-silent-result",
+            numericSubtotal: 99,
+            participantId: "encounter-owner",
+            rollSetId: "private-current-stack",
+            silent: true,
+            skillId: "stealth",
+            skillLabel: "Stealth",
+            summary: "Owner hero silently rolled Stealth.",
+            type: "gm_skill_roll",
+          },
+        ],
+        currentRankedRollStackId: "private-current-stack",
+        pendingSkillRolls: [
+          {
+            assignedAt: "2026-01-01T00:00:00.000Z",
+            id: "owner-private-pending",
+            otherMod: 9,
+            participantId: "encounter-owner",
+            rollSetId: "private-current-stack",
+            skillId: "perception",
+            skillLabel: "Perception",
+            skillValue: 15,
+          },
+        ],
+        visibility: {
+          "encounter-other": { "encounter-owner": true },
+        },
+      },
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Courtyard",
+      updatedAt: "2026-01-01T00:03:00.000Z",
+    });
+    const scenarioParticipants = [
+      {
+        controlledByUserId: "player-owner",
+        id: "participant-owner",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "Owner hero" },
+        sourceType: "character",
+      },
+      {
+        controlledByUserId: "player-other",
+        id: "participant-other",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "Other hero" },
+        sourceType: "character",
+      },
+      {
+        controlledByUserId: "player-observer",
+        id: "participant-observer",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "Observer hero" },
+        sourceType: "character",
+      },
+    ];
+    mocks.encounterService.getEncounterById.mockResolvedValue(encounter);
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      status: "live",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      status: "active",
+    });
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue(scenarioParticipants);
+    let activeUser = { email: "owner@example.test", id: "player-owner", roles: ["player"] };
+    mocks.requireAuthenticatedUser.mockImplementation(async () => activeUser);
+    const app = await buildScenarioTestApp();
+
+    const loadAs = async (user: typeof activeUser) => {
+      activeUser = user;
+      return app.inject({ method: "GET", url: "/encounters/encounter-1" });
+    };
+    const ownerResponse = await loadAs(activeUser);
+    const otherResponse = await loadAs({
+      email: "other@example.test",
+      id: "player-other",
+      roles: ["player"],
+    });
+    const observerResponse = await loadAs({
+      email: "observer@example.test",
+      id: "player-observer",
+      roles: ["player"],
+    });
+    const gmResponse = await loadAs({
+      email: "gm@example.test",
+      id: "gm-1",
+      roles: ["game_master"],
+    });
+
+    await app.close();
+
+    const ownerState = ownerResponse.json().encounter.roleplayState;
+    const otherState = otherResponse.json().encounter.roleplayState;
+    const observerState = observerResponse.json().encounter.roleplayState;
+    const gmState = gmResponse.json().encounter.roleplayState;
+    expect(
+      [ownerResponse, otherResponse, observerResponse, gmResponse].map(
+        (response) => response.statusCode,
+      ),
+    ).toEqual([200, 200, 200, 200]);
+    expect(ownerState.pendingSkillRolls[0]).toMatchObject({
+      id: "owner-private-pending",
+      otherMod: 9,
+      skillValue: 15,
+    });
+    expect(
+      ownerState.actionLog.find((entry: { id: string }) => entry.id === "owner-public-result"),
+    ).toMatchObject({
+      calculationText: "owner-private-calculation",
+      dieResult: 18,
+      pendingRollId: "owner-private-pending",
+    });
+    expect(JSON.stringify(ownerState)).not.toContain("silent-private-calculation");
+
+    expect(otherState.pendingSkillRolls).toEqual([]);
+    expect(otherState.actionLog).toHaveLength(1);
+    expect(otherState.actionLog[0]).toMatchObject({
+      id: "owner-public-result",
+      numericSubtotal: 42,
+      participantId: "encounter-owner",
+      skillLabel: "Perception",
+      summary: "Public Skill result.",
+    });
+    expect(otherState.actionLog[0]).not.toHaveProperty("calculationText");
+    expect(otherState.actionLog[0]).not.toHaveProperty("dieResult");
+    expect(otherState.actionLog[0]).not.toHaveProperty("otherMod");
+    expect(otherState.actionLog[0]).not.toHaveProperty("pendingRollId");
+    expect(otherState.actionLog[0]).not.toHaveProperty("skillValue");
+    expect(otherState.currentRankedRollStackId).toBe("player-safe-public-ranked-roll-stack");
+    expect(JSON.stringify(otherState)).not.toContain("private-current-stack");
+    expect(JSON.stringify(otherState)).not.toContain("owner-private-pending");
+
+    expect(observerState.pendingSkillRolls).toEqual([]);
+    expect(observerState.actionLog).toEqual([]);
+    expect(observerState.currentRankedRollStackId).toBe("player-safe-empty-ranked-roll-stack");
+    expect(JSON.stringify(observerState)).not.toContain("owner-public-result");
+    expect(JSON.stringify(observerState)).not.toContain("private-current-stack");
+    expect(JSON.stringify(observerState)).not.toContain("owner-private-pending");
+
+    expect(gmState.pendingSkillRolls[0].id).toBe("owner-private-pending");
+    expect(gmState.currentRankedRollStackId).toBe("private-current-stack");
+    expect(
+      gmState.actionLog.find((entry: { id: string }) => entry.id === "owner-public-result"),
+    ).toMatchObject({
+      calculationText: "owner-private-calculation",
+      dieResult: 18,
+      pendingRollId: "owner-private-pending",
+    });
+    expect(JSON.stringify(gmState)).toContain("silent-private-calculation");
+  });
+
   it("returns projected combat history without raw events or hidden participant ids", async () => {
     const encounterParticipants = [
       {
