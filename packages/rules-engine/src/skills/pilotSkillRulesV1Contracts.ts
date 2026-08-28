@@ -102,6 +102,7 @@ export interface PilotSkillCompetencyResult {
   competencyId: string;
   directRanks: number;
   effectiveCompetence: number;
+  grantSources: PilotSkillGrantedAcquisition[];
   grantedRanks: number;
   groupContribution: number;
   relationshipCandidates: PilotSkillRelationshipCandidate[];

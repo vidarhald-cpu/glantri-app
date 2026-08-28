@@ -147,7 +147,7 @@ Society/background may supply explicit granted competence, including the startin
 
 ## 10. Mandatory spoken language
 
-A finalized Character must have at least one spoken-language competency with acquired base competence above zero. The kernel consumes the existing society/background starting-language value; it does not invent or replace that numeric rule.
+A finalized Character must have at least one spoken-language competency with a positive explicit starting-language grant whose source is `society` or `background`. A spoken language present only through direct purchase, a learning group/history, a relationship, or another explicit grant does not satisfy this starting invariant. The kernel consumes the existing society/background starting-language value; it does not invent or replace that numeric rule.
 
 A written tradition is a separate competency and never satisfies the spoken-language invariant. Granting a spoken language does not grant its written tradition. Additional spoken or written competencies are acquired through their normal explicit routes.
 

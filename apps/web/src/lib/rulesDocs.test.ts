@@ -114,6 +114,7 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("Typical prerequisite thresholds");
     expect(model.selectedDocument.markdown).toContain("grants exactly zero competence");
     expect(model.selectedDocument.markdown).toContain("Mandatory spoken language");
+    expect(model.selectedDocument.markdown).toContain("source is `society` or `background`");
     expect(model.selectedDocument.markdown).toContain("Deliberate optimizer");
     expect(model.selectedDocument.markdown).toContain("Configuration Formation `47`, Flex `5`");
   });

@@ -198,17 +198,21 @@ export function validatePilotSkillFinalization(input: {
   build: PilotSkillBuildResult;
   competencies: readonly PilotSkillCompetencyDefinition[];
 }): PilotSkillFinalizationValidation {
-  const hasSpokenLanguage = input.competencies.some(
+  const hasStartingSpokenLanguageGrant = input.competencies.some(
     (competency) =>
       competency.kind === "spoken-language" &&
-      (input.build.byCompetencyId[competency.id]?.acquiredBaseCompetence ?? 0) > 0,
+      input.build.byCompetencyId[competency.id]?.grantSources.some(
+        (grant) =>
+          grant.ranks > 0 && (grant.sourceKind === "society" || grant.sourceKind === "background"),
+      ),
   );
-  const errors: PilotSkillFinalizationValidation["errors"] = hasSpokenLanguage
+  const errors: PilotSkillFinalizationValidation["errors"] = hasStartingSpokenLanguageGrant
     ? []
     : [
         {
           code: "PILOT_SKILL_MISSING_SPOKEN_LANGUAGE",
-          message: "A finalized Character must have at least one acquired spoken language.",
+          message:
+            "A finalized Character must have a starting spoken language granted by society or background.",
         },
       ];
 

@@ -11,6 +11,7 @@ import {
   resolvePilotSkillAccess,
   validatePilotSkillFinalization,
   type PilotSkillCompetencyDefinition,
+  type PilotSkillBuildInput,
   type PilotSkillLearningGroup,
   type PilotSkillRelationship,
 } from "./pilotSkillRulesV1";
@@ -398,6 +399,66 @@ describe("Pilot Skill Rules v1 specializations", () => {
     });
   });
 
+  it.each([
+    { baseRanks: 5, threshold: 6 },
+    { baseRanks: 10, threshold: 11 },
+  ])(
+    "rejects an attempted first rank below threshold $threshold without competence, ownership, or price",
+    ({ baseRanks, threshold }) => {
+      const result = calculatePilotSkillBuild({
+        competencies: [skill("base"), specialization({ baseId: "base", id: "spec", threshold })],
+        directAcquisitions: [
+          { competencyId: "base", ranks: baseRanks },
+          { competencyId: "spec", ranks: 1 },
+        ],
+      });
+
+      expect(result.specializationCost).toBe(0);
+      expect(result.byCompetencyId.spec).toMatchObject({
+        acquiredBaseCompetence: 0,
+        directRanks: 0,
+        effectiveCompetence: 0,
+        relationshipTargetBlockedUntilAcquired: true,
+        specialization: {
+          acquiredRanks: 0,
+          eligible: false,
+          owned: false,
+        },
+      });
+    },
+  );
+
+  it.each([
+    { baseRanks: 6, threshold: 6 },
+    { baseRanks: 7, threshold: 6 },
+    { baseRanks: 11, threshold: 11 },
+    { baseRanks: 12, threshold: 11 },
+  ])(
+    "accepts an explicit first rank at/above threshold $threshold with base $baseRanks",
+    ({ baseRanks, threshold }) => {
+      const result = calculatePilotSkillBuild({
+        competencies: [skill("base"), specialization({ baseId: "base", id: "spec", threshold })],
+        directAcquisitions: [
+          { competencyId: "base", ranks: baseRanks },
+          { competencyId: "spec", ranks: 1 },
+        ],
+      });
+
+      expect(result.specializationCost).toBe(3);
+      expect(result.byCompetencyId.spec).toMatchObject({
+        acquiredBaseCompetence: 1,
+        directRanks: 1,
+        effectiveCompetence: 1,
+        relationshipTargetBlockedUntilAcquired: false,
+        specialization: {
+          acquiredRanks: 1,
+          eligible: true,
+          owned: true,
+        },
+      });
+    },
+  );
+
   it("allows zero-transfer specializations", () => {
     const result = calculatePilotSkillBuild({
       competencies: [skill("base"), specialization({ baseId: "base", id: "zero-edge" })],
@@ -608,7 +669,103 @@ describe("Pilot Skill Rules v1 access, budgets, identity, and language", () => {
     );
   });
 
-  it("requires acquired spoken language and never treats written tradition as spoken", () => {
+  const languageCompetencies = [
+    skill("spoken-thyatian", 2, "spoken-language"),
+    skill("written-thyatian", 2, "written-tradition"),
+  ];
+
+  it.each(["society", "background"] as const)(
+    "accepts a starting spoken language granted by %s without granting writing",
+    (sourceKind) => {
+      const build = calculatePilotSkillBuild({
+        competencies: languageCompetencies,
+        grantedAcquisitions: [
+          {
+            competencyId: "spoken-thyatian",
+            ranks: 11,
+            sourceId: `${sourceKind}:thyatis`,
+            sourceKind,
+          },
+        ],
+      });
+
+      expect(validatePilotSkillFinalization({ build, competencies: languageCompetencies })).toEqual(
+        {
+          errors: [],
+          valid: true,
+        },
+      );
+      expect(build.byCompetencyId["spoken-thyatian"].grantSources).toEqual([
+        expect.objectContaining({ sourceKind }),
+      ]);
+      expect(build.byCompetencyId["written-thyatian"].acquiredBaseCompetence).toBe(0);
+    },
+  );
+
+  it.each([
+    {
+      input: { directAcquisitions: [{ competencyId: "spoken-thyatian", ranks: 11 }] },
+      name: "direct-only spoken language",
+    },
+    {
+      input: {
+        groups: [
+          {
+            competencyIds: ["spoken-thyatian"],
+            id: "history:language-school",
+            level: 11,
+            name: "Language school",
+          },
+        ],
+      },
+      name: "group-only spoken language",
+    },
+    {
+      input: {
+        grantedAcquisitions: [
+          {
+            competencyId: "written-thyatian",
+            ranks: 11,
+            sourceId: "background:clerk",
+            sourceKind: "background",
+          },
+        ],
+      },
+      name: "written-only background grant",
+    },
+    {
+      input: {
+        grantedAcquisitions: [
+          {
+            competencyId: "spoken-thyatian",
+            ranks: 11,
+            sourceId: "grant:manual",
+            sourceKind: "other-explicit-grant",
+          },
+        ],
+      },
+      name: "non-starting explicit spoken-language grant",
+    },
+    { input: {}, name: "missing language" },
+  ] satisfies Array<{
+    input: Omit<PilotSkillBuildInput, "competencies">;
+    name: string;
+  }>)("rejects $name for the starting-language invariant", ({ input }) => {
+    const build = calculatePilotSkillBuild({ competencies: languageCompetencies, ...input });
+
+    expect(validatePilotSkillFinalization({ build, competencies: languageCompetencies })).toEqual({
+      errors: [
+        {
+          code: "PILOT_SKILL_MISSING_SPOKEN_LANGUAGE",
+          message:
+            "A finalized Character must have a starting spoken language granted by society or background.",
+        },
+      ],
+      valid: false,
+    });
+  });
+
+  it("never treats written tradition as spoken or grants it from spoken language", () => {
     const competencies = [
       skill("spoken-thyatian", 2, "spoken-language"),
       skill("written-thyatian", 2, "written-tradition"),
@@ -624,26 +781,9 @@ describe("Pilot Skill Rules v1 access, budgets, identity, and language", () => {
         },
       ],
     });
-    const spoken = calculatePilotSkillBuild({
-      competencies,
-      grantedAcquisitions: [
-        {
-          competencyId: "spoken-thyatian",
-          ranks: 11,
-          sourceId: "society:thyatis",
-          sourceKind: "society",
-        },
-      ],
-    });
-
     expect(validatePilotSkillFinalization({ build: writtenOnly, competencies })).toMatchObject({
       errors: [{ code: "PILOT_SKILL_MISSING_SPOKEN_LANGUAGE" }],
       valid: false,
     });
-    expect(validatePilotSkillFinalization({ build: spoken, competencies })).toEqual({
-      errors: [],
-      valid: true,
-    });
-    expect(spoken.byCompetencyId["written-thyatian"].acquiredBaseCompetence).toBe(0);
   });
 });

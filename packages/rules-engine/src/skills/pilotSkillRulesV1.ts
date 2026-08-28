@@ -12,7 +12,6 @@ import {
   assertPilotNonNegativeInteger,
   assertPilotPositiveInteger,
   PilotSkillRulesInputError,
-  type PilotSkillAcquisition,
   type PilotSkillBuildInput,
   type PilotSkillBuildResult,
   type PilotSkillCompetencyDefinition,
@@ -25,6 +24,11 @@ import {
   type PilotSkillRelationshipCandidate,
   type PilotSpecializationEvaluation,
 } from "./pilotSkillRulesV1Contracts";
+import {
+  collectPilotSkillGrantSources,
+  enforcePilotSpecializationPrerequisites,
+  sumPilotSkillAcquisitions,
+} from "./pilotSkillRulesV1Acquisitions";
 
 export * from "./pilotSkillRulesV1Contracts";
 export * from "./pilotSkillRulesV1Support";
@@ -101,30 +105,6 @@ function buildCompetencyMap(
   }
 
   return byId;
-}
-
-function sumAcquisitions(
-  acquisitions: readonly PilotSkillAcquisition[],
-  competencyById: ReadonlyMap<string, PilotSkillCompetencyDefinition>,
-  label: string,
-): Map<string, number> {
-  const ranksById = new Map<string, number>();
-
-  for (const acquisition of acquisitions) {
-    if (!competencyById.has(acquisition.competencyId)) {
-      throw new PilotSkillRulesInputError(
-        "PILOT_SKILL_UNKNOWN_ACQUISITION_TARGET",
-        `${label} references unknown competency "${acquisition.competencyId}".`,
-      );
-    }
-    assertPilotNonNegativeInteger(acquisition.ranks, `${label} ranks`);
-    ranksById.set(
-      acquisition.competencyId,
-      (ranksById.get(acquisition.competencyId) ?? 0) + acquisition.ranks,
-    );
-  }
-
-  return ranksById;
 }
 
 function compareRelationshipCandidates(
@@ -385,16 +365,17 @@ export function calculatePilotLearningGroupBundle(input: {
 
 export function calculatePilotSkillBuild(input: PilotSkillBuildInput): PilotSkillBuildResult {
   const competencyById = buildCompetencyMap(input.competencies);
-  const directRanksById = sumAcquisitions(
+  const directRanksById = sumPilotSkillAcquisitions(
     input.directAcquisitions ?? [],
     competencyById,
     "Direct acquisition",
   );
-  const grantedRanksById = sumAcquisitions(
+  const grantedRanksById = sumPilotSkillAcquisitions(
     input.grantedAcquisitions ?? [],
     competencyById,
     "Granted acquisition",
   );
+  const grantSourcesById = collectPilotSkillGrantSources(input.grantedAcquisitions ?? []);
   const groupCandidatesByCompetencyId = getBestGroupCandidates({
     competencyById,
     groups: input.groups ?? [],
@@ -404,16 +385,21 @@ export function calculatePilotSkillBuild(input: PilotSkillBuildInput): PilotSkil
     groups: input.groups ?? [],
     relationships: input.relationships,
   });
-  const acquiredBaseByCompetencyId = new Map<string, number>();
+  const requestedBaseByCompetencyId = new Map<string, number>();
 
   for (const competency of input.competencies) {
-    acquiredBaseByCompetencyId.set(
+    requestedBaseByCompetencyId.set(
       competency.id,
       (directRanksById.get(competency.id) ?? 0) +
         (grantedRanksById.get(competency.id) ?? 0) +
         (groupCandidatesByCompetencyId.get(competency.id)?.[0]?.groupLevel ?? 0),
     );
   }
+
+  const acquiredBaseByCompetencyId = enforcePilotSpecializationPrerequisites(
+    input.competencies,
+    requestedBaseByCompetencyId,
+  );
 
   const relationshipCandidatesByTargetId = resolveRelationshipCandidates({
     acquiredBaseByCompetencyId,
@@ -425,8 +411,8 @@ export function calculatePilotSkillBuild(input: PilotSkillBuildInput): PilotSkil
   let specializationCost = 0;
 
   for (const competency of input.competencies) {
-    const directRanks = directRanksById.get(competency.id) ?? 0;
-    const grantedRanks = grantedRanksById.get(competency.id) ?? 0;
+    const requestedDirectRanks = directRanksById.get(competency.id) ?? 0;
+    const requestedGrantedRanks = grantedRanksById.get(competency.id) ?? 0;
     const groupContribution =
       groupCandidatesByCompetencyId.get(competency.id)?.[0]?.groupLevel ?? 0;
     const acquiredBaseCompetence = acquiredBaseByCompetencyId.get(competency.id) ?? 0;
@@ -439,6 +425,9 @@ export function calculatePilotSkillBuild(input: PilotSkillBuildInput): PilotSkil
       ? 0
       : Math.max(acquiredBaseCompetence, relationshipFloor);
     let specialization: PilotSpecializationEvaluation | undefined;
+    let directRanks = requestedDirectRanks;
+    let grantedRanks = requestedGrantedRanks;
+    let grantSources = grantSourcesById.get(competency.id) ?? [];
 
     if (competency.kind === "specialization") {
       const prerequisites = competency.specialization!.prerequisites.map((prerequisite) => {
@@ -456,6 +445,11 @@ export function calculatePilotSkillBuild(input: PilotSkillBuildInput): PilotSkil
         owned: acquiredBaseCompetence >= 1,
         prerequisites,
       };
+      if (!specialization.eligible) {
+        directRanks = 0;
+        grantedRanks = 0;
+        grantSources = [];
+      }
       specializationCost += calculatePilotSpecializationAcquisitionCost({
         acquiredRanks: directRanks,
         weight: competency.specialization!.acquisitionWeight,
@@ -470,6 +464,7 @@ export function calculatePilotSkillBuild(input: PilotSkillBuildInput): PilotSkil
       competencyId: competency.id,
       directRanks,
       effectiveCompetence,
+      grantSources,
       grantedRanks,
       groupContribution,
       relationshipCandidates,
