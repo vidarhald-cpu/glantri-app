@@ -10,9 +10,14 @@ export interface PilotSkillContentReleaseValidation {
 
 const STABLE_ID = /^[a-z][a-z0-9-]*(?::[a-z0-9][a-z0-9-]*)+$/;
 const SHA256_DIGEST = /^sha256:[0-9a-f]{64}$/;
+// The bounded v1 release has one authored home-profile unavailability source. Keeping this list
+// closed prevents a syntactically valid but unknown attribution from becoming an access bypass.
+const PILOT_PROFILE_ATTRIBUTION_SOURCES = new Map([
+  ["profile:scythian-olog-unavailable", "profile:scythian-pastoral-clan"],
+]);
 const accessBand = z.enum(["AB1", "AB2", "AB3", "AB4"]);
 const developmentStage = z.enum(["DS1", "DS2", "DS3", "DS4", "DS5", "DS6"]);
-const stableReference = z.string().min(1);
+const stableReference = z.string().regex(STABLE_ID, "Invalid stable reference.");
 const stableReferences = z.array(stableReference);
 
 const competency = z
@@ -273,6 +278,28 @@ function sortDiagnostics(
   );
 }
 
+function addDuplicateTargetDiagnostics(input: {
+  add: (code: string, path: string, message: string) => void;
+  code?: string;
+  label: string;
+  path: string;
+  values: readonly string[];
+}): void {
+  const firstIndexByTarget = new Map<string, number>();
+  input.values.forEach((target, index) => {
+    const firstIndex = firstIndexByTarget.get(target);
+    if (firstIndex === undefined) {
+      firstIndexByTarget.set(target, index);
+      return;
+    }
+    input.add(
+      input.code ?? "PILOT_CONTENT_DUPLICATE_TARGET",
+      `${input.path}[${index}]`,
+      `${input.label} target "${target}" duplicates ${input.path}[${firstIndex}].`,
+    );
+  });
+}
+
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (isRecord(value)) {
@@ -429,8 +456,20 @@ export function validatePilotSkillContentRelease(
   const professionIds = new Set(release.professions.map(({ id }) => id));
   const profileIds = new Set(release.profiles.map(({ id }) => id));
   const exceptionIds = new Set(release.accessExceptions.map(({ id }) => id));
+  const accessExceptionById = new Map(release.accessExceptions.map((entry) => [entry.id, entry]));
+  const normalRouteProfileById = new Map(
+    release.profiles.flatMap((entry) =>
+      entry.normalRoutes.map((route) => [route.id, entry.id] as const),
+    ),
+  );
 
   release.histories.forEach((entry, historyIndex) => {
+    addDuplicateTargetDiagnostics({
+      add,
+      label: `History "${entry.id}" fixed competency`,
+      path: `histories[${historyIndex}].fixedCompetencyIds`,
+      values: entry.fixedCompetencyIds,
+    });
     const allMembers = [
       ...entry.fixedCompetencyIds,
       ...entry.selectionSlots.flatMap((slot) => slot.candidateCompetencyIds),
@@ -445,6 +484,12 @@ export function validatePilotSkillContentRelease(
       }
     });
     entry.selectionSlots.forEach((slot, slotIndex) => {
+      addDuplicateTargetDiagnostics({
+        add,
+        label: `Selection slot "${slot.id}" candidate competency`,
+        path: `histories[${historyIndex}].selectionSlots[${slotIndex}].candidateCompetencyIds`,
+        values: slot.candidateCompetencyIds,
+      });
       if (slot.chooseCount > slot.candidateCompetencyIds.length) {
         add(
           "PILOT_CONTENT_INVALID_SELECTION_SLOT",
@@ -455,7 +500,18 @@ export function validatePilotSkillContentRelease(
     });
   });
 
+  const firstRelationshipIndexByEdge = new Map<string, number>();
   release.relationships.forEach((entry, index) => {
+    const edge = `${entry.sourceCompetencyId}->${entry.targetCompetencyId}`;
+    const firstEdgeIndex = firstRelationshipIndexByEdge.get(edge);
+    if (firstEdgeIndex === undefined) firstRelationshipIndexByEdge.set(edge, index);
+    else {
+      add(
+        "PILOT_CONTENT_DUPLICATE_RELATIONSHIP_EDGE",
+        `relationships[${index}]`,
+        `Relationship edge "${edge}" duplicates relationships[${firstEdgeIndex}].`,
+      );
+    }
     if (
       !competenceIds.has(entry.sourceCompetencyId) ||
       !competenceIds.has(entry.targetCompetencyId)
@@ -469,6 +525,12 @@ export function validatePilotSkillContentRelease(
   });
 
   release.specializations.forEach((entry, index) => {
+    addDuplicateTargetDiagnostics({
+      add,
+      label: `Specialization "${entry.id}" prerequisite competency`,
+      path: `specializations[${index}].prerequisites`,
+      values: entry.prerequisites.map(({ competencyId }) => competencyId),
+    });
     entry.prerequisites.forEach(({ competencyId }) => {
       if (!competencyIds.has(competencyId)) {
         add(
@@ -479,6 +541,12 @@ export function validatePilotSkillContentRelease(
       }
     });
     if (entry.transfer.kind === "explicit-relationships") {
+      addDuplicateTargetDiagnostics({
+        add,
+        label: `Specialization "${entry.id}" transfer relationship`,
+        path: `specializations[${index}].transfer.relationshipIds`,
+        values: entry.transfer.relationshipIds,
+      });
       entry.transfer.relationshipIds.forEach((id) => {
         if (!relationshipIds.has(id)) {
           add(
@@ -510,21 +578,73 @@ export function validatePilotSkillContentRelease(
   });
 
   release.profiles.forEach((entry, index) => {
-    [
-      ...entry.normalRoutes.flatMap(({ competencyIds }) => competencyIds),
-      ...entry.overrides.flatMap(({ competencyIds }) => competencyIds),
-    ].forEach((id) => {
-      if (!competenceIds.has(id)) {
+    entry.normalRoutes.forEach((route, routeIndex) => {
+      addDuplicateTargetDiagnostics({
+        add,
+        label: `Normal route "${route.id}" competency`,
+        path: `profiles[${index}].normalRoutes[${routeIndex}].competencyIds`,
+        values: route.competencyIds,
+      });
+      route.competencyIds.forEach((id) => {
+        if (!competenceIds.has(id)) {
+          add(
+            "PILOT_CONTENT_UNKNOWN_PROFILE_COMPETENCY",
+            `profiles[${index}].normalRoutes[${routeIndex}].competencyIds`,
+            `Profile "${entry.id}" references unknown competency "${id}".`,
+          );
+        }
+      });
+    });
+    entry.overrides.forEach((override, overrideIndex) => {
+      const path = `profiles[${index}].overrides[${overrideIndex}]`;
+      addDuplicateTargetDiagnostics({
+        add,
+        label: `Applicability override "${override.attributionId}" competency`,
+        path: `${path}.competencyIds`,
+        values: override.competencyIds,
+      });
+      override.competencyIds.forEach((id) => {
+        if (!competenceIds.has(id)) {
+          add(
+            "PILOT_CONTENT_UNKNOWN_PROFILE_COMPETENCY",
+            `${path}.competencyIds`,
+            `Profile "${entry.id}" references unknown competency "${id}".`,
+          );
+        }
+      });
+
+      const restrictedSource = accessExceptionById.get(override.attributionId);
+      const availableSourceProfileId = normalRouteProfileById.get(override.attributionId);
+      const unavailableSourceProfileId = PILOT_PROFILE_ATTRIBUTION_SOURCES.get(
+        override.attributionId,
+      );
+      const sourceIsValid =
+        (override.availability === "restricted" && restrictedSource?.profileId === entry.id) ||
+        (override.availability === "available" && availableSourceProfileId === entry.id) ||
+        (override.availability === "unavailable" && unavailableSourceProfileId === entry.id);
+      if (!sourceIsValid) {
         add(
-          "PILOT_CONTENT_UNKNOWN_PROFILE_COMPETENCY",
-          `profiles[${index}]`,
-          `Profile "${entry.id}" references unknown competency "${id}".`,
+          "PILOT_CONTENT_INVALID_ATTRIBUTION_SOURCE",
+          `${path}.attributionId`,
+          `Attribution "${override.attributionId}" does not resolve to a known ${override.availability} source for profile "${entry.id}".`,
         );
       }
     });
   });
 
   release.professions.forEach((entry, index) => {
+    addDuplicateTargetDiagnostics({
+      add,
+      label: `Profession "${entry.id}" suggested competency`,
+      path: `professions[${index}].suggestedCompetencyIds`,
+      values: entry.suggestedCompetencyIds,
+    });
+    addDuplicateTargetDiagnostics({
+      add,
+      label: `Profession "${entry.id}" suggested history`,
+      path: `professions[${index}].suggestedHistoryIds`,
+      values: entry.suggestedHistoryIds,
+    });
     entry.suggestedCompetencyIds.forEach((id) => {
       if (!competenceIds.has(id)) {
         add(
@@ -546,6 +666,18 @@ export function validatePilotSkillContentRelease(
   });
 
   release.accessExceptions.forEach((entry, index) => {
+    addDuplicateTargetDiagnostics({
+      add,
+      label: `Access exception "${entry.id}" competency`,
+      path: `accessExceptions[${index}].competencyIds`,
+      values: entry.competencyIds,
+    });
+    addDuplicateTargetDiagnostics({
+      add,
+      label: `Access exception "${entry.id}" history`,
+      path: `accessExceptions[${index}].historyIds`,
+      values: entry.historyIds,
+    });
     if (!profileIds.has(entry.profileId)) {
       add(
         "PILOT_CONTENT_ACCESS_EXCEPTION_INVALID",
@@ -574,6 +706,12 @@ export function validatePilotSkillContentRelease(
   });
 
   release.characters.forEach((entry, index) => {
+    addDuplicateTargetDiagnostics({
+      add,
+      label: `Character "${entry.id}" access exception`,
+      path: `characters[${index}].accessExceptionIds`,
+      values: entry.accessExceptionIds,
+    });
     if (!backgroundById.has(entry.backgroundId) || !professionIds.has(entry.professionId)) {
       add(
         "PILOT_CONTENT_CHARACTER_CONTEXT_UNKNOWN",
@@ -589,6 +727,14 @@ export function validatePilotSkillContentRelease(
           `Unknown access exception "${id}".`,
         );
       }
+    });
+    addDuplicateTargetDiagnostics({
+      add,
+      label: `Character "${entry.id}" acquisition competency`,
+      path: `characters[${index}].acquisitions`,
+      values: [...entry.directAcquisitions, ...entry.specializationAcquisitions].map(
+        ({ competencyId }) => competencyId,
+      ),
     });
     [...entry.directAcquisitions, ...entry.specializationAcquisitions].forEach(
       ({ competencyId }) => {
@@ -615,6 +761,12 @@ export function validatePilotSkillContentRelease(
         );
         return;
       }
+      addDuplicateTargetDiagnostics({
+        add,
+        label: `Resolved choices for history "${selection.historyId}"`,
+        path: `characters[${index}].histories[${selectionIndex}].selectedCompetencyIds`,
+        values: selection.selectedCompetencyIds,
+      });
       const selected = new Set(selection.selectedCompetencyIds);
       const expectedSelectedCount = selectedHistory.selectionSlots.reduce(
         (sum, slot) => sum + slot.chooseCount,

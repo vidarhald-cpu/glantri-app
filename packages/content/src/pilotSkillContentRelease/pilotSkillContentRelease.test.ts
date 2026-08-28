@@ -9,6 +9,13 @@ import {
   validatePilotSkillContentRelease,
 } from "./validator";
 
+function resignPilotRelease(release: PilotSkillContentRelease): void {
+  const digest = createHash("sha256")
+    .update(serializePilotSkillContentReleasePayload(release))
+    .digest("hex");
+  Object.assign(release.manifest, { payloadDigest: `sha256:${digest}` });
+}
+
 describe("canonical bounded pilot Skill content release", () => {
   it("has one stable, versioned identity and a byte-reproducible payload digest", () => {
     expect(pilotSkillContentReleaseV1).toMatchObject({
@@ -349,6 +356,140 @@ describe("canonical bounded pilot Skill content release", () => {
       expect.arrayContaining([expect.objectContaining({ code: "PILOT_CONTENT_DIGEST_MISMATCH" })]),
     );
     expect(JSON.stringify(invalid)).toBe(before);
+  });
+
+  it("rejects re-signed invalid attribution sources and duplicate semantic targets", () => {
+    const cases: Array<{
+      code: string;
+      mutate: (release: PilotSkillContentRelease) => void;
+      name: string;
+    }> = [
+      {
+        code: "PILOT_CONTENT_INVALID_SHAPE",
+        mutate: (release) =>
+          Object.assign(release.profiles[1]!.overrides[0]!, { attributionId: "not stable" }),
+        name: "invalid attribution stable-ID grammar",
+      },
+      {
+        code: "PILOT_CONTENT_INVALID_ATTRIBUTION_SOURCE",
+        mutate: (release) =>
+          Object.assign(release.profiles[1]!.overrides[0]!, {
+            attributionId: "access:unknown-source",
+          }),
+        name: "unknown stable attribution source",
+      },
+      {
+        code: "PILOT_CONTENT_INVALID_ATTRIBUTION_SOURCE",
+        mutate: (release) =>
+          Object.assign(release.profiles[1]!.overrides[0]!, {
+            attributionId: "access:lankhmar-master-hanno",
+          }),
+        name: "known attribution source for the wrong profile",
+      },
+      {
+        code: "PILOT_CONTENT_INVALID_SHAPE",
+        mutate: (release) =>
+          Object.assign(release.relationships[0]!, { sourceCompetencyId: "not stable" }),
+        name: "invalid relationship source stable-ID grammar",
+      },
+      {
+        code: "PILOT_CONTENT_UNKNOWN_RELATIONSHIP_ENDPOINT",
+        mutate: (release) =>
+          Object.assign(release.relationships[0]!, { sourceCompetencyId: "skill:missing" }),
+        name: "unknown stable relationship source",
+      },
+      {
+        code: "PILOT_CONTENT_DUPLICATE_RELATIONSHIP_EDGE",
+        mutate: (release) =>
+          Object.assign(release.relationships[1]!, {
+            sourceCompetencyId: release.relationships[0]!.sourceCompetencyId,
+            targetCompetencyId: release.relationships[0]!.targetCompetencyId,
+          }),
+        name: "duplicate relationship source-target edge",
+      },
+      {
+        code: "PILOT_CONTENT_DUPLICATE_TARGET",
+        mutate: (release) =>
+          Object.assign(release.characters[0]!.directAcquisitions[1]!, {
+            competencyId: release.characters[0]!.directAcquisitions[0]!.competencyId,
+          }),
+        name: "duplicate direct-acquisition competency target",
+      },
+      {
+        code: "PILOT_CONTENT_DUPLICATE_TARGET",
+        mutate: (release) => {
+          const acquisition = release.characters[0]!.specializationAcquisitions[0]!;
+          (release.characters[0]!.specializationAcquisitions as Array<typeof acquisition>).push({
+            ...acquisition,
+          });
+        },
+        name: "duplicate specialization-acquisition competency target",
+      },
+      {
+        code: "PILOT_CONTENT_DUPLICATE_TARGET",
+        mutate: (release) => {
+          const targets = release.profiles[0]!.normalRoutes[0]!.competencyIds as string[];
+          targets.push(targets[0]!);
+        },
+        name: "duplicate normal-route competency target",
+      },
+      {
+        code: "PILOT_CONTENT_DUPLICATE_TARGET",
+        mutate: (release) => {
+          const targets = release.profiles[1]!.overrides[0]!.competencyIds as string[];
+          targets.push(targets[0]!);
+        },
+        name: "duplicate restricted-access competency target",
+      },
+      {
+        code: "PILOT_CONTENT_DUPLICATE_TARGET",
+        mutate: (release) => {
+          const targets = release.accessExceptions[0]!.competencyIds as string[];
+          targets.push(targets[0]!);
+        },
+        name: "duplicate access-exception competency target",
+      },
+      {
+        code: "PILOT_CONTENT_DUPLICATE_TARGET",
+        mutate: (release) => {
+          const selected = release.characters[0]!.histories[0]!.selectedCompetencyIds as string[];
+          selected.push(selected[0]!);
+        },
+        name: "duplicate resolved choice target",
+      },
+    ];
+
+    for (const { code, mutate, name } of cases) {
+      const invalid = structuredClone(pilotSkillContentReleaseV1) as PilotSkillContentRelease;
+      mutate(invalid);
+      resignPilotRelease(invalid);
+      const before = JSON.stringify(invalid);
+      const expectedDigest = `sha256:${createHash("sha256")
+        .update(serializePilotSkillContentReleasePayload(invalid))
+        .digest("hex")}`;
+      expect(invalid.manifest.payloadDigest, name).toBe(expectedDigest);
+      expect(() => validatePilotSkillContentRelease(invalid), name).not.toThrow();
+      const first = validatePilotSkillContentRelease(invalid);
+      expect(first.valid, name).toBe(false);
+      expect(first.diagnostics, name).toEqual(
+        expect.arrayContaining([expect.objectContaining({ code })]),
+      );
+      expect(first.diagnostics, name).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: "PILOT_CONTENT_DIGEST_MISMATCH" }),
+        ]),
+      );
+      expect(first, name).toEqual(validatePilotSkillContentRelease(invalid));
+      expect(first.diagnostics, name).toEqual(
+        [...first.diagnostics].sort(
+          (left, right) =>
+            left.code.localeCompare(right.code) ||
+            left.path.localeCompare(right.path) ||
+            left.message.localeCompare(right.message),
+        ),
+      );
+      expect(JSON.stringify(invalid), name).toBe(before);
+    }
   });
 
   it("returns deterministic diagnostics without mutating an invalid release", () => {
