@@ -94,55 +94,59 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
     );
     expect(recapResponse.status()).toBe(201);
 
-    const mapTitle = `Hill route ${suffix}`;
-    const mapUploadResponse = await page.request.post(
-      `${API_URL}/campaigns/${campaignId}/artifacts`,
-      {
-        headers: ARTIFACT_HEADERS,
-        multipart: {
-          metadata: JSON.stringify({
-            altText: "A hand-drawn route from the mill to the hill caves",
-            artifactKind: "map",
-            title: mapTitle,
-          }),
-          file: {
-            buffer: fs.readFileSync(
-              path.resolve(__dirname, "../public/images/GrinulGrimbrew.jpeg"),
-            ),
-            mimeType: "image/jpeg",
-            name: "blackboard-route.jpeg",
+    const artifactStorageAvailable =
+      process.env.CI !== "true" || process.env.ARTIFACT_E2E_STORAGE_ENABLED === "1";
+    const mapTitle = artifactStorageAvailable ? `Hill route ${suffix}` : undefined;
+    if (mapTitle) {
+      const mapUploadResponse = await page.request.post(
+        `${API_URL}/campaigns/${campaignId}/artifacts`,
+        {
+          headers: ARTIFACT_HEADERS,
+          multipart: {
+            metadata: JSON.stringify({
+              altText: "A hand-drawn route from the mill to the hill caves",
+              artifactKind: "map",
+              title: mapTitle,
+            }),
+            file: {
+              buffer: fs.readFileSync(
+                path.resolve(__dirname, "../public/images/GrinulGrimbrew.jpeg"),
+              ),
+              mimeType: "image/jpeg",
+              name: "blackboard-route.jpeg",
+            },
           },
         },
-      },
-    );
-    expect(mapUploadResponse.status()).toBe(201);
-    const uploadedMap = (await mapUploadResponse.json()) as {
-      artifact: { id: string; metadataVersion: number };
-    };
-    const publishMapResponse = await page.request.put(
-      `${API_URL}/campaigns/${campaignId}/artifacts/${uploadedMap.artifact.id}/audience`,
-      {
-        data: {
-          audience: "campaign",
-          expectedMetadataVersion: uploadedMap.artifact.metadataVersion,
+      );
+      expect(mapUploadResponse.status()).toBe(201);
+      const uploadedMap = (await mapUploadResponse.json()) as {
+        artifact: { id: string; metadataVersion: number };
+      };
+      const publishMapResponse = await page.request.put(
+        `${API_URL}/campaigns/${campaignId}/artifacts/${uploadedMap.artifact.id}/audience`,
+        {
+          data: {
+            audience: "campaign",
+            expectedMetadataVersion: uploadedMap.artifact.metadataVersion,
+          },
+          headers: ARTIFACT_HEADERS,
         },
-        headers: ARTIFACT_HEADERS,
-      },
-    );
-    expect(publishMapResponse.status()).toBe(200);
-    const mapResponse = await page.request.post(
-      `${API_URL}/campaigns/${campaignId}/blackboard/entries`,
-      {
-        data: {
-          caption: "The safe route avoids the watchtower.",
-          category: "image_map",
-          sourceArtifactId: uploadedMap.artifact.id,
-          title: mapTitle,
+      );
+      expect(publishMapResponse.status()).toBe(200);
+      const mapResponse = await page.request.post(
+        `${API_URL}/campaigns/${campaignId}/blackboard/entries`,
+        {
+          data: {
+            caption: "The safe route avoids the watchtower.",
+            category: "image_map",
+            sourceArtifactId: uploadedMap.artifact.id,
+            title: mapTitle,
+          },
+          headers: BLACKBOARD_HEADERS,
         },
-        headers: BLACKBOARD_HEADERS,
-      },
-    );
-    expect(mapResponse.status()).toBe(201);
+      );
+      expect(mapResponse.status()).toBe(201);
+    }
 
     const pinResponse = await playerContext.request.post(
       `${API_URL}/campaigns/${campaignId}/blackboard/placements`,
@@ -175,7 +179,7 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
     await expect(page.getByRole("heading", { name: "Blackboard" })).toBeVisible();
     await expect(page.getByText(clueTitle, { exact: true }).first()).toBeVisible();
     await expect(page.getByText(documentTitle, { exact: true })).toBeVisible();
-    await expect(page.getByText(mapTitle, { exact: true })).toBeVisible();
+    if (mapTitle) await expect(page.getByText(mapTitle, { exact: true })).toBeVisible();
     await expect(page.getByText(recapTitle, { exact: true })).toBeVisible();
     await expect(page.getByText(/unitKey|grant stream|storage key|digest/i)).toHaveCount(0);
 
