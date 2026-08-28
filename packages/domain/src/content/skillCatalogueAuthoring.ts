@@ -2,6 +2,74 @@ import type { AccessBand, DevelopmentStage } from "./skillSemanticFixtures";
 
 export const SKILL_CATALOGUE_AUTHORING_SCHEMA_VERSION = "skill-catalogue-authoring/v1" as const;
 
+export const PILOT_SKILL_RULES_VERSION = "pilot-skill-rules/v1" as const;
+export type PilotSkillRulesVersion = typeof PILOT_SKILL_RULES_VERSION;
+
+export const PILOT_SKILL_ECONOMIC_WEIGHTS = [1, 2, 3] as const;
+export type PilotSkillEconomicWeight = (typeof PILOT_SKILL_ECONOMIC_WEIGHTS)[number];
+
+export const PILOT_SPECIALIZATION_ECONOMIC_WEIGHTS = [1, 2] as const;
+export type PilotSpecializationEconomicWeight =
+  (typeof PILOT_SPECIALIZATION_ECONOMIC_WEIGHTS)[number];
+
+export const PILOT_SKILL_RELATIONSHIP_STRENGTHS = [100, 75, 50, 25] as const;
+export type PilotSkillRelationshipStrength = (typeof PILOT_SKILL_RELATIONSHIP_STRENGTHS)[number];
+
+export const PILOT_SKILL_ACCESS_AVAILABILITIES = [
+  "available",
+  "restricted",
+  "unavailable",
+] as const;
+export type PilotSkillAccessAvailability = (typeof PILOT_SKILL_ACCESS_AVAILABILITIES)[number];
+
+export const PILOT_SKILL_ACCESS_EXCEPTION_BASES = [
+  "biography",
+  "contact",
+  "domain",
+  "institution",
+  "profile",
+  "teacher",
+  "text",
+  "tradition",
+] as const;
+export type PilotSkillAccessExceptionBasis = (typeof PILOT_SKILL_ACCESS_EXCEPTION_BASES)[number];
+
+export const PILOT_SKILL_COMPETENCE_BANDS = [
+  { id: "beginner", minimum: 1 },
+  { id: "intermediate", minimum: 6 },
+  { id: "experienced", minimum: 11 },
+  { id: "expert", minimum: 16 },
+  { id: "world-class", minimum: 21 },
+] as const;
+export type PilotSkillCompetenceBandId = (typeof PILOT_SKILL_COMPETENCE_BANDS)[number]["id"];
+
+export interface PilotSkillEconomicWeightAuthoring {
+  rationale: string;
+  rulesVersion: PilotSkillRulesVersion;
+  value: PilotSkillEconomicWeight;
+}
+
+export interface PilotSpecializationPrerequisiteAuthoring {
+  competencyId: string;
+  justification?: string;
+  threshold: number;
+}
+
+export interface PilotSpecializationEconomicsAuthoring {
+  acquisitionWeight: PilotSpecializationEconomicWeight;
+  initiationCost: 2;
+  prerequisites: readonly PilotSpecializationPrerequisiteAuthoring[];
+  rulesVersion: PilotSkillRulesVersion;
+}
+
+export interface PilotSkillRelationshipAuthoring {
+  id: string;
+  rulesVersion: PilotSkillRulesVersion;
+  sourceCompetencyId: string;
+  strength: PilotSkillRelationshipStrength;
+  targetCompetencyId: string;
+}
+
 export const SKILL_CATALOGUE_AUTHORING_STATUSES = [
   "canonical",
   "proposal",
