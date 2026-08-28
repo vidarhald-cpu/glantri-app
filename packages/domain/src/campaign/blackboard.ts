@@ -303,6 +303,20 @@ export const blackboardCommonDtoSchema = z
   })
   .strict();
 
+export const blackboardViewerCapabilitiesSchema = z
+  .object({
+    entries: z.array(
+      z
+        .object({
+          canCorrect: z.boolean(),
+          canRemove: z.boolean(),
+          entryId: idSchema,
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
 export const blackboardExpandedDetailSchema = z
   .object({
     common: blackboardCommonEntrySchema,
@@ -382,6 +396,7 @@ export type BlackboardPlacementDto = z.infer<typeof blackboardPlacementDtoSchema
 export type BlackboardTombstone = z.infer<typeof blackboardTombstoneSchema>;
 export type BlackboardCommonDto = z.infer<typeof blackboardCommonDtoSchema>;
 export type BlackboardExpandedDetail = z.infer<typeof blackboardExpandedDetailSchema>;
+export type BlackboardViewerCapabilities = z.infer<typeof blackboardViewerCapabilitiesSchema>;
 
 function normalizedTitle(entry: BlackboardCommonEntry): string {
   return entry.title.normalize("NFKC").trim().toLocaleLowerCase("en");
@@ -410,5 +425,17 @@ export function serializeBlackboardCommonDto(input: {
       version: input.layout.version,
     },
     tombstones: [...input.tombstones].sort((left, right) => left.id.localeCompare(right.id, "en")),
+  });
+}
+
+/**
+ * The viewer-relative action seam. It intentionally contains no owner identity,
+ * actor label, content, source, ordering, or hidden-entry information.
+ */
+export function serializeBlackboardViewerCapabilities(
+  entries: BlackboardViewerCapabilities["entries"],
+): BlackboardViewerCapabilities {
+  return blackboardViewerCapabilitiesSchema.parse({
+    entries: [...entries].sort((left, right) => left.entryId.localeCompare(right.entryId, "en")),
   });
 }

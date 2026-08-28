@@ -23,6 +23,7 @@ import {
   blackboardSafeHistorySchema,
   blackboardTombstoneSchema,
   serializeBlackboardCommonDto,
+  serializeBlackboardViewerCapabilities,
   type ArtifactBlackboardCandidate,
   type BlackboardCommonEntry,
   type BlackboardPlacementDto,
@@ -201,6 +202,25 @@ export class BlackboardService {
       },
       tombstones,
     });
+  }
+
+  async getViewerCapabilities(campaignId: string, userId: string) {
+    const access = await this.requireCommonAccess(campaignId, userId);
+    const records = await this.repository.loadBoard(campaignId);
+    return serializeBlackboardViewerCapabilities(
+      records.entries.flatMap((entry) => {
+        if (entry.state !== "published") return [];
+        const mayManage =
+          access.isGm || (entry.category !== "recap" && entry.createdByUserId === userId);
+        return [
+          {
+            canCorrect: mayManage,
+            canRemove: mayManage,
+            entryId: entry.id,
+          },
+        ];
+      }),
+    );
   }
 
   async getEntry(input: {

@@ -34,6 +34,13 @@
   margin: 0;
 }
 
+.detail h3:focus-visible,
+.composer h3:focus-visible,
+.error:focus-visible {
+  outline: 3px solid #2f5d62;
+  outline-offset: 3px;
+}
+
 .intro p,
 .muted {
   color: #5e5a50;

@@ -8,13 +8,15 @@ import type {
   BlackboardCommonDto,
   BlackboardCommonEntry,
   BlackboardPlacementDto,
+  BlackboardViewerCapabilities,
 } from "@glantri/domain";
 
-import { artifactContentUrl } from "@/lib/api/artifactClient";
+import { fetchArtifactBlob } from "@/lib/api/artifactClient";
 import { ApiRequestError } from "@/lib/api/apiClient";
 import {
   createBlackboardEntry,
   loadBlackboard,
+  loadBlackboardCapabilities,
   loadBlackboardArtifactCandidates,
   loadBlackboardHistory,
   moveBlackboardEntry,
@@ -39,6 +41,10 @@ interface EntryDraft {
   text: string;
   title: string;
 }
+
+type ArtifactViewState =
+  | { status: "idle" | "loading" | "operational_unavailable" | "source_unavailable" }
+  | { objectUrl: string; status: "ready" };
 
 const emptyDraft: EntryDraft = {
   category: "clue_fact",
@@ -159,6 +165,7 @@ function buildCreateContent(draft: EntryDraft) {
 
 export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWorkspaceProps) {
   const [board, setBoard] = useState<BlackboardCommonDto>();
+  const [capabilities, setCapabilities] = useState<BlackboardViewerCapabilities>({ entries: [] });
   const [artifacts, setArtifacts] = useState<ArtifactBlackboardCandidate[]>([]);
   const [selectedId, setSelectedId] = useState<string>();
   const [composerMode, setComposerMode] = useState<"create" | "correct">();
@@ -171,15 +178,41 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [artifactNotice, setArtifactNotice] = useState<string>();
+  const [capabilityNotice, setCapabilityNotice] = useState<string>();
+  const [artifactView, setArtifactView] = useState<ArtifactViewState>({ status: "idle" });
+  const [artifactRetry, setArtifactRetry] = useState(0);
   const [confirmRetract, setConfirmRetract] = useState(false);
   const detailHeadingRef = useRef<HTMLHeadingElement>(null);
+  const composerHeadingRef = useRef<HTMLHeadingElement>(null);
+  const createTriggerRef = useRef<HTMLButtonElement>(null);
+  const correctTriggerRef = useRef<HTMLButtonElement>(null);
+  const composerReturnFocusRef = useRef<HTMLElement | null>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const sourceArtifactSelectRef = useRef<HTMLSelectElement>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
   const catalogueButtons = useRef(new Map<string, HTMLButtonElement>());
 
+  const refreshCapabilities = useCallback(async () => {
+    try {
+      const nextCapabilities = await loadBlackboardCapabilities(campaignId);
+      setCapabilities(nextCapabilities);
+      setCapabilityNotice(undefined);
+      return nextCapabilities;
+    } catch {
+      setCapabilities({ entries: [] });
+      setCapabilityNotice(
+        "Entry actions are temporarily unavailable. Reload the Blackboard to try again.",
+      );
+      return undefined;
+    }
+  }, [campaignId]);
+
   const refreshBoard = useCallback(async () => {
-    const nextBoard = await loadBlackboard(campaignId);
+    const [nextBoard] = await Promise.all([loadBlackboard(campaignId), refreshCapabilities()]);
     setBoard(nextBoard);
     return nextBoard;
-  }, [campaignId]);
+  }, [campaignId, refreshCapabilities]);
 
   useEffect(() => {
     let cancelled = false;
@@ -187,6 +220,14 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
     setError(undefined);
     void Promise.all([
       loadBlackboard(campaignId),
+      loadBlackboardCapabilities(campaignId).catch(() => {
+        if (!cancelled) {
+          setCapabilityNotice(
+            "Entry actions are temporarily unavailable. Reload the Blackboard to try again.",
+          );
+        }
+        return { entries: [] };
+      }),
       loadBlackboardArtifactCandidates(campaignId).catch(() => {
         if (!cancelled) {
           setArtifactNotice(
@@ -196,9 +237,10 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
         return [];
       }),
     ])
-      .then(([nextBoard, nextArtifacts]) => {
+      .then(([nextBoard, nextCapabilities, nextArtifacts]) => {
         if (cancelled) return;
         setBoard(nextBoard);
+        setCapabilities(nextCapabilities);
         setArtifacts(nextArtifacts);
       })
       .catch(() => {
@@ -217,6 +259,7 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
   }, [campaignId]);
 
   const selectedEntry = board?.catalogue.find((entry) => entry.id === selectedId);
+  const selectedCapability = capabilities.entries.find((entry) => entry.entryId === selectedId);
   const selectedTombstone = board?.tombstones.find((entry) => entry.id === selectedId);
   const selectedPlacement = board?.layout.placements.find(
     (placement) => placement.entryId === selectedId,
@@ -233,6 +276,47 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
   useEffect(() => {
     if (selectedId) detailHeadingRef.current?.focus();
   }, [selectedId]);
+
+  useEffect(() => {
+    if (!composerMode) return;
+    const frame = window.requestAnimationFrame(() => composerHeadingRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [composerMode]);
+
+  useEffect(() => {
+    if (
+      !selectedEntry ||
+      selectedEntry.category !== "image_map" ||
+      selectedEntry.sourceStatus === "source_unavailable" ||
+      !selectedEntry.content
+    ) {
+      setArtifactView({ status: "idle" });
+      return;
+    }
+
+    let cancelled = false;
+    let objectUrl: string | undefined;
+    setArtifactView({ status: "loading" });
+    void fetchArtifactBlob(campaignId, selectedEntry.content.artifactId)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setArtifactView({ objectUrl, status: "ready" });
+      })
+      .catch((caught: unknown) => {
+        if (cancelled) return;
+        setArtifactView({
+          status:
+            caught instanceof ApiRequestError && caught.status < 500
+              ? "source_unavailable"
+              : "operational_unavailable",
+        });
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [artifactRetry, campaignId, selectedEntry]);
 
   function selectEntry(entryId: string) {
     setComposerMode(undefined);
@@ -252,6 +336,7 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
   }
 
   function beginCreate() {
+    composerReturnFocusRef.current = createTriggerRef.current;
     setDraft({ ...emptyDraft, sourceArtifactId: artifacts[0]?.id ?? "" });
     setComposerMode("create");
     setRevisionKind("correction");
@@ -262,7 +347,8 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
   }
 
   function beginCorrection() {
-    if (!selectedEntry) return;
+    if (!selectedEntry || !selectedCapability?.canCorrect) return;
+    composerReturnFocusRef.current = correctTriggerRef.current;
     setDraft(draftFromEntry(selectedEntry));
     setComposerMode("correct");
     setRevisionKind("correction");
@@ -270,41 +356,56 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
     setError(undefined);
   }
 
+  function closeComposer() {
+    const returnTarget = composerReturnFocusRef.current;
+    setComposerMode(undefined);
+    setError(undefined);
+    window.requestAnimationFrame(() => returnTarget?.focus());
+  }
+
+  function focusError(message: string) {
+    setError(message);
+    window.requestAnimationFrame(() => errorRef.current?.focus());
+  }
+
   async function handleConflict(caught: unknown, fallback: string) {
     if (caught instanceof ApiRequestError && caught.status === 409) {
       await refreshBoard().catch(() => undefined);
-      setError(
+      focusError(
         "The Blackboard changed elsewhere. Your draft was kept. Review the refreshed entry, then try again.",
       );
       return;
     }
     if (caught instanceof ApiRequestError && caught.status === 404) {
       await refreshBoard().catch(() => undefined);
-      setError(
+      focusError(
         "This entry is no longer available to change. Nothing was changed; the Blackboard has been refreshed.",
       );
       return;
     }
-    setError(fallback);
+    focusError(fallback);
   }
 
   async function saveDraft() {
     if (!draft.title.trim()) {
-      setError("Give this reference a title.");
+      focusError("Give this reference a title.");
+      window.requestAnimationFrame(() => titleInputRef.current?.focus());
       return;
     }
     if (draft.category === "image_map" && !draft.sourceArtifactId) {
-      setError("Choose a shared map or image.");
+      focusError("Choose a shared map or image.");
+      window.requestAnimationFrame(() => sourceArtifactSelectRef.current?.focus());
       return;
     }
     if (draft.category !== "image_map" && !draft.text.trim()) {
-      setError(
+      focusError(
         draft.category === "clue_fact"
           ? "Write the clue or fact to share."
           : draft.category === "document_text"
             ? "Add the document text to share."
             : "Add the approved recap text.",
       );
+      window.requestAnimationFrame(() => textInputRef.current?.focus());
       return;
     }
 
@@ -335,6 +436,7 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
             : "Replacement shared. Earlier shared text remains in History."
           : "Reference shared with the Campaign.",
       );
+      window.requestAnimationFrame(() => detailHeadingRef.current?.focus());
     } catch (caught) {
       await handleConflict(caught, "The reference could not be saved. Nothing was changed.");
     } finally {
@@ -343,7 +445,8 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
   }
 
   async function refreshImageSnapshot() {
-    if (!selectedEntry || selectedEntry.category !== "image_map") return;
+    if (!selectedEntry || selectedEntry.category !== "image_map" || !selectedCapability?.canCorrect)
+      return;
     setBusy(true);
     setError(undefined);
     try {
@@ -367,7 +470,7 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
   }
 
   async function retractSelected() {
-    if (!selectedEntry) return;
+    if (!selectedEntry || !selectedCapability?.canRemove) return;
     setBusy(true);
     setError(undefined);
     try {
@@ -404,6 +507,19 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
       setError("History could not be loaded. The current shared reference is unchanged.");
     } finally {
       setHistoryLoading(false);
+    }
+  }
+
+  async function reloadArtifactReference() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await refreshBoard();
+      setArtifactRetry((current) => current + 1);
+    } catch {
+      focusError("The Blackboard could not be reloaded. The shared reference is unchanged.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -504,13 +620,13 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
           <h2>Blackboard</h2>
           <p>Shared clues, documents, maps, images, and approved recaps for this Campaign.</p>
         </div>
-        <button onClick={beginCreate} type="button">
+        <button onClick={beginCreate} ref={createTriggerRef} type="button">
           Share a reference
         </button>
       </header>
 
       {error ? (
-        <div className={styles.error} role="alert">
+        <div className={styles.error} ref={errorRef} role="alert" tabIndex={-1}>
           {error}
         </div>
       ) : null}
@@ -522,6 +638,11 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
       {artifactNotice ? (
         <div className={styles.notice} role="status">
           {artifactNotice}
+        </div>
+      ) : null}
+      {capabilityNotice ? (
+        <div className={styles.notice} role="status">
+          {capabilityNotice}
         </div>
       ) : null}
 
@@ -603,8 +724,10 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
       {composerMode ? (
         <section className={styles.composer}>
           <div className={styles.headingRow}>
-            <h3>{composerMode === "create" ? "Share a reference" : "Correct this reference"}</h3>
-            <button onClick={() => setComposerMode(undefined)} type="button">
+            <h3 ref={composerHeadingRef} tabIndex={-1}>
+              {composerMode === "create" ? "Share a reference" : "Correct this reference"}
+            </h3>
+            <button onClick={closeComposer} type="button">
               Cancel
             </button>
           </div>
@@ -650,6 +773,7 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, title: event.target.value }))
                 }
+                ref={titleInputRef}
                 value={draft.title}
               />
             </label>
@@ -661,6 +785,7 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
                     onChange={(event) =>
                       setDraft((current) => ({ ...current, sourceArtifactId: event.target.value }))
                     }
+                    ref={sourceArtifactSelectRef}
                     value={draft.sourceArtifactId}
                   >
                     <option value="">Choose a shared visual</option>
@@ -695,6 +820,7 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
                     onChange={(event) =>
                       setDraft((current) => ({ ...current, text: event.target.value }))
                     }
+                    ref={textInputRef}
                     value={draft.text}
                   />
                 </label>
@@ -815,24 +941,58 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
                       This visual is no longer available. The shared title, caption, and description
                       remain as they were when posted.
                     </div>
-                  ) : (
+                  ) : artifactView.status === "ready" ? (
                     <img
                       alt={selectedEntry.artifact.altText}
                       className={styles.image}
-                      src={artifactContentUrl(campaignId, selectedEntry.content!.artifactId)}
+                      src={artifactView.objectUrl}
                     />
-                  )}
+                  ) : artifactView.status === "loading" ? (
+                    <div className={styles.notice} role="status">
+                      Loading the shared visual…
+                    </div>
+                  ) : artifactView.status === "operational_unavailable" ? (
+                    <div className={styles.error} role="status">
+                      <strong>The shared visual could not be loaded right now.</strong>
+                      <p>
+                        The Blackboard reference is still available. Try loading the visual again.
+                      </p>
+                      <button
+                        onClick={() => setArtifactRetry((current) => current + 1)}
+                        type="button"
+                      >
+                        Retry shared visual
+                      </button>
+                    </div>
+                  ) : artifactView.status === "source_unavailable" ? (
+                    <div className={styles.notice} role="status">
+                      <strong>This visual is no longer available.</strong>
+                      <p>
+                        The shared title, caption, and description remain available. Reload the
+                        Blackboard to check the current reference.
+                      </p>
+                      <button
+                        disabled={busy}
+                        onClick={() => void reloadArtifactReference()}
+                        type="button"
+                      >
+                        Reload Blackboard
+                      </button>
+                    </div>
+                  ) : null}
                   {selectedEntry.sourceStatus === "source_changed" ? (
                     <div className={styles.notice} role="status">
                       The source details changed after this reference was shared. The Blackboard
                       still shows the shared snapshot until an authorized poster refreshes it.
-                      <button
-                        disabled={busy}
-                        onClick={() => void refreshImageSnapshot()}
-                        type="button"
-                      >
-                        Refresh shared reference
-                      </button>
+                      {selectedCapability?.canCorrect ? (
+                        <button
+                          disabled={busy}
+                          onClick={() => void refreshImageSnapshot()}
+                          type="button"
+                        >
+                          Refresh shared reference
+                        </button>
+                      ) : null}
                     </div>
                   ) : null}
                 </>
@@ -860,20 +1020,20 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
                 <button disabled={historyLoading} onClick={() => void showHistory()} type="button">
                   {historyLoading ? "Loading history…" : "History"}
                 </button>
-                {isGameMaster || selectedEntry.category !== "recap" ? (
-                  <>
-                    <button onClick={beginCorrection} type="button">
-                      Correct this entry
-                    </button>
-                    <button onClick={() => setConfirmRetract(true)} type="button">
-                      Remove this entry
-                    </button>
-                  </>
+                {selectedCapability?.canCorrect ? (
+                  <button onClick={beginCorrection} ref={correctTriggerRef} type="button">
+                    Correct this entry
+                  </button>
+                ) : null}
+                {selectedCapability?.canRemove ? (
+                  <button onClick={() => setConfirmRetract(true)} type="button">
+                    Remove this entry
+                  </button>
                 ) : null}
               </div>
-              {!isGameMaster && selectedEntry.category !== "recap" ? (
+              {!isGameMaster && selectedCapability?.canCorrect ? (
                 <p className={styles.muted}>
-                  You can correct or remove entries you posted. Other entries remain unchanged.
+                  You can correct or remove this entry because you posted it.
                 </p>
               ) : null}
               {confirmRetract ? (

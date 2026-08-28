@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createBlackboardEntry,
   loadBlackboard,
+  loadBlackboardCapabilities,
   loadBlackboardArtifactCandidates,
   moveBlackboardEntry,
   retractBlackboardEntry,
@@ -26,6 +27,13 @@ describe("blackboardClient", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            entries: [{ canCorrect: true, canRemove: true, entryId: "entry-1" }],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
             artifacts: [
               {
                 altText: "A route through the hills",
@@ -40,9 +48,13 @@ describe("blackboardClient", () => {
       );
 
     await expect(loadBlackboard("campaign-1")).resolves.toMatchObject({ catalogue: [] });
+    await expect(loadBlackboardCapabilities("campaign-1")).resolves.toEqual({
+      entries: [{ canCorrect: true, canRemove: true, entryId: "entry-1" }],
+    });
     await expect(loadBlackboardArtifactCandidates("campaign-1")).resolves.toHaveLength(1);
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       "http://localhost:4000/campaigns/campaign-1/blackboard",
+      "http://localhost:4000/campaigns/campaign-1/blackboard/capabilities",
       "http://localhost:4000/campaigns/campaign-1/artifacts/blackboard-candidates",
     ]);
   });

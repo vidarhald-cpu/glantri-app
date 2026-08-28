@@ -20,6 +20,13 @@ function loadCharacterIds(): { characterId: string; nonHolderCharacterId: string
   };
 }
 
+function filesBelow(root: string): string[] {
+  return fs.readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+    const resolved = path.join(root, entry.name);
+    return entry.isDirectory() ? filesBelow(resolved) : [resolved];
+  });
+}
+
 test.describe("Campaign Blackboard shared-reference workspace", () => {
   test.use({ storageState: "e2e/.auth/gm.json" });
 
@@ -27,7 +34,7 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
     browser,
     page,
   }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(90_000);
     const suffix = Date.now();
     const campaignResponse = await page.request.post(`${API_URL}/campaigns`, {
       data: { name: `Blackboard campaign ${suffix}`, status: "active" },
@@ -79,6 +86,9 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
       },
     );
     expect(documentResponse.status()).toBe(201);
+    const document = (await documentResponse.json()) as {
+      entry: { entryVersion: number; id: string };
+    };
 
     const recapTitle = `Last session ${suffix}`;
     const recapResponse = await page.request.post(
@@ -93,10 +103,12 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
       },
     );
     expect(recapResponse.status()).toBe(201);
+    const recap = (await recapResponse.json()) as { entry: { id: string } };
 
     const artifactStorageAvailable =
       process.env.CI !== "true" || process.env.ARTIFACT_E2E_STORAGE_ENABLED === "1";
     const mapTitle = artifactStorageAvailable ? `Hill route ${suffix}` : undefined;
+    let mapEntryId: string | undefined;
     if (mapTitle) {
       const mapUploadResponse = await page.request.post(
         `${API_URL}/campaigns/${campaignId}/artifacts`,
@@ -146,6 +158,7 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
         },
       );
       expect(mapResponse.status()).toBe(201);
+      mapEntryId = ((await mapResponse.json()) as { entry: { id: string } }).entry.id;
     }
 
     const pinResponse = await playerContext.request.post(
@@ -175,6 +188,52 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
     expect(await playerBoard.text()).toBe(gmBoardBytes);
     expect(await otherPlayerBoard.text()).toBe(gmBoardBytes);
 
+    type Capabilities = {
+      entries: Array<{ canCorrect: boolean; canRemove: boolean; entryId: string }>;
+    };
+    const [gmCapabilitiesResponse, playerCapabilitiesResponse, otherCapabilitiesResponse] =
+      await Promise.all([
+        page.request.get(`${API_URL}/campaigns/${campaignId}/blackboard/capabilities`),
+        playerContext.request.get(`${API_URL}/campaigns/${campaignId}/blackboard/capabilities`),
+        otherPlayerContext.request.get(
+          `${API_URL}/campaigns/${campaignId}/blackboard/capabilities`,
+        ),
+      ]);
+    const [gmCapabilities, playerCapabilities, otherCapabilities] = await Promise.all([
+      gmCapabilitiesResponse.json() as Promise<Capabilities>,
+      playerCapabilitiesResponse.json() as Promise<Capabilities>,
+      otherCapabilitiesResponse.json() as Promise<Capabilities>,
+    ]);
+    const capabilityFor = (projection: Capabilities, entryId: string) =>
+      projection.entries.find((entry) => entry.entryId === entryId);
+    expect(capabilityFor(gmCapabilities, clue.entry.id)).toMatchObject({
+      canCorrect: true,
+      canRemove: true,
+    });
+    expect(capabilityFor(gmCapabilities, recap.entry.id)).toMatchObject({
+      canCorrect: true,
+      canRemove: true,
+    });
+    expect(capabilityFor(playerCapabilities, clue.entry.id)).toMatchObject({
+      canCorrect: true,
+      canRemove: true,
+    });
+    expect(capabilityFor(playerCapabilities, document.entry.id)).toMatchObject({
+      canCorrect: false,
+      canRemove: false,
+    });
+    expect(capabilityFor(otherCapabilities, clue.entry.id)).toMatchObject({
+      canCorrect: false,
+      canRemove: false,
+    });
+    if (mapEntryId) {
+      expect(capabilityFor(otherCapabilities, mapEntryId)).toMatchObject({
+        canCorrect: false,
+        canRemove: false,
+      });
+    }
+    expect(JSON.stringify(otherCapabilities)).not.toMatch(/owner|userId|displayName|storage/i);
+
     await page.goto(`${WEB_URL}/campaigns/${campaignId}?tab=blackboard`);
     await expect(page.getByRole("heading", { name: "Blackboard" })).toBeVisible();
     await expect(page.getByText(clueTitle, { exact: true }).first()).toBeVisible();
@@ -197,24 +256,114 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
         .evaluate((element) => element.scrollWidth <= element.clientWidth),
     ).toBe(true);
 
-    await page.getByRole("button", { name: `Open ${clueTitle}` }).click();
-    await page.getByRole("button", { name: "Correct this entry" }).click();
-    await page.getByLabel("Clue or fact").fill("The bronze bell now rings three times.");
-    await page.getByRole("button", { name: "Share correction" }).click();
-    await expect(page.getByRole("status")).toContainText("Correction shared");
-    await page.reload();
-    await page.getByRole("button", { name: `Open ${clueTitle}` }).click();
-    await expect(page.getByText("The bronze bell now rings three times.").last()).toBeVisible();
-    await page.getByRole("button", { name: "History" }).click();
-    await expect(page.getByRole("region", { name: "Reference history" })).toContainText(clueFact);
+    await page.getByRole("button").filter({ hasText: documentTitle }).click();
+    await expect(page.getByRole("button", { name: "Correct this entry" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Remove this entry" })).toBeVisible();
+    await page.getByRole("button").filter({ hasText: recapTitle }).click();
+    await expect(page.getByRole("button", { name: "Correct this entry" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Remove this entry" })).toBeVisible();
+
+    const playerCorrectTrigger = playerPage.getByRole("button", { name: "Correct this entry" });
+    await expect(playerCorrectTrigger).toBeVisible();
+    await playerCorrectTrigger.click();
+    await expect(playerPage.getByRole("heading", { name: "Correct this reference" })).toBeFocused();
+    await playerPage.getByRole("button", { name: "Cancel" }).click();
+    await expect(playerCorrectTrigger).toBeFocused();
+    await playerCorrectTrigger.click();
+    await playerPage.getByLabel("Clue or fact").fill("The bronze bell now rings three times.");
+    await playerPage.getByRole("button", { name: "Share correction" }).click();
+    await expect(playerPage.getByText(/Correction shared/)).toBeVisible();
+    await expect(playerPage.getByRole("heading", { name: clueTitle })).toBeFocused();
+    await playerPage.reload();
+    await playerPage.getByRole("button", { name: `Open ${clueTitle}` }).click();
+    await expect(
+      playerPage.getByText("The bronze bell now rings three times.").last(),
+    ).toBeVisible();
+    await playerPage.getByRole("button", { name: "History" }).click();
+    await expect(playerPage.getByRole("region", { name: "Reference history" })).toContainText(
+      clueFact,
+    );
 
     const otherPlayerPage = await otherPlayerContext.newPage();
     await otherPlayerPage.goto(`${WEB_URL}/campaigns/${campaignId}?tab=blackboard`);
+    const shareTrigger = otherPlayerPage.getByRole("button", { name: "Share a reference" });
+    await shareTrigger.click();
+    await expect(otherPlayerPage.getByRole("heading", { name: "Share a reference" })).toBeFocused();
+    await otherPlayerPage.getByRole("button", { name: "Share reference" }).click();
+    await expect(otherPlayerPage.getByLabel("Title")).toBeFocused();
+    await expect(
+      otherPlayerPage.getByRole("alert").filter({ hasText: "Give this reference a title" }),
+    ).toBeVisible();
+    await otherPlayerPage.getByRole("button", { name: "Cancel" }).click();
+    await expect(shareTrigger).toBeFocused();
     await otherPlayerPage.getByRole("button").filter({ hasText: documentTitle }).click();
-    await otherPlayerPage.getByRole("button", { name: "Correct this entry" }).click();
-    await otherPlayerPage.getByLabel("Document text").fill("This must not be accepted.");
-    await otherPlayerPage.getByRole("button", { name: "Share correction" }).click();
-    await expect(otherPlayerPage.getByText(/Nothing was changed/)).toBeVisible();
+    await expect(otherPlayerPage.getByRole("button", { name: "Correct this entry" })).toHaveCount(
+      0,
+    );
+    await expect(otherPlayerPage.getByRole("button", { name: "Remove this entry" })).toHaveCount(0);
+    const deniedCorrection = await otherPlayerContext.request.post(
+      `${API_URL}/campaigns/${campaignId}/blackboard/entries/${document.entry.id}/revisions`,
+      {
+        data: {
+          category: "document_text",
+          changeKind: "correction",
+          documentText: "This must not be accepted.",
+          expectedEntryVersion: document.entry.entryVersion,
+          title: documentTitle,
+        },
+        headers: BLACKBOARD_HEADERS,
+      },
+    );
+    expect(deniedCorrection.status()).toBe(404);
+    const boardAfterDenied = await otherPlayerContext.request.get(
+      `${API_URL}/campaigns/${campaignId}/blackboard`,
+    );
+    const playerBoardAfterCorrection = await playerContext.request.get(
+      `${API_URL}/campaigns/${campaignId}/blackboard`,
+    );
+    expect(await boardAfterDenied.text()).toBe(await playerBoardAfterCorrection.text());
+
+    if (mapTitle) {
+      const artifactRoot = process.env.ARTIFACT_LOCAL_ROOT;
+      expect(artifactRoot).toBeTruthy();
+      const storedFiles = filesBelow(artifactRoot!).filter((file) => !file.endsWith(".withheld"));
+      expect(storedFiles).toHaveLength(1);
+      const storedFile = storedFiles[0]!;
+      const withheldFile = `${storedFile}.withheld`;
+
+      await page.getByRole("button").filter({ hasText: mapTitle }).click();
+      const mapImage = page.getByRole("img", {
+        name: "A hand-drawn route from the mill to the hill caves",
+      });
+      await expect(mapImage).toBeVisible();
+      expect(
+        await mapImage.evaluate((image: HTMLImageElement) => image.naturalWidth),
+      ).toBeGreaterThan(0);
+
+      fs.renameSync(storedFile, withheldFile);
+      let restored = false;
+      try {
+        await page.reload();
+        await page.getByRole("button").filter({ hasText: mapTitle }).click();
+        await expect(
+          page.getByText("The shared visual could not be loaded right now."),
+        ).toBeVisible();
+        await expect(mapImage).toHaveCount(0);
+        expect(await page.locator("body").innerText()).not.toMatch(
+          /503|storage|provider|object key|filesystem|path|diagnostic/i,
+        );
+
+        fs.renameSync(withheldFile, storedFile);
+        restored = true;
+        await page.getByRole("button", { name: "Retry shared visual" }).click();
+        await expect(mapImage).toBeVisible();
+        expect(
+          await mapImage.evaluate((image: HTMLImageElement) => image.naturalWidth),
+        ).toBeGreaterThan(0);
+      } finally {
+        if (!restored && fs.existsSync(withheldFile)) fs.renameSync(withheldFile, storedFile);
+      }
+    }
 
     await playerPage.reload();
     await playerPage.getByRole("button", { name: `Open ${clueTitle}` }).click();
@@ -232,6 +381,11 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
     );
     expect(unauthorized.status()).toBe(404);
     expect(await unauthorized.json()).toEqual({ error: "Blackboard unavailable." });
+    const unauthorizedCapabilities = await unauthorizedContext.request.get(
+      `${API_URL}/campaigns/${campaignId}/blackboard/capabilities`,
+    );
+    expect(unauthorizedCapabilities.status()).toBe(404);
+    expect(await unauthorizedCapabilities.json()).toEqual({ error: "Blackboard unavailable." });
 
     await unauthorizedContext.close();
     await otherPlayerContext.close();

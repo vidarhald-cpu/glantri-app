@@ -8,6 +8,7 @@ import type {
   BlackboardPlacementDto,
   BlackboardRevision,
   BlackboardTombstone,
+  BlackboardViewerCapabilities,
 } from "@glantri/domain";
 
 import { sendJson } from "./apiClient";
@@ -57,6 +58,15 @@ export async function loadBlackboard(campaignId: string): Promise<BlackboardComm
   return sendJson<BlackboardCommonDto>(`/campaigns/${campaignId}/blackboard`, {
     method: "GET",
   });
+}
+
+export async function loadBlackboardCapabilities(
+  campaignId: string,
+): Promise<BlackboardViewerCapabilities> {
+  return sendJson<BlackboardViewerCapabilities>(
+    `/campaigns/${campaignId}/blackboard/capabilities`,
+    { method: "GET" },
+  );
 }
 
 export async function loadBlackboardHistory(input: {

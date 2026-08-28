@@ -54,4 +54,39 @@ describe("artifactClient strict mutation bodies", () => {
       "https://api.example.test/campaigns/campaign-1/scenarios/scenario-1/artifacts/artifact-1/publish",
     ]);
   });
+
+  it("loads authenticated Artifact bytes after a sanitized operational failure recovers", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
+    const fetchMock = vi
+      .fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: "Artifact content temporarily unavailable." }), {
+          headers: { "content-type": "application/json" },
+          status: 503,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([1, 2, 3]), {
+          headers: { "content-type": "image/png" },
+          status: 200,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = await import("./artifactClient");
+
+    await expect(client.fetchArtifactBlob("campaign-1", "artifact-1")).rejects.toMatchObject({
+      message: "Artifact content temporarily unavailable.",
+      status: 503,
+    });
+    await expect(client.fetchArtifactBlob("campaign-1", "artifact-1")).resolves.toBeInstanceOf(
+      Blob,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [url, init] of fetchMock.mock.calls) {
+      expect(String(url)).toBe(
+        "https://api.example.test/campaigns/campaign-1/artifacts/artifact-1/content",
+      );
+      expect(init).toMatchObject({ cache: "no-store", credentials: "include" });
+    }
+  });
 });

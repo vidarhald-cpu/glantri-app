@@ -11,6 +11,7 @@ import { BlackboardWorkspace } from "./BlackboardWorkspace";
 const mocks = vi.hoisted(() => ({
   createBlackboardEntry: vi.fn(),
   loadBlackboard: vi.fn(),
+  loadBlackboardCapabilities: vi.fn(),
   loadBlackboardArtifactCandidates: vi.fn(),
   loadBlackboardHistory: vi.fn(),
   moveBlackboardEntry: vi.fn(),
@@ -20,7 +21,12 @@ const mocks = vi.hoisted(() => ({
   unpinBlackboardEntry: vi.fn(),
 }));
 
+const artifactMocks = vi.hoisted(() => ({
+  fetchArtifactBlob: vi.fn(),
+}));
+
 vi.mock("@/lib/api/blackboardClient", () => mocks);
+vi.mock("@/lib/api/artifactClient", () => artifactMocks);
 
 const board: BlackboardCommonDto = {
   catalogue: [
@@ -99,7 +105,24 @@ const board: BlackboardCommonDto = {
 describe("BlackboardWorkspace", () => {
   beforeEach(() => {
     for (const mock of Object.values(mocks)) mock.mockReset();
+    for (const mock of Object.values(artifactMocks)) mock.mockReset();
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:blackboard-visual"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
     mocks.loadBlackboard.mockResolvedValue(structuredClone(board));
+    mocks.loadBlackboardCapabilities.mockResolvedValue({
+      entries: [
+        { canCorrect: true, canRemove: true, entryId: "entry-clue" },
+        { canCorrect: false, canRemove: false, entryId: "entry-document" },
+        { canCorrect: false, canRemove: false, entryId: "entry-map" },
+        { canCorrect: false, canRemove: false, entryId: "entry-recap" },
+      ],
+    });
     mocks.loadBlackboardArtifactCandidates.mockResolvedValue([
       {
         altText: "A hand-drawn route from the mill to the hill caves",
@@ -109,6 +132,7 @@ describe("BlackboardWorkspace", () => {
         title: "Hill route",
       },
     ]);
+    artifactMocks.fetchArtifactBlob.mockResolvedValue(new Blob(["image"], { type: "image/png" }));
   });
 
   it("renders all four safe categories, readable detail, and no protected projection terms", async () => {
@@ -137,6 +161,7 @@ describe("BlackboardWorkspace", () => {
     render(<BlackboardWorkspace campaignId="campaign-1" isGameMaster={false} />);
     await screen.findByRole("heading", { name: "Blackboard" });
     await user.click(screen.getByRole("button", { name: "Share a reference" }));
+    expect(screen.getByRole("heading", { name: "Share a reference" })).toHaveFocus();
 
     const kind = screen.getByLabelText("Kind");
     expect(within(kind).queryByRole("option", { name: "Approved recap" })).not.toBeInTheDocument();
@@ -155,6 +180,59 @@ describe("BlackboardWorkspace", () => {
       }),
     );
     expect(await screen.findByRole("status")).toHaveTextContent("Reference shared");
+    expect(screen.getByRole("heading", { name: "Bell signal" })).toHaveFocus();
+  });
+
+  it("moves focus into the composer, restores its trigger on cancel, and focuses validation", async () => {
+    const user = userEvent.setup();
+
+    render(<BlackboardWorkspace campaignId="campaign-1" isGameMaster={false} />);
+    await screen.findByRole("heading", { name: "Blackboard" });
+    const trigger = screen.getByRole("button", { name: "Share a reference" });
+    await user.click(trigger);
+    expect(screen.getByRole("heading", { name: "Share a reference" })).toHaveFocus();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    await user.click(screen.getByRole("button", { name: "Share reference" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Give this reference a title");
+    expect(screen.getByLabelText("Title")).toHaveFocus();
+    expect(screen.getByRole("heading", { name: "Share a reference" })).toBeVisible();
+  });
+
+  it("renders management controls only for the server-projected player and GM perspectives", async () => {
+    const user = userEvent.setup();
+    const playerView = render(<BlackboardWorkspace campaignId="campaign-1" isGameMaster={false} />);
+    await screen.findByRole("heading", { name: "Blackboard" });
+
+    await user.click(screen.getByRole("button", { name: "Open Bell signal" }));
+    const correctTrigger = screen.getByRole("button", { name: "Correct this entry" });
+    expect(correctTrigger).toBeVisible();
+    expect(screen.getByRole("button", { name: "Remove this entry" })).toBeVisible();
+    await user.click(correctTrigger);
+    expect(screen.getByRole("heading", { name: "Correct this reference" })).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(correctTrigger).toHaveFocus();
+
+    await user.click(screen.getByRole("button", { name: /Intercepted letter/ }));
+    expect(screen.queryByRole("button", { name: "Correct this entry" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove this entry" })).not.toBeInTheDocument();
+    playerView.unmount();
+
+    mocks.loadBlackboardCapabilities.mockResolvedValue({
+      entries: board.catalogue.map((entry) => ({
+        canCorrect: true,
+        canRemove: true,
+        entryId: entry.id,
+      })),
+    });
+    render(<BlackboardWorkspace campaignId="campaign-1" isGameMaster />);
+    await screen.findByRole("heading", { name: "Blackboard" });
+    await user.click(screen.getByRole("button", { name: /Last session/ }));
+    expect(screen.getByRole("button", { name: "Correct this entry" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Remove this entry" })).toBeVisible();
   });
 
   it("keeps GM-approved recap controls hidden from players", async () => {
@@ -185,6 +263,35 @@ describe("BlackboardWorkspace", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("no longer available");
     expect(screen.getAllByText("The safe route avoids the watchtower.")).toHaveLength(2);
+    expect(artifactMocks.fetchArtifactBlob).not.toHaveBeenCalled();
+  });
+
+  it("shows a recoverable sanitized state when Artifact bytes fail and renders recovery", async () => {
+    artifactMocks.fetchArtifactBlob
+      .mockRejectedValueOnce(
+        new ApiRequestError("Artifact content temporarily unavailable.", 503, {
+          error: "Artifact content temporarily unavailable.",
+        }),
+      )
+      .mockResolvedValueOnce(new Blob(["image"], { type: "image/png" }));
+    const user = userEvent.setup();
+    const { container } = render(<BlackboardWorkspace campaignId="campaign-1" isGameMaster />);
+    await screen.findByRole("heading", { name: "Blackboard" });
+    await user.click(screen.getByRole("button", { name: /Route to the caves/ }));
+
+    expect(
+      await screen.findByText("The shared visual could not be loaded right now."),
+    ).toBeVisible();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/503|storage|provider|path|diagnostic/i);
+    await user.click(screen.getByRole("button", { name: "Retry shared visual" }));
+
+    expect(
+      await screen.findByRole("img", {
+        name: "A hand-drawn route from the mill to the hill caves",
+      }),
+    ).toBeVisible();
+    expect(artifactMocks.fetchArtifactBlob).toHaveBeenCalledTimes(2);
   });
 
   it("keeps a correction draft and refreshes current truth after a stale write", async () => {
@@ -197,12 +304,14 @@ describe("BlackboardWorkspace", () => {
     await screen.findByRole("heading", { name: "Blackboard" });
     await user.click(screen.getByRole("button", { name: "Open Bell signal" }));
     await user.click(screen.getByRole("button", { name: "Correct this entry" }));
+    expect(screen.getByRole("heading", { name: "Correct this reference" })).toHaveFocus();
     const fact = screen.getByLabelText("Clue or fact");
     await user.clear(fact);
     await user.type(fact, "The bell now rings three times.");
     await user.click(screen.getByRole("button", { name: "Share correction" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("changed elsewhere");
+    expect(screen.getByRole("alert")).toHaveFocus();
     expect(screen.getByDisplayValue("The bell now rings three times.")).toBeVisible();
     expect(mocks.loadBlackboard).toHaveBeenCalledTimes(2);
   });
