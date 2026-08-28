@@ -43,6 +43,16 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
     title: "Pilot Skill Rules v1",
   },
   {
+    audience: "Players, GMs, and content reviewers",
+    description:
+      "Canonical bounded pilot content release: exact Skills and weights, histories, professions, relationships, Specializations, access routes, languages, retained Character fixtures, version, and digest.",
+    fileName: "pilot-skill-content-release-v1.md",
+    id: "pilot-skill-content-release-v1",
+    order: 8,
+    section: "Skills",
+    title: "Pilot Skill Content Release v1",
+  },
+  {
     audience: "Players and GM reviewers",
     description:
       "Manual reference for the main Character Sheet values, skill XP columns, characteristics, and chargen-rule displays.",

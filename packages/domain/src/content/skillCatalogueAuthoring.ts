@@ -341,3 +341,162 @@ export interface SkillCatalogueAuthoringDocument {
   title: string;
   writtenTraditions: readonly WrittenTraditionCatalogueAuthoringRecord[];
 }
+
+/**
+ * Canonical, bounded content released for the eight retained pilot Characters. This is an
+ * immutable semantic-content contract, not runtime Character persistence or catalogue activation.
+ */
+export const PILOT_SKILL_CONTENT_RELEASE_SCHEMA_VERSION = "pilot-skill-content-release/v1" as const;
+
+export interface PilotSkillContentCompetencyRecord {
+  description: string;
+  domainId: string;
+  id: string;
+  kind: "skill" | "spoken-language" | "written-tradition";
+  name: string;
+  weight: PilotSkillEconomicWeight;
+}
+
+export interface PilotSkillContentSpecializationRecord {
+  acquisitionWeight: PilotSpecializationEconomicWeight;
+  description: string;
+  id: string;
+  kind: "specialization";
+  name: string;
+  prerequisites: readonly PilotSpecializationPrerequisiteAuthoring[];
+  transfer:
+    | { kind: "explicit-relationships"; relationshipIds: readonly string[] }
+    | { kind: "zero-transfer"; rationale: string };
+}
+
+export interface PilotSkillContentHistoryRecord {
+  context: string;
+  fixedCompetencyIds: readonly string[];
+  id: string;
+  intensity: { maximum: 4; minimum: 1 };
+  name: string;
+  selectionSlots: readonly SkillLearningGroupSelectionSlot[];
+}
+
+export interface PilotSkillContentProfessionRecord {
+  id: string;
+  mechanics: "none";
+  name: string;
+  suggestedCompetencyIds: readonly string[];
+  suggestedHistoryIds: readonly string[];
+}
+
+export interface PilotSkillContentBackgroundRecord {
+  id: string;
+  name: string;
+  profileId: string;
+  startingSpokenLanguageId: string;
+  startingSpokenLanguageRule: "max(11,education)";
+}
+
+export interface PilotSkillContentAccessRoute {
+  accessBand: AccessBand;
+  competencyIds: readonly string[];
+  description: string;
+  id: string;
+}
+
+export interface PilotSkillContentApplicabilityOverride {
+  attributionId: string;
+  availability: PilotSkillAccessAvailability;
+  competencyIds: readonly string[];
+  explanation: string;
+}
+
+export interface PilotSkillContentProfileRecord {
+  accessBand: AccessBand;
+  developmentStage: DevelopmentStage;
+  id: string;
+  name: string;
+  normalRoutes: readonly PilotSkillContentAccessRoute[];
+  overrides: readonly PilotSkillContentApplicabilityOverride[];
+}
+
+export interface PilotSkillContentAccessExceptionRecord {
+  basis: PilotSkillAccessExceptionBasis;
+  competencyIds: readonly string[];
+  grantsCompetence: 0;
+  historyIds: readonly string[];
+  id: string;
+  profileId: string;
+  explanation: string;
+}
+
+export interface PilotSkillContentRelationshipRecord extends PilotSkillRelationshipAuthoring {
+  direction: "source-to-target";
+  futureCascadeRisk: string;
+  rationale: string;
+  reverseEdge: "not-inferred";
+}
+
+export interface PilotSkillContentCharacterHistorySelection {
+  historyId: string;
+  level: number;
+  selectedCompetencyIds: readonly string[];
+}
+
+export interface PilotSkillContentCharacterFixture {
+  accessExceptionIds: readonly string[];
+  backgroundId: string;
+  concept: string;
+  directAcquisitions: readonly { competencyId: string; ranks: number }[];
+  expected: {
+    flexSpent: number;
+    groupCost: number;
+    totalCost: number;
+  };
+  histories: readonly PilotSkillContentCharacterHistorySelection[];
+  id: string;
+  professionId: string;
+  specializationAcquisitions: readonly { competencyId: string; ranks: 2 }[];
+  startingSpokenLanguageRanks: 11;
+}
+
+export interface PilotSkillContentReleaseManifest {
+  counts: {
+    accessExceptions: 4;
+    backgrounds: 8;
+    characters: 8;
+    competencies: 53;
+    histories: 17;
+    professions: 8;
+    profiles: 7;
+    relationships: 15;
+    specializations: 8;
+  };
+  payloadDigest: `sha256:${string}`;
+  serialization: "canonical-json-lexicographic-keys/v1";
+}
+
+export interface PilotSkillContentRelease {
+  accessExceptions: readonly PilotSkillContentAccessExceptionRecord[];
+  backgrounds: readonly PilotSkillContentBackgroundRecord[];
+  characters: readonly PilotSkillContentCharacterFixture[];
+  competencies: readonly PilotSkillContentCompetencyRecord[];
+  contentVersion: string;
+  histories: readonly PilotSkillContentHistoryRecord[];
+  id: string;
+  manifest: PilotSkillContentReleaseManifest;
+  policies: {
+    accessGrantsCompetence: 0;
+    navigationTaxonomyMechanics: "none";
+    professionMechanics: "none";
+    relationshipInference: "explicit-directional-only";
+    relationshipRecursion: "non-recursive-pilot-v1";
+    spokenLanguageImpliesWriting: false;
+  };
+  professions: readonly PilotSkillContentProfessionRecord[];
+  profiles: readonly PilotSkillContentProfileRecord[];
+  provenance: readonly string[];
+  relationships: readonly PilotSkillContentRelationshipRecord[];
+  rulesVersion: PilotSkillRulesVersion;
+  schemaVersion: typeof PILOT_SKILL_CONTENT_RELEASE_SCHEMA_VERSION;
+  specializations: readonly PilotSkillContentSpecializationRecord[];
+  status: "canonical-bounded-pilot";
+  title: string;
+}

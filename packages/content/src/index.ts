@@ -1,5 +1,6 @@
 export * from "./equipment";
 export * from "./loaders";
+export * from "./pilotSkillContentRelease";
 export * from "./seeds/defaultContent";
 export * from "./skillCatalogueAuthoring";
 export * from "./types";
