@@ -10,6 +10,14 @@ function readSource(): string {
 }
 
 describe("CampaignWorkspaceShell roleplay encounter routing", () => {
+  it("renders the shared Blackboard as a Campaign-level GM and player destination", () => {
+    const source = readSource();
+
+    expect(source).toContain("BlackboardWorkspace");
+    expect(source).toContain('workspaceState.activeTab === "blackboard"');
+    expect(source).toContain("isGameMaster={canAccessGmEncounter}");
+  });
+
   it("renders the real GM campaign Items workspace without changing global navigation", () => {
     const source = readSource();
 

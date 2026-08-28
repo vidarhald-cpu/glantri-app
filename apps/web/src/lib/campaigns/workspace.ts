@@ -10,6 +10,7 @@ import { isUserAssignedToEffectiveEncounter } from "./encounterParticipantFallba
 
 export type CampaignWorkspaceTabId =
   | "campaign"
+  | "blackboard"
   | "items"
   | "scenario"
   | "encounter"
@@ -43,6 +44,7 @@ export interface CampaignWorkspaceHrefInput {
 
 const orderedTabs: CampaignWorkspaceTab[] = [
   { id: "campaign", label: "Campaign" },
+  { id: "blackboard", label: "Blackboard" },
   { id: "items", label: "Items" },
   { id: "scenario", label: "Scenario" },
   { id: "encounter", label: "Encounter" },
@@ -113,6 +115,8 @@ function resolveRequestedCampaignWorkspaceTab(input: {
   switch (input.requestedTab) {
     case "campaign":
       return "campaign";
+    case "blackboard":
+      return "blackboard";
     case "items":
       return input.canAccessGmEncounter ? "items" : fallbackTab;
     case "scenario":

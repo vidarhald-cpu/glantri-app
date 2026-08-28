@@ -104,7 +104,7 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
   {
     audience: "GM reviewers",
     description:
-      "Manual reference for table-driven critical results, effect templates, roll requirements, and future D1/D2 integration.",
+      "Manual reference for table-driven Critical results, the frozen C1 representative fixture rules, exact Stun/Bleed timing, and current runtime boundaries.",
     fileName: "combat-critical-effects.md",
     id: "combat-critical-effects",
     order: 40,

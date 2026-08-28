@@ -198,6 +198,35 @@ describe("BlackboardService public and privileged projections", () => {
     expect(JSON.stringify(board)).not.toMatch(/grant|unitKey|actorUserId|storageUrl/i);
   });
 
+  it("derives viewer capabilities from exact user ownership rather than colliding labels", async () => {
+    repositoryMock.loadBoard.mockResolvedValue({
+      entries: [
+        entry({ createdByUserId: "player-a", id: "entry-owned" }),
+        entry({ createdByUserId: "player-b", id: "entry-other" }),
+        entry({ category: "recap", createdByUserId: "gm", id: "entry-recap" }),
+        entry({ id: "entry-removed", state: "retracted" }),
+      ],
+      layout: null,
+      placements: [],
+      revisions: [],
+    });
+
+    await expect(service.getViewerCapabilities(campaignId, "player-a")).resolves.toEqual({
+      entries: [
+        { canCorrect: false, canRemove: false, entryId: "entry-other" },
+        { canCorrect: true, canRemove: true, entryId: "entry-owned" },
+        { canCorrect: false, canRemove: false, entryId: "entry-recap" },
+      ],
+    });
+    await expect(service.getViewerCapabilities(campaignId, "gm")).resolves.toEqual({
+      entries: [
+        { canCorrect: true, canRemove: true, entryId: "entry-other" },
+        { canCorrect: true, canRemove: true, entryId: "entry-owned" },
+        { canCorrect: true, canRemove: true, entryId: "entry-recap" },
+      ],
+    });
+  });
+
   it("keeps Character-sensitive expansion explicit and fail-closed", async () => {
     await expect(
       service.getEntry({

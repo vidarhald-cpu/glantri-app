@@ -91,6 +91,16 @@ export const blackboardRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.get("/campaigns/:campaignId/blackboard/capabilities", async (request, reply) => {
+    const user = await requirePrivateUser(request, reply);
+    if (!user) return;
+    try {
+      return await getService().getViewerCapabilities(routeId(request, "campaignId"), user.id);
+    } catch (error) {
+      return sendError(request, reply, error);
+    }
+  });
+
   app.get("/campaigns/:campaignId/blackboard/entries/:entryId", async (request, reply) => {
     const user = await requirePrivateUser(request, reply);
     if (!user) return;

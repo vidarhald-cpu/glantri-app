@@ -118,6 +118,7 @@ describe("campaign workspace", () => {
     expect(buildCampaignWorkspaceTabs({ canAccessGmEncounter: true }).map((tab) => tab.id)).toEqual(
       [
         "campaign",
+        "blackboard",
         "items",
         "scenario",
         "encounter",
@@ -133,6 +134,7 @@ describe("campaign workspace", () => {
       buildCampaignWorkspaceTabs({ canAccessGmEncounter: false }).map((tab) => tab.id),
     ).toEqual([
       "campaign",
+      "blackboard",
       "scenario",
       "encounter",
       "skill-rolls",
@@ -140,6 +142,20 @@ describe("campaign workspace", () => {
       "character",
       "player-combat",
     ]);
+  });
+
+  it("opens the Campaign Blackboard for both GM and player access", () => {
+    for (const canAccessGmEncounter of [true, false]) {
+      expect(
+        resolveCampaignWorkspaceState({
+          activeCampaignId: "camp-1",
+          canAccessGmEncounter,
+          encounters: [],
+          requestedTab: "blackboard",
+          scenarios: [],
+        }).activeTab,
+      ).toBe("blackboard");
+    }
   });
 
   it("opens Items only for a GM and fails a player request closed to Campaign", () => {

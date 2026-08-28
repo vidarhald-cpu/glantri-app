@@ -1,0 +1,249 @@
+.workspace {
+  --board-ink: #243733;
+  --board-border: #c8c7b9;
+  display: grid;
+  gap: 1rem;
+}
+
+.intro,
+.panel,
+.detail,
+.composer {
+  background: #fff;
+  border: 1px solid #d9ddd8;
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.intro,
+.headingRow,
+.detailHeader,
+.actionRow,
+.moveRow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: space-between;
+}
+
+.intro h2,
+.panel h3,
+.detail h3,
+.composer h3 {
+  margin: 0;
+}
+
+.detail h3:focus-visible,
+.composer h3:focus-visible,
+.error:focus-visible {
+  outline: 3px solid #2f5d62;
+  outline-offset: 3px;
+}
+
+.intro p,
+.muted {
+  color: #5e5a50;
+  margin: 0.25rem 0 0;
+}
+
+.board {
+  background: linear-gradient(rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.025)), #365c52;
+  border: 8px solid #7a583b;
+  border-radius: 14px;
+  color: #f8f6eb;
+  min-height: 18rem;
+  overflow: auto;
+  padding: 1rem;
+  position: relative;
+}
+
+.boardEmpty {
+  align-content: center;
+  display: grid;
+  min-height: 14rem;
+  text-align: center;
+}
+
+.pin {
+  background: #fffdf0;
+  border: 1px solid #d8cf9a;
+  border-radius: 8px;
+  box-shadow: 0 5px 16px rgba(24, 35, 32, 0.25);
+  color: var(--board-ink);
+  display: grid;
+  gap: 0.45rem;
+  overflow: auto;
+  padding: 0.8rem;
+  position: absolute;
+}
+
+.pin button,
+.catalogueButton {
+  text-align: left;
+}
+
+.pinTitle {
+  font-weight: 700;
+}
+
+.category,
+.state {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 0.78rem;
+  padding: 0.12rem 0.42rem;
+}
+
+.workspaceGrid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(15rem, 0.7fr) minmax(0, 1.3fr);
+}
+
+.catalogue,
+.tombstones,
+.historyList {
+  display: grid;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.catalogueButton {
+  background: #fff;
+  border: 1px solid #d9ddd8;
+  border-radius: 9px;
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.7rem;
+  width: 100%;
+}
+
+.catalogueButton[aria-current="true"] {
+  border-color: #2f5d62;
+  box-shadow: 0 0 0 2px rgba(47, 93, 98, 0.16);
+}
+
+.detail {
+  align-content: start;
+  display: grid;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.bodyText {
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.image {
+  border-radius: 8px;
+  max-height: 32rem;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.notice,
+.error,
+.success {
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.notice {
+  background: #f4f1df;
+  border: 1px solid #d8cf9a;
+}
+
+.error {
+  background: #fff1ee;
+  border: 1px solid #c98375;
+}
+
+.success {
+  background: #eef7f1;
+  border: 1px solid #8ab59a;
+}
+
+.composer {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.fields {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fields label,
+.fullField {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.fullField {
+  grid-column: 1 / -1;
+}
+
+.fields input,
+.fields select,
+.fields textarea {
+  font: inherit;
+  min-width: 0;
+  padding: 0.5rem;
+}
+
+.fields textarea {
+  min-height: 8rem;
+  resize: vertical;
+}
+
+.historyItem {
+  border-left: 3px solid #b8b5a4;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.45rem 0.7rem;
+}
+
+.narrowBack {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .board {
+    display: grid;
+    gap: 0.75rem;
+    min-height: auto;
+  }
+
+  .pin {
+    height: auto !important;
+    position: static;
+    width: auto !important;
+  }
+
+  .workspaceGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspaceGrid[data-detail-open="true"] .panel {
+    display: none;
+  }
+
+  .workspaceGrid[data-detail-open="false"] .detail {
+    display: none;
+  }
+
+  .narrowBack {
+    display: inline-block;
+  }
+
+  .fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

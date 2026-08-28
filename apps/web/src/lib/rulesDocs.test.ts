@@ -303,6 +303,15 @@ describe("rules documentation registry", () => {
     );
     expect(model.selectedDocument.markdown).toContain("minimum total damage floor");
     expect(model.selectedDocument.markdown).toContain("GM review remains required");
+    expect(model.selectedDocument.markdown).toContain("C1 representative fixture authority");
+    expect(model.selectedDocument.markdown).toContain("Equal initiative is simultaneous");
+    expect(model.selectedDocument.markdown).toContain("exact rational arithmetic");
+    expect(model.selectedDocument.markdown).toContain(
+      "Generic `treatment` text remains GM-managed",
+    );
+    expect(model.selectedDocument.markdown).toContain(
+      "bulk activation of the 608-result catalogue",
+    );
     expect(model.selectedDocument.markdown).not.toContain("Glantri_CriticalEffects_AppFacing");
     expect(model.selectedDocument.markdown).not.toContain("AppFacing_Crits");
   });
