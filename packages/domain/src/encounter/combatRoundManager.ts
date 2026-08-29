@@ -1949,6 +1949,34 @@ function findCombatRoundPendingPhaseAttackCandidate(input: {
   };
 }
 
+function getCombatRoundPendingAttackRequiredFunctions(input: {
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): readonly ("arm" | "hand")[] {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const participant = normalized.participants.find(
+    (entry) => entry.participantId === input.participantId,
+  );
+  const opportunity = getCombatRoundPhaseAttackCandidates({
+    phase: input.phase,
+    state: normalized,
+  }).find((candidate) => candidate.participantId === input.participantId);
+  const canonicalIdentity = opportunity
+    ? getCanonicalAttackOpportunityIdentity({
+        actionId: participant?.declaration?.actionId,
+        attackerParticipantId: input.participantId,
+        opportunity,
+        roundNumber: normalized.roundNumber,
+      })
+    : undefined;
+
+  // A complete canonical weapon source proves that this pending attack depends on manual
+  // arm/hand function. Unarmed and legacy/incomplete sources do not identify a required limb,
+  // so C1 must not infer one from labels or prose.
+  return canonicalIdentity && opportunity?.sourceKind === "weapon" ? ["arm", "hand"] : [];
+}
+
 function buildCombatRoundCriticalOperationalConsequences(input: {
   damageResult: CombatRoundDamageResult;
   proposal: ReturnType<typeof buildCriticalEffectProposalFromDamageResult>;
@@ -16608,8 +16636,9 @@ function buildCombatRoundOperationalCancelledActions(input: {
 function buildCombatCriticalRuntimeOperationalConsequences(input: {
   criticalRuntime?: CombatCriticalRuntimeDefinition;
   defenderParticipantId: string;
+  state: CombatRoundState;
 }): CombatRoundDamageReviewOperationalConsequence[] {
-  const cancellingConditions = (input.criticalRuntime?.conditions ?? []).filter(
+  const globallyCancellingConditions = (input.criticalRuntime?.conditions ?? []).filter(
     (condition) =>
       condition.mechanicallyActive &&
       condition.onset === "immediate" &&
@@ -16618,21 +16647,59 @@ function buildCombatCriticalRuntimeOperationalConsequences(input: {
         condition.code === "parry_only" ||
         condition.code === "unconscious"),
   );
-  if (!input.criticalRuntime || cancellingConditions.length === 0) return [];
+  const functionConditions = (input.criticalRuntime?.conditions ?? []).filter(
+    (condition) =>
+      condition.mechanicallyActive &&
+      condition.onset === "immediate" &&
+      condition.code === "function_unusable",
+  );
+  if (!input.criticalRuntime) return [];
 
-  return (["phase1", "phase2"] as const).map((phase) =>
-    combatRoundDamageReviewOperationalConsequenceSchema.parse({
-      accepted: true,
-      id: `c1:${input.criticalRuntime!.criticalKey}:${phase}:locked-action-state`,
-      kind: "cancel_pending_action",
-      label: "Pending attack cancelled by Critical action state",
+  return (["phase1", "phase2"] as const).flatMap((phase) => {
+    const pending = findCombatRoundPendingPhaseAttackCandidate({
       participantId: input.defenderParticipantId,
       phase,
-      reason: `Accepted C1 ${cancellingConditions.map((condition) => condition.code).join("/")} state`,
-      sourceCritKey: input.criticalRuntime!.criticalKey,
-      step: getCombatRoundAttackCursorStepForPhase(phase),
-    }),
-  );
+      state: input.state,
+    });
+    const requiredFunctions = pending
+      ? getCombatRoundPendingAttackRequiredFunctions({
+          participantId: input.defenderParticipantId,
+          phase,
+          state: input.state,
+        })
+      : [];
+    const incompatibleFunctionConditions = pending
+      ? functionConditions.filter((condition) =>
+          requiredFunctions.some((requiredFunction) => condition.target === requiredFunction),
+        )
+      : [];
+    const cancellingConditions = [
+      ...globallyCancellingConditions,
+      ...incompatibleFunctionConditions,
+    ];
+
+    return cancellingConditions.length === 0
+      ? []
+      : [
+          combatRoundDamageReviewOperationalConsequenceSchema.parse({
+            accepted: true,
+            id: `c1:${input.criticalRuntime!.criticalKey}:${phase}:locked-action-state`,
+            kind: "cancel_pending_action",
+            label: "Pending attack cancelled by Critical action state",
+            participantId: input.defenderParticipantId,
+            phase,
+            reason: `Accepted C1 ${cancellingConditions
+              .map((condition) =>
+                condition.code === "function_unusable"
+                  ? `${condition.code}:${condition.target}`
+                  : condition.code,
+              )
+              .join("/")} state`,
+            sourceCritKey: input.criticalRuntime!.criticalKey,
+            step: getCombatRoundAttackCursorStepForPhase(phase),
+          }),
+        ];
+  });
 }
 
 function applyCombatRoundOperationalActionCancellations(input: {
@@ -16844,6 +16911,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
   const criticalRuntimeOperationalConsequences = buildCombatCriticalRuntimeOperationalConsequences({
     criticalRuntime: input.criticalRuntime,
     defenderParticipantId: input.damageResult.defenderParticipantId,
+    state: normalized,
   });
   const acceptedOperationalConsequences = [
     ...getAcceptedCombatRoundOperationalConsequences(input.damageResult),

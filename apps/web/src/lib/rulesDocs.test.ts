@@ -308,7 +308,15 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("minimum total damage floor");
     expect(model.selectedDocument.markdown).toContain("GM review remains required");
     expect(model.selectedDocument.markdown).toContain("C1 representative fixture authority");
-    expect(model.selectedDocument.markdown).toContain("Equal initiative is simultaneous");
+    expect(model.selectedDocument.markdown).toContain("Initiative resolves highest first");
+    expect(model.selectedDocument.markdown).toContain("initiative `7`");
+    expect(model.selectedDocument.markdown).toContain("initiative `4`");
+    expect(model.selectedDocument.markdown).toContain(
+      "Explicit `next_round` onset remains deferred",
+    );
+    expect(model.selectedDocument.markdown).toContain(
+      "complete canonical weapon source establishes an arm/hand requirement",
+    );
     expect(model.selectedDocument.markdown).toContain("exact rational arithmetic");
     expect(model.selectedDocument.markdown).toContain(
       "Generic `treatment` text remains GM-managed",

@@ -112,10 +112,10 @@ export interface RepresentativeCriticalFixture {
   readonly information: readonly RepresentativeCriticalInformation[];
   readonly initiativeExample?: {
     readonly equalAffected: false;
-    readonly equalInitiative: 4;
+    readonly equalInitiative: 7;
     readonly laterAffected: boolean;
-    readonly laterInitiative: 5;
-    readonly sourceInitiative: 4;
+    readonly laterInitiative: 4;
+    readonly sourceInitiative: 7;
   };
   readonly location: string;
   readonly lookupSupport: "addressable_pilot_family" | "specialized_not_addressable";
@@ -299,10 +299,10 @@ function createFixture(seed: FixtureSeed): RepresentativeCriticalFixture {
       seed.stun || seed.conditions.length > 0
         ? ({
             equalAffected: false,
-            equalInitiative: 4,
+            equalInitiative: 7,
             laterAffected: Boolean(immediateTiming),
-            laterInitiative: 5,
-            sourceInitiative: 4,
+            laterInitiative: 4,
+            sourceInitiative: 7,
           } as const)
         : undefined,
     location,
@@ -1243,7 +1243,7 @@ export function isCriticalConsequenceActiveForPendingInitiative(input: {
   pendingInitiative: number;
   sourceInitiative: number;
 }): boolean {
-  return input.onset === "immediate" && input.pendingInitiative > input.sourceInitiative;
+  return input.onset === "immediate" && input.pendingInitiative < input.sourceInitiative;
 }
 
 export function addExactRationals(left: ExactRational, right: ExactRational): ExactRational {

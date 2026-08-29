@@ -26,13 +26,20 @@ The accepted C1 rules are:
   `-8` to OB/Skill, DB/Parry, and Initiative only. Separate Critical-source Stuns retain independent
   identity and add without a generic cap. Severity 5 is an explicit action state, not another numeric
   rung, and Stun never progresses automatically into unconsciousness.
-- A consequence accepted at initiative `N` does not affect an equal-initiative action at `N`.
-  Equal initiative is simultaneous. An immediate consequence applies only to a still-unresolved,
-  incompatible action at a strictly later initiative position. Explicit next-round onset overrides
-  that default. This ordering is canonical and is not a GM-editable suggestion.
+- Initiative resolves highest first. A consequence created at initiative `7` does not affect a peer
+  action at `7`: the whole equal-initiative group uses the same pre-group state. Once that group
+  closes, an immediate consequence activates automatically for a still-unresolved, mechanically
+  incompatible action at initiative `4`. A consequence created at `4` never reaches backward to an
+  already-resolved action at `5`. Explicit `next_round` onset remains deferred and is never pulled
+  forward by group closure. This ordering is canonical and is not a GM-editable suggestion.
 - Conditions and operations are separate. `collapse`, `unconscious`, `prone`, `fall_to_ground`, and
   `drop_held_item` do not imply one another. Functional loss is target-specific unless an explicit
-  result imposes a global action restriction.
+  result imposes a global action restriction. In the current server-authoritative pending-attack
+  seam, a complete canonical weapon source establishes an arm/hand requirement. An unusable arm or
+  hand can therefore invalidate that weapon attack. Movement, speech, perception, an unarmed source
+  without canonical limb metadata, any otherwise unaffected-function action, and incomplete legacy
+  source data remain valid unless a separate typed restriction applies. Labels and descriptive prose
+  never manufacture a dependency.
 - Ordinary Bleed exists and can be treated immediately, but its first periodic HP loss is at SU of
   the following round after one full three-second interval. Each external/internal source retains
   identity. Rates use exact rational arithmetic, add before whole-HP application, and carry exact

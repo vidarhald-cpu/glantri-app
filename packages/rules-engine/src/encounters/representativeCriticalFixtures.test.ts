@@ -20,7 +20,7 @@ describe("#377 representative C1 Critical fixtures", () => {
     expect(REPRESENTATIVE_CRITICAL_FIXTURES).toHaveLength(34);
     expect(
       createHash("sha256").update(JSON.stringify(REPRESENTATIVE_CRITICAL_FIXTURES)).digest("hex"),
-    ).toBe("eef174595876216c843de233d62b77f968dc0620d205e813f19da4dff0b25b6e");
+    ).toBe("373b8e6e02efb6676667acf15000c0000a53469473677819d01c21595ca5a10d");
   });
 
   it("retains unique stable identities, exact workbook provenance, and current source rows", () => {
@@ -125,8 +125,22 @@ describe("#377 representative C1 Critical fixtures", () => {
     expect(
       isCriticalConsequenceActiveForPendingInitiative({
         onset: "immediate",
+        pendingInitiative: 7,
+        sourceInitiative: 7,
+      }),
+    ).toBe(false);
+    expect(
+      isCriticalConsequenceActiveForPendingInitiative({
+        onset: "immediate",
         pendingInitiative: 4,
-        sourceInitiative: 4,
+        sourceInitiative: 7,
+      }),
+    ).toBe(true);
+    expect(
+      isCriticalConsequenceActiveForPendingInitiative({
+        onset: "next_round",
+        pendingInitiative: 4,
+        sourceInitiative: 7,
       }),
     ).toBe(false);
     expect(
@@ -135,28 +149,44 @@ describe("#377 representative C1 Critical fixtures", () => {
         pendingInitiative: 5,
         sourceInitiative: 4,
       }),
-    ).toBe(true);
-    expect(
-      isCriticalConsequenceActiveForPendingInitiative({
-        onset: "next_round",
-        pendingInitiative: 5,
-        sourceInitiative: 4,
-      }),
     ).toBe(false);
+    const groupPermutations = [
+      [7, 7, 4],
+      [7, 4, 7],
+      [4, 7, 7],
+    ];
+    for (const initiatives of groupPermutations) {
+      expect(
+        initiatives
+          .map((pendingInitiative) => ({
+            active: isCriticalConsequenceActiveForPendingInitiative({
+              onset: "immediate",
+              pendingInitiative,
+              sourceInitiative: 7,
+            }),
+            pendingInitiative,
+          }))
+          .sort((left, right) => right.pendingInitiative - left.pendingInitiative),
+      ).toEqual([
+        { active: false, pendingInitiative: 7 },
+        { active: false, pendingInitiative: 7 },
+        { active: true, pendingInitiative: 4 },
+      ]);
+    }
 
     expect(getRepresentativeCriticalFixture("blunt|arm|12")?.initiativeExample).toEqual({
       equalAffected: false,
-      equalInitiative: 4,
+      equalInitiative: 7,
       laterAffected: true,
-      laterInitiative: 5,
-      sourceInitiative: 4,
+      laterInitiative: 4,
+      sourceInitiative: 7,
     });
     expect(getRepresentativeCriticalFixture("sharp|head|04")?.initiativeExample).toEqual({
       equalAffected: false,
-      equalInitiative: 4,
+      equalInitiative: 7,
       laterAffected: false,
-      laterInitiative: 5,
-      sourceInitiative: 4,
+      laterInitiative: 4,
+      sourceInitiative: 7,
     });
   });
 

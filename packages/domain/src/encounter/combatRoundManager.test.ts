@@ -1094,18 +1094,49 @@ describe("canonical attack opportunity lineage", () => {
 
 function declareRoundAction(input: {
   actionId: string;
+  attackSourceKind?: "unarmed" | "weapon";
   participantId: string;
   state: ReturnType<typeof initializeCombatRoundState>;
 }): ReturnType<typeof initializeCombatRoundState> {
   const targetParticipantId = input.participantId === "gladiator" ? "guard" : "gladiator";
+  const phaseContexts = {
+    phase1: testPhaseContext(targetParticipantId),
+    phase2: testPhaseContext(targetParticipantId),
+  };
+  const attackOpportunities = input.attackSourceKind
+    ? buildCombatRoundDeclaredAttackOpportunities({
+        actionId: input.actionId,
+        participantId: input.participantId,
+        phaseContexts,
+        roundNumber: 3,
+        sources: {
+          phase1:
+            input.attackSourceKind === "weapon"
+              ? {
+                  attackModeId: `${input.participantId}-weapon-mode`,
+                  itemId: `${input.participantId}-weapon`,
+                  sourceKind: "weapon",
+                  weaponInstanceId: `${input.participantId}-weapon`,
+                  weaponSourceId: `weapon:${input.participantId}-weapon`,
+                  weaponSourceSlot: "primary",
+                  weaponTemplateId: "test-sword",
+                }
+              : {
+                  attackModeId: `${input.participantId}-unarmed-mode`,
+                  sourceKind: "unarmed",
+                  weaponSourceId: `unarmed:${input.participantId}-unarmed`,
+                  weaponSourceSlot: "virtual",
+                  weaponTemplateId: `${input.participantId}-unarmed`,
+                },
+        },
+      })
+    : undefined;
 
   return recordCombatRoundDeclaration({
     declaration: {
       actionId: input.actionId,
-      phaseContexts: {
-        phase1: testPhaseContext(targetParticipantId),
-        phase2: testPhaseContext(targetParticipantId),
-      },
+      attackOpportunities,
+      phaseContexts,
       roundNumber: 3,
     },
     participantId: input.participantId,
@@ -1822,6 +1853,101 @@ function prepareFailedParryPendingDamage(input: {
   };
 }
 
+function commitArmFunctionUnusableAgainstGuardAttack(attackSourceKind: "unarmed" | "weapon") {
+  const pending = prepareFailedParryPendingDamage({ weaponDamageClass: "pointed_weapons" });
+  const withGuardAttack = setCombatRoundParticipantInitiative({
+    initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [4], rollTotal: 4, total: 4 },
+    participantId: "guard",
+    phase: "phase1",
+    state: declareRoundAction({
+      actionId: "attack_parry",
+      attackSourceKind,
+      participantId: "guard",
+      state: pending.state,
+    }),
+  });
+  const afterLocation = recordTestHitLocation({
+    attackResult: pending.attackResult,
+    hitLocationRolls: [17],
+    state: withGuardAttack,
+  });
+  const afterDamage = recordCombatRoundDamageResult({
+    attackResult: pending.attackResult,
+    defenderDm: 0,
+    dmb: 8,
+    state: afterLocation,
+    submittedBy: "gm",
+    updatedAt: "2026-01-01T00:05:00.000Z",
+  });
+  const afterCritical = recordCombatRoundCriticalRoll({
+    attackResult: pending.attackResult,
+    criticalDice: [1, 1],
+    rolledByParticipantId: "gladiator",
+    state: afterDamage,
+    submittedBy: "gm",
+    updatedAt: "2026-01-01T00:05:30.000Z",
+  });
+  const attackResultId = afterCritical.phaseResolutionResults[0]?.damageResult?.attackResultId;
+
+  if (!attackResultId) throw new Error("Expected function-unusable damage result.");
+
+  const reviewed = reviewCombatRoundDamageResult({
+    attackResultId,
+    reviewedAt: "2026-01-01T00:05:45.000Z",
+    reviewedByUserId: "gm-1",
+    review: {
+      additionalEffects: [],
+      finalCriticalRollOverride: 9,
+      operationalConsequences: [],
+    },
+    state: afterCritical,
+  });
+
+  return commitCombatRoundPhaseDamage({
+    attackResultId,
+    command: {
+      commandId: `commit-function-unusable-${attackSourceKind}`,
+      createdAt: "2026-01-01T00:06:00.000Z",
+      createdByUserId: "gm-1",
+    },
+    criticalRuntime: {
+      bleed: [],
+      canonicalName: "Joint puncture; arm locked.",
+      conditions: [
+        {
+          code: "function_unusable",
+          duration: { kind: "until_event", text: "until appropriate care" },
+          mechanicallyActive: true,
+          onset: "immediate",
+          target: "arm",
+        },
+      ],
+      criticalKey: "pointed_weapons|arm|09",
+      description: "The arm is unusable without imposing a global action lock.",
+      fixtureVersion: "c1-2026-08-28",
+      information: [],
+      operations: [],
+      stun: {
+        channels: ["ob_skill", "db_parry", "initiative"],
+        duration: { kind: "until_event", text: "until appropriate care" },
+        modifier: -2,
+        onset: "immediate",
+        severity: 2,
+        sourceEffectKey: "pointed_weapons|arm|09|02",
+      },
+      treatment: {
+        equipmentOrOperation: [],
+        gmManaged: true,
+        guidance: "Generic treatment remains GM-managed.",
+        sourceGate: "until treated",
+        stages: [],
+      },
+    },
+    defenderScenarioParticipantId: "scenario-guard",
+    state: reviewed,
+  });
+}
+
 function commitFailedParryDamage(input: {
   actionId: string;
   phase: "phase1" | "phase2";
@@ -2075,6 +2201,32 @@ describe("combat round manager", () => {
       exactRemainingRemainder: { denominator: 3, numerator: 2 },
       exactTotal: { denominator: 3, numerator: 5 },
     });
+  });
+
+  it("cancels only a pending action canonically dependent on an unusable arm", () => {
+    const weaponAttack = commitArmFunctionUnusableAgainstGuardAttack("weapon");
+    const unarmedAttack = commitArmFunctionUnusableAgainstGuardAttack("unarmed");
+
+    expect(weaponAttack.command.facts.cancelledActions).toContainEqual(
+      expect.objectContaining({
+        participantId: "guard",
+        phase: "phase1",
+        reason: "Accepted C1 function_unusable:arm state",
+      }),
+    );
+    expect(
+      weaponAttack.state.participants.find((participant) => participant.participantId === "guard")
+        ?.stepStatuses.phase_1_actions,
+    ).toBe("skipped");
+
+    // An unarmed source does not identify which limb/function it needs. The server therefore keeps
+    // that action pending instead of inferring a dependency from its label; movement, speech, and
+    // perception likewise remain outside the pending-attack cancellation path.
+    expect(unarmedAttack.command.facts.cancelledActions ?? []).toEqual([]);
+    expect(
+      unarmedAttack.state.participants.find((participant) => participant.participantId === "guard")
+        ?.stepStatuses.phase_1_actions,
+    ).not.toBe("skipped");
   });
 
   it("derives both Feint phase targets and the A2 opportunity from one declaration target", () => {
