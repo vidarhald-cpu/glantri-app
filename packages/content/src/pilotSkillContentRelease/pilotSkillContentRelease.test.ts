@@ -16,6 +16,46 @@ function resignPilotRelease(release: PilotSkillContentRelease): void {
   Object.assign(release.manifest, { payloadDigest: `sha256:${digest}` });
 }
 
+function expectResignedSemanticRejection(input: {
+  code: string;
+  mutate: (release: PilotSkillContentRelease) => void;
+  name: string;
+  path?: string;
+}): void {
+  const invalid = structuredClone(pilotSkillContentReleaseV1) as PilotSkillContentRelease;
+  input.mutate(invalid);
+  resignPilotRelease(invalid);
+  const before = JSON.stringify(invalid);
+  const expectedDigest = `sha256:${createHash("sha256")
+    .update(serializePilotSkillContentReleasePayload(invalid))
+    .digest("hex")}`;
+  expect(invalid.manifest.payloadDigest, input.name).toBe(expectedDigest);
+  expect(() => validatePilotSkillContentRelease(invalid), input.name).not.toThrow();
+  const first = validatePilotSkillContentRelease(invalid);
+  expect(first.valid, input.name).toBe(false);
+  expect(first.diagnostics, input.name).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        code: input.code,
+        ...(input.path === undefined ? {} : { path: input.path }),
+      }),
+    ]),
+  );
+  expect(first.diagnostics, input.name).not.toEqual(
+    expect.arrayContaining([expect.objectContaining({ code: "PILOT_CONTENT_DIGEST_MISMATCH" })]),
+  );
+  expect(first, input.name).toEqual(validatePilotSkillContentRelease(invalid));
+  expect(first.diagnostics, input.name).toEqual(
+    [...first.diagnostics].sort(
+      (left, right) =>
+        left.code.localeCompare(right.code) ||
+        left.path.localeCompare(right.path) ||
+        left.message.localeCompare(right.message),
+    ),
+  );
+  expect(JSON.stringify(invalid), input.name).toBe(before);
+}
+
 describe("canonical bounded pilot Skill content release", () => {
   it("has one stable, versioned identity and a byte-reproducible payload digest", () => {
     expect(pilotSkillContentReleaseV1).toMatchObject({
@@ -294,6 +334,180 @@ describe("canonical bounded pilot Skill content release", () => {
         ).toBe(true);
       }
     }
+  });
+
+  it("rejects every re-signed empty, partial, reversed, self, or mixed explicit transfer", () => {
+    const explicitTransfer = (release: PilotSkillContentRelease) =>
+      release.specializations.find(({ id }) => id === "spec:diagnostic-medicine")!.transfer as {
+        kind: "explicit-relationships";
+        relationshipIds: string[];
+      };
+    const diagnosticRelationship = (release: PilotSkillContentRelease) =>
+      release.relationships.find(({ id }) => id === "rel:medicine:diagnostic-medicine")!;
+    const topologyPath = "specializations[1].transfer.relationshipIds";
+    const cases: Array<Parameters<typeof expectResignedSemanticRejection>[0]> = [
+      {
+        code: "PILOT_CONTENT_SPECIALIZATION_TRANSFER_TOPOLOGY_INVALID",
+        mutate: (release) => Object.assign(explicitTransfer(release), { relationshipIds: [] }),
+        name: "empty explicit relationship list",
+        path: topologyPath,
+      },
+      {
+        code: "PILOT_CONTENT_INVALID_SHAPE",
+        mutate: (release) => {
+          delete (explicitTransfer(release) as { relationshipIds?: string[] }).relationshipIds;
+        },
+        name: "missing explicit relationship list",
+        path: topologyPath,
+      },
+      {
+        code: "PILOT_CONTENT_SPECIALIZATION_TRANSFER_TOPOLOGY_INVALID",
+        mutate: (release) =>
+          Object.assign(explicitTransfer(release), {
+            relationshipIds: ["rel:trade:bargaining"],
+          }),
+        name: "unrelated explicit relationship",
+        path: `${topologyPath}[0]`,
+      },
+      {
+        code: "PILOT_CONTENT_SPECIALIZATION_TRANSFER_TOPOLOGY_INVALID",
+        mutate: (release) =>
+          Object.assign(explicitTransfer(release), {
+            relationshipIds: ["rel:medicine:diagnostic-medicine", "rel:trade:bargaining"],
+          }),
+        name: "mixed valid and unrelated explicit relationships",
+        path: `${topologyPath}[1]`,
+      },
+      {
+        code: "PILOT_CONTENT_SPECIALIZATION_TRANSFER_TOPOLOGY_INVALID",
+        mutate: (release) =>
+          Object.assign(diagnosticRelationship(release), {
+            targetCompetencyId: "spec:warded-lock-entry",
+          }),
+        name: "partial topology with the expected source but another target",
+        path: `${topologyPath}[0]`,
+      },
+      {
+        code: "PILOT_CONTENT_SPECIALIZATION_TRANSFER_TOPOLOGY_INVALID",
+        mutate: (release) =>
+          Object.assign(diagnosticRelationship(release), {
+            sourceCompetencyId: "spec:diagnostic-medicine",
+            targetCompetencyId: "skill:medicine",
+          }),
+        name: "reversed explicit relationship",
+        path: `${topologyPath}[0]`,
+      },
+      {
+        code: "PILOT_CONTENT_SPECIALIZATION_TRANSFER_TOPOLOGY_INVALID",
+        mutate: (release) =>
+          Object.assign(diagnosticRelationship(release), {
+            sourceCompetencyId: "spec:diagnostic-medicine",
+            targetCompetencyId: "spec:diagnostic-medicine",
+          }),
+        name: "self explicit relationship",
+        path: `${topologyPath}[0]`,
+      },
+    ];
+
+    for (const testCase of cases) expectResignedSemanticRejection(testCase);
+
+    const accepted = validatePilotSkillContentRelease(pilotSkillContentReleaseV1);
+    expect(accepted).toMatchObject({ diagnostics: [], valid: true });
+    expect(
+      pilotSkillContentReleaseV1.specializations
+        .filter(({ transfer }) => transfer.kind === "explicit-relationships")
+        .every(({ transfer }) =>
+          transfer.kind === "explicit-relationships" ? transfer.relationshipIds.length > 0 : false,
+        ),
+    ).toBe(true);
+    expect(
+      pilotSkillContentReleaseV1.specializations.filter(
+        ({ transfer }) => transfer.kind === "zero-transfer",
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("rejects every unrelated member padded into a re-signed access-exception scope", () => {
+    const exception = (release: PilotSkillContentRelease, id: string) =>
+      release.accessExceptions.find((entry) => entry.id === id)!;
+    const cases: Array<Parameters<typeof expectResignedSemanticRejection>[0]> = [
+      {
+        code: "PILOT_CONTENT_ACCESS_EXCEPTION_SCOPE_MISMATCH",
+        mutate: (release) => {
+          const competencyIds = exception(release, "access:mogreb-surgeon-neseret")
+            .competencyIds as string[];
+          competencyIds.push("skill:medicine");
+        },
+        name: "valid direct scope with unrelated direct padding",
+        path: "accessExceptions[0].competencyIds[1]",
+      },
+      {
+        code: "PILOT_CONTENT_ACCESS_EXCEPTION_SCOPE_MISMATCH",
+        mutate: (release) => {
+          const historyIds = exception(release, "access:mogreb-surgeon-neseret")
+            .historyIds as string[];
+          historyIds.push("hist:mogreb-temple-infirmary");
+        },
+        name: "valid direct scope with unrelated same-profile history padding",
+        path: "accessExceptions[0].historyIds[0]",
+      },
+      {
+        code: "PILOT_CONTENT_ACCESS_EXCEPTION_SCOPE_MISMATCH",
+        mutate: (release) => {
+          const historyIds = exception(release, "access:iest-contact-copper-latch")
+            .historyIds as string[];
+          historyIds.push("hist:mogreb-temple-infirmary");
+        },
+        name: "valid history scope with unrelated cross-profile history padding",
+        path: "accessExceptions[1].historyIds[1]",
+      },
+      {
+        code: "PILOT_CONTENT_ACCESS_EXCEPTION_SCOPE_MISMATCH",
+        mutate: (release) => {
+          const competencyIds = exception(release, "access:iest-contact-copper-latch")
+            .competencyIds as string[];
+          competencyIds.push("skill:underworld");
+        },
+        name: "valid history scope with unrelated direct padding",
+        path: "accessExceptions[1].competencyIds[0]",
+      },
+      {
+        code: "PILOT_CONTENT_ACCESS_EXCEPTION_SCOPE_MISMATCH",
+        mutate: (release) => {
+          const historyIds = exception(release, "access:iest-contact-copper-latch")
+            .historyIds as string[];
+          historyIds.push("hist:mogreb-temple-infirmary", "hist:olog-clerk-school");
+        },
+        name: "multiple unrelated history members",
+        path: "accessExceptions[1].historyIds[1]",
+      },
+      {
+        code: "PILOT_CONTENT_ACCESS_EXCEPTION_SCOPE_MISMATCH",
+        mutate: (release) => {
+          const historyIds = exception(release, "access:olog-fosterage-house-vorodin")
+            .historyIds as string[];
+          historyIds.push("hist:iest-dockside-network");
+        },
+        name: "cross-profile history padding that overlaps an unavailable competency",
+        path: "accessExceptions[3].historyIds[1]",
+      },
+    ];
+
+    for (const testCase of cases) expectResignedSemanticRejection(testCase);
+
+    expect(validatePilotSkillContentRelease(pilotSkillContentReleaseV1)).toMatchObject({
+      diagnostics: [],
+      valid: true,
+    });
+    expect(
+      exception(pilotSkillContentReleaseV1, "access:mogreb-surgeon-neseret").competencyIds,
+    ).toEqual(["skill:surgery"]);
+    expect(
+      exception(pilotSkillContentReleaseV1, "access:iest-contact-copper-latch").historyIds,
+    ).toEqual(["hist:iest-night-entry-crew"]);
+    expect(
+      exception(pilotSkillContentReleaseV1, "access:olog-fosterage-house-vorodin").historyIds,
+    ).toEqual(["hist:olog-diplomatic-fosterage"]);
   });
 
   it("rejects every prior QA enum and access mutation without throwing or mutating input", () => {

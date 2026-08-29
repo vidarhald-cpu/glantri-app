@@ -462,6 +462,16 @@ export function validatePilotSkillContentRelease(
       entry.normalRoutes.map((route) => [route.id, entry.id] as const),
     ),
   );
+  const historyProfileIds = new Map<string, Set<string>>();
+  release.characters.forEach((entry) => {
+    const profileId = backgroundById.get(entry.backgroundId)?.profileId;
+    if (!profileId) return;
+    entry.histories.forEach(({ historyId }) => {
+      const profiles = historyProfileIds.get(historyId) ?? new Set<string>();
+      profiles.add(profileId);
+      historyProfileIds.set(historyId, profiles);
+    });
+  });
 
   release.histories.forEach((entry, historyIndex) => {
     addDuplicateTargetDiagnostics({
@@ -541,6 +551,13 @@ export function validatePilotSkillContentRelease(
       }
     });
     if (entry.transfer.kind === "explicit-relationships") {
+      if (entry.transfer.relationshipIds.length === 0) {
+        add(
+          "PILOT_CONTENT_SPECIALIZATION_TRANSFER_TOPOLOGY_INVALID",
+          `specializations[${index}].transfer.relationshipIds`,
+          `Explicit relationship transfer for Specialization "${entry.id}" requires at least one relationship.`,
+        );
+      }
       addDuplicateTargetDiagnostics({
         add,
         label: `Specialization "${entry.id}" transfer relationship`,
@@ -548,6 +565,7 @@ export function validatePilotSkillContentRelease(
         values: entry.transfer.relationshipIds,
       });
       const prerequisiteIds = new Set(entry.prerequisites.map(({ competencyId }) => competencyId));
+      const connectedPrerequisiteIds = new Set<string>();
       entry.transfer.relationshipIds.forEach((id, relationshipIndex) => {
         const transferRelationship = relationshipById.get(id);
         if (!transferRelationship) {
@@ -566,6 +584,17 @@ export function validatePilotSkillContentRelease(
             "PILOT_CONTENT_SPECIALIZATION_TRANSFER_TOPOLOGY_INVALID",
             `specializations[${index}].transfer.relationshipIds[${relationshipIndex}]`,
             `Relationship "${id}" must connect a declared prerequisite to Specialization "${entry.id}"; found "${transferRelationship.sourceCompetencyId}" -> "${transferRelationship.targetCompetencyId}".`,
+          );
+          return;
+        }
+        connectedPrerequisiteIds.add(transferRelationship.sourceCompetencyId);
+      });
+      prerequisiteIds.forEach((prerequisiteId) => {
+        if (!connectedPrerequisiteIds.has(prerequisiteId)) {
+          add(
+            "PILOT_CONTENT_SPECIALIZATION_TRANSFER_TOPOLOGY_INVALID",
+            `specializations[${index}].transfer.relationshipIds`,
+            `Explicit relationship transfer for Specialization "${entry.id}" is missing an edge from prerequisite "${prerequisiteId}".`,
           );
         }
       });
@@ -751,12 +780,31 @@ export function validatePilotSkillContentRelease(
         );
       }
     });
-    entry.historyIds.forEach((id) => {
-      if (!historyById.has(id)) {
+    entry.historyIds.forEach((id, historyIndex) => {
+      const sourceHistory = historyById.get(id);
+      if (!sourceHistory) {
         add(
           "PILOT_CONTENT_UNKNOWN_EXCEPTION_HISTORY",
-          `accessExceptions[${index}]`,
+          `accessExceptions[${index}].historyIds[${historyIndex}]`,
           `Unknown exception history "${id}".`,
+        );
+        return;
+      }
+      const historyMembers = [
+        ...sourceHistory.fixedCompetencyIds,
+        ...sourceHistory.selectionSlots.flatMap(
+          ({ candidateCompetencyIds }) => candidateCompetencyIds,
+        ),
+      ];
+      const hasAttributableMember = historyMembers.some((competencyId) =>
+        attributableCompetencyIds.has(competencyId),
+      );
+      const hasCompatibleProfile = historyProfileIds.get(id)?.has(entry.profileId) === true;
+      if (!hasAttributableMember || !hasCompatibleProfile) {
+        add(
+          "PILOT_CONTENT_ACCESS_EXCEPTION_SCOPE_MISMATCH",
+          `accessExceptions[${index}].historyIds[${historyIndex}]`,
+          `Exception history "${id}" must belong to profile "${entry.profileId}" and contain a competency in its restricted or unavailable scope.`,
         );
       }
     });
