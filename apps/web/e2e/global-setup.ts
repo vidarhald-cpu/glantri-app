@@ -64,6 +64,7 @@ function buildStorageState(cookieHeader: string, domain: string): object {
 
 const SMOKE_CHARACTER_ID = "smoke-char-00001";
 const SMOKE_NON_HOLDER_CHARACTER_ID = "smoke-char-00002";
+const SMOKE_DELEGATED_CHARACTER_ID = "smoke-char-00003";
 const SMOKE_GM_EMAIL = "smoke-gm@test.local";
 const SMOKE_NON_HOLDER_EMAIL = "smoke-non-holder@test.local";
 const SMOKE_PLAYER_EMAIL = "smoke-player@test.local";
@@ -220,6 +221,16 @@ export default async function globalSetup() {
     // Character already exists — idempotent
   }
 
+  try {
+    await apiPost(
+      "/characters",
+      characterPayload(SMOKE_DELEGATED_CHARACTER_ID, "Smoke Delegated Character"),
+      playerCookie,
+    );
+  } catch {
+    // Character already exists — idempotent
+  }
+
   // --- B2 campaign with the player's Character available for initial item assignment ---
   const { data: b2CampaignData } = await apiPost<{ campaign: { id: string } }>(
     "/campaigns",
@@ -275,7 +286,7 @@ export default async function globalSetup() {
     `/campaigns/${delegatedCampaignId}/roster`,
     {
       category: "pc",
-      sourceId: SMOKE_CHARACTER_ID,
+      sourceId: SMOKE_DELEGATED_CHARACTER_ID,
       sourceType: "character",
     },
     gmCookie,
@@ -293,7 +304,7 @@ export default async function globalSetup() {
   const { data: delegatedParticipantData } = await apiPost<{ participant: { id: string } }>(
     `/scenarios/${delegatedScenarioId}/participants/character`,
     {
-      characterId: SMOKE_CHARACTER_ID,
+      characterId: SMOKE_DELEGATED_CHARACTER_ID,
       controlledByUserId: nonHolderUser.id,
     },
     gmCookie,
@@ -314,9 +325,9 @@ export default async function globalSetup() {
         participantMembershipMode: "explicit",
         participants: [
           {
-            characterId: SMOKE_CHARACTER_ID,
+            characterId: SMOKE_DELEGATED_CHARACTER_ID,
             id: `delegated-encounter-participant-${delegatedEncounterSeed}`,
-            label: "Smoke Character",
+            label: "Smoke Delegated Character",
             participantType: "scenario",
             scenarioParticipantId: delegatedParticipantData.participant.id,
           },
