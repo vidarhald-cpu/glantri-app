@@ -254,7 +254,7 @@ if (!appUsesTestDatabase) {
       expect(response.statusCode).toBe(200);
       expect(response.json().retainedCharacter).toMatchObject({
         characterId: "retained-api-veteran",
-        characterRevisionId: first.json().revision.id,
+        characterRevisionId: first.json().revision.characterRevisionId,
         effectiveSkills: {
           versionEnvelope: {
             contentRelease: {
@@ -299,14 +299,47 @@ if (!appUsesTestDatabase) {
         url: "/chargen/headless/finalize",
       });
       expect(finalized.statusCode).toBe(200);
-      const currentRevisionId = finalized.json().revision.id as string;
-      const historyInstanceId = finalized.json().revision.state.histories[0].instanceId as string;
+      const protectedSourcePattern =
+        /Copper Latch|Night-Entry Crew|Iest Dockside Network|hist:iest-|iest-dockside-childhood|access:iest-contact-copper-latch/;
+      expect(finalized.body).not.toMatch(protectedSourcePattern);
+      expect(finalized.json().revision).not.toHaveProperty("state");
+      expect(finalized.json().revision).not.toHaveProperty("commandDigest");
+      expect(finalized.json().revision).not.toHaveProperty("revisionDigest");
+      const finalizedEvents = finalized.json().revision.events as Array<{
+        component: string;
+        economics?: Record<string, unknown>;
+        targetId: string;
+      }>;
+      expect(finalizedEvents.find((entry) => entry.component === "history")).toMatchObject({
+        economics: { finalBundleCost: 32 },
+        targetId: "protected-history-1",
+      });
+      expect(finalizedEvents.find((entry) => entry.component === "direct")).toMatchObject({
+        economics: { ranks: 3 },
+      });
+      const currentRevisionId = finalized.json().revision.characterRevisionId as string;
+      const historyInstanceId = "protected-history-probe";
       const ownerProjection = await app.inject({
         headers: { cookie: ownerCookie },
         method: "GET",
         url: "/characters/retained-private-a/effective-skills",
       });
       expect(ownerProjection.statusCode).toBe(200);
+      expect(ownerProjection.body).not.toMatch(protectedSourcePattern);
+      expect(
+        ownerProjection
+          .json()
+          .retainedCharacter.events.find(
+            (entry: { component: string }) => entry.component === "history",
+          ),
+      ).toMatchObject({ economics: { finalBundleCost: 32 }, targetId: "protected-history-1" });
+      expect(
+        ownerProjection
+          .json()
+          .retainedCharacter.events.find(
+            (entry: { component: string }) => entry.component === "direct",
+          ),
+      ).toMatchObject({ economics: { ranks: 3 } });
       expect(
         ownerProjection
           .json()
@@ -327,9 +360,6 @@ if (!appUsesTestDatabase) {
         ],
         strongestHistoryContribution: 3,
       });
-      expect(ownerProjection.body).not.toMatch(
-        /Copper Latch|Night-Entry Crew|Iest Dockside Network|access:iest-contact-copper-latch/,
-      );
       expect(
         ownerProjection.json().retainedCharacter.effectiveSkills.versionEnvelope,
       ).toMatchObject({
@@ -393,7 +423,7 @@ if (!appUsesTestDatabase) {
           payload: {
             expectedRevisionId: "known-stale-revision",
             migrationId: "migration:probe",
-            targetEnvelope: finalized.json().revision.versionEnvelope,
+            targetEnvelope: finalized.json().revision.effectiveSkills.versionEnvelope,
           },
           url: "/characters/retained-private-a/migrations/preview",
         },
@@ -427,11 +457,12 @@ if (!appUsesTestDatabase) {
         payload: {
           expectedRevisionId: currentRevisionId,
           migrationId: "migration:api-bound-a",
-          targetEnvelope: finalized.json().revision.versionEnvelope,
+          targetEnvelope: finalized.json().revision.effectiveSkills.versionEnvelope,
         },
         url: "/characters/retained-private-a/migrations/preview",
       });
       expect(previewResponse.statusCode).toBe(200);
+      expect(previewResponse.body).not.toMatch(protectedSourcePattern);
       const preview = previewResponse.json().preview;
 
       const outsiderApply = await app.inject({
@@ -470,7 +501,10 @@ if (!appUsesTestDatabase) {
         method: "POST",
         payload: {
           idempotencyKey: "source-b-plan-a",
-          preview: { ...preview, expectedRevisionId: finalizedB.json().revision.id },
+          preview: {
+            ...preview,
+            expectedRevisionId: finalizedB.json().revision.characterRevisionId,
+          },
         },
         url: "/characters/retained-private-a/migrations/apply",
       });
@@ -497,6 +531,7 @@ if (!appUsesTestDatabase) {
         url: "/characters/retained-private-a/migrations/apply",
       });
       expect(applied.statusCode).toBe(200);
+      expect(applied.body).not.toMatch(protectedSourcePattern);
       expect(applied.json().revision.migrationLineage).toMatchObject({
         sourceRevisionId: currentRevisionId,
         status: "migration_applied",
@@ -506,18 +541,59 @@ if (!appUsesTestDatabase) {
         headers: { cookie: ownerCookie },
         method: "POST",
         payload: {
-          expectedRevisionId: applied.json().revision.id,
+          expectedRevisionId: applied.json().revision.characterRevisionId,
           idempotencyKey: "valid-rollback-a",
-          migrationRevisionId: applied.json().revision.id,
+          migrationRevisionId: applied.json().revision.characterRevisionId,
         },
         url: "/characters/retained-private-a/migrations/rollback",
       });
       expect(rolledBack.statusCode).toBe(200);
+      expect(rolledBack.body).not.toMatch(protectedSourcePattern);
       expect(rolledBack.json().revision.migrationLineage).toMatchObject({
-        rollbackOfRevisionId: applied.json().revision.id,
+        rollbackOfRevisionId: applied.json().revision.characterRevisionId,
         sourceRevisionId: currentRevisionId,
         status: "rollback_applied",
       });
+
+      const currentGm = await createTestUser(prisma, {
+        email: "private-current-gm-api@example.com",
+        roles: ["game_master"],
+      });
+      const admin = await createTestUser(prisma, {
+        email: "private-admin-api@example.com",
+        roles: ["admin"],
+      });
+      const campaign = await createTestCampaign(prisma, currentGm.id);
+      await prisma.campaignRosterEntry.create({
+        data: {
+          campaignId: campaign.id,
+          category: "pc",
+          sourceId: "retained-private-a",
+          sourceType: "character",
+        },
+      });
+      for (const cookie of [await sessionCookie(currentGm.id), await sessionCookie(admin.id)]) {
+        const fullProjection = await app.inject({
+          headers: { cookie },
+          method: "GET",
+          url: "/characters/retained-private-a/effective-skills",
+        });
+        expect(fullProjection.statusCode).toBe(200);
+        expect(fullProjection.json().retainedCharacter.provenanceDetail).toBe("full");
+        expect(fullProjection.body).toMatch(
+          /Night-Entry Crew|Iest Dockside Network|access:iest-contact-copper-latch/,
+        );
+      }
+
+      const uninvolvedProjection = await app.inject({
+        headers: { cookie: outsiderCookie },
+        method: "GET",
+        url: "/characters/retained-private-a/effective-skills",
+      });
+      expect(uninvolvedProjection.statusCode).toBe(404);
+      expect(uninvolvedProjection.body).not.toMatch(
+        /revision|event|ledger|economics|Night-Entry|Iest Dockside|Copper Latch/,
+      );
     });
   });
 }

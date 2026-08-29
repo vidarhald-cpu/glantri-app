@@ -26,6 +26,7 @@ import {
 import {
   calculateRetainedCharacterSkills,
   createRetainedCharacterStateFromPilotRelease,
+  projectOwnerSafeRetainedCharacterSkills,
   projectRetainedCharacterRevision,
   RetainedCharacterRulesError,
   validateCharacterBuild,
@@ -414,6 +415,10 @@ export class RetainedCharacterService {
     command: HeadlessChargenFinalizeInput;
   }): Promise<{ character: CharacterRecord; revision: CharacterRevisionRecord }> {
     const build = characterBuildSchema.parse(input.command.build);
+    let existingCharacter = await this.characterService.getCharacterById(build.id);
+    if (existingCharacter) {
+      await this.assertCharacterLifecycleAuthority(input.actor, build.id);
+    }
     const validation = validateCharacterBuild({ build });
     if (!validation.valid) {
       throw new CharacterValidationError(validation.issues.map((issue) => issue.message));
@@ -441,10 +446,6 @@ export class RetainedCharacterService {
     const envelope = createPilotCharacterVersionEnvelope(input.command.configuration);
     const commandPayload = { ...input.command, build };
     const commandDigest = digest(commandPayload);
-    let existingCharacter = await this.characterService.getCharacterById(build.id);
-    if (existingCharacter) {
-      await this.assertCharacterLifecycleAuthority(input.actor, build.id);
-    }
     const replay = await this.repository.findByCommand(build.id, input.command.idempotencyKey);
     if (replay) {
       if (!existingCharacter) {
@@ -524,6 +525,21 @@ export class RetainedCharacterService {
     }
   }
 
+  async finalizeHeadlessProjected(input: {
+    actor: RetainedCharacterActor;
+    command: HeadlessChargenFinalizeInput;
+  }): Promise<{ character: CharacterRecord; revision: CharacterEffectiveSkillProjection }> {
+    const finalized = await this.finalizeHeadless(input);
+    return {
+      character: finalized.character,
+      revision: await this.projectAuthorizedRevision({
+        actor: input.actor,
+        characterId: finalized.character.id,
+        revision: finalized.revision,
+      }),
+    };
+  }
+
   async getCurrentProjection(input: {
     characterId: string;
     perspective: CharacterProvenancePerspective;
@@ -537,6 +553,22 @@ export class RetainedCharacterService {
     revisionId: string,
   ): Promise<CharacterRevisionRecord | null> {
     return this.repository.findRevision(characterId, revisionId);
+  }
+
+  async projectAuthorizedRevision(input: {
+    actor: RetainedCharacterActor;
+    characterId: string;
+    revision: CharacterRevisionRecord;
+  }): Promise<CharacterEffectiveSkillProjection> {
+    await this.assertCharacterLifecycleAuthority(input.actor, input.characterId);
+    const authority = await this.authorityFor(input.actor, input.characterId);
+    const perspective: CharacterProvenancePerspective =
+      authority === "admin"
+        ? "admin"
+        : authority === "campaign_gm"
+          ? "current_campaign_gm"
+          : "owner";
+    return projectRetainedCharacterRevision(input.revision, perspective)!;
   }
 
   async advanceLearningHistory(input: {
@@ -674,17 +706,24 @@ export class RetainedCharacterService {
   }): Promise<CharacterMigrationPreview> {
     await this.assertCharacterLifecycleAuthority(input.actor, input.characterId);
     const current = await this.requireCurrent(input.characterId, input.expectedRevisionId);
+    const authority = await this.authorityFor(input.actor, input.characterId);
     assertSupportedVersionEnvelope(input.targetEnvelope);
-    const after = buildEffectiveSkills({
+    const rawAfter = buildEffectiveSkills({
       characterId: current.characterId,
       revisionId: current.id,
       state: current.state,
       versionEnvelope: input.targetEnvelope,
     });
+    const before =
+      authority === "owner"
+        ? projectOwnerSafeRetainedCharacterSkills(current, current.effectiveSkills)
+        : current.effectiveSkills;
+    const after =
+      authority === "owner" ? projectOwnerSafeRetainedCharacterSkills(current, rawAfter) : rawAfter;
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     const base = {
       after,
-      before: current.effectiveSkills,
+      before,
       characterId: current.characterId,
       expiresAt,
       expectedRevisionId: current.id,
@@ -735,6 +774,17 @@ export class RetainedCharacterService {
       state: current.state,
       versionEnvelope: input.preview.targetEnvelope,
     });
+    const expectedSafeBefore = projectOwnerSafeRetainedCharacterSkills(
+      current,
+      current.effectiveSkills,
+    );
+    const expectedSafeAfter = projectOwnerSafeRetainedCharacterSkills(current, expectedAfter);
+    const previewUsesFullProjection =
+      digest(input.preview.before) === digest(current.effectiveSkills) &&
+      digest(input.preview.after) === digest(expectedAfter);
+    const previewUsesOwnerSafeProjection =
+      digest(input.preview.before) === digest(expectedSafeBefore) &&
+      digest(input.preview.after) === digest(expectedSafeAfter);
     if (
       input.preview.version !== CHARACTER_MIGRATION_PREVIEW_VERSION ||
       input.preview.mutatesCharacter !== false ||
@@ -742,8 +792,7 @@ export class RetainedCharacterService {
       input.preview.after.characterId !== input.characterId ||
       input.preview.before.characterRevisionId !== current.id ||
       input.preview.after.characterRevisionId !== current.id ||
-      digest(input.preview.before) !== digest(current.effectiveSkills) ||
-      digest(input.preview.after) !== digest(expectedAfter)
+      (!previewUsesFullProjection && !previewUsesOwnerSafeProjection)
     ) {
       throw new RetainedCharacterMutationError(
         "retained_character_invalid_command",

@@ -27,7 +27,7 @@ const mocks = vi.hoisted(() => {
     createRuleSet: vi.fn(),
     getStore: vi.fn(),
   };
-  const retainedCharacterService = { finalizeHeadless: vi.fn() };
+  const retainedCharacterService = { finalizeHeadlessProjected: vi.fn() };
   return {
     adminUser,
     chargenRuleSetService,
@@ -88,7 +88,7 @@ describe("chargen route contract", () => {
       idempotencyKey: "finalize-1",
       pilotCharacterId: "character:pilot:glantrian-retainer-veteran",
     };
-    mocks.retainedCharacterService.finalizeHeadless.mockResolvedValue({
+    mocks.retainedCharacterService.finalizeHeadlessProjected.mockResolvedValue({
       character: { id: "char-1" },
       revision: { id: "revision-1" },
     });
@@ -99,7 +99,7 @@ describe("chargen route contract", () => {
       url: "/chargen/headless/finalize",
     });
     expect(response.statusCode).toBe(200);
-    expect(mocks.retainedCharacterService.finalizeHeadless).toHaveBeenCalledWith({
+    expect(mocks.retainedCharacterService.finalizeHeadlessProjected).toHaveBeenCalledWith({
       actor: { isAdmin: false, userId: "player-1" },
       command,
     });

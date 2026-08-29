@@ -149,7 +149,13 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
         reason: String(body.reason ?? "Learning history advanced."),
         targetLevel: Number(body.targetLevel),
       });
-      return { revision };
+      return {
+        revision: await retainedCharacterService.projectAuthorizedRevision({
+          actor: { isAdmin: user.roles.includes("admin"), userId: user.id },
+          characterId: params.id,
+          revision,
+        }),
+      };
     } catch (error) {
       return handleCharacterMutationError(error, reply);
     }
@@ -170,7 +176,13 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
         professionId: String(body.professionId ?? ""),
         reason: String(body.reason ?? "Profession context changed."),
       });
-      return { revision };
+      return {
+        revision: await retainedCharacterService.projectAuthorizedRevision({
+          actor: { isAdmin: user.roles.includes("admin"), userId: user.id },
+          characterId,
+          revision,
+        }),
+      };
     } catch (error) {
       return handleCharacterMutationError(error, reply);
     }
@@ -209,7 +221,13 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
         idempotencyKey: String(body.idempotencyKey ?? ""),
         preview: body.preview as CharacterMigrationPreview,
       });
-      return { revision };
+      return {
+        revision: await retainedCharacterService.projectAuthorizedRevision({
+          actor: { isAdmin: user.roles.includes("admin"), userId: user.id },
+          characterId,
+          revision,
+        }),
+      };
     } catch (error) {
       return handleCharacterMutationError(error, reply);
     }
@@ -229,7 +247,13 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
         idempotencyKey: String(body.idempotencyKey ?? ""),
         migrationRevisionId: String(body.migrationRevisionId ?? ""),
       });
-      return { revision };
+      return {
+        revision: await retainedCharacterService.projectAuthorizedRevision({
+          actor: { isAdmin: user.roles.includes("admin"), userId: user.id },
+          characterId,
+          revision,
+        }),
+      };
     } catch (error) {
       return handleCharacterMutationError(error, reply);
     }

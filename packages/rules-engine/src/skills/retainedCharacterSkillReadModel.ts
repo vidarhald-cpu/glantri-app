@@ -9,7 +9,9 @@ import {
   PILOT_SKILL_CONTENT_VERSION,
   PILOT_SKILL_RULES_RELEASE_ID,
   type CharacterEffectiveSkillProjection,
+  type CharacterEffectiveSkillReadModel,
   type CharacterEffectiveSkillRow,
+  type CharacterOwnerSafeLedgerEvent,
   type CharacterProvenancePerspective,
   type CharacterRevisionRecord,
   type RetainedCharacterState,
@@ -252,26 +254,12 @@ function sanitizeSummaryRow(row: CharacterEffectiveSkillRow): CharacterEffective
   };
 }
 
-function sanitizeOwnerEvent(
-  event: CharacterRevisionRecord["events"][number],
-): CharacterRevisionRecord["events"][number] {
-  if (!event.protectedProvenance) {
-    return { ...event, protectedProvenance: undefined };
-  }
-
-  return {
-    ...event,
-    economics: undefined,
-    prerequisiteEvidence: undefined,
-    protectedProvenance: undefined,
-    publicExplanation: "Acquisition retained from a protected source.",
-    sourceId: "protected-source",
-    sourceKind: "protected",
-    sourceLabel: "Protected source",
-  };
+interface OwnerProjectionAliases {
+  historyIds: Map<string, string>;
+  sourceIds: Set<string>;
 }
 
-function sanitizeOwnerSkillRows(revision: CharacterRevisionRecord): CharacterEffectiveSkillRow[] {
+function ownerProjectionAliases(revision: CharacterRevisionRecord): OwnerProjectionAliases {
   const protectedHistoryIds = revision.events
     .filter(
       (entry) =>
@@ -280,13 +268,83 @@ function sanitizeOwnerSkillRows(revision: CharacterRevisionRecord): CharacterEff
         entry.protectedProvenance,
     )
     .map((entry) => entry.targetId);
-  const protectedHistoryAliases = new Map(
-    protectedHistoryIds.map((historyId, index) => [historyId, `protected-history-${index + 1}`]),
+  return {
+    historyIds: new Map(
+      protectedHistoryIds.map((historyId, index) => [historyId, `protected-history-${index + 1}`]),
+    ),
+    sourceIds: new Set(
+      revision.events.filter((entry) => entry.protectedProvenance).map((entry) => entry.sourceId),
+    ),
+  };
+}
+
+function ownerSafeEventExplanation(
+  event: CharacterRevisionRecord["events"][number],
+  hasProtectedSource: boolean,
+): string {
+  if (!hasProtectedSource) return event.publicExplanation;
+  switch (event.eventKind) {
+    case "background_competence_granted":
+      return "Starting spoken language granted by a protected background.";
+    case "direct_skill_acquired":
+    case "specialization_acquired":
+    case "specialization_advanced":
+      return event.publicExplanation;
+    case "learning_history_acquired":
+      return `Acquired a protected learning history at level ${event.valueAfter ?? 0}.`;
+    case "learning_history_advanced":
+      return `Advanced a protected learning history from ${event.valueBefore ?? 0} to ${event.valueAfter ?? 0}.`;
+    default:
+      return "Acquisition retained from a protected source.";
+  }
+}
+
+function sanitizeOwnerEvent(
+  event: CharacterRevisionRecord["events"][number],
+  aliases: OwnerProjectionAliases,
+): CharacterOwnerSafeLedgerEvent {
+  const historyAlias = aliases.historyIds.get(event.targetId);
+  const hasProtectedSource = Boolean(
+    event.protectedProvenance || historyAlias || aliases.sourceIds.has(event.sourceId),
   );
+
+  return {
+    actorUserId: event.actorUserId,
+    authority: event.authority,
+    characterId: event.characterId,
+    characterRevisionId: event.characterRevisionId,
+    component: event.component,
+    economics: event.economics,
+    eventId: event.eventId,
+    eventKind: event.eventKind,
+    idempotencyKey: event.idempotencyKey,
+    occurredAt: event.occurredAt,
+    phase: event.phase,
+    prerequisiteEvidence: event.protectedProvenance ? undefined : event.prerequisiteEvidence,
+    publicExplanation: ownerSafeEventExplanation(event, hasProtectedSource),
+    sequence: event.sequence,
+    sourceId: hasProtectedSource ? "protected-source" : event.sourceId,
+    sourceKind: hasProtectedSource ? "protected" : event.sourceKind,
+    sourceLabel: hasProtectedSource ? "Protected source" : event.sourceLabel,
+    targetId: historyAlias ?? event.targetId,
+    targetKind: event.targetKind,
+    valueAfter: event.valueAfter,
+    valueBefore: event.valueBefore,
+    valueDelta: event.valueDelta,
+    versionEnvelope: event.versionEnvelope,
+    visibility: event.visibility,
+  };
+}
+
+function sanitizeOwnerSkillRows(
+  revision: CharacterRevisionRecord,
+  rows: CharacterEffectiveSkillRow[],
+): CharacterEffectiveSkillRow[] {
+  const aliases = ownerProjectionAliases(revision);
   const sanitizeCandidate = (candidate: CharacterEffectiveSkillRow["groupCandidates"][number]) => {
-    const alias = protectedHistoryAliases.get(candidate.historyInstanceId);
+    const alias = aliases.historyIds.get(candidate.historyInstanceId);
     const suppressedAlias = candidate.suppressedByHistoryInstanceId
-      ? protectedHistoryAliases.get(candidate.suppressedByHistoryInstanceId)
+      ? aliases.historyIds.get(candidate.suppressedByHistoryInstanceId)
       : undefined;
     return {
       ...candidate,
@@ -295,11 +353,21 @@ function sanitizeOwnerSkillRows(revision: CharacterRevisionRecord): CharacterEff
       suppressedByHistoryInstanceId: suppressedAlias ?? candidate.suppressedByHistoryInstanceId,
     };
   };
-  return revision.effectiveSkills.rows.map((row) => ({
+  return rows.map((row) => ({
     ...row,
     groupCandidates: row.groupCandidates.map(sanitizeCandidate),
     suppressedOverlaps: row.suppressedOverlaps.map(sanitizeCandidate),
   }));
+}
+
+export function projectOwnerSafeRetainedCharacterSkills(
+  revision: CharacterRevisionRecord,
+  effectiveSkills: CharacterEffectiveSkillReadModel,
+): CharacterEffectiveSkillReadModel {
+  return {
+    ...effectiveSkills,
+    rows: sanitizeOwnerSkillRows(revision, effectiveSkills.rows),
+  };
 }
 
 export function projectRetainedCharacterRevision(
@@ -327,19 +395,33 @@ export function projectRetainedCharacterRevision(
   }
 
   const isGmOrAdmin = perspective === "current_campaign_gm" || perspective === "admin";
+  if (isGmOrAdmin) {
+    return {
+      characterId: revision.characterId,
+      characterRevisionId: revision.id,
+      effectiveSkills: revision.effectiveSkills,
+      events: revision.events,
+      migrationLineage: revision.migrationLineage,
+      perspective,
+      provenanceDetail: "full",
+      revisionState: revision.revisionState,
+    };
+  }
+
+  const aliases = ownerProjectionAliases(revision);
   return {
     characterId: revision.characterId,
     characterRevisionId: revision.id,
     effectiveSkills:
       perspective === "owner"
-        ? { ...revision.effectiveSkills, rows: sanitizeOwnerSkillRows(revision) }
+        ? projectOwnerSafeRetainedCharacterSkills(revision, revision.effectiveSkills)
         : revision.effectiveSkills,
     events: revision.events
-      .filter((event) => isGmOrAdmin || event.visibility !== "gm_only")
-      .map((event) => (isGmOrAdmin ? event : sanitizeOwnerEvent(event))),
+      .filter((event) => event.visibility !== "gm_only")
+      .map((event) => sanitizeOwnerEvent(event, aliases)),
     migrationLineage: revision.migrationLineage,
     perspective,
-    provenanceDetail: isGmOrAdmin ? "full" : "owner_safe",
+    provenanceDetail: "owner_safe",
     revisionState: revision.revisionState,
   };
 }

@@ -215,6 +215,10 @@ export type CharacterProvenancePerspective =
   | "uninvolved_player"
   | "admin";
 
+export type CharacterOwnerSafeLedgerEvent = Omit<CharacterLedgerEvent, "protectedProvenance"> & {
+  protectedProvenance?: never;
+};
+
 export type CharacterEffectiveSkillProjection =
   | {
       characterId: string;
@@ -233,10 +237,20 @@ export type CharacterEffectiveSkillProjection =
       characterId: string;
       characterRevisionId: string;
       effectiveSkills: CharacterEffectiveSkillReadModel;
+      events: CharacterOwnerSafeLedgerEvent[];
+      migrationLineage: CharacterRevisionRecord["migrationLineage"];
+      perspective: "owner";
+      provenanceDetail: "owner_safe";
+      revisionState: CharacterRevisionRecord["revisionState"];
+    }
+  | {
+      characterId: string;
+      characterRevisionId: string;
+      effectiveSkills: CharacterEffectiveSkillReadModel;
       events: CharacterLedgerEvent[];
       migrationLineage: CharacterRevisionRecord["migrationLineage"];
-      perspective: "admin" | "current_campaign_gm" | "owner";
-      provenanceDetail: "full" | "owner_safe";
+      perspective: "admin" | "current_campaign_gm";
+      provenanceDetail: "full";
       revisionState: CharacterRevisionRecord["revisionState"];
     };
 

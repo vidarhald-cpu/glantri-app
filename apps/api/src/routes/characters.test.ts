@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => {
     changeProfessionContext: vi.fn(),
     getCurrentProjection: vi.fn(),
     previewMigration: vi.fn(),
+    projectAuthorizedRevision: vi.fn(),
     rollbackMigration: vi.fn(),
   };
   return {

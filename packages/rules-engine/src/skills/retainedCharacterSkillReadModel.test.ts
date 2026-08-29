@@ -110,10 +110,41 @@ describe("retained Character Pilot v1 composition", () => {
       events: [
         {
           component: "history",
+          economics: { finalBundleCost: 32, memberSnapshot: ["skill:lockpicking"] },
+          eventKind: "learning_history_acquired",
+          prerequisiteEvidence: { accessExceptionIds: ["access:iest-contact-copper-latch"] },
           protectedProvenance: { contact: "Copper Latch" },
+          sourceId: "history:iest-night-entry-crew",
           sourceLabel: "Night-Entry Crew",
           targetId: "investigator:history:2:hist:iest-night-entry-crew",
           targetKind: "history",
+          valueAfter: 3,
+          valueBefore: 0,
+          visibility: "owner_and_gm",
+        },
+        {
+          component: "direct",
+          economics: { amountPaid: 6, ranks: 3, weight: 2 },
+          eventKind: "direct_skill_acquired",
+          prerequisiteEvidence: { accessExceptionIds: ["access:iest-contact-copper-latch"] },
+          protectedProvenance: { accessExceptionIds: ["access:iest-contact-copper-latch"] },
+          publicExplanation: "Acquired 3 direct ranks.",
+          sourceId: "background:iest-dockside-informant",
+          sourceLabel: "Chargen training",
+          targetId: "skill:lockpicking",
+          targetKind: "skill",
+          visibility: "owner_and_gm",
+        },
+        {
+          component: "explicit_grant",
+          economics: { amountPaid: 0, ranks: 11 },
+          eventKind: "background_competence_granted",
+          publicExplanation: "Dockside Informant granted Trade Cant.",
+          sourceId: "background:iest-dockside-informant",
+          sourceKind: "background",
+          sourceLabel: "Dockside Informant",
+          targetId: "spoken:trade-cant",
+          targetKind: "spoken-language",
           visibility: "owner_and_gm",
         },
       ],
@@ -150,14 +181,37 @@ describe("retained Character Pilot v1 composition", () => {
     expect(gm.effectiveSkills.rows).toEqual(rows);
     expect(admin.effectiveSkills.rows).toEqual(rows);
     expect(owner.events?.[0]?.protectedProvenance).toBeUndefined();
-    expect(JSON.stringify(owner)).not.toMatch(/Copper Latch|Night-Entry Crew/);
+    expect(JSON.stringify(owner)).not.toMatch(
+      /Copper Latch|Night-Entry Crew|hist:iest-night-entry-crew|access:iest-contact-copper-latch|background:iest-dockside-informant/,
+    );
     expect(owner.events?.[0]).toMatchObject({
-      publicExplanation: "Acquisition retained from a protected source.",
+      economics: { finalBundleCost: 32, memberSnapshot: ["skill:lockpicking"] },
+      prerequisiteEvidence: undefined,
+      publicExplanation: "Acquired a protected learning history at level 3.",
       sourceId: "protected-source",
       sourceKind: "protected",
       sourceLabel: "Protected source",
+      targetId: "protected-history-1",
+    });
+    expect(owner.events?.[1]).toMatchObject({
+      economics: { amountPaid: 6, ranks: 3, weight: 2 },
+      prerequisiteEvidence: undefined,
+      sourceId: "protected-source",
+      targetId: "skill:lockpicking",
+    });
+    expect(owner.events?.[2]).toMatchObject({
+      economics: { amountPaid: 0, ranks: 11 },
+      publicExplanation: "Starting spoken language granted by a protected background.",
+      sourceId: "protected-source",
+      sourceLabel: "Protected source",
+      targetId: "spoken:trade-cant",
     });
     expect(gm.events?.[0]?.protectedProvenance).toEqual({ contact: "Copper Latch" });
+    expect(gm.events?.[2]).toMatchObject({
+      publicExplanation: "Dockside Informant granted Trade Cant.",
+      sourceId: "background:iest-dockside-informant",
+      sourceLabel: "Dockside Informant",
+    });
     expect(admin.events?.[0]?.protectedProvenance).toEqual({ contact: "Copper Latch" });
     expect(player.events).toBeUndefined();
     expect(player).not.toHaveProperty("characterRevisionId");

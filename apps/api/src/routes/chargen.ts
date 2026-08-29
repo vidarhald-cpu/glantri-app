@@ -40,7 +40,7 @@ export const chargenRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const parsed = headlessChargenFinalizeInputSchema.parse(request.body);
-      const result = await retainedCharacterService.finalizeHeadless({
+      const result = await retainedCharacterService.finalizeHeadlessProjected({
         actor: { isAdmin: user.roles.includes("admin"), userId: user.id },
         command: parsed as never,
       });
