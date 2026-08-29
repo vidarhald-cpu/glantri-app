@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
+
 import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { AuthService, prisma } from "@glantri/database";
-import type { CharacterBuild } from "@glantri/domain";
+import type { CharacterBuild, CharacterMigrationPreview } from "@glantri/domain";
 import {
   createTestCampaign,
   createTestCharacter,
@@ -67,6 +69,29 @@ function retainedBuild(characterId: string): CharacterBuild {
       history: [],
       pendingAttempts: [],
     },
+  };
+}
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entry]) => entry !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, canonicalize(entry)]),
+    );
+  }
+  return value;
+}
+
+function withClientRecomputedDigest(preview: CharacterMigrationPreview): CharacterMigrationPreview {
+  const { previewDigest: _previewDigest, ...base } = preview;
+  return {
+    ...base,
+    previewDigest: `sha256:${createHash("sha256")
+      .update(JSON.stringify(canonicalize(base)))
+      .digest("hex")}`,
   };
 }
 
@@ -319,6 +344,28 @@ if (!appUsesTestDatabase) {
       });
       const currentRevisionId = finalized.json().revision.characterRevisionId as string;
       const historyInstanceId = "protected-history-probe";
+      const specializationEvent = await prisma.characterLedgerEvent.findFirstOrThrow({
+        where: {
+          characterId: "retained-private-a",
+          characterRevisionId: currentRevisionId,
+          component: "specialization",
+        },
+      });
+      await prisma.characterLedgerEvent.update({
+        data: {
+          prerequisiteEvidenceJson: {
+            ...(specializationEvent.prerequisiteEvidenceJson as Record<string, unknown>),
+            audit: {
+              accessExceptionIds: ["access:iest-contact-copper-latch"],
+              nested: {
+                mechanicalReference: "spec:warded-lock-entry",
+                sourceReferences: ["access:iest-contact-copper-latch"],
+              },
+            },
+          },
+        },
+        where: { id: specializationEvent.id },
+      });
       const ownerProjection = await app.inject({
         headers: { cookie: ownerCookie },
         method: "GET",
@@ -340,6 +387,20 @@ if (!appUsesTestDatabase) {
             (entry: { component: string }) => entry.component === "direct",
           ),
       ).toMatchObject({ economics: { ranks: 3 } });
+      expect(
+        ownerProjection
+          .json()
+          .retainedCharacter.events.find(
+            (entry: { component: string }) => entry.component === "specialization",
+          ),
+      ).toMatchObject({
+        prerequisiteEvidence: {
+          audit: {
+            nested: { mechanicalReference: "spec:warded-lock-entry" },
+          },
+          explicitlyAcquired: true,
+        },
+      });
       expect(
         ownerProjection
           .json()
@@ -463,7 +524,8 @@ if (!appUsesTestDatabase) {
       });
       expect(previewResponse.statusCode).toBe(200);
       expect(previewResponse.body).not.toMatch(protectedSourcePattern);
-      const preview = previewResponse.json().preview;
+      const preview = previewResponse.json().preview as CharacterMigrationPreview;
+      expect(preview.planId).toEqual(expect.any(String));
 
       const outsiderApply = await app.inject({
         headers: { cookie: outsiderCookie },
@@ -495,33 +557,58 @@ if (!appUsesTestDatabase) {
       });
       expect(routeMismatch.statusCode).toBe(409);
       expect(routeMismatch.json()).toMatchObject({ code: "retained_character_invalid_command" });
+      expect(routeMismatch.body).not.toMatch(/currentRevisionId|Copper Latch|Night-Entry Crew/);
 
       const sourceMismatch = await app.inject({
         headers: { cookie: ownerCookie },
         method: "POST",
         payload: {
           idempotencyKey: "source-b-plan-a",
-          preview: {
+          preview: withClientRecomputedDigest({
             ...preview,
             expectedRevisionId: finalizedB.json().revision.characterRevisionId,
-          },
+          }),
         },
         url: "/characters/retained-private-a/migrations/apply",
       });
       expect(sourceMismatch.statusCode).toBe(409);
-      expect(sourceMismatch.json()).toMatchObject({ code: "retained_character_stale_revision" });
+      expect(sourceMismatch.json()).toMatchObject({ code: "retained_character_invalid_command" });
+      expect(sourceMismatch.body).not.toMatch(/currentRevisionId|Copper Latch|Night-Entry Crew/);
 
       const tamperedPlan = await app.inject({
         headers: { cookie: ownerCookie },
         method: "POST",
         payload: {
           idempotencyKey: "tampered-plan-a",
-          preview: { ...preview, migrationId: "migration:tampered" },
+          preview: withClientRecomputedDigest({
+            ...preview,
+            migrationId: "migration:tampered",
+          }),
         },
         url: "/characters/retained-private-a/migrations/apply",
       });
       expect(tamperedPlan.statusCode).toBe(409);
       expect(tamperedPlan.json()).toMatchObject({ code: "retained_character_invalid_command" });
+      expect(tamperedPlan.body).not.toMatch(/currentRevisionId|Copper Latch|Night-Entry Crew/);
+      const forgedPlanIdentity = await app.inject({
+        headers: { cookie: ownerCookie },
+        method: "POST",
+        payload: {
+          idempotencyKey: "forged-plan-identity-a",
+          preview: withClientRecomputedDigest({
+            ...preview,
+            planId: "client-forged-plan-id",
+          }),
+        },
+        url: "/characters/retained-private-a/migrations/apply",
+      });
+      expect(forgedPlanIdentity.statusCode).toBe(409);
+      expect(forgedPlanIdentity.json()).toMatchObject({
+        code: "retained_character_invalid_command",
+      });
+      expect(forgedPlanIdentity.body).not.toMatch(
+        /currentRevisionId|Copper Latch|Night-Entry Crew/,
+      );
       await expect(prisma.characterRevision.count()).resolves.toBe(beforeFailedApplyCount);
 
       const applied = await app.inject({
@@ -583,6 +670,17 @@ if (!appUsesTestDatabase) {
         expect(fullProjection.body).toMatch(
           /Night-Entry Crew|Iest Dockside Network|access:iest-contact-copper-latch/,
         );
+        expect(
+          fullProjection
+            .json()
+            .retainedCharacter.events.find(
+              (entry: { component: string }) => entry.component === "specialization",
+            ),
+        ).toMatchObject({
+          prerequisiteEvidence: {
+            audit: { accessExceptionIds: ["access:iest-contact-copper-latch"] },
+          },
+        });
       }
 
       const uninvolvedProjection = await app.inject({

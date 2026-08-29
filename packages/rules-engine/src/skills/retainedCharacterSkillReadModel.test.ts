@@ -139,6 +139,24 @@ describe("retained Character Pilot v1 composition", () => {
           component: "explicit_grant",
           economics: { amountPaid: 0, ranks: 11 },
           eventKind: "background_competence_granted",
+          prerequisiteEvidence: {
+            accessExceptionIds: [
+              "access:iest-contact-copper-latch",
+              "rule:public-spoken-language-grant",
+            ],
+            mechanicalPrerequisites: {
+              competencyId: "skill:lockpicking",
+              minimumLevel: 3,
+            },
+            nestedReferences: {
+              fallback: "skill:lockpicking",
+              protected: "access:iest-contact-copper-latch",
+            },
+            referenceMetadata: {
+              "access:iest-contact-copper-latch": { granted: true },
+              "skill:lockpicking": { minimumLevel: 3 },
+            },
+          },
           publicExplanation: "Dockside Informant granted Trade Cant.",
           sourceId: "background:iest-dockside-informant",
           sourceKind: "background",
@@ -201,6 +219,15 @@ describe("retained Character Pilot v1 composition", () => {
     });
     expect(owner.events?.[2]).toMatchObject({
       economics: { amountPaid: 0, ranks: 11 },
+      prerequisiteEvidence: {
+        accessExceptionIds: ["rule:public-spoken-language-grant"],
+        mechanicalPrerequisites: {
+          competencyId: "skill:lockpicking",
+          minimumLevel: 3,
+        },
+        nestedReferences: { fallback: "skill:lockpicking" },
+        referenceMetadata: { "skill:lockpicking": { minimumLevel: 3 } },
+      },
       publicExplanation: "Starting spoken language granted by a protected background.",
       sourceId: "protected-source",
       sourceLabel: "Protected source",

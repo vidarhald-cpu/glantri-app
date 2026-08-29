@@ -256,26 +256,79 @@ function sanitizeSummaryRow(row: CharacterEffectiveSkillRow): CharacterEffective
 
 interface OwnerProjectionAliases {
   historyIds: Map<string, string>;
+  protectedReferences: Set<string>;
   sourceIds: Set<string>;
 }
 
+function collectProtectedReferences(value: unknown, references: Set<string>): void {
+  if (typeof value === "string") {
+    references.add(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectProtectedReferences(entry, references));
+    return;
+  }
+  if (value && typeof value === "object") {
+    Object.values(value as Record<string, unknown>).forEach((entry) =>
+      collectProtectedReferences(entry, references),
+    );
+  }
+}
+
 function ownerProjectionAliases(revision: CharacterRevisionRecord): OwnerProjectionAliases {
-  const protectedHistoryIds = revision.events
-    .filter(
-      (entry) =>
-        entry.component === "history" &&
-        entry.targetKind === "history" &&
-        entry.protectedProvenance,
-    )
+  const protectedEvents = revision.events.filter((entry) => entry.protectedProvenance);
+  const protectedHistoryIds = protectedEvents
+    .filter((entry) => entry.component === "history" && entry.targetKind === "history")
     .map((entry) => entry.targetId);
+  const protectedReferences = new Set<string>();
+  for (const entry of protectedEvents) {
+    protectedReferences.add(entry.sourceId);
+    protectedReferences.add(entry.sourceLabel);
+    if (entry.targetKind === "history") protectedReferences.add(entry.targetId);
+    collectProtectedReferences(entry.protectedProvenance, protectedReferences);
+  }
   return {
     historyIds: new Map(
       protectedHistoryIds.map((historyId, index) => [historyId, `protected-history-${index + 1}`]),
     ),
-    sourceIds: new Set(
-      revision.events.filter((entry) => entry.protectedProvenance).map((entry) => entry.sourceId),
-    ),
+    protectedReferences,
+    sourceIds: new Set(protectedEvents.map((entry) => entry.sourceId)),
   };
+}
+
+function sanitizeOwnerNestedEvidence(value: unknown, protectedReferences: Set<string>): unknown {
+  if (typeof value === "string") {
+    return protectedReferences.has(value) ? undefined : value;
+  }
+  if (Array.isArray(value)) {
+    const sanitized = value
+      .map((entry) => sanitizeOwnerNestedEvidence(entry, protectedReferences))
+      .filter((entry) => entry !== undefined);
+    return sanitized.length === 0 && value.length > 0 ? undefined : sanitized;
+  }
+  if (value && typeof value === "object") {
+    const originalEntries = Object.entries(value as Record<string, unknown>);
+    const sanitizedEntries = originalEntries.flatMap(([key, entry]) => {
+      if (protectedReferences.has(key)) return [];
+      const sanitized = sanitizeOwnerNestedEvidence(entry, protectedReferences);
+      return sanitized === undefined ? [] : [[key, sanitized] as const];
+    });
+    return sanitizedEntries.length === 0 && originalEntries.length > 0
+      ? undefined
+      : Object.fromEntries(sanitizedEntries);
+  }
+  return value;
+}
+
+function sanitizeOwnerRecord(
+  value: Record<string, unknown> | undefined,
+  protectedReferences: Set<string>,
+): Record<string, unknown> | undefined {
+  const sanitized = sanitizeOwnerNestedEvidence(value, protectedReferences);
+  return sanitized && typeof sanitized === "object" && !Array.isArray(sanitized)
+    ? (sanitized as Record<string, unknown>)
+    : undefined;
 }
 
 function ownerSafeEventExplanation(
@@ -314,13 +367,16 @@ function sanitizeOwnerEvent(
     characterId: event.characterId,
     characterRevisionId: event.characterRevisionId,
     component: event.component,
-    economics: event.economics,
+    economics: sanitizeOwnerRecord(event.economics, aliases.protectedReferences),
     eventId: event.eventId,
     eventKind: event.eventKind,
     idempotencyKey: event.idempotencyKey,
     occurredAt: event.occurredAt,
     phase: event.phase,
-    prerequisiteEvidence: event.protectedProvenance ? undefined : event.prerequisiteEvidence,
+    prerequisiteEvidence: sanitizeOwnerRecord(
+      event.prerequisiteEvidence,
+      aliases.protectedReferences,
+    ),
     publicExplanation: ownerSafeEventExplanation(event, hasProtectedSource),
     sequence: event.sequence,
     sourceId: hasProtectedSource ? "protected-source" : event.sourceId,

@@ -284,6 +284,7 @@ export interface CharacterMigrationPreview {
   expectedRevisionId: string;
   migrationId: string;
   mutatesCharacter: false;
+  planId: string;
   previewDigest: `sha256:${string}`;
   targetEnvelope: CharacterVersionEnvelope;
   version: typeof CHARACTER_MIGRATION_PREVIEW_VERSION;

@@ -1,6 +1,13 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
-import type { CharacterBuild, CharacterRecord, CharacterRevisionRecord } from "@glantri/domain";
+import type {
+  CharacterBuild,
+  CharacterMigrationPreview,
+  CharacterRecord,
+  CharacterRevisionRecord,
+} from "@glantri/domain";
 
 import type { RetainedCharacterRepository } from "../repositories/retainedCharacterRepository";
 import type { CharacterService } from "./characterService";
@@ -53,6 +60,29 @@ function build(characterId: string): CharacterBuild {
       history: [],
       pendingAttempts: [],
     },
+  };
+}
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entry]) => entry !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, canonicalize(entry)]),
+    );
+  }
+  return value;
+}
+
+function withClientRecomputedDigest(preview: CharacterMigrationPreview): CharacterMigrationPreview {
+  const { previewDigest: _previewDigest, ...base } = preview;
+  return {
+    ...base,
+    previewDigest: `sha256:${createHash("sha256")
+      .update(JSON.stringify(canonicalize(base)))
+      .digest("hex")}`,
   };
 }
 
@@ -261,6 +291,7 @@ describe("RetainedCharacterService", () => {
         id: "memory-maintenance",
       }),
     });
+    expect(preview.planId).toEqual(expect.any(String));
     await expect(
       service.applyMigration({
         actor: { isAdmin: false, userId: "owner" },
@@ -289,7 +320,6 @@ describe("RetainedCharacterService", () => {
         },
       }),
     ).rejects.toMatchObject({ code: "retained_character_invalid_command" });
-
     const migrated = await service.applyMigration({
       actor: { isAdmin: false, userId: "gm" },
       characterId: finalized.character.id,
@@ -446,15 +476,32 @@ describe("RetainedCharacterService", () => {
         actor,
         characterId: finalizedA.character.id,
         idempotencyKey: "source-b",
-        preview: { ...preview, expectedRevisionId: finalizedB.revision.id },
+        preview: withClientRecomputedDigest({
+          ...preview,
+          expectedRevisionId: finalizedB.revision.id,
+        }),
       }),
-    ).rejects.toMatchObject({ code: "retained_character_stale_revision" });
+    ).rejects.toMatchObject({ code: "retained_character_invalid_command" });
     await expect(
       service.applyMigration({
         actor,
         characterId: finalizedA.character.id,
         idempotencyKey: "tampered-plan",
-        preview: { ...preview, migrationId: "migration:tampered" },
+        preview: withClientRecomputedDigest({
+          ...preview,
+          migrationId: "migration:tampered",
+        }),
+      }),
+    ).rejects.toMatchObject({ code: "retained_character_invalid_command" });
+    await expect(
+      service.applyMigration({
+        actor,
+        characterId: finalizedA.character.id,
+        idempotencyKey: "forged-plan-identity",
+        preview: withClientRecomputedDigest({
+          ...preview,
+          planId: "client-forged-plan-id",
+        }),
       }),
     ).rejects.toMatchObject({ code: "retained_character_invalid_command" });
     expect(revisionCount(finalizedA.character.id)).toBe(1);

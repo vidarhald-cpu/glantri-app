@@ -67,6 +67,16 @@ interface RevisionWrite extends Omit<
   events: Array<Omit<CharacterLedgerEvent, "occurredAt">>;
 }
 
+interface IssuedMigrationPlan {
+  characterId: string;
+  expectedRevisionId: string;
+  expiresAt: string;
+  migrationId: string;
+  previewDigest: `sha256:${string}`;
+}
+
+const issuedMigrationPlans = new Map<string, IssuedMigrationPlan>();
+
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (value && typeof value === "object") {
@@ -729,13 +739,16 @@ export class RetainedCharacterService {
       expectedRevisionId: current.id,
       migrationId: input.migrationId,
       mutatesCharacter: false as const,
+      planId: randomUUID(),
       targetEnvelope: input.targetEnvelope,
       version: CHARACTER_MIGRATION_PREVIEW_VERSION,
       warnings: [
         "Historical acquisitions, Scenario snapshots, and accepted rolls remain unchanged.",
       ],
     };
-    return { ...base, previewDigest: digest(base) };
+    const preview = { ...base, previewDigest: digest(base) };
+    this.rememberIssuedMigrationPlan(preview);
+    return preview;
   }
 
   async applyMigration(input: {
@@ -753,6 +766,7 @@ export class RetainedCharacterService {
     }
     const replay = await this.findIdempotent(input.characterId, input.idempotencyKey, input);
     if (replay) return replay;
+    this.assertIssuedMigrationPlan(input.preview);
     const current = await this.requireCurrent(input.characterId, input.preview.expectedRevisionId);
     assertSupportedVersionEnvelope(input.preview.targetEnvelope);
     if (input.preview.expiresAt <= new Date().toISOString()) {
@@ -937,6 +951,44 @@ export class RetainedCharacterService {
         );
       }
       throw error;
+    }
+  }
+
+  private rememberIssuedMigrationPlan(preview: CharacterMigrationPreview): void {
+    const now = new Date().toISOString();
+    for (const [planId, plan] of issuedMigrationPlans) {
+      if (plan.expiresAt <= now) issuedMigrationPlans.delete(planId);
+    }
+    issuedMigrationPlans.set(preview.planId, {
+      characterId: preview.characterId,
+      expectedRevisionId: preview.expectedRevisionId,
+      expiresAt: preview.expiresAt,
+      migrationId: preview.migrationId,
+      previewDigest: preview.previewDigest,
+    });
+  }
+
+  private assertIssuedMigrationPlan(preview: CharacterMigrationPreview): void {
+    const issued = issuedMigrationPlans.get(preview.planId);
+    if (issued && issued.expiresAt <= new Date().toISOString()) {
+      issuedMigrationPlans.delete(preview.planId);
+      throw new RetainedCharacterMutationError(
+        "retained_character_invalid_command",
+        "The migration preview expired; create a new preview.",
+      );
+    }
+    if (
+      !issued ||
+      issued.characterId !== preview.characterId ||
+      issued.expectedRevisionId !== preview.expectedRevisionId ||
+      issued.expiresAt !== preview.expiresAt ||
+      issued.migrationId !== preview.migrationId ||
+      issued.previewDigest !== preview.previewDigest
+    ) {
+      throw new RetainedCharacterMutationError(
+        "retained_character_invalid_command",
+        "The migration preview is not the exact server-issued plan.",
+      );
     }
   }
 

@@ -82,10 +82,12 @@ from the prior Campaign remain immutable.
 
 ## Required migration maintenance and lineage
 
-Migration preview is non-mutating and bound to the exact current revision, target envelope, expiry,
-and digest. For an actively rostered Character, the current Campaign GM (or audited admin) applies
-accepted required maintenance. For an unrostered Character, its owner or an admin may apply it.
-This maintenance is not a permanent per-player version fork.
+Migration preview is non-mutating and carries an opaque server-issued plan identity bound to the
+exact Character, current revision, migration identity, target envelope, expiry, projection context,
+and digest. A client-recomputed digest cannot authenticate changed plan content; apply accepts only
+the exact still-live server-issued plan. For an actively rostered Character, the current Campaign GM
+(or audited admin) applies accepted required maintenance. For an unrostered Character, its owner or
+an admin may apply it. This maintenance is not a permanent per-player version fork.
 
 Apply creates a new revision and migration event while retaining the source revision and all
 historical acquisitions. Exact rollback is another appended revision and is available only while
