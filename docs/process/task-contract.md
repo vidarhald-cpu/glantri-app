@@ -156,16 +156,18 @@ Do not prescribe a comprehensive screen design when the functional area is still
 
 Required when behavior depends on role, character control, involvement, ownership, knowledge, visibility, secret state, private choices, or player-specific calculations.
 
+Apply the canonical [Authority and Information Projection Principle](../architecture/information-authority-and-projection.md). Action authorization, information projection, and rendered presentation are separate acceptance gates.
+
 State:
 
 - who may act;
 - who may receive each sensitive input, roll, calculation, note, and outcome;
 - what safe completion/status fact remains after redaction;
-- where sanitization or authorization is enforced;
+- which server/domain DTO or serialization boundary enforces projection, separately from where action authorization is enforced;
 - behavior for ambiguous visibility and stale/cross-perspective data;
-- negative acceptance examples: facts that must be absent from unauthorized payloads and UI.
+- negative acceptance examples: keys, values, identities, relationships, and executable state that must be absent from unauthorized server/API payloads, DTOs, serialized responses or generated HTML, and UI.
 
-Client-side hiding alone is not acceptance evidence for protected facts.
+Client-side hiding, a rejected action, zero mutation, and a privacy-equivalent error are each insufficient evidence that protected facts were excluded from the payload.
 
 #### Product-quality acceptance
 
@@ -227,7 +229,8 @@ Include, as applicable:
 - expected visible result for each perspective;
 - expected absent/private facts;
 - focused unit/component tests;
-- API/projection/sanitization evidence;
+- negative server/API payload, DTO, serialized-response or generated-HTML key/value/identity checks;
+- API/projection/sanitization evidence separate from action-authorization and DOM evidence;
 - Playwright scenario or screenshots;
 - reload, history, undo, stale-response, keyboard, and responsive checks;
 - known limitations and deliberately deferred findings.
