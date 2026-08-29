@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { createCharacterForE2e } from "./character-fixture";
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
@@ -74,8 +75,20 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     const recipientMe = (await (
       await recipientContext.request.get(`${API_URL}/auth/me`)
     ).json()) as { user: { id: string } };
-    const characterId = "smoke-char-00001";
-    const recipientCharacterId = "smoke-char-00002";
+    const characterId = `acov4-player-${suffix}`;
+    const recipientCharacterId = `acov4-recipient-${suffix}`;
+    await createCharacterForE2e({
+      apiUrl: API_URL,
+      id: characterId,
+      name: "Smoke Character",
+      request: playerContext.request,
+    });
+    await createCharacterForE2e({
+      apiUrl: API_URL,
+      id: recipientCharacterId,
+      name: "Smoke Non-holder Character",
+      request: recipientContext.request,
+    });
 
     const campaign = await postJson<{ campaign: { id: string } }>(gmPage.request, "/campaigns", {
       name: `ACoV4 Item Combat ${suffix}`,

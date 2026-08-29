@@ -7,6 +7,7 @@ import {
   type EncounterSession,
 } from "@glantri/domain";
 import { setScenarioParticipantVisibilityForTest } from "@glantri/database/testing/scenarioPrivacy";
+import { createCharacterForE2e } from "./character-fixture";
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
@@ -240,9 +241,23 @@ test.describe("Player attack initiative identity", () => {
     const playerBUser = await json<{ user: { id: string } }>(
       await playerBContext.request.get(`${API_URL}/auth/me`),
     );
+    const characterAId = `initiative-player-${suffix}`;
+    const characterBId = `initiative-other-${suffix}`;
+    await createCharacterForE2e({
+      apiUrl: API_URL,
+      id: characterAId,
+      name: "Smoke Character",
+      request: playerAContext.request,
+    });
+    await createCharacterForE2e({
+      apiUrl: API_URL,
+      id: characterBId,
+      name: "Smoke Non-holder Character",
+      request: playerBContext.request,
+    });
     for (const [context, characterId] of [
-      [playerAContext, "smoke-char-00001"],
-      [playerBContext, "smoke-char-00002"],
+      [playerAContext, characterAId],
+      [playerBContext, characterBId],
     ] as const) {
       await json(
         await context.request.post(
@@ -257,7 +272,7 @@ test.describe("Player attack initiative identity", () => {
         data: { name: `Issue 352 Initiative ${suffix}`, status: "active" },
       }),
     );
-    for (const sourceId of ["smoke-char-00001", "smoke-char-00002"]) {
+    for (const sourceId of [characterAId, characterBId]) {
       await json(
         await gmPage.request.post(`${API_URL}/campaigns/${campaign.campaign.id}/roster`, {
           data: { category: "pc", sourceId, sourceType: "character" },
@@ -272,13 +287,13 @@ test.describe("Player attack initiative identity", () => {
     const participantA = await json<{ participant: { id: string } }>(
       await gmPage.request.post(
         `${API_URL}/scenarios/${scenario.scenario.id}/participants/character`,
-        { data: { characterId: "smoke-char-00001", controlledByUserId: playerAUser.user.id } },
+        { data: { characterId: characterAId, controlledByUserId: playerAUser.user.id } },
       ),
     );
     const participantB = await json<{ participant: { id: string } }>(
       await gmPage.request.post(
         `${API_URL}/scenarios/${scenario.scenario.id}/participants/character`,
-        { data: { characterId: "smoke-char-00002", controlledByUserId: playerBUser.user.id } },
+        { data: { characterId: characterBId, controlledByUserId: playerBUser.user.id } },
       ),
     );
     let participantARevision: string | undefined;
@@ -353,14 +368,14 @@ test.describe("Player attack initiative identity", () => {
             participantMembershipMode: "explicit",
             participants: [
               {
-                characterId: "smoke-char-00001",
+                characterId: characterAId,
                 id: encounterParticipantIds.attackerAId,
                 label: "Smoke Character",
                 participantType: "scenario",
                 scenarioParticipantId: participantA.participant.id,
               },
               {
-                characterId: "smoke-char-00002",
+                characterId: characterBId,
                 id: encounterParticipantIds.attackerBId,
                 label: "Smoke Non-holder Character",
                 participantType: "scenario",

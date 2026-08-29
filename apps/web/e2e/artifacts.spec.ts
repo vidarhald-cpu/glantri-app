@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
+import { createCharacterForE2e } from "./character-fixture";
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 const WEB_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
@@ -8,14 +9,6 @@ const ARTIFACT_MUTATION_HEADERS = {
   origin: WEB_URL,
   "x-glantri-artifact-mutation": "1",
 };
-
-function loadCharacterIds(): { characterId: string; nonHolderCharacterId: string } {
-  const state = JSON.parse(fs.readFileSync(path.join(__dirname, "test-state.json"), "utf8")) as {
-    characterId: string;
-    nonHolderCharacterId: string;
-  };
-  return state;
-}
 
 test.describe("Campaign Artifact player presentation", () => {
   test.use({ storageState: "e2e/.auth/gm.json" });
@@ -28,12 +21,34 @@ test.describe("Campaign Artifact player presentation", () => {
       process.env.CI === "true" && process.env.ARTIFACT_E2E_STORAGE_ENABLED !== "1",
       "The production Docker smoke environment intentionally has no Artifact storage configuration; the isolated Artifact E2E run supplies one.",
     );
-    const title = `Artifact player presentation ${Date.now()}`;
+    const suffix = Date.now();
+    const title = `Artifact player presentation ${suffix}`;
     const altText = "A smiling dwarf holding a tankard";
     const imagePath = path.resolve(__dirname, "../public/images/GrinulGrimbrew.jpeg");
-    const characterIds = loadCharacterIds();
+    const characterIds = {
+      characterId: `artifact-player-${suffix}`,
+      nonHolderCharacterId: `artifact-other-${suffix}`,
+    };
+    const playerContext = await browser.newContext({
+      storageState: path.resolve(__dirname, ".auth/player.json"),
+    });
+    const campaignOnlyContext = await browser.newContext({
+      storageState: path.resolve(__dirname, ".auth/non-holder.json"),
+    });
+    await createCharacterForE2e({
+      apiUrl: API_URL,
+      id: characterIds.characterId,
+      name: "Smoke Character",
+      request: playerContext.request,
+    });
+    await createCharacterForE2e({
+      apiUrl: API_URL,
+      id: characterIds.nonHolderCharacterId,
+      name: "Smoke Non-holder Character",
+      request: campaignOnlyContext.request,
+    });
     const campaignResponse = await page.request.post(`${API_URL}/campaigns`, {
-      data: { name: `Artifact presentation ${Date.now()}`, status: "active" },
+      data: { name: `Artifact presentation ${suffix}`, status: "active" },
     });
     expect(campaignResponse.status()).toBe(200);
     const campaignId = ((await campaignResponse.json()) as { campaign: { id: string } }).campaign
@@ -52,9 +67,6 @@ test.describe("Campaign Artifact player presentation", () => {
     const scenarioId = ((await scenarioResponse.json()) as { scenario: { id: string } }).scenario
       .id;
 
-    const playerContext = await browser.newContext({
-      storageState: path.resolve(__dirname, ".auth/player.json"),
-    });
     const playerMe = await playerContext.request.get(`${API_URL}/auth/me`);
     expect((await playerMe.json()).user.email).toBe("smoke-player@test.local");
     const participantResponse = await playerContext.request.post(
@@ -169,9 +181,6 @@ test.describe("Campaign Artifact player presentation", () => {
       expect.arrayContaining([expect.objectContaining({ title })]),
     );
 
-    const campaignOnlyContext = await browser.newContext({
-      storageState: path.resolve(__dirname, ".auth/non-holder.json"),
-    });
     const campaignOnlyList = await campaignOnlyContext.request.get(
       `${API_URL}/campaigns/${campaignId}/artifacts`,
     );

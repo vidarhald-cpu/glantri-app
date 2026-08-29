@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
+import { createCharacterForE2e } from "./character-fixture";
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
@@ -15,7 +16,6 @@ interface SmokeTestState {
   delegatedScenarioDescription: string;
   delegatedScenarioId: string;
   delegatedScenarioName: string;
-  nonHolderCharacterId: string;
 }
 
 function loadTestState(): SmokeTestState {
@@ -85,11 +85,24 @@ test.describe("campaign workspace", () => {
   });
 
   test("discovers and rosters another player's Character through the safe candidate view", async ({
+    browser,
     page,
   }) => {
-    const testState = loadTestState();
+    const suffix = Date.now();
+    const candidateCharacterId = `candidate-other-${suffix}`;
+    const candidateCharacterName = `Candidate Character ${suffix}`;
+    const nonHolderContext = await browser.newContext({
+      storageState: "e2e/.auth/non-holder.json",
+    });
+    await createCharacterForE2e({
+      apiUrl: API_URL,
+      id: candidateCharacterId,
+      name: candidateCharacterName,
+      request: nonHolderContext.request,
+    });
+    await nonHolderContext.close();
     const createResponse = await page.request.post(`${API_URL}/campaigns`, {
-      data: { name: `Cross-player candidate ${Date.now()}` },
+      data: { name: `Cross-player candidate ${suffix}` },
     });
     expect(createResponse.ok()).toBe(true);
     const { campaign } = (await createResponse.json()) as { campaign: { id: string } };
@@ -105,13 +118,13 @@ test.describe("campaign workspace", () => {
       characters: Array<Record<string, unknown>>;
     };
     const otherPlayerCharacter = candidatePayload.characters.find(
-      (candidate) => candidate.id === testState.nonHolderCharacterId,
+      (candidate) => candidate.id === candidateCharacterId,
     );
 
     expect(otherPlayerCharacter).toEqual({
       alreadyRostered: false,
-      id: testState.nonHolderCharacterId,
-      name: "Smoke Non-holder Character",
+      id: candidateCharacterId,
+      name: candidateCharacterName,
       ownerLabel: "Smoke Non-holder",
     });
     expect(Object.keys(otherPlayerCharacter ?? {}).sort()).toEqual([
@@ -122,7 +135,7 @@ test.describe("campaign workspace", () => {
     ]);
 
     const rosterToggle = page.getByRole("checkbox", {
-      name: "Toggle Smoke Non-holder Character campaign roster membership",
+      name: `Toggle ${candidateCharacterName} campaign roster membership`,
     });
     await expect(rosterToggle).toBeVisible({ timeout: 10_000 });
     await expect(rosterToggle).not.toBeChecked();

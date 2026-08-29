@@ -1,16 +1,8 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { setScenarioParticipantVisibilityForTest } from "@glantri/database/testing/scenarioPrivacy";
-import fs from "node:fs";
-import path from "node:path";
+import { createCharacterForE2e } from "./character-fixture";
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
-
-function loadCharacters(): { characterId: string; nonHolderCharacterId: string } {
-  return JSON.parse(fs.readFileSync(path.join(__dirname, "test-state.json"), "utf8")) as {
-    characterId: string;
-    nonHolderCharacterId: string;
-  };
-}
 
 async function json<T>(response: Awaited<ReturnType<APIRequestContext["get"]>>): Promise<T> {
   if (!response.ok()) {
@@ -41,7 +33,9 @@ test.describe("Lost Seal Scenario happy path", () => {
     page,
   }) => {
     test.setTimeout(90_000);
-    const { characterId: characterAId, nonHolderCharacterId: characterBId } = loadCharacters();
+    const suffix = Date.now();
+    const characterAId = `lost-seal-player-${suffix}`;
+    const characterBId = `lost-seal-other-${suffix}`;
     const playerAContext = await browser.newContext({ storageState: "e2e/.auth/player.json" });
     const playerBContext = await browser.newContext({
       storageState: "e2e/.auth/non-holder.json",
@@ -58,10 +52,22 @@ test.describe("Lost Seal Scenario happy path", () => {
     const playerBUser = await json<{ user: { id: string } }>(
       await playerBContext.request.get(`${API_URL}/auth/me`),
     );
+    await createCharacterForE2e({
+      apiUrl: API_URL,
+      id: characterAId,
+      name: "Smoke Character",
+      request: playerAContext.request,
+    });
+    await createCharacterForE2e({
+      apiUrl: API_URL,
+      id: characterBId,
+      name: "Smoke Non-holder Character",
+      request: playerBContext.request,
+    });
 
     const campaign = await json<{ campaign: { id: string } }>(
       await page.request.post(`${API_URL}/campaigns`, {
-        data: { name: `Lost Seal ${Date.now()}`, status: "active" },
+        data: { name: `Lost Seal ${suffix}`, status: "active" },
       }),
     );
     for (const characterId of [characterAId, characterBId]) {
