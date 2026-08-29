@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   accrueRepresentativeBleed,
+  buildRepresentativeCriticalRuntimeDefinition,
   getActiveMortalityOrPermanenceMechanics,
   getRepresentativeCriticalFixture,
   getRepresentativeTreatmentSkillCandidates,
@@ -206,6 +207,60 @@ describe("#377 representative C1 Critical fixtures", () => {
     expect(() => resolveRepresentativeBleedRate(crush.bleed[0]!)).toThrow(
       "requires one stored positive roll",
     );
+  });
+
+  it("builds a retained server-owned runtime only for the 34 active fixtures", () => {
+    const rolls = [0.49, 0.99];
+    const runtime = buildRepresentativeCriticalRuntimeDefinition(
+      "falling_crushing|whole_body|10",
+      () => rolls.shift() ?? 0,
+    );
+
+    expect(runtime?.bleed).toEqual([
+      expect.objectContaining({
+        allowedControlStates: ["active", "partial", "staunched_zero", "resolved"],
+        rate: { denominator: 12, numerator: 2 },
+        rollFormula: "d4",
+        storedRoll: 2,
+      }),
+      expect.objectContaining({
+        allowedControlStates: ["active", "stabilised", "resolved"],
+        rate: { denominator: 12, numerator: 4 },
+        rollFormula: "d4",
+        storedRoll: 4,
+      }),
+    ]);
+    expect(buildRepresentativeCriticalRuntimeDefinition("sharp|arm|02")).toBeUndefined();
+  });
+
+  it("maps blunt|arm|12 into separate severe Stun, collapse, hand loss, drop, Bleed, and care facts", () => {
+    const runtime = buildRepresentativeCriticalRuntimeDefinition("blunt|arm|12", () => 0);
+
+    expect(runtime).toMatchObject({
+      bleed: [
+        expect.objectContaining({
+          firstTickRound: 1,
+          kind: "external",
+          rate: { denominator: 2, numerator: 1 },
+        }),
+      ],
+      conditions: expect.arrayContaining([
+        expect.objectContaining({ code: "collapse", target: "whole_body" }),
+        expect.objectContaining({ code: "function_unusable", target: "hand" }),
+      ]),
+      criticalKey: "blunt|arm|12",
+      operations: ["drop_held_item"],
+      stun: expect.objectContaining({
+        channels: ["ob_skill", "db_parry", "initiative"],
+        modifier: -8,
+      }),
+      treatment: expect.objectContaining({
+        stages: [
+          { role: "field_control", skill: "first_aid" },
+          { role: "definitive_care", skill: "surgery" },
+        ],
+      }),
+    });
   });
 
   it("does not manufacture a Skill candidate from generic treatment language", () => {

@@ -9,6 +9,7 @@ import {
   buildCombatHistorySourceViewFromState,
   buildCombatRoundAttackRollResult,
   buildCombatRoundPhaseResolutionResult,
+  combatEffectSchema,
   deriveCombatHistoryStepOutcome,
   getLatestPlayerSafeCombatDefenseReview,
   projectCombatHistory,
@@ -69,6 +70,82 @@ const player = (controlled: string[], visible: string[]) => ({
 });
 
 describe("combat history projection", () => {
+  it("projects exact C1 consequences without source identity to affected-player and GM only", () => {
+    const effect = combatEffectSchema.parse({
+      createdAt: "2026-08-29T08:00:00.000Z",
+      criticalRuntime: {
+        bleed: {
+          allowedControlStates: ["active", "partial", "staunched_zero", "resolved"],
+          controlState: "active",
+          firstTickRound: 2,
+          kind: "external",
+          rate: { denominator: 3, numerator: 1 },
+          sourceEffectKey: "private-source-effect",
+          sourceRate: "1 HP / 3 rounds",
+        },
+        criticalKey: "private|critical|key",
+        fixtureVersion: "c1-2026-08-28",
+        kind: "bleed",
+      },
+      damage: 0,
+      effectGroup: "bleed",
+      generalDamage: 0,
+      id: "private-runtime-effect",
+      sourceEventId: "private-runtime-event",
+      status: "active",
+      targetParticipantId: "scenario-participant-aria",
+      type: "bleed",
+      updatedAt: "2026-08-29T08:00:00.000Z",
+    });
+    const state = combatRoundStateSchema.parse({
+      encounterId: "encounter-1",
+      participants: [
+        { label: "Aria", participantId: "aria" },
+        { label: "Borin", participantId: "borin" },
+      ],
+      roundNumber: 2,
+    });
+    const projectionInput = {
+      continuingConsequences: [
+        {
+          criticalEffects: [effect],
+          effects: [],
+          ownerParticipantId: "scenario-participant-aria",
+          participantId: "aria",
+        },
+      ],
+      participants,
+      source: historySource(state, "revision-c1"),
+    };
+    const affected = projectCombatHistory({
+      ...projectionInput,
+      viewer: player(["aria"], ["aria", "borin"]),
+    });
+    const gm = projectCombatHistory({ ...projectionInput, viewer: { kind: "gm" } });
+    const other = projectCombatHistory({
+      ...projectionInput,
+      viewer: player(["borin"], ["aria", "borin"]),
+    });
+
+    expect(affected.currentConsequences).toEqual([
+      {
+        detail: "active",
+        durationLabel: "Until resolved",
+        summary: "Bleed 1/3 HP per round",
+      },
+    ]);
+    expect(gm.currentConsequences).toEqual(affected.currentConsequences);
+    expect(other.currentConsequences).toEqual([]);
+    const serialized = JSON.stringify(affected.currentConsequences);
+    [
+      "private|critical|key",
+      "private-source-effect",
+      "private-runtime-effect",
+      "private-runtime-event",
+      "scenario-participant-aria",
+    ].forEach((secret) => expect(serialized).not.toContain(secret));
+  });
+
   it("keeps an active typed Critical consequence visible only to the affected Player and GM", () => {
     const activeBleed = buildDamagePersistentLifecycle({
       context: {

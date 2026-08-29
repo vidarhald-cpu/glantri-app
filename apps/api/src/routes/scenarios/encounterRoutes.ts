@@ -312,6 +312,7 @@ import type {
 import {
   assignRoleplayStatCheck,
   buildCharacterSheetSummary,
+  buildRepresentativeCriticalRuntimeDefinition,
   buildCombatStateCharacterInputs,
   calculateWorkbookPercentageAdjustmentTrace,
   deriveParryPrimaryActionModifier,
@@ -7692,6 +7693,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
         return [
           {
+            criticalEffects: (scenarioParticipant.state.combatEffects?.effects ?? []).filter(
+              (effect) => effect.criticalRuntime !== undefined,
+            ),
+            currentInitiativeGroupId: state.phaseResolutionCursor?.phase
+              ? getCombatRoundCurrentInitiativeExecutionGroup({
+                  phase: state.phaseResolutionCursor.phase,
+                  state,
+                })?.id
+              : undefined,
             effects: (scenarioParticipant.state.combatEffects?.effects ?? []).flatMap((effect) =>
               effect.canonicalLifecycle ? [effect.canonicalLifecycle] : [],
             ),
@@ -15174,6 +15184,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         reviewedByUserId: user.id,
         state: roundState,
       });
+      const reviewedDamageResult = reviewedState.phaseResolutionResults.find(
+        (candidate) => candidate.attackResultId === resolution.damageResult?.attackResultId,
+      )?.damageResult;
+      const criticalRuntime = reviewedDamageResult?.review?.criticalEffectProposal?.critKey
+        ? buildRepresentativeCriticalRuntimeDefinition(
+            reviewedDamageResult.review.criticalEffectProposal.critKey,
+          )
+        : undefined;
       const committed = commitCombatRoundPhaseDamage({
         attackResultId: resolution.damageResult.attackResultId,
         attackerScenarioParticipantId: attackerScenarioParticipant?.id,
@@ -15182,6 +15200,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           createdByUserId: user.id,
         },
         combatEffects: defenderScenarioParticipant.state.combatEffects,
+        criticalRuntime,
         createdRevision: encounter.updatedAt,
         defenderScenarioParticipantId: defenderScenarioParticipant.id,
         encounterId,

@@ -166,11 +166,20 @@ import {
   combatEffectBleedStateSchema,
   combatEffectsStateSchema,
   combatEffectSchema,
+  getCombatEffectEffectiveStatus,
   type CombatEffect,
   type CombatEffectGroup,
   type CombatEffectType,
   type CombatEffectsState,
 } from "./combatEffects";
+import type { CombatCriticalRuntimeDefinition } from "./combatCriticalRuntime";
+import {
+  accrueCombatCriticalBleed,
+  combatCriticalBleedAccumulatorSchema,
+  combatCriticalExactRationalSchema,
+  getCombatCriticalBleedEffectiveRate,
+  isCombatCriticalBleedSourceActive,
+} from "./combatCriticalRuntime";
 import {
   buildCombatFeintProposalId,
   combatFeintMethodSchema,
@@ -599,6 +608,9 @@ export const combatRoundEndDamageProposalSchema = z.object({
   accumulatedTenths: z.number().int().nonnegative().default(0),
   bleedType: combatRoundEndBleedTypeSchema,
   bleedRate: z.number().int().nonnegative().default(0),
+  exactPreviousRemainder: combatCriticalExactRationalSchema.optional(),
+  exactRemainingRemainder: combatCriticalExactRationalSchema.optional(),
+  exactTotal: combatCriticalExactRationalSchema.optional(),
   healthCheckDue: z.boolean().default(false),
   id: idSchema,
   initializedRound: z.number().int().positive().optional(),
@@ -610,6 +622,7 @@ export const combatRoundEndDamageProposalSchema = z.object({
   remainingAccumulatedTenths: z.number().int().min(0).max(9).default(0),
   roundsUntilHealthCheck: z.number().int().nonnegative().optional(),
   sourceEffectId: idSchema,
+  sourceEffectIds: z.array(idSchema).optional(),
 });
 export type CombatRoundEndDamageProposal = z.infer<typeof combatRoundEndDamageProposalSchema>;
 
@@ -5544,6 +5557,7 @@ export function rollCombatRoundCombatExperience(input: {
   const nextCombatEffects =
     result.needsEffectRow && createdCombatEffectEventId && createdCombatEffectIds[0]
       ? combatEffectsStateSchema.parse({
+          ...currentCombatEffects,
           effects: [
             ...currentCombatEffects.effects,
             combatEffectSchema.parse({
@@ -12721,10 +12735,32 @@ function formatCombatRoundPhysicalDamageEffectDescription(input: {
   return `${weapon} hit ${target.toLowerCase()} for ${effectiveDamage.effectiveTotalDamage} damage.${armor}${criticalMin}${criticalReference}${criticalRoll}${notes}`;
 }
 
+function getCombatCriticalRuntimeEffectKinds(
+  criticalRuntime?: CombatCriticalRuntimeDefinition,
+): string[] {
+  if (!criticalRuntime) return [];
+  return [
+    ...(criticalRuntime.stun ? [`stun-${criticalRuntime.stun.sourceEffectKey}`] : []),
+    ...criticalRuntime.conditions.map((condition, index) => `condition-${index}-${condition.code}`),
+    ...criticalRuntime.bleed.map((bleed) => `bleed-${bleed.sourceEffectKey}`),
+    "treatment-read-state",
+  ];
+}
+
+function formatCombatCriticalRuntimeRoundDuration(
+  duration: { kind: string; rounds?: number; text: string },
+  onset: "immediate" | "next_round",
+): string {
+  if (duration.rounds === undefined) return duration.text;
+  const rounds = duration.rounds + (onset === "next_round" ? 1 : 0);
+  return `${rounds} ${rounds === 1 ? "round" : "rounds"}`;
+}
+
 function buildCombatRoundDamageCommitRows(input: {
   attackerScenarioParticipantId?: string;
   command: CombatRoundCommand;
   combatEffects?: CombatEffectsState;
+  criticalRuntime?: CombatCriticalRuntimeDefinition;
   createdRevision?: string;
   createdSequence: number;
   criticalRoll?: CombatRoundCriticalRollResult;
@@ -12759,9 +12795,9 @@ function buildCombatRoundDamageCommitRows(input: {
     roundNumber: input.command.roundNumber,
   };
   const eventId = buildCombatRoundDamageCommitEventId(idInput);
-  const reviewAdditionalEffects = getAcceptedCombatRoundDamageReviewAdditionalEffects(
-    input.damageResult.review,
-  );
+  const reviewAdditionalEffects = input.criticalRuntime
+    ? []
+    : getAcceptedCombatRoundDamageReviewAdditionalEffects(input.damageResult.review);
   const reviewOperationalConsequences = getAcceptedCombatRoundOperationalConsequences(
     input.damageResult,
   );
@@ -12793,7 +12829,15 @@ function buildCombatRoundDamageCommitRows(input: {
       kind: `operational-${consequence.id}`,
     }),
   );
-  const effectIds = [...committedDamageEffectIds, ...additionalEffectIds, ...operationalEffectIds];
+  const criticalRuntimeEffectIds = getCombatCriticalRuntimeEffectKinds(input.criticalRuntime).map(
+    (kind) => buildCombatRoundDamageCommitEffectId({ ...idInput, kind: `c1-${kind}` }),
+  );
+  const effectIds = [
+    ...committedDamageEffectIds,
+    ...additionalEffectIds,
+    ...operationalEffectIds,
+    ...criticalRuntimeEffectIds,
+  ];
   const description = formatCombatRoundDamageCommitDescription({
     criticalRoll: input.criticalRoll,
     damageResult: input.damageResult,
@@ -12938,12 +12982,140 @@ function buildCombatRoundDamageCommitRows(input: {
       updatedAt: input.command.createdAt,
     }),
   );
-  const effects = [...committedDamageEffects, ...additionalEffects, ...operationalEffects];
+  let criticalRuntimeIndex = 0;
+  const buildCriticalRuntimeEffect = (
+    draft: Omit<CombatEffect, "id" | "sourceEventId" | "targetParticipantId">,
+  ): CombatEffect =>
+    combatEffectSchema.parse({
+      ...draft,
+      id: criticalRuntimeEffectIds[criticalRuntimeIndex++],
+      sourceEventId: eventId,
+      targetParticipantId: input.defenderScenarioParticipantId,
+    });
+  const criticalRuntimeEffects: CombatEffect[] = input.criticalRuntime
+    ? [
+        ...(input.criticalRuntime.stun
+          ? [
+              buildCriticalRuntimeEffect({
+                combatModifierBucket: undefined,
+                createdAt: input.command.createdAt,
+                createdInInitiativeGroupId: input.initiativeGroup?.id,
+                criticalRuntime: {
+                  criticalKey: input.criticalRuntime.criticalKey,
+                  fixtureVersion: input.criticalRuntime.fixtureVersion,
+                  kind: "stun",
+                  stun: input.criticalRuntime.stun,
+                },
+                damage: 0,
+                description: `Stun from ${input.criticalRuntime.canonicalName}.`,
+                duration: formatCombatCriticalRuntimeRoundDuration(
+                  input.criticalRuntime.stun.duration,
+                  input.criticalRuntime.stun.onset,
+                ),
+                effectGroup: "special",
+                effectiveAfterInitiativeGroupId: input.initiativeGroup?.id,
+                generalDamage: 0,
+                initiativePhase: input.initiativeGroup?.phase,
+                initiativeValue: input.initiativeGroup?.initiativeValue,
+                modifierValue: input.criticalRuntime.stun.modifier ?? undefined,
+                roundNumber: input.command.roundNumber,
+                sourceAttackResultId: input.damageResult.attackResultId,
+                sourceOpportunityId: input.sourceOpportunityId,
+                status: input.effectStatus ?? (input.initiativeGroup ? "pending" : "active"),
+                type: "stun",
+                updatedAt: input.command.createdAt,
+              }),
+            ]
+          : []),
+        ...input.criticalRuntime.conditions.map((condition) =>
+          buildCriticalRuntimeEffect({
+            createdAt: input.command.createdAt,
+            createdInInitiativeGroupId: input.initiativeGroup?.id,
+            criticalRuntime: {
+              condition,
+              criticalKey: input.criticalRuntime!.criticalKey,
+              fixtureVersion: input.criticalRuntime!.fixtureVersion,
+              kind: "condition",
+            },
+            damage: 0,
+            description: `${condition.code.replaceAll("_", " ")}: ${condition.target}.`,
+            duration: formatCombatCriticalRuntimeRoundDuration(condition.duration, condition.onset),
+            effectGroup: "special",
+            effectiveAfterInitiativeGroupId: input.initiativeGroup?.id,
+            generalDamage: 0,
+            initiativePhase: input.initiativeGroup?.phase,
+            initiativeValue: input.initiativeGroup?.initiativeValue,
+            roundNumber: input.command.roundNumber,
+            sourceAttackResultId: input.damageResult.attackResultId,
+            sourceOpportunityId: input.sourceOpportunityId,
+            status: input.effectStatus ?? (input.initiativeGroup ? "pending" : "active"),
+            type: "special",
+            updatedAt: input.command.createdAt,
+          }),
+        ),
+        ...input.criticalRuntime.bleed.map((bleed) =>
+          buildCriticalRuntimeEffect({
+            createdAt: input.command.createdAt,
+            createdInInitiativeGroupId: input.initiativeGroup?.id,
+            criticalRuntime: {
+              bleed: { ...bleed, firstTickRound: input.command.roundNumber + 1 },
+              criticalKey: input.criticalRuntime!.criticalKey,
+              fixtureVersion: input.criticalRuntime!.fixtureVersion,
+              kind: "bleed",
+            },
+            damage: 0,
+            description: `${bleed.kind === "internal" ? "Internal Bleed" : "Bleed"} ${bleed.rate.numerator}/${bleed.rate.denominator} HP per round.`,
+            effectGroup: "bleed",
+            effectiveAfterInitiativeGroupId: input.initiativeGroup?.id,
+            generalDamage: 0,
+            initiativePhase: input.initiativeGroup?.phase,
+            initiativeValue: input.initiativeGroup?.initiativeValue,
+            roundNumber: input.command.roundNumber,
+            sourceAttackResultId: input.damageResult.attackResultId,
+            sourceOpportunityId: input.sourceOpportunityId,
+            status: input.effectStatus ?? (input.initiativeGroup ? "pending" : "active"),
+            type: bleed.kind === "internal" ? "internal_bleed" : "bleed",
+            updatedAt: input.command.createdAt,
+          }),
+        ),
+        buildCriticalRuntimeEffect({
+          createdAt: input.command.createdAt,
+          createdInInitiativeGroupId: input.initiativeGroup?.id,
+          criticalRuntime: {
+            criticalKey: input.criticalRuntime.criticalKey,
+            fixtureVersion: input.criticalRuntime.fixtureVersion,
+            information: input.criticalRuntime.information,
+            kind: "treatment_read_state",
+            treatment: input.criticalRuntime.treatment,
+          },
+          damage: 0,
+          description: input.criticalRuntime.treatment.guidance,
+          effectGroup: "special",
+          effectiveAfterInitiativeGroupId: input.initiativeGroup?.id,
+          generalDamage: 0,
+          initiativePhase: input.initiativeGroup?.phase,
+          initiativeValue: input.initiativeGroup?.initiativeValue,
+          roundNumber: input.command.roundNumber,
+          sourceAttackResultId: input.damageResult.attackResultId,
+          sourceOpportunityId: input.sourceOpportunityId,
+          status: input.effectStatus ?? (input.initiativeGroup ? "pending" : "active"),
+          type: "special",
+          updatedAt: input.command.createdAt,
+        }),
+      ]
+    : [];
+  const effects = [
+    ...committedDamageEffects,
+    ...additionalEffects,
+    ...operationalEffects,
+    ...criticalRuntimeEffects,
+  ];
 
   return {
     effectIds,
     eventId,
     nextCombatEffects: combatEffectsStateSchema.parse({
+      criticalBleedAccumulator: currentCombatEffects.criticalBleedAccumulator,
       effects: [
         ...currentCombatEffects.effects.filter((effect) => !effectIds.includes(effect.id)),
         ...effects,
@@ -12973,6 +13145,7 @@ export function removeCombatRoundCommittedDamageEffects(input: {
   const effectIdSet = new Set(effectIds);
 
   return combatEffectsStateSchema.parse({
+    ...currentCombatEffects,
     effects: currentCombatEffects.effects.filter((effect) => !effectIdSet.has(effect.id)),
     events: currentCombatEffects.events.filter((event) => event.id !== eventId),
   });
@@ -13854,9 +14027,52 @@ function buildCombatRoundEndParticipantReview(input: {
   const canonicalProposals: CanonicalCombatSuLifecycleProposal[] = [];
   const canonicalRequirements: CanonicalCombatSuRequirement[] = [];
   const effectVersions: Record<string, number> = {};
+  const exactBleedSources = combatEffects.effects.flatMap((effect) => {
+    if (effect.criticalRuntime?.kind !== "bleed") return [];
+    const bleed = effect.criticalRuntime.bleed;
+    return (effect.status === "active" ||
+      (effect.status === "pending" && effect.effectiveAfterInitiativeGroupId !== undefined)) &&
+      bleed.firstTickRound <= input.roundNumber &&
+      isCombatCriticalBleedSourceActive(bleed)
+      ? [{ bleed, effect }]
+      : [];
+  });
+
+  if (
+    exactBleedSources.length > 0 &&
+    combatEffects.criticalBleedAccumulator?.lastProcessedRound !== input.roundNumber
+  ) {
+    const previousRemainder = combatEffects.criticalBleedAccumulator?.remainder ?? {
+      denominator: 1,
+      numerator: 0,
+    };
+    const accrual = accrueCombatCriticalBleed({
+      activeRates: exactBleedSources.map((source) =>
+        getCombatCriticalBleedEffectiveRate(source.bleed),
+      ),
+      previousRemainder,
+    });
+    const sourceEffectIds = exactBleedSources.map((source) => source.effect.id).sort();
+    const kinds = new Set(exactBleedSources.map((source) => source.bleed.kind));
+    proposedDamage.push(
+      combatRoundEndDamageProposalSchema.parse({
+        amount: accrual.appliedHp,
+        bleedType: kinds.size === 1 && kinds.has("internal") ? "internal" : "external",
+        exactPreviousRemainder: previousRemainder,
+        exactRemainingRemainder: accrual.remainder,
+        exactTotal: accrual.total,
+        id: `round-end:${input.roundNumber}:${input.participantId}:c1-exact-bleed`,
+        label: `Exact Bleed from ${sourceEffectIds.length} source${sourceEffectIds.length === 1 ? "" : "s"}`,
+        notes: `${accrual.total.numerator}/${accrual.total.denominator} HP accrued; ${accrual.appliedHp} whole HP applied and ${accrual.remainder.numerator}/${accrual.remainder.denominator} carried.`,
+        participantId: input.participantId,
+        sourceEffectId: sourceEffectIds[0],
+        sourceEffectIds,
+      }),
+    );
+  }
 
   for (const effect of combatEffects.effects) {
-    if (effect.status !== "active") {
+    if (getCombatEffectEffectiveStatus(effect) !== "active") {
       continue;
     }
 
@@ -13982,7 +14198,8 @@ function buildCombatRoundEndParticipantReview(input: {
       );
     }
 
-    const bleedType = getCombatRoundEffectBleedType(effect);
+    const bleedType =
+      effect.criticalRuntime?.kind === "bleed" ? undefined : getCombatRoundEffectBleedType(effect);
     const bleedRate = bleedType ? getCombatRoundEffectBleedAmount(effect) : 0;
 
     if (bleedType && bleedRate > 0) {
@@ -14857,10 +15074,10 @@ function applyCombatRoundEndReviewEffects(input: {
 } {
   const currentCombatEffects = combatEffectsStateSchema.parse(input.combatEffects);
   const acceptedDamage = input.participantReview.proposedDamage.filter(
-    (proposal) => proposal.accepted && proposal.amount > 0,
+    (proposal) => (proposal.accepted || proposal.exactTotal) && proposal.amount > 0,
   );
   const acceptedBleedProposals = input.participantReview.proposedDamage.filter(
-    (proposal) => proposal.accepted,
+    (proposal) => proposal.accepted || proposal.exactTotal,
   );
   const updatedEffects: CombatRoundEndUpdatedEffectFact[] = [];
   const updatedEffectIds = new Set<string>();
@@ -14909,7 +15126,7 @@ function applyCombatRoundEndReviewEffects(input: {
       });
     }
 
-    if (bleedProposal) {
+    if (bleedProposal && !bleedProposal.exactTotal) {
       nextEffect = combatEffectSchema.parse({
         ...nextEffect,
         bleedState: combatEffectBleedStateSchema.parse({
@@ -15028,6 +15245,15 @@ function applyCombatRoundEndReviewEffects(input: {
 
   return {
     combatEffects: combatEffectsStateSchema.parse({
+      criticalBleedAccumulator: acceptedBleedProposals.find(
+        (proposal) => proposal.exactRemainingRemainder,
+      )?.exactRemainingRemainder
+        ? {
+            lastProcessedRound: input.command.roundNumber,
+            remainder: acceptedBleedProposals.find((proposal) => proposal.exactRemainingRemainder)!
+              .exactRemainingRemainder!,
+          }
+        : currentCombatEffects.criticalBleedAccumulator,
       effects: [
         ...nextEffects.filter(
           (effect) =>
@@ -15177,7 +15403,7 @@ export function commitCombatRoundEndParticipantReview(input: {
     afterCursor,
     facts: {
       acceptedDamageProposalIds: participantReview.proposedDamage
-        .filter((proposal) => proposal.accepted && proposal.amount > 0)
+        .filter((proposal) => proposal.accepted || proposal.exactTotal)
         .map((proposal) => proposal.id),
       acceptedDurationProposalIds: participantReview.proposedEffects
         .filter((proposal) => proposal.accepted)
@@ -15195,6 +15421,8 @@ export function commitCombatRoundEndParticipantReview(input: {
       nextReviewStatus: nextStatus,
       nextStatus,
       previousReviewStatus: participantReview.status,
+      previousCriticalBleedAccumulator:
+        combatEffectsStateSchema.parse(input.combatEffects).criticalBleedAccumulator ?? null,
       scenarioParticipantId: input.scenarioParticipantId,
       canonicalSuReview: committedReview.canonicalReview,
       updatedEffects: effectApplication.updatedEffects,
@@ -15242,7 +15470,7 @@ export function commitCombatRoundEndParticipantReview(input: {
         },
         involvedOutcome: {
           damageApplied: participantReview.proposedDamage
-            .filter((proposal) => proposal.accepted && proposal.amount > 0)
+            .filter((proposal) => (proposal.accepted || proposal.exactTotal) && proposal.amount > 0)
             .map((proposal) => ({
               amount: proposal.amount,
               bleedType: proposal.bleedType,
@@ -15268,7 +15496,7 @@ export function commitCombatRoundEndParticipantReview(input: {
         publicOutcome: {
           changed:
             participantReview.proposedDamage.some(
-              (proposal) => proposal.accepted && proposal.amount > 0,
+              (proposal) => proposal.accepted || proposal.exactTotal,
             ) ||
             participantReview.proposedEffects.some((proposal) => proposal.accepted) ||
             participantReview.proposedRemovals.some((proposal) => proposal.accepted),
@@ -15344,8 +15572,20 @@ export function removeCombatRoundEndParticipantReviewEffects(input: {
   const missingRestored = [...restoredById.values()].filter(
     (effect) => !restoredExisting.some((existingEffect) => existingEffect.id === effect.id),
   );
+  const previousCriticalBleedAccumulator = combatCriticalBleedAccumulatorSchema.safeParse(
+    input.command.facts.previousCriticalBleedAccumulator,
+  );
+  const hasPreviousCriticalBleedAccumulator = Object.prototype.hasOwnProperty.call(
+    input.command.facts,
+    "previousCriticalBleedAccumulator",
+  );
 
   return combatEffectsStateSchema.parse({
+    criticalBleedAccumulator: hasPreviousCriticalBleedAccumulator
+      ? previousCriticalBleedAccumulator.success
+        ? previousCriticalBleedAccumulator.data
+        : undefined
+      : currentCombatEffects.criticalBleedAccumulator,
     effects: [...restoredExisting, ...missingRestored],
     events: currentCombatEffects.events.filter((event) => event.id !== eventId),
   });
@@ -16267,6 +16507,7 @@ function restoreCombatRoundOperationalCancelledAttackPenalty(input: {
 }
 
 function buildCombatRoundOperationalCancelledActions(input: {
+  additionalConsequences?: readonly CombatRoundDamageReviewOperationalConsequence[];
   damageResult: CombatRoundDamageResult;
   state: CombatRoundState;
 }): CombatRoundOperationalCancelledAction[] {
@@ -16278,7 +16519,10 @@ function buildCombatRoundOperationalCancelledActions(input: {
   const seen = new Set<string>();
   const actions: CombatRoundOperationalCancelledAction[] = [];
 
-  for (const consequence of getAcceptedCombatRoundOperationalConsequences(input.damageResult)) {
+  for (const consequence of [
+    ...getAcceptedCombatRoundOperationalConsequences(input.damageResult),
+    ...(input.additionalConsequences ?? []),
+  ]) {
     if (consequence.kind !== "cancel_pending_action" || !consequence.phase || !consequence.step) {
       continue;
     }
@@ -16359,6 +16603,36 @@ function buildCombatRoundOperationalCancelledActions(input: {
   }
 
   return actions;
+}
+
+function buildCombatCriticalRuntimeOperationalConsequences(input: {
+  criticalRuntime?: CombatCriticalRuntimeDefinition;
+  defenderParticipantId: string;
+}): CombatRoundDamageReviewOperationalConsequence[] {
+  const cancellingConditions = (input.criticalRuntime?.conditions ?? []).filter(
+    (condition) =>
+      condition.mechanicallyActive &&
+      condition.onset === "immediate" &&
+      (condition.code === "collapse" ||
+        condition.code === "no_action" ||
+        condition.code === "parry_only" ||
+        condition.code === "unconscious"),
+  );
+  if (!input.criticalRuntime || cancellingConditions.length === 0) return [];
+
+  return (["phase1", "phase2"] as const).map((phase) =>
+    combatRoundDamageReviewOperationalConsequenceSchema.parse({
+      accepted: true,
+      id: `c1:${input.criticalRuntime!.criticalKey}:${phase}:locked-action-state`,
+      kind: "cancel_pending_action",
+      label: "Pending attack cancelled by Critical action state",
+      participantId: input.defenderParticipantId,
+      phase,
+      reason: `Accepted C1 ${cancellingConditions.map((condition) => condition.code).join("/")} state`,
+      sourceCritKey: input.criticalRuntime!.criticalKey,
+      step: getCombatRoundAttackCursorStepForPhase(phase),
+    }),
+  );
 }
 
 function applyCombatRoundOperationalActionCancellations(input: {
@@ -16545,6 +16819,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
     createdByUserId?: string;
   };
   combatEffects?: CombatEffectsState;
+  criticalRuntime?: CombatCriticalRuntimeDefinition;
   createdRevision?: string;
   criticalRoll?: CombatRoundCriticalRollResult;
   damageResult: CombatRoundDamageResult;
@@ -16566,10 +16841,16 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
     attackResultId: input.damageResult.attackResultId,
     state: normalized,
   });
-  const acceptedOperationalConsequences = getAcceptedCombatRoundOperationalConsequences(
-    input.damageResult,
-  );
+  const criticalRuntimeOperationalConsequences = buildCombatCriticalRuntimeOperationalConsequences({
+    criticalRuntime: input.criticalRuntime,
+    defenderParticipantId: input.damageResult.defenderParticipantId,
+  });
+  const acceptedOperationalConsequences = [
+    ...getAcceptedCombatRoundOperationalConsequences(input.damageResult),
+    ...criticalRuntimeOperationalConsequences,
+  ];
   const cancelledActions = buildCombatRoundOperationalCancelledActions({
+    additionalConsequences: criticalRuntimeOperationalConsequences,
     damageResult: input.damageResult,
     state: normalized,
   });
@@ -16660,9 +16941,9 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
           }),
         ]
       : [];
-  const acceptedAdditionalEffects = getAcceptedCombatRoundDamageReviewAdditionalEffects(
-    input.damageResult.review,
-  );
+  const acceptedAdditionalEffects = input.criticalRuntime
+    ? []
+    : getAcceptedCombatRoundDamageReviewAdditionalEffects(input.damageResult.review);
   const createdAdditionalCombatEffectIds = acceptedAdditionalEffects.map((effect) =>
     buildCombatRoundDamageCommitEffectId({
       ...idInput,
@@ -16679,10 +16960,14 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
       kind: `operational-${consequence.id}`,
     }),
   );
+  const createdCriticalRuntimeEffectIds = getCombatCriticalRuntimeEffectKinds(
+    input.criticalRuntime,
+  ).map((kind) => buildCombatRoundDamageCommitEffectId({ ...idInput, kind: `c1-${kind}` }));
   const createdCombatEffectIds = [
     ...createdDamageEffectIds,
     ...createdAdditionalCombatEffectIds,
     ...createdOperationalCombatEffectIds,
+    ...createdCriticalRuntimeEffectIds,
   ];
   const command = combatRoundCommandSchema.parse({
     afterCursor,
@@ -16698,6 +16983,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
       createdCombatEffectEventId,
       createdCombatEffectIds,
       createdDamageEffectIds,
+      createdCriticalRuntimeEffectIds,
       createdOperationalCombatEffectIds,
       computedCriticalGrade: input.damageResult.criticalGrade,
       computedTotalDamage: input.damageResult.totalDamage,
@@ -16772,6 +17058,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
     attackerScenarioParticipantId: input.attackerScenarioParticipantId,
     command,
     combatEffects: input.combatEffects,
+    criticalRuntime: input.criticalRuntime,
     createdRevision: input.createdRevision,
     createdSequence: getCombatRoundNextEventSequence(normalized),
     criticalRoll: input.criticalRoll,
@@ -17152,6 +17439,7 @@ export function commitCombatRoundPhaseDamage(input: {
     createdByUserId?: string;
   };
   combatEffects?: CombatEffectsState;
+  criticalRuntime?: CombatCriticalRuntimeDefinition;
   createdRevision?: string;
   defenderScenarioParticipantId: string;
   encounterId?: string;
@@ -17180,6 +17468,7 @@ export function commitCombatRoundPhaseDamage(input: {
     attackerScenarioParticipantId: input.attackerScenarioParticipantId,
     command: input.command,
     combatEffects: input.combatEffects,
+    criticalRuntime: input.criticalRuntime,
     createdRevision: input.createdRevision,
     criticalRoll: readiness.resolution.criticalRoll,
     damageResult: readiness.damageResult,

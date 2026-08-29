@@ -1,4 +1,13 @@
-import { getCriticalResultWithEffects, type CriticalBand } from "@glantri/domain";
+import {
+  accrueCombatCriticalBleed,
+  addCombatCriticalExactRationals,
+  combatCriticalRuntimeDefinitionSchema,
+  getCriticalResultWithEffects,
+  type CombatCriticalDuration,
+  type CombatCriticalExactRational,
+  type CombatCriticalRuntimeDefinition,
+  type CriticalBand,
+} from "@glantri/domain";
 
 export const REPRESENTATIVE_CRITICAL_FIXTURE_VERSION = "c1-2026-08-28" as const;
 export const REPRESENTATIVE_CRITICAL_WORKBOOK_SHA256 =
@@ -23,10 +32,7 @@ export type RepresentativeCriticalConditionCode =
 export type RepresentativeCriticalOperation = "drop_held_item" | "fall_to_ground";
 export type RepresentativeCriticalTreatmentSkill = "first_aid" | "medicine" | "surgery";
 
-export interface ExactRational {
-  readonly denominator: number;
-  readonly numerator: number;
-}
+export type ExactRational = CombatCriticalExactRational;
 
 export interface RepresentativeCriticalDuration {
   readonly formula?: "d3" | "d4";
@@ -1241,13 +1247,7 @@ export function isCriticalConsequenceActiveForPendingInitiative(input: {
 }
 
 export function addExactRationals(left: ExactRational, right: ExactRational): ExactRational {
-  const numerator = left.numerator * right.denominator + right.numerator * left.denominator;
-  const denominator = left.denominator * right.denominator;
-  let a = Math.abs(numerator);
-  let b = Math.abs(denominator);
-  while (b !== 0) [a, b] = [b, a % b];
-  const divisor = a || 1;
-  return { denominator: denominator / divisor, numerator: numerator / divisor };
+  return addCombatCriticalExactRationals(left, right);
 }
 
 export function resolveRepresentativeBleedRate(
@@ -1276,22 +1276,72 @@ export function accrueRepresentativeBleed(input: {
   readonly remainder: ExactRational;
   readonly total: ExactRational;
 } {
-  let total = input.previousRemainder ?? { denominator: 1, numerator: 0 };
-  for (const source of input.activeSources) {
-    total = addExactRationals(
-      total,
+  return accrueCombatCriticalBleed({
+    activeRates: input.activeSources.map((source) =>
       resolveRepresentativeBleedRate(source.bleed, source.storedRoll),
-    );
-  }
-  const appliedHp = Math.floor(total.numerator / total.denominator);
-  return {
-    appliedHp,
-    remainder: {
-      denominator: total.denominator,
-      numerator: total.numerator - appliedHp * total.denominator,
-    },
-    total,
-  };
+    ),
+    previousRemainder: input.previousRemainder,
+  });
+}
+
+function rollRepresentativeDuration(
+  duration: RepresentativeCriticalDuration,
+  rng: () => number,
+): CombatCriticalDuration {
+  if (duration.kind !== "roll_once" || !duration.formula) return { ...duration };
+  const maximum = duration.formula === "d3" ? 3 : 4;
+  const storedRoll = Math.floor(rng() * maximum) + 1;
+  return { ...duration, rounds: duration.unit === "round" ? storedRoll : undefined, storedRoll };
+}
+
+/**
+ * Resolves one of the 34 accepted C1 fixtures into a server-owned runtime definition.
+ * Every authored roll-once value is retained in the returned state and is never rerolled by SU.
+ */
+export function buildRepresentativeCriticalRuntimeDefinition(
+  criticalKey: string,
+  rng: () => number = Math.random,
+): CombatCriticalRuntimeDefinition | undefined {
+  const fixture = getRepresentativeCriticalFixture(criticalKey);
+  if (!fixture) return undefined;
+
+  return combatCriticalRuntimeDefinitionSchema.parse({
+    bleed: fixture.bleed.map((bleed) => {
+      const storedRoll =
+        bleed.rate.kind === "roll_once"
+          ? Math.floor(rng() * (bleed.rate.formula === "d4" ? 4 : 6)) + 1
+          : undefined;
+      return {
+        allowedControlStates:
+          bleed.kind === "external"
+            ? ["active", "partial", "staunched_zero", "resolved"]
+            : ["active", "stabilised", "resolved"],
+        controlState: "active",
+        currentRate: resolveRepresentativeBleedRate(bleed, storedRoll),
+        firstTickRound: 1,
+        kind: bleed.kind,
+        rate: resolveRepresentativeBleedRate(bleed, storedRoll),
+        rollFormula: bleed.rate.kind === "roll_once" ? bleed.rate.formula : undefined,
+        sourceEffectKey: bleed.sourceEffectKey,
+        sourceRate: bleed.sourceRate,
+        storedRoll,
+      };
+    }),
+    canonicalName: fixture.canonicalName,
+    conditions: fixture.conditions.map((condition) => ({
+      ...condition,
+      duration: rollRepresentativeDuration(condition.duration, rng),
+    })),
+    criticalKey: fixture.criticalKey,
+    description: fixture.description,
+    fixtureVersion: fixture.fixtureVersion,
+    information: fixture.information,
+    operations: fixture.operations,
+    stun: fixture.stun
+      ? { ...fixture.stun, duration: rollRepresentativeDuration(fixture.stun.duration, rng) }
+      : undefined,
+    treatment: fixture.treatment,
+  });
 }
 
 export function sumIndependentCriticalStuns(

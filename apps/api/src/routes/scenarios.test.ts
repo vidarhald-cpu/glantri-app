@@ -808,7 +808,7 @@ function recordCombatRoundParryResult(
   return recordCanonicalCombatRoundParryResult({ ...input, state });
 }
 
-function makeCriticalRollMutationFixture() {
+function makeCriticalRollMutationFixture(options: { c1?: boolean } = {}) {
   const encounterParticipants = makeTwoCombatEncounterParticipants();
   const combatEncounter = makeCombatEncounter({
     participants: encounterParticipants,
@@ -824,6 +824,8 @@ function makeCriticalRollMutationFixture() {
     rollD20: 14,
     rollTotal: 14,
     rolledAt: "2026-01-01T00:03:00.000Z",
+    weaponCriticalCode: options.c1 ? "FS" : undefined,
+    weaponDamageClass: options.c1 ? "edged" : undefined,
     weaponName: "Broad sword",
   });
   const afterAttack = recordCombatRoundAttackResult({
@@ -6857,32 +6859,20 @@ describe("scenarios route contract", () => {
   });
 
   it("projects an active typed Critical consequence only to its affected Player and the GM", async () => {
-    const activeBleed = buildDamagePersistentLifecycle({
-      context: {
-        commandId: "private-critical-command",
-        createdAt: "2026-08-24T08:00:00.000Z",
-        createdRevision: "revision-1",
-        createdSequence: 12,
-        encounterId: "encounter-1",
-        eventId: "private-critical-event",
-        ownerParticipantId: "participant-1",
-        roundNumber: 1,
+    const criticalRuntime = {
+      bleed: {
+        allowedControlStates: ["active", "partial", "staunched_zero", "resolved"] as const,
+        controlState: "active" as const,
+        currentRate: { denominator: 3, numerator: 1 },
+        firstTickRound: 2,
+        kind: "external" as const,
+        rate: { denominator: 3, numerator: 1 },
+        sourceEffectKey: "pointed_weapons|arm|09|02",
+        sourceRate: "1/3",
       },
-      effectId: "private-critical-effect",
-      isStunned: false,
-      label: "External bleed",
-      modifierValue: 5,
-      notes: "External bleeding",
-      sourceCritKey: "pointed_weapons|arm|12",
-      sourceEffectKey: "pointed_weapons|arm|12|03",
-      status: "active",
-      type: "bleed",
-    });
-    expect(activeBleed).toBeDefined();
-    const resolvedBleed = {
-      ...activeBleed!,
-      id: "resolved-private-critical-effect",
-      lifecycle: { ...activeBleed!.lifecycle, state: "resolved" as const },
+      criticalKey: "pointed_weapons|arm|09",
+      fixtureVersion: "c1-2026-08-28",
+      kind: "bleed" as const,
     };
     const encounterParticipants = makeTwoCombatEncounterParticipants();
     const encounter = makeCombatEncounter({
@@ -6913,11 +6903,10 @@ describe("scenarios route contract", () => {
             combatEffects: {
               effects: [
                 {
-                  canonicalLifecycle: activeBleed,
+                  criticalRuntime,
                   createdAt: "2026-08-24T08:00:00.000Z",
                   effectGroup: "bleed",
                   id: "private-critical-effect",
-                  modifierValue: 5,
                   roundNumber: 1,
                   sourceEventId: "private-critical-event",
                   status: "active",
@@ -6926,11 +6915,13 @@ describe("scenarios route contract", () => {
                   updatedAt: "2026-08-24T08:00:00.000Z",
                 },
                 {
-                  canonicalLifecycle: resolvedBleed,
+                  criticalRuntime: {
+                    ...criticalRuntime,
+                    bleed: { ...criticalRuntime.bleed, controlState: "resolved" as const },
+                  },
                   createdAt: "2026-08-24T08:00:00.000Z",
                   effectGroup: "bleed",
                   id: "resolved-private-critical-effect",
-                  modifierValue: 5,
                   roundNumber: 1,
                   sourceEventId: "resolved-private-critical-event",
                   status: "resolved",
@@ -6963,9 +6954,9 @@ describe("scenarios route contract", () => {
     await app.close();
 
     const expected = {
-      detail: "External bleeding",
-      durationLabel: "Until cleared",
-      summary: "Bleed 5/10 HP per round",
+      detail: "active",
+      durationLabel: "Until resolved",
+      summary: "Bleed 1/3 HP per round",
     };
     expect(gmResponse.statusCode, gmResponse.body).toBe(200);
     expect(affectedResponse.statusCode, affectedResponse.body).toBe(200);
@@ -20653,7 +20644,7 @@ describe("scenarios route contract", () => {
   });
 
   it("commits the canonical current damage review through a narrow GM route", async () => {
-    const fixture = makeCriticalRollMutationFixture();
+    const fixture = makeCriticalRollMutationFixture({ c1: true });
     const attackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
       participantId: "encounter-participant-1",
       phase: "phase1",
@@ -20667,7 +20658,7 @@ describe("scenarios route contract", () => {
         createdAt: "2026-01-01T00:05:45.000Z",
         createdByUserId: "gm-1",
       },
-      criticalDice: [4, 5],
+      criticalDice: [6, 7],
       rolledByParticipantId: "encounter-participant-1",
       state: fixture.state,
       submittedBy: "gm",
@@ -20721,6 +20712,48 @@ describe("scenarios route contract", () => {
           }),
         }),
       }),
+    );
+    const persistedEffects =
+      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state.combatEffects
+        .effects;
+    expect(persistedEffects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          criticalRuntime: expect.objectContaining({
+            criticalKey: "sharp|chest|09",
+            kind: "stun",
+            stun: expect.objectContaining({ modifier: null }),
+          }),
+        }),
+        expect.objectContaining({
+          criticalRuntime: expect.objectContaining({
+            bleed: expect.objectContaining({
+              firstTickRound: 2,
+              kind: "internal",
+              rate: { denominator: 2, numerator: 1 },
+            }),
+            criticalKey: "sharp|chest|09",
+            kind: "bleed",
+          }),
+        }),
+        expect.objectContaining({
+          criticalRuntime: expect.objectContaining({
+            criticalKey: "sharp|chest|09",
+            condition: expect.objectContaining({ code: "unconscious" }),
+            kind: "condition",
+          }),
+        }),
+        expect.objectContaining({
+          criticalRuntime: expect.objectContaining({
+            criticalKey: "sharp|chest|09",
+            kind: "treatment_read_state",
+            treatment: expect.objectContaining({
+              gmManaged: true,
+              stages: [],
+            }),
+          }),
+        }),
+      ]),
     );
     const savedState = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session
       .combatRoundState as CombatRoundState;

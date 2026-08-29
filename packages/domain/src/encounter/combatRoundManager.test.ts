@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import type { EncounterParticipant, EncounterSession } from "./session";
 import type { HitLocationTarget } from "./hitLocation";
+import type { CombatEffect } from "./combatEffects";
+import type { CombatCriticalBleedControlState } from "./combatCriticalRuntime";
 
 import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
@@ -1920,6 +1922,161 @@ function commitFailedParryDamage(input: {
 }
 
 describe("combat round manager", () => {
+  it("accrues C1 Bleed sources exactly once per SU and carries the aggregate remainder across reload", () => {
+    const base = initializeCombatRoundState({ encounter: encounter({ currentRound: 3 }) });
+    const atSu = {
+      ...base,
+      currentCursor: { participantId: "guard", roundNumber: 3, step: "SU" as const },
+      currentStep: "round_summary" as const,
+      selectedParticipantId: "guard",
+      selectedStep: "round_summary" as const,
+    };
+    const criticalBleed = (
+      id: string,
+      kind: "external" | "internal",
+      numerator: number,
+      denominator: number,
+    ): CombatEffect => ({
+      createdAt: "2026-01-01T00:00:00.000Z",
+      criticalRuntime: {
+        bleed: {
+          allowedControlStates: (kind === "external"
+            ? ["active", "partial", "staunched_zero", "resolved"]
+            : ["active", "stabilised", "resolved"]) as CombatCriticalBleedControlState[],
+          controlState: "active" as const,
+          firstTickRound: 3,
+          kind,
+          rate: { denominator, numerator },
+          sourceEffectKey: `${id}|source`,
+          sourceRate: `${numerator}/${denominator}`,
+        },
+        criticalKey: "c1-test",
+        fixtureVersion: "c1-2026-08-28",
+        kind: "bleed" as const,
+      },
+      damage: 0,
+      effectGroup: "bleed" as const,
+      generalDamage: 0,
+      id,
+      sourceEventId: "critical-event",
+      status: "active" as const,
+      targetParticipantId: "scenario-guard",
+      type: kind === "internal" ? ("internal_bleed" as const) : ("bleed" as const),
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const effects = {
+      effects: [
+        criticalBleed("one-third", "external", 1, 3),
+        criticalBleed("one-half", "internal", 1, 2),
+      ],
+      events: [
+        {
+          createdAt: "2026-01-01T00:00:00.000Z",
+          description: "C1 test",
+          id: "critical-event",
+          sourceLabel: "Critical",
+          sourceType: "critical" as const,
+          targetParticipantId: "scenario-guard",
+        },
+      ],
+    };
+    const creationRoundReview = prepareCombatRoundEndReview({
+      participantInputs: {
+        guard: {
+          combatEffects: {
+            ...effects,
+            effects: effects.effects.map((effect) => {
+              if (effect.criticalRuntime?.kind !== "bleed") return effect;
+              return {
+                ...effect,
+                criticalRuntime: {
+                  ...effect.criticalRuntime,
+                  bleed: { ...effect.criticalRuntime.bleed, firstTickRound: 4 },
+                },
+              };
+            }),
+          },
+        },
+      },
+      state: atSu,
+    });
+    expect(creationRoundReview.roundEndReview?.participantReviews.guard?.proposedDamage).toEqual(
+      [],
+    );
+
+    const firstReview = prepareCombatRoundEndReview({
+      participantInputs: { guard: { combatEffects: effects } },
+      state: atSu,
+    });
+    const firstProposal = firstReview.roundEndReview?.participantReviews.guard?.proposedDamage[0];
+
+    expect(firstProposal).toMatchObject({
+      amount: 0,
+      exactRemainingRemainder: { denominator: 6, numerator: 5 },
+      sourceEffectIds: ["one-half", "one-third"],
+    });
+
+    const attemptedOptOut = combatRoundStateSchema.parse({
+      ...firstReview,
+      roundEndReview: {
+        ...firstReview.roundEndReview!,
+        participantReviews: {
+          ...firstReview.roundEndReview!.participantReviews,
+          guard: {
+            ...firstReview.roundEndReview!.participantReviews.guard!,
+            proposedDamage:
+              firstReview.roundEndReview!.participantReviews.guard!.proposedDamage.map(
+                (proposal) => ({ ...proposal, accepted: false }),
+              ),
+          },
+        },
+      },
+    });
+
+    const firstCommit = commitCombatRoundEndParticipantReview({
+      combatEffects: structuredClone(effects),
+      command: { commandId: "c1-su-3", createdAt: "2026-01-01T00:01:00.000Z" },
+      participantId: "guard",
+      scenarioParticipantId: "scenario-guard",
+      state: attemptedOptOut,
+    });
+    expect(firstCommit.combatEffects.criticalBleedAccumulator).toEqual({
+      lastProcessedRound: 3,
+      remainder: { denominator: 6, numerator: 5 },
+    });
+    expect(
+      removeCombatRoundEndParticipantReviewEffects({
+        combatEffects: firstCommit.combatEffects,
+        command: firstCommit.command,
+      }).criticalBleedAccumulator,
+    ).toBeUndefined();
+    const retryReview = prepareCombatRoundEndReview({
+      participantInputs: { guard: { combatEffects: firstCommit.combatEffects } },
+      state: atSu,
+    });
+    expect(retryReview.roundEndReview?.participantReviews.guard?.proposedDamage).toEqual([]);
+
+    const roundFour = {
+      ...firstCommit.state,
+      currentCursor: { participantId: "guard", roundNumber: 4, step: "SU" as const },
+      currentStep: "round_summary" as const,
+      roundEndReview: undefined,
+      roundNumber: 4,
+      selectedParticipantId: "guard",
+      selectedStep: "round_summary" as const,
+    };
+    const secondReview = prepareCombatRoundEndReview({
+      participantInputs: { guard: { combatEffects: structuredClone(firstCommit.combatEffects) } },
+      state: roundFour,
+    });
+
+    expect(secondReview.roundEndReview?.participantReviews.guard?.proposedDamage[0]).toMatchObject({
+      amount: 1,
+      exactRemainingRemainder: { denominator: 3, numerator: 2 },
+      exactTotal: { denominator: 3, numerator: 5 },
+    });
+  });
+
   it("derives both Feint phase targets and the A2 opportunity from one declaration target", () => {
     const declaration = synchronizeCombatRoundFeintDeclarationTarget({
       actionId: "feint_attack",
@@ -9827,6 +9984,30 @@ describe("combat round manager", () => {
         createdByUserId: "gm-1",
       },
       combatEffects: { effects: [], events: [] },
+      criticalRuntime: {
+        bleed: [],
+        canonicalName: "Hand grazed; grip broken.",
+        conditions: [
+          {
+            code: "impaired",
+            duration: { kind: "gm_managed", text: "instant grip disruption" },
+            mechanicallyActive: true,
+            onset: "immediate",
+            target: "hand",
+          },
+        ],
+        criticalKey: "sharp|arm|01",
+        description: "The arm is grazed and the struck hand opens.",
+        fixtureVersion: "c1-2026-08-28",
+        information: [],
+        operations: ["drop_held_item"],
+        treatment: {
+          equipmentOrOperation: [],
+          gmManaged: true,
+          guidance: "No authored treatment gate.",
+          stages: [],
+        },
+      },
       defenderScenarioParticipantId: "scenario-guard",
       encounterId: "encounter-1",
       scenarioId: "scenario-1",
@@ -9858,6 +10039,16 @@ describe("combat round manager", () => {
         status: "active",
         targetParticipantId: "scenario-guard",
         type: "special",
+      }),
+    );
+    expect(committed.combatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        criticalRuntime: expect.objectContaining({
+          criticalKey: "sharp|arm|01",
+          kind: "condition",
+        }),
+        status: "active",
+        targetParticipantId: "scenario-guard",
       }),
     );
     expect(

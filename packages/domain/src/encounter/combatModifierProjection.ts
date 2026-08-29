@@ -129,8 +129,20 @@ function isEffectActiveForRound(
   currentRound?: number,
   currentInitiativeGroupId?: string,
 ): boolean {
+  const criticalOnset =
+    effect.criticalRuntime?.kind === "stun"
+      ? effect.criticalRuntime.stun?.onset
+      : effect.criticalRuntime?.kind === "condition"
+        ? effect.criticalRuntime.condition?.onset
+        : undefined;
   return (
     getCombatEffectEffectiveStatus(effect, { currentInitiativeGroupId }) === "active" &&
+    !(
+      criticalOnset === "next_round" &&
+      currentRound !== undefined &&
+      effect.roundNumber !== undefined &&
+      currentRound <= effect.roundNumber
+    ) &&
     (currentRound === undefined ||
       effect.expiresAtRound === undefined ||
       effect.expiresAtRound >= currentRound)
@@ -164,6 +176,22 @@ function getScenarioBucket(effect: CombatEffect): ScenarioCombatModifierBucket |
   }
 }
 
+function getScenarioBuckets(effect: CombatEffect): readonly ScenarioCombatModifierBucket[] {
+  const criticalStun =
+    effect.criticalRuntime?.kind === "stun" ? effect.criticalRuntime.stun : undefined;
+  if (criticalStun?.modifier !== null && criticalStun?.modifier !== undefined) {
+    return criticalStun.channels.map((channel) =>
+      channel === "ob_skill"
+        ? "situation_ob_skill"
+        : channel === "db_parry"
+          ? "situation_db"
+          : "situation_initiative",
+    );
+  }
+  const bucket = getScenarioBucket(effect);
+  return bucket ? [bucket] : [];
+}
+
 function getImportedModifierLabel(effect: CombatEffect, event?: CombatEffectEvent): string {
   const sourceLabel = event?.sourceLabel.trim();
 
@@ -184,6 +212,7 @@ function buildImportedEntry(input: {
   canonicalLifecycle?: CombatEffect["canonicalLifecycle"];
   effect: CombatEffect;
   event?: CombatEffectEvent;
+  projectedBucket?: ScenarioCombatModifierBucket;
 }): ScenarioCombatModifierEntry {
   const canonical = input.canonicalLifecycle ?? input.effect.canonicalLifecycle;
   const canonicalNumeric = canonical?.payload.kind === "numeric" ? canonical.payload : undefined;
@@ -207,7 +236,11 @@ function buildImportedEntry(input: {
     expiresAtRound: input.effect.expiresAtRound,
     excludedRollPurposes: input.effect.excludedRollPurposes,
     generated: false,
-    id: `import:character_effect:${input.effect.id}:${input.effect.combatModifierBucket}`,
+    id: `import:character_effect:${input.effect.id}:${
+      input.effect.criticalRuntime?.kind === "stun"
+        ? input.projectedBucket
+        : input.effect.combatModifierBucket
+    }`,
     imported: true,
     notes: getImportedModifierLabel(input.effect, input.event),
     readOnly: true,
@@ -247,13 +280,19 @@ export function projectPersistentCombatEffectModifiers(
       }) === "pending"
     ) {
       if (
-        getScenarioBucket(effect) &&
+        getScenarioBuckets(effect).length > 0 &&
         effect.modifierValue !== undefined &&
         Number.isFinite(effect.modifierValue)
       ) {
-        pendingModifierEntries.push(
-          buildImportedEntry({ effect, event: eventsById.get(effect.sourceEventId) }),
-        );
+        for (const projectedBucket of getScenarioBuckets(effect)) {
+          pendingModifierEntries.push(
+            buildImportedEntry({
+              effect,
+              event: eventsById.get(effect.sourceEventId),
+              projectedBucket,
+            }),
+          );
+        }
       }
       continue;
     }
@@ -261,11 +300,11 @@ export function projectPersistentCombatEffectModifiers(
       continue;
     }
 
-    const bucket = getScenarioBucket(effect);
+    const buckets = getScenarioBuckets(effect);
     const hasExplicitModifier =
       effect.modifierValue !== undefined && Number.isFinite(effect.modifierValue);
 
-    if (!bucket || !hasExplicitModifier || !effect.id || !effect.sourceEventId) {
+    if (buckets.length === 0 || !hasExplicitModifier || !effect.id || !effect.sourceEventId) {
       specialEffectIds.push(effect.id);
       continue;
     }
@@ -277,20 +316,23 @@ export function projectPersistentCombatEffectModifiers(
             lifecycle: { ...effect.canonicalLifecycle.lifecycle, state: "active" as const },
           }
         : effect.canonicalLifecycle;
-    const entry = buildImportedEntry({
-      canonicalLifecycle,
-      effect,
-      event: eventsById.get(effect.sourceEventId),
-    });
-    const bucketKey =
-      bucket === "situation_db"
-        ? "situationDb"
-        : bucket === "situation_initiative"
-          ? "situationInitiative"
-          : bucket === "situation_ob_skill"
-            ? "situationObSkill"
-            : "general";
-    modifierBuckets[bucketKey].push(entry);
+    for (const bucket of buckets) {
+      const entry = buildImportedEntry({
+        canonicalLifecycle,
+        effect,
+        event: eventsById.get(effect.sourceEventId),
+        projectedBucket: bucket,
+      });
+      const bucketKey =
+        bucket === "situation_db"
+          ? "situationDb"
+          : bucket === "situation_initiative"
+            ? "situationInitiative"
+            : bucket === "situation_ob_skill"
+              ? "situationObSkill"
+              : "general";
+      modifierBuckets[bucketKey].push(entry);
+    }
     importedEffectIds.push(effect.id);
   }
 
