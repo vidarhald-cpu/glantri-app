@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   buildRoleplayCalculationPreview,
+  combatEffectsStateSchema,
   encounterSessionSchema,
+  initializeCombatRoundState,
   normalizeRoleplayState,
+  scenarioParticipantStateSchema,
 } from "@glantri/domain";
 import { assignRoleplayStatCheck, recordRoleplayStatCheckResult } from "@glantri/rules-engine";
 
@@ -261,6 +264,154 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(rejected?.reason).toMatchObject({
         code: expect.stringMatching(/^(participant_already_active|transaction_conflict)$/),
       });
+    });
+
+    it("atomically persists and reloads C1 source state, roll-once rate, and exact remainder", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const owner = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, owner.id, { name: "Bleeding hero" });
+      const scenarioRepository = createPrismaScenarioRepository(prisma!);
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const equipmentService = new CharacterEquipmentReadModelService(
+        createPrismaCharacterEquipmentRepository(prisma!),
+      );
+      const campaignService = new CampaignService(scenarioRepository, characterService);
+      const scenarioService = new ScenarioService(
+        scenarioRepository,
+        characterService,
+        equipmentService,
+      );
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "C1 persistence",
+        status: "active",
+      });
+      await campaignService.addCampaignRosterEntry({
+        campaignId: campaign.id,
+        category: "pc",
+        sourceId: character.id,
+        sourceType: "character",
+      });
+      const scenario = await scenarioService.createScenario({
+        campaignId: campaign.id,
+        name: "C1 persistence",
+        status: "live",
+      });
+      const participant = await scenarioService.addCharacterParticipant({
+        characterId: character.id,
+        controlledByUserId: owner.id,
+        joinSource: "gm_added",
+        scenarioId: scenario.id,
+      });
+      const service = new EncounterService(
+        createPrismaEncounterRepository(prisma!),
+        scenarioRepository,
+      );
+      const sessionBase = encounterSessionSchema.parse({
+        createdAt: "2026-08-29T10:00:00.000Z",
+        currentRound: 2,
+        id: "c1-persistence",
+        kind: "combat",
+        participantMembershipMode: "explicit",
+        participants: [
+          {
+            id: "c1-hero",
+            label: "Bleeding hero",
+            participantType: "scenario",
+            scenarioParticipantId: participant.id,
+          },
+        ],
+        scenarioId: scenario.id,
+        status: "active",
+        title: "C1 persistence",
+        updatedAt: "2026-08-29T10:00:00.000Z",
+      });
+      const encounter = await service.createEncounter({
+        campaignId: campaign.id,
+        scenarioId: scenario.id,
+        session: encounterSessionSchema.parse({
+          ...sessionBase,
+          combatRoundState: initializeCombatRoundState({ encounter: sessionBase }),
+        }),
+      });
+      const combatEffects = combatEffectsStateSchema.parse({
+        criticalBleedAccumulator: {
+          lastProcessedRound: 2,
+          remainder: { denominator: 3, numerator: 2 },
+        },
+        effects: [
+          {
+            createdAt: "2026-08-29T10:01:00.000Z",
+            criticalRuntime: {
+              bleed: {
+                allowedControlStates: ["active", "partial", "staunched_zero", "resolved"],
+                controlState: "active",
+                currentRate: { denominator: 12, numerator: 3 },
+                firstTickRound: 2,
+                kind: "external",
+                rate: { denominator: 12, numerator: 3 },
+                rollFormula: "d4",
+                sourceEffectKey: "falling_crushing|whole_body|10|04",
+                sourceRate: "1D4 HP / round",
+                storedRoll: 3,
+              },
+              criticalKey: "falling_crushing|whole_body|10",
+              fixtureVersion: "c1-2026-08-28",
+              kind: "bleed",
+            },
+            damage: 0,
+            effectGroup: "bleed",
+            generalDamage: 0,
+            id: "c1-roll-once-source",
+            sourceEventId: "c1-event",
+            status: "active",
+            targetParticipantId: participant.id,
+            type: "bleed",
+            updatedAt: "2026-08-29T10:01:00.000Z",
+          },
+        ],
+        events: [
+          {
+            createdAt: "2026-08-29T10:01:00.000Z",
+            description: "C1 Critical",
+            id: "c1-event",
+            sourceLabel: "Critical",
+            sourceType: "critical",
+            targetParticipantId: participant.id,
+          },
+        ],
+      });
+      const state = scenarioParticipantStateSchema.parse({
+        ...participant.state,
+        combatEffects,
+      });
+      const saved = await service.commitCombatParticipantStateMutation({
+        campaignId: campaign.id,
+        encounterId: encounter.id,
+        expectedEncounterRevision: encounter.updatedAt,
+        participant,
+        scenarioId: scenario.id,
+        session: encounter,
+        state,
+      });
+      const reloaded = await scenarioRepository.getScenarioParticipantById(
+        participant.id,
+        scenario.id,
+      );
+
+      expect(reloaded?.state.combatEffects).toEqual(combatEffects);
+      expect(saved.participant.state.combatEffects).toEqual(combatEffects);
+      await expect(
+        service.commitCombatParticipantStateMutation({
+          campaignId: campaign.id,
+          encounterId: encounter.id,
+          expectedEncounterRevision: encounter.updatedAt,
+          participant,
+          scenarioId: scenario.id,
+          session: encounter,
+          state,
+        }),
+      ).rejects.toMatchObject({ code: "stale_revision" });
     });
   });
 }

@@ -15,9 +15,10 @@ is recorded in [the C1 fixture audit](../audits/c1-critical-fixtures.md).
 The representative fixtures preserve the stable `family|location|NN` identities and record the
 canonical suggested name/description, damage floor, one Stun at most, action-state conditions,
 immediate operations, exact Bleed rate and type, treatment classification, unresolved information,
-authority, runtime support, and initiative interpretation. They remain an inert rules/content and
-golden-test surface. Existing D1/D2 lookup, proposal, persistence, and round-progression paths do not
-consume the new fixture set, and specialized families remain unreachable from ordinary Combat lookup.
+authority, runtime support, and initiative interpretation. D1/D2 now activates this fixture contract
+server-side when the committed Critical key is one of those exact 34 keys. The other 574 catalogue
+rows remain on the legacy path and are not C1-active; specialized families also remain unreachable
+from ordinary Combat lookup unless an existing Combat result already addresses one of the 34 keys.
 
 The accepted C1 rules are:
 
@@ -25,20 +26,28 @@ The accepted C1 rules are:
   `-8` to OB/Skill, DB/Parry, and Initiative only. Separate Critical-source Stuns retain independent
   identity and add without a generic cap. Severity 5 is an explicit action state, not another numeric
   rung, and Stun never progresses automatically into unconsciousness.
-- A consequence accepted at initiative `N` does not affect an equal-initiative action at `N`.
-  Equal initiative is simultaneous. An immediate consequence applies only to a still-unresolved,
-  incompatible action at a strictly later initiative position. Explicit next-round onset overrides
-  that default. This ordering is canonical and is not a GM-editable suggestion.
+- Initiative resolves highest first. A consequence created at initiative `7` does not affect a peer
+  action at `7`: the whole equal-initiative group uses the same pre-group state. Once that group
+  closes, an immediate consequence activates automatically for a still-unresolved, mechanically
+  incompatible action at initiative `4`. A consequence created at `4` never reaches backward to an
+  already-resolved action at `5`. Explicit `next_round` onset remains deferred and is never pulled
+  forward by group closure. This ordering is canonical and is not a GM-editable suggestion.
 - Conditions and operations are separate. `collapse`, `unconscious`, `prone`, `fall_to_ground`, and
   `drop_held_item` do not imply one another. Functional loss is target-specific unless an explicit
-  result imposes a global action restriction.
+  result imposes a global action restriction. In the current server-authoritative pending-attack
+  seam, a complete canonical weapon source establishes an arm/hand requirement. An unusable arm or
+  hand can therefore invalidate that weapon attack. Movement, speech, perception, an unarmed source
+  without canonical limb metadata, any otherwise unaffected-function action, and incomplete legacy
+  source data remain valid unless a separate typed restriction applies. Labels and descriptive prose
+  never manufacture a dependency.
 - Ordinary Bleed exists and can be treated immediately, but its first periodic HP loss is at SU of
   the following round after one full three-second interval. Each external/internal source retains
   identity. Rates use exact rational arithmetic, add before whole-HP application, and carry exact
   remainder. Approved whole-body variable rates roll once when accepted and retain the numerator.
-- External Bleed uses `active -> controlled -> staunched -> resolved`; internal Bleed uses
-  `active -> stabilised -> resolved`. These states concern the periodic-loss process, not healing of
-  the underlying injury.
+- External Bleed exposes `active`, `partial`, `staunched_zero`, and `resolved`; internal Bleed exposes
+  only `active`, `stabilised`, and `resolved`. These states concern the periodic-loss process, not
+  healing of the underlying injury. Internal Bleed never inherits generic pressure, partial-control,
+  or self-staunch behavior.
 - First Aid, Medicine, or Surgery is named only where the accepted treatment map explicitly supports
   it. Equipment, time, assistance, stabilization, and controlled removal remain separate facts.
   Generic `treatment` text remains GM-managed and creates no Skill check.
@@ -46,9 +55,15 @@ The accepted C1 rules are:
   legacy checks are information-only or unresolved in C1. Descriptive prose cannot activate those
   mechanics.
 
-Descriptions are project-authored canonical GM suggestions. A GM may later adjudicate permitted
-instance wording and suggested magnitudes, but that does not rewrite the frozen fixture canon or its
-non-editable timing.
+The accepted runtime stores every consequence with its Critical and source-effect identity. One Stun
+source remains one durable effect even though its read-only calculation projection contributes to all
+three channels. Separate source Stuns therefore add and can be resolved independently. Numeric Stun
+does not cancel an action or imply collapse, parry-only, no-action, unconsciousness, or functional
+loss; those are separate typed facts.
+
+Descriptions are project-authored canonical GM suggestions. A GM may adjudicate the explicitly
+GM-managed parts, but that does not rewrite the frozen fixture canon, its authored Stun magnitude, or
+its non-editable equal-initiative timing.
 
 ## Reproducing the Critical table
 
@@ -212,6 +227,17 @@ At SU:
 
 - Active round-duration effects propose a one-round duration decrease; effects that reach zero
   propose removal or deactivation.
+- For an active C1 exact Bleed, no periodic damage occurs in the creation round. The first accrual is
+  at SU of the following round after one full three-second interval.
+- All active C1 Bleed source rates for the participant are added as exact rationals before applying
+  whole HP. SU creates one aggregate General-damage proposal and stores one reduced rational
+  remainder on the participant Combat effect state. Source effects remain separate and independently
+  resolvable. Reload/reconnect reuses both the retained source rates and the aggregate remainder.
+- A C1 whole-body `d4`/`d6` rate rolls once when the Critical is committed. The retained roll and
+  rational rate are persisted on that source and SU never rerolls it.
+
+The following bullets describe the legacy non-C1 path only:
+
 - Bleed values are tenths of HP per round. Bleed `1` means `1/10` HP per round, and bleed `10`
   means `1` HP per round.
 - Each active bleed row accumulates its bleed value in tenths at SU. Only whole accumulated HP is
@@ -224,10 +250,10 @@ At SU:
 - A successful Health check reduces the relevant bleed row by `1`. If that reduces the bleed value
   to `0`, the bleed row is expired. A failed check does not reduce bleed automatically.
 
-The Health-check reduction above describes the current legacy runtime path only. It is not canonical
-for the accepted C1 fixtures and is not evidence that their exact rational Bleeds are activated.
-Canonical C1 treatment uses only the explicit First Aid/Medicine/Surgery or GM-managed classification
-described above; no universal self-staunch Health roll is approved.
+The Health-check reduction above is never applied to C1 exact Bleed. C1 treatment read state preserves
+only the fixture's explicit First Aid, Medicine, Surgery, staged guidance, equipment/removal boundary,
+or GM-managed/unresolved classification. It does not manufacture a DC, Health substitution,
+self-staunch chance, recovery duration, mortality clock, or permanent-stat effect from prose.
 
 Start next round remains blocked until participant SU reviews and accepted health checks are
 complete. Undoing SU review commands restores previous durations/statuses and removes only the
@@ -265,7 +291,10 @@ The GM may override the reviewed critical index without rerolling the stored cri
 `1` through `16` rebuilds the table proposal for that index; choosing no effect removes generated
 critical proposal rows while leaving the original dice and computed final roll available for audit.
 
-GM review remains required before any critical-derived effect rows are committed. The review is
+GM review remains required before any critical-derived effect rows are committed. For one of the 34
+C1 keys, commit resolves the accepted fixture into source-linked Stun, typed condition, exact Bleed,
+and treatment read-state effects; the 574 inactive rows continue to use the legacy proposal mapping.
+The review is
 outcome-focused: it shows proposed physical damage, modifier, bleed, internal bleed, fatigue,
 no-action/loss-of-use, and special-note rows before commit. Operational consequences are shown as a
 separate compact checklist, not as duplicate proposed character-sheet rows. Bleed and internal bleed

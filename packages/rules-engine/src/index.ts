@@ -33,6 +33,7 @@ export * from "./calculators/db/calculateDB";
 export * from "./calculators/parry/calculateParryValue";
 export * from "./education/calculateEducation";
 export * from "./encounters/manageEncounterSession";
+export * from "./encounters/representativeCriticalFixtures";
 export * from "./encounters/criticalInjuryEvaluator";
 export * from "./encounters/criticalInjuryPresentation";
 export * from "./encounters/resolveParticipantSkillRollProfile";

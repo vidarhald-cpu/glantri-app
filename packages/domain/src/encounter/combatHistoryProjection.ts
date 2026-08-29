@@ -32,6 +32,8 @@ import {
   type CanonicalCombatModifierEffect,
   type PlayerSafeCanonicalCombatModifierEffect,
 } from "./combatModifierLifecycle";
+import { getCombatEffectEffectiveStatus, type CombatEffect } from "./combatEffects";
+import { getCombatCriticalBleedEffectiveRate } from "./combatCriticalRuntime";
 
 export type CombatHistoryViewer =
   | { kind: "gm" }
@@ -309,9 +311,87 @@ export interface CombatHistoryParticipantInput {
 }
 
 export interface CombatHistoryContinuingConsequenceInput {
+  criticalEffects?: readonly CombatEffect[];
+  currentInitiativeGroupId?: string;
   effects: readonly CanonicalCombatModifierEffect[];
   ownerParticipantId: string;
   participantId: string;
+}
+
+function formatCriticalRuntimeDuration(effect: CombatEffect): string | undefined {
+  const duration =
+    effect.criticalRuntime?.kind === "stun"
+      ? effect.criticalRuntime.stun?.duration
+      : effect.criticalRuntime?.kind === "condition"
+        ? effect.criticalRuntime.condition?.duration
+        : undefined;
+  if (!duration) return undefined;
+  const persistedRounds = effect.duration?.match(/^(\d+)\s+rounds?$/i)?.[1];
+  if (persistedRounds) {
+    const rounds = Number.parseInt(persistedRounds, 10);
+    return `${rounds} ${rounds === 1 ? "round" : "rounds"} remaining`;
+  }
+  if (duration.kind === "roll_once" && duration.storedRoll) {
+    return `${duration.storedRoll} ${duration.unit === "hour" ? "hour" : "round"}${duration.storedRoll === 1 ? "" : "s"}`;
+  }
+  return duration.text;
+}
+
+function projectCriticalRuntimeConsequence(
+  effect: CombatEffect,
+  currentInitiativeGroupId?: string,
+): ProjectedCombatContinuingConsequence | undefined {
+  if (
+    getCombatEffectEffectiveStatus(effect, { currentInitiativeGroupId }) !== "active" ||
+    !effect.criticalRuntime
+  ) {
+    return undefined;
+  }
+  const runtime = effect.criticalRuntime;
+  if (
+    runtime.kind === "stun" &&
+    runtime.stun?.modifier !== null &&
+    runtime.stun?.modifier !== undefined
+  ) {
+    return {
+      durationLabel: formatCriticalRuntimeDuration(effect),
+      summary: `Stun ${runtime.stun.modifier} to OB/Skill, DB/Parry, and Initiative`,
+    };
+  }
+  if (runtime.kind === "condition" && runtime.condition?.mechanicallyActive) {
+    const labels: Record<string, string> = {
+      collapse: "Collapsed",
+      function_unusable: `${runtime.condition.target.replaceAll("_", " ")} unusable`,
+      impaired: `${runtime.condition.target.replaceAll("_", " ")} impaired`,
+      no_action: "No action",
+      parry_only: "Parry only",
+      prone: "Prone",
+      recovery_restricted: "Recovery restricted",
+      restricted: "Action restricted",
+      unconscious: "Unconscious",
+    };
+    return {
+      durationLabel: formatCriticalRuntimeDuration(effect),
+      summary: labels[runtime.condition.code] ?? "Continuing injury",
+    };
+  }
+  if (runtime.kind === "bleed" && runtime.bleed) {
+    if (runtime.bleed.controlState === "resolved") return undefined;
+    const label = runtime.bleed.kind === "internal" ? "Internal Bleed" : "Bleed";
+    const currentRate = getCombatCriticalBleedEffectiveRate(runtime.bleed);
+    return {
+      detail: runtime.bleed.controlState.replaceAll("_", " "),
+      durationLabel: "Until resolved",
+      summary: `${label} ${currentRate.numerator}/${currentRate.denominator} HP per round`,
+    };
+  }
+  if (runtime.kind === "treatment_read_state" && runtime.treatment) {
+    return {
+      detail: runtime.treatment.guidance,
+      summary: runtime.treatment.gmManaged ? "Treatment unresolved" : "Treatment guidance",
+    };
+  }
+  return undefined;
 }
 
 export interface ProjectedCombatContinuingConsequence {
@@ -374,8 +454,8 @@ function projectCombatContinuingConsequences(input: {
         input.viewer.kind === "gm" ||
         input.viewer.controlledParticipantIds.has(entry.participantId),
     )
-    .flatMap((entry) =>
-      entry.effects.flatMap((effect) => {
+    .flatMap((entry) => [
+      ...entry.effects.flatMap((effect) => {
         if (effect.ownerParticipantId !== entry.ownerParticipantId) return [];
 
         const viewer =
@@ -416,7 +496,15 @@ function projectCombatContinuingConsequences(input: {
           },
         ];
       }),
-    )
+      ...(entry.criticalEffects ?? []).flatMap((effect) => {
+        if (effect.targetParticipantId !== entry.ownerParticipantId) return [];
+        const consequence = projectCriticalRuntimeConsequence(
+          effect,
+          entry.currentInitiativeGroupId,
+        );
+        return consequence ? [{ consequence, participantId: entry.participantId }] : [];
+      }),
+    ])
     .sort(
       (left, right) =>
         left.participantId.localeCompare(right.participantId) ||

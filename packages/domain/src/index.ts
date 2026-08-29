@@ -42,6 +42,7 @@ export * from "./encounter/combatMovementIntent";
 export * from "./encounter/combatMovementBurden";
 export * from "./encounter/combatOffensiveParry";
 export * from "./encounter/combatEffects";
+export * from "./encounter/combatCriticalRuntime";
 export * from "./encounter/combatFeint";
 export * from "./encounter/combatAdjustDistance";
 export * from "./encounter/combatBreakOff";

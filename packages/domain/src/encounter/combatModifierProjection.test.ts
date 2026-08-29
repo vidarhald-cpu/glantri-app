@@ -120,6 +120,100 @@ function refresh(input: {
 }
 
 describe("persistent combat modifier projection", () => {
+  it("projects one source-linked Critical Stun into all three channels without duplicating the source", () => {
+    const stun = effect({
+      combatModifierBucket: undefined,
+      criticalRuntime: {
+        criticalKey: "blunt|arm|12",
+        fixtureVersion: "c1-2026-08-28",
+        kind: "stun",
+        stun: {
+          channels: ["ob_skill", "db_parry", "initiative"],
+          duration: { kind: "gm_managed", text: "collapse" },
+          modifier: -8,
+          onset: "immediate",
+          severity: 4,
+          sourceEffectKey: "blunt|arm|12|02",
+        },
+      },
+      effectGroup: "special",
+      effectiveAfterInitiativeGroupId: "round:2:phase:phase1:initiative:7",
+      id: "critical-stun-source",
+      modifierValue: -8,
+      status: "pending",
+      type: "stun",
+    });
+
+    const sameGroup = projectPersistentCombatEffectModifiers({
+      combatEffects: effects(stun),
+      currentInitiativeGroupId: "round:2:phase:phase1:initiative:7",
+    });
+    expect(sameGroup.pendingModifierEntries).toHaveLength(3);
+    expect(sameGroup.importedEffectIds).toEqual([]);
+
+    const projection = projectPersistentCombatEffectModifiers({
+      combatEffects: effects(stun),
+      currentInitiativeGroupId: "round:2:phase:phase1:initiative:4",
+    });
+
+    expect(projection.importedEffectIds).toEqual(["critical-stun-source"]);
+    expect(projection.modifierBuckets.situationObSkill).toHaveLength(1);
+    expect(projection.modifierBuckets.situationDb).toHaveLength(1);
+    expect(projection.modifierBuckets.situationInitiative).toHaveLength(1);
+    expect(
+      [
+        ...projection.modifierBuckets.situationObSkill,
+        ...projection.modifierBuckets.situationDb,
+        ...projection.modifierBuckets.situationInitiative,
+      ].every((entry) => entry.sourceEffectId === "critical-stun-source" && entry.value === -8),
+    ).toBe(true);
+  });
+
+  it("adds separate Critical Stun sources and removes only the resolved source", () => {
+    const criticalStun = (id: string, modifier: -1 | -8) =>
+      effect({
+        combatModifierBucket: undefined,
+        criticalRuntime: {
+          criticalKey: `${id}|critical`,
+          fixtureVersion: "c1-2026-08-28",
+          kind: "stun",
+          stun: {
+            channels: ["ob_skill", "db_parry", "initiative"],
+            duration: { kind: "gm_managed", text: "until resolved" },
+            modifier,
+            onset: "immediate",
+            severity: modifier === -8 ? 4 : 1,
+            sourceEffectKey: `${id}|stun`,
+          },
+        },
+        effectGroup: "special",
+        id,
+        modifierValue: modifier,
+        type: "stun",
+      });
+    const mild = criticalStun("mild-source", -1);
+    const severe = criticalStun("severe-source", -8);
+    const both = getMergedCombatModifierTotals({
+      modifierBuckets: projectPersistentCombatEffectModifiers({
+        combatEffects: effects(mild, severe),
+      }).modifierBuckets,
+    });
+    const reversed = getMergedCombatModifierTotals({
+      modifierBuckets: projectPersistentCombatEffectModifiers({
+        combatEffects: effects(severe, mild),
+      }).modifierBuckets,
+    });
+    const afterMildResolved = getMergedCombatModifierTotals({
+      modifierBuckets: projectPersistentCombatEffectModifiers({
+        combatEffects: effects({ ...mild, status: "resolved" }, severe),
+      }).modifierBuckets,
+    });
+
+    expect(both).toMatchObject({ dbParry: -9, initiative: -9, skillOb: -9 });
+    expect(reversed).toEqual(both);
+    expect(afterMildResolved).toMatchObject({ dbParry: -8, initiative: -8, skillOb: -8 });
+  });
+
   it("shows a same-group effect as pending, then includes it automatically after the group", () => {
     const pendingEffect = effect({
       createdInInitiativeGroupId: "round:2:phase:phase1:initiative:4",

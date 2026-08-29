@@ -4,6 +4,10 @@ import {
   canonicalCombatModifierEffectSchema,
   canonicalCombatModifierLifecycleTransitionSchema,
 } from "./combatModifierLifecycle";
+import {
+  combatCriticalBleedAccumulatorSchema,
+  combatCriticalEffectRuntimeSchema,
+} from "./combatCriticalRuntime";
 
 const idSchema = z.string().min(1);
 const timestampSchema = z.string().min(1);
@@ -89,6 +93,7 @@ export const combatEffectSchema = z
     checkRequired: z.boolean().optional(),
     checkSkillOrStat: z.string().optional(),
     combatWide: z.boolean().optional(),
+    criticalRuntime: combatCriticalEffectRuntimeSchema.optional(),
     combatModifierBucket: combatEffectModifierBucketSchema.optional(),
     createdInInitiativeGroupId: idSchema.optional(),
     createdAt: timestampSchema,
@@ -137,6 +142,7 @@ export const combatEffectSchema = z
 
 export const combatEffectsStateSchema = z
   .object({
+    criticalBleedAccumulator: combatCriticalBleedAccumulatorSchema.optional(),
     effects: z.array(combatEffectSchema).default([]),
     events: z.array(combatEffectEventSchema).default([]),
   })
