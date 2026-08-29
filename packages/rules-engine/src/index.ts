@@ -53,6 +53,7 @@ export * from "./skills/calculateSpecializationLevel";
 export * from "./skills/deriveSkillRelationships";
 export * from "./skills/evaluateSkillSelection";
 export * from "./skills/pilotSkillRulesV1";
+export * from "./skills/retainedCharacterSkillReadModel";
 export * from "./skills/selectBestSkillGroupContribution";
 export * from "./stats/calculateAdjustedStats";
 export * from "./stats/characteristicGms";

@@ -80,6 +80,13 @@ guess or rewrite missing roll provenance.
 
 The Skills table shows each visible trained skill grouped into player-facing categories.
 
+For retained Pilot Characters, the authoritative server row is governed by
+[Retained Character Ledger and Headless Chargen](./retained-character-ledger.md): direct ranks and
+explicit grants add to the strongest owned history, then the strongest non-recursive relationship
+acts as a floor (`E = max(A, R)`). Relationship competence is not added a second time. The legacy
+columns below remain the compatibility presentation for older Character builds until the later
+Character Sheet UI consumes the retained read model directly.
+
 ### Stats and Avg stats
 
 `Stats` lists the stats linked to the skill.

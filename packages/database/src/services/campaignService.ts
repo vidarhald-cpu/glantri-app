@@ -11,6 +11,7 @@ import {
 } from "@glantri/domain";
 
 import {
+  CampaignRosterPersistenceConflictError,
   createPrismaScenarioRepository,
   type ScenarioRepository,
 } from "../repositories/scenarioRepository";
@@ -45,6 +46,15 @@ export class CampaignCharacterRosterCandidateNotFoundError extends Error {
   constructor() {
     super("Campaign character candidate not found.");
     this.name = "CampaignCharacterRosterCandidateNotFoundError";
+  }
+}
+
+export class CampaignCharacterAlreadyRosteredError extends Error {
+  constructor(readonly activeCampaignId: string) {
+    super(
+      "This Character already belongs to another active Campaign. Leave or ask that Campaign's GM to remove it before joining this Campaign.",
+    );
+    this.name = "CampaignCharacterAlreadyRosteredError";
   }
 }
 
@@ -204,15 +214,22 @@ export class CampaignService {
   }): Promise<CampaignRosterEntry> {
     const labelSnapshot = await this.resolveCampaignRosterLabel(input);
 
-    return this.repository.createCampaignRosterEntry({
-      campaignId: input.campaignId,
-      category: input.category,
-      createdByUserId: input.createdByUserId,
-      labelSnapshot,
-      notes: input.notes?.trim() || null,
-      sourceId: input.sourceId,
-      sourceType: input.sourceType,
-    });
+    try {
+      return await this.repository.createCampaignRosterEntry({
+        campaignId: input.campaignId,
+        category: input.category,
+        createdByUserId: input.createdByUserId,
+        labelSnapshot,
+        notes: input.notes?.trim() || null,
+        sourceId: input.sourceId,
+        sourceType: input.sourceType,
+      });
+    } catch (error) {
+      if (error instanceof CampaignRosterPersistenceConflictError) {
+        throw new CampaignCharacterAlreadyRosteredError(error.activeCampaignId);
+      }
+      throw error;
+    }
   }
 
   async removeCampaignRosterEntry(input: {
@@ -242,6 +259,25 @@ export class CampaignService {
     return {
       removed: removedCount > 0,
     };
+  }
+
+  async leaveCampaign(input: {
+    campaignId: string;
+    characterId: string;
+    ownerUserId: string;
+  }): Promise<{ removed: boolean }> {
+    const ownedCharacter = await this.characterService.getOwnedCharacter(
+      input.ownerUserId,
+      input.characterId,
+    );
+    if (!ownedCharacter) {
+      throw new CampaignCharacterRosterCandidateNotFoundError();
+    }
+    return this.removeCampaignRosterEntryBySource({
+      campaignId: input.campaignId,
+      sourceId: input.characterId,
+      sourceType: "character",
+    });
   }
 
   async createReusableEntity(input: {

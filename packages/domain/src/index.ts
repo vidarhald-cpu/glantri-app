@@ -6,6 +6,7 @@ export * from "./character/equipment";
 export * from "./character/profiles";
 export * from "./character/progression";
 export * from "./character/statLayers";
+export * from "./character/retainedCharacter";
 export * from "./campaign/scenario";
 export * from "./campaign/artifact";
 export * from "./campaign/blackboard";

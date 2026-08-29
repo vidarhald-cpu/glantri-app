@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { AuthService, prisma } from "@glantri/database";
+import type { CharacterBuild } from "@glantri/domain";
 import {
   createTestCampaign,
   createTestCharacter,
@@ -20,6 +21,53 @@ const appUsesTestDatabase = Boolean(
 async function sessionCookie(userId: string): Promise<string> {
   const { token } = await new AuthService().createSessionForUser(userId);
   return `${SESSION_COOKIE_NAME}=${token}`;
+}
+
+function retainedBuild(characterId: string): CharacterBuild {
+  return {
+    equipment: { items: [] },
+    id: characterId,
+    name: "API retained veteran",
+    profile: {
+      description: "Headless API integration Character",
+      distractionLevel: 3,
+      id: `profile:${characterId}`,
+      label: "API retained profile",
+      rolledStats: {
+        cha: 10,
+        com: 10,
+        con: 10,
+        dex: 10,
+        health: 10,
+        int: 10,
+        lck: 10,
+        pow: 10,
+        siz: 10,
+        str: 10,
+        will: 10,
+      },
+      societyLevel: 0,
+    },
+    progression: {
+      chargenMode: "standard",
+      educationPoints: 0,
+      flexiblePointFactor: 1,
+      level: 1,
+      primaryPoolSpent: 0,
+      primaryPoolTotal: 60,
+      secondaryPoolSpent: 0,
+      secondaryPoolTotal: 26,
+      skillGroups: [],
+      skills: [],
+      specializations: [],
+    },
+    progressionState: {
+      availablePoints: 0,
+      checks: [],
+      history: [],
+      pendingAttempts: [],
+    },
+  };
 }
 
 if (!appUsesTestDatabase) {
@@ -170,6 +218,67 @@ if (!appUsesTestDatabase) {
         updatedAt: new Date(canonical.updatedAt),
       });
       await expect(prisma.character.count({ where: { id: character.id } })).resolves.toBe(1);
+    });
+
+    it("finalizes, replays, reloads, and projects the pinned retained Skill model", async () => {
+      const owner = await createTestUser(prisma, { email: "retained-api@example.com" });
+      const cookie = await sessionCookie(owner.id);
+      const payload = {
+        build: retainedBuild("retained-api-veteran"),
+        configuration: { flexBudget: 26, formationBudget: 60, id: "api-pilot-v1" },
+        idempotencyKey: "api-finalize-veteran",
+        pilotCharacterId: "character:pilot:glantrian-retainer-veteran",
+      };
+      const first = await app.inject({
+        headers: { cookie },
+        method: "POST",
+        payload,
+        url: "/chargen/headless/finalize",
+      });
+      const replay = await app.inject({
+        headers: { cookie },
+        method: "POST",
+        payload,
+        url: "/chargen/headless/finalize",
+      });
+
+      expect(first.statusCode).toBe(200);
+      expect(replay.statusCode).toBe(200);
+      expect(replay.json()).toEqual(first.json());
+
+      const response = await app.inject({
+        headers: { cookie },
+        method: "GET",
+        url: "/characters/retained-api-veteran/effective-skills",
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().retainedCharacter).toMatchObject({
+        characterId: "retained-api-veteran",
+        characterRevisionId: first.json().revision.id,
+        effectiveSkills: {
+          versionEnvelope: {
+            contentRelease: {
+              contentVersion: "pilot-skills-content/1.0.1",
+              digest: "sha256:f524303b274b546c42daac06b65403957e896f35609d42ce7456ff5781c9f419",
+              id: "content-release:pilot-skills:1",
+            },
+          },
+        },
+        perspective: "owner",
+        provenanceDetail: "owner_safe",
+      });
+      expect(
+        response
+          .json()
+          .retainedCharacter.effectiveSkills.rows.find(
+            (row: { competencyId: string }) => row.competencyId === "skill:sword",
+          ),
+      ).toMatchObject({
+        directAcquisition: 0,
+        effectiveLevel: 6,
+        publicExplanation: "Competence acquired through prior experience",
+        strongestHistoryContribution: 0,
+      });
     });
   });
 }

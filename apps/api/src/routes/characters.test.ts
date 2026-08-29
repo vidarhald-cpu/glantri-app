@@ -19,11 +19,20 @@ const mocks = vi.hoisted(() => {
     saveCharacter: vi.fn(),
     saveExistingCharacter: vi.fn(),
   };
+  const retainedCharacterService = {
+    advanceLearningHistory: vi.fn(),
+    applyMigration: vi.fn(),
+    changeProfessionContext: vi.fn(),
+    getCurrentProjection: vi.fn(),
+    previewMigration: vi.fn(),
+    rollbackMigration: vi.fn(),
+  };
   return {
     characterService,
     gmUser,
     loadAccessibleCharacterInApi: vi.fn(),
     playerUser,
+    retainedCharacterService,
     requireAuthenticatedUser: vi.fn(),
   };
 });
@@ -52,6 +61,16 @@ vi.mock("@glantri/database", () => ({
       this.issues = issues;
     }
   },
+  RetainedCharacterMutationError: class RetainedCharacterMutationError extends Error {
+    constructor(
+      public code: string,
+      message: string,
+      public currentRevisionId?: string,
+    ) {
+      super(message);
+    }
+  },
+  RetainedCharacterService: vi.fn(() => mocks.retainedCharacterService),
 }));
 
 vi.mock("@glantri/domain", () => ({
@@ -139,6 +158,26 @@ describe("characters route contract", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ character: stubCharacter });
+  });
+
+  it("returns the server-authoritative retained Skill projection", async () => {
+    mocks.loadAccessibleCharacterInApi.mockResolvedValue(stubCharacter);
+    mocks.retainedCharacterService.getCurrentProjection.mockResolvedValue({
+      characterId: "char-1",
+      characterRevisionId: "revision-1",
+      effectiveSkills: { rows: [] },
+      perspective: "owner",
+      provenanceDetail: "owner_safe",
+    });
+
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({ method: "GET", url: "/char-1/effective-skills" });
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.retainedCharacterService.getCurrentProjection).toHaveBeenCalledWith({
+      characterId: "char-1",
+      perspective: "owner",
+    });
   });
 
   it("returns 404 when character is not accessible to the user", async () => {

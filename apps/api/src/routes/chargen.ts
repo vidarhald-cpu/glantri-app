@@ -1,17 +1,26 @@
 import type { FastifyPluginAsync } from "fastify";
 
-import { chargenRuleSetParametersSchema } from "@glantri/domain";
-import { ChargenRuleSetService } from "@glantri/database";
+import {
+  chargenRuleSetParametersSchema,
+  headlessChargenFinalizeInputSchema,
+} from "@glantri/domain";
+import {
+  ChargenRuleSetService,
+  CharacterValidationError,
+  RetainedCharacterMutationError,
+  RetainedCharacterService,
+} from "@glantri/database";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../lib/sessionAuth";
 import { BadRequestError, NotFoundError, handleRouteError } from "../lib/errors";
 
 const chargenRuleSetService = new ChargenRuleSetService();
+const retainedCharacterService = new RetainedCharacterService();
 
 export const chargenRoutes: FastifyPluginAsync = async (app) => {
   app.get("/", async () => ({
     resource: "chargen",
-    status: "scaffolded"
+    status: "scaffolded",
   }));
 
   app.get("/rule-sets", async (request, reply) => {
@@ -24,11 +33,41 @@ export const chargenRoutes: FastifyPluginAsync = async (app) => {
     return chargenRuleSetService.getStore();
   });
 
+  app.post("/headless/finalize", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) return;
+
+    try {
+      const parsed = headlessChargenFinalizeInputSchema.parse(request.body);
+      const result = await retainedCharacterService.finalizeHeadless({
+        actor: { isAdmin: user.roles.includes("admin"), userId: user.id },
+        command: parsed as never,
+      });
+      return result;
+    } catch (error) {
+      if (error instanceof RetainedCharacterMutationError) {
+        return reply.code(409).send({
+          code: error.code,
+          currentRevisionId: error.currentRevisionId,
+          error: error.message,
+        });
+      }
+      if (error instanceof CharacterValidationError) {
+        return handleRouteError(
+          new BadRequestError("Character build validation failed.", { issues: error.issues }),
+          reply,
+        );
+      }
+      return handleRouteError(error, reply);
+    }
+  });
+
   app.get("/rule-sets/active", async () => {
     const store = await chargenRuleSetService.getStore();
 
     return {
-      activeRuleSet: store.activeRuleSet
+      activeRuleSet: store.activeRuleSet,
     };
   });
 
@@ -48,7 +87,7 @@ export const chargenRoutes: FastifyPluginAsync = async (app) => {
 
     return chargenRuleSetService.createRuleSet({
       name,
-      parameters
+      parameters,
     });
   });
 

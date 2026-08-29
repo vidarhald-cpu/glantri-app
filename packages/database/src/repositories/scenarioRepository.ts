@@ -54,6 +54,13 @@ export class ScenarioPersistenceError extends Error {
   }
 }
 
+export class CampaignRosterPersistenceConflictError extends Error {
+  constructor(readonly activeCampaignId: string) {
+    super("Character already belongs to another active Campaign.");
+    this.name = "CampaignRosterPersistenceConflictError";
+  }
+}
+
 function isCampaignRosterIdentityConflict(
   error: unknown,
 ): error is Prisma.PrismaClientKnownRequestError {
@@ -1077,6 +1084,18 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
 
         return mapCampaignRosterEntry(record);
       } catch (error) {
+        if (
+          input.sourceType === "character" &&
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002"
+        ) {
+          const activeMembership = await prisma.campaignRosterEntry.findFirst({
+            where: { sourceId: input.sourceId, sourceType: "character" },
+          });
+          if (activeMembership && activeMembership.campaignId !== input.campaignId) {
+            throw new CampaignRosterPersistenceConflictError(activeMembership.campaignId);
+          }
+        }
         if (!isCampaignRosterIdentityConflict(error)) {
           throw error;
         }
