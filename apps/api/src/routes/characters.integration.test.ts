@@ -330,16 +330,15 @@ if (!appUsesTestDatabase) {
       expect(ownerProjection.body).not.toMatch(
         /Copper Latch|Night-Entry Crew|Iest Dockside Network|access:iest-contact-copper-latch/,
       );
-      expect(ownerProjection.json().retainedCharacter.effectiveSkills.versionEnvelope).toMatchObject(
-        {
-          contentRelease: {
-            contentVersion: "pilot-skills-content/1.0.1",
-            digest:
-              "sha256:f524303b274b546c42daac06b65403957e896f35609d42ce7456ff5781c9f419",
-            id: "content-release:pilot-skills:1",
-          },
+      expect(
+        ownerProjection.json().retainedCharacter.effectiveSkills.versionEnvelope,
+      ).toMatchObject({
+        contentRelease: {
+          contentVersion: "pilot-skills-content/1.0.1",
+          digest: "sha256:f524303b274b546c42daac06b65403957e896f35609d42ce7456ff5781c9f419",
+          id: "content-release:pilot-skills:1",
         },
-      );
+      });
 
       const replayProbe = await app.inject({
         headers: { cookie: outsiderCookie },
