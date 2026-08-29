@@ -30,6 +30,12 @@ describe("rules documentation registry", () => {
           title: "Pilot Skill Rules v1",
         }),
         expect.objectContaining({
+          fileName: "pilot-skill-content-release-v1.md",
+          id: "pilot-skill-content-release-v1",
+          section: "Skills",
+          title: "Pilot Skill Content Release v1",
+        }),
+        expect.objectContaining({
           fileName: "equipment-encumbrance-calculations.md",
           id: "equipment-encumbrance-calculations",
           section: "Equipment",
@@ -80,6 +86,7 @@ describe("rules documentation registry", () => {
     expect(getRulesDocuments().map((document) => document.title)).toEqual([
       "Chargen Calculations",
       "Pilot Skill Rules v1",
+      "Pilot Skill Content Release v1",
       "Character Sheet Calculations",
       "Character Progression Calculations",
       "Equipment & Encumbrance Calculations",
@@ -117,6 +124,31 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("source is `society` or `background`");
     expect(model.selectedDocument.markdown).toContain("Deliberate optimizer");
     expect(model.selectedDocument.markdown).toContain("Configuration Formation `47`, Flex `5`");
+  });
+
+  it("loads the canonical bounded Pilot Skill content release identity and safeguards", async () => {
+    const model = await getRulesDocumentationPageModel({
+      selectedDocumentId: "pilot-skill-content-release-v1",
+    });
+
+    expect(model.selectedDocument.title).toBe("Pilot Skill Content Release v1");
+    expect(model.selectedDocument.markdown).toContain("# Pilot Skill Content Release v1");
+    expect(model.selectedDocument.markdown).toContain("content-release:pilot-skills:1");
+    expect(model.selectedDocument.markdown).toContain("pilot-skills-content/1.0.1");
+    expect(model.selectedDocument.markdown).toContain(
+      "f524303b274b546c42daac06b65403957e896f35609d42ce7456ff5781c9f419",
+    );
+    expect(model.selectedDocument.markdown).toContain("ordinary Trade and Smithing route is AB2");
+    expect(model.selectedDocument.markdown).toContain(
+      "Olog Princely Law, and Court Administration",
+    );
+    expect(model.selectedDocument.markdown).toContain("from the synthetic Gate A fixtures");
+    expect(model.selectedDocument.markdown).toContain(
+      "Every exception records `grantsCompetence: 0`",
+    );
+    expect(model.selectedDocument.markdown).toContain("background automatically grants writing");
+    expect(model.selectedDocument.markdown).toContain("Recursive relationships remain deferred");
+    expect(model.selectedDocument.markdown).toContain("new content version");
   });
 
   it("loads the character progression document with roll and threshold content", async () => {
