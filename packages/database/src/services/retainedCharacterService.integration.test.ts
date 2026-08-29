@@ -255,6 +255,7 @@ if (!process.env.DATABASE_URL_TEST) {
 
       const migrated = await retained.applyMigration({
         actor: { isAdmin: false, userId: owner.id },
+        characterId: "physician",
         idempotencyKey: "apply-migration",
         preview,
       });
@@ -305,7 +306,7 @@ if (!process.env.DATABASE_URL_TEST) {
           build: build("rostered-migration", "Rostered migration"),
           configuration: { flexBudget: 26, formationBudget: 60, id: "pilot-v1" },
           idempotencyKey: "finalize-rostered-migration",
-          pilotCharacterId: "character:pilot:mogrebi-temple-physician",
+          pilotCharacterId: "character:pilot:iest-dockside-investigator",
         },
       });
       const activeCampaign = await createTestCampaign(prisma!, gm.id, { status: "active" });
@@ -315,6 +316,31 @@ if (!process.env.DATABASE_URL_TEST) {
         category: "pc",
         sourceId: finalized.character.id,
         sourceType: "character",
+      });
+      await expect(
+        retained.finalizeHeadless({
+          actor: { isAdmin: false, userId: gm.id },
+          command: {
+            build: build("rostered-migration", "Rostered migration"),
+            configuration: { flexBudget: 26, formationBudget: 60, id: "pilot-v1" },
+            idempotencyKey: "finalize-rostered-migration",
+            pilotCharacterId: "character:pilot:iest-dockside-investigator",
+          },
+        }),
+      ).resolves.toMatchObject({ revision: { id: finalized.revision.id } });
+      await expect(
+        retained.getCurrentProjection({
+          characterId: finalized.character.id,
+          perspective: "current_campaign_gm",
+        }),
+      ).resolves.toMatchObject({
+        events: expect.arrayContaining([
+          expect.objectContaining({
+            protectedProvenance: { accessExceptionIds: ["access:iest-contact-copper-latch"] },
+          }),
+        ]),
+        perspective: "current_campaign_gm",
+        provenanceDetail: "full",
       });
       const preview = await retained.previewMigration({
         actor: { isAdmin: false, userId: owner.id },
@@ -331,6 +357,7 @@ if (!process.env.DATABASE_URL_TEST) {
       await expect(
         retained.applyMigration({
           actor: { isAdmin: false, userId: owner.id },
+          characterId: finalized.character.id,
           idempotencyKey: "owner-cannot-apply-rostered",
           preview,
         }),
@@ -339,6 +366,7 @@ if (!process.env.DATABASE_URL_TEST) {
       await expect(
         retained.applyMigration({
           actor: { isAdmin: false, userId: gm.id },
+          characterId: finalized.character.id,
           idempotencyKey: "gm-applies-rostered",
           preview,
         }),

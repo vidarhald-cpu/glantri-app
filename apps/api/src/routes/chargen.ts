@@ -47,6 +47,9 @@ export const chargenRoutes: FastifyPluginAsync = async (app) => {
       return result;
     } catch (error) {
       if (error instanceof RetainedCharacterMutationError) {
+        if (error.code === "retained_character_unauthorized") {
+          return reply.code(404).send({ code: error.code, error: "Character not found." });
+        }
         return reply.code(409).send({
           code: error.code,
           currentRevisionId: error.currentRevisionId,

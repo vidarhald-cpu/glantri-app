@@ -30,8 +30,10 @@ function parseExpectedUpdatedAt(value: unknown): string {
 
 function handleCharacterMutationError(error: unknown, reply: FastifyReply) {
   if (error instanceof RetainedCharacterMutationError) {
-    const status = error.code === "retained_character_unauthorized" ? 404 : 409;
-    return reply.code(status).send({
+    if (error.code === "retained_character_unauthorized") {
+      return reply.code(404).send({ code: error.code, error: "Character not found." });
+    }
+    return reply.code(409).send({
       code: error.code,
       currentRevisionId: error.currentRevisionId,
       error: error.message,
@@ -198,9 +200,12 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
     try {
       const user = await requireAuthenticatedUser(request, reply);
       if (!user) return;
+      const characterId = (request.params as { id?: string }).id;
       const body = request.body as Record<string, unknown>;
+      if (!characterId) throw new BadRequestError("Character id is required.");
       const revision = await retainedCharacterService.applyMigration({
         actor: { isAdmin: user.roles.includes("admin"), userId: user.id },
+        characterId,
         idempotencyKey: String(body.idempotencyKey ?? ""),
         preview: body.preview as CharacterMigrationPreview,
       });

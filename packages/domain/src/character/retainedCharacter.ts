@@ -215,16 +215,30 @@ export type CharacterProvenancePerspective =
   | "uninvolved_player"
   | "admin";
 
-export interface CharacterEffectiveSkillProjection {
-  characterId: string;
-  characterRevisionId: string;
-  effectiveSkills: CharacterEffectiveSkillReadModel;
-  events?: CharacterLedgerEvent[];
-  migrationLineage: CharacterRevisionRecord["migrationLineage"];
-  perspective: Exclude<CharacterProvenancePerspective, "uninvolved_player">;
-  provenanceDetail: "full" | "owner_safe" | "summary_only";
-  revisionState: CharacterRevisionRecord["revisionState"];
-}
+export type CharacterEffectiveSkillProjection =
+  | {
+      characterId: string;
+      characterRevisionId?: never;
+      effectiveSkills: Omit<
+        CharacterEffectiveSkillReadModel,
+        "calculationDigest" | "characterRevisionId"
+      >;
+      events?: never;
+      migrationLineage?: never;
+      perspective: "entitled_player";
+      provenanceDetail: "summary_only";
+      revisionState?: never;
+    }
+  | {
+      characterId: string;
+      characterRevisionId: string;
+      effectiveSkills: CharacterEffectiveSkillReadModel;
+      events: CharacterLedgerEvent[];
+      migrationLineage: CharacterRevisionRecord["migrationLineage"];
+      perspective: "admin" | "current_campaign_gm" | "owner";
+      provenanceDetail: "full" | "owner_safe";
+      revisionState: CharacterRevisionRecord["revisionState"];
+    };
 
 export interface HeadlessChargenFinalizeInput {
   build: CharacterBuild;

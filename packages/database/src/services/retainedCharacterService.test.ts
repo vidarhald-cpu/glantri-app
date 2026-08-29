@@ -157,6 +157,9 @@ function inMemoryServices() {
   } as CharacterService;
 
   return {
+    revisionCount(characterId: string) {
+      return revisions.get(characterId)?.length ?? 0;
+    },
     service: new RetainedCharacterService(repository, characterService),
     setMembership(value: typeof membership) {
       membership = value;
@@ -261,6 +264,7 @@ describe("RetainedCharacterService", () => {
     await expect(
       service.applyMigration({
         actor: { isAdmin: false, userId: "owner" },
+        characterId: finalized.character.id,
         idempotencyKey: "memory-owner-apply",
         preview,
       }),
@@ -268,6 +272,7 @@ describe("RetainedCharacterService", () => {
     await expect(
       service.applyMigration({
         actor: { isAdmin: false, userId: "gm" },
+        characterId: finalized.character.id,
         idempotencyKey: "memory-forged-apply",
         preview: {
           ...preview,
@@ -287,6 +292,7 @@ describe("RetainedCharacterService", () => {
 
     const migrated = await service.applyMigration({
       actor: { isAdmin: false, userId: "gm" },
+      characterId: finalized.character.id,
       idempotencyKey: "memory-gm-apply",
       preview,
     });
@@ -304,6 +310,165 @@ describe("RetainedCharacterService", () => {
         status: "rollback_applied",
       },
       parentRevisionId: migrated.id,
+    });
+  });
+
+  it("authorizes every retained command before replay or stale-revision disclosure", async () => {
+    const { service, setMembership } = inMemoryServices();
+    const command = {
+      build: build("memory-private"),
+      configuration: { flexBudget: 26, formationBudget: 60, id: "memory-private-pilot" },
+      idempotencyKey: "memory-private-finalize",
+      pilotCharacterId: "character:pilot:iest-dockside-investigator",
+    };
+    const finalized = await service.finalizeHeadless({
+      actor: { isAdmin: false, userId: "owner" },
+      command,
+    });
+    await expect(
+      service.finalizeHeadless({
+        actor: { isAdmin: false, userId: "outsider" },
+        command,
+      }),
+    ).rejects.toMatchObject({
+      code: "retained_character_unauthorized",
+      currentRevisionId: undefined,
+    });
+
+    const outsider = { isAdmin: false, userId: "outsider" };
+    const history = finalized.revision.state.histories[0]!;
+    await expect(
+      service.advanceLearningHistory({
+        actor: outsider,
+        characterId: finalized.character.id,
+        expectedRevisionId: "known-stale-revision",
+        historyInstanceId: history.instanceId,
+        idempotencyKey: "known-command-key",
+        reason: "Probe",
+        targetLevel: history.level + 1,
+      }),
+    ).rejects.toMatchObject({ code: "retained_character_unauthorized" });
+    await expect(
+      service.changeProfessionContext({
+        actor: outsider,
+        characterId: finalized.character.id,
+        expectedRevisionId: "known-stale-revision",
+        idempotencyKey: "known-command-key",
+        professionId: "profession:probe",
+        reason: "Probe",
+      }),
+    ).rejects.toMatchObject({ code: "retained_character_unauthorized" });
+    await expect(
+      service.previewMigration({
+        actor: outsider,
+        characterId: finalized.character.id,
+        expectedRevisionId: "known-stale-revision",
+        migrationId: "migration:probe",
+        targetEnvelope: finalized.revision.versionEnvelope,
+      }),
+    ).rejects.toMatchObject({ code: "retained_character_unauthorized" });
+
+    setMembership({
+      campaignId: "campaign-private",
+      campaignStatus: "active",
+      gmUserId: "gm",
+      rosterEntryId: "roster-private",
+    });
+    const preview = await service.previewMigration({
+      actor: { isAdmin: false, userId: "owner" },
+      characterId: finalized.character.id,
+      expectedRevisionId: finalized.revision.id,
+      migrationId: "migration:private",
+      targetEnvelope: finalized.revision.versionEnvelope,
+    });
+    await expect(
+      service.applyMigration({
+        actor: outsider,
+        characterId: finalized.character.id,
+        idempotencyKey: "known-command-key",
+        preview,
+      }),
+    ).rejects.toMatchObject({ code: "retained_character_unauthorized" });
+    await expect(
+      service.rollbackMigration({
+        actor: outsider,
+        characterId: finalized.character.id,
+        expectedRevisionId: "known-stale-revision",
+        idempotencyKey: "known-command-key",
+        migrationRevisionId: "known-migration-revision",
+      }),
+    ).rejects.toMatchObject({ code: "retained_character_unauthorized" });
+  });
+
+  it("binds migration preview identity to the requested Character before mutation", async () => {
+    const { revisionCount, service } = inMemoryServices();
+    const actor = { isAdmin: false, userId: "owner" };
+    const finalizedA = await service.finalizeHeadless({
+      actor,
+      command: {
+        build: build("memory-migration-a"),
+        configuration: { flexBudget: 26, formationBudget: 60, id: "memory-a" },
+        idempotencyKey: "finalize-memory-a",
+        pilotCharacterId: "character:pilot:mogrebi-temple-physician",
+      },
+    });
+    const finalizedB = await service.finalizeHeadless({
+      actor,
+      command: {
+        build: build("memory-migration-b"),
+        configuration: { flexBudget: 26, formationBudget: 60, id: "memory-b" },
+        idempotencyKey: "finalize-memory-b",
+        pilotCharacterId: "character:pilot:mogrebi-temple-physician",
+      },
+    });
+    const preview = await service.previewMigration({
+      actor,
+      characterId: finalizedA.character.id,
+      expectedRevisionId: finalizedA.revision.id,
+      migrationId: "migration:bound-a",
+      targetEnvelope: createPilotCharacterVersionEnvelope({
+        flexBudget: 26,
+        formationBudget: 60,
+        id: "memory-a-maintenance",
+      }),
+    });
+
+    await expect(
+      service.applyMigration({
+        actor,
+        characterId: finalizedB.character.id,
+        idempotencyKey: "route-b",
+        preview,
+      }),
+    ).rejects.toMatchObject({ code: "retained_character_invalid_command" });
+    await expect(
+      service.applyMigration({
+        actor,
+        characterId: finalizedA.character.id,
+        idempotencyKey: "source-b",
+        preview: { ...preview, expectedRevisionId: finalizedB.revision.id },
+      }),
+    ).rejects.toMatchObject({ code: "retained_character_stale_revision" });
+    await expect(
+      service.applyMigration({
+        actor,
+        characterId: finalizedA.character.id,
+        idempotencyKey: "tampered-plan",
+        preview: { ...preview, migrationId: "migration:tampered" },
+      }),
+    ).rejects.toMatchObject({ code: "retained_character_invalid_command" });
+    expect(revisionCount(finalizedA.character.id)).toBe(1);
+    expect(revisionCount(finalizedB.character.id)).toBe(1);
+
+    await expect(
+      service.applyMigration({
+        actor,
+        characterId: finalizedA.character.id,
+        idempotencyKey: "valid-bound-a",
+        preview,
+      }),
+    ).resolves.toMatchObject({
+      migrationLineage: { sourceRevisionId: finalizedA.revision.id },
     });
   });
 });

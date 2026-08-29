@@ -271,25 +271,58 @@ function sanitizeOwnerEvent(
   };
 }
 
+function sanitizeOwnerSkillRows(revision: CharacterRevisionRecord): CharacterEffectiveSkillRow[] {
+  const protectedHistoryIds = revision.events
+    .filter(
+      (entry) =>
+        entry.component === "history" &&
+        entry.targetKind === "history" &&
+        entry.protectedProvenance,
+    )
+    .map((entry) => entry.targetId);
+  const protectedHistoryAliases = new Map(
+    protectedHistoryIds.map((historyId, index) => [historyId, `protected-history-${index + 1}`]),
+  );
+  const sanitizeCandidate = (candidate: CharacterEffectiveSkillRow["groupCandidates"][number]) => {
+    const alias = protectedHistoryAliases.get(candidate.historyInstanceId);
+    const suppressedAlias = candidate.suppressedByHistoryInstanceId
+      ? protectedHistoryAliases.get(candidate.suppressedByHistoryInstanceId)
+      : undefined;
+    return {
+      ...candidate,
+      historyInstanceId: alias ?? candidate.historyInstanceId,
+      historyLabel: alias ? "Protected learning history" : candidate.historyLabel,
+      suppressedByHistoryInstanceId: suppressedAlias ?? candidate.suppressedByHistoryInstanceId,
+    };
+  };
+  return revision.effectiveSkills.rows.map((row) => ({
+    ...row,
+    groupCandidates: row.groupCandidates.map(sanitizeCandidate),
+    suppressedOverlaps: row.suppressedOverlaps.map(sanitizeCandidate),
+  }));
+}
+
 export function projectRetainedCharacterRevision(
   revision: CharacterRevisionRecord,
   perspective: CharacterProvenancePerspective,
 ): CharacterEffectiveSkillProjection | null {
   if (perspective === "uninvolved_player") return null;
   if (perspective === "entitled_player") {
+    const {
+      calculationDigest: _calculationDigest,
+      characterRevisionId: _characterRevisionId,
+      ...summarySkills
+    } = revision.effectiveSkills;
     return {
       characterId: revision.characterId,
-      characterRevisionId: revision.id,
       effectiveSkills: {
-        ...revision.effectiveSkills,
+        ...summarySkills,
         rows: revision.effectiveSkills.rows
           .filter((row) => row.effectiveLevel > 0)
           .map(sanitizeSummaryRow),
       },
-      migrationLineage: revision.migrationLineage,
       perspective,
       provenanceDetail: "summary_only",
-      revisionState: revision.revisionState,
     };
   }
 
@@ -299,10 +332,7 @@ export function projectRetainedCharacterRevision(
     characterRevisionId: revision.id,
     effectiveSkills:
       perspective === "owner"
-        ? {
-            ...revision.effectiveSkills,
-            rows: revision.effectiveSkills.rows.map(sanitizeSummaryRow),
-          }
+        ? { ...revision.effectiveSkills, rows: sanitizeOwnerSkillRows(revision) }
         : revision.effectiveSkills,
     events: revision.events
       .filter((event) => isGmOrAdmin || event.visibility !== "gm_only")

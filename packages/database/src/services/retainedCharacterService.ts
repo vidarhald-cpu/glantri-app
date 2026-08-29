@@ -441,11 +441,18 @@ export class RetainedCharacterService {
     const envelope = createPilotCharacterVersionEnvelope(input.command.configuration);
     const commandPayload = { ...input.command, build };
     const commandDigest = digest(commandPayload);
+    let existingCharacter = await this.characterService.getCharacterById(build.id);
+    if (existingCharacter) {
+      await this.assertCharacterLifecycleAuthority(input.actor, build.id);
+    }
     const replay = await this.repository.findByCommand(build.id, input.command.idempotencyKey);
     if (replay) {
+      if (!existingCharacter) {
+        await this.assertCharacterLifecycleAuthority(input.actor, build.id);
+        existingCharacter = await this.characterService.getCharacterById(build.id);
+      }
       if (replay.commandDigest === commandDigest) {
-        const character = await this.characterService.getCharacterById(build.id);
-        return { character: character!, revision: replay };
+        return { character: existingCharacter!, revision: replay };
       }
       throw new RetainedCharacterMutationError(
         "retained_character_idempotency_conflict",
@@ -455,6 +462,9 @@ export class RetainedCharacterService {
     }
     const current = await this.repository.findCurrent(build.id);
     if (current) {
+      if (!existingCharacter) {
+        await this.assertCharacterLifecycleAuthority(input.actor, build.id);
+      }
       throw new RetainedCharacterMutationError(
         "retained_character_already_exists",
         "A retained Character already exists with this identity.",
@@ -493,6 +503,9 @@ export class RetainedCharacterService {
       return { character: character!, revision: committed };
     } catch (error) {
       const concurrent = await this.repository.findCurrent(build.id);
+      if (concurrent) {
+        await this.assertCharacterLifecycleAuthority(input.actor, build.id);
+      }
       if (
         concurrent?.commandIdempotencyKey === input.command.idempotencyKey &&
         concurrent.commandDigest === commandDigest
@@ -535,16 +548,10 @@ export class RetainedCharacterService {
     reason: string;
     targetLevel: number;
   }): Promise<CharacterRevisionRecord> {
+    await this.assertLearningHistoryAdvanceAuthority(input.actor, input.characterId);
     const replay = await this.findIdempotent(input.characterId, input.idempotencyKey, input);
     if (replay) return replay;
     const current = await this.requireCurrent(input.characterId, input.expectedRevisionId);
-    const membership = await this.repository.findActiveCampaignMembership(input.characterId);
-    if (!input.actor.isAdmin && membership?.gmUserId !== input.actor.userId) {
-      throw new RetainedCharacterMutationError(
-        "retained_character_unauthorized",
-        "Only the current Campaign GM or an admin may advance a learning history.",
-      );
-    }
     const history = current.state.histories.find(
       (candidate) => candidate.instanceId === input.historyInstanceId,
     );
@@ -614,10 +621,10 @@ export class RetainedCharacterService {
     professionId: string;
     reason: string;
   }): Promise<CharacterRevisionRecord> {
+    await this.assertCharacterLifecycleAuthority(input.actor, input.characterId);
     const replay = await this.findIdempotent(input.characterId, input.idempotencyKey, input);
     if (replay) return replay;
     const current = await this.requireCurrent(input.characterId, input.expectedRevisionId);
-    await this.assertCharacterLifecycleAuthority(input.actor, input.characterId);
     const state = { ...current.state, professionId: input.professionId };
     const authority = await this.authorityFor(input.actor, input.characterId);
     const revision = buildRevision({
@@ -665,8 +672,8 @@ export class RetainedCharacterService {
     migrationId: string;
     targetEnvelope: CharacterVersionEnvelope;
   }): Promise<CharacterMigrationPreview> {
+    await this.assertCharacterLifecycleAuthority(input.actor, input.characterId);
     const current = await this.requireCurrent(input.characterId, input.expectedRevisionId);
-    await this.assertCharacterLifecycleAuthority(input.actor, input.characterId, true);
     assertSupportedVersionEnvelope(input.targetEnvelope);
     const after = buildEffectiveSkills({
       characterId: current.characterId,
@@ -694,19 +701,20 @@ export class RetainedCharacterService {
 
   async applyMigration(input: {
     actor: RetainedCharacterActor;
+    characterId: string;
     idempotencyKey: string;
     preview: CharacterMigrationPreview;
   }): Promise<CharacterRevisionRecord> {
-    const replay = await this.findIdempotent(
-      input.preview.characterId,
-      input.idempotencyKey,
-      input,
-    );
+    const authority = await this.assertMigrationApplyAuthority(input.actor, input.characterId);
+    if (input.preview.characterId !== input.characterId) {
+      throw new RetainedCharacterMutationError(
+        "retained_character_invalid_command",
+        "The migration preview does not match the requested Character.",
+      );
+    }
+    const replay = await this.findIdempotent(input.characterId, input.idempotencyKey, input);
     if (replay) return replay;
-    const current = await this.requireCurrent(
-      input.preview.characterId,
-      input.preview.expectedRevisionId,
-    );
+    const current = await this.requireCurrent(input.characterId, input.preview.expectedRevisionId);
     assertSupportedVersionEnvelope(input.preview.targetEnvelope);
     if (input.preview.expiresAt <= new Date().toISOString()) {
       throw new RetainedCharacterMutationError(
@@ -730,6 +738,10 @@ export class RetainedCharacterService {
     if (
       input.preview.version !== CHARACTER_MIGRATION_PREVIEW_VERSION ||
       input.preview.mutatesCharacter !== false ||
+      input.preview.before.characterId !== input.characterId ||
+      input.preview.after.characterId !== input.characterId ||
+      input.preview.before.characterRevisionId !== current.id ||
+      input.preview.after.characterRevisionId !== current.id ||
       digest(input.preview.before) !== digest(current.effectiveSkills) ||
       digest(input.preview.after) !== digest(expectedAfter)
     ) {
@@ -738,7 +750,6 @@ export class RetainedCharacterService {
         "The migration preview no longer matches the retained Character calculation.",
       );
     }
-    const authority = await this.assertMigrationApplyAuthority(input.actor, current.characterId);
     const revision = buildRevision({
       actorUserId: input.actor.userId,
       authority,
@@ -789,6 +800,7 @@ export class RetainedCharacterService {
     idempotencyKey: string;
     migrationRevisionId: string;
   }): Promise<CharacterRevisionRecord> {
+    const authority = await this.assertMigrationApplyAuthority(input.actor, input.characterId);
     const replay = await this.findIdempotent(input.characterId, input.idempotencyKey, input);
     if (replay) return replay;
     const current = await this.requireCurrent(input.characterId, input.expectedRevisionId);
@@ -808,7 +820,6 @@ export class RetainedCharacterService {
         "The retained source revision is unavailable.",
       );
     }
-    const authority = await this.assertMigrationApplyAuthority(input.actor, input.characterId);
     const revision = buildRevision({
       actorUserId: input.actor.userId,
       authority,
@@ -921,28 +932,27 @@ export class RetainedCharacterService {
   private async assertCharacterLifecycleAuthority(
     actor: RetainedCharacterActor,
     characterId: string,
-    previewOnly = false,
   ): Promise<void> {
     if (actor.isAdmin) return;
     const [character, membership] = await Promise.all([
       this.characterService.getCharacterById(characterId),
       this.repository.findActiveCampaignMembership(characterId),
     ]);
-    if (
-      character?.ownerId !== actor.userId &&
-      membership?.gmUserId !== actor.userId &&
-      !previewOnly
-    ) {
+    if (character?.ownerId !== actor.userId && membership?.gmUserId !== actor.userId) {
       throw new RetainedCharacterMutationError(
         "retained_character_unauthorized",
         "Character not found.",
       );
     }
-    if (
-      previewOnly &&
-      character?.ownerId !== actor.userId &&
-      membership?.gmUserId !== actor.userId
-    ) {
+  }
+
+  private async assertLearningHistoryAdvanceAuthority(
+    actor: RetainedCharacterActor,
+    characterId: string,
+  ): Promise<void> {
+    if (actor.isAdmin) return;
+    const membership = await this.repository.findActiveCampaignMembership(characterId);
+    if (membership?.gmUserId !== actor.userId) {
       throw new RetainedCharacterMutationError(
         "retained_character_unauthorized",
         "Character not found.",

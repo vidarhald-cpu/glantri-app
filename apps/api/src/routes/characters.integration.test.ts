@@ -274,10 +274,250 @@ if (!appUsesTestDatabase) {
             (row: { competencyId: string }) => row.competencyId === "skill:sword",
           ),
       ).toMatchObject({
-        directAcquisition: 0,
+        directAcquisition: 2,
         effectiveLevel: 6,
-        publicExplanation: "Competence acquired through prior experience",
-        strongestHistoryContribution: 0,
+        publicExplanation: "2 acquired directly, 4 from strongest learning history",
+        strongestHistoryContribution: 4,
+      });
+    });
+
+    it("denies retained-command probes before replay or stale details and binds migrations", async () => {
+      const owner = await createTestUser(prisma, { email: "private-owner-api@example.com" });
+      const outsider = await createTestUser(prisma, { email: "private-outsider-api@example.com" });
+      const ownerCookie = await sessionCookie(owner.id);
+      const outsiderCookie = await sessionCookie(outsider.id);
+      const payload = {
+        build: retainedBuild("retained-private-a"),
+        configuration: { flexBudget: 26, formationBudget: 60, id: "api-private-v1" },
+        idempotencyKey: "api-private-finalize",
+        pilotCharacterId: "character:pilot:iest-dockside-investigator",
+      };
+      const finalized = await app.inject({
+        headers: { cookie: ownerCookie },
+        method: "POST",
+        payload,
+        url: "/chargen/headless/finalize",
+      });
+      expect(finalized.statusCode).toBe(200);
+      const currentRevisionId = finalized.json().revision.id as string;
+      const historyInstanceId = finalized.json().revision.state.histories[0].instanceId as string;
+      const ownerProjection = await app.inject({
+        headers: { cookie: ownerCookie },
+        method: "GET",
+        url: "/characters/retained-private-a/effective-skills",
+      });
+      expect(ownerProjection.statusCode).toBe(200);
+      expect(
+        ownerProjection
+          .json()
+          .retainedCharacter.effectiveSkills.rows.find(
+            (row: { competencyId: string }) => row.competencyId === "skill:lockpicking",
+          ),
+      ).toMatchObject({
+        acquiredBase: 6,
+        directAcquisition: 3,
+        effectiveLevel: 6,
+        groupCandidates: [
+          {
+            historyInstanceId: "protected-history-2",
+            historyLabel: "Protected learning history",
+            level: 3,
+            selectedAsStrongest: true,
+          },
+        ],
+        strongestHistoryContribution: 3,
+      });
+      expect(ownerProjection.body).not.toMatch(
+        /Copper Latch|Night-Entry Crew|Iest Dockside Network|access:iest-contact-copper-latch/,
+      );
+      expect(ownerProjection.json().retainedCharacter.effectiveSkills.versionEnvelope).toMatchObject(
+        {
+          contentRelease: {
+            contentVersion: "pilot-skills-content/1.0.1",
+            digest:
+              "sha256:f524303b274b546c42daac06b65403957e896f35609d42ce7456ff5781c9f419",
+            id: "content-release:pilot-skills:1",
+          },
+        },
+      );
+
+      const replayProbe = await app.inject({
+        headers: { cookie: outsiderCookie },
+        method: "POST",
+        payload,
+        url: "/chargen/headless/finalize",
+      });
+      expect(replayProbe.statusCode).toBe(404);
+      expect(replayProbe.json()).toEqual({
+        code: "retained_character_unauthorized",
+        error: "Character not found.",
+      });
+      expect(replayProbe.body).not.toMatch(
+        /eventId|actorUserId|revision|ledger|economics|protectedProvenance|Copper Latch|access:iest-contact-copper-latch|effectiveSkills/,
+      );
+
+      const ownerStale = await app.inject({
+        headers: { cookie: ownerCookie },
+        method: "POST",
+        payload: {
+          expectedRevisionId: "known-stale-revision",
+          idempotencyKey: "owner-stale-profession",
+          professionId: "profession:stale",
+        },
+        url: "/characters/retained-private-a/profession",
+      });
+      expect(ownerStale.statusCode).toBe(409);
+      expect(ownerStale.json()).toMatchObject({
+        code: "retained_character_stale_revision",
+        currentRevisionId,
+      });
+
+      const outsiderCommands = [
+        {
+          payload: {
+            expectedRevisionId: "known-stale-revision",
+            idempotencyKey: "outsider-profession",
+            professionId: "profession:probe",
+          },
+          url: "/characters/retained-private-a/profession",
+        },
+        {
+          payload: {
+            expectedRevisionId: "known-stale-revision",
+            idempotencyKey: "outsider-advance",
+            reason: "Probe",
+            targetLevel: 99,
+          },
+          url: `/characters/retained-private-a/histories/${historyInstanceId}/advance`,
+        },
+        {
+          payload: {
+            expectedRevisionId: "known-stale-revision",
+            migrationId: "migration:probe",
+            targetEnvelope: finalized.json().revision.versionEnvelope,
+          },
+          url: "/characters/retained-private-a/migrations/preview",
+        },
+        {
+          payload: {
+            expectedRevisionId: "known-stale-revision",
+            idempotencyKey: "outsider-rollback",
+            migrationRevisionId: "known-migration-revision",
+          },
+          url: "/characters/retained-private-a/migrations/rollback",
+        },
+      ];
+      for (const command of outsiderCommands) {
+        const response = await app.inject({
+          headers: { cookie: outsiderCookie },
+          method: "POST",
+          payload: command.payload,
+          url: command.url,
+        });
+        expect(response.statusCode).toBe(404);
+        expect(response.json()).toEqual({
+          code: "retained_character_unauthorized",
+          error: "Character not found.",
+        });
+        expect(response.body).not.toMatch(/currentRevisionId|eventId|actorUserId|economics/);
+      }
+
+      const previewResponse = await app.inject({
+        headers: { cookie: ownerCookie },
+        method: "POST",
+        payload: {
+          expectedRevisionId: currentRevisionId,
+          migrationId: "migration:api-bound-a",
+          targetEnvelope: finalized.json().revision.versionEnvelope,
+        },
+        url: "/characters/retained-private-a/migrations/preview",
+      });
+      expect(previewResponse.statusCode).toBe(200);
+      const preview = previewResponse.json().preview;
+
+      const outsiderApply = await app.inject({
+        headers: { cookie: outsiderCookie },
+        method: "POST",
+        payload: { idempotencyKey: "outsider-apply", preview },
+        url: "/characters/retained-private-a/migrations/apply",
+      });
+      expect(outsiderApply.statusCode).toBe(404);
+      expect(outsiderApply.body).not.toMatch(/currentRevisionId|previewDigest|revision|economics/);
+
+      const finalizedB = await app.inject({
+        headers: { cookie: ownerCookie },
+        method: "POST",
+        payload: {
+          ...payload,
+          build: retainedBuild("retained-private-b"),
+          idempotencyKey: "api-private-finalize-b",
+        },
+        url: "/chargen/headless/finalize",
+      });
+      expect(finalizedB.statusCode).toBe(200);
+      const beforeFailedApplyCount = await prisma.characterRevision.count();
+
+      const routeMismatch = await app.inject({
+        headers: { cookie: ownerCookie },
+        method: "POST",
+        payload: { idempotencyKey: "route-b-plan-a", preview },
+        url: "/characters/retained-private-b/migrations/apply",
+      });
+      expect(routeMismatch.statusCode).toBe(409);
+      expect(routeMismatch.json()).toMatchObject({ code: "retained_character_invalid_command" });
+
+      const sourceMismatch = await app.inject({
+        headers: { cookie: ownerCookie },
+        method: "POST",
+        payload: {
+          idempotencyKey: "source-b-plan-a",
+          preview: { ...preview, expectedRevisionId: finalizedB.json().revision.id },
+        },
+        url: "/characters/retained-private-a/migrations/apply",
+      });
+      expect(sourceMismatch.statusCode).toBe(409);
+      expect(sourceMismatch.json()).toMatchObject({ code: "retained_character_stale_revision" });
+
+      const tamperedPlan = await app.inject({
+        headers: { cookie: ownerCookie },
+        method: "POST",
+        payload: {
+          idempotencyKey: "tampered-plan-a",
+          preview: { ...preview, migrationId: "migration:tampered" },
+        },
+        url: "/characters/retained-private-a/migrations/apply",
+      });
+      expect(tamperedPlan.statusCode).toBe(409);
+      expect(tamperedPlan.json()).toMatchObject({ code: "retained_character_invalid_command" });
+      await expect(prisma.characterRevision.count()).resolves.toBe(beforeFailedApplyCount);
+
+      const applied = await app.inject({
+        headers: { cookie: ownerCookie },
+        method: "POST",
+        payload: { idempotencyKey: "valid-plan-a", preview },
+        url: "/characters/retained-private-a/migrations/apply",
+      });
+      expect(applied.statusCode).toBe(200);
+      expect(applied.json().revision.migrationLineage).toMatchObject({
+        sourceRevisionId: currentRevisionId,
+        status: "migration_applied",
+      });
+
+      const rolledBack = await app.inject({
+        headers: { cookie: ownerCookie },
+        method: "POST",
+        payload: {
+          expectedRevisionId: applied.json().revision.id,
+          idempotencyKey: "valid-rollback-a",
+          migrationRevisionId: applied.json().revision.id,
+        },
+        url: "/characters/retained-private-a/migrations/rollback",
+      });
+      expect(rolledBack.statusCode).toBe(200);
+      expect(rolledBack.json().revision.migrationLineage).toMatchObject({
+        rollbackOfRevisionId: applied.json().revision.id,
+        sourceRevisionId: currentRevisionId,
+        status: "rollback_applied",
       });
     });
   });

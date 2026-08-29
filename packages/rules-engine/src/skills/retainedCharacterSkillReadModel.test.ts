@@ -109,8 +109,11 @@ describe("retained Character Pilot v1 composition", () => {
       effectiveSkills: { characterId: "investigator", rows },
       events: [
         {
+          component: "history",
           protectedProvenance: { contact: "Copper Latch" },
           sourceLabel: "Night-Entry Crew",
+          targetId: "investigator:history:2:hist:iest-night-entry-crew",
+          targetKind: "history",
           visibility: "owner_and_gm",
         },
       ],
@@ -123,6 +126,29 @@ describe("retained Character Pilot v1 composition", () => {
     const gm = projectRetainedCharacterRevision(revision, "current_campaign_gm")!;
     const admin = projectRetainedCharacterRevision(revision, "admin")!;
     const player = projectRetainedCharacterRevision(revision, "entitled_player")!;
+    expect(owner.effectiveSkills.rows.find((row) => row.explicitGrants > 0)).toBeDefined();
+    expect(owner.effectiveSkills.rows.find((row) => row.directAcquisition > 0)).toBeDefined();
+    expect(
+      owner.effectiveSkills.rows.find((row) => row.relationshipCandidates.length > 0),
+    ).toBeDefined();
+    expect(
+      owner.effectiveSkills.rows.find((row) => row.competencyId === "skill:lockpicking"),
+    ).toMatchObject({
+      acquiredBase: 6,
+      directAcquisition: 3,
+      effectiveLevel: 6,
+      groupCandidates: [
+        {
+          historyInstanceId: "protected-history-1",
+          historyLabel: "Protected learning history",
+          level: 3,
+          selectedAsStrongest: true,
+        },
+      ],
+      strongestHistoryContribution: 3,
+    });
+    expect(gm.effectiveSkills.rows).toEqual(rows);
+    expect(admin.effectiveSkills.rows).toEqual(rows);
     expect(owner.events?.[0]?.protectedProvenance).toBeUndefined();
     expect(JSON.stringify(owner)).not.toMatch(/Copper Latch|Night-Entry Crew/);
     expect(owner.events?.[0]).toMatchObject({
@@ -134,6 +160,17 @@ describe("retained Character Pilot v1 composition", () => {
     expect(gm.events?.[0]?.protectedProvenance).toEqual({ contact: "Copper Latch" });
     expect(admin.events?.[0]?.protectedProvenance).toEqual({ contact: "Copper Latch" });
     expect(player.events).toBeUndefined();
+    expect(player).not.toHaveProperty("characterRevisionId");
+    expect(player).not.toHaveProperty("migrationLineage");
+    expect(player).not.toHaveProperty("revisionState");
+    expect(player.effectiveSkills).not.toHaveProperty("calculationDigest");
+    expect(player.effectiveSkills).not.toHaveProperty("characterRevisionId");
+    const playerRow = player.effectiveSkills.rows.find(
+      (row) => row.competencyId === owner.effectiveSkills.rows[0]?.competencyId,
+    );
+    if (playerRow) {
+      expect(playerRow.effectiveLevel).toBe(owner.effectiveSkills.rows[0]?.effectiveLevel);
+    }
     expect(JSON.stringify(player)).not.toMatch(
       /Copper Latch|Night-Entry Crew|groupCandidates":\[\{/,
     );
