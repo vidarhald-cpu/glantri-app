@@ -29,6 +29,7 @@ Useful references:
 - Task contract: `docs/process/task-contract.md`
 - Isolated Builder/QA execution: `docs/process/agent-execution.md`
 - Functional ownership/hotspots: `docs/architecture/ownership.md`
+- Strategic areas and existing proposals: `docs/product/development-areas.md`
 - Global user-facing principles: `docs/product/product-presentation-principles.md`
 - Regression guidance: `docs/testing-regression-matrix.md`
 - Rule and architecture decisions: `docs/decisions/`
