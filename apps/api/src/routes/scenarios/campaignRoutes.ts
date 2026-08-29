@@ -2,6 +2,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 
 import {
   CampaignCharacterRosterCandidateNotFoundError,
+  CampaignCharacterAlreadyRosteredError,
   CampaignService,
   EncounterService,
   ScenarioService,
@@ -510,6 +511,12 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
       return { rosterEntry };
     } catch (error) {
+      if (error instanceof CampaignCharacterAlreadyRosteredError) {
+        return reply.code(409).send({
+          code: "CHARACTER_ALREADY_IN_ACTIVE_CAMPAIGN",
+          error: error.message,
+        });
+      }
       if (error instanceof CampaignCharacterRosterCandidateNotFoundError) {
         return reply.code(404).send({ error: "Campaign character candidate not found." });
       }
@@ -552,6 +559,26 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to remove campaign roster entry.",
       });
+    }
+  });
+
+  app.post("/campaigns/:campaignId/characters/:characterId/leave", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+    try {
+      const campaignId = parseId(request.params, "campaignId", "Campaign id");
+      const characterId = parseId(request.params, "characterId", "Character id");
+      const result = await campaignService.leaveCampaign({
+        campaignId,
+        characterId,
+        ownerUserId: user.id,
+      });
+      return { ok: true, removed: result.removed };
+    } catch (error) {
+      if (error instanceof CampaignCharacterRosterCandidateNotFoundError) {
+        return reply.code(404).send({ error: "Character not found." });
+      }
+      return reply.code(400).send({ error: "Unable to leave Campaign." });
     }
   });
 

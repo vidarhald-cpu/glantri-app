@@ -14,18 +14,18 @@ For related references:
 
 Quick lookup:
 
-| What you see in Chargen | Where this doc explains it |
-| --- | --- |
-| Profile roll cards | `Stat/profile rolls` |
-| Resolve stats | `Resolve stats` and `Exchanges and builds` |
-| Choose civilization | `Civilization, society, and social class` |
-| Social class | `Stat/profile rolls` and `Civilization, society, and social class` |
-| Choose profession | `Profession packages and choices` |
-| Skill allocation | `Ordinary and flexible skill points` and `Skill purchases` |
-| Other skills | `Skill purchases` and `Profession packages and choices` |
-| Specializations | `Derived XP and specializations` |
-| Review summary | `Review summary and finalization` |
-| Finalize character | `Review summary and finalization` |
+| What you see in Chargen | Where this doc explains it                                         |
+| ----------------------- | ------------------------------------------------------------------ |
+| Profile roll cards      | `Stat/profile rolls`                                               |
+| Resolve stats           | `Resolve stats` and `Exchanges and builds`                         |
+| Choose civilization     | `Civilization, society, and social class`                          |
+| Social class            | `Stat/profile rolls` and `Civilization, society, and social class` |
+| Choose profession       | `Profession packages and choices`                                  |
+| Skill allocation        | `Ordinary and flexible skill points` and `Skill purchases`         |
+| Other skills            | `Skill purchases` and `Profession packages and choices`            |
+| Specializations         | `Derived XP and specializations`                                   |
+| Review summary          | `Review summary and finalization`                                  |
+| Finalize character      | `Review summary and finalization`                                  |
 
 ## 2. Chargen rule set
 
@@ -35,14 +35,20 @@ Chargen uses the active chargen rule set. Admins can manage rule sets in `Admin 
 
 Finalized characters save the chargen rule-set name and parameters that were used. Changing the active rule set later does not silently change already-finalized characters. Older characters without saved chargen rules show `Legacy default`.
 
+The bounded retained-Character headless path additionally pins the exact Pilot Skill rules,
+canonical content-release identity/version/digest, and complete campaign/Chargen configuration
+snapshot. It commits an append-only acquisition ledger and the authoritative effective-Skill read
+model described in [Retained Character Ledger and Headless Chargen](./retained-character-ledger.md).
+The existing visual Chargen wizard is not replaced by this headless foundation.
+
 Custom rule sets can change these values. The table below shows the legacy/default values used when no custom active rule set overrides them.
 
-| Rule-set parameter | Meaning | Default value |
-| --- | --- | ---: |
-| `Stat roll count` | Number of profile roll cards generated. | 20 |
-| `Exchanges allowed` | Number of stat exchanges allowed after choosing a profile. | 2 |
-| `Ordinary skill points` | Ordinary points available for normal chargen skill and group purchases. | 60 |
-| `Flexible point factor` | Multiplier for flexible point calculation. | 1 |
+| Rule-set parameter      | Meaning                                                                 | Default value |
+| ----------------------- | ----------------------------------------------------------------------- | ------------: |
+| `Stat roll count`       | Number of profile roll cards generated.                                 |            20 |
+| `Exchanges allowed`     | Number of stat exchanges allowed after choosing a profile.              |             2 |
+| `Ordinary skill points` | Ordinary points available for normal chargen skill and group purchases. |            60 |
+| `Flexible point factor` | Multiplier for flexible point calculation.                              |             1 |
 
 ## 3. Stat/profile rolls
 
@@ -50,11 +56,11 @@ App section: Chargen step `Profile rolls`.
 
 Each profile card has rolled stats, a distraction level, and a social class roll.
 
-| Value | Roll rule |
-| --- | --- |
-| Profile stats | Each stat is `4d6, drop the lowest die`. |
-| Distraction | `1d3 + 1d3`. |
-| Social class roll | `1d20`. |
+| Value             | Roll rule                                |
+| ----------------- | ---------------------------------------- |
+| Profile stats     | Each stat is `4d6, drop the lowest die`. |
+| Distraction       | `1d3 + 1d3`.                             |
+| Social class roll | `1d20`.                                  |
 
 The rule set's `Stat roll count` controls how many profile cards are generated. It does not change the dice used for social class or distraction.
 
@@ -71,38 +77,38 @@ After profile selection and any stat exchanges/builds, chargen resolves the fina
 The app uses a stat modifier table for some adjustments.
 
 | Stat value | Modifier |
-| ---: | ---: |
-| 1 | -5 |
-| 2-3 | -4 |
-| 4-5 | -3 |
-| 6-7 | -2 |
-| 8-9 | -1 |
-| 10-12 | 0 |
-| 13-14 | 1 |
-| 15-16 | 2 |
-| 17-18 | 3 |
-| 19-20 | 4 |
-| 21-22 | 5 |
-| 23-24 | 6 |
-| 25 | 7 |
+| ---------: | -------: |
+|          1 |       -5 |
+|        2-3 |       -4 |
+|        4-5 |       -3 |
+|        6-7 |       -2 |
+|        8-9 |       -1 |
+|      10-12 |        0 |
+|      13-14 |        1 |
+|      15-16 |        2 |
+|      17-18 |        3 |
+|      19-20 |        4 |
+|      21-22 |        5 |
+|      23-24 |        6 |
+|         25 |        7 |
 
 Current stat-resolution effects:
 
-| Resolved stat | Formula |
-| --- | --- |
-| `STR` | `rolled STR + stat modifier from SIZ` |
-| `DEX` | `rolled DEX + Size-to-DEX modifier` |
-| `CHA` | `rolled CHA + stat modifier from COM` |
-| `Health` | `rolled Health + stat modifier from CON` |
-| Other stats | Use the rolled or adjusted chargen value. |
+| Resolved stat | Formula                                   |
+| ------------- | ----------------------------------------- |
+| `STR`         | `rolled STR + stat modifier from SIZ`     |
+| `DEX`         | `rolled DEX + Size-to-DEX modifier`       |
+| `CHA`         | `rolled CHA + stat modifier from COM`     |
+| `Health`      | `rolled Health + stat modifier from CON`  |
+| Other stats   | Use the rolled or adjusted chargen value. |
 
 Size-to-DEX modifier:
 
-| Size condition | Modifier |
-| --- | ---: |
-| `SIZ > 14` | `-(Size GM - 1)` |
-| `SIZ > 9` and `SIZ <= 14` | `0` |
-| `SIZ <= 9` | `-Size GM` |
+| Size condition            |         Modifier |
+| ------------------------- | ---------------: |
+| `SIZ > 14`                | `-(Size GM - 1)` |
+| `SIZ > 9` and `SIZ <= 14` |              `0` |
+| `SIZ <= 9`                |       `-Size GM` |
 
 `Size GM` uses the same stat modifier table above.
 
@@ -112,14 +118,14 @@ App section: Chargen step `Resolve stats`.
 
 Exchanges and builds happen before final stat resolution.
 
-| Adjustment | Current rule |
-| --- | --- |
-| Exchange | Swap two different stats. |
-| Exchanges allowed | Comes from the active chargen rule set. |
-| Build | Increase one stat by `1` and decrease a different stat by `2`. |
-| Builds allowed | Currently fixed at `2`. |
-| Build lower bound | The decreased stat cannot go below `1`. |
-| Build upper bound | The increased stat cannot go above `25`. |
+| Adjustment        | Current rule                                                   |
+| ----------------- | -------------------------------------------------------------- |
+| Exchange          | Swap two different stats.                                      |
+| Exchanges allowed | Comes from the active chargen rule set.                        |
+| Build             | Increase one stat by `1` and decrease a different stat by `2`. |
+| Builds allowed    | Currently fixed at `2`.                                        |
+| Build lower bound | The decreased stat cannot go below `1`.                        |
+| Build upper bound | The increased stat cannot go above `25`.                       |
 
 Exchange count and build count are tracked separately.
 
@@ -134,20 +140,20 @@ Society determines social-band labels, available professions, baseline languages
 Social class roll maps to one of four social bands:
 
 | Social class roll | Social band |
-| ---: | ---: |
-| 1-10 | 1 |
-| 11-15 | 2 |
-| 16-18 | 3 |
-| 19-20 | 4 |
+| ----------------: | ----------: |
+|              1-10 |           1 |
+|             11-15 |           2 |
+|             16-18 |           3 |
+|             19-20 |           4 |
 
 The social-class table also gives a label and education value:
 
-| Social class roll | Label | Education value |
-| ---: | --- | ---: |
-| 1-10 | `Bønder` | 2 |
-| 11-15 | `Håndverkere` | 4 |
-| 16-18 | `Storbønder` | 6 |
-| 19-20 | `Adelen` | 8 |
+| Social class roll | Label         | Education value |
+| ----------------: | ------------- | --------------: |
+|              1-10 | `Bønder`      |               2 |
+|             11-15 | `Håndverkere` |               4 |
+|             16-18 | `Storbønder`  |               6 |
+|             19-20 | `Adelen`      |               8 |
 
 Society stage and social class band are separate ideas. Society stage is the civilization/society's development level; social class band is the character's access band inside that society.
 
@@ -173,11 +179,11 @@ App section: Chargen `Review summary`.
 
 Education combines the selected society/civilization setup, social class, and education-linked learned skills.
 
-| Input | Meaning |
-| --- | --- |
-| Base education | Starting education from the selected society/civilization setup. |
-| Social class education value | Education value from the social class band. |
-| Education-linked skills | Learned skills that add to Education. |
+| Input                        | Meaning                                                          |
+| ---------------------------- | ---------------------------------------------------------------- |
+| Base education               | Starting education from the selected society/civilization setup. |
+| Social class education value | Education value from the social class band.                      |
+| Education-linked skills      | Learned skills that add to Education.                            |
 
 Formula:
 
@@ -213,12 +219,12 @@ App section: Chargen steps `Skill allocation`, `Other skills`, and `Specializati
 
 Individual skill costs:
 
-| Purchase | Cost |
-| --- | ---: |
-| Ordinary skill increase | 2 |
-| Secondary skill increase | 1 |
-| New specialization | 4 |
-| Existing specialization increase | 2 |
+| Purchase                         | Cost |
+| -------------------------------- | ---: |
+| Ordinary skill increase          |    2 |
+| Secondary skill increase         |    1 |
+| New specialization               |    4 |
+| Existing specialization increase |    2 |
 
 Skill group cost is dynamic.
 
@@ -245,14 +251,14 @@ A profession grants access to included training packages and sometimes specific 
 
 The review summary shows:
 
-| UI label | Meaning |
-| --- | --- |
-| `Skill groups` | Skill groups currently represented in the draft. |
-| `Skills` | Skill rows currently represented in the draft. |
-| `Core skills` | Profession/package skills that are directly included and not only slot candidates. |
-| `Required group choices` | Required choice slots from available profession groups. |
-| `Selectable pool` | Other selectable skills from current profession/society access. |
-| `Chosen skills` | Skills selected from free choices or group slots. |
+| UI label                 | Meaning                                                                            |
+| ------------------------ | ---------------------------------------------------------------------------------- |
+| `Skill groups`           | Skill groups currently represented in the draft.                                   |
+| `Skills`                 | Skill rows currently represented in the draft.                                     |
+| `Core skills`            | Profession/package skills that are directly included and not only slot candidates. |
+| `Required group choices` | Required choice slots from available profession groups.                            |
+| `Selectable pool`        | Other selectable skills from current profession/society access.                    |
+| `Chosen skills`          | Skills selected from free choices or group slots.                                  |
 
 Selected slot skills appear under their owning group. Unselected slot candidates should not appear as direct skills.
 
@@ -299,6 +305,7 @@ Creator or owner attribution is handled by the character record around the saved
 
 ## 14. Known interim notes
 
-- Character advancement is not implemented yet.
+- General Character advancement remains incomplete. Retained Pilot Characters support the bounded
+  current-GM-authorized learning-history advancement seam documented above.
 - Some formula labels may be refined as the docs mature.
 - Combat and equipment calculations are documented in separate pages.

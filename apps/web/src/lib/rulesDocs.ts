@@ -23,6 +23,16 @@ export interface RulesDocument extends RulesDocumentRegistryEntry {
 
 export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
   {
+    audience: "Players, GMs, admins, and rules reviewers",
+    description:
+      "Canonical retained Character authority for acquisition events, effective Skills, headless finalization, Campaign exclusivity, migration lineage, snapshots, and provenance privacy.",
+    fileName: "retained-character-ledger.md",
+    id: "retained-character-ledger",
+    order: 9,
+    section: "Character",
+    title: "Retained Character Ledger and Headless Chargen",
+  },
+  {
     audience: "Players and GM reviewers",
     description:
       "Manual reference for profile rolls, stat resolution, social class, education, skill points, skill-group costs, choices, and finalization.",

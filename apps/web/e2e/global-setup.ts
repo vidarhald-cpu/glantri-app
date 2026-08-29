@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { characterPayload } from "./character-fixture";
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
@@ -64,6 +65,7 @@ function buildStorageState(cookieHeader: string, domain: string): object {
 
 const SMOKE_CHARACTER_ID = "smoke-char-00001";
 const SMOKE_NON_HOLDER_CHARACTER_ID = "smoke-char-00002";
+const SMOKE_DELEGATED_CHARACTER_ID = "smoke-char-00003";
 const SMOKE_GM_EMAIL = "smoke-gm@test.local";
 const SMOKE_NON_HOLDER_EMAIL = "smoke-non-holder@test.local";
 const SMOKE_PLAYER_EMAIL = "smoke-player@test.local";
@@ -85,66 +87,6 @@ async function loginOrRegister(email: string, displayName: string): Promise<stri
     });
     return sessionCookie!;
   }
-}
-
-function characterPayload(id: string, name: string) {
-  return {
-    build: {
-      equipment: { items: [] },
-      currentStatModifiers: {},
-      developedStatModifiers: { str: 1 },
-      id,
-      name,
-      profile: {
-        description: "",
-        distractionLevel: 3,
-        id: `profile-${id}`,
-        label: "Profile",
-        rolledStats: {
-          cha: 10,
-          com: 10,
-          con: 10,
-          dex: 10,
-          health: 10,
-          int: 10,
-          lck: 10,
-          pow: 10,
-          siz: 10,
-          str: 12,
-          will: 10,
-        },
-        resolvedStats: {
-          cha: 10,
-          com: 10,
-          con: 10,
-          dex: 10,
-          health: 10,
-          int: 10,
-          lck: 10,
-          pow: 10,
-          siz: 10,
-          str: 13,
-          will: 10,
-        },
-        societyLevel: 0,
-        statLayerVersion: 1,
-      },
-      progression: {
-        chargenMode: "standard",
-        educationPoints: 0,
-        flexiblePointFactor: 1,
-        level: 1,
-        primaryPoolSpent: 0,
-        primaryPoolTotal: 60,
-        secondaryPoolSpent: 0,
-        secondaryPoolTotal: 0,
-        skillGroups: [],
-        skills: [],
-        specializations: [],
-      },
-      progressionState: { availablePoints: 0, checks: [], history: [], pendingAttempts: [] },
-    },
-  };
 }
 
 export default async function globalSetup() {
@@ -220,6 +162,16 @@ export default async function globalSetup() {
     // Character already exists — idempotent
   }
 
+  try {
+    await apiPost(
+      "/characters",
+      characterPayload(SMOKE_DELEGATED_CHARACTER_ID, "Smoke Delegated Character"),
+      playerCookie,
+    );
+  } catch {
+    // Character already exists — idempotent
+  }
+
   // --- B2 campaign with the player's Character available for initial item assignment ---
   const { data: b2CampaignData } = await apiPost<{ campaign: { id: string } }>(
     "/campaigns",
@@ -275,7 +227,7 @@ export default async function globalSetup() {
     `/campaigns/${delegatedCampaignId}/roster`,
     {
       category: "pc",
-      sourceId: SMOKE_CHARACTER_ID,
+      sourceId: SMOKE_DELEGATED_CHARACTER_ID,
       sourceType: "character",
     },
     gmCookie,
@@ -293,7 +245,7 @@ export default async function globalSetup() {
   const { data: delegatedParticipantData } = await apiPost<{ participant: { id: string } }>(
     `/scenarios/${delegatedScenarioId}/participants/character`,
     {
-      characterId: SMOKE_CHARACTER_ID,
+      characterId: SMOKE_DELEGATED_CHARACTER_ID,
       controlledByUserId: nonHolderUser.id,
     },
     gmCookie,
@@ -314,9 +266,9 @@ export default async function globalSetup() {
         participantMembershipMode: "explicit",
         participants: [
           {
-            characterId: SMOKE_CHARACTER_ID,
+            characterId: SMOKE_DELEGATED_CHARACTER_ID,
             id: `delegated-encounter-participant-${delegatedEncounterSeed}`,
-            label: "Smoke Character",
+            label: "Smoke Delegated Character",
             participantType: "scenario",
             scenarioParticipantId: delegatedParticipantData.participant.id,
           },

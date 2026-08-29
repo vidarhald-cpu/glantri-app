@@ -20,6 +20,11 @@ implementation detail, and unresolved design work.
 Pages not listed here have not yet been audience-separated. Their existing content remains
 maintained and reachable while migration proceeds.
 
+Current retained-Character authority is documented in
+[Retained Character Ledger and Headless Chargen](./retained-character-ledger.md), which links the
+accepted Pilot v1 rules and exact canonical content release to persisted revisions, Campaign
+membership, migration lineage, snapshots, and viewer-safe provenance.
+
 ## Maintainer Indexes
 
 - [Combat Action Rule Inventory](./combat-action-rule-inventory.md) — source extraction,

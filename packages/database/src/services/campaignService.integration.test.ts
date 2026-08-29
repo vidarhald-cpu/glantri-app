@@ -4,7 +4,11 @@ import { createPrismaCharacterRepository } from "../repositories/characterReposi
 import { createPrismaScenarioRepository } from "../repositories/scenarioRepository";
 import { createTestCharacter, createTestUser } from "../testing/factories";
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
-import { CampaignCharacterRosterCandidateNotFoundError, CampaignService } from "./campaignService";
+import {
+  CampaignCharacterAlreadyRosteredError,
+  CampaignCharacterRosterCandidateNotFoundError,
+  CampaignService,
+} from "./campaignService";
 import { CharacterService } from "./characterService";
 
 const prisma = getTestPrismaClient();
@@ -211,6 +215,60 @@ if (!process.env.DATABASE_URL_TEST) {
           },
         }),
       ).resolves.toHaveLength(1);
+    });
+
+    it("atomically enforces one active Campaign and permits leave or GM removal before rejoining", async () => {
+      const gmA = await createTestUser(prisma!, { roles: ["game_master"] });
+      const gmB = await createTestUser(prisma!, { roles: ["game_master"] });
+      const owner = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, owner.id, { name: "One Campaign Hero" });
+      const repository = createPrismaScenarioRepository(prisma!);
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const service = new CampaignService(repository, characterService);
+      const campaignA = await service.createCampaign({ gmUserId: gmA.id, name: "Campaign A" });
+      const campaignB = await service.createCampaign({ gmUserId: gmB.id, name: "Campaign B" });
+      const add = (campaignId: string, gmUserId: string) =>
+        service.addCampaignRosterEntry({
+          actorUserId: gmUserId,
+          campaignId,
+          category: "pc",
+          sourceId: character.id,
+          sourceType: "character",
+        });
+
+      const first = await add(campaignA.id, gmA.id);
+      await expect(add(campaignB.id, gmB.id)).rejects.toBeInstanceOf(
+        CampaignCharacterAlreadyRosteredError,
+      );
+      await expect(
+        prisma!.campaignRosterEntry.count({
+          where: { sourceId: character.id, sourceType: "character" },
+        }),
+      ).resolves.toBe(1);
+
+      await service.removeCampaignRosterEntry({
+        campaignId: campaignA.id,
+        rosterEntryId: first.id,
+      });
+      const second = await add(campaignB.id, gmB.id);
+      expect(second.campaignId).toBe(campaignB.id);
+
+      await service.leaveCampaign({
+        campaignId: campaignB.id,
+        characterId: character.id,
+        ownerUserId: owner.id,
+      });
+      const raced = await Promise.allSettled([
+        add(campaignA.id, gmA.id),
+        add(campaignB.id, gmB.id),
+      ]);
+      expect(raced.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      expect(raced.filter((result) => result.status === "rejected")).toHaveLength(1);
+      await expect(
+        prisma!.campaignRosterEntry.count({
+          where: { sourceId: character.id, sourceType: "character" },
+        }),
+      ).resolves.toBe(1);
     });
 
     it("enforces concrete NPC roster ownership and campaign binding before writing or labeling", async () => {

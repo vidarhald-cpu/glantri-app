@@ -41,8 +41,23 @@ function mapCharacterRecord(character: {
     id: string;
   } | null;
   ownerId: string | null;
+  currentRetainedRevision?: {
+    effectiveSkillsJson: unknown;
+    id: string;
+    sequence: number;
+    versionEnvelopeJson: unknown;
+  } | null;
   updatedAt: Date;
 }): CharacterRecord {
+  const retainedEnvelope = character.currentRetainedRevision?.versionEnvelopeJson as
+    | {
+        contentRelease?: { digest?: string; id?: string };
+        skillRules?: { id?: string };
+      }
+    | undefined;
+  const retainedSkills = character.currentRetainedRevision?.effectiveSkillsJson as
+    | { calculationDigest?: string }
+    | undefined;
   return {
     build: characterBuildSchema.parse(character.build),
     createdAt: character.createdAt.toISOString(),
@@ -57,6 +72,23 @@ function mapCharacterRecord(character: {
         }
       : null,
     ownerId: character.ownerId,
+    retainedRevision:
+      character.currentRetainedRevision &&
+      retainedEnvelope?.contentRelease?.digest &&
+      retainedEnvelope.contentRelease.id &&
+      retainedEnvelope.skillRules?.id &&
+      retainedSkills?.calculationDigest
+        ? {
+            characterId: character.id,
+            characterRevisionId: character.currentRetainedRevision.id,
+            characterRevisionSequence: character.currentRetainedRevision.sequence,
+            contentDigest: retainedEnvelope.contentRelease.digest,
+            contentReleaseId: retainedEnvelope.contentRelease.id,
+            readModelDigest: retainedSkills.calculationDigest,
+            rulesVersion: retainedEnvelope.skillRules.id,
+            snapshotContractVersion: "character-revision-snapshot/v1",
+          }
+        : null,
     updatedAt: character.updatedAt.toISOString(),
   };
 }
@@ -67,6 +99,14 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
   async function findById(id: string): Promise<CharacterRecord | null> {
     const character = await prisma.character.findUnique({
       include: {
+        currentRetainedRevision: {
+          select: {
+            effectiveSkillsJson: true,
+            id: true,
+            sequence: true,
+            versionEnvelopeJson: true,
+          },
+        },
         owner: {
           select: {
             displayName: true,
@@ -134,6 +174,14 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
 
       const character = await prisma.character.findUnique({
         include: {
+          currentRetainedRevision: {
+            select: {
+              effectiveSkillsJson: true,
+              id: true,
+              sequence: true,
+              versionEnvelopeJson: true,
+            },
+          },
           owner: {
             select: {
               displayName: true,
@@ -150,6 +198,14 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
     async findOwnedById(ownerId, id) {
       const character = await prisma.character.findFirst({
         include: {
+          currentRetainedRevision: {
+            select: {
+              effectiveSkillsJson: true,
+              id: true,
+              sequence: true,
+              versionEnvelopeJson: true,
+            },
+          },
           owner: {
             select: {
               displayName: true,
@@ -169,6 +225,14 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
     async listAll() {
       const characters = await prisma.character.findMany({
         include: {
+          currentRetainedRevision: {
+            select: {
+              effectiveSkillsJson: true,
+              id: true,
+              sequence: true,
+              versionEnvelopeJson: true,
+            },
+          },
           owner: {
             select: {
               displayName: true,
@@ -202,6 +266,14 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
 
       const characters = await prisma.character.findMany({
         include: {
+          currentRetainedRevision: {
+            select: {
+              effectiveSkillsJson: true,
+              id: true,
+              sequence: true,
+              versionEnvelopeJson: true,
+            },
+          },
           owner: {
             select: {
               displayName: true,
@@ -223,6 +295,14 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
     async listByOwner(ownerId) {
       const characters = await prisma.character.findMany({
         include: {
+          currentRetainedRevision: {
+            select: {
+              effectiveSkillsJson: true,
+              id: true,
+              sequence: true,
+              versionEnvelopeJson: true,
+            },
+          },
           owner: {
             select: {
               displayName: true,

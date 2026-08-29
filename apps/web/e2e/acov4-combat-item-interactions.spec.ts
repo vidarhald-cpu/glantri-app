@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { createCharacterForE2e } from "./character-fixture";
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
@@ -74,8 +75,22 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     const recipientMe = (await (
       await recipientContext.request.get(`${API_URL}/auth/me`)
     ).json()) as { user: { id: string } };
-    const characterId = "smoke-char-00001";
-    const recipientCharacterId = "smoke-char-00002";
+    const characterId = `acov4-player-${suffix}`;
+    const recipientCharacterId = `acov4-recipient-${suffix}`;
+    const characterName = `ACoV4 Source ${suffix}`;
+    const recipientCharacterName = `ACoV4 Recipient ${suffix}`;
+    await createCharacterForE2e({
+      apiUrl: API_URL,
+      id: characterId,
+      name: characterName,
+      request: playerContext.request,
+    });
+    await createCharacterForE2e({
+      apiUrl: API_URL,
+      id: recipientCharacterId,
+      name: recipientCharacterName,
+      request: recipientContext.request,
+    });
 
     const campaign = await postJson<{ campaign: { id: string } }>(gmPage.request, "/campaigns", {
       name: `ACoV4 Item Combat ${suffix}`,
@@ -118,14 +133,14 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
           {
             characterId,
             id: `acov4-source-${suffix}`,
-            label: "Smoke Character",
+            label: characterName,
             participantType: "scenario",
             scenarioParticipantId: sourceParticipant.participant.id,
           },
           {
             characterId: recipientCharacterId,
             id: `acov4-recipient-${suffix}`,
-            label: "Smoke Non-holder Character",
+            label: recipientCharacterName,
             participantType: "scenario",
             scenarioParticipantId: recipientParticipant.participant.id,
           },
@@ -162,10 +177,10 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
       };
     };
     const sourceEncounterParticipantId = initialOptions.options.actors.find(
-      (candidate) => candidate.label === "Smoke Character",
+      (candidate) => candidate.label === characterName,
     )?.participantId;
     const recipientEncounterParticipantId = initialOptions.options.recipients.find(
-      (candidate) => candidate.label === "Smoke Non-holder Character",
+      (candidate) => candidate.label === recipientCharacterName,
     )?.participantId;
     expect(sourceEncounterParticipantId).toBeTruthy();
     expect(recipientEncounterParticipantId).toBeTruthy();
@@ -177,7 +192,7 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     await expect(playerPage.getByText("Held · On person", { exact: true })).toBeVisible();
     await playerPage
       .getByLabel(`Pass ${itemName} to`)
-      .selectOption({ label: "Smoke Non-holder Character" });
+      .selectOption({ label: recipientCharacterName });
     await playerPage.getByRole("button", { name: `${itemName}: Pass / give` }).click();
     await expect(playerPage.getByText("Waiting for GM review · GM decides")).toBeVisible();
 

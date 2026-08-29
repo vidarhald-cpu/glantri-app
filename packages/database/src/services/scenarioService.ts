@@ -389,6 +389,7 @@ export class ScenarioService {
     const snapshotState = createParticipantSnapshotFromCharacter({
       build: character.build,
       equipmentState,
+      retainedCharacterRevision: character.retainedRevision ?? undefined,
       sourceUpdatedAt: character.updatedAt,
     });
     const participant = await this.repository.createScenarioParticipant({

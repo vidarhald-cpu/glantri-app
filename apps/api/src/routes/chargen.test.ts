@@ -27,12 +27,14 @@ const mocks = vi.hoisted(() => {
     createRuleSet: vi.fn(),
     getStore: vi.fn(),
   };
+  const retainedCharacterService = { finalizeHeadlessProjected: vi.fn() };
   return {
     adminUser,
     chargenRuleSetService,
     playerUser,
     requireAdminUser: vi.fn(),
     requireAuthenticatedUser: vi.fn(),
+    retainedCharacterService,
     stubRuleSet,
     stubStore,
   };
@@ -40,10 +42,14 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("@glantri/database", () => ({
   ChargenRuleSetService: vi.fn(() => mocks.chargenRuleSetService),
+  CharacterValidationError: class CharacterValidationError extends Error {},
+  RetainedCharacterMutationError: class RetainedCharacterMutationError extends Error {},
+  RetainedCharacterService: vi.fn(() => mocks.retainedCharacterService),
 }));
 
 vi.mock("@glantri/domain", () => ({
   chargenRuleSetParametersSchema: { parse: (v: unknown) => v },
+  headlessChargenFinalizeInputSchema: { parse: (v: unknown) => v },
 }));
 
 vi.mock("../lib/sessionAuth", () => ({
@@ -73,6 +79,30 @@ describe("chargen route contract", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual(mocks.stubStore);
+  });
+
+  it("finalizes a canonical retained Character through the headless boundary", async () => {
+    const command = {
+      build: { id: "char-1" },
+      configuration: { flexBudget: 26, formationBudget: 60, id: "pilot" },
+      idempotencyKey: "finalize-1",
+      pilotCharacterId: "character:pilot:glantrian-retainer-veteran",
+    };
+    mocks.retainedCharacterService.finalizeHeadlessProjected.mockResolvedValue({
+      character: { id: "char-1" },
+      revision: { id: "revision-1" },
+    });
+    const app = await buildChargenTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: command,
+      url: "/chargen/headless/finalize",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(mocks.retainedCharacterService.finalizeHeadlessProjected).toHaveBeenCalledWith({
+      actor: { isAdmin: false, userId: "player-1" },
+      command,
+    });
   });
 
   it("returns 401 shape when not authenticated on rule-sets", async () => {
@@ -142,7 +172,7 @@ describe("chargen route contract", () => {
 
   it("returns 404 when activating a non-existent rule set", async () => {
     mocks.chargenRuleSetService.activateRuleSet.mockRejectedValue(
-      new Error("Chargen rule set not found.")
+      new Error("Chargen rule set not found."),
     );
 
     const app = await buildChargenTestApp();

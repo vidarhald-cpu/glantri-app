@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
+import { createCharacterForE2e } from "./character-fixture";
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 const WEB_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
@@ -12,13 +13,6 @@ const ARTIFACT_HEADERS = {
   origin: WEB_URL,
   "x-glantri-artifact-mutation": "1",
 };
-
-function loadCharacterIds(): { characterId: string; nonHolderCharacterId: string } {
-  return JSON.parse(fs.readFileSync(path.join(__dirname, "test-state.json"), "utf8")) as {
-    characterId: string;
-    nonHolderCharacterId: string;
-  };
-}
 
 function filesBelow(root: string): string[] {
   return fs.readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
@@ -42,7 +36,26 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
     expect(campaignResponse.status()).toBe(200);
     const campaignId = ((await campaignResponse.json()) as { campaign: { id: string } }).campaign
       .id;
-    const { characterId, nonHolderCharacterId } = loadCharacterIds();
+    const characterId = `blackboard-player-${suffix}`;
+    const nonHolderCharacterId = `blackboard-other-${suffix}`;
+    const playerContext = await browser.newContext({
+      storageState: path.resolve(__dirname, ".auth/player.json"),
+    });
+    const otherPlayerContext = await browser.newContext({
+      storageState: path.resolve(__dirname, ".auth/non-holder.json"),
+    });
+    await createCharacterForE2e({
+      apiUrl: API_URL,
+      id: characterId,
+      name: `Blackboard Player ${suffix}`,
+      request: playerContext.request,
+    });
+    await createCharacterForE2e({
+      apiUrl: API_URL,
+      id: nonHolderCharacterId,
+      name: `Blackboard Other ${suffix}`,
+      request: otherPlayerContext.request,
+    });
 
     for (const sourceId of [characterId, nonHolderCharacterId]) {
       const rosterResponse = await page.request.post(`${API_URL}/campaigns/${campaignId}/roster`, {
@@ -51,12 +64,6 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
       expect(rosterResponse.status()).toBe(200);
     }
 
-    const playerContext = await browser.newContext({
-      storageState: path.resolve(__dirname, ".auth/player.json"),
-    });
-    const otherPlayerContext = await browser.newContext({
-      storageState: path.resolve(__dirname, ".auth/non-holder.json"),
-    });
     const unauthorizedContext = await browser.newContext({
       storageState: path.resolve(__dirname, ".auth/unrelated.json"),
     });

@@ -295,6 +295,18 @@ export const scenarioParticipantSnapshotSchema = z.object({
     })
     .optional(),
   equipmentState: z.unknown().optional(),
+  retainedCharacterRevision: z
+    .object({
+      characterId: z.string().min(1),
+      characterRevisionId: z.string().min(1),
+      characterRevisionSequence: z.number().int().positive(),
+      contentDigest: z.string().min(1),
+      contentReleaseId: z.string().min(1),
+      readModelDigest: z.string().min(1),
+      rulesVersion: z.string().min(1),
+      snapshotContractVersion: z.literal("character-revision-snapshot/v1"),
+    })
+    .optional(),
   sheetSummary: z.unknown().optional(),
   sourceUpdatedAt: timestampSchema.optional(),
 });
@@ -633,6 +645,7 @@ export function hasScenarioParticipantCombatDeclarationForEncounterRound(input: 
 export function createParticipantSnapshotFromCharacter(input: {
   build: CharacterBuild;
   equipmentState?: unknown;
+  retainedCharacterRevision?: import("../character/retainedCharacter").CharacterRevisionSnapshotReference;
   sheetSummary?: unknown;
   sourceUpdatedAt?: string;
 }): {
@@ -651,6 +664,7 @@ export function createParticipantSnapshotFromCharacter(input: {
       build: snapshotBuild,
       displayName: input.build.name,
       equipmentState: input.equipmentState,
+      retainedCharacterRevision: input.retainedCharacterRevision,
       sheetSummary: input.sheetSummary,
       sourceUpdatedAt: input.sourceUpdatedAt,
     }),

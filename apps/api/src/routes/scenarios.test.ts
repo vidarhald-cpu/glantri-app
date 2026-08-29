@@ -68,6 +68,13 @@ import {
 import { weaponTemplates } from "@glantri/content/equipment";
 
 const mocks = vi.hoisted(() => {
+  class CampaignCharacterAlreadyRosteredError extends Error {
+    constructor() {
+      super("Character is already rostered in an active Campaign.");
+      this.name = "CampaignCharacterAlreadyRosteredError";
+    }
+  }
+
   class CampaignCharacterRosterCandidateNotFoundError extends Error {
     constructor() {
       super("Campaign character candidate not found.");
@@ -158,6 +165,7 @@ const mocks = vi.hoisted(() => {
   };
   return {
     adminUser,
+    CampaignCharacterAlreadyRosteredError,
     CampaignCharacterRosterCandidateNotFoundError,
     campaignService,
     characterEquipmentReadModelService,
@@ -173,6 +181,7 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("@glantri/database", () => ({
+  CampaignCharacterAlreadyRosteredError: mocks.CampaignCharacterAlreadyRosteredError,
   CampaignCharacterRosterCandidateNotFoundError:
     mocks.CampaignCharacterRosterCandidateNotFoundError,
   CampaignService: vi.fn(() => mocks.campaignService),

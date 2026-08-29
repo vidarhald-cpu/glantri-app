@@ -36,6 +36,12 @@ describe("rules documentation registry", () => {
           title: "Pilot Skill Content Release v1",
         }),
         expect.objectContaining({
+          fileName: "retained-character-ledger.md",
+          id: "retained-character-ledger",
+          section: "Character",
+          title: "Retained Character Ledger and Headless Chargen",
+        }),
+        expect.objectContaining({
           fileName: "equipment-encumbrance-calculations.md",
           id: "equipment-encumbrance-calculations",
           section: "Equipment",
@@ -87,6 +93,7 @@ describe("rules documentation registry", () => {
       "Chargen Calculations",
       "Pilot Skill Rules v1",
       "Pilot Skill Content Release v1",
+      "Retained Character Ledger and Headless Chargen",
       "Character Sheet Calculations",
       "Character Progression Calculations",
       "Equipment & Encumbrance Calculations",
@@ -149,6 +156,23 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("background automatically grants writing");
     expect(model.selectedDocument.markdown).toContain("Recursive relationships remain deferred");
     expect(model.selectedDocument.markdown).toContain("new content version");
+  });
+
+  it("loads the retained Character ledger, Campaign, migration, snapshot, and privacy authority", async () => {
+    const model = await getRulesDocumentationPageModel({
+      selectedDocumentId: "retained-character-ledger",
+    });
+
+    expect(model.selectedDocument.markdown).toContain(
+      "# Retained Character Ledger and Headless Chargen",
+    );
+    expect(model.selectedDocument.markdown).toContain("content-release:pilot-skills:1");
+    expect(model.selectedDocument.markdown).toContain("effective Skill E = max(A, R)");
+    expect(model.selectedDocument.markdown).toContain(
+      "at most one current Campaign roster membership",
+    );
+    expect(model.selectedDocument.markdown).toContain("Migration preview is non-mutating");
+    expect(model.selectedDocument.markdown).toContain("Teacher/contact identities");
   });
 
   it("loads the character progression document with roll and threshold content", async () => {

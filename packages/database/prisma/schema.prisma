@@ -166,11 +166,74 @@ model Character {
   ownerId          String?
   createdAt        DateTime                  @default(now())
   updatedAt        DateTime                  @updatedAt
+  currentRetainedRevisionId String?          @unique
   owner            User?                     @relation(fields: [ownerId], references: [id])
+  currentRetainedRevision CharacterRevision? @relation("CharacterCurrentRetainedRevision", fields: [currentRetainedRevisionId], references: [id], onDelete: SetNull)
+  retainedRevisions CharacterRevision[]      @relation("CharacterRetainedRevisionHistory")
+  retainedLedgerEvents CharacterLedgerEvent[]
   equipmentItems   CharacterEquipmentItem[]
   storageLocations CharacterStorageLocation[]
   loadouts         CharacterLoadout[]
   scenarioParticipants ScenarioParticipant[]
+}
+
+model CharacterRevision {
+  id                    String   @id
+  characterId           String
+  sequence              Int
+  parentRevisionId      String?
+  commandIdempotencyKey String
+  commandDigest         String
+  reason                String
+  actorUserId           String?
+  versionEnvelopeJson   Json
+  stateJson             Json
+  effectiveSkillsJson   Json
+  revisionDigest        String
+  migrationLineageJson  Json
+  createdAt             DateTime @default(now())
+  character             Character @relation("CharacterRetainedRevisionHistory", fields: [characterId], references: [id], onDelete: Cascade)
+  currentForCharacter   Character? @relation("CharacterCurrentRetainedRevision")
+  events                CharacterLedgerEvent[]
+
+  @@unique([characterId, sequence])
+  @@unique([characterId, commandIdempotencyKey])
+  @@index([characterId, createdAt])
+}
+
+model CharacterLedgerEvent {
+  id                        String   @id
+  characterId               String
+  characterRevisionId       String
+  sequence                  Int
+  idempotencyKey            String
+  eventKind                 String
+  phase                     String
+  component                 String
+  targetKind                String
+  targetId                  String
+  sourceKind                String
+  sourceId                  String
+  sourceLabel               String
+  publicExplanation         String
+  authority                 String
+  actorUserId               String?
+  visibility                String
+  valueBefore               Int?
+  valueAfter                Int?
+  valueDelta                Int?
+  economicsJson             Json?
+  prerequisiteEvidenceJson  Json?
+  protectedProvenanceJson   Json?
+  versionEnvelopeJson       Json
+  occurredAt                DateTime @default(now())
+  character                 Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  characterRevision         CharacterRevision @relation(fields: [characterRevisionId], references: [id], onDelete: Cascade)
+
+  @@unique([characterRevisionId, sequence])
+  @@unique([characterId, idempotencyKey])
+  @@index([characterId, occurredAt])
+  @@index([targetKind, targetId])
 }
 
 model Weapon {
