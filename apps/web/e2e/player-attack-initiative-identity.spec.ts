@@ -243,16 +243,18 @@ test.describe("Player attack initiative identity", () => {
     );
     const characterAId = `initiative-player-${suffix}`;
     const characterBId = `initiative-other-${suffix}`;
+    const characterAName = `Initiative Player ${suffix}`;
+    const characterBName = `Initiative Other ${suffix}`;
     await createCharacterForE2e({
       apiUrl: API_URL,
       id: characterAId,
-      name: "Smoke Character",
+      name: characterAName,
       request: playerAContext.request,
     });
     await createCharacterForE2e({
       apiUrl: API_URL,
       id: characterBId,
-      name: "Smoke Non-holder Character",
+      name: characterBName,
       request: playerBContext.request,
     });
     for (const [context, characterId] of [
@@ -370,14 +372,14 @@ test.describe("Player attack initiative identity", () => {
               {
                 characterId: characterAId,
                 id: encounterParticipantIds.attackerAId,
-                label: "Smoke Character",
+                label: characterAName,
                 participantType: "scenario",
                 scenarioParticipantId: participantA.participant.id,
               },
               {
                 characterId: characterBId,
                 id: encounterParticipantIds.attackerBId,
-                label: "Smoke Non-holder Character",
+                label: characterBName,
                 participantType: "scenario",
                 scenarioParticipantId: participantB.participant.id,
               },

@@ -38,13 +38,13 @@ test.describe("Campaign Artifact player presentation", () => {
     await createCharacterForE2e({
       apiUrl: API_URL,
       id: characterIds.characterId,
-      name: "Smoke Character",
+      name: `Artifact Player ${suffix}`,
       request: playerContext.request,
     });
     await createCharacterForE2e({
       apiUrl: API_URL,
       id: characterIds.nonHolderCharacterId,
-      name: "Smoke Non-holder Character",
+      name: `Artifact Other ${suffix}`,
       request: campaignOnlyContext.request,
     });
     const campaignResponse = await page.request.post(`${API_URL}/campaigns`, {

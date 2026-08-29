@@ -47,13 +47,13 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
     await createCharacterForE2e({
       apiUrl: API_URL,
       id: characterId,
-      name: "Smoke Character",
+      name: `Blackboard Player ${suffix}`,
       request: playerContext.request,
     });
     await createCharacterForE2e({
       apiUrl: API_URL,
       id: nonHolderCharacterId,
-      name: "Smoke Non-holder Character",
+      name: `Blackboard Other ${suffix}`,
       request: otherPlayerContext.request,
     });
 

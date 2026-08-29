@@ -36,6 +36,8 @@ test.describe("Lost Seal Scenario happy path", () => {
     const suffix = Date.now();
     const characterAId = `lost-seal-player-${suffix}`;
     const characterBId = `lost-seal-other-${suffix}`;
+    const characterAName = `Lost Seal Player ${suffix}`;
+    const characterBName = `Lost Seal Other ${suffix}`;
     const playerAContext = await browser.newContext({ storageState: "e2e/.auth/player.json" });
     const playerBContext = await browser.newContext({
       storageState: "e2e/.auth/non-holder.json",
@@ -55,13 +57,13 @@ test.describe("Lost Seal Scenario happy path", () => {
     await createCharacterForE2e({
       apiUrl: API_URL,
       id: characterAId,
-      name: "Smoke Character",
+      name: characterAName,
       request: playerAContext.request,
     });
     await createCharacterForE2e({
       apiUrl: API_URL,
       id: characterBId,
-      name: "Smoke Non-holder Character",
+      name: characterBName,
       request: playerBContext.request,
     });
 
@@ -330,7 +332,9 @@ test.describe("Lost Seal Scenario happy path", () => {
     await expect(playerAPage.getByText("Encounter: Seal Library Investigation")).toBeVisible();
     await expect(playerAPage.getByText("Courtyard Ambush")).toHaveCount(0);
     await expect(playerAPage.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
-    const pickUp = playerAPage.getByRole("button", { name: /Pick up as Smoke Character/ });
+    const pickUp = playerAPage.getByRole("button", {
+      name: `Pick up as ${characterAName}`,
+    });
     await pickUp.focus();
     await expect(pickUp).toBeFocused();
     await pickUp.press("Enter");
@@ -422,7 +426,7 @@ test.describe("Lost Seal Scenario happy path", () => {
               {
                 characterId: characterAId,
                 id: "shared-combat-player-a",
-                label: "Smoke Character",
+                label: characterAName,
                 participantType: "scenario",
                 scenarioParticipantId: participantA.participant.id,
               },
@@ -467,7 +471,7 @@ test.describe("Lost Seal Scenario happy path", () => {
     await playerAPage.setViewportSize({ height: 900, width: 1280 });
     await playerAPage.goto(playerCombatHref);
     await expect(
-      playerAPage.getByRole("heading", { name: "Combat — Smoke Character" }),
+      playerAPage.getByRole("heading", { name: `Combat — ${characterAName}` }),
     ).toBeVisible();
     await expect(
       playerAPage.getByText(hiddenParticipantName, { exact: false }).first(),
@@ -546,7 +550,7 @@ test.describe("Lost Seal Scenario happy path", () => {
     const reconnectedPlayerAPage = await playerAContext.newPage();
     await reconnectedPlayerAPage.goto(playerCombatHref);
     await expect(
-      reconnectedPlayerAPage.getByRole("heading", { name: "Combat — Smoke Character" }),
+      reconnectedPlayerAPage.getByRole("heading", { name: `Combat — ${characterAName}` }),
     ).toBeVisible();
     await expect(
       reconnectedPlayerAPage.getByText(hiddenParticipantName, { exact: false }),
