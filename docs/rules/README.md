@@ -25,6 +25,19 @@ Current retained-Character authority is documented in
 accepted Pilot v1 rules and exact canonical content release to persisted revisions, Campaign
 membership, migration lineage, snapshots, and viewer-safe provenance.
 
+Current Skill authority is split deliberately:
+
+- [Skill Catalogue qualitative architecture](../decisions/rules/0002-skill-catalogue-qualitative-architecture.md)
+  governs the 19 navigation domains, competence identities, DS/AB meaning,
+  language/written-tradition boundary, directional authoring relationships, and
+  learning-history semantics; and
+- [Pilot Skill Rules v1](./pilot-skill-rules-v1.md) and
+  [Pilot Skill Content Release v1](./pilot-skill-content-release-v1.md) govern the
+  bounded Pilot's accepted quantitative arithmetic, calibration, content, and
+  migration boundary.
+
+The qualitative decision does not change or generalize Pilot v1 mechanics.
+
 ## Maintainer Indexes
 
 - [Combat Action Rule Inventory](./combat-action-rule-inventory.md) — source extraction,

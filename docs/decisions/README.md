@@ -32,5 +32,8 @@ Routine implementation details do not need decision records.
 ## Recovered current decisions
 
 - Rules: [`rules/0001-c1-critical-injury-recalibration.md`](rules/0001-c1-critical-injury-recalibration.md)
+- Rules: [`rules/0002-skill-catalogue-qualitative-architecture.md`](rules/0002-skill-catalogue-qualitative-architecture.md)
 - Product/UX: [`../product/ui-interaction-preservation.md`](../product/ui-interaction-preservation.md)
 - Architecture: [`architecture/0002-spatial-scene-rules-boundary.md`](architecture/0002-spatial-scene-rules-boundary.md)
+- Architecture guidance: [`../architecture/information-authority-and-projection.md`](../architecture/information-authority-and-projection.md)
+- Portfolio guidance: [`../product/2026-09-03-strategic-future-register.md`](../product/2026-09-03-strategic-future-register.md)

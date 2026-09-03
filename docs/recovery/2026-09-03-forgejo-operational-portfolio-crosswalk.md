@@ -1,16 +1,20 @@
 # Recovered Forgejo operational portfolio and crosswalk
 
-Status: R3B minimum viable operational portfolio reconstructed on 2026-09-03.
+Status: R3B-R3D recovered operational portfolio crosswalk current on 2026-09-03.
 
 R3C reconciliation on 2026-09-03 moved the recovered contracts and accepted decisions into dedicated durable records. Use this document as the identity/status crosswalk, then consult:
 
 - [R3C recovered case register](./2026-09-03-r3c-recovered-case-register.md) for the self-contained state of Forgejo issues #1-#8;
+- [R3D recovered case register](./2026-09-03-r3d-recovered-case-register.md) for the self-contained state of Forgejo issues #9-#17 and the durable omission boundary;
 - [C1 Critical content calibration decision](../decisions/rules/0001-c1-critical-injury-recalibration.md);
+- [Skill Catalogue qualitative architecture decision](../decisions/rules/0002-skill-catalogue-qualitative-architecture.md);
+- [Authority and Information Projection Principle](../architecture/information-authority-and-projection.md);
+- [strategic portfolio and future register](../product/2026-09-03-strategic-future-register.md);
 - [Chargen and Combat Manager preservation contract](../product/ui-interaction-preservation.md);
 - [future spatial subsystem boundary](../decisions/architecture/0002-spatial-scene-rules-boundary.md); and
 - [prepared R4 localhost inspection contract](./2026-09-03-r4-localhost-inspection-task-contract.md).
 
-The R3B text below is retained as recovery provenance. Where its summary is less detailed, the R3C case register and dedicated decision records control.
+The R3B text below is retained as recovery provenance. Where its summary is less detailed, the R3C/R3D case registers and dedicated decision records control.
 
 ## Purpose and scope
 
@@ -25,6 +29,8 @@ This R3B record:
 - keeps inactive, paused, future, or unapproved work from becoming implementation authority merely because it has been reconstructed.
 
 R3B creates no Builder or QA work, implements no product code, changes no Glantri runtime behavior, and grants no `main`, production, Azure, deployment, or release authority.
+
+R3D separately reconstructs exactly nine additional issue identities (#9-#17) and one documentation-recovery Builder/QA lane. It does not adopt any other historical case or grant product implementation authority to the six inactive recovered cases.
 
 R3C later promoted the accepted decisions out of this recovery summary into durable rule, product, and architecture records. The issue-status crosswalk below remains the provenance ledger; the normative recovered decisions are:
 
@@ -51,15 +57,15 @@ Canonical `dev` was therefore fast-forwarded to `b4c6a61bcb423b81fb01a2d31aac4bf
 
 Every operational issue must carry exactly one exclusive `status/...` label. The labels preserve the Glantri status model:
 
-| Label | Meaning |
-| --- | --- |
-| `status/Design` | Concept, evidence, or consequential decisions are still being clarified. No implementation authority. |
-| `status/Ready` | The task contract is complete, but implementation is not authorized. |
-| `status/Authorized` | Product/control plane approved the work; the orchestrator may dispatch only when all gates and baseline checks are clear. |
-| `status/Active` | A Builder or QA lane has claimed ownership and work is in progress. |
-| `status/Ready for Independent QA` | Builder work is complete and awaits independent QA against an exact immutable head. |
-| `status/Ready for Control-plane Acceptance` | Independent QA passed and the exact result awaits control-plane acceptance. |
-| `status/Integrated` | The accepted result is integrated into `dev`; for design-only work, the accepted outcome is durably integrated into repository records. |
+| Label                                       | Meaning                                                                                                                                 |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `status/Design`                             | Concept, evidence, or consequential decisions are still being clarified. No implementation authority.                                   |
+| `status/Ready`                              | The task contract is complete, but implementation is not authorized.                                                                    |
+| `status/Authorized`                         | Product/control plane approved the work; the orchestrator may dispatch only when all gates and baseline checks are clear.               |
+| `status/Active`                             | A Builder or QA lane has claimed ownership and work is in progress.                                                                     |
+| `status/Ready for Independent QA`           | Builder work is complete and awaits independent QA against an exact immutable head.                                                     |
+| `status/Ready for Control-plane Acceptance` | Independent QA passed and the exact result awaits control-plane acceptance.                                                             |
+| `status/Integrated`                         | The accepted result is integrated into `dev`; for design-only work, the accepted outcome is durably integrated into repository records. |
 
 Operational rules:
 
@@ -80,6 +86,7 @@ Type labels are non-exclusive because a recovery item can also be a Bug and a co
 - `type/Content`
 - `type/Architecture`
 - `type/Recovery`
+- `type/Proposal` (added by R3D only for the standalone old #354 Proposal/Design identity)
 
 Supporting conventions created by R3B:
 
@@ -101,16 +108,44 @@ Where the sources differ in strength:
 
 ## Old GitHub to Forgejo crosswalk
 
-| Recovered source identity | New Forgejo issue | Reconstructed disposition |
-| --- | --- | --- |
-| GitHub #383 / PR #386 | [Forgejo #1](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/1) | Closed; `status/Integrated`; accepted head `a04c449f...` is the second parent of recovered integration `d533b47a...`. |
-| GitHub #387 / PR #390 | [Forgejo #2](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/2) | Closed; `status/Integrated`; accepted head `15dabcc4...` integrated through `8db7ae06...`. |
-| GitHub #391 | [Forgejo #3](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/3) | Open; `status/Authorized`; dependency-gated and inactive. |
-| GitHub #392 | [Forgejo #4](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/4) | Open; `status/Authorized`; paused/inactive; old package superseded pending refresh from #393. |
-| GitHub #393 | [Forgejo #5](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/5) | Closed; accepted design/content outcome durably integrated by this record; non-Bleed runtime explicitly excluded. |
-| GitHub #394 | [Forgejo #6](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/6) | Open; `status/Design`; core preservation principles accepted, five narrower questions open. |
-| GitHub #395 | [Forgejo #7](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/7) | Open; `status/Design`; future spatial architecture only, inactive and not authorized. |
-| R1 finding B2 (no recovered GitHub issue) | [Forgejo #8](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/8) | Open; `status/Ready`; mandatory recovery follow-up, inactive and not yet authorized. |
+| Recovered source identity                 | New Forgejo issue                                                         | Reconstructed disposition                                                                                                                                                          |
+| ----------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub #383 / PR #386                     | [Forgejo #1](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/1)   | Closed; `status/Integrated`; accepted head `a04c449f...` is the second parent of recovered integration `d533b47a...`.                                                              |
+| GitHub #387 / PR #390                     | [Forgejo #2](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/2)   | Closed; `status/Integrated`; accepted head `15dabcc4...` integrated through `8db7ae06...`.                                                                                         |
+| GitHub #391                               | [Forgejo #3](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/3)   | Open; `status/Authorized`; dependency-gated and inactive.                                                                                                                          |
+| GitHub #392                               | [Forgejo #4](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/4)   | Open; `status/Authorized`; paused/inactive; old package superseded pending refresh from #393.                                                                                      |
+| GitHub #393                               | [Forgejo #5](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/5)   | Closed; accepted design/content outcome durably integrated by this record; non-Bleed runtime explicitly excluded.                                                                  |
+| GitHub #394                               | [Forgejo #6](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/6)   | Open; `status/Design`; core preservation principles accepted, five narrower questions open.                                                                                        |
+| GitHub #395                               | [Forgejo #7](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/7)   | Open; `status/Design`; future spatial architecture only, inactive and not authorized.                                                                                              |
+| R1 finding B2 (no recovered GitHub issue) | [Forgejo #8](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/8)   | Open; `status/Ready`; mandatory recovery follow-up, inactive and not yet authorized.                                                                                               |
+| GitHub #356 / PR #357                     | [Forgejo #9](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/9)   | Open; `status/Ready for Independent QA` at Builder handoff; accepted head `5df9ccc9748dc05a7cf4bd2ce0e72ed5e4a65121` did not reach recovered `dev`; fresh QA/integration required. |
+| GitHub #355 / PR #358                     | [Forgejo #10](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/10) | Open; `status/Ready for Independent QA` at Builder handoff; accepted head `0689a9fe10056afe6a823e36a855ab93d946a3cf` did not reach recovered `dev`; fresh QA/integration required. |
+| GitHub #369 / PR #370                     | [Forgejo #11](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/11) | Open; `status/Ready for Independent QA` at Builder handoff; accepted head `5f0de383442bedad878ba8a48a306844ac0d17a2` did not reach recovered `dev`; fresh QA/integration required. |
+| GitHub #349                               | [Forgejo #12](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/12) | Open; `status/Design`; inactive, priority unassigned, not authorized; remaining structured-condition authority only; gates #13.                                                    |
+| GitHub #348                               | [Forgejo #13](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/13) | Open; `status/Ready`; dependency-gated, inactive, priority unassigned, not authorized; requires contract refresh and reauthorization.                                              |
+| GitHub #220                               | [Forgejo #14](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/14) | Open; `status/Design`; inactive, priority unassigned, not authorized; future evolving-injury/recovery-risk design excluding integrated C1/#393.                                    |
+| GitHub #257                               | [Forgejo #15](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/15) | Open; `status/Design`; inactive, priority unassigned, not authorized; Character Knowledge receipts and mechanical-activation boundary.                                             |
+| GitHub #320                               | [Forgejo #16](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/16) | Open; `status/Ready`; inactive, priority unassigned, not authorized; refresh against current Blackboard/Artifact/#15 boundaries before authorization.                              |
+| GitHub #354                               | [Forgejo #17](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/17) | Open; Proposal/Design, `status/Design`; future priority, inactive, not authorized; standalone player-authored Campaign-object proposal.                                            |
+
+## R3D recovery boundary
+
+R3D restores three historically accepted documentation outcomes through a fresh
+documentation-only branch and current Forgejo PR rather than cherry-picking
+their stale accepted commits. Forgejo #9-#11 move from actual Builder-owned
+`status/Active` work to open, unassigned `status/Ready for Independent QA` at
+handoff. Fresh independent QA and later control-plane acceptance/integration are
+required.
+
+Forgejo #12-#17 are deliberately non-dispatchable. Their issue bodies preserve
+the ruled scope, dependencies, unresolved decisions, and explicit lack of
+authorization. R3D does not modify or implement those product areas.
+
+The exact R3D non-recreation list—including old #340, #258, #361, #363, #364,
+#368, #371, #372, #377, #378, #379, #380, #382, #346, #287, #388, #389, #213,
+#318, #319, #342, #345, #350, #352, #359, #365, #373, #279, #280, #306, and
+#309—is durable in the
+[R3D register](./2026-09-03-r3d-recovered-case-register.md#durable-omission-and-deferment-boundary).
 
 ## Recovered portfolio decisions and boundaries
 
@@ -143,11 +178,11 @@ The recovered accepted content directions are:
 
 The accepted Fire/Energy content progression is:
 
-| Fixture | Injury/content intent | Stun/state | Non-Bleed content rate | HP/min | End condition |
-| --- | --- | --- | --- | ---: | --- |
-| `fire_energy|whole_body|06` | Clothing/fur burning across the body | `-4`, no action lock | `1/4 HP/round` | 5 | Flames extinguished |
-| `fire_energy|whole_body|09` | Broad deep burns with systemic shock | `-8`, conscious/actionable | `1/3 HP/round` | 6 2/3 | Cooling and burn-shock stabilization |
-| `fire_energy|whole_body|10` | Widespread burns with inhalation injury | `-8` plus breathing impairment | `1/2 HP/round` | 10 | Airway/circulatory stabilization |
+| Fixture                                          | Injury/content intent                   | Stun/state                     | Non-Bleed content rate | HP/min | End condition                        |
+| ------------------------------------------------ | --------------------------------------- | ------------------------------ | ---------------------- | -----: | ------------------------------------ |
+| <code>fire_energy&#124;whole_body&#124;06</code> | Clothing/fur burning across the body    | `-4`, no action lock           | `1/4 HP/round`         |      5 | Flames extinguished                  |
+| <code>fire_energy&#124;whole_body&#124;09</code> | Broad deep burns with systemic shock    | `-8`, conscious/actionable     | `1/3 HP/round`         |  6 2/3 | Cooling and burn-shock stabilization |
+| <code>fire_energy&#124;whole_body&#124;10</code> | Widespread burns with inhalation injury | `-8` plus breathing impairment | `1/2 HP/round`         |     10 | Airway/circulatory stabilization     |
 
 Each retains minimum total damage floor 4 and begins after one full three-second interval.
 

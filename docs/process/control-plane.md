@@ -4,7 +4,10 @@
 
 The control plane keeps product decisions, implementation work, and repository state understandable while several agents work independently. It optimizes the product owner's time by making decisions and acceptance visible without using chat history as the backlog.
 
-This document describes durable operating policy. GitHub Issues and one GitHub Project show what work is happening now.
+This document describes durable operating policy. The current operational issue
+tracker and linked pull requests show what work is happening now. During local
+control-plane recovery, that tracker is the loopback-only Forgejo repository
+identified by the recovery register; historical GitHub records are evidence.
 
 ## Sources of truth
 
@@ -115,7 +118,14 @@ Priority is separate from defect severity. Small defects can remain durably reco
 
 An issue reaches `Ready` only when its task contract supplies an exact baseline, acceptance examples, ownership, rule basis, affected contracts/hotspots, verification, required decisions, and an applicability result for every acceptance dimension. See `docs/process/task-contract.md`.
 
-`Ready` is a completeness state, not implementation permission. `Authorized` is a separate, explicit product-owner/control-plane dispatch decision recorded in durable GitHub state. `Active` means a Builder or repair loop is in flight. `Blocked`, `Design only`, `Completed`, and `Stale/needs refresh` remain non-dispatchable; a stale contract must be reconciled to live `origin/dev` before it can return to `Ready`. No more than four authorized implementation Builders may be active concurrently, and hotspot or dependency conflicts can reduce that number.
+`Ready` is a completeness state, not implementation permission. `Authorized` is a separate, explicit product-owner/control-plane dispatch decision recorded in durable operational issue state. `Active` means a Builder or repair loop is in flight. `Blocked`, `Design only`, `Completed`, and `Stale/needs refresh` remain non-dispatchable; a stale contract must be reconciled to live `origin/dev` before it can return to `Ready`. No more than four authorized implementation Builders may be active concurrently, and hotspot or dependency conflicts can reduce that number.
+
+Portfolio discovery follows
+`Proposal -> Architecture review -> Design -> Ready -> Authorized -> Active`.
+Proposal, architecture review, and Design clarify direction and boundaries; none
+is implementation permission. The current dated portfolio guidance and future
+areas are kept in the
+[strategic portfolio and future register](../product/2026-09-03-strategic-future-register.md).
 
 ## When I approve a case, what happens next?
 
