@@ -178,11 +178,11 @@ The recovered accepted content directions are:
 
 The accepted Fire/Energy content progression is:
 
-| Fixture                           | Injury/content intent                   | Stun/state                     | Non-Bleed content rate | HP/min | End condition                        |
-| --------------------------------- | --------------------------------------- | ------------------------------ | ---------------------- | -----: | ------------------------------------ |
-| `fire_energy \| whole_body \| 06` | Clothing/fur burning across the body    | `-4`, no action lock           | `1/4 HP/round`         |      5 | Flames extinguished                  |
-| `fire_energy \| whole_body \| 09` | Broad deep burns with systemic shock    | `-8`, conscious/actionable     | `1/3 HP/round`         |  6 2/3 | Cooling and burn-shock stabilization |
-| `fire_energy \| whole_body \| 10` | Widespread burns with inhalation injury | `-8` plus breathing impairment | `1/2 HP/round`         |     10 | Airway/circulatory stabilization     |
+| Fixture                                          | Injury/content intent                   | Stun/state                     | Non-Bleed content rate | HP/min | End condition                        |
+| ------------------------------------------------ | --------------------------------------- | ------------------------------ | ---------------------- | -----: | ------------------------------------ |
+| <code>fire_energy&#124;whole_body&#124;06</code> | Clothing/fur burning across the body    | `-4`, no action lock           | `1/4 HP/round`         |      5 | Flames extinguished                  |
+| <code>fire_energy&#124;whole_body&#124;09</code> | Broad deep burns with systemic shock    | `-8`, conscious/actionable     | `1/3 HP/round`         |  6 2/3 | Cooling and burn-shock stabilization |
+| <code>fire_energy&#124;whole_body&#124;10</code> | Widespread burns with inhalation injury | `-8` plus breathing impairment | `1/2 HP/round`         |     10 | Airway/circulatory stabilization     |
 
 Each retains minimum total damage floor 4 and begins after one full three-second interval.
 
