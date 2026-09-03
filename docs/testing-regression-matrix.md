@@ -134,6 +134,11 @@ order, table order, or exact button placement:
   encounter session normalization, roleplay roll rules, opposed roll comparison,
   scenario participant vs encounter participant boundaries, hidden/silent data
   not visible to players, and API/read-model contracts.
+- For privacy-sensitive workflows, apply the
+  [Authority and Information Projection Principle](./architecture/information-authority-and-projection.md):
+  assert protected keys, values, identities, relationships, and executable state
+  are absent from unauthorized payloads, DTOs, serialized responses, generated
+  HTML, and rendered output across relevant roles and state transitions.
 - Avoid detailed Playwright or component tests that lock current encounter table
   order, section order, or exact button placement until encounter product design
   settles.
