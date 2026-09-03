@@ -2,6 +2,16 @@
 
 Status: R3B minimum viable operational portfolio reconstructed on 2026-09-03.
 
+R3C reconciliation on 2026-09-03 moved the recovered contracts and accepted decisions into dedicated durable records. Use this document as the identity/status crosswalk, then consult:
+
+- [R3C recovered case register](./2026-09-03-r3c-recovered-case-register.md) for the self-contained state of Forgejo issues #1-#8;
+- [C1 Critical content calibration decision](../decisions/rules/0001-c1-critical-injury-recalibration.md);
+- [Chargen and Combat Manager preservation contract](../product/ui-interaction-preservation.md);
+- [future spatial subsystem boundary](../decisions/architecture/0002-spatial-scene-rules-boundary.md); and
+- [prepared R4 localhost inspection contract](./2026-09-03-r4-localhost-inspection-task-contract.md).
+
+The R3B text below is retained as recovery provenance. Where its summary is less detailed, the R3C case register and dedicated decision records control.
+
 ## Purpose and scope
 
 This record reconstructs only the current late-August Glantri portfolio and mandatory recovery follow-ups needed to resume controlled development after loss of the GitHub operational control plane. It does not reproduce the historical GitHub issue database or its comments verbatim.
@@ -15,6 +25,12 @@ This R3B record:
 - keeps inactive, paused, future, or unapproved work from becoming implementation authority merely because it has been reconstructed.
 
 R3B creates no Builder or QA work, implements no product code, changes no Glantri runtime behavior, and grants no `main`, production, Azure, deployment, or release authority.
+
+R3C later promoted the accepted decisions out of this recovery summary into durable rule, product, and architecture records. The issue-status crosswalk below remains the provenance ledger; the normative recovered decisions are:
+
+- `docs/decisions/rules/0001-c1-critical-injury-recalibration.md`;
+- `docs/product/ui-interaction-preservation.md`; and
+- `docs/decisions/architecture/0002-spatial-scene-rules-boundary.md`.
 
 ## Recovered `dev` chronology
 
@@ -137,6 +153,8 @@ Each retains minimum total damage floor 4 and begins after one full three-second
 
 These rates are accepted content semantics only. Burn/shock loss is not Bleed, but a non-Bleed `periodic_loss` runtime capability is **not authorized**. It requires a separate source-linked design, task contract, control-plane authorization, implementation, and independent QA.
 
+Normative recovered rule record: `docs/decisions/rules/0001-c1-critical-injury-recalibration.md`.
+
 ### #394
 
 Accepted preservation principles:
@@ -154,11 +172,15 @@ The five narrower questions remain open:
 4. whether create, owner-edit, and GM-edit remain separate authority journeys; and
 5. how #391 coexists with the older broad/manual damage-adjustment path.
 
+Normative recovered preservation record: `docs/product/ui-interaction-preservation.md`.
+
 ### #395
 
 The recovered direction favors a Glantri-native spatial scene model, layered over qualified map/Artifact images and implemented with standard rendering/geometry components rather than a competing full VTT product model. Geometry should produce factual spatial queries; Glantri rules should convert them into suggested modifiers; the GM remains the reviewer.
 
 The concept remains future-only and unapproved for implementation. Facing/shield arcs, directional armor, cover/LOS, movement/elevation/formations, library choice, Artifact integration, and prototype scope still require decisions.
+
+Normative recovered architecture boundary: `docs/decisions/architecture/0002-spatial-scene-rules-boundary.md`.
 
 ### B2
 

@@ -5,6 +5,13 @@ D1/D2 now uses that table to create GM-reviewable proposals after the attacker h
 critical die. The proposals are editable draft rows; they are not committed until the GM accepts them
 through the normal phase-damage commit.
 
+> **Accepted content versus implemented behavior:** the recovered #393 calibration in
+> [`docs/decisions/rules/0001-c1-critical-injury-recalibration.md`](../decisions/rules/0001-c1-critical-injury-recalibration.md)
+> is authoritative for future fixture activation, but the fixture code, workbook, generated data, and
+> runtime described below remain at the pre-#393 implementation. In particular, the accepted
+> Fire/Energy `1/4`, `1/3`, and `1/2 HP/round` values are content intent only. Executable non-Bleed
+> `periodic_loss` is not authorized.
+
 ## C1 representative fixture authority
 
 Issue #377 freezes 34 representative C1 Critical definitions under fixture version

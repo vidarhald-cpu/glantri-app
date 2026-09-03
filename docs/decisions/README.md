@@ -28,3 +28,9 @@ Only the product owner approves game-rule/UX rulings. Architecture decisions fol
 Create a rule decision when implementation intentionally differs from, resolves a conflict in, or materially interprets source evidence. Create an architecture decision when a change establishes a durable cross-area boundary, shared contract, persistence strategy, or hard-to-reverse constraint.
 
 Routine implementation details do not need decision records.
+
+## Recovered current decisions
+
+- Rules: [`rules/0001-c1-critical-injury-recalibration.md`](rules/0001-c1-critical-injury-recalibration.md)
+- Product/UX: [`../product/ui-interaction-preservation.md`](../product/ui-interaction-preservation.md)
+- Architecture: [`architecture/0002-spatial-scene-rules-boundary.md`](architecture/0002-spatial-scene-rules-boundary.md)
