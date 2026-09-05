@@ -35,8 +35,12 @@ export interface CampaignWorkspaceState {
 }
 
 export interface CampaignWorkspaceHrefInput {
+  blackboardCategory?: string | null;
+  blackboardPinned?: string | null;
+  blackboardQuery?: string | null;
   campaignId: string;
   encounterId?: string | null;
+  entryId?: string | null;
   participantId?: string | null;
   scenarioId?: string | null;
   tab?: CampaignWorkspaceTabId | null;
@@ -72,6 +76,22 @@ export function buildCampaignWorkspaceHref(input: CampaignWorkspaceHrefInput): s
 
   if (input.participantId) {
     searchParams.set("participantId", input.participantId);
+  }
+
+  if (input.entryId) {
+    searchParams.set("entryId", input.entryId);
+  }
+
+  if (input.blackboardQuery) {
+    searchParams.set("blackboardQuery", input.blackboardQuery);
+  }
+
+  if (input.blackboardCategory) {
+    searchParams.set("blackboardCategory", input.blackboardCategory);
+  }
+
+  if (input.blackboardPinned) {
+    searchParams.set("blackboardPinned", input.blackboardPinned);
   }
 
   const query = searchParams.toString();

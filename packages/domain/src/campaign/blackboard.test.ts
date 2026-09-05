@@ -5,7 +5,9 @@ import {
   blackboardGmCreateSchema,
   blackboardPlacementUpdateSchema,
   blackboardRevisionSchema,
+  blackboardSearchQuerySchema,
   serializeBlackboardCommonDto,
+  serializeBlackboardSearchResult,
   serializeBlackboardViewerCapabilities,
 } from "./blackboard";
 
@@ -121,5 +123,29 @@ describe("Campaign Blackboard domain contract", () => {
       { canCorrect: false, canRemove: false, entryId: "entry-b" },
     ]);
     expect(JSON.stringify(result)).not.toMatch(/owner|userId|label|content|source/i);
+  });
+
+  it("validates bounded search filters and serializes only safe findability fields", () => {
+    expect(
+      blackboardSearchQuerySchema.parse({ category: "image_map", pinned: "pinned", q: "  route " }),
+    ).toEqual({ category: "image_map", pinned: "pinned", q: "route" });
+    expect(
+      blackboardSearchQuerySchema.safeParse({ q: "x", viewerCharacterId: "secret" }).success,
+    ).toBe(false);
+
+    const result = serializeBlackboardSearchResult([
+      { category: "recap", entryId: "entry-b", pinned: false, title: "Zulu" },
+      { category: "clue_fact", entryId: "entry-a", pinned: true, title: "Alpha" },
+    ]);
+    expect(result.results.map((entry) => entry.entryId)).toEqual(["entry-a", "entry-b"]);
+    expect(Object.keys(result.results[0] ?? {}).sort()).toEqual([
+      "category",
+      "entryId",
+      "pinned",
+      "title",
+    ]);
+    expect(JSON.stringify(result)).not.toMatch(
+      /artifactId|"content"|context|documentText|recapText|unitKey|grant|actor|userId|source/i,
+    );
   });
 });
