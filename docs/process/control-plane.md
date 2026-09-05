@@ -5,23 +5,33 @@
 The control plane keeps product decisions, implementation work, and repository state understandable while several agents work independently. It optimizes the product owner's time by making decisions and acceptance visible without using chat history as the backlog.
 
 This document describes durable operating policy. The current operational issue
-tracker and linked pull requests show what work is happening now. During local
-control-plane recovery, that tracker is the loopback-only Forgejo repository
-identified by the recovery register; historical GitHub records are evidence.
+tracker and linked pull requests show what work is happening now. Current Git
+and case-management authority is the loopback-only Forgejo repository
+`recovery-admin/glantri-app`; historical GitHub records are provenance and
+recovery evidence.
+
+The canonical MacBook clone is `/Users/vidarhald/dev/glantri-app-forgejo`, and
+the canonical Codex project is `Glantri app — Forgejo`. The historical
+`Glantri app` project and `/Users/vidarhald/dev/glantri-app` checkout are
+read-only, non-mutable recovery/history evidence. Do not use them for new
+implementation, Builder work, QA mutation, branch creation,
+reset/rebase/cleanup, migration, or routine current-development fetch/push.
+Repository documents are authoritative; Codex project references are navigation
+aids, not policy or authorization records.
 
 ## Sources of truth
 
 | Information                                 | Authoritative location                                                         |
 | ------------------------------------------- | ------------------------------------------------------------------------------ |
-| Product priorities and current work status  | GitHub Project and linked Issues/PRs                                           |
-| Task contract and implementation discussion | GitHub Issue and PR                                                            |
+| Product priorities and current work status  | Local Forgejo issues, labels, and linked PRs                                   |
+| Task contract and implementation discussion | Local Forgejo issue, when applicable, and PR                                   |
 | Product and presentation quality            | `docs/product/product-presentation-principles.md` plus area and task contracts |
 | Architecture and ownership policy           | Repository documentation                                                       |
 | Approved rule and architecture rulings      | `docs/decisions/`                                                              |
 | Source evidence and provenance              | `docs/source/`, `docs/rules/`, cited external material                         |
 | Current implementation behavior             | Code plus tests, interpreted with approved decisions                           |
 
-Chat is useful for exploration and product discussion but is not durable project state. Material decisions must be recorded in the repository or linked GitHub issue before dependent implementation is accepted.
+Chat is useful for exploration and product discussion but is not durable project state. Material decisions must be recorded in the repository or linked Forgejo issue before dependent implementation is accepted.
 
 Historical issues, milestones, and Claude-created architecture work are preserved as input. They do not become the current operational backlog until triaged and deliberately adopted.
 
@@ -58,7 +68,7 @@ An agent's default operating boundary is:
 
 - the assigned Glantri repository or isolated worktree;
 - existing standard local development and file-processing tools;
-- the Glantri GitHub repository, subject to the separate read/write, push, PR, merge, and release authority in this control plane and the task contract; and
+- the local Glantri Forgejo repository, subject to the separate read/write, push, PR, merge, and release authority in this control plane and the task contract; and
 - Glantri source material explicitly stored in the repository or supplied through the Glantri project context.
 
 Anything outside that boundary needs a concrete task reason and the approval required below. Technical reachability, an existing login, a credential, or an installed tool does not expand the task's scope or the agent's authority.
@@ -83,7 +93,7 @@ If an existing tool cannot complete the task without one of these changes, stop 
 
 ### External transmission and personal services
 
-An installed VS Code extension or local tool is not automatically approved to transmit Glantri repository or source content. External AI or cloud analysis, signed-in personal services, publishing/deployment services, and any other tool that sends project content outside the approved Glantri/GitHub environment require explicit approval before use.
+An installed VS Code extension or local tool is not automatically approved to transmit Glantri repository or source content. External AI or cloud analysis, signed-in personal services, publishing/deployment services, and any other tool that sends project content outside the approved Glantri/Forgejo environment require explicit approval before use.
 
 Personal ChatGPT capabilities such as Calendar or Sites may exist for unrelated user purposes. Glantri agents must not use them unless the Glantri task explicitly requires them and the user approves their use where appropriate. Their presence does not make them part of the Glantri control plane.
 
@@ -91,17 +101,17 @@ The personal Google Drive connector has been deliberately disconnected. Current 
 
 ### Tool availability does not grant action authority
 
-Destructive and external actions remain governed by the task contract and the authority model. Installing, discovering, or being able to invoke a tool does not grant authority to push, open or update a PR, merge, deploy, delete, publish, change accounts or permissions, or alter GitHub, production, or Azure configuration.
+Destructive and external actions remain governed by the task contract and the authority model. Installing, discovering, or being able to invoke a tool does not grant authority to push, open or update a PR, merge, deploy, delete, publish, change accounts or permissions, or alter Forgejo, production, or Azure configuration.
 
 ## Work lifecycle
 
-Use these Project statuses:
+Use these case statuses:
 
 `Inbox -> Triage -> Needs decision -> Ready -> In progress -> In review -> Acceptance -> Done`
 
 Terminal alternative: `Cancelled / Duplicate`.
 
-Suggested Project fields:
+Suggested case fields:
 
 - Area
 - Type: feature, bug, rule decision, technical debt, investigation, operations
@@ -118,7 +128,7 @@ Priority is separate from defect severity. Small defects can remain durably reco
 
 An issue reaches `Ready` only when its task contract supplies an exact baseline, acceptance examples, ownership, rule basis, affected contracts/hotspots, verification, required decisions, and an applicability result for every acceptance dimension. See `docs/process/task-contract.md`.
 
-`Ready` is a completeness state, not implementation permission. `Authorized` is a separate, explicit product-owner/control-plane dispatch decision recorded in durable operational issue state. `Active` means a Builder or repair loop is in flight. `Blocked`, `Design only`, `Completed`, and `Stale/needs refresh` remain non-dispatchable; a stale contract must be reconciled to live `origin/dev` before it can return to `Ready`. No more than four authorized implementation Builders may be active concurrently, and hotspot or dependency conflicts can reduce that number.
+`Ready` is a completeness state, not implementation permission. `Authorized` is a separate, explicit product-owner/control-plane dispatch decision recorded in durable operational case state. `Active` means a Builder or repair loop is in flight. `Blocked`, `Design only`, `Completed`, and `Stale/needs refresh` remain non-dispatchable; a stale contract must be reconciled to live `origin/dev` before it can return to `Ready`. No more than four authorized implementation Builders may be active concurrently, and hotspot or dependency conflicts can reduce that number.
 
 Portfolio discovery follows
 `Proposal -> Architecture review -> Design -> Ready -> Authorized -> Active`.
@@ -126,6 +136,49 @@ Proposal, architecture review, and Design clarify direction and boundaries; none
 is implementation permission. The current dated portfolio guidance and future
 areas are kept in the
 [strategic portfolio and future register](../product/2026-09-03-strategic-future-register.md).
+
+## Visible execution and standing authority
+
+Substantial implementation Builder, independent QA, and dispatched bounded
+Investigator lanes run as separate visible Work/Codex tasks. QA must be a
+different visible task from its Builder. Hidden internal helper agents may assist
+minor orchestration, but do not satisfy any of these lanes. If visible task
+creation is unavailable, report that capability problem instead of silently
+substituting a hidden agent.
+
+Every substantial visible-lane dispatch records the canonical Codex project,
+role, Forgejo issue when applicable, resolved visible Work/Codex thread ID,
+direct task/thread link when the client provides one, worktree, branch when
+applicable, exact baseline SHA, and state: `queued`, `running`, `completed`, or
+`failed`. The thread ID is mandatory. The link is a separate field required when
+available; neither substitutes for the other. The orchestrator owns the
+operational return: it must harvest child completion, retrieve the exact
+head/result, record authorized durable evidence and status, and include the
+result in its consolidated return. A child task merely ending is not operational
+completion.
+
+Once a bounded lane is control-plane authorized, the orchestrator may claim
+task/issue ownership, mark it `Active`, transfer or release ownership at
+Builder-to-QA-to-orchestrator boundaries, clear ownership at completion, and
+apply defined lifecycle transitions for Builder completion, QA PASS/FAIL,
+bounded repair, or control-plane return without repeated product-owner
+confirmation. Standing execution authority also covers worktree and branch
+setup, authorized task dispatch, local Forgejo push/PR/evidence actions,
+task-token lifecycle, and disposable cleanup.
+
+This authority does not permit starting work that is merely `Design` or `Ready`,
+broadening scope, accepting product/rule/UX/architecture decisions, performing
+control-plane acceptance, or integrating behind an explicit gate. Return for
+material scope, product/rule/UX/architecture, new authorization, hotspot or
+dependency ownership, destructive persistent-data, `main`/production,
+unresolved-behavior, or explicit acceptance/integration gates.
+
+Aggressively parallelize independent design and investigation. Run no more than
+four implementation Builders concurrently, keep hotspot ownership explicit, do
+not stop unrelated lanes when one lane blocks, and serialize only real hotspots
+or dependencies. Start independent QA when its Builder finishes. Detailed role,
+dispatch, handoff, and evidence mechanics are in
+[`agent-execution.md`](./agent-execution.md).
 
 ## When I approve a case, what happens next?
 
@@ -149,7 +202,7 @@ Exception paths stay narrow:
 - Dependency or hotspot collision: stop and coordinate ownership/merge order; do not widen scope.
 - Production-only problem: ordinary agents may diagnose safely when authorized, but do not mutate production, merge `main`, change Azure, or deploy.
 
-The issue and PR hold the durable status, exact SHAs, evidence, decisions, and follow-ups. Chat may notify the product owner, but chat-only context never authorizes work or substitutes for those records.
+The Forgejo issue, when applicable, and PR hold the durable status, exact SHAs, evidence, decisions, and follow-ups. Chat may notify the product owner, but chat-only context never substitutes for those records.
 
 ## Implementation flow
 
@@ -198,7 +251,7 @@ Recommended cadence:
 - Weekly short portfolio checkpoint: priorities and product/rule decisions.
 - Architecture checkpoint only for material cross-area tradeoffs.
 - Acceptance checkpoint for completed user-visible slices.
-- Monthly reconciliation of the Project, issues, documentation, branches, and released version.
+- Monthly reconciliation of Forgejo cases, documentation, branches, and the released version.
 
 ## Published `dev` and PR #200 provenance
 
@@ -210,7 +263,7 @@ PR #200 is superseded provenance, not the active development baseline. Its head 
 
 `main` remains production/release only. A future accepted release moves from `dev` toward `main` with the required production-boundary support, and the released `main` state is then reconciled back into `dev` before a newer development baseline is accepted.
 
-## Repository versus GitHub work
+## Repository versus Forgejo work
 
 Keep in the repository:
 
@@ -221,7 +274,7 @@ Keep in the repository:
 - issue/PR templates;
 - machine-enforceable architecture checks where valuable.
 
-Keep in GitHub:
+Keep in Forgejo:
 
 - current backlog and status;
 - assignees, priority, dependencies, and checkpoints;
