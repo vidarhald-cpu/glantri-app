@@ -25,16 +25,16 @@ general consumables initiative.
 | Order | Forgejo case                                                      | Purpose                                                           | Current authority                                                                                               |
 | ----: | ----------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 |     0 | [#8](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/8)   | Investigate the intermittent equipment read-model race            | Ready/inactive Mandatory Recovery; not authorized and causally separate                                         |
-|     1 | [#43](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/43) | Record accepted Field Equipment authority and portfolio           | Authorized/Active documentation Builder only                                                                    |
-|     2 | [#44](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/44) | Repair GM-private Item projection authority                       | Authorized/Active narrow security repair; independent only while avoiding aggregate, Scenario, and Combat scope |
-|     3 | [#45](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/45) | Make Character equipment one atomic revision-controlled aggregate | Ready/inactive/unassigned; not authorized; dependency-gated                                                     |
-|     4 | [#46](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/46) | Reconcile canonical equipment with Scenario play                  | Ready/inactive/unassigned; not authorized; dependency-gated                                                     |
-|     5 | [#47](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/47) | Deliver the integrated Canonical Field Equipment v1 milestone     | Ready/inactive/unassigned; not authorized; dependency-gated                                                     |
+|     1 | [#44](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/44) | Repair GM-private Item projection authority                       | Authorized/Active narrow security repair; independent only while avoiding aggregate, Scenario, and Combat scope |
+|     2 | [#45](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/45) | Make Character equipment one atomic revision-controlled aggregate | Ready/inactive/unassigned; not authorized; dependency-gated                                                     |
+|     3 | [#46](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/46) | Reconcile canonical equipment with Scenario play                  | Ready/inactive/unassigned; not authorized; dependency-gated                                                     |
+|     4 | [#47](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/47) | Deliver the integrated Canonical Field Equipment v1 milestone     | Ready/inactive/unassigned; not authorized; dependency-gated                                                     |
 
 `Ready` never grants execution authority. #8, #45, #46, and #47 require a fresh
 exact-baseline gate and separate Product Owner authorization before a Builder
-may start. #43 is documentation-only. #44 remains a bounded security repair and
-does not authorize the later aggregate or Scenario work.
+may start. #44 remains a bounded security repair and does not authorize the
+later aggregate or Scenario work. Forgejo #43 governs this documentation record
+and follows its own Builder-to-independent-QA lifecycle.
 
 ## Delivery sequence
 
