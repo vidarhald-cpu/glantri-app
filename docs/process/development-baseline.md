@@ -30,7 +30,7 @@ Credentials never replace task authorization. Pushes, PR creation/updates, branc
 - Current Git and case-management authority is the loopback-only Forgejo repository `recovery-admin/glantri-app`.
 - The canonical MacBook clone is `/Users/vidarhald/dev/glantri-app-forgejo`.
 - The canonical Codex project is `Glantri app — Forgejo`.
-- The historical `Glantri app` project and `/Users/vidarhald/dev/glantri-app` checkout are recovery/history evidence only, not the default root for new development.
+- The historical `Glantri app` project and `/Users/vidarhald/dev/glantri-app` checkout are read-only, non-mutable recovery/history evidence. Do not use them for new implementation, Builder work, QA mutation, branch creation, reset/rebase/cleanup, migration, or routine current-development fetch/push.
 - Repository documents are authoritative. Codex project references are navigation aids and do not grant task, Git, integration, release, or production authority.
 - `main`, Azure, and production remain the external-maintainer release boundary described above.
 

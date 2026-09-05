@@ -35,12 +35,13 @@ Explain impact and why this task has priority.
 - Durable authorization record (Forgejo issue body/comment/label or other named contract):
 - Canonical Codex project (`Glantri app — Forgejo`):
 - Execution role (Builder, independent QA, or bounded Investigator):
-- Resolved visible task/thread ID/link:
+- Resolved visible Work/Codex thread ID (required):
+- Direct task/thread link (required when the client provides one; otherwise unavailable):
 - Dispatch state (`queued`, `running`, `completed`, or `failed`):
 - Accepted baseline branch:
 - Accepted baseline commit SHA:
 - Isolated worktree:
-- Short-lived branch:
+- Short-lived branch (or N/A when no branch applies):
 - Local-only, push authorized, or PR authorized:
 - Intended PR target, if confirmed:
 - Required reading (exact repository paths):

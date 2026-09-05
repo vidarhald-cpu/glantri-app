@@ -36,9 +36,11 @@ At dispatch, record:
 
 - canonical Codex project (`Glantri app — Forgejo`);
 - role and Forgejo issue when applicable;
-- resolved visible task/thread ID or link;
-- isolated worktree and branch;
-- exact accepted baseline; and
+- resolved visible Work/Codex thread ID, which is mandatory;
+- direct task/thread link when the client provides one, recorded separately from the thread ID because neither substitutes for the other;
+- isolated worktree;
+- branch when applicable;
+- exact accepted baseline SHA; and
 - current state: `queued`, `running`, `completed`, or `failed`.
 
 The orchestrator must follow the visible task through completion, retrieve its
@@ -48,14 +50,21 @@ ending, or a dispatch remaining queued, is not operational completion.
 
 ## Standing execution authority
 
-After a bounded lane is authorized, normal execution proceeds without repeated
-confirmation for claim/status changes, worktree/branch setup, authorized task
-dispatch, local Forgejo push/PR/evidence, PASS/FAIL recording, expressly
-authorized bounded repairs, task-token creation/use/revocation, and disposable
-cleanup. Stop and return only for a material scope, product/rule/UX,
-consequential architecture, new authorization, hotspot/dependency ownership,
-destructive persistent-data, `main`/production, unresolved-behavior, or explicit
-acceptance/integration gate.
+After a bounded lane is control-plane authorized, the orchestrator may claim
+task/issue ownership, mark it `Active`, transfer or release ownership at
+Builder-to-QA-to-orchestrator boundaries, clear ownership at completion, and
+apply defined lifecycle transitions for Builder completion, QA PASS/FAIL,
+bounded repair, or control-plane return without repeated product-owner
+confirmation. Normal execution also proceeds without repeated confirmation for
+worktree/branch setup, authorized task dispatch, local Forgejo push/PR/evidence,
+task-token creation/use/revocation, and disposable cleanup.
+
+This standing authority does not authorize starting work that is merely
+`Design` or `Ready`, broadening scope, accepting product/rule/UX/architecture
+decisions, performing control-plane acceptance, or integrating behind an
+explicit gate. Stop and return for a material scope, product/rule/UX/architecture,
+new authorization, hotspot/dependency ownership, destructive persistent-data,
+`main`/production, unresolved-behavior, or explicit acceptance/integration gate.
 
 ## Capacity, collisions, and exception paths
 
@@ -75,7 +84,9 @@ Post this concise handoff to the draft PR (and link it from the Forgejo issue wh
 ```text
 BUILDER RETURN
 Issue: #<number> — <title>, or N/A — <durable authorization record>
-Dispatch: Glantri app — Forgejo / Builder / <visible task/thread ID or link> / completed
+Dispatch: Glantri app — Forgejo / Builder / completed
+Thread ID: <mandatory resolved visible Work/Codex thread ID>
+Direct task/thread link: <link when the client provides one; otherwise unavailable>
 Worktree: <absolute path>
 Exact baseline: origin/dev <full SHA>
 Branch / PR / exact head: <branch> / #<PR> / <full SHA>
@@ -93,7 +104,9 @@ Post this to the PR after reviewing the exact head:
 
 ```text
 QA RETURN
-Dispatch: Glantri app — Forgejo / independent QA / <visible task/thread ID or link> / completed
+Dispatch: Glantri app — Forgejo / independent QA / completed
+Thread ID: <mandatory resolved visible Work/Codex thread ID>
+Direct task/thread link: <link when the client provides one; otherwise unavailable>
 Worktree: <absolute path>
 PR / exact reviewed head: #<PR> / <full SHA>
 Verdict: PASS | PASS WITH FOLLOW-UP | FAIL

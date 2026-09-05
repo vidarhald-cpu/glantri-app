@@ -13,7 +13,9 @@ recovery evidence.
 The canonical MacBook clone is `/Users/vidarhald/dev/glantri-app-forgejo`, and
 the canonical Codex project is `Glantri app — Forgejo`. The historical
 `Glantri app` project and `/Users/vidarhald/dev/glantri-app` checkout are
-recovery/history evidence only and are not the default root for new development.
+read-only, non-mutable recovery/history evidence. Do not use them for new
+implementation, Builder work, QA mutation, branch creation,
+reset/rebase/cleanup, migration, or routine current-development fetch/push.
 Repository documents are authoritative; Codex project references are navigation
 aids, not policy or authorization records.
 
@@ -144,20 +146,30 @@ minor orchestration, but do not satisfy any of these lanes. If visible task
 creation is unavailable, report that capability problem instead of silently
 substituting a hidden agent.
 
-Every dispatch records the canonical Codex project, role, Forgejo issue when
-applicable, resolved visible task/thread ID or link, worktree, branch, exact
-baseline, and state: `queued`, `running`, `completed`, or `failed`. The
-orchestrator owns the operational return: it must harvest child completion,
-retrieve the exact head/result, record authorized durable evidence and status,
-and include the result in its consolidated return. A child task merely ending is
-not operational completion.
+Every substantial visible-lane dispatch records the canonical Codex project,
+role, Forgejo issue when applicable, resolved visible Work/Codex thread ID,
+direct task/thread link when the client provides one, worktree, branch when
+applicable, exact baseline SHA, and state: `queued`, `running`, `completed`, or
+`failed`. The thread ID is mandatory. The link is a separate field required when
+available; neither substitutes for the other. The orchestrator owns the
+operational return: it must harvest child completion, retrieve the exact
+head/result, record authorized durable evidence and status, and include the
+result in its consolidated return. A child task merely ending is not operational
+completion.
 
-Once a bounded lane is authorized, standing execution authority covers normal
-claim/status updates, worktree and branch setup, authorized task dispatch, local
-Forgejo push/PR/evidence actions, PASS/FAIL recording, expressly authorized
-bounded repairs, task-token lifecycle, and disposable cleanup. Do not interrupt
-the product owner for repetitive confirmation. Return only for material scope,
-product/rule/UX, consequential architecture, new authorization, hotspot or
+Once a bounded lane is control-plane authorized, the orchestrator may claim
+task/issue ownership, mark it `Active`, transfer or release ownership at
+Builder-to-QA-to-orchestrator boundaries, clear ownership at completion, and
+apply defined lifecycle transitions for Builder completion, QA PASS/FAIL,
+bounded repair, or control-plane return without repeated product-owner
+confirmation. Standing execution authority also covers worktree and branch
+setup, authorized task dispatch, local Forgejo push/PR/evidence actions,
+task-token lifecycle, and disposable cleanup.
+
+This authority does not permit starting work that is merely `Design` or `Ready`,
+broadening scope, accepting product/rule/UX/architecture decisions, performing
+control-plane acceptance, or integrating behind an explicit gate. Return for
+material scope, product/rule/UX/architecture, new authorization, hotspot or
 dependency ownership, destructive persistent-data, `main`/production,
 unresolved-behavior, or explicit acceptance/integration gates.
 
