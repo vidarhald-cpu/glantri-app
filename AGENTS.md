@@ -3,6 +3,8 @@
 ## Core rules
 
 - Work from the existing Glantri monorepo and preserve established architecture unless the task explicitly changes it.
+- Current Git and case-management authority is the loopback-only Forgejo repository `recovery-admin/glantri-app`. The canonical MacBook clone is `/Users/vidarhald/dev/glantri-app-forgejo`, and the canonical Codex project is `Glantri app — Forgejo`.
+- The historical `Glantri app` Codex project and `/Users/vidarhald/dev/glantri-app` checkout are recovery/history evidence only, not the default root for new development. Repository documents remain authoritative; Codex project references are navigation aids.
 - The product owner decides priority, game rules, user experience, development integration, and acceptance.
 - `dev` is the shared development integration branch. The product owner/project development process may create and protect it and merge ordinary task PRs into it.
 - The external maintainer participates only in future production-release/deployment support at the `dev -> main -> Azure` boundary.
@@ -16,7 +18,7 @@ Full process: `docs/process/control-plane.md` and `docs/process/development-base
 Before non-trivial work:
 
 1. Read this file and the exact additional documents named in the task contract.
-2. Confirm the GitHub issue is both `Ready` (the contract is complete) and explicitly `Authorized` for implementation. `Ready` alone is not permission to start.
+2. Confirm the current Forgejo issue, when applicable, or other durable task contract is both `Ready` (complete) and explicitly `Authorized` for implementation. `Ready` alone is not permission to start.
 3. Confirm outcome, scope, ownership, accepted baseline branch/SHA, reserved hotspots, acceptance examples, verification, and Git authority.
 4. Fetch and resolve the live `origin/dev` SHA. Stop for contract refresh if it differs from the accepted baseline; do not silently choose a new baseline.
 5. Inspect the current source and tests for the affected area; do not rely on old branches or chat history.
@@ -46,6 +48,7 @@ Useful references:
 ## Git, tools, and verification
 
 - Use one clean, short-lived task branch/worktree from the exact accepted `dev` SHA. Do not continue feature work on accepted or long-lived branches.
+- Substantial implementation Builder, independent QA, and dispatched bounded Investigator roles use separate visible Codex tasks. Builder and QA must never be the same visible task; hidden helper agents do not satisfy these roles.
 - Coordinate reserved hotspots and cross-area merge order through the task contract.
 - Existing repository tools, Docker/local database tooling, and declared dependency installation are allowed. New software, global tools, services, permissions, or external transmission require explicit approval.
 - A linked Builder/QA worktree that can reach PostgreSQL must own an explicit disposable task target; worktree filesystem isolation is not database isolation. Follow `docs/dev-database.md`, never copy the primary checkout `.env`, and never use the protected `localhost:5432/glantri` database from a linked worktree.

@@ -25,6 +25,15 @@ short-lived task branches/worktrees
 
 Credentials never replace task authorization. Pushes, PR creation/updates, branch-rule changes, and merges require the authority stated in the task contract and this policy.
 
+## Canonical development environment
+
+- Current Git and case-management authority is the loopback-only Forgejo repository `recovery-admin/glantri-app`.
+- The canonical MacBook clone is `/Users/vidarhald/dev/glantri-app-forgejo`.
+- The canonical Codex project is `Glantri app — Forgejo`.
+- The historical `Glantri app` project and `/Users/vidarhald/dev/glantri-app` checkout are recovery/history evidence only, not the default root for new development.
+- Repository documents are authoritative. Codex project references are navigation aids and do not grant task, Git, integration, release, or production authority.
+- `main`, Azure, and production remain the external-maintainer release boundary described above.
+
 ## Operational baseline status (2026-08-11)
 
 - `dev` is the active integration branch. Its accepted initial baseline is `2203f37e196e2de34cf911ea4fa08ac9feb6f8be`.
@@ -50,7 +59,7 @@ The merge topology preserves correspondence with PR #200, the 50 local continuat
 
 1. Every task contract names the exact accepted `dev` SHA, task branch/worktree, intended target, and Git authority.
 2. Work occurs in a clean, isolated, short-lived task branch/worktree.
-3. Ordinary development PRs target `dev`; the product owner/project development process may review and merge them when required checks and acceptance are satisfied.
+3. Ordinary local Forgejo development PRs target `dev`; the product owner/project development process may review and merge them when required checks and acceptance are satisfied.
 4. Changes arrive as coherent behavior or architecture slices. `dev` must not become another unbounded long-lived feature stream.
 5. Reserved hotspots and cross-area contract order are coordinated before implementation.
 6. Completed work records parent SHA, resulting SHA, verification, dependencies, compatibility, and follow-ups.

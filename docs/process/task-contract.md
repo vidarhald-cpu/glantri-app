@@ -2,7 +2,7 @@
 
 Use this contract for every significant implementation issue. Small defects may use a shorter form only when scope, ownership, rule basis, and verification are still unambiguous.
 
-`Ready` and `Authorized` are separate. `Ready` means the contract below is complete and current. `Authorized` means the product owner/control plane has explicitly permitted implementation dispatch in durable GitHub state. An agent starts implementation only when both are true; neither technical completeness nor credentials imply authorization. `Active` means a Builder or its repair loop is already in flight.
+`Ready` and `Authorized` are separate. `Ready` means the contract below is complete and current. `Authorized` means the product owner/control plane has explicitly permitted implementation dispatch in durable Forgejo case state or another named durable task contract. An agent starts implementation only when both are true; neither technical completeness nor credentials imply authorization. `Active` means a Builder or its repair loop is already in flight.
 
 ## Ready contract
 
@@ -32,10 +32,15 @@ Explain impact and why this task has priority.
 - Contract status: `Ready` / `Blocked` / `Design only` / `Completed` / `Stale/needs refresh`:
 - Implementation authorization: `Authorized` / `Not authorized`:
 - Activity: `Active` / `Inactive`:
-- Durable authorization record (issue body, comment, or project metadata):
+- Durable authorization record (Forgejo issue body/comment/label or other named contract):
+- Canonical Codex project (`Glantri app — Forgejo`):
+- Execution role (Builder, independent QA, or bounded Investigator):
+- Resolved visible task/thread ID/link:
+- Dispatch state (`queued`, `running`, `completed`, or `failed`):
 - Accepted baseline branch:
 - Accepted baseline commit SHA:
-- Local branch/worktree name:
+- Isolated worktree:
+- Short-lived branch:
 - Local-only, push authorized, or PR authorized:
 - Intended PR target, if confirmed:
 - Required reading (exact repository paths):
@@ -45,6 +50,13 @@ Explain impact and why this task has priority.
 - Disposable PostgreSQL 16 setup, verification, and cleanup commands, when database-capable:
 
 Name only the documents needed to execute this task safely. `AGENTS.md` is always required; area-specific contracts apply only when the task touches that area. Decision records, audits, and historical reports are on-demand references, not blanket startup reading. Do not use instructions such as `read all architecture docs`.
+
+Substantial Builder, independent QA, and dispatched Investigator work uses
+separate visible Work/Codex tasks; QA must be a different visible task from the
+Builder. Hidden internal sub-agents do not satisfy those roles. If visible task
+creation is unavailable, record the capability problem rather than substituting
+a hidden lane. Repository documents are authoritative; the Codex project and
+task links are navigation and execution evidence only.
 
 Database-capable Builder/QA work must name an isolated disposable target before any application, migration, reset, seed, or integration-test command runs. A separate Git worktree does not isolate PostgreSQL state. Linked worktrees must not copy or inherit the primary checkout `.env` or another worktree's `.env.task`, and must not use the protected normal database at `localhost:5432/glantri`. Every database-capable operation and cleanup must re-bind the declared task environment to the actual current linked worktree and its expected container labels. If current-worktree ownership cannot be proved from the task contract and repository preflight, the command does not run.
 
@@ -186,7 +198,7 @@ State the heuristic outcomes needed to prevent technically correct but clearly u
 - errors explain the user-relevant problem and recovery;
 - natural Glantri/RPG terminology is used instead of architecture language.
 
-QA may raise a `product-quality finding` or `presentation finding` for a clear violation of the approved global principles or area contract even when no existing automated test, task sentence, or mockup predicts the exact defect. These are issue-body classifications for now, not new GitHub labels.
+QA may raise a `product-quality finding` or `presentation finding` for a clear violation of the approved global principles or area contract even when no existing automated test, task sentence, or mockup predicts the exact defect. These are issue-body classifications for now, not new Forgejo labels.
 
 Ambiguous preference goes to `Needs decision`. Clear low-impact polish may be recorded as P3. A clear principle violation is a bug/UX issue and is not reclassified as polish merely because functional tests pass.
 
@@ -292,6 +304,7 @@ For an authorized Builder/QA loop, use the standard exact-SHA Builder and indepe
 - Resulting commit SHA and parent baseline.
 - Compatibility/rollback notes.
 - Remaining risks and follow-ups.
+- Orchestrator harvest evidence: child final state, retrieved exact head/result, durable Forgejo evidence/status update when authorized, and inclusion in the consolidated return.
 
 A task is not `Ready` when a materially applicable acceptance dimension is omitted, when a perspective-sensitive workflow lacks a perspective matrix, or when a consequential presentation/privacy choice remains hidden inside implementation language. Categories that are genuinely irrelevant may be `Not applicable` with a reason. A material unresolved product preference, rules meaning, or visibility choice moves the task to `Needs decision`.
 
