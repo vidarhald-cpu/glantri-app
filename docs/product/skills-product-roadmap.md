@@ -45,7 +45,7 @@ Normative content and integrity authority:
 
 | Order | Forgejo case                                                      | Purpose                                                      | Current authority                                                             |
 | ----: | ----------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-|     1 | [#22](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/22) | Canonical Skill documentation and release-integrity contract | Authorized for design/documentation only; inactive; no Builder/QA dispatched  |
+|     1 | [#22](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/22) | Canonical Skill documentation and release-integrity contract | Design/documentation authority only; no downstream implementation authority   |
 |     2 | [#23](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/23) | Extend versioned content schema and validators               | Ready, dependency-gated on Case 1; not authorized                             |
 |     3 | [#24](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/24) | Read-only Admin Skill Reference                              | Ready, dependency-gated on Case 2; not authorized                             |
 |     4 | [#25](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/25) | Fully author documentation-complete Pilot content            | Ready, dependency-gated on Case 2; not authorized                             |
