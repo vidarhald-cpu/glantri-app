@@ -187,17 +187,22 @@ export interface SkillContentRelease {
 }
 
 export interface SkillContentReferenceProjection {
-  contentVersion: string;
-  id: string;
-  manifest: SkillContentReleaseManifest;
-  records: {
-    competencies: readonly SkillContentCompetencyRecord[];
-    domains: readonly SkillContentDomainRecord[];
-    histories: readonly SkillContentLearningHistoryRecord[];
-    profiles: readonly SkillContentApplicabilityProfile[];
-    relationships: readonly SkillContentRelationshipRecord[];
-    scripts: readonly SkillContentScriptRecord[];
+  readonly compatibility: SkillContentReleaseCompatibility;
+  readonly contentVersion: string;
+  readonly id: string;
+  readonly manifest: SkillContentReleaseManifest;
+  readonly provenance: readonly string[];
+  readonly records: {
+    readonly accessExceptions: readonly SkillContentAccessException[];
+    readonly competencies: readonly SkillContentCompetencyRecord[];
+    readonly domains: readonly SkillContentDomainRecord[];
+    readonly histories: readonly SkillContentLearningHistoryRecord[];
+    readonly profiles: readonly SkillContentApplicabilityProfile[];
+    readonly relationships: readonly SkillContentRelationshipRecord[];
+    readonly scripts: readonly SkillContentScriptRecord[];
   };
-  status: SkillContentRelease["status"];
-  title: string;
+  readonly rulesVersion: string;
+  readonly schemaVersion: typeof SKILL_CONTENT_RELEASE_SCHEMA_VERSION;
+  readonly status: SkillContentRelease["status"];
+  readonly title: string;
 }

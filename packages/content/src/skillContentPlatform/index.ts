@@ -13,6 +13,12 @@ import { canonicalize, sha256 } from "../integrity/canonicalSha256";
 
 const stableId = z.string().regex(/^[a-z][a-z0-9-]*(?::[a-z0-9][a-z0-9-]*)+$/);
 const nonBlank = z.string().trim().min(1);
+const PROVENANCE_KIND_BY_STATUS = {
+  canonical: "decision",
+  evidence: "evidence",
+  legacy: "legacy",
+  proposal: "proposal",
+} as const;
 const metadata = z
   .object({
     recordVersion: nonBlank,
@@ -29,7 +35,7 @@ const metadata = z
 const taskEnvelope = z
   .object({
     coreTasks: z.array(nonBlank).min(1),
-    limits: z.array(nonBlank),
+    limits: z.array(nonBlank).min(1),
     methods: z.array(nonBlank).min(1),
     useGuidance: nonBlank,
   })
@@ -254,25 +260,55 @@ function releaseWithoutIntegrity(release: SkillContentRelease): unknown {
   return { ...release, manifest: manifestFacts };
 }
 
+function compareCanonicalValues(left: unknown, right: unknown): number {
+  const leftJson = JSON.stringify(canonicalize(left));
+  const rightJson = JSON.stringify(canonicalize(right));
+  return leftJson < rightJson ? -1 : leftJson > rightJson ? 1 : 0;
+}
+
+function semanticSet<T, U>(values: readonly T[], project: (value: T) => U): U[] {
+  return values.map(project).sort(compareCanonicalValues);
+}
+
+function semanticStringSet(values: readonly string[]): string[] {
+  return [...values].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+}
+
 function semanticCompetency(record: SkillContentCompetencyRecord): unknown {
   const base = {
     domainId: record.domainId,
     id: record.id,
     kind: record.kind,
-    prerequisites: record.prerequisites,
-    taskEnvelope: record.taskEnvelope,
+    prerequisites: semanticSet(record.prerequisites, ({ competencyId, threshold }) => ({
+      competencyId,
+      threshold,
+    })),
+    taskEnvelope: {
+      coreTasks: semanticStringSet(record.taskEnvelope.coreTasks),
+      limits: semanticStringSet(record.taskEnvelope.limits),
+      methods: semanticStringSet(record.taskEnvelope.methods),
+      useGuidance: record.taskEnvelope.useGuidance,
+    },
     weight: record.weight,
   };
-  if (record.kind === "spoken-language") return { ...base, familyIds: record.familyIds };
+  if (record.kind === "spoken-language")
+    return { ...base, familyIds: semanticStringSet(record.familyIds) };
   if (record.kind === "written-tradition") {
     return { ...base, scriptId: record.scriptId, spokenLanguageId: record.spokenLanguageId };
   }
   if (record.kind === "specialization") {
+    const transfer =
+      record.transfer.kind === "explicit-relationships"
+        ? {
+            kind: record.transfer.kind,
+            relationshipIds: semanticStringSet(record.transfer.relationshipIds),
+          }
+        : { kind: record.transfer.kind };
     return {
       ...base,
       acquisitionWeight: record.acquisitionWeight,
       parentCompetencyId: record.parentCompetencyId,
-      transfer: record.transfer,
+      transfer,
     };
   }
   return base;
@@ -285,17 +321,56 @@ export function serializeSkillContentPackage(release: SkillContentRelease): stri
 export function serializeSkillContentSemantics(release: SkillContentRelease): string {
   return JSON.stringify(
     canonicalize({
-      accessExceptions: release.accessExceptions,
-      competencies: release.competencies.map(semanticCompetency),
-      domains: release.domains.map(({ id, kind, mechanics }) => ({ id, kind, mechanics })),
-      histories: release.histories.map(({ fixedCompetencyIds, id, selectionSlots }) => ({
-        fixedCompetencyIds,
+      accessExceptions: semanticSet(
+        release.accessExceptions,
+        ({ basis, competencyIds, grantsCompetence, historyIds, id, profileId }) => ({
+          basis,
+          competencyIds: semanticStringSet(competencyIds),
+          grantsCompetence,
+          historyIds: semanticStringSet(historyIds),
+          id,
+          profileId,
+        }),
+      ),
+      competencies: semanticSet(release.competencies, semanticCompetency),
+      domains: semanticSet(release.domains, ({ id, kind, mechanics }) => ({
         id,
-        selectionSlots,
+        kind,
+        mechanics,
+      })),
+      histories: semanticSet(release.histories, ({ fixedCompetencyIds, id, selectionSlots }) => ({
+        fixedCompetencyIds: semanticStringSet(fixedCompetencyIds),
+        id,
+        selectionSlots: semanticSet(
+          selectionSlots,
+          ({ candidateCompetencyIds, chooseCount, id }) => ({
+            candidateCompetencyIds: semanticStringSet(candidateCompetencyIds),
+            chooseCount,
+            id,
+          }),
+        ),
       })),
       id: release.id,
-      profiles: release.profiles,
-      relationships: release.relationships.map(
+      profiles: semanticSet(
+        release.profiles,
+        ({ accessBand, developmentStage, id, normalRoutes, overrides }) => ({
+          accessBand,
+          developmentStage,
+          id,
+          normalRoutes: semanticSet(normalRoutes, ({ accessBand, competencyIds, id }) => ({
+            accessBand,
+            competencyIds: semanticStringSet(competencyIds),
+            id,
+          })),
+          overrides: semanticSet(overrides, ({ attributionId, availability, competencyIds }) => ({
+            attributionId,
+            availability,
+            competencyIds: semanticStringSet(competencyIds),
+          })),
+        }),
+      ),
+      relationships: semanticSet(
+        release.relationships,
         ({ direction, id, sourceCompetencyId, strength, targetCompetencyId }) => ({
           direction,
           id,
@@ -306,7 +381,11 @@ export function serializeSkillContentSemantics(release: SkillContentRelease): st
       ),
       rulesVersion: release.rulesVersion,
       schemaVersion: release.schemaVersion,
-      scripts: release.scripts.map(({ familyIds, id, kind }) => ({ familyIds, id, kind })),
+      scripts: semanticSet(release.scripts, ({ familyIds, id, kind }) => ({
+        familyIds: semanticStringSet(familyIds),
+        id,
+        kind,
+      })),
     }),
   );
 }
@@ -355,6 +434,28 @@ function pathOf(path: readonly (string | number)[]): string {
   );
 }
 
+function addDuplicateTargetDiagnostics(input: {
+  add: (code: string, path: string, message: string) => void;
+  code?: string;
+  label: string;
+  path: string;
+  values: readonly string[];
+}): void {
+  const firstIndexByTarget = new Map<string, number>();
+  input.values.forEach((target, index) => {
+    const firstIndex = firstIndexByTarget.get(target);
+    if (firstIndex === undefined) {
+      firstIndexByTarget.set(target, index);
+      return;
+    }
+    input.add(
+      input.code ?? "SKILL_CONTENT_DUPLICATE_TARGET",
+      `${input.path}[${index}]`,
+      `${input.label} target "${target}" duplicates ${input.path}[${firstIndex}].`,
+    );
+  });
+}
+
 export function validateSkillContentRelease(input: unknown): SkillContentReleaseValidation {
   const diagnostics: SkillContentReleaseDiagnostic[] = [];
   const add = (code: string, path: string, message: string) =>
@@ -366,20 +467,64 @@ export function validateSkillContentRelease(input: unknown): SkillContentRelease
     );
   } else {
     const release = parsed.data as SkillContentRelease;
-    const records = [
-      ...release.domains,
-      ...release.scripts,
-      ...release.competencies,
-      ...release.histories,
-      ...release.profiles,
-      ...release.relationships,
-      ...release.accessExceptions,
+    const recordEntries = [
+      ...release.domains.map((record, index) => ({ path: `domains[${index}]`, record })),
+      ...release.scripts.map((record, index) => ({ path: `scripts[${index}]`, record })),
+      ...release.competencies.map((record, index) => ({
+        path: `competencies[${index}]`,
+        record,
+      })),
+      ...release.histories.map((record, index) => ({ path: `histories[${index}]`, record })),
+      ...release.profiles.map((record, index) => ({ path: `profiles[${index}]`, record })),
+      ...release.profiles.flatMap((profile, profileIndex) =>
+        profile.normalRoutes.map((record, routeIndex) => ({
+          path: `profiles[${profileIndex}].normalRoutes[${routeIndex}]`,
+          record,
+        })),
+      ),
+      ...release.relationships.map((record, index) => ({
+        path: `relationships[${index}]`,
+        record,
+      })),
+      ...release.accessExceptions.map((record, index) => ({
+        path: `accessExceptions[${index}]`,
+        record,
+      })),
     ];
-    const seen = new Set<string>();
-    records.forEach((record) => {
-      if (seen.has(record.id))
-        add("SKILL_CONTENT_DUPLICATE_ID", record.id, `Duplicate stable identity "${record.id}".`);
-      seen.add(record.id);
+    const idEntries = [
+      ...recordEntries,
+      ...release.histories.flatMap((history, historyIndex) =>
+        history.selectionSlots.map((record, slotIndex) => ({
+          path: `histories[${historyIndex}].selectionSlots[${slotIndex}]`,
+          record,
+        })),
+      ),
+    ];
+    const firstPathById = new Map<string, string>();
+    idEntries.forEach(({ path, record }) => {
+      const firstPath = firstPathById.get(record.id);
+      if (firstPath)
+        add(
+          "SKILL_CONTENT_DUPLICATE_ID",
+          `${path}.id`,
+          `Stable identity "${record.id}" duplicates ${firstPath}.id.`,
+        );
+      else firstPathById.set(record.id, path);
+    });
+    recordEntries.forEach(({ path, record }) => {
+      const expectedProvenance = PROVENANCE_KIND_BY_STATUS[record.metadata.status];
+      if (record.metadata.provenance.kind !== expectedProvenance)
+        add(
+          "SKILL_CONTENT_STATUS_PROVENANCE_MISMATCH",
+          `${path}.metadata.provenance.kind`,
+          `Record status "${record.metadata.status}" requires "${expectedProvenance}" provenance, not "${record.metadata.provenance.kind}".`,
+        );
+    });
+    addDuplicateTargetDiagnostics({
+      add,
+      label: "Release provenance",
+      path: "provenance",
+      values: release.provenance,
     });
     const domainIds = new Set(release.domains.map(({ id }) => id));
     const scriptIds = new Set(release.scripts.map(({ id }) => id));
@@ -387,6 +532,30 @@ export function validateSkillContentRelease(input: unknown): SkillContentRelease
     const historyIds = new Set(release.histories.map(({ id }) => id));
     const relationshipById = new Map(release.relationships.map((record) => [record.id, record]));
     release.competencies.forEach((record, index) => {
+      addDuplicateTargetDiagnostics({
+        add,
+        label: `Competency "${record.id}" prerequisite competency`,
+        path: `competencies[${index}].prerequisites`,
+        values: record.prerequisites.map(({ competencyId }) => competencyId),
+      });
+      addDuplicateTargetDiagnostics({
+        add,
+        label: `Competency "${record.id}" core task`,
+        path: `competencies[${index}].taskEnvelope.coreTasks`,
+        values: record.taskEnvelope.coreTasks,
+      });
+      addDuplicateTargetDiagnostics({
+        add,
+        label: `Competency "${record.id}" task-envelope limit`,
+        path: `competencies[${index}].taskEnvelope.limits`,
+        values: record.taskEnvelope.limits,
+      });
+      addDuplicateTargetDiagnostics({
+        add,
+        label: `Competency "${record.id}" method`,
+        path: `competencies[${index}].taskEnvelope.methods`,
+        values: record.taskEnvelope.methods,
+      });
       if (!domainIds.has(record.domainId))
         add(
           "SKILL_CONTENT_UNKNOWN_DOMAIN",
@@ -415,6 +584,13 @@ export function validateSkillContentRelease(input: unknown): SkillContentRelease
             `Written tradition must bind a spoken-language identity.`,
           );
       }
+      if (record.kind === "spoken-language")
+        addDuplicateTargetDiagnostics({
+          add,
+          label: `Spoken language "${record.id}" family`,
+          path: `competencies[${index}].familyIds`,
+          values: record.familyIds,
+        });
       if (record.kind === "specialization") {
         if (competencyById.get(record.parentCompetencyId)?.kind !== "skill")
           add(
@@ -422,7 +598,23 @@ export function validateSkillContentRelease(input: unknown): SkillContentRelease
             `competencies[${index}].parentCompetencyId`,
             `Specialization parent must be a concrete Skill.`,
           );
+        if (
+          !record.prerequisites.some(
+            ({ competencyId }) => competencyId === record.parentCompetencyId,
+          )
+        )
+          add(
+            "SKILL_CONTENT_SPECIALIZATION_PARENT_PREREQUISITE_MISSING",
+            `competencies[${index}].prerequisites`,
+            `Specialization must declare its parent Skill as a prerequisite.`,
+          );
         if (record.transfer.kind === "explicit-relationships") {
+          addDuplicateTargetDiagnostics({
+            add,
+            label: `Specialization "${record.id}" transfer relationship`,
+            path: `competencies[${index}].transfer.relationshipIds`,
+            values: record.transfer.relationshipIds,
+          });
           record.transfer.relationshipIds.forEach((relationshipId, relationshipIndex) => {
             const edge = relationshipById.get(relationshipId);
             if (
@@ -439,7 +631,31 @@ export function validateSkillContentRelease(input: unknown): SkillContentRelease
         }
       }
     });
+    release.scripts.forEach((record, index) =>
+      addDuplicateTargetDiagnostics({
+        add,
+        label: `Script "${record.id}" family`,
+        path: `scripts[${index}].familyIds`,
+        values: record.familyIds,
+      }),
+    );
+    const firstRelationshipIndexByEdge = new Map<string, number>();
     release.relationships.forEach((record, index) => {
+      const edge = `${record.sourceCompetencyId}->${record.targetCompetencyId}`;
+      const firstEdgeIndex = firstRelationshipIndexByEdge.get(edge);
+      if (firstEdgeIndex === undefined) firstRelationshipIndexByEdge.set(edge, index);
+      else
+        add(
+          "SKILL_CONTENT_DUPLICATE_RELATIONSHIP_EDGE",
+          `relationships[${index}]`,
+          `Relationship edge "${edge}" duplicates relationships[${firstEdgeIndex}].`,
+        );
+      if (record.sourceCompetencyId === record.targetCompetencyId)
+        add(
+          "SKILL_CONTENT_SELF_RELATIONSHIP",
+          `relationships[${index}]`,
+          `Relationship "${record.id}" cannot target its own source competency.`,
+        );
       if (
         !competencyById.has(record.sourceCompetencyId) ||
         !competencyById.has(record.targetCompetencyId)
@@ -451,10 +667,23 @@ export function validateSkillContentRelease(input: unknown): SkillContentRelease
         );
     });
     release.histories.forEach((record, index) => {
-      [
+      const memberIds = [
         ...record.fixedCompetencyIds,
         ...record.selectionSlots.flatMap(({ candidateCompetencyIds }) => candidateCompetencyIds),
-      ].forEach((id) => {
+      ];
+      addDuplicateTargetDiagnostics({
+        add,
+        label: `History "${record.id}" competency membership`,
+        path: `histories[${index}]`,
+        values: memberIds,
+      });
+      if (memberIds.length === 0)
+        add(
+          "SKILL_CONTENT_EMPTY_HISTORY",
+          `histories[${index}]`,
+          `History "${record.id}" must contain at least one competency membership.`,
+        );
+      memberIds.forEach((id) => {
         if (!competencyById.has(id))
           add(
             "SKILL_CONTENT_UNKNOWN_HISTORY_MEMBER",
@@ -462,8 +691,32 @@ export function validateSkillContentRelease(input: unknown): SkillContentRelease
             `Unknown history competency "${id}".`,
           );
       });
+      record.selectionSlots.forEach((slot, slotIndex) => {
+        if (slot.chooseCount > slot.candidateCompetencyIds.length)
+          add(
+            "SKILL_CONTENT_INVALID_SELECTION_SLOT",
+            `histories[${index}].selectionSlots[${slotIndex}]`,
+            `Selection slot "${slot.id}" has an impossible choose count.`,
+          );
+      });
     });
     release.profiles.forEach((record, index) => {
+      record.normalRoutes.forEach((route, routeIndex) =>
+        addDuplicateTargetDiagnostics({
+          add,
+          label: `Access route "${route.id}" competency`,
+          path: `profiles[${index}].normalRoutes[${routeIndex}].competencyIds`,
+          values: route.competencyIds,
+        }),
+      );
+      const overrideTargets = record.overrides.flatMap(({ competencyIds }) => competencyIds);
+      addDuplicateTargetDiagnostics({
+        add,
+        code: "SKILL_CONTENT_DUPLICATE_PROFILE_OVERRIDE",
+        label: `Profile "${record.id}" override competency`,
+        path: `profiles[${index}].overrides`,
+        values: overrideTargets,
+      });
       [
         ...record.normalRoutes.flatMap(({ competencyIds }) => competencyIds),
         ...record.overrides.flatMap(({ competencyIds }) => competencyIds),
@@ -478,6 +731,24 @@ export function validateSkillContentRelease(input: unknown): SkillContentRelease
     });
     const profileIds = new Set(release.profiles.map(({ id }) => id));
     release.accessExceptions.forEach((record, index) => {
+      addDuplicateTargetDiagnostics({
+        add,
+        label: `Access exception "${record.id}" competency`,
+        path: `accessExceptions[${index}].competencyIds`,
+        values: record.competencyIds,
+      });
+      addDuplicateTargetDiagnostics({
+        add,
+        label: `Access exception "${record.id}" history`,
+        path: `accessExceptions[${index}].historyIds`,
+        values: record.historyIds,
+      });
+      if (record.competencyIds.length === 0 && record.historyIds.length === 0)
+        add(
+          "SKILL_CONTENT_EMPTY_ACCESS_EXCEPTION",
+          `accessExceptions[${index}]`,
+          `Access exception "${record.id}" must target a competency or history.`,
+        );
       if (!profileIds.has(record.profileId))
         add(
           "SKILL_CONTENT_UNKNOWN_EXCEPTION_PROFILE",
@@ -554,11 +825,14 @@ export function validateSkillContentRelease(input: unknown): SkillContentRelease
 export function projectSkillContentReleaseForReference(
   release: SkillContentRelease,
 ): SkillContentReferenceProjection {
-  return {
+  return deepReadonlyClone({
+    compatibility: release.compatibility,
     contentVersion: release.contentVersion,
     id: release.id,
     manifest: release.manifest,
+    provenance: release.provenance,
     records: {
+      accessExceptions: release.accessExceptions,
       competencies: release.competencies,
       domains: release.domains,
       histories: release.histories,
@@ -566,7 +840,20 @@ export function projectSkillContentReleaseForReference(
       relationships: release.relationships,
       scripts: release.scripts,
     },
+    rulesVersion: release.rulesVersion,
+    schemaVersion: release.schemaVersion,
     status: release.status,
     title: release.title,
-  };
+  });
+}
+
+function deepReadonlyClone<T>(value: T): T {
+  if (Array.isArray(value)) return Object.freeze(value.map(deepReadonlyClone)) as T;
+  if (value !== null && typeof value === "object") {
+    const clone = Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, deepReadonlyClone(entry)]),
+    );
+    return Object.freeze(clone) as T;
+  }
+  return value;
 }

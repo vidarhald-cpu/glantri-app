@@ -40,9 +40,10 @@ Each v2 manifest carries two deterministic values:
   envelope, prerequisites, relationships, access, histories, Specializations, and
   language/script/written-tradition bindings.
 
-Editorial-only changes therefore alter the package digest without altering the semantic digest.
-Compatibility remains an explicit release classification; no digest comparison by itself decides
-Character migration. The governing architecture is
+Editorial prose and presentation ordering therefore alter the package digest without altering the
+semantic digest. Record status and provenance remain paired and validated separately from those
+mechanical facts. Compatibility remains an explicit release classification; no digest comparison
+by itself decides Character migration. The governing architecture is
 [Rule decision 0003](../decisions/rules/0003-skill-documentation-and-release-integrity.md).
 
 This release contains only the accepted content needed by eight retained pilot Character concepts:

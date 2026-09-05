@@ -39,5 +39,6 @@ The accepted Pilot `1.0.1` payload remains immutable in `pilotSkillContentReleas
 documentation-complete candidates use `skill-content-release/v2`; `buildSkillContentRelease`
 creates deterministic package and semantic digests, `validateSkillContentRelease` checks content
 and reference integrity, and `projectSkillContentReleaseForReference` supplies a read-only
-candidate/canonical view for the later Admin reference. This platform does not activate runtime
-Skills or decide Character migration.
+candidate/canonical snapshot for the later Admin reference. Semantic integrity normalizes
+presentation ordering and excludes editorial prose; the package digest still covers both. This
+platform does not activate runtime Skills or decide Character migration.
