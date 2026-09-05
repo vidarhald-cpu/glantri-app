@@ -94,6 +94,18 @@ usable catalogue rollout, and only then preserved Chargen/Character integration.
 Its six operational cases remain governed by their live Forgejo status and
 separate authorization; the roadmap itself grants no implementation authority.
 
+### Campaign play lifecycle
+
+The accepted
+[Campaign play lifecycle decision](../decisions/architecture/0003-campaign-play-lifecycle.md)
+defines the first game-usable Campaign, Scenario, Encounter, and optional Combat
+journey without replacing the mature Combat surfaces or creating a new session
+engine. The bounded
+[#34-#40 roadmap](./campaign-play-lifecycle-roadmap.md) records current sequencing,
+the #16 Campaign-shell dependency, Critical/Combat hotspot gate, and single-owner
+migration and shared-E2E rules. Live Forgejo state remains authoritative; the
+roadmap does not authorize its inactive Ready or Design cases.
+
 ### Player-authored Campaign objects
 
 [Forgejo #17](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/17)

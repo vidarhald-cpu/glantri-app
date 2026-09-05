@@ -37,6 +37,8 @@ Routine implementation details do not need decision records.
 - Rules: [`rules/0004-c1-critical-authoring-and-adjudication.md`](rules/0004-c1-critical-authoring-and-adjudication.md)
 - Product/UX: [`../product/ui-interaction-preservation.md`](../product/ui-interaction-preservation.md)
 - Architecture: [`architecture/0002-spatial-scene-rules-boundary.md`](architecture/0002-spatial-scene-rules-boundary.md)
+- Architecture: [`architecture/0003-campaign-play-lifecycle.md`](architecture/0003-campaign-play-lifecycle.md)
 - Architecture guidance: [`../architecture/information-authority-and-projection.md`](../architecture/information-authority-and-projection.md)
 - Portfolio guidance: [`../product/2026-09-03-strategic-future-register.md`](../product/2026-09-03-strategic-future-register.md)
 - Skills product roadmap: [`../product/skills-product-roadmap.md`](../product/skills-product-roadmap.md)
+- Campaign play lifecycle roadmap: [`../product/campaign-play-lifecycle-roadmap.md`](../product/campaign-play-lifecycle-roadmap.md)
