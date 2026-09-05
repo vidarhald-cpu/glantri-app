@@ -36,6 +36,8 @@ Routine implementation details do not need decision records.
 - Rules: [`rules/0003-skill-documentation-and-release-integrity.md`](rules/0003-skill-documentation-and-release-integrity.md)
 - Product/UX: [`../product/ui-interaction-preservation.md`](../product/ui-interaction-preservation.md)
 - Architecture: [`architecture/0002-spatial-scene-rules-boundary.md`](architecture/0002-spatial-scene-rules-boundary.md)
+- Architecture: [`architecture/0004-canonical-field-equipment-v1.md`](architecture/0004-canonical-field-equipment-v1.md)
 - Architecture guidance: [`../architecture/information-authority-and-projection.md`](../architecture/information-authority-and-projection.md)
 - Portfolio guidance: [`../product/2026-09-03-strategic-future-register.md`](../product/2026-09-03-strategic-future-register.md)
 - Skills product roadmap: [`../product/skills-product-roadmap.md`](../product/skills-product-roadmap.md)
+- Field Equipment product roadmap: [`../product/canonical-field-equipment-v1-roadmap.md`](../product/canonical-field-equipment-v1-roadmap.md)
