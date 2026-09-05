@@ -8,6 +8,8 @@ R3C reconciliation on 2026-09-03 moved the recovered contracts and accepted deci
 - [R3D recovered case register](./2026-09-03-r3d-recovered-case-register.md) for the self-contained state of Forgejo issues #9-#17 and the durable omission boundary;
 - [C1 Critical content calibration decision](../decisions/rules/0001-c1-critical-injury-recalibration.md);
 - [Skill Catalogue qualitative architecture decision](../decisions/rules/0002-skill-catalogue-qualitative-architecture.md);
+- [Skill documentation and release-integrity decision](../decisions/rules/0003-skill-documentation-and-release-integrity.md);
+- [Skills product-area roadmap](../product/skills-product-roadmap.md);
 - [Authority and Information Projection Principle](../architecture/information-authority-and-projection.md);
 - [strategic portfolio and future register](../product/2026-09-03-strategic-future-register.md);
 - [Chargen and Combat Manager preservation contract](../product/ui-interaction-preservation.md);
@@ -233,3 +235,26 @@ The reconstructed portfolio intentionally leaves these decisions open:
 6. decide whether/when #395 receives a bounded architecture investigation or feasibility prototype.
 
 No priority ordering among these items is inferred by R3B beyond the explicit `Mandatory Recovery` and `Future` labels.
+
+## Skills product-area portfolio added 2026-09-04
+
+The product owner made Skills the highest-priority product area and established a
+new six-case delivery portfolio against
+`dev@2ae4ceb65dc1bbc25275bde8ca54832d31a3dcc3`. These are current operational
+cases rather than reconstructed historical GitHub identities:
+
+| Portfolio case                                               | Forgejo issue                                                     | Disposition at creation                                                  |
+| ------------------------------------------------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Canonical Skill documentation and release-integrity contract | [#22](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/22) | Open; `status/Authorized`; inactive; design/documentation authority only |
+| Versioned Skill content schema and validators                | [#23](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/23) | Open; `status/Ready`; dependency-gated and not authorized                |
+| Read-only Admin Skill Reference                              | [#24](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/24) | Open; `status/Ready`; dependency-gated and not authorized                |
+| Documentation-complete Pilot Skill authorship                | [#25](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/25) | Open; `status/Ready`; dependency-gated and not authorized                |
+| Pilot content calibration and acceptance                     | [#26](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/26) | Open; `status/Design`; inactive review gate and not authorized           |
+| Legacy catalogue mapping                                     | [#27](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/27) | Open; `status/Ready`; inactive planning work and not authorized          |
+
+The normative decision is
+[`0003-skill-documentation-and-release-integrity.md`](../decisions/rules/0003-skill-documentation-and-release-integrity.md),
+and the dependency graph and product sequencing are in the
+[Skills roadmap](../product/skills-product-roadmap.md). Only Case 1 has current
+design/documentation authority. No Builder or QA lane was dispatched by the
+portfolio-creation action, and Cases 2-6 carry no implementation authority.

@@ -85,6 +85,15 @@ recap, and Campaign-object design must respect that boundary.
 
 ## Near and future design areas
 
+### Skills product area
+
+The accepted [Skills product-area roadmap](./skills-product-roadmap.md) makes
+Skills the current highest-priority product area and sequences the bounded Pilot
+documentation model, read-only Admin review, Pilot content acceptance, full
+usable catalogue rollout, and only then preserved Chargen/Character integration.
+Its six operational cases remain governed by their live Forgejo status and
+separate authorization; the roadmap itself grants no implementation authority.
+
 ### Player-authored Campaign objects
 
 [Forgejo #17](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/17)
