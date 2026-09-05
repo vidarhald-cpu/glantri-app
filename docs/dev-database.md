@@ -1,5 +1,10 @@
 # Local Development Database Workflow
 
+Role authority, visible Builder/QA lanes, and standing execution boundaries are
+defined in the
+[canonical development operating model](./process/development-operating-model.md).
+This document owns database isolation and safety procedure.
+
 The normal database at `localhost:5432/glantri` is **protected shared user state**. It can contain valuable development users, characters, campaigns, scenarios, and other records. A separate Git worktree only isolates files; it does not isolate PostgreSQL.
 
 ## Two Supported Database Modes

@@ -1,5 +1,10 @@
 # Development baseline and integration policy
 
+The [canonical development operating model](./development-operating-model.md)
+owns the high-level role, workflow, lifecycle, execution-lane, and
+repository/project map. This document owns branch, accepted-baseline,
+integration, verification, and release-boundary policy.
+
 ## Branch model and authority
 
 `dev` is Glantri's non-production integration branch. Short-lived task branches start from an accepted `dev` commit and return through coherent task PRs.
@@ -17,7 +22,11 @@ short-lived task branches/worktrees
         Azure production
 ```
 
-- The product owner/project development process controls `dev`: baseline selection, branch creation/protection, ordinary task-PR review and merge, integration order, and development acceptance.
+- The Product Owner owns `dev` baseline selection, development acceptance, and
+  integration decisions. Within an already authorized bounded lane, the
+  Development Orchestrator may perform the routine branch, PR, evidence, and
+  lifecycle operations granted by the canonical operating model; an authorized
+  integration actor merges only after the required acceptance gate.
 - The external maintainer is not part of routine development. Their role is limited to production-release/deployment support at the future `dev -> main -> Azure` boundary.
 - `main` is production-coupled and remains outside ordinary agent authority. Agents do not push or merge to it, change its rules, deploy, or alter Azure/production configuration.
 - Pushes to `dev` run `.github/workflows/ci.yml`. They do not trigger `.github/workflows/deploy.yml`, whose push trigger is restricted to `main`.
@@ -33,6 +42,11 @@ Credentials never replace task authorization. Pushes, PR creation/updates, branc
 - The historical `Glantri app` project and `/Users/vidarhald/dev/glantri-app` checkout are read-only, non-mutable recovery/history evidence. Do not use them for new implementation, Builder work, QA mutation, branch creation, reset/rebase/cleanup, migration, or routine current-development fetch/push.
 - Repository documents are authoritative. Codex project references are navigation aids and do not grant task, Git, integration, release, or production authority.
 - `main`, Azure, and production remain the external-maintainer release boundary described above.
+- The current pinned Development and QA Orchestrator tasks may coordinate from
+  their verified historical-project UI association, but must not mutate or use
+  that historical project/clone as current development authority. All new
+  substantial Builder, Investigator, and independent-QA execution uses
+  `Glantri app — Forgejo`.
 
 ## Operational baseline status (2026-08-11)
 
@@ -59,7 +73,9 @@ The merge topology preserves correspondence with PR #200, the 50 local continuat
 
 1. Every task contract names the exact accepted `dev` SHA, task branch/worktree, intended target, and Git authority.
 2. Work occurs in a clean, isolated, short-lived task branch/worktree.
-3. Ordinary local Forgejo development PRs target `dev`; the product owner/project development process may review and merge them when required checks and acceptance are satisfied.
+3. Ordinary local Forgejo development PRs target `dev`; the Product Owner
+   decides acceptance and integration, and an authorized integration actor may
+   merge when the required checks and acceptance are satisfied.
 4. Changes arrive as coherent behavior or architecture slices. `dev` must not become another unbounded long-lived feature stream.
 5. Reserved hotspots and cross-area contract order are coordinated before implementation.
 6. Completed work records parent SHA, resulting SHA, verification, dependencies, compatibility, and follow-ups.

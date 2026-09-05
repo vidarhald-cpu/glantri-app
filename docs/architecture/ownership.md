@@ -2,6 +2,10 @@
 
 These are coordination boundaries for concurrent development, not necessarily permanent package boundaries. Agents may read the entire repository but normally write only inside the task's declared area.
 
+The [canonical development operating model](../process/development-operating-model.md)
+owns role authority, parallelism, dispatch, and lifecycle. This document owns
+functional-area and reserved-hotspot definitions.
+
 ## Functional areas
 
 | Area                              | Primary responsibility                                                                             | Typical paths/surfaces                                                                           |
@@ -42,7 +46,9 @@ This list is intentionally surface-oriented. If a refactor replaces a hotspot, u
 5. Product-rule changes link an approved rule decision; architectural boundary changes link an architecture decision.
 6. UI and engine agents do not independently invent parallel representations of the same combat fact.
 7. Platform/release surfaces never broaden an implementation task into production authority.
-8. Parallelize independent design and investigation and keep unrelated lanes running when one lane blocks. No more than four implementation Builders run concurrently; serialize only declared hotspots or real dependencies, with explicit ownership and merge order.
+8. Apply the operating model's parallelism ceiling and keep unrelated lanes
+   running when one lane blocks. Serialize only declared hotspots or real
+   dependencies, with explicit ownership and merge order.
 
 ## Path ownership is not exclusive code ownership
 

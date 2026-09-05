@@ -4,23 +4,85 @@
 
 Use this procedure for an authorized implementation case or other named durable task contract that needs an isolated Builder and an independent QA pass. It is tool-agnostic: a human coordinator, Codex, Claude, or another agent may perform a role, but no role depends on private chat history or expands the Git, product, merge, release, or production authority recorded in the contract.
 
-- The product owner/control plane decides priority, product and rule behavior, consequential architecture choices, acceptance, and `dev` integration. An implementation or QA agent may identify a decision but may not invent it.
+- The [canonical development operating model](./development-operating-model.md)
+  owns the role map, workflow, lifecycle, visible-lane requirements, standing
+  authority, and return gates. This document owns the detailed isolated
+  Builder/QA procedure and exact return formats.
+- The Product Owner decides priority, product and rule behavior, UX,
+  consequential architecture, authorization, acceptance, and `dev`
+  integration. Architecture/control plane proposes and interprets; it does not
+  silently make those decisions. An implementation or QA agent may identify a
+  decision but may not invent it.
 - The local Forgejo issue, when applicable, is the self-contained task contract and authorization record. The Forgejo PR is the implementation and QA handoff record. Forgejo is authoritative for current case status, exact SHAs, PR state, checks, findings, and readiness; repository documents control standing policy.
-- `Ready` means the task contract is complete and current. `Authorized` means the product owner/control plane has explicitly permitted implementation. A Builder starts only when both are recorded; `Ready` alone is not permission to start.
-- Builder self-assessment is not acceptance. A passing QA verdict is evidence for, not a substitute for, control-plane/product-owner acceptance and integration.
+- `Ready` means the task contract is complete and current but is not permission
+  to start. `Authorized` is the next exclusive lifecycle state, reached only
+  after the Product Owner copies explicit bounded authorization into the
+  operational flow. A Builder starts from `Authorized` only after the
+  Development Orchestrator confirms the contract remains current and live gates
+  pass.
+- Builder self-assessment is not acceptance. A passing QA verdict is evidence
+  for Architecture/control-plane evaluation and Product Owner acceptance; it
+  does not substitute for either or for the Product Owner's integration
+  decision.
 - The task contract defines the stopping point. Nobody infers authority to merge, release, touch `main`, deploy, or change production merely because implementation or QA is complete.
 
 ## Case-to-integration loop
 
-1. **Authorize and verify.** The control plane confirms that the task contract is `Ready + Authorized`, dependencies and hotspots are available, and no more than four authorized implementation Builders will be active. The Builder fetches the remote and resolves the exact live `origin/dev` SHA. If it differs from the contract's accepted baseline, stop for contract refresh; do not silently choose or rebase onto a new baseline.
+1. **Authorize and verify.** Architecture/control plane prepares or interprets
+   the complete task contract; the Product Owner decides and copies the
+   authorization; the Development Orchestrator confirms the issue is
+   `Authorized`, the contract remains complete/current, dependencies and
+   hotspots are available, and no more than four implementation Builders will
+   be active. The Builder fetches the remote and resolves the exact live
+   `origin/dev` SHA. If it differs from the contract's accepted baseline, stop
+   for contract refresh; do not silently choose or rebase onto a new baseline.
 2. **Build in isolation.** The Builder uses a clean, short-lived branch and isolated worktree at the accepted SHA. It reads `AGENTS.md` and only the exact task-specific documents, implements the approved slice, and does not widen scope to absorb unrelated findings, dependency changes, or hotspot conflicts.
-3. **Publish and stop.** The Builder runs proportionate verification, inspects the resulting diff and status, commits and pushes the authorized branch, opens or updates one draft PR targeting `dev`, records the exact PR head and structured Builder return in Forgejo, then stops at `READY FOR INDEPENDENT QA`. Builder self-review does not make the PR accepted.
-4. **Review the exact head independently.** A fresh QA reviewer uses a separate clean worktree, fetches the PR, resolves and records its exact head SHA, and reviews that immutable head against the task contract. QA checks acceptance, scope, regressions, required perspectives, presentation, privacy, product quality, database evidence, and relevant CI/local checks. For protected facts, QA applies the [Authority and Information Projection Principle](../architecture/information-authority-and-projection.md) and reviews action authorization/zero mutation, server payload/DTO/serialized-response absence, and UI rendering as separate gates. A rejected action or absent control does not prove a safe projection. QA does not repair Builder-owned code. If the PR head changes during review, the result is stale and QA reviews the new head before issuing a verdict.
-5. **Route the verdict.** QA posts `PASS`, `PASS WITH FOLLOW-UP`, or `FAIL` with evidence. `PASS WITH FOLLOW-UP` is allowed only for durably recorded non-blocking work; it must identify why integration is safe. `FAIL` returns clear in-scope defects to the same Builder and PR. The Builder publishes a new exact head and fresh handoff, then independent QA reruns against that head.
-6. **Accept and integrate.** On a passing QA verdict, the control plane/product owner decides acceptance and integration. An authorized integration actor may merge the accepted ordinary PR into shared `dev` after required checks and coordination. QA and Builder do not infer merge authority.
-7. **Release separately when chosen.** A release is optional and separately authorized. The product owner decides release readiness; a narrow `dev -> main` release PR is prepared under the release contract; the external maintainer owns production release/deployment support. Ordinary agents do not merge `main`, deploy, or mutate Azure/production.
+3. **Publish, harvest, and stop.** The Builder runs proportionate verification,
+   inspects the resulting diff and status, commits and pushes the authorized
+   branch, opens or updates one draft PR targeting `dev`, records the exact PR
+   head and structured Builder return in Forgejo, and stops. The Development
+   Orchestrator harvests the exact result and advances the issue to
+   `Ready for Independent QA`. Builder self-review does not make the PR
+   accepted.
+4. **Hand off and review the exact head independently.** The Development
+   Orchestrator sends the immutable exact-head QA contract directly to the
+   pinned QA Orchestrator. The QA Orchestrator creates a separate visible QA
+   task. A fresh QA reviewer uses a separate clean worktree, fetches the PR,
+   resolves and records its exact head SHA, and reviews that immutable head
+   against the task contract. QA checks acceptance, scope, regressions,
+   required perspectives, presentation, privacy, product quality, database
+   evidence, and relevant CI/local checks. For protected facts, QA applies the
+   [Authority and Information Projection Principle](../architecture/information-authority-and-projection.md)
+   and reviews action authorization/zero mutation, server
+   payload/DTO/serialized-response absence, and UI rendering as separate gates.
+   A rejected action or absent control does not prove a safe projection. QA
+   does not repair Builder-owned code. If the PR head changes during review,
+   the result is stale and QA reviews the new head before issuing a verdict.
+5. **Harvest and route the verdict.** The QA Orchestrator harvests the separate
+   QA task and records `PASS`, `PASS WITH FOLLOW-UP`, or `FAIL` with durable
+   evidence, then returns directly to the Development Orchestrator.
+   `PASS WITH FOLLOW-UP` is allowed only for durably recorded non-blocking work;
+   it must identify why integration is safe. PASS advances the issue to
+   `Ready for Control-plane Acceptance`. FAIL never does: clear in-scope
+   defects return through the Development Orchestrator to the same Builder and
+   PR as an `Active` bounded repair. The Builder publishes a new exact head,
+   followed by a new direct handoff and fresh independent QA.
+6. **Accept and integrate.** On a passing QA verdict, Architecture/control plane
+   evaluates the durable result and the Product Owner decides acceptance and
+   integration. An authorized integration actor may merge the accepted ordinary
+   PR into shared `dev` after required checks and coordination. QA and Builder
+   do not infer merge authority.
+7. **Release separately when chosen.** A release is optional and separately
+   authorized. The Product Owner decides release readiness; a narrow
+   `dev -> main` release PR is prepared under the release contract; the
+   external maintainer owns production release/deployment support. Ordinary
+   agents do not merge `main`, deploy, or mutate Azure/production.
 
-The coordinator moves handoffs between roles and keeps the issue/PR current. The product owner should receive decision-point messages, not have to copy private chat between Builder and QA.
+The Development Orchestrator and QA Orchestrator move handoffs directly and keep
+the issue/PR current. The Product Owner receives decision and acceptance
+messages; they do not normally copy QA prompts or monitor child completion.
+Manual copy/paste is only an explicitly authorized technical fallback when
+direct routing is unavailable.
 
 ## Visible task dispatch and completion
 
@@ -29,8 +91,9 @@ Investigator lanes each use a separate visible Work/Codex task. Builder and QA
 for the same result must be different visible tasks. Hidden internal sub-agents
 may assist minor orchestration inside a lane, but same-thread or hidden work does
 not satisfy a Builder, QA, or dispatched Investigator lane. If visible task
-creation is unavailable, the orchestrator reports the capability problem and
-does not claim that a hidden substitute fulfilled the role.
+creation is unavailable, the Development Orchestrator reports the capability
+problem and uses only an explicitly authorized manual visible fallback; it does
+not claim that a hidden substitute fulfilled the role.
 
 At dispatch, record:
 
@@ -43,21 +106,24 @@ At dispatch, record:
 - exact accepted baseline SHA; and
 - current state: `queued`, `running`, `completed`, or `failed`.
 
-The orchestrator must follow the visible task through completion, retrieve its
-exact head and result, record authorized durable Forgejo evidence/status, and
-surface the harvested outcome in the consolidated return. A child task merely
-ending, or a dispatch remaining queued, is not operational completion.
+The Development Orchestrator must follow each Builder/Investigator task through
+completion, retrieve its exact head/result, reconcile Forgejo evidence/status,
+and surface the harvested outcome in the consolidated return. The QA
+Orchestrator does the same for its independent-QA child and returns directly to
+the Development Orchestrator. A child task merely ending, or a dispatch
+remaining queued, is not operational completion.
 
 ## Standing execution authority
 
-After a bounded lane is control-plane authorized, the orchestrator may claim
-task/issue ownership, mark it `Active`, transfer or release ownership at
+After a bounded lane is Product Owner authorized, the Development Orchestrator
+may claim task/issue ownership, mark it `Active`, transfer or release ownership at
 Builder-to-QA-to-orchestrator boundaries, clear ownership at completion, and
 apply defined lifecycle transitions for Builder completion, QA PASS/FAIL,
 bounded repair, or control-plane return without repeated product-owner
 confirmation. Normal execution also proceeds without repeated confirmation for
 worktree/branch setup, authorized task dispatch, local Forgejo push/PR/evidence,
-task-token creation/use/revocation, and disposable cleanup.
+task-token creation/use/revocation, direct QA handoff, explicitly authorized
+bounded repair, and disposable cleanup.
 
 This standing authority does not authorize starting work that is merely
 `Design` or `Ready`, broadening scope, accepting product/rule/UX/architecture
@@ -134,7 +200,8 @@ Route each finding once, without broadening the active task:
 - clear, in-scope defect: same Builder task and PR;
 - unrelated defect: durable backlog issue;
 - clear low-impact polish: P3 backlog;
-- material product or rule ambiguity: `Needs decision` for the product owner/control plane;
+- material product or rule ambiguity: Architecture/control plane prepares the
+  question and recommendation for Product Owner decision;
 - cross-area architecture or ownership conflict: architecture/control-plane review.
 
 Do not add speculative placeholders, disabled future controls, or unapproved future UI to make a later task appear prepared.
