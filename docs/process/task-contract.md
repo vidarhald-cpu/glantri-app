@@ -2,7 +2,19 @@
 
 Use this contract for every significant implementation issue. Small defects may use a shorter form only when scope, ownership, rule basis, and verification are still unambiguous.
 
-`Ready` and `Authorized` are separate. `Ready` means the contract below is complete and current. `Authorized` means the product owner/control plane has explicitly permitted implementation dispatch in durable Forgejo case state or another named durable task contract. An agent starts implementation only when both are true; neither technical completeness nor credentials imply authorization. `Active` means a Builder or its repair loop is already in flight.
+The [canonical development operating model](./development-operating-model.md)
+owns role authority, workflow, exclusive Forgejo lifecycle, visible-lane rules,
+and standing execution authority. This document owns the self-contained
+contract schema and acceptance detail.
+
+`Ready` and `Authorized` are consecutive, exclusive lifecycle states. `Ready`
+means the contract below is complete and current but execution is not
+permitted. The Product Owner advances it to `Authorized` by copying an explicit
+bounded authorization into the operational flow. A Builder starts only from
+`Authorized`, after the Development Orchestrator confirms that the contract is
+still complete/current and live gates pass. Technical completeness, chat
+history, or credentials never imply authorization. `Active` means a named
+visible Builder, Investigator, QA task, or bounded repair owns work in flight.
 
 ## Ready contract
 
@@ -29,9 +41,9 @@ Explain impact and why this task has priority.
 
 ### Baseline and Git authority
 
-- Contract status: `Ready` / `Blocked` / `Design only` / `Completed` / `Stale/needs refresh`:
-- Implementation authorization: `Authorized` / `Not authorized`:
-- Activity: `Active` / `Inactive`:
+- Forgejo lifecycle status: `Design` / `Ready` / `Authorized` / `Active` / `Ready for Independent QA` / `Ready for Control-plane Acceptance` / `Integrated`:
+- Contract completeness/currentness evidence:
+- Blocking, inactivity, dependency, or stale-contract support state, if any:
 - Durable authorization record (Forgejo issue body/comment/label or other named contract):
 - Canonical Codex project (`Glantri app — Forgejo`):
 - Execution role (Builder, independent QA, or bounded Investigator):
@@ -55,9 +67,13 @@ Name only the documents needed to execute this task safely. `AGENTS.md` is alway
 Substantial Builder, independent QA, and dispatched Investigator work uses
 separate visible Work/Codex tasks; QA must be a different visible task from the
 Builder. Hidden internal sub-agents do not satisfy those roles. If visible task
-creation is unavailable, record the capability problem rather than substituting
-a hidden lane. Repository documents are authoritative; the Codex project and
-task links are navigation and execution evidence only.
+creation is unavailable, record the capability problem and use only an
+explicitly authorized manual visible fallback rather than substituting a hidden
+lane. Repository documents are authoritative; the Codex project and task links
+are navigation and execution evidence only. Builders must not rely on chat
+history to reconstruct issue, baseline, sources, scope, exclusions,
+ownership/hotspots, acceptance, verification, Git/PR authority, dependencies,
+role, or QA requirements.
 
 Database-capable Builder/QA work must name an isolated disposable target before any application, migration, reset, seed, or integration-test command runs. A separate Git worktree does not isolate PostgreSQL state. Linked worktrees must not copy or inherit the primary checkout `.env` or another worktree's `.env.task`, and must not use the protected normal database at `localhost:5432/glantri`. Every database-capable operation and cleanup must re-bind the declared task environment to the actual current linked worktree and its expected container labels. If current-worktree ownership cannot be proved from the task contract and repository preflight, the command does not run.
 
@@ -292,7 +308,7 @@ List only decisions that genuinely require product/rule/UX judgment. Use `None` 
 
 ### Handoff requirements
 
-For an authorized Builder/QA loop, use the standard exact-SHA Builder and independent QA returns in `docs/process/agent-execution.md` in addition to the evidence below.
+For an authorized Builder/QA loop, use the standard exact-SHA Builder and independent QA returns in `docs/process/agent-execution.md` in addition to the evidence below. The Development Orchestrator harvests the Builder result and sends the immutable exact-head contract directly to the pinned QA Orchestrator; the Product Owner is not the routine relay.
 
 - Result and files changed.
 - Decision records created/updated.

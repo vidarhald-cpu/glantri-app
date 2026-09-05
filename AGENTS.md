@@ -11,14 +11,16 @@
 - Never push or merge to `main`, deploy, change production/Azure configuration or secrets, or treat credentials as authority.
 - Pushes and PR changes require explicit task or user authorization and a confirmed target.
 
-Full process: `docs/process/control-plane.md` and `docs/process/development-baseline.md`.
+Canonical operating map: `docs/process/development-operating-model.md`. Detailed
+authority and baseline policy: `docs/process/control-plane.md` and
+`docs/process/development-baseline.md`.
 
 ## Task start and reading
 
 Before non-trivial work:
 
 1. Read this file and the exact additional documents named in the task contract.
-2. Confirm the current Forgejo issue, when applicable, or other durable task contract is both `Ready` (complete) and explicitly `Authorized` for implementation. `Ready` alone is not permission to start.
+2. Confirm the current Forgejo issue, when applicable, has reached `Authorized` through the canonical lifecycle and its durable task contract remains complete and current. `Ready` alone is not permission to start.
 3. Confirm outcome, scope, ownership, accepted baseline branch/SHA, reserved hotspots, acceptance examples, verification, and Git authority.
 4. Fetch and resolve the live `origin/dev` SHA. Stop for contract refresh if it differs from the accepted baseline; do not silently choose a new baseline.
 5. Inspect the current source and tests for the affected area; do not rely on old branches or chat history.
@@ -30,6 +32,7 @@ Useful references:
 
 - Task contract: `docs/process/task-contract.md`
 - Isolated Builder/QA execution: `docs/process/agent-execution.md`
+- Canonical development operating model: `docs/process/development-operating-model.md`
 - Functional ownership/hotspots: `docs/architecture/ownership.md`
 - Global user-facing principles: `docs/product/product-presentation-principles.md`
 - Regression guidance: `docs/testing-regression-matrix.md`
