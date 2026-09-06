@@ -1571,6 +1571,37 @@ describe("CombatRoundManagerPanel GM workflow selector", () => {
     expect(mocks.clearCurrentStep).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the inspected Declaration participant selected when Clear restores phase-wide work", async () => {
+    const before = buildEncounter();
+    const restoredBase = buildCombatExperiencePendingEncounter();
+    const restored = encounterSessionSchema.parse({
+      ...restoredBase,
+      updatedAt: "2026-07-23T10:01:31.000Z",
+    });
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    mocks.clearCurrentStep.mockResolvedValue({ encounter: restored, participants: [] });
+
+    render(<CombatRoundManagerPanel encounter={before} scenarioParticipants={participants} />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /Scyrian cavalry guy · Round 1 · DE:/,
+      }),
+    );
+    expect(
+      screen.getByText("Combat inspector — Scyrian cavalry guy · Round 1 · Declaration"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear current step" }));
+    await waitFor(() => expect(mocks.clearCurrentStep).toHaveBeenCalledTimes(1));
+
+    expect(
+      screen.getByText("Combat inspector — Scyrian cavalry guy · Round 1 · Declaration"),
+    ).toBeInTheDocument();
+  });
+
   it("keeps an empty modifier review as an editable GM checkpoint", async () => {
     const encounter = buildModifierReviewEncounter();
     const participants = [

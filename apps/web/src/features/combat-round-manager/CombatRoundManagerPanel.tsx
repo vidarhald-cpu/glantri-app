@@ -9090,6 +9090,12 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
+      const retainedCurrentActionSelection = inspectorSelectionIsCurrentProgression
+        ? {
+            participantId: inspector.participant?.participantId,
+            step: inspector.step,
+          }
+        : undefined;
       const currentSelection = getCurrentCombatRoundTaskSelection(roundState);
       const clearedSelection: CombatRoundSelectionTarget = {
         participantId: currentSelection?.participantId,
@@ -9103,12 +9109,13 @@ export default function CombatRoundManagerPanel({
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
       const nextSelection = resolveCombatRoundInspectionSelection({
-        manualSelection: getCurrentCombatRoundTaskSelection(nextRoundState),
+        manualSelection:
+          retainedCurrentActionSelection ?? getCurrentCombatRoundTaskSelection(nextRoundState),
         state: nextRoundState,
       });
 
       pendingSelectionRef.current = undefined;
-      manualSelectionRef.current = undefined;
+      manualSelectionRef.current = retainedCurrentActionSelection ? nextSelection : undefined;
       setInspectionSelection(nextSelection);
       setRoundState(nextRoundState, nextEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);

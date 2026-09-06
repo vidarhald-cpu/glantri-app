@@ -1138,14 +1138,21 @@ describe("CombatRoundManagerPanel", () => {
     expect(rollHandler).not.toContain("updateEncounterOnServer({");
   });
 
-  it("uses canonical current task selection after command-stack Clear", () => {
+  it("preserves an inspected Current Action selection after command-stack Clear", () => {
     const source = readSource();
 
     expect(source).toContain("const clearedSelection: CombatRoundSelectionTarget =");
+    expect(source).toContain(
+      "const retainedCurrentActionSelection = inspectorSelectionIsCurrentProgression",
+    );
     expect(source).toContain("const nextSelection = resolveCombatRoundInspectionSelection({");
-    expect(source).toContain("manualSelection: getCurrentCombatRoundTaskSelection(nextRoundState)");
+    expect(source).toContain(
+      "retainedCurrentActionSelection ?? getCurrentCombatRoundTaskSelection(nextRoundState)",
+    );
     expect(source).toContain("pendingSelectionRef.current = undefined");
-    expect(source).toContain("manualSelectionRef.current = undefined");
+    expect(source).toContain(
+      "manualSelectionRef.current = retainedCurrentActionSelection ? nextSelection : undefined",
+    );
     expect(source).toContain("setInspectionSelection(nextSelection)");
     expect(source).not.toContain(
       "nextRoundState.selectedParticipantId ?? clearedSelection.participantId",
