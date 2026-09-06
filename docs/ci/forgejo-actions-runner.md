@@ -95,12 +95,17 @@ only to `dind.docker.internal:5432`; this preserves the repository's fail-closed
 local/disposable database guard without trusting another hostname or exposing a
 port. Separate proxy processes exist only for the integration-test and
 Playwright steps and are stopped by their respective shell traps. Playwright's
-direct database helpers receive the same guarded disposable URL, while its
-browser-route matching uses the actual DIND-visible API origin. The job needs
-the isolated DIND daemon but no protected local database. Its 60-minute workflow
-limit and the runner's 90-minute hard limit ensure terminal failure instead of
-an indefinite gate. Runner capacity one is the concurrency boundary; Forgejo
-also cancels superseded push and pull-request synchronize runs.
+direct database helpers receive the same guarded disposable URL. A second
+CI-only TCP proxy binds browser-facing Web and API routes to `127.0.0.1:3000`
+and `127.0.0.1:4000` inside the job, forwarding only to the matching DIND ports.
+Chromium therefore uses the normal `http://localhost` secure-context exception
+needed by Web Crypto while the application containers remain isolated inside
+DIND. The browser proxy has no public bind and stops with the Playwright step.
+The job needs the isolated DIND daemon but no protected local database. Its
+60-minute workflow limit and the runner's 90-minute hard limit ensure terminal
+failure instead of an indefinite gate. Runner capacity one is the concurrency
+boundary; Forgejo also cancels superseded push and pull-request synchronize
+runs.
 
 Cold runs download dependencies, the PostgreSQL image, two Node base images,
 and Playwright Chromium, and build both application images. Warm DIND pulls and
@@ -225,5 +230,7 @@ throwaway proof behavior. Confirm `main` is unchanged before and after the proof
 When a job fails or is canceled, first verify `docker-test` reached a terminal
 state. Check the workflow's final cleanup step and the dedicated DIND daemon for
 run-specific `glantri-api-test-*` / `glantri-web-test-*` containers and images.
-Remove only resources bearing that exact run suffix. Forgejo job logs and failed
-Playwright reports remain in Forgejo under the configured retention policy.
+Remove only resources bearing that exact run suffix. Forgejo job logs plus the
+Playwright HTML report, retained trace/test results, and API/Web container logs
+remain in Forgejo under the configured seven-day retention policy when
+Playwright fails.

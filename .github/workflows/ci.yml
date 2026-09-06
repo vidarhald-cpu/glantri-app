@@ -120,7 +120,7 @@ jobs:
       - name: Build Web image
         run: |
           docker build \
-            --build-arg NEXT_PUBLIC_API_BASE_URL="http://$CI_DIND_HOST:4000" \
+            --build-arg NEXT_PUBLIC_API_BASE_URL="http://localhost:4000" \
             -t "glantri-web-test-$CI_RESOURCE_SUFFIX" \
             -f apps/web/Dockerfile .
 
@@ -129,7 +129,7 @@ jobs:
           docker run -d --name "glantri-api-test-$CI_RESOURCE_SUFFIX" \
             --network host \
             -e DATABASE_URL="postgresql://postgres:postgres@localhost:5432/glantri_test" \
-            -e WEB_ORIGIN="http://$CI_DIND_HOST:3000" \
+            -e WEB_ORIGIN="http://localhost:3000" \
             -e NODE_ENV="production" \
             "glantri-api-test-$CI_RESOURCE_SUFFIX"
 
@@ -176,13 +176,15 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/glantri_test
           DATABASE_URL_TEST: postgresql://postgres:postgres@127.0.0.1:5432/glantri_test
-          PLAYWRIGHT_BASE_URL: http://dind.docker.internal:3000
-          PLAYWRIGHT_API_URL: http://dind.docker.internal:4000
-          PLAYWRIGHT_BROWSER_API_URL: http://dind.docker.internal:4000
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          PLAYWRIGHT_API_URL: http://localhost:4000
+          PLAYWRIGHT_BROWSER_API_URL: http://localhost:4000
         run: |
           node scripts/ci/postgres-loopback-proxy.mjs &
-          proxy_pid=$!
-          trap 'kill "$proxy_pid"; wait "$proxy_pid" 2>/dev/null || true' EXIT
+          database_proxy_pid=$!
+          node scripts/ci/browser-loopback-proxy.mjs &
+          browser_proxy_pid=$!
+          trap 'kill "$database_proxy_pid" "$browser_proxy_pid"; wait "$database_proxy_pid" "$browser_proxy_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 20); do
             if node -e 'const net=require("node:net");const socket=net.connect(5432,"127.0.0.1");socket.setTimeout(500);socket.once("connect",()=>socket.end());socket.once("close",hadError=>process.exit(hadError?1:0));socket.once("error",()=>process.exit(1));socket.once("timeout",()=>{socket.destroy();process.exit(1)})'; then
               break
@@ -193,14 +195,37 @@ jobs:
             fi
             sleep 0.25
           done
-          pnpm --filter @glantri/web exec playwright test
+          for url in http://127.0.0.1:3000 http://127.0.0.1:4000/ready; do
+            for attempt in $(seq 1 20); do
+              if curl -fsS -o /dev/null "$url"; then
+                break
+              fi
+              if [ "$attempt" -eq 20 ]; then
+                echo "Browser loopback proxy did not become ready for $url."
+                exit 1
+              fi
+              sleep 0.25
+            done
+          done
+          pnpm --filter @glantri/web exec playwright test --reporter=list,html
+
+      - name: Collect Playwright service logs on failure
+        if: failure()
+        run: |
+          mkdir -p apps/web/test-results/ci
+          docker logs "glantri-api-test-$CI_RESOURCE_SUFFIX" \
+            > apps/web/test-results/ci/api-container.log 2>&1 || true
+          docker logs "glantri-web-test-$CI_RESOURCE_SUFFIX" \
+            > apps/web/test-results/ci/web-container.log 2>&1 || true
 
       - name: Upload Playwright report on failure
         if: failure()
         uses: https://data.forgejo.org/actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: playwright-report
-          path: apps/web/playwright-report/
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
           retention-days: 7
 
       - name: Remove run-owned Docker resources
