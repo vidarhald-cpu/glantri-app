@@ -13,6 +13,23 @@ import { canonicalize, sha256 } from "../integrity/canonicalSha256";
 
 const stableId = z.string().regex(/^[a-z][a-z0-9-]*(?::[a-z0-9][a-z0-9-]*)+$/);
 const nonBlank = z.string().trim().min(1);
+const competencyName = z
+  .string()
+  .trim()
+  .min(2, "Competency name must contain at least 2 characters.");
+const competencyShortLabel = z
+  .string()
+  .trim()
+  .min(2, "Competency short label must contain at least 2 characters.");
+const competencyShortDescription = z
+  .string()
+  .trim()
+  .min(12, "Competency short description must contain at least 12 characters.");
+const competencyDescription = z
+  .string()
+  .trim()
+  .min(40, "Competency description must contain at least 40 characters.");
+const STANDARD_SPECIALIZATION_PREREQUISITE_THRESHOLDS = new Set([6, 11]);
 const PROVENANCE_KIND_BY_STATUS = {
   canonical: "decision",
   evidence: "evidence",
@@ -48,10 +65,10 @@ const prerequisite = z
   })
   .strict();
 const documentation = {
-  description: nonBlank,
-  name: nonBlank,
-  shortDescription: nonBlank,
-  shortLabel: nonBlank,
+  description: competencyDescription,
+  name: competencyName,
+  shortDescription: competencyShortDescription,
+  shortLabel: competencyShortLabel,
   taskEnvelope,
 };
 const competencyBase = z.object({
@@ -562,14 +579,25 @@ export function validateSkillContentRelease(input: unknown): SkillContentRelease
           `competencies[${index}].domainId`,
           `Unknown domain "${record.domainId}".`,
         );
-      record.prerequisites.forEach(({ competencyId }, prerequisiteIndex) => {
-        if (!competencyById.has(competencyId))
-          add(
-            "SKILL_CONTENT_UNKNOWN_PREREQUISITE",
-            `competencies[${index}].prerequisites[${prerequisiteIndex}]`,
-            `Unknown prerequisite "${competencyId}".`,
-          );
-      });
+      record.prerequisites.forEach(
+        ({ competencyId, justification, threshold }, prerequisiteIndex) => {
+          if (!competencyById.has(competencyId))
+            add(
+              "SKILL_CONTENT_UNKNOWN_PREREQUISITE",
+              `competencies[${index}].prerequisites[${prerequisiteIndex}]`,
+              `Unknown prerequisite "${competencyId}".`,
+            );
+          if (
+            !STANDARD_SPECIALIZATION_PREREQUISITE_THRESHOLDS.has(threshold) &&
+            justification === undefined
+          )
+            add(
+              "SKILL_CONTENT_NONSTANDARD_PREREQUISITE_JUSTIFICATION_REQUIRED",
+              `competencies[${index}].prerequisites[${prerequisiteIndex}].justification`,
+              `Prerequisite threshold ${threshold} requires authored justification because the standard thresholds are 6 and 11.`,
+            );
+        },
+      );
       if (record.kind === "written-tradition") {
         if (!scriptIds.has(record.scriptId))
           add(
@@ -628,6 +656,20 @@ export function validateSkillContentRelease(input: unknown): SkillContentRelease
                 `Transfer edge must connect the declared parent to this Specialization.`,
               );
           });
+        } else {
+          release.relationships
+            .filter(
+              ({ sourceCompetencyId, targetCompetencyId }) =>
+                sourceCompetencyId === record.parentCompetencyId &&
+                targetCompetencyId === record.id,
+            )
+            .forEach((edge) =>
+              add(
+                "SKILL_CONTENT_CONTRADICTORY_SPECIALIZATION_TRANSFER",
+                `competencies[${index}].transfer`,
+                `Specialization "${record.id}" declares zero transfer but relationship "${edge.id}" authors a ${edge.strength}% parent-to-Specialization transfer edge.`,
+              ),
+            );
         }
       }
     });

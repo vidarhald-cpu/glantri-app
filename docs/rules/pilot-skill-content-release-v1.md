@@ -32,6 +32,14 @@ existing `proposal` or `canonical` publication status. Candidate and canonical r
 be projected read-only for the later Admin Skill Reference; this does not publish or activate
 content.
 
+The v2 validator applies conservative presentation floors so presence cannot be satisfied by
+placeholder fragments: trimmed names and short labels require at least 2 characters, concise
+descriptions at least 12, and substantive descriptions at least 40. These are minimum integrity
+checks, not a substitute for the production-quality editorial review required by the content gate.
+Prerequisite thresholds `6` and `11` are standard; any other positive threshold must carry an
+authored justification. A Specialization declaring explicit zero transfer cannot coexist with an
+authored parent-to-Specialization relationship edge.
+
 Each v2 manifest carries two deterministic values:
 
 - `packageDigest` covers the complete release except the digest fields themselves, including

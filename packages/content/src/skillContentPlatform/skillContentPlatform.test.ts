@@ -359,6 +359,118 @@ describe("documentation-complete Skill content platform", () => {
     });
   });
 
+  it("rejects a zero-transfer declaration that contradicts an authored parent edge", () => {
+    const contradictory = candidate();
+    const specialization = contradictory.competencies[3]!;
+    expect(specialization.kind).toBe("specialization");
+    if (specialization.kind !== "specialization") return;
+    specialization.transfer = {
+      kind: "zero-transfer",
+      rationale: "This declaration contradicts the authored relationship edge.",
+    };
+    contradictory.manifest = {
+      ...contradictory.manifest,
+      ...computeSkillContentReleaseIntegrity(contradictory),
+    };
+    expect(validateSkillContentRelease(contradictory).diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "SKILL_CONTENT_CONTRADICTORY_SPECIALIZATION_TRANSFER",
+          path: "competencies[3].transfer",
+        }),
+      ]),
+    );
+
+    const zeroTransfer = candidate();
+    const zeroTransferSpecialization = zeroTransfer.competencies[3]!;
+    expect(zeroTransferSpecialization.kind).toBe("specialization");
+    if (zeroTransferSpecialization.kind !== "specialization") return;
+    zeroTransferSpecialization.transfer = {
+      kind: "zero-transfer",
+      rationale: "No parent-to-Specialization relationship is authored.",
+    };
+    zeroTransfer.relationships = [];
+    zeroTransfer.manifest.counts.relationships = 0;
+    zeroTransfer.manifest = {
+      ...zeroTransfer.manifest,
+      ...computeSkillContentReleaseIntegrity(zeroTransfer),
+    };
+    expect(validateSkillContentRelease(zeroTransfer).valid).toBe(true);
+  });
+
+  it("requires justification only for nonstandard prerequisite thresholds", () => {
+    const unexplained = candidate();
+    unexplained.competencies[3]!.prerequisites[0]!.threshold = 7;
+    unexplained.manifest = {
+      ...unexplained.manifest,
+      ...computeSkillContentReleaseIntegrity(unexplained),
+    };
+    expect(validateSkillContentRelease(unexplained).diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "SKILL_CONTENT_NONSTANDARD_PREREQUISITE_JUSTIFICATION_REQUIRED",
+          path: "competencies[3].prerequisites[0].justification",
+        }),
+      ]),
+    );
+
+    const explained = candidate();
+    explained.competencies[3]!.prerequisites[0]!.justification =
+      "This narrow diagnostic practice is taught after seven acquired ranks.";
+    explained.competencies[3]!.prerequisites[0]!.threshold = 7;
+    explained.manifest = {
+      ...explained.manifest,
+      ...computeSkillContentReleaseIntegrity(explained),
+    };
+    expect(validateSkillContentRelease(explained).valid).toBe(true);
+  });
+
+  it("requires substantive competency presentation fields with deterministic diagnostics", () => {
+    const mutations: Array<[string, string, (release: SkillContentRelease) => void]> = [
+      [
+        "competencies[0].name",
+        "Competency name must contain at least 2 characters.",
+        (release) => (release.competencies[0]!.name = "M"),
+      ],
+      [
+        "competencies[0].shortLabel",
+        "Competency short label must contain at least 2 characters.",
+        (release) => (release.competencies[0]!.shortLabel = "M"),
+      ],
+      [
+        "competencies[0].shortDescription",
+        "Competency short description must contain at least 12 characters.",
+        (release) => (release.competencies[0]!.shortDescription = "M"),
+      ],
+      [
+        "competencies[0].description",
+        "Competency description must contain at least 40 characters.",
+        (release) => (release.competencies[0]!.description = "M"),
+      ],
+    ];
+    mutations.forEach(([path, message, mutate]) => {
+      const release = candidate();
+      mutate(release);
+      release.manifest = { ...release.manifest, ...computeSkillContentReleaseIntegrity(release) };
+      expect(validateSkillContentRelease(release).diagnostics, path).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: "SKILL_CONTENT_INVALID_SHAPE", message, path }),
+        ]),
+      );
+    });
+
+    const boundary = candidate();
+    boundary.competencies[0]!.name = "Me";
+    boundary.competencies[0]!.shortLabel = "Rx";
+    boundary.competencies[0]!.shortDescription = "x".repeat(12);
+    boundary.competencies[0]!.description = "x".repeat(40);
+    boundary.manifest = {
+      ...boundary.manifest,
+      ...computeSkillContentReleaseIntegrity(boundary),
+    };
+    expect(validateSkillContentRelease(boundary).valid).toBe(true);
+  });
+
   it("rejects duplicate IDs, targets, relationship edges, and impossible history choices", () => {
     const mutations: Array<[string, (release: SkillContentRelease) => void]> = [
       [
