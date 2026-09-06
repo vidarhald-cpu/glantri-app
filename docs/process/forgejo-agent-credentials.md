@@ -200,6 +200,11 @@ Verified for Forgejo issue #41 on 2026-09-06 against
 - token values were piped directly into Keychain and were not recorded in
   repository, task output, Forgejo evidence, or Git history.
 
+This Forgejo instance currently has no Actions runner. Required `dev` status
+contexts therefore remain waiting after a push and block integration until a
+separately authorized runner is available or the control plane explicitly
+changes the gate. Issue #41 does not authorize weakening that protection.
+
 Live Forgejo issue, PR, user, token-metadata, and branch-protection state remains
 operational truth. This document is the standing process contract, not a
 substitute for fresh verification.
