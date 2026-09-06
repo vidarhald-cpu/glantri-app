@@ -53,7 +53,9 @@ scripts/worktree-runtime.sh pnpm db:task:cleanup
 
 Do not invoke a broken or incompatible host `node`/`pnpm` directly. Cleanup remains fail-closed:
 the existing database command re-derives current-worktree ownership and checks the exact container
-labels before removing the container and `.env.task`.
+labels before removing the exact container, its anonymous PostgreSQL data volume, and `.env.task`.
+Docker receives no caller-supplied volume name, so unrelated named or anonymous volumes are outside
+the cleanup target.
 
 ## Forgejo credential boundary
 
