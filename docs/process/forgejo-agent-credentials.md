@@ -65,14 +65,24 @@ built-in SSH server is not started, and Docker publishes only
 surface without improving the current single-host workflow.
 
 The persistent access-token values live only in the macOS login Keychain via
-Git's `osxkeychain` credential helper. The non-secret handles are:
+Git's `osxkeychain` credential helper. Every item is scoped to the exact
+repository path `recovery-admin/glantri-app.git`; there are no host-only items.
+The non-secret handles are:
 
-- `git-http://glantri-orchestrator@127.0.0.1:3001` / token name
+- `git-http://glantri-orchestrator@127.0.0.1:3001/recovery-admin/glantri-app.git`
+  / token name
   `persistent-orchestrator-v1`;
-- `git-http://glantri-builder@127.0.0.1:3001` / token name
+- `git-http://glantri-builder@127.0.0.1:3001/recovery-admin/glantri-app.git` /
+  token name
   `persistent-builder-v1`; and
-- `git-http://glantri-qa@127.0.0.1:3001` / token name
+- `git-http://glantri-qa@127.0.0.1:3001/recovery-admin/glantri-app.git` / token
+  name
   `persistent-qa-v1`.
+
+The separate break-glass Git handle is
+`git-http://recovery-admin@127.0.0.1:3001/recovery-admin/glantri-app.git`.
+It is never a default and is used only when recovery administration is
+separately authorized.
 
 Do not put a token value or account password in repository files, `.env` files,
 prompts, shell arguments, command output, logs, Forgejo comments, task returns,
@@ -81,6 +91,18 @@ worktree. The existing recovery administrator Keychain item is a provisioning
 and break-glass control only, not a routine agent identity.
 
 ## Visible-task consumption
+
+The canonical clone's repository-local Git configuration enforces both:
+
+- `credential.useHttpPath=true`; and
+- `credential.username=glantri-no-default`.
+
+`glantri-no-default` is deliberately not a Forgejo user and has no Keychain
+item. With terminal prompts disabled, an unqualified credential lookup therefore
+fails locally instead of selecting any role or the recovery administrator.
+Command-level `credential.username` is required to override the sentinel with
+one explicit path-scoped handle. Do not unset or bypass either repository-local
+setting, and do not create host-only Forgejo Keychain items.
 
 The Development Orchestrator assigns the role before dispatch and includes only
 the identity and Keychain handle in the visible task contract. Git network
@@ -95,7 +117,9 @@ commands must:
 
 Setting a username selects an identity; it does not grant permission. Forgejo
 token scopes, collaborator roles, branch rules, and the task contract all have
-to permit the operation.
+to permit the operation. Recovery Git operations use the same pattern with
+`credential.username=recovery-admin`, but only under separate break-glass
+authority; no routine task may select it.
 
 For issue or PR API calls, the Orchestrator lanes use a local credential bridge
 that reads the selected Keychain entry into process memory, supplies
@@ -122,9 +146,10 @@ rotation, and revocation. The Product Owner is never asked to paste or relay a
 credential value.
 
 Create tokens as repository-specific credentials with the exact scopes in the
-table above. Pipe each generated value directly into its Keychain entry without
-rendering it. Record only the account name, token name, scopes, selected
-repository, creation/rotation date, and verification outcome.
+table above. Pipe each generated value directly into a repository-path-scoped
+Keychain entry without rendering it. Never create a host-only entry. Record
+only the account name, token name, scopes, selected repository,
+creation/rotation date, and verification outcome.
 
 On suspected or confirmed exposure:
 
@@ -145,6 +170,9 @@ collaborator access, and disable the local user before considering deletion.
 
 Provisioning is incomplete until separate visible tasks prove:
 
+- Credential selection: an unqualified lookup with terminal prompts disabled
+  fails; every role resolves only when its username is explicit; and the
+  recovery administrator remains available only when explicitly selected.
 - Builder: unattended fetch/read and one disposable task-branch push succeed;
   direct `dev` and `main` pushes are denied; the `dev` merge allowlist excludes
   Builder; the disposable branch is deleted.
@@ -167,15 +195,19 @@ not relax branch protection or task authority.
 
 Do not export token values from this MacBook. On a future Mac mini:
 
-1. install the same supported Git credential helper and keep Forgejo bound to
-   loopback/private scope;
+1. install the same supported Git credential helper, keep Forgejo bound to
+   loopback/private scope, and configure the canonical clone with
+   `credential.useHttpPath=true` and
+   `credential.username=glantri-no-default`;
 2. restore or migrate the Forgejo data/configuration through the approved
    stopped-instance process, then verify the three restricted users,
    collaborator roles, token metadata, and `dev`/`main` rules;
 3. revoke the MacBook role tokens and create new repository-specific tokens for
    the Mac mini;
-4. pipe the new values directly into that host's login Keychain under the same
-   non-secret handles;
+4. pipe the new values directly into repository-path-scoped entries in that
+   host's login Keychain under the same non-secret handles, create the recovery
+   handle only under separate break-glass authority, and create no host-only
+   entries;
 5. ensure the automation account's Keychain is available to unattended local
    tasks without storing its unlock secret in the repository or task prompts;
    and
@@ -196,6 +228,10 @@ Verified for Forgejo issue #41 on 2026-09-06 against
   root; Docker publishes only `127.0.0.1:3001 -> 3000/tcp`;
 - open registration disabled; SSH disabled; built-in SSH server not started;
 - three role users and repository-specific tokens match this document;
+- repository-local Git selection uses the non-existent
+  `glantri-no-default` sentinel and repository-path matching;
+- all four explicit Keychain handles are repository-path-scoped and their
+  superseded host-only records are absent;
 - `dev` and `main` protections match this document; and
 - token values were piped directly into Keychain and were not recorded in
   repository, task output, Forgejo evidence, or Git history.

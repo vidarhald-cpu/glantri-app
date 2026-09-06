@@ -115,7 +115,11 @@ Keychain storage, protected-branch enforcement, verification, revocation, and
 host recreation are defined in
 [`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md). That mechanism
 supplies authentication only; the task contract and this control plane still
-govern every action.
+govern every action. The canonical clone fails closed by combining repository
+path matching with a non-existent default username. Every routine command must
+select its assigned role explicitly; recovery administration is available only
+through its separately explicit break-glass handle. Unqualified credential
+selection is never an authorized fallback.
 
 ### Tool availability does not grant action authority
 

@@ -41,6 +41,13 @@ Credentials never replace task authorization. Pushes, PR creation/updates, branc
 - The canonical Codex project is `Glantri app — Forgejo`.
 - The historical `Glantri app` project and `/Users/vidarhald/dev/glantri-app` checkout are read-only, non-mutable recovery/history evidence. Do not use them for new implementation, Builder work, QA mutation, branch creation, reset/rebase/cleanup, migration, or routine current-development fetch/push.
 - Repository documents are authoritative. Codex project references are navigation aids and do not grant task, Git, integration, release, or production authority.
+- The canonical clone's repository-local Git configuration sets
+  `credential.useHttpPath=true` and
+  `credential.username=glantri-no-default`. Because that username has no
+  Keychain item, unqualified access fails with prompting disabled. Every role,
+  including separately authorized recovery administration, must be selected
+  explicitly through the repository-path-scoped handles in
+  [`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md).
 - `main`, Azure, and production remain the external-maintainer release boundary described above.
 - The current pinned Development and QA Orchestrator tasks may coordinate from
   their verified historical-project UI association, but must not mutate or use
