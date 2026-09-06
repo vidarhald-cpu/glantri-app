@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   pinBlackboardEntry: vi.fn(),
   retractBlackboardEntry: vi.fn(),
   reviseBlackboardEntry: vi.fn(),
+  searchBlackboard: vi.fn(),
   unpinBlackboardEntry: vi.fn(),
 }));
 
@@ -132,6 +133,16 @@ describe("BlackboardWorkspace", () => {
         title: "Hill route",
       },
     ]);
+    mocks.searchBlackboard.mockResolvedValue({
+      results: [
+        {
+          category: "image_map",
+          entryId: "entry-map",
+          pinned: false,
+          title: "Route to the caves",
+        },
+      ],
+    });
     artifactMocks.fetchArtifactBlob.mockResolvedValue(new Blob(["image"], { type: "image/png" }));
   });
 
@@ -163,8 +174,13 @@ describe("BlackboardWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "Share a reference" }));
     expect(screen.getByRole("heading", { name: "Share a reference" })).toHaveFocus();
 
-    const kind = screen.getByLabelText("Kind");
+    const composer = screen.getByRole("heading", { name: "Share a reference" }).closest("section");
+    expect(composer).not.toBeNull();
+    const kind = within(composer!).getByLabelText("Kind");
     expect(within(kind).queryByRole("option", { name: "Approved recap" })).not.toBeInTheDocument();
+    expect(
+      within(composer!).getByText(/immediately exposes this reference to everyone in the Campaign/),
+    ).toBeVisible();
     await user.type(screen.getByLabelText("Title"), "Signal at the gate");
     await user.type(screen.getByLabelText("Clue or fact"), "Three knocks mean danger.");
     await user.click(screen.getByRole("button", { name: "Share reference" }));
@@ -181,6 +197,94 @@ describe("BlackboardWorkspace", () => {
     );
     expect(await screen.findByRole("status")).toHaveTextContent("Reference shared");
     expect(screen.getByRole("heading", { name: "Bell signal" })).toHaveFocus();
+  });
+
+  it("runs composed search on the server and opens results in the existing detail surface", async () => {
+    const user = userEvent.setup();
+    const onRouteChange = vi.fn();
+    render(
+      <BlackboardWorkspace
+        campaignId="campaign-1"
+        isGameMaster={false}
+        onRouteChange={onRouteChange}
+      />,
+    );
+    await screen.findByRole("heading", { name: "Blackboard" });
+
+    await user.type(screen.getByLabelText("Search shared references"), "watchtower");
+    await user.selectOptions(screen.getByLabelText("Kind", { selector: "select" }), "image_map");
+    await user.selectOptions(screen.getByLabelText("Board"), "unpinned");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() =>
+      expect(mocks.searchBlackboard).toHaveBeenCalledWith("campaign-1", {
+        category: "image_map",
+        pinned: "unpinned",
+        q: "watchtower",
+      }),
+    );
+    const results = screen.getByRole("region", { name: "Blackboard search results" });
+    expect(within(results).getByText("1 found")).toBeVisible();
+    await user.click(within(results).getByRole("button", { name: /Route to the caves/ }));
+    expect(screen.getByRole("heading", { name: "Route to the caves" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "History" })).toBeVisible();
+    expect(onRouteChange).toHaveBeenLastCalledWith({
+      category: "image_map",
+      entryId: "entry-map",
+      pinned: "unpinned",
+      query: "watchtower",
+    });
+  });
+
+  it("reopens a stable entry link and fails unknown links closed", async () => {
+    const { rerender } = render(
+      <BlackboardWorkspace
+        campaignId="campaign-1"
+        isGameMaster={false}
+        routeEntryId="entry-document"
+      />,
+    );
+    expect(await screen.findByRole("heading", { name: "Intercepted letter" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "History" })).toBeVisible();
+
+    rerender(
+      <BlackboardWorkspace
+        campaignId="campaign-1"
+        isGameMaster={false}
+        routeEntryId="foreign-or-archived-entry"
+      />,
+    );
+    expect(await screen.findByRole("heading", { name: "Reference unavailable" })).toHaveFocus();
+    expect(screen.getByText(/removed or is not available in this Campaign/)).toBeVisible();
+    expect(document.body.textContent).not.toContain("foreign-or-archived-entry");
+  });
+
+  it("focuses the safe unavailable state when an unknown link is opened directly", async () => {
+    render(
+      <BlackboardWorkspace
+        campaignId="campaign-1"
+        isGameMaster={false}
+        routeEntryId="foreign-or-archived-entry"
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Reference unavailable" })).toHaveFocus();
+    expect(screen.getByText(/removed or is not available in this Campaign/)).toBeVisible();
+    expect(document.body.textContent).not.toContain("foreign-or-archived-entry");
+  });
+
+  it("shows a useful empty state for a server-authorized search", async () => {
+    mocks.searchBlackboard.mockResolvedValue({ results: [] });
+    const user = userEvent.setup();
+    render(<BlackboardWorkspace campaignId="campaign-1" isGameMaster={false} />);
+    await screen.findByRole("heading", { name: "Blackboard" });
+
+    await user.type(screen.getByLabelText("Search shared references"), "missing clue");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(
+      await screen.findByText("No shared references match this search and filters."),
+    ).toBeVisible();
   });
 
   it("moves focus into the composer, restores its trigger on cancel, and focuses validation", async () => {

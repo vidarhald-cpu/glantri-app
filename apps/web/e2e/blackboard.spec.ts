@@ -252,8 +252,18 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
     const playerPage = await playerContext.newPage();
     await playerPage.setViewportSize({ height: 760, width: 360 });
     await playerPage.goto(`${WEB_URL}/campaigns/${campaignId}?tab=blackboard`);
-    await playerPage.getByRole("button", { name: `Open ${clueTitle}` }).click();
+    await playerPage.getByLabel("Search shared references").fill("bronze bell");
+    await playerPage.getByRole("combobox", { name: "Kind", exact: true }).selectOption("clue_fact");
+    await playerPage.getByRole("combobox", { name: "Board", exact: true }).selectOption("pinned");
+    await playerPage.getByRole("button", { name: "Search", exact: true }).click();
+    const searchResults = playerPage.getByRole("region", { name: "Blackboard search results" });
+    await expect(searchResults.getByText("1 found")).toBeVisible();
+    await searchResults.getByRole("button", { name: new RegExp(clueTitle) }).click();
     await expect(playerPage.getByRole("heading", { name: clueTitle })).toBeFocused();
+    await expect(playerPage).toHaveURL(new RegExp(`entryId=${clue.entry.id}`));
+    await playerPage.reload();
+    await expect(playerPage.getByRole("heading", { name: clueTitle })).toBeFocused();
+    await expect(playerPage.getByLabel("Search shared references")).toHaveValue("bronze bell");
     await expect(
       playerPage.getByRole("button", { name: "Back to shared catalogue" }),
     ).toBeVisible();
@@ -282,7 +292,6 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
     await expect(playerPage.getByText(/Correction shared/)).toBeVisible();
     await expect(playerPage.getByRole("heading", { name: clueTitle })).toBeFocused();
     await playerPage.reload();
-    await playerPage.getByRole("button", { name: `Open ${clueTitle}` }).click();
     await expect(
       playerPage.getByText("The bronze bell now rings three times.").last(),
     ).toBeVisible();
@@ -373,7 +382,6 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
     }
 
     await playerPage.reload();
-    await playerPage.getByRole("button", { name: `Open ${clueTitle}` }).click();
     await playerPage.getByRole("button", { name: "Remove this entry" }).click();
     await playerPage
       .getByRole("alertdialog", { name: "Remove reference" })

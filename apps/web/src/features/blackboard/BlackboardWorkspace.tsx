@@ -8,6 +8,7 @@ import type {
   BlackboardCommonDto,
   BlackboardCommonEntry,
   BlackboardPlacementDto,
+  BlackboardSearchResult,
   BlackboardViewerCapabilities,
 } from "@glantri/domain";
 
@@ -23,6 +24,7 @@ import {
   pinBlackboardEntry,
   retractBlackboardEntry,
   reviseBlackboardEntry,
+  searchBlackboard,
   unpinBlackboardEntry,
   type BlackboardSafeHistory,
 } from "@/lib/api/blackboardClient";
@@ -32,6 +34,18 @@ import styles from "./BlackboardWorkspace.module.css";
 interface BlackboardWorkspaceProps {
   campaignId: string;
   isGameMaster: boolean;
+  onRouteChange?: (route: BlackboardRouteState) => void;
+  routeCategory?: string | null;
+  routeEntryId?: string | null;
+  routePinned?: string | null;
+  routeQuery?: string | null;
+}
+
+interface BlackboardRouteState {
+  category?: BlackboardCategory;
+  entryId?: string;
+  pinned?: "pinned" | "unpinned";
+  query: string;
 }
 
 interface EntryDraft {
@@ -60,6 +74,14 @@ const categoryLabels: Record<BlackboardCategory, string> = {
   image_map: "Map or image",
   recap: "Recap",
 };
+
+function routeCategory(value?: string | null): BlackboardCategory | undefined {
+  return value && value in categoryLabels ? (value as BlackboardCategory) : undefined;
+}
+
+function routePinned(value?: string | null): "pinned" | "unpinned" | undefined {
+  return value === "pinned" || value === "unpinned" ? value : undefined;
+}
 
 function displayDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
@@ -163,11 +185,29 @@ function buildCreateContent(draft: EntryDraft) {
   }
 }
 
-export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWorkspaceProps) {
+export function BlackboardWorkspace({
+  campaignId,
+  isGameMaster,
+  onRouteChange,
+  routeCategory: routeCategoryValue,
+  routeEntryId,
+  routePinned: routePinnedValue,
+  routeQuery,
+}: BlackboardWorkspaceProps) {
+  const initialSearch = {
+    category: routeCategory(routeCategoryValue),
+    pinned: routePinned(routePinnedValue),
+    query: routeQuery?.trim() ?? "",
+  };
   const [board, setBoard] = useState<BlackboardCommonDto>();
   const [capabilities, setCapabilities] = useState<BlackboardViewerCapabilities>({ entries: [] });
   const [artifacts, setArtifacts] = useState<ArtifactBlackboardCandidate[]>([]);
-  const [selectedId, setSelectedId] = useState<string>();
+  const [selectedId, setSelectedId] = useState<string | undefined>(routeEntryId || undefined);
+  const [appliedSearch, setAppliedSearch] = useState<BlackboardRouteState>(initialSearch);
+  const [searchDraft, setSearchDraft] = useState<BlackboardRouteState>(initialSearch);
+  const [searchResult, setSearchResult] = useState<BlackboardSearchResult>({ results: [] });
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string>();
   const [composerMode, setComposerMode] = useState<"create" | "correct">();
   const [revisionKind, setRevisionKind] = useState<"correction" | "replacement">("correction");
   const [draft, setDraft] = useState<EntryDraft>(emptyDraft);
@@ -188,6 +228,9 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
   const correctTriggerRef = useRef<HTMLButtonElement>(null);
   const composerReturnFocusRef = useRef<HTMLElement | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchRequestIdRef = useRef(0);
+  const detailReturnFocusRef = useRef<HTMLElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const sourceArtifactSelectRef = useRef<HTMLSelectElement>(null);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
@@ -208,11 +251,65 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
     }
   }, [campaignId]);
 
+  const hasActiveSearch = Boolean(
+    appliedSearch.query || appliedSearch.category || appliedSearch.pinned,
+  );
+
+  const refreshSearch = useCallback(async () => {
+    const requestId = ++searchRequestIdRef.current;
+    if (!appliedSearch.query && !appliedSearch.category && !appliedSearch.pinned) {
+      setSearchResult({ results: [] });
+      setSearchError(undefined);
+      setSearchLoading(false);
+      return;
+    }
+    setSearchLoading(true);
+    setSearchError(undefined);
+    setSearchResult({ results: [] });
+    try {
+      const result = await searchBlackboard(campaignId, {
+        category: appliedSearch.category,
+        pinned: appliedSearch.pinned,
+        q: appliedSearch.query,
+      });
+      if (requestId === searchRequestIdRef.current) setSearchResult(result);
+    } catch {
+      if (requestId === searchRequestIdRef.current) {
+        setSearchResult({ results: [] });
+        setSearchError("Search is temporarily unavailable. The shared catalogue is unchanged.");
+      }
+    } finally {
+      if (requestId === searchRequestIdRef.current) setSearchLoading(false);
+    }
+  }, [appliedSearch.category, appliedSearch.pinned, appliedSearch.query, campaignId]);
+
   const refreshBoard = useCallback(async () => {
-    const [nextBoard] = await Promise.all([loadBlackboard(campaignId), refreshCapabilities()]);
+    const [nextBoard] = await Promise.all([
+      loadBlackboard(campaignId),
+      refreshCapabilities(),
+      refreshSearch(),
+    ]);
     setBoard(nextBoard);
     return nextBoard;
-  }, [campaignId, refreshCapabilities]);
+  }, [campaignId, refreshCapabilities, refreshSearch]);
+
+  useEffect(() => {
+    setSelectedId(routeEntryId || undefined);
+  }, [routeEntryId]);
+
+  useEffect(() => {
+    const next = {
+      category: routeCategory(routeCategoryValue),
+      pinned: routePinned(routePinnedValue),
+      query: routeQuery?.trim() ?? "",
+    };
+    setAppliedSearch(next);
+    setSearchDraft(next);
+  }, [routeCategoryValue, routePinnedValue, routeQuery]);
+
+  useEffect(() => {
+    void refreshSearch();
+  }, [refreshSearch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -275,7 +372,7 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
 
   useEffect(() => {
     if (selectedId) detailHeadingRef.current?.focus();
-  }, [selectedId]);
+  }, [board, selectedId]);
 
   useEffect(() => {
     if (!composerMode) return;
@@ -318,11 +415,13 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
     };
   }, [artifactRetry, campaignId, selectedEntry]);
 
-  function selectEntry(entryId: string) {
+  function selectEntry(entryId: string, returnFocus?: HTMLElement | null) {
+    detailReturnFocusRef.current = returnFocus ?? null;
     setComposerMode(undefined);
     setConfirmRetract(false);
     setHistory(undefined);
     setSelectedId(entryId);
+    onRouteChange?.({ ...appliedSearch, entryId });
   }
 
   function returnToList() {
@@ -330,9 +429,33 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
     setSelectedId(undefined);
     setComposerMode(undefined);
     setConfirmRetract(false);
+    onRouteChange?.({ ...appliedSearch, entryId: undefined });
     window.requestAnimationFrame(() => {
-      if (previousId) catalogueButtons.current.get(previousId)?.focus();
+      if (detailReturnFocusRef.current) detailReturnFocusRef.current.focus();
+      else if (previousId) catalogueButtons.current.get(previousId)?.focus();
+      else searchInputRef.current?.focus();
     });
+  }
+
+  function applySearch() {
+    const next = {
+      category: searchDraft.category,
+      pinned: searchDraft.pinned,
+      query: searchDraft.query.trim(),
+    };
+    setAppliedSearch(next);
+    setSelectedId(undefined);
+    onRouteChange?.({ ...next, entryId: undefined });
+  }
+
+  function clearSearch() {
+    const next = { query: "" };
+    setSearchDraft(next);
+    setAppliedSearch(next);
+    setSelectedId(undefined);
+    setSearchError(undefined);
+    onRouteChange?.({ query: "", entryId: undefined });
+    window.requestAnimationFrame(() => searchInputRef.current?.focus());
   }
 
   function beginCreate() {
@@ -427,6 +550,7 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
           : await createBlackboardEntry({ campaignId, content: buildCreateContent(draft) });
       await refreshBoard();
       setSelectedId(saved.id);
+      onRouteChange?.({ ...appliedSearch, entryId: saved.id });
       setComposerMode(undefined);
       setHistory(undefined);
       setNotice(
@@ -668,7 +792,7 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
               <button
                 aria-label={`Open ${entry?.title ?? "removed reference"}`}
                 className={styles.catalogueButton}
-                onClick={() => selectEntry(placement.entryId)}
+                onClick={(event) => selectEntry(placement.entryId, event.currentTarget)}
                 type="button"
               >
                 <span className={styles.pinTitle}>{entry?.title ?? "Removed reference"}</span>
@@ -841,7 +965,8 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
           </div>
           <div className={styles.actionRow}>
             <span className={styles.muted}>
-              Sharing adds a player reference only. It does not change Characters, Items, or play.
+              Sharing immediately exposes this reference to everyone in the Campaign. It does not
+              change Characters, Items, or play.
             </span>
             <button disabled={busy} onClick={() => void saveDraft()} type="button">
               {busy
@@ -856,9 +981,112 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
 
       <div className={styles.workspaceGrid} data-detail-open={Boolean(selectedId)}>
         <section className={styles.panel}>
+          <form
+            className={styles.searchForm}
+            onSubmit={(event) => {
+              event.preventDefault();
+              applySearch();
+            }}
+          >
+            <label>
+              Search shared references
+              <input
+                maxLength={200}
+                onChange={(event) =>
+                  setSearchDraft((current) => ({ ...current, query: event.target.value }))
+                }
+                placeholder="Title or shared text"
+                ref={searchInputRef}
+                type="search"
+                value={searchDraft.query}
+              />
+            </label>
+            <label>
+              Kind
+              <select
+                onChange={(event) =>
+                  setSearchDraft((current) => ({
+                    ...current,
+                    category: routeCategory(event.target.value),
+                  }))
+                }
+                value={searchDraft.category ?? ""}
+              >
+                <option value="">All kinds</option>
+                {Object.entries(categoryLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Board
+              <select
+                onChange={(event) =>
+                  setSearchDraft((current) => ({
+                    ...current,
+                    pinned: routePinned(event.target.value),
+                  }))
+                }
+                value={searchDraft.pinned ?? ""}
+              >
+                <option value="">Pinned and unpinned</option>
+                <option value="pinned">Pinned</option>
+                <option value="unpinned">Unpinned</option>
+              </select>
+            </label>
+            <div className={styles.searchActions}>
+              <button disabled={searchLoading} type="submit">
+                {searchLoading ? "Searching…" : "Search"}
+              </button>
+              {hasActiveSearch ? (
+                <button onClick={clearSearch} type="button">
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </form>
+          {searchError ? (
+            <div className={styles.notice} role="status">
+              {searchError}
+            </div>
+          ) : null}
+          {hasActiveSearch && !searchError ? (
+            <section aria-busy={searchLoading} aria-label="Blackboard search results">
+              <div className={styles.headingRow}>
+                <h4>Search results</h4>
+                <span>{searchResult.results.length} found</span>
+              </div>
+              {searchResult.results.length === 0 && !searchLoading ? (
+                <p>No shared references match this search and filters.</p>
+              ) : (
+                <ul className={styles.catalogue}>
+                  {searchResult.results.map((result) => (
+                    <li key={result.entryId}>
+                      <button
+                        aria-current={selectedId === result.entryId}
+                        className={styles.catalogueButton}
+                        onClick={(event) => selectEntry(result.entryId, event.currentTarget)}
+                        type="button"
+                      >
+                        <span className={styles.headingRow}>
+                          <strong>{result.title}</strong>
+                          <span className={styles.category}>{categoryLabels[result.category]}</span>
+                        </span>
+                        <span className={styles.muted}>
+                          {result.pinned ? "Pinned to the board" : "Not pinned"}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          ) : null}
           <div className={styles.headingRow}>
             <h3>Shared catalogue</h3>
-            <span>{board.catalogue.length} current</span>
+            <span>{board.catalogue.length} shared</span>
           </div>
           {board.catalogue.length === 0 ? (
             <p>No references have been shared yet.</p>
@@ -869,7 +1097,7 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
                   <button
                     aria-current={selectedId === entry.id}
                     className={styles.catalogueButton}
-                    onClick={() => selectEntry(entry.id)}
+                    onClick={(event) => selectEntry(entry.id, event.currentTarget)}
                     ref={(element) => {
                       if (element) catalogueButtons.current.set(entry.id, element);
                       else catalogueButtons.current.delete(entry.id);
@@ -895,7 +1123,7 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
                   <li key={entry.id}>
                     <button
                       className={styles.catalogueButton}
-                      onClick={() => selectEntry(entry.id)}
+                      onClick={(event) => selectEntry(entry.id, event.currentTarget)}
                       ref={(element) => {
                         if (element) catalogueButtons.current.set(entry.id, element);
                         else catalogueButtons.current.delete(entry.id);
@@ -1101,6 +1329,18 @@ export function BlackboardWorkspace({ campaignId, isGameMaster }: BlackboardWork
                   Unpin removed marker
                 </button>
               ) : null}
+            </>
+          ) : selectedId ? (
+            <>
+              <button className={styles.narrowBack} onClick={returnToList} type="button">
+                Back to shared catalogue
+              </button>
+              <h3 ref={detailHeadingRef} tabIndex={-1}>
+                Reference unavailable
+              </h3>
+              <div className={styles.notice}>
+                This shared reference was removed or is not available in this Campaign.
+              </div>
             </>
           ) : (
             <>

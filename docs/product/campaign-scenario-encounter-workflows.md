@@ -43,6 +43,31 @@ Player Campaign pages should not show:
 - Hidden scenarios.
 - Implementation details about why a scenario is accessible.
 
+### Shared Campaign Blackboard
+
+The Blackboard is the Campaign's shared reference surface. A GM or Campaign player may share a
+clue or fact, document text, or Campaign-visible map/image; only the GM may share an approved
+recap. Sharing is immediate: submitting **Share reference** exposes the entry to everyone who can
+access the Campaign.
+
+The shared catalogue and board are one common safe projection. Search is authorized and executed
+on the server before its small result projection is serialized. It searches the current shared
+title and the category-specific shared text: clue/fact and context, document text and context,
+map/image caption plus its frozen shared Artifact title and alt text, or approved recap text. It
+does not search restricted Character detail, private Artifact metadata, source provenance, or
+Artifact bytes. Category and pinned/unpinned filters may be combined. Retracted and archived
+entries do not appear in ordinary results.
+
+Opening a result uses the existing entry detail and shared revision history. Campaign-scoped links
+keep the opaque Blackboard entry identity so the same link follows a correction, replacement, or
+explicit Artifact snapshot refresh. Every load rechecks Campaign access. A removed, archived,
+foreign, or otherwise unavailable identity yields only the safe unavailable state; Artifact bytes
+remain behind their separately authorized content action.
+
+`Current` and `Corrected` describe the shared revision state. They are not publication-review
+states. Pinning, moving, and unpinning remain shared layout actions available to both GM and
+Campaign players.
+
 ## Scenario Workspace
 
 The Scenario workspace answers: "Who is concretely in this story situation?"
