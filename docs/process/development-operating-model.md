@@ -283,6 +283,9 @@ This document owns the high-level operating map. Details stay with:
   exact returns, and repair mechanics;
 - [`development-baseline.md`](./development-baseline.md): branch, baseline,
   integration, and release-boundary policy;
+- [`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md): persistent
+  local Forgejo identities, scoped credentials, secure storage, and branch
+  enforcement;
 - [`../architecture/ownership.md`](../architecture/ownership.md): functional
   ownership and reserved hotspots; and
 - [`../dev-database.md`](../dev-database.md): protected and disposable database
