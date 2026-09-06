@@ -1,0 +1,43 @@
+log:
+  level: info
+  job_level: info
+
+runner:
+  capacity: 1
+  envs:
+    CI: "true"
+    DOCKER_HOST: tcp://dind.docker.internal:2375
+  timeout: 90m
+  shutdown_timeout: 10m
+  insecure: false
+  fetch_timeout: 30s
+  fetch_interval: 2s
+  report_interval: 1s
+  labels:
+    - ubuntu-latest:docker://docker.io/library/node:22-bookworm@sha256:8a34c4ab3ea2c5cd194f07e317b2a8f09461d3c8b05c4e34c8ccd56d56024c4d
+
+# The runner cache proxy is deliberately disabled. The nested job network cannot
+# reach the runner container directly, and silently sharing a cross-job cache
+# would weaken the initial isolation boundary.
+cache:
+  enabled: false
+
+container:
+  network: ""
+  enable_ipv6: false
+  privileged: false
+  options: >-
+    --add-host=dind.docker.internal:host-gateway
+    --volume /usr/local/bin/docker:/usr/local/bin/docker:ro
+    --volume /usr/local/libexec/docker/cli-plugins:/usr/local/libexec/docker/cli-plugins:ro
+  valid_volumes: []
+  docker_host: "-"
+  force_pull: false
+  force_rebuild: false
+
+server:
+  connections:
+    glantri:
+      url: http://host.docker.internal:3001/
+      uuid: __RUNNER_UUID__
+      token_url: file:/data/runner-token

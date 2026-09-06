@@ -6,31 +6,29 @@ on:
   pull_request:
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  CI_DIND_HOST: dind.docker.internal
 
 jobs:
   ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.6.0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+      - name: Verify pinned runtime
+        run: |
+          test "$(node --version)" = "v22.23.2"
+          corepack enable
+          test "$(pnpm --version)" = "10.6.0"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Changed-file formatting and whitespace
         env:
-          FORMAT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          FORMAT_BASE_SHA: ${{ forgejo.event.pull_request.base.sha || forgejo.event.before }}
         run: pnpm format:check:changed
 
       - name: Type check
@@ -53,10 +51,13 @@ jobs:
 
   docker-test:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    timeout-minutes: 60
+    if: forgejo.event_name == 'pull_request'
+    env:
+      CI_RESOURCE_SUFFIX: ${{ forgejo.run_id }}-${{ forgejo.run_attempt }}
     services:
       postgres:
-        image: postgres:16
+        image: docker.io/library/postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -69,60 +70,66 @@ jobs:
         ports:
           - 5432:5432
     steps:
-      - uses: actions/checkout@v4
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.6.0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+      - name: Verify pinned runtime and isolated Docker
+        run: |
+          test "$(node --version)" = "v22.23.2"
+          corepack enable
+          test "$(pnpm --version)" = "10.6.0"
+          test "$(docker version --format '{{.Server.Version}}' | cut -d. -f1)" = "29"
+          test -n "$CI_RESOURCE_SUFFIX"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Run database migrations
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/glantri_test
+          DATABASE_URL: postgresql://postgres:postgres@dind.docker.internal:5432/glantri_test
         run: pnpm --filter @glantri/database exec prisma migrate deploy
 
       - name: Run integration tests
         env:
-          DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/glantri_test
+          DATABASE_URL_TEST: postgresql://postgres:postgres@dind.docker.internal:5432/glantri_test
         run: pnpm --filter @glantri/database test
 
+      - name: Pin Dockerfile base image
+        run: |
+          docker pull docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+          docker tag \
+            docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 \
+            node:22-alpine
+
       - name: Build API image
-        run: docker build -t glantri-api-test -f apps/api/Dockerfile .
+        run: docker build -t "glantri-api-test-$CI_RESOURCE_SUFFIX" -f apps/api/Dockerfile .
 
       - name: Build Web image
         run: |
           docker build \
-            --build-arg NEXT_PUBLIC_API_BASE_URL=http://localhost:4000 \
-            -t glantri-web-test \
+            --build-arg NEXT_PUBLIC_API_BASE_URL="http://$CI_DIND_HOST:4000" \
+            -t "glantri-web-test-$CI_RESOURCE_SUFFIX" \
             -f apps/web/Dockerfile .
 
       - name: Start API container
         run: |
-          docker run -d --name api-test \
+          docker run -d --name "glantri-api-test-$CI_RESOURCE_SUFFIX" \
             --network host \
             -e DATABASE_URL="postgresql://postgres:postgres@localhost:5432/glantri_test" \
-            -e WEB_ORIGIN="http://localhost:3000" \
+            -e WEB_ORIGIN="http://$CI_DIND_HOST:3000" \
             -e NODE_ENV="production" \
-            glantri-api-test
+            "glantri-api-test-$CI_RESOURCE_SUFFIX"
 
       - name: Start Web container
         run: |
-          docker run -d --name web-test \
+          docker run -d --name "glantri-web-test-$CI_RESOURCE_SUFFIX" \
             --network host \
             -e NODE_ENV="production" \
-            glantri-web-test
+            "glantri-web-test-$CI_RESOURCE_SUFFIX"
 
       - name: Wait for API to be ready
         run: |
           for i in $(seq 1 12); do
-            if curl -fsS http://localhost:4000/ready; then
+            if curl -fsS "http://$CI_DIND_HOST:4000/ready"; then
               echo ""
               echo "Readiness check passed on attempt $i"
               exit 0
@@ -131,13 +138,13 @@ jobs:
             sleep 5
           done
           echo "API failed to start after 60s. Container logs:"
-          docker logs api-test
+          docker logs "glantri-api-test-$CI_RESOURCE_SUFFIX"
           exit 1
 
       - name: Wait for Web to be ready
         run: |
           for i in $(seq 1 12); do
-            if curl -fsS -o /dev/null http://localhost:3000; then
+            if curl -fsS -o /dev/null "http://$CI_DIND_HOST:3000"; then
               echo "Web started on attempt $i"
               exit 0
             fi
@@ -145,7 +152,7 @@ jobs:
             sleep 5
           done
           echo "Web failed to start after 60s. Container logs:"
-          docker logs web-test
+          docker logs "glantri-web-test-$CI_RESOURCE_SUFFIX"
           exit 1
 
       - name: Install Playwright browsers
@@ -153,14 +160,24 @@ jobs:
 
       - name: Run Playwright smoke tests
         env:
-          PLAYWRIGHT_BASE_URL: http://localhost:3000
-          PLAYWRIGHT_API_URL: http://localhost:4000
+          PLAYWRIGHT_BASE_URL: http://dind.docker.internal:3000
+          PLAYWRIGHT_API_URL: http://dind.docker.internal:4000
         run: pnpm --filter @glantri/web exec playwright test
 
       - name: Upload Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: https://data.forgejo.org/actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: playwright-report
           path: apps/web/playwright-report/
           retention-days: 7
+
+      - name: Remove run-owned Docker resources
+        if: always()
+        run: |
+          docker rm -f \
+            "glantri-api-test-$CI_RESOURCE_SUFFIX" \
+            "glantri-web-test-$CI_RESOURCE_SUFFIX" 2>/dev/null || true
+          docker image rm \
+            "glantri-api-test-$CI_RESOURCE_SUFFIX" \
+            "glantri-web-test-$CI_RESOURCE_SUFFIX" 2>/dev/null || true
