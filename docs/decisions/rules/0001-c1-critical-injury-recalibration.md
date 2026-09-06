@@ -82,11 +82,11 @@ Retain exactly the two source-anchored chest-index-04 `parry_only` cases—Sharp
 
 The following content intent is approved. Each result retains a minimum total damage floor of 4 HP and its recurring loss begins after one full three-second interval.
 
-| Fixture | Concrete injury/content intent | Stun and state | Non-Bleed content rate | HP/min | Ends when |
-| --- | --- | --- | --- | ---: | --- |
-| `fire_energy|whole_body|06` | Clothing or fur burns across the body; the victim remains able to act to fight the flames | `-4`; no general action lock | `1/4 HP/round` | 5 | Flames are extinguished |
-| `fire_energy|whole_body|09` | Broad deep burns produce severe systemic shock | `-8`; conscious and actionable | `1/3 HP/round` | 6 2/3 | Cooling and burn-shock stabilization |
-| `fire_energy|whole_body|10` | Widespread burns include inhalation injury and impaired breathing | `-8` plus concrete breathing impairment | `1/2 HP/round` | 10 | Airway and circulatory stabilization |
+| Fixture                                          | Concrete injury/content intent                                                            | Stun and state                 | Non-Bleed content rate | HP/min | Ends when                            |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------- | ------------------------------ | ---------------------- | -----: | ------------------------------------ |
+| <code>fire_energy&#124;whole_body&#124;06</code> | Clothing or fur burns across the body; the victim remains able to act to fight the flames | `-4`; no general action lock   | `1/4 HP/round`         |      5 | Flames are extinguished              |
+| <code>fire_energy&#124;whole_body&#124;09</code> | Broad deep burns produce severe systemic shock                                            | `-8`; conscious and actionable | `1/3 HP/round`         |  6 2/3 | Cooling and burn-shock stabilization |
+| <code>fire_energy&#124;whole_body&#124;10</code> | Widespread burns include inhalation injury and impaired breathing                         | `-8` plus breathing impairment | `1/2 HP/round`         |     10 | Airway and circulatory stabilization |
 
 Burn/shock loss is not Bleed. These rates are approved content semantics only.
 
@@ -113,6 +113,9 @@ These examples become test authority only in a separately authorized implementat
 
 - Forgejo #4 (#392) must not use its superseded pre-#393 package unchanged. Control plane must decide whether to refresh, partially reuse, or replace it.
 - Forgejo #3 (#391) may consume accepted content only through its existing dependency gate and must not manufacture unsupported runtime semantics.
+- The recovered five-key payload and future adjudication semantics are frozen by
+  [the Forgejo #51 comparison record](../../recovery/2026-09-06-c1-five-key-freeze-and-staging.md)
+  and [decision 0004](./0004-c1-critical-authoring-and-adjudication.md).
 - The canonical 34-fixture module, generated table, workbook, rules text, and tests remain unchanged by this decision record.
 - Mortality, death clocks, permanent loss, recovery, treatment execution, new checks, and non-Bleed periodic runtime remain outside this ruling unless already supported by separate accepted authority.
 

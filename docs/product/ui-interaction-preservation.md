@@ -1,6 +1,8 @@
 # Chargen and Combat Manager interaction preservation
 
-Status: partially approved product/architecture contract recovered on 2026-09-03. The preservation boundaries below are approved. The five named questions remain open.
+Status: partially approved product/architecture contract recovered on 2026-09-03 and refreshed by
+Forgejo #51 on 2026-09-06. The preservation boundaries below are approved. Four named questions
+remain open; the former #391/manual-damage coexistence question is resolved below.
 
 ## Authority and provenance
 
@@ -58,6 +60,14 @@ Forgejo #3 (recovered GitHub #391) must extend the existing Damage/effects revie
 - Accepted/current consequences belong in existing Results and player-safe projections.
 - Immutable adjudication evidence belongs in the existing Combat Log/history path.
 - Rejected/suppressed atoms and private GM reasons remain outside player current and history projections unless a later ruling explicitly changes that boundary.
+- Existing manual damage/effect rows may co-commit independently with provenance `manual`. They are
+  not canonical C1 atoms or C1 adjudication telemetry and do not redefine, suppress, or replace a C1
+  atom.
+- Minimal ordinary-Bleed control stays inside Current Action and may expose only an existing,
+  source-specific lifecycle transition. Results shows the accepted current state; Combat Log/history
+  records the immutable command; existing persistence/reload and command-backed Clear/undo restore
+  prior state. No new medical check, equipment, time, assistance, healing, or recovery rule is
+  implied.
 
 #391 does not authorize a new general Combat panel, Critical panel, navigation system, round-control shell, progression button, second review grammar, or broad layout redesign.
 
@@ -74,7 +84,7 @@ No feature task may independently introduce:
 - new cross-surface terminology or a generalized design-system rewrite; or
 - client-only privacy or automatic replay/merge after stale/conflicted state.
 
-## Exactly five unresolved #394 questions
+## Exactly four unresolved #394 questions
 
 These questions remain open and are not decided by this record:
 
@@ -82,9 +92,12 @@ These questions remain open and are not decided by this record:
 2. **`9b` numbering:** confirm whether section `9b` numbering is intentional.
 3. **Narrow-layout contract:** define the narrow-layout Chargen contract.
 4. **Create/owner-edit/GM-edit authority journeys:** confirm whether create, owner-edit, and GM-edit remain separate authority journeys.
-5. **#391/manual-damage coexistence:** decide how #391 coexists with the older broad/manual damage-adjustment path.
 
 Until the product owner rules, Builders must not choose answers locally. A future task may proceed only around an open question if its contract explicitly avoids that behavior.
+
+Forgejo #51 resolved the former fifth question through
+[decision 0004](../decisions/rules/0004-c1-critical-authoring-and-adjudication.md): manual rows may
+co-commit independently with `manual` provenance and are not C1 override telemetry.
 
 ## Builder and QA contract consequences
 
