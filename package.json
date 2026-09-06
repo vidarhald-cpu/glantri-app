@@ -4,9 +4,10 @@
   "version": "0.1.0",
   "packageManager": "pnpm@10.6.0",
   "engines": {
-    "node": ">=22"
+    "node": "22.23.x"
   },
   "scripts": {
+    "bootstrap:test": "node --test scripts/bootstrap/*.test.mjs",
     "dev": "node --import tsx scripts/database/guardedDatabaseCommand.ts dev",
     "build": "turbo build --force",
     "dev:full": "pnpm --filter @glantri/content build && pnpm dev",
@@ -14,7 +15,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "format:check:changed": "node scripts/checkChangedFormatting.mjs",
-    "lint": "eslint scripts/database && turbo lint --force",
+    "lint": "eslint scripts/database scripts/bootstrap && turbo lint --force",
     "test": "turbo test --force",
     "coverage": "vitest run --coverage --passWithNoTests",
     "critical-effects:generate": "node scripts/generateCriticalEffectsTable.mjs --generate",
