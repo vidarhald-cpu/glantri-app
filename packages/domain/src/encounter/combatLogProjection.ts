@@ -281,7 +281,7 @@ function booleanFact(facts: Record<string, unknown>, key: string): boolean | und
 }
 
 function phaseForEvent(event: CombatStepEvent): CombatLogPhase {
-  if (event.type === "declaration") return "declaration";
+  if (event.type === "declaration" || event.step === "select_actions") return "declaration";
   if (event.phase) return event.phase;
   return "round_end";
 }

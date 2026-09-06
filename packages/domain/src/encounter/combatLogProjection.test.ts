@@ -945,6 +945,7 @@ describe("CombatLogProjection", () => {
             id: "bleed-treatment-1",
             ownerParticipantId: "scyrian",
             sequence: 0,
+            step: "select_actions",
             targetParticipantId: "scyrian",
             type: "effect_review",
             visibility: {
@@ -961,6 +962,7 @@ describe("CombatLogProjection", () => {
       expect.objectContaining({
         actor: { displayName: "GM" },
         category: "state_change",
+        phase: "declaration",
         summary: "Scyrian Cavalry’s Bleed changed from active to staunched.",
         summaryFacts: {
           bleedKind: "external",

@@ -141,6 +141,10 @@ test.describe("Critical Bleed treatment command repair", () => {
     await staunchButton.press("Enter");
     await expect(treatment).toContainText("staunched");
     await expect(gmPage.getByRole("button", { name: "Clear current step" })).toBeEnabled();
+    const declarationTreatmentLogEntry = gmPage.getByRole("button", {
+      name: /Round 1 · Declaration.*Bleed changed from active to staunched/,
+    });
+    await expect(declarationTreatmentLogEntry).toBeVisible();
 
     const treatedEncounter = await json<{
       encounter: {
@@ -191,6 +195,7 @@ test.describe("Critical Bleed treatment command repair", () => {
         .locator("..")
         .getByLabel("Current Action Bleed treatment"),
     ).toContainText("staunched");
+    await expect(declarationTreatmentLogEntry).toBeVisible();
     const clearButton = gmPage.getByRole("button", { name: "Clear current step" });
     await expect(clearButton).toBeEnabled();
     await clearButton.click();
