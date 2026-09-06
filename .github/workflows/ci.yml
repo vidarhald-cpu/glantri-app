@@ -174,9 +174,26 @@ jobs:
 
       - name: Run Playwright smoke tests
         env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/glantri_test
+          DATABASE_URL_TEST: postgresql://postgres:postgres@127.0.0.1:5432/glantri_test
           PLAYWRIGHT_BASE_URL: http://dind.docker.internal:3000
           PLAYWRIGHT_API_URL: http://dind.docker.internal:4000
-        run: pnpm --filter @glantri/web exec playwright test
+          PLAYWRIGHT_BROWSER_API_URL: http://dind.docker.internal:4000
+        run: |
+          node scripts/ci/postgres-loopback-proxy.mjs &
+          proxy_pid=$!
+          trap 'kill "$proxy_pid"; wait "$proxy_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 20); do
+            if node -e 'const net=require("node:net");const socket=net.connect(5432,"127.0.0.1");socket.setTimeout(500);socket.once("connect",()=>socket.end());socket.once("close",hadError=>process.exit(hadError?1:0));socket.once("error",()=>process.exit(1));socket.once("timeout",()=>{socket.destroy();process.exit(1)})'; then
+              break
+            fi
+            if [ "$attempt" -eq 20 ]; then
+              echo "PostgreSQL loopback proxy did not become ready."
+              exit 1
+            fi
+            sleep 0.25
+          done
+          pnpm --filter @glantri/web exec playwright test
 
       - name: Upload Playwright report on failure
         if: failure()

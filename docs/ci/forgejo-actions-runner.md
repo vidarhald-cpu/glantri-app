@@ -93,12 +93,14 @@ dependencies, then runs the single-worker Playwright smoke suite. A CI-only Node
 TCP proxy binds `127.0.0.1:5432` inside the disposable job container and forwards
 only to `dind.docker.internal:5432`; this preserves the repository's fail-closed
 local/disposable database guard without trusting another hostname or exposing a
-port. The proxy exists only for the integration-test step and is stopped by its
-shell trap. The job needs the isolated DIND daemon but no protected local
-database. Its 60-minute workflow limit and the runner's 90-minute hard limit
-ensure terminal failure instead of an indefinite gate. Runner capacity one is
-the concurrency boundary; Forgejo also cancels superseded push and pull-request
-synchronize runs.
+port. Separate proxy processes exist only for the integration-test and
+Playwright steps and are stopped by their respective shell traps. Playwright's
+direct database helpers receive the same guarded disposable URL, while its
+browser-route matching uses the actual DIND-visible API origin. The job needs
+the isolated DIND daemon but no protected local database. Its 60-minute workflow
+limit and the runner's 90-minute hard limit ensure terminal failure instead of
+an indefinite gate. Runner capacity one is the concurrency boundary; Forgejo
+also cancels superseded push and pull-request synchronize runs.
 
 Cold runs download dependencies, the PostgreSQL image, two Node base images,
 and Playwright Chromium, and build both application images. Warm DIND pulls and
