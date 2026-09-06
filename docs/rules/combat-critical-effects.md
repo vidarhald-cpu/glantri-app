@@ -12,6 +12,14 @@ through the normal phase-damage commit.
 > Fire/Energy `1/4`, `1/3`, and `1/2 HP/round` values are content intent only. Executable non-Bleed
 > `periodic_loss` is not authorized.
 
+The exact five-key post-#393 recovery is now frozen as
+[non-executable evidence](../recovery/2026-09-06-c1-five-key-post-393-payloads.json), with its
+[per-key pre/post comparison](../recovery/2026-09-06-c1-five-key-freeze-and-staging.md). The future
+six-kind authoring, immutable-canon/GM-delta, manual-provenance, Stun, ordinary-Bleed, treatment, and
+presentation contract is [decision 0004](../decisions/rules/0004-c1-critical-authoring-and-adjudication.md).
+Those records prepare future work for exactly five keys; they do not change the pre-#393 executable
+behavior documented on this page.
+
 ## C1 representative fixture authority
 
 Issue #377 freezes 34 representative C1 Critical definitions under fixture version
@@ -68,9 +76,11 @@ three channels. Separate source Stuns therefore add and can be resolved independ
 does not cancel an action or imply collapse, parry-only, no-action, unconsciousness, or functional
 loss; those are separate typed facts.
 
-Descriptions are project-authored canonical GM suggestions. A GM may adjudicate the explicitly
-GM-managed parts, but that does not rewrite the frozen fixture canon, its authored Stun magnitude, or
-its non-editable equal-initiative timing.
+Descriptions are project-authored canonical GM suggestions. Narrative is not mechanics. Under the
+future contract, an allowed GM review produces an instance delta and never rewrites canonical atoms;
+the exact permitted and prohibited fields are enumerated in
+[decision 0004](../decisions/rules/0004-c1-critical-authoring-and-adjudication.md). Current executable
+review behavior remains pre-#393 until a separately authorized implementation is accepted.
 
 ## Reproducing the Critical table
 

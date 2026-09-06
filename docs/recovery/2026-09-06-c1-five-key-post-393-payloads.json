@@ -1,0 +1,329 @@
+{
+  "artifactKind": "non_executable_recovery_evidence",
+  "schemaVersion": "c1-six-kind-recovery-v1",
+  "authority": {
+    "decision": "docs/decisions/rules/0004-c1-critical-authoring-and-adjudication.md",
+    "freeze": "docs/recovery/2026-09-06-c1-five-key-freeze-and-staging.md",
+    "historicalDesignTask": "01a04f1a-71ad-78c1-91a4-603918e5dd09",
+    "recoveredIssue": "Forgejo #5 / former GitHub #393"
+  },
+  "allowedKinds": [
+    "damage_floor",
+    "modifier",
+    "periodic_loss",
+    "condition",
+    "operation",
+    "information"
+  ],
+  "runtimeBoundary": "Evidence only. This file is not imported, generated, or executable and authorizes no runtime behavior.",
+  "payloads": [
+    {
+      "criticalKey": "pointed_weapons|arm|02",
+      "severity": "minor",
+      "title": "Hand puncture breaks the grip",
+      "narrative": "The point passes through the fleshy hand; the fingers open and whatever was held drops.",
+      "provenance": {
+        "acceptedCommentId": 5464671257,
+        "acceptedPart": "Part 3/4",
+        "resultRange": "AppFacing_Crits!A515:X515",
+        "effectRange": "AppFacing_Effects!A1738:AE1742",
+        "sourceEffectKeys": [
+          "pointed_weapons|arm|02|01",
+          "pointed_weapons|arm|02|02",
+          "pointed_weapons|arm|02|03",
+          "pointed_weapons|arm|02|04",
+          "pointed_weapons|arm|02|05"
+        ]
+      },
+      "atoms": [
+        {
+          "kind": "damage_floor",
+          "sourceEffectKey": "pointed_weapons|arm|02|01",
+          "amount": { "numerator": 3, "denominator": 1, "unit": "hp" },
+          "application": "minimum_total_damage",
+          "target": { "scope": "combatant" }
+        },
+        {
+          "kind": "modifier",
+          "sourceEffectKey": "pointed_weapons|arm|02|02",
+          "modifierType": "stun",
+          "value": -1,
+          "channels": ["ob_skill", "db_parry", "initiative"],
+          "onset": "immediate",
+          "duration": { "kind": "roll_once", "formula": "1d4", "unit": "round" },
+          "target": { "scope": "combatant" }
+        },
+        {
+          "kind": "periodic_loss",
+          "sourceEffectKey": "pointed_weapons|arm|02|03",
+          "lossType": "external_bleed",
+          "rate": { "numerator": 1, "denominator": 8, "unit": "hp_per_round" },
+          "roundSeconds": 3,
+          "firstTick": "following_round_su_after_one_full_interval",
+          "lifecycle": ["active", "controlled", "staunched", "resolved"],
+          "target": { "scope": "anatomy", "part": "arm" }
+        },
+        {
+          "kind": "condition",
+          "sourceEffectKey": "pointed_weapons|arm|02|04",
+          "condition": "impaired",
+          "onset": "immediate",
+          "duration": { "kind": "roll_once", "formula": "1d4", "unit": "round" },
+          "target": { "scope": "anatomy", "part": "hand" }
+        },
+        {
+          "kind": "operation",
+          "sourceEffectKey": "pointed_weapons|arm|02|05",
+          "operation": "drop_held_item",
+          "onset": "immediate",
+          "target": { "scope": "held_item", "heldBy": "struck_hand" }
+        },
+        {
+          "kind": "information",
+          "topic": "treatment",
+          "mechanicallyActive": false,
+          "text": "First Aid bandaging is the explicit field-control candidate; the source gate is bandage.",
+          "skill": "first_aid",
+          "equipmentOrOperation": ["bandage"]
+        }
+      ]
+    },
+    {
+      "criticalKey": "blunt|arm|12",
+      "severity": "very_severe",
+      "title": "Hand crushed beyond use",
+      "narrative": "The blow shatters the hand into torn bone and tissue; the hand is unusable and the victim drops what it held.",
+      "provenance": {
+        "acceptedCommentId": 5464670911,
+        "acceptedPart": "Part 2/4",
+        "resultRange": "AppFacing_Crits!A109:X109",
+        "effectRange": "AppFacing_Effects!A340:AE345",
+        "sourceEffectKeys": [
+          "blunt|arm|12|01",
+          "blunt|arm|12|02",
+          "blunt|arm|12|03",
+          "blunt|arm|12|04",
+          "blunt|arm|12|05",
+          "blunt|arm|12|06"
+        ]
+      },
+      "atoms": [
+        {
+          "kind": "damage_floor",
+          "sourceEffectKey": "blunt|arm|12|01",
+          "amount": { "numerator": 5, "denominator": 1, "unit": "hp" },
+          "application": "minimum_total_damage",
+          "target": { "scope": "combatant" }
+        },
+        {
+          "kind": "modifier",
+          "sourceEffectKey": "blunt|arm|12|02",
+          "modifierType": "stun",
+          "value": -4,
+          "channels": ["ob_skill", "db_parry", "initiative"],
+          "onset": "immediate",
+          "duration": { "kind": "fixed", "value": 1, "unit": "round" },
+          "target": { "scope": "combatant" }
+        },
+        {
+          "kind": "periodic_loss",
+          "sourceEffectKey": "blunt|arm|12|03",
+          "lossType": "external_bleed",
+          "rate": { "numerator": 1, "denominator": 2, "unit": "hp_per_round" },
+          "roundSeconds": 3,
+          "firstTick": "following_round_su_after_one_full_interval",
+          "lifecycle": ["active", "controlled", "staunched", "resolved"],
+          "target": { "scope": "anatomy", "part": "arm" }
+        },
+        {
+          "kind": "condition",
+          "sourceEffectKey": "blunt|arm|12|04",
+          "condition": "function_unusable",
+          "onset": "immediate",
+          "duration": { "kind": "until_event", "event": "separately_resolved" },
+          "target": { "scope": "anatomy", "part": "hand" }
+        },
+        {
+          "kind": "operation",
+          "sourceEffectKey": "blunt|arm|12|05",
+          "operation": "drop_held_item",
+          "onset": "immediate",
+          "target": { "scope": "held_item", "heldBy": "struck_hand" }
+        },
+        {
+          "kind": "information",
+          "topic": "treatment",
+          "mechanicallyActive": false,
+          "text": "First Aid pressure and splinting are field stages; Surgery is the authored definitive stage.",
+          "skills": ["first_aid", "surgery"],
+          "equipmentOrOperation": ["pressure_dressing", "splint"]
+        },
+        {
+          "kind": "information",
+          "sourceEffectKey": "blunt|arm|12|06",
+          "topic": "permanence_and_recovery",
+          "mechanicallyActive": false,
+          "text": "Any permanent hand deficit and its recovery remain GM-managed information."
+        }
+      ]
+    },
+    {
+      "criticalKey": "pointed_weapons|chest|07",
+      "severity": "serious",
+      "title": "Punctured lung shortens every breath",
+      "narrative": "The point slips between the ribs and punctures a lung; breathing becomes short and blood-tinged.",
+      "provenance": {
+        "acceptedCommentId": 5464671539,
+        "acceptedPart": "Part 4/4",
+        "resultRange": "AppFacing_Crits!A552:X552",
+        "effectRange": "AppFacing_Effects!A1901:AE1904",
+        "sourceEffectKeys": [
+          "pointed_weapons|chest|07|01",
+          "pointed_weapons|chest|07|02",
+          "pointed_weapons|chest|07|03",
+          "pointed_weapons|chest|07|04"
+        ]
+      },
+      "atoms": [
+        {
+          "kind": "damage_floor",
+          "sourceEffectKey": "pointed_weapons|chest|07|01",
+          "amount": { "numerator": 5, "denominator": 1, "unit": "hp" },
+          "application": "minimum_total_damage",
+          "target": { "scope": "combatant" }
+        },
+        {
+          "kind": "modifier",
+          "sourceEffectKey": "pointed_weapons|chest|07|02",
+          "modifierType": "stun",
+          "value": -4,
+          "channels": ["ob_skill", "db_parry", "initiative"],
+          "onset": "immediate",
+          "duration": { "kind": "until_event", "event": "appropriate_care" },
+          "target": { "scope": "combatant" }
+        },
+        {
+          "kind": "periodic_loss",
+          "sourceEffectKey": "pointed_weapons|chest|07|03",
+          "lossType": "internal_bleed",
+          "rate": { "numerator": 1, "denominator": 4, "unit": "hp_per_round" },
+          "roundSeconds": 3,
+          "firstTick": "following_round_su_after_one_full_interval",
+          "lifecycle": ["active", "stabilised", "resolved"],
+          "target": { "scope": "anatomy", "part": "chest" }
+        },
+        {
+          "kind": "condition",
+          "sourceEffectKey": "pointed_weapons|chest|07|04",
+          "condition": "impaired",
+          "onset": "immediate",
+          "duration": { "kind": "until_event", "event": "appropriate_care" },
+          "target": { "scope": "function", "function": "breathing_and_general_action" }
+        },
+        {
+          "kind": "information",
+          "topic": "treatment",
+          "mechanicallyActive": false,
+          "text": "Generic immediate care does not identify First Aid, Medicine, or Surgery.",
+          "sourceGate": "immediate_treatment"
+        }
+      ]
+    },
+    {
+      "criticalKey": "sharp|head|10",
+      "severity": "very_severe",
+      "title": "Severe concussion causes unconsciousness",
+      "narrative": "A heavy head wound causes a severe concussion; the target slumps unconscious.",
+      "provenance": {
+        "acceptedCommentId": 5464670629,
+        "acceptedPart": "Part 1/4",
+        "resultRange": "AppFacing_Crits!A27:X27",
+        "effectRange": "AppFacing_Effects!A88:AE89",
+        "sourceEffectKeys": ["sharp|head|10|01", "sharp|head|10|02"]
+      },
+      "atoms": [
+        {
+          "kind": "damage_floor",
+          "sourceEffectKey": "sharp|head|10|01",
+          "amount": { "numerator": 3, "denominator": 1, "unit": "hp" },
+          "application": "minimum_total_damage",
+          "target": { "scope": "combatant" }
+        },
+        {
+          "kind": "condition",
+          "sourceEffectKey": "sharp|head|10|02",
+          "condition": "unconscious",
+          "onset": "immediate",
+          "duration": {
+            "kind": "retained_roll_or_gm_managed_event",
+            "roll": { "formula": "1d4", "unit": "hour" },
+            "event": "appropriate_care"
+          },
+          "target": { "scope": "function", "function": "consciousness" }
+        },
+        {
+          "kind": "information",
+          "topic": "treatment_and_recovery",
+          "mechanicallyActive": false,
+          "text": "The alternative generic-care end and recovery remain GM-managed; no Skill is identified."
+        }
+      ]
+    },
+    {
+      "criticalKey": "sharp|chest|04",
+      "severity": "moderate",
+      "title": "Pectoral slash disables attacks",
+      "narrative": "A slash tears across the weapon-side chest and shoulder; the target drops the weapon and can brace a shield but cannot drive an attack.",
+      "provenance": {
+        "acceptedCommentId": 5464670629,
+        "acceptedPart": "Part 1/4",
+        "resultRange": "AppFacing_Crits!A37:X37",
+        "effectRange": "AppFacing_Effects!A114:AE117",
+        "sourceEffectKeys": [
+          "sharp|chest|04|01",
+          "sharp|chest|04|02",
+          "sharp|chest|04|03",
+          "sharp|chest|04|04"
+        ]
+      },
+      "atoms": [
+        {
+          "kind": "damage_floor",
+          "sourceEffectKey": "sharp|chest|04|01",
+          "amount": { "numerator": 2, "denominator": 1, "unit": "hp" },
+          "application": "minimum_total_damage",
+          "target": { "scope": "combatant" }
+        },
+        {
+          "kind": "condition",
+          "sourceEffectKey": "sharp|chest|04|02",
+          "condition": "impaired",
+          "onset": "immediate",
+          "duration": { "kind": "roll_once", "formula": "1d4", "unit": "round" },
+          "target": { "scope": "function", "function": "stance" }
+        },
+        {
+          "kind": "condition",
+          "sourceEffectKey": "sharp|chest|04|03",
+          "condition": "parry_only",
+          "onset": "immediate",
+          "duration": { "kind": "roll_once", "formula": "1d4", "unit": "round" },
+          "target": { "scope": "function", "function": "general_action" }
+        },
+        {
+          "kind": "operation",
+          "sourceEffectKey": "sharp|chest|04|04",
+          "operation": "drop_held_item",
+          "onset": "immediate",
+          "target": { "scope": "held_item", "heldBy": "weapon_side_hand" }
+        },
+        {
+          "kind": "information",
+          "topic": "treatment",
+          "mechanicallyActive": false,
+          "text": "Generic treatment remains GM-managed and identifies no Skill."
+        }
+      ]
+    }
+  ]
+}

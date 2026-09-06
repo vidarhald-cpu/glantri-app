@@ -34,6 +34,7 @@ Routine implementation details do not need decision records.
 - Rules: [`rules/0001-c1-critical-injury-recalibration.md`](rules/0001-c1-critical-injury-recalibration.md)
 - Rules: [`rules/0002-skill-catalogue-qualitative-architecture.md`](rules/0002-skill-catalogue-qualitative-architecture.md)
 - Rules: [`rules/0003-skill-documentation-and-release-integrity.md`](rules/0003-skill-documentation-and-release-integrity.md)
+- Rules: [`rules/0004-c1-critical-authoring-and-adjudication.md`](rules/0004-c1-critical-authoring-and-adjudication.md)
 - Product/UX: [`../product/ui-interaction-preservation.md`](../product/ui-interaction-preservation.md)
 - Architecture: [`architecture/0002-spatial-scene-rules-boundary.md`](architecture/0002-spatial-scene-rules-boundary.md)
 - Architecture guidance: [`../architecture/information-authority-and-projection.md`](../architecture/information-authority-and-projection.md)
