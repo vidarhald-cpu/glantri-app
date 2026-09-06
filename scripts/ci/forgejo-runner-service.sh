@@ -8,6 +8,7 @@ SOURCE_DIR="$REPOSITORY_ROOT/infra/forgejo-actions"
 RUNNER_HOME=${GLANTRI_RUNNER_HOME:-}
 FORGEJO_CONTAINER=${GLANTRI_FORGEJO_CONTAINER:-glantri-forgejo}
 RUNNER_NAME=${GLANTRI_RUNNER_NAME:-glantri-private-ci}
+RUNNER_LABEL=glantri-private-ci
 RUNNER_SCOPE=recovery-admin/glantri-app
 RUNNER_VERSION=13.1.0
 
@@ -22,6 +23,7 @@ usage() {
     '  status     Show the two service containers.' \
     '  verify     Verify versions, isolation, health, and restart policy.' \
     '  pause      Gracefully stop only the runner after its current job.' \
+    '  migrate-label  Replace the legacy ubuntu-latest label while stopped.' \
     '  down       Stop the service, retaining registration and DIND cache.'
 }
 
@@ -88,7 +90,7 @@ bootstrap() {
   uuid=$(printf '%s' "$secret" | docker exec -i --user git "$FORGEJO_CONTAINER" forgejo forgejo-cli actions register \
     --secret-stdin=1 \
     --scope "$RUNNER_SCOPE" \
-    --labels ubuntu-latest \
+    --labels "$RUNNER_LABEL" \
     --name "$RUNNER_NAME" \
     --version "$RUNNER_VERSION" | tail -n 1)
   case "$uuid" in
@@ -181,6 +183,32 @@ pause() {
   printf 'Runner paused after graceful shutdown; DIND and its cache remain available.\n'
 }
 
+migrate_label() {
+  runner_state=$(docker inspect --format '{{.State.Status}}' glantri-forgejo-actions-runner 2>/dev/null || true)
+  if [ "$runner_state" = running ]; then
+    printf 'Pause the runner before changing its label.\n' >&2
+    exit 2
+  fi
+
+  config_path="$RUNNER_HOME/state/runner-config.yml"
+  test -s "$config_path"
+  if grep -q "^    - $RUNNER_LABEL:docker://" "$config_path"; then
+    printf 'Runner already uses the dedicated %s label.\n' "$RUNNER_LABEL"
+    return
+  fi
+  if ! grep -q '^    - ubuntu-latest:docker://' "$config_path"; then
+    printf 'Runner config does not contain the expected legacy label.\n' >&2
+    exit 2
+  fi
+
+  umask 077
+  temporary_config="$config_path.tmp"
+  sed "s/^    - ubuntu-latest:docker:/    - $RUNNER_LABEL:docker:/" "$config_path" >"$temporary_config"
+  chmod 600 "$temporary_config"
+  mv "$temporary_config" "$config_path"
+  printf 'Runner config now uses the dedicated %s label.\n' "$RUNNER_LABEL"
+}
+
 down() {
   compose down
   printf 'Runner stopped; repository registration, token, and DIND cache were retained.\n'
@@ -195,6 +223,7 @@ case "$command" in
   status) status ;;
   verify) verify ;;
   pause) pause ;;
+  migrate-label) migrate_label ;;
   down) down ;;
   *)
     usage >&2

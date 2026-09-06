@@ -24,6 +24,12 @@ One repository-scoped Forgejo Runner 13.1.0 polls only
 capabilities dropped, `no-new-privileges`, a read-only root filesystem, no host
 ports, no administrator credential, and capacity one.
 
+Both jobs request the dedicated `glantri-private-ci` label. The runner advertises
+only that label, never Forgejo's generic `ubuntu-latest` label. Labels select a
+runner but do not form part of the `CI / <job> (<event>)` status-context name.
+This keeps unrelated or historical `ubuntu-latest` work ineligible without
+changing the protected branch's required-context policy.
+
 Jobs run as root inside a fresh container created by a dedicated Docker 29.8
 Docker-in-Docker (DIND) daemon. DIND is privileged inside Docker Desktop's Linux
 VM because nested containers require it, but it receives no host filesystem
@@ -112,7 +118,7 @@ local target. Never paste its contents into an issue, PR, terminal transcript,
 or chat.
 
 Verify the runner is visible as one online repository runner named
-`glantri-private-ci` with label `ubuntu-latest`. There must still be zero
+`glantri-private-ci` with label `glantri-private-ci`. There must still be zero
 user-owner and instance runners.
 
 ## Restart, stop, maintenance, and recovery
@@ -138,6 +144,18 @@ current job and cleanup to finish. DIND remains running so its cache and cleanup
 state can be inspected. Use this when preserving queued Actions history. Confirm
 the runner is stopped and that it did not claim another task before treating the
 pause as complete.
+
+An existing stopped runner configured with the legacy generic label can be
+migrated in place without rotating its registration token:
+
+```bash
+scripts/ci/forgejo-runner-service.sh migrate-label
+scripts/ci/forgejo-runner-service.sh up
+```
+
+`migrate-label` refuses to operate while the runner is running and changes only
+the label in its external rendered configuration. After `up`, confirm Forgejo
+shows only `glantri-private-ci` and that no `ubuntu-latest` task was claimed.
 
 Stop both service containers without deleting registration, token, or cache:
 
