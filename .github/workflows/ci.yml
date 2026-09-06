@@ -90,8 +90,22 @@ jobs:
 
       - name: Run integration tests
         env:
-          DATABASE_URL_TEST: postgresql://postgres:postgres@dind.docker.internal:5432/glantri_test
-        run: pnpm --filter @glantri/database test
+          DATABASE_URL_TEST: postgresql://postgres:postgres@127.0.0.1:5432/glantri_test
+        run: |
+          node scripts/ci/postgres-loopback-proxy.mjs &
+          proxy_pid=$!
+          trap 'kill "$proxy_pid"; wait "$proxy_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 20); do
+            if node -e 'const net=require("node:net");const socket=net.connect(5432,"127.0.0.1");socket.setTimeout(500);socket.once("connect",()=>socket.end());socket.once("close",hadError=>process.exit(hadError?1:0));socket.once("error",()=>process.exit(1));socket.once("timeout",()=>{socket.destroy();process.exit(1)})'; then
+              break
+            fi
+            if [ "$attempt" -eq 20 ]; then
+              echo "PostgreSQL loopback proxy did not become ready."
+              exit 1
+            fi
+            sleep 0.25
+          done
+          pnpm --filter @glantri/database test
 
       - name: Pin Dockerfile base image
         run: |
