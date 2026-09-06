@@ -599,7 +599,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('aria-label="Canonical Critical review"');
     expect(source).toContain("Canonical atoms are immutable");
     expect(source).toContain("Private adjudication reason (optional)");
-    expect(source).toContain('aria-label="Critical Bleed treatment"');
+    expect(source).toContain('aria-label="Current Action Bleed treatment"');
+    expect(source).toContain("inspectorCriticalBleedTreatmentControls");
+    expect(source).not.toContain("CriticalBleedTreatmentPanel");
     expect(source).toContain("transitionCriticalBleedOnServer");
     expect(source).toContain("getCombatDamageReviewDraftEffectRowType");
     expect(source).toContain("getCombatDamageReviewDraftEffectTarget");

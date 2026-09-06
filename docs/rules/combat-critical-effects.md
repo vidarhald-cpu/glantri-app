@@ -272,11 +272,14 @@ only the fixture's explicit First Aid, Medicine, Surgery, staged guidance, equip
 or GM-managed/unresolved classification. It does not manufacture a DC, Health substitution,
 self-staunch chance, recovery duration, mortality clock, or permanent-stat effect from prose.
 
-The GM can change those accepted source-specific lifecycle states from the Combat inspector. External
-partial control requires an explicit exact rational remaining rate lower than the authored rate; the
-server never guesses it. Each transition persists on the source effect, creates a separately
-provenanced treatment event, and appears in Results/history and Combat Log. Selecting a prior allowed
-state provides an auditable reversal without rewriting the original Critical.
+The GM can change those accepted source-specific lifecycle states from the existing Current Action
+Damage/effects controls. External partial control requires an explicit exact rational remaining rate
+lower than the authored rate; the server never guesses it. Each transition persists on the source
+effect and appends one immutable Combat command created by the authenticated GM. The command records
+the treated participant as target/context and retains exact before/after effect facts; its linked,
+separately provenanced event appears in Results/history and Combat Log. Existing Clear authority
+reverses the latest transition atomically, including after reload, without rewriting the original
+Critical or adding a separate treatment panel or undo system.
 
 Start next round remains blocked until participant SU reviews and accepted health checks are
 complete. Undoing SU review commands restores previous durations/statuses and removes only the

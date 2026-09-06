@@ -2970,7 +2970,7 @@ function CombatParryResolutionPanel(input: {
   );
 }
 
-export function CriticalBleedTreatmentPanel(input: {
+export function CriticalBleedTreatmentControls(input: {
   disabled?: boolean;
   onTransition: (
     effectId: string,
@@ -2991,8 +2991,16 @@ export function CriticalBleedTreatmentPanel(input: {
   if (effects.length === 0) return null;
 
   return (
-    <section aria-label="Critical Bleed treatment" style={playerCombatPanelCardStyle}>
-      <strong>Critical Bleed treatment</strong>
+    <div
+      aria-label="Current Action Bleed treatment"
+      style={{
+        borderTop: "1px solid #d7d3c7",
+        display: "grid",
+        gap: "0.45rem",
+        paddingTop: "0.5rem",
+      }}
+    >
+      <strong>Damage/effects · Bleed treatment</strong>
       <div style={combatDamageReviewHelperTextStyle}>
         GM-only lifecycle controls. No roll, Skill, DC, equipment, or duration is inferred.
       </div>
@@ -3088,7 +3096,7 @@ export function CriticalBleedTreatmentPanel(input: {
           </section>
         );
       })}
-    </section>
+    </div>
   );
 }
 
@@ -8011,7 +8019,18 @@ export default function CombatRoundManagerPanel({
         ) : null}
       </div>
     ) : null;
+  const inspectorCriticalBleedTreatmentControls =
+    selectedScenarioParticipant && !inspectorIsHistorical ? (
+      <CriticalBleedTreatmentControls
+        disabled={saving}
+        onTransition={(effectId, nextState, partialRate) =>
+          void transitionInspectorCriticalBleed(effectId, nextState, partialRate)
+        }
+        participant={selectedScenarioParticipant}
+      />
+    ) : null;
   const inspectorPreActionControls =
+    inspectorCriticalBleedTreatmentControls ||
     inspectorDefenseReviewControls ||
     inspectorMissileReadinessControls ||
     inspectorCurrentActionOutcomeControls ||
@@ -8028,6 +8047,7 @@ export default function CombatRoundManagerPanel({
       <>
         {inspectorStepWorkflowStatus}
         {inspectorDeclarationProposal}
+        {inspectorCriticalBleedTreatmentControls}
         {inspectorCurrentActionOutcomeControls}
         {inspectorDefenseReviewControls}
         {inspectorMissileReadinessControls}
@@ -12148,15 +12168,6 @@ export default function CombatRoundManagerPanel({
           scenarioParticipants={effectiveScenarioParticipants}
           skills={content?.skills}
         />
-        {selectedScenarioParticipant && !inspectorIsHistorical ? (
-          <CriticalBleedTreatmentPanel
-            disabled={saving}
-            onTransition={(effectId, nextState, partialRate) =>
-              void transitionInspectorCriticalBleed(effectId, nextState, partialRate)
-            }
-            participant={selectedScenarioParticipant}
-          />
-        ) : null}
         <section
           aria-label="Combat round inspector"
           style={{

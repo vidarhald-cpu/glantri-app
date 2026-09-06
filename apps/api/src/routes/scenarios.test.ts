@@ -21191,6 +21191,11 @@ describe("scenarios route contract", () => {
       participants: [fixture.scenarioParticipants[0]!, target],
       user: mocks.adminUser,
     });
+    setupMutableCombatRouteState({
+      encounter: setup.encounter as EncounterSession,
+      participants: setup.participants,
+      user: mocks.adminUser,
+    });
     const app = await buildScenarioTestApp();
     const response = await app.inject({
       method: "POST",
@@ -21204,8 +21209,6 @@ describe("scenarios route contract", () => {
       url: "/encounters/encounter-1/combat-round/transition-critical-bleed",
     });
 
-    await app.close();
-
     expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
     expect(response.json().participant.state.combatEffects.effects[0]).toMatchObject({
       criticalRuntime: {
@@ -21217,8 +21220,20 @@ describe("scenarios route contract", () => {
       description: "Bleed 1/4 HP per round · controlled.",
     });
     const savedRoundState = response.json().encounter.combatRoundState as CombatRoundState;
-    expect(savedRoundState.events.at(-1)).toMatchObject({
+    expect(savedRoundState.commands.at(-1)).toMatchObject({
+      createdByUserId: "gm-1",
+      participantId: "encounter-participant-2",
+      type: "transition_critical_bleed",
       facts: {
+        actorUserId: "gm-1",
+        scenarioParticipantId: "participant-2",
+        targetParticipantId: "encounter-participant-2",
+      },
+    });
+    expect(savedRoundState.events.at(-1)).toMatchObject({
+      commandId: savedRoundState.commands.at(-1)?.id,
+      facts: {
+        gmReview: { actorUserId: "gm-1" },
         involvedOutcome: {
           bleedKind: "external",
           currentRate: { denominator: 4, numerator: 1 },
@@ -21230,6 +21245,48 @@ describe("scenarios route contract", () => {
       type: "effect_review",
       visibility: { outcomeScope: "involved" },
     });
+    expect(savedRoundState.events.at(-1)).not.toHaveProperty("actorParticipantId");
+
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
+    const playerReload = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+    expect(playerReload.statusCode, JSON.stringify(playerReload.json())).toBe(200);
+    expect(playerReload.json().encounter.combatRoundState.commands).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "transition_critical_bleed" })]),
+    );
+    expect(JSON.stringify(playerReload.json())).not.toContain('"gmReview"');
+    expect(JSON.stringify(playerReload.json())).not.toContain('"previousEffect"');
+    expect(JSON.stringify(playerReload.json())).not.toContain('"nextEffect"');
+
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.adminUser);
+    const clearResponse = await app.inject({
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(clearResponse.statusCode, JSON.stringify(clearResponse.json())).toBe(200);
+    expect(clearResponse.json().encounter.combatRoundState.commands).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "transition_critical_bleed" })]),
+    );
+    expect(clearResponse.json().encounter.combatRoundState.events).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ commandId: savedRoundState.commands.at(-1)?.id }),
+      ]),
+    );
+    expect(clearResponse.json().participants[0].state.combatEffects.effects[0]).toMatchObject({
+      criticalRuntime: {
+        bleed: {
+          controlState: "active",
+          currentRate: { denominator: 2, numerator: 1 },
+        },
+      },
+      description: "Bleed 1/2 HP per round.",
+    });
+    expect(clearResponse.json().participants[0].state.combatEffects.events).toHaveLength(0);
   });
 
   it("rejects player use of the GM damage review save route", async () => {

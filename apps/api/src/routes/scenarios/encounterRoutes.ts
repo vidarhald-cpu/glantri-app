@@ -42,7 +42,6 @@ import {
   transitionCombatCriticalBleedEffect,
   combatCriticalBleedControlStateSchema,
   combatCriticalExactRationalSchema,
-  combatStepEventSchema,
   buildPlayerSafeCombatObservationAttempts,
   buildPlayerSafeCombatObservationRelationships,
   activateCombatGenericAction,
@@ -165,6 +164,7 @@ import {
   normalizeCombatArmorModifierClass,
   rollCombatRoundCombatExperience,
   recordCombatRoundCriticalRoll,
+  recordCombatCriticalBleedTreatmentCommand,
   recordCombatGenericActionRoll,
   recordCombatRoundDamageResult,
   recordCombatRoundDeclaration,
@@ -5431,6 +5431,25 @@ function getContinuedContactEffectTransitionFactsList(command: CombatRoundComman
   return singular ? [singular] : [];
 }
 
+function getCriticalBleedTreatmentTransitionFact(command: CombatRoundCommand) {
+  if (command.type !== "transition_critical_bleed") return undefined;
+  const previousEffect = combatEffectSchema.safeParse(command.facts.previousEffect);
+  const nextEffect = combatEffectSchema.safeParse(command.facts.nextEffect);
+  const scenarioParticipantId = command.facts.scenarioParticipantId;
+  const combatEffectEventId = command.facts.combatEffectEventId;
+  return previousEffect.success &&
+    nextEffect.success &&
+    typeof scenarioParticipantId === "string" &&
+    typeof combatEffectEventId === "string"
+    ? {
+        combatEffectEventId,
+        nextEffect: nextEffect.data,
+        previousEffect: previousEffect.data,
+        scenarioParticipantId,
+      }
+    : undefined;
+}
+
 function attachCombatNpcDeclarationProposalProvenance(input: {
   commandId: string;
   proposal: CombatNpcDeclarationProposal;
@@ -6146,6 +6165,12 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
   controlledEncounterParticipantIds: Set<string>;
   visibleParticipantIds: Set<string>;
 }): CombatRoundCommand | undefined {
+  // Treatment commands retain exact before/after effect snapshots and the authenticated GM actor.
+  // Players receive only the separately sanitized involved event/current-effect projection.
+  if (input.command.type === "transition_critical_bleed") {
+    return undefined;
+  }
+
   // Feint command facts retain undo provenance, including both raw rolls and GM notes.
   // Player live state uses the separately sanitized proposal and projected event history.
   if (
@@ -15376,6 +15401,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounter,
           scenarioParticipants,
         });
+        const previousEffect = combatEffectsStateSchema
+          .parse(scenarioParticipant.state.combatEffects)
+          .effects.find((effect) => effect.id === effectId);
+        if (!previousEffect) {
+          return reply.code(404).send({ error: "Critical Bleed source not found." });
+        }
         const transitioned = transitionCombatCriticalBleedEffect({
           combatEffects: scenarioParticipant.state.combatEffects,
           createdAt: submittedAt,
@@ -15390,58 +15421,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const sourceEffect = transitioned.combatEffects.effects.find(
           (effect) => effect.id === effectId,
         );
-        const step = roundState.events.at(-1)?.step ?? "round_summary";
-        const treatmentEvent = combatStepEventSchema.parse({
-          actorParticipantId: encounterParticipant.id,
+        if (!sourceEffect) {
+          throw new RangeError("Critical Bleed transition did not preserve its source effect.");
+        }
+        const recorded = recordCombatCriticalBleedTreatmentCommand({
           combatEffectEventId: transitioned.treatmentEventId,
-          combatEffectIds: [effectId],
-          completeness: "complete",
-          encounterId,
-          facts: {
-            gmReview: {
-              effectId,
-              partialRate,
-              previousState: transitioned.previousState,
-            },
-            involvedOutcome: {
-              bleedKind:
-                sourceEffect?.criticalRuntime?.kind === "bleed"
-                  ? sourceEffect.criticalRuntime.bleed.kind
-                  : undefined,
-              currentRate: transitioned.rate,
-              nextState: transitioned.nextState,
-              previousState: transitioned.previousState,
-            },
-            publicOutcome: { status: "committed" },
-          },
-          id: transitioned.treatmentEventId,
-          missingFacts: [],
-          occurredAt: submittedAt,
-          ownerParticipantId: encounterParticipant.id,
-          roundNumber: roundState.roundNumber,
-          schemaVersion: 1,
-          sequence: getCombatRoundNextEventSequence(roundState),
-          source: {
-            kind: "canonical",
-            sourceIds: [effectId, transitioned.treatmentEventId],
-          },
-          status: "committed",
-          step,
-          targetParticipantId: encounterParticipant.id,
-          type: "effect_review",
-          visibility: {
-            identityRefs: [
-              { participantId: encounterParticipant.id, role: "actor" },
-              { participantId: encounterParticipant.id, role: "target" },
-            ],
-            involvedParticipantIds: [encounterParticipant.id],
-            outcomeScope: "involved",
-          },
+          createdAt: submittedAt,
+          createdByUserId: user.id,
+          encounterParticipantId: encounterParticipant.id,
+          nextEffect: sourceEffect,
+          partialRate,
+          previousEffect,
+          scenarioParticipantId,
+          state: roundState,
         });
-        const nextRoundState = {
-          ...roundState,
-          events: [...roundState.events, treatmentEvent],
-        };
+        const nextRoundState = recorded.state;
         const saved = await encounterService.commitCombatParticipantStateMutation({
           campaignId: access.campaignId,
           encounterId,
@@ -15459,7 +15453,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             combatEffects: transitioned.combatEffects,
           },
         });
-        return { encounter: saved.encounter, participant: saved.participant };
+        return {
+          command: recorded.command,
+          commandEnvelope: buildCombatRoundCommandEnvelope({ state: nextRoundState }),
+          encounter: saved.encounter,
+          participant: saved.participant,
+        };
       } catch (error) {
         return reply.code(400).send({
           error:
@@ -18488,6 +18487,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           command.type === "commit_phase_damage" &&
           !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
       );
+      const removedCriticalBleedTreatmentCommands = roundState.commands.filter(
+        (command) =>
+          command.roundNumber === roundState.roundNumber &&
+          command.type === "transition_critical_bleed" &&
+          !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
+      );
       const removedCombatExperienceCommands = roundState.commands.filter(
         (command) =>
           command.roundNumber === roundState.roundNumber &&
@@ -18614,6 +18619,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const submittedAt = new Date().toISOString();
       const atomicParticipantEffectCommands = [
+        ...removedCriticalBleedTreatmentCommands,
         ...removedModifierReviewCommands,
         ...removedRoundEndHealthCheckCommands,
         ...removedRoundEndParticipantReviewCommands,
@@ -18632,12 +18638,55 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         ...removedContinuedContactMaintenanceCommands,
         ...removedBreakOffCommitCommands,
       ].some((command) => getContinuedContactEffectTransitionFactsList(command).length > 0);
+      const hasExactCriticalBleedTreatmentRestoration =
+        removedCriticalBleedTreatmentCommands.length > 0;
       if (atomicParticipantEffectCommands.length > 0) {
         const restorationStates = new Map(
           scenarioParticipants.map((participant) => [participant.id, participant.state]),
         );
         let completeAtomicRestoration = true;
         for (const command of atomicParticipantEffectCommands) {
+          const criticalBleedTreatment = getCriticalBleedTreatmentTransitionFact(command);
+          if (criticalBleedTreatment) {
+            const scenarioParticipant = scenarioParticipants.find(
+              (participant) => participant.id === criticalBleedTreatment.scenarioParticipantId,
+            );
+            if (!scenarioParticipant) {
+              completeAtomicRestoration = false;
+              break;
+            }
+            const currentState = restorationStates.get(scenarioParticipant.id)!;
+            const effects = combatEffectsStateSchema.parse(currentState.combatEffects);
+            const currentEffect = effects.effects.find(
+              (effect) => effect.id === criticalBleedTreatment.nextEffect.id,
+            );
+            if (
+              !currentEffect ||
+              JSON.stringify(currentEffect) !== JSON.stringify(criticalBleedTreatment.nextEffect)
+            ) {
+              completeAtomicRestoration = false;
+              break;
+            }
+            restorationStates.set(scenarioParticipant.id, {
+              ...currentState,
+              combatEffects: combatEffectsStateSchema.parse({
+                ...effects,
+                effects: effects.effects.map((effect) =>
+                  effect.id === criticalBleedTreatment.nextEffect.id
+                    ? criticalBleedTreatment.previousEffect
+                    : effect,
+                ),
+                events: effects.events.filter(
+                  (event) => event.id !== criticalBleedTreatment.combatEffectEventId,
+                ),
+              }),
+            });
+            continue;
+          }
+          if (command.type === "transition_critical_bleed") {
+            completeAtomicRestoration = false;
+            break;
+          }
           const continuedContactEffectTransitions =
             getContinuedContactEffectTransitionFactsList(command);
           if (continuedContactEffectTransitions.length > 0) {
@@ -18731,6 +18780,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         if (completeAtomicRestoration) {
           const affectedParticipantIds = new Set(
             atomicParticipantEffectCommands.flatMap((command) => {
+              const criticalBleedTreatment = getCriticalBleedTreatmentTransitionFact(command);
+              if (criticalBleedTreatment) {
+                return [criticalBleedTreatment.scenarioParticipantId];
+              }
               const transitions = getContinuedContactEffectTransitionFactsList(command);
               if (transitions.length > 0) {
                 return transitions.map((transition) => transition.scenarioParticipantId);
@@ -18826,6 +18879,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         if (hasExactContinuedContactEffectRestoration) {
           throw new RangeError(
             "Continued Contact effect state changed before exact undo could be applied.",
+          );
+        }
+        if (hasExactCriticalBleedTreatmentRestoration) {
+          throw new RangeError(
+            "Critical Bleed treatment changed before exact undo could be applied.",
           );
         }
       }

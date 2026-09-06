@@ -928,9 +928,12 @@ describe("CombatLogProjection", () => {
       state({
         events: [
           event({
-            actorParticipantId: "scyrian",
             facts: {
-              gmReview: { effectId: "bleed-1", previousState: "active" },
+              gmReview: {
+                actorUserId: "gm-user-1",
+                effectId: "bleed-1",
+                previousState: "active",
+              },
               involvedOutcome: {
                 bleedKind: "external",
                 nextState: "staunched_zero",
@@ -945,10 +948,7 @@ describe("CombatLogProjection", () => {
             targetParticipantId: "scyrian",
             type: "effect_review",
             visibility: {
-              identityRefs: [
-                { participantId: "scyrian", role: "actor" },
-                { participantId: "scyrian", role: "target" },
-              ],
+              identityRefs: [{ participantId: "scyrian", role: "target" }],
               involvedParticipantIds: ["scyrian"],
               outcomeScope: "involved",
             },
@@ -959,6 +959,7 @@ describe("CombatLogProjection", () => {
 
     expect(projection.events).toContainEqual(
       expect.objectContaining({
+        actor: { displayName: "GM" },
         category: "state_change",
         summary: "Scyrian Cavalry’s Bleed changed from active to staunched.",
         summaryFacts: {

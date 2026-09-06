@@ -154,7 +154,7 @@ vi.mock("@/features/player-combat/playerCombatPhaseModel", async (importOriginal
 
 import CombatRoundManagerPanel, {
   CombatDefenseSnapshotPanel,
-  CriticalBleedTreatmentPanel,
+  CriticalBleedTreatmentControls,
 } from "./CombatRoundManagerPanel";
 import { buildActiveCombatPresentation } from "./view-models/combatPresentationModel";
 import {
@@ -1101,7 +1101,7 @@ function scenarioParticipantWithDefenseLoadout(): ScenarioParticipant {
   } as unknown as ScenarioParticipant;
 }
 
-describe("CriticalBleedTreatmentPanel", () => {
+describe("CriticalBleedTreatmentControls", () => {
   it("keeps exact partial control keyboard-operable and shows the persisted current rate", () => {
     const base = scenarioParticipant({
       gmControlled: true,
@@ -1150,7 +1150,7 @@ describe("CriticalBleedTreatmentPanel", () => {
     const onTransition = vi.fn();
 
     const view = render(
-      <CriticalBleedTreatmentPanel onTransition={onTransition} participant={participant} />,
+      <CriticalBleedTreatmentControls onTransition={onTransition} participant={participant} />,
     );
     const numerator = screen.getByRole("textbox", { name: "Controlled numerator" });
     const denominator = screen.getByRole("textbox", { name: "Denominator" });
@@ -1170,7 +1170,7 @@ describe("CriticalBleedTreatmentPanel", () => {
     });
 
     view.rerender(
-      <CriticalBleedTreatmentPanel
+      <CriticalBleedTreatmentControls
         onTransition={onTransition}
         participant={{
           ...participant,

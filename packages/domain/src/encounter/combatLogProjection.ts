@@ -641,7 +641,7 @@ function projectCriticalBleedTreatment(input: {
     return undefined;
   }
   return baseCandidate({
-    actor: target,
+    actor: { displayName: "GM" },
     category: "state_change",
     encounterId: input.encounterId,
     eventId: `${input.event.id}:bleed-treatment`,
