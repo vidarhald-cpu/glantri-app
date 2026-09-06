@@ -140,5 +140,5 @@ merging.
 On authorization, create one clean short-lived `codex/` branch from the exact accepted `dev` SHA.
 Push and open a draft PR to `dev` only when the dispatch grants that authority. Builder completion
 moves the issue to Ready for Independent QA with exact branch, head, files, and checks. QA approval
-moves it to Ready for Merge. Only the Product Owner or authorized integrator may merge. This contract
+moves it to Ready for Control-plane Acceptance. Only the Product Owner or authorized integrator may merge. This contract
 grants no current Builder, QA, merge, release, or deployment authority.

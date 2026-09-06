@@ -135,7 +135,7 @@ merge.
 
 Each authorized stage uses one clean short-lived `codex/` branch from its exact accepted `dev` SHA,
 one draft PR to `dev`, and exact Builder head evidence. Builder completion moves the active stage to
-Ready for Independent QA; QA approval moves it to Ready for Merge. Only the Product Owner or an
+Ready for Independent QA; QA approval moves it to Ready for Control-plane Acceptance. Only the Product Owner or an
 authorized integrator may merge. Stage 2 must not inherit Stage 1's authorization, assignment,
 branch, or baseline. This contract grants no current Builder, QA, merge, release, or deployment
 authority.
