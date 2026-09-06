@@ -56,16 +56,19 @@ QA that needs PostgreSQL uses only its own linked worktree and issue number:
 ```bash
 pnpm db:task:setup -- --task <issue>
 pnpm db:task:verify
+pnpm db:task:migrate
 pnpm db:task:test
 # run any database-capable app/check through the guarded environment
 pnpm db:task:exec -- <command>
 pnpm db:task:cleanup
 ```
 
-Before the first database-capable command, record the sanitized ownership
-marker, loopback host/port, application and `_test` database names, and
-PostgreSQL 16 result printed by verification. Never copy the primary checkout
-`.env`, inherit another worktree's environment, use
+After setup and verification, run `db:task:migrate` before any guarded
+application or check; setup creates the databases, while `db:task:test` migrates
+only the test database. Before the first database-capable command, record the
+sanitized ownership marker, loopback host/port, application and `_test`
+database names, and PostgreSQL 16 result printed by verification. Never copy
+the primary checkout `.env`, inherit another worktree's environment, use
 `localhost:5432/glantri`, run direct Prisma commands, or clean a container whose
 current-worktree ownership labels do not match. On any guard mismatch, stop as
 `BLOCKED`; do not repair around the guard. Record cleanup or the explicit reason
