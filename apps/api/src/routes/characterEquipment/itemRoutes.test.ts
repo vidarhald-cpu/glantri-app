@@ -130,4 +130,112 @@ describe("Character Equipment item route authority", () => {
       }),
     );
   });
+
+  it("serializes only holder-safe Item facts for a global GM without Campaign authority", async () => {
+    mocks.requireUser.mockResolvedValue({ id: "global-gm-owner", roles: ["game_master"] });
+    mocks.requireAccess.mockResolvedValue({ characterId, kind: "holder" });
+    mocks.getState.mockImplementation(async (_requestedCharacterId, viewer) => ({
+      ...emptyState,
+      itemsById: {
+        "item-1": {
+          id: "item-1",
+          itemFacts: {
+            activeMechanics: [
+              {
+                id: "revealed-ob",
+                kind: "final_attack_ob_delta",
+                value: 1,
+                visibility: "revealed",
+              },
+            ],
+            descriptiveTraits:
+              viewer.kind === "gm"
+                ? [
+                    {
+                      category: "history",
+                      id: "gm-history",
+                      text: "Its former owner is still searching for it.",
+                      visibility: "gm_only",
+                    },
+                  ]
+                : [],
+            templateOverrides: [],
+            unsupportedCapabilities: [],
+            version: 1,
+          },
+        },
+      },
+    }));
+    const app = await buildApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/characters/${characterId}/equipment`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.requireAccess).toHaveBeenCalledWith(
+      { id: "global-gm-owner", roles: ["game_master"] },
+      characterId,
+    );
+    expect(mocks.getState).toHaveBeenCalledWith(characterId, {
+      characterId,
+      kind: "holder",
+    });
+    expect(response.json()).toMatchObject({
+      state: {
+        itemsById: {
+          "item-1": {
+            itemFacts: {
+              activeMechanics: [expect.objectContaining({ id: "revealed-ob" })],
+              descriptiveTraits: [],
+              unsupportedCapabilities: [],
+            },
+          },
+        },
+      },
+    });
+    expect(response.body).not.toContain("gm-history");
+    expect(response.body).not.toContain("former owner");
+    expect(response.body).not.toContain("gm_only");
+  });
+
+  it("serializes GM-private Item facts for the managing Campaign GM", async () => {
+    mocks.requireUser.mockResolvedValue({ id: "campaign-gm", roles: ["game_master"] });
+    mocks.requireAccess.mockResolvedValue({ kind: "gm" });
+    mocks.getState.mockResolvedValue({
+      ...emptyState,
+      itemsById: {
+        "item-1": {
+          id: "item-1",
+          itemFacts: {
+            activeMechanics: [],
+            descriptiveTraits: [
+              {
+                category: "history",
+                id: "gm-history",
+                text: "Its former owner is still searching for it.",
+                visibility: "gm_only",
+              },
+            ],
+            templateOverrides: [],
+            unsupportedCapabilities: [],
+            version: 1,
+          },
+        },
+      },
+    });
+    const app = await buildApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/characters/${characterId}/equipment`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.getState).toHaveBeenCalledWith(characterId, { kind: "gm" });
+    expect(response.body).toContain("gm-history");
+    expect(response.body).toContain("former owner");
+    expect(response.body).toContain("gm_only");
+  });
 });
