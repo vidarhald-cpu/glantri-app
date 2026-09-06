@@ -185,7 +185,9 @@ band distinctions:
   Olog Princely Law, and Court Administration. The narrow fosterage exception still excludes the
   latter two.
 
-Every listed route or override is access metadata only and grants zero competence or XP.
+Every listed route or override is access metadata only and grants zero competence or XP. Each
+profile override attributes its scope to an authored normal route or access exception for the same
+profile, and every competency in the override is included in that source's competency scope.
 
 Four narrow exceptions are retained:
 

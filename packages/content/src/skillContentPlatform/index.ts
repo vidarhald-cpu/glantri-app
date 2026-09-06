@@ -548,6 +548,20 @@ export function validateSkillContentRelease(input: unknown): SkillContentRelease
     const competencyById = new Map(release.competencies.map((record) => [record.id, record]));
     const historyIds = new Set(release.histories.map(({ id }) => id));
     const relationshipById = new Map(release.relationships.map((record) => [record.id, record]));
+    const accessSourceById = new Map<
+      string,
+      { competencyIds: ReadonlySet<string>; profileId: string }
+    >();
+    release.profiles.forEach(({ id: profileId, normalRoutes }) => {
+      normalRoutes.forEach(({ competencyIds, id }) => {
+        if (!accessSourceById.has(id))
+          accessSourceById.set(id, { competencyIds: new Set(competencyIds), profileId });
+      });
+    });
+    release.accessExceptions.forEach(({ competencyIds, id, profileId }) => {
+      if (!accessSourceById.has(id))
+        accessSourceById.set(id, { competencyIds: new Set(competencyIds), profileId });
+    });
     release.competencies.forEach((record, index) => {
       addDuplicateTargetDiagnostics({
         add,
@@ -769,6 +783,34 @@ export function validateSkillContentRelease(input: unknown): SkillContentRelease
             `profiles[${index}]`,
             `Unknown access target "${id}".`,
           );
+      });
+      record.overrides.forEach((override, overrideIndex) => {
+        const source = accessSourceById.get(override.attributionId);
+        const path = `profiles[${index}].overrides[${overrideIndex}].attributionId`;
+        if (!source) {
+          add(
+            "SKILL_CONTENT_UNKNOWN_OVERRIDE_ATTRIBUTION",
+            path,
+            `Override attribution "${override.attributionId}" must resolve to an authored access route or exception.`,
+          );
+          return;
+        }
+        if (source.profileId !== record.id) {
+          add(
+            "SKILL_CONTENT_OVERRIDE_ATTRIBUTION_PROFILE_MISMATCH",
+            path,
+            `Override attribution "${override.attributionId}" belongs to profile "${source.profileId}", not "${record.id}".`,
+          );
+          return;
+        }
+        override.competencyIds.forEach((competencyId, competencyIndex) => {
+          if (!source.competencyIds.has(competencyId))
+            add(
+              "SKILL_CONTENT_OVERRIDE_ATTRIBUTION_SCOPE_MISMATCH",
+              `profiles[${index}].overrides[${overrideIndex}].competencyIds[${competencyIndex}]`,
+              `Override attribution "${override.attributionId}" does not authorize competency "${competencyId}".`,
+            );
+        });
       });
     });
     const profileIds = new Set(release.profiles.map(({ id }) => id));

@@ -328,6 +328,92 @@ describe("documentation-complete Skill content platform", () => {
     });
   });
 
+  it("resolves profile override attribution against the same-profile authored source scope", () => {
+    expect(validateSkillContentRelease(candidate()).valid).toBe(true);
+
+    const routeAttributed = candidate();
+    routeAttributed.profiles[0]!.overrides[0]!.attributionId = "route:mogreb-temple";
+    routeAttributed.profiles[0]!.overrides[0]!.competencyIds = ["skill:medicine"];
+    routeAttributed.manifest = {
+      ...routeAttributed.manifest,
+      ...computeSkillContentReleaseIntegrity(routeAttributed),
+    };
+    expect(validateSkillContentRelease(routeAttributed).valid).toBe(true);
+
+    const unresolved = candidate();
+    unresolved.profiles[0]!.overrides[0]!.attributionId = "source:does-not-exist";
+    unresolved.manifest = {
+      ...unresolved.manifest,
+      ...computeSkillContentReleaseIntegrity(unresolved),
+    };
+    expect(validateSkillContentRelease(unresolved).diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "SKILL_CONTENT_UNKNOWN_OVERRIDE_ATTRIBUTION",
+          path: "profiles[0].overrides[0].attributionId",
+        }),
+      ]),
+    );
+
+    const missing = candidate();
+    delete (missing.profiles[0]!.overrides[0] as Partial<{ attributionId: string }>).attributionId;
+    expect(validateSkillContentRelease(missing).diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "SKILL_CONTENT_INVALID_SHAPE",
+          path: "profiles[0].overrides[0].attributionId",
+        }),
+      ]),
+    );
+
+    const wrongProfile = candidate();
+    wrongProfile.profiles = [
+      ...wrongProfile.profiles,
+      {
+        ...structuredClone(wrongProfile.profiles[0]!),
+        id: "profile:other",
+        name: "Other",
+        normalRoutes: [
+          {
+            ...structuredClone(wrongProfile.profiles[0]!.normalRoutes[0]!),
+            id: "route:other-medicine",
+            competencyIds: ["skill:medicine"],
+          },
+        ],
+        overrides: [],
+      },
+    ];
+    wrongProfile.profiles[0]!.overrides[0]!.attributionId = "route:other-medicine";
+    wrongProfile.manifest.counts.profiles = 2;
+    wrongProfile.manifest = {
+      ...wrongProfile.manifest,
+      ...computeSkillContentReleaseIntegrity(wrongProfile),
+    };
+    expect(validateSkillContentRelease(wrongProfile).diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "SKILL_CONTENT_OVERRIDE_ATTRIBUTION_PROFILE_MISMATCH",
+          path: "profiles[0].overrides[0].attributionId",
+        }),
+      ]),
+    );
+
+    const wrongScope = candidate();
+    wrongScope.profiles[0]!.overrides[0]!.attributionId = "route:mogreb-temple";
+    wrongScope.manifest = {
+      ...wrongScope.manifest,
+      ...computeSkillContentReleaseIntegrity(wrongScope),
+    };
+    expect(validateSkillContentRelease(wrongScope).diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "SKILL_CONTENT_OVERRIDE_ATTRIBUTION_SCOPE_MISMATCH",
+          path: "profiles[0].overrides[0].competencyIds[0]",
+        }),
+      ]),
+    );
+  });
+
   it("validates record provenance, complete task envelopes, and Specialization parents", () => {
     const mutations: Array<[string, (release: SkillContentRelease) => void]> = [
       [
