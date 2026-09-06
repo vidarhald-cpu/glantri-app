@@ -57,6 +57,30 @@ wait_for_service() {
   exit 1
 }
 
+render_config() {
+  uuid=$1
+  case "$uuid" in
+    ????????-????-????-????-????????????) ;;
+    *)
+      printf 'Runner configuration does not contain a valid UUID.\n' >&2
+      exit 1
+      ;;
+  esac
+
+  config_path="$RUNNER_HOME/state/runner-config.yml"
+  temporary_config="$config_path.tmp"
+  umask 077
+  sed "s/__RUNNER_UUID__/$uuid/" "$SOURCE_DIR/runner-config.template.yml" >"$temporary_config"
+  chmod 600 "$temporary_config"
+  mv "$temporary_config" "$config_path"
+}
+
+refresh_config() {
+  config_path="$RUNNER_HOME/state/runner-config.yml"
+  uuid=$(sed -n 's/^      uuid: \(.*\)$/\1/p' "$config_path")
+  render_config "$uuid"
+}
+
 bootstrap() {
   if [ -e "$RUNNER_HOME/state/runner-token" ] && [ -e "$RUNNER_HOME/state/runner-config.yml" ]; then
     printf 'Runner token already exists; use up or restart instead of rotating it.\n' >&2
@@ -101,8 +125,7 @@ bootstrap() {
       ;;
   esac
 
-  sed "s/__RUNNER_UUID__/$uuid/" "$SOURCE_DIR/runner-config.template.yml" >"$RUNNER_HOME/state/runner-config.yml"
-  chmod 600 "$RUNNER_HOME/state/runner-config.yml"
+  render_config "$uuid"
   unset secret
 
   compose up --detach
@@ -114,6 +137,7 @@ bootstrap() {
 up() {
   test -s "$RUNNER_HOME/state/runner-token"
   test -s "$RUNNER_HOME/state/runner-config.yml"
+  refresh_config
   cp "$SOURCE_DIR/compose.yaml" "$RUNNER_HOME/compose.yaml"
   compose up --detach
   wait_for_service
@@ -121,6 +145,7 @@ up() {
 }
 
 restart() {
+  refresh_config
   compose restart
   wait_for_service
   verify

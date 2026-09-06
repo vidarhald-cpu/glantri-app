@@ -71,6 +71,12 @@ through that daemon. Each `docker-test` run uses run-specific names and has an
 removes job, step, service containers, and its job network. Periodically inspect
 and prune only the dedicated DIND cache when disk use warrants it.
 
+The Node job image receives the DIND Docker client and CLI plugins through two
+read-only mounts. Forgejo Runner permits only those exact public executable
+paths in `container.valid_volumes`; workflows cannot request any other host or
+DIND filesystem mount. The client connects only to the isolated DIND TCP daemon
+through `DOCKER_HOST`.
+
 ## Current workflow audit
 
 `ci` runs for branch pushes and pull requests. It checks changed-file formatting
@@ -125,6 +131,9 @@ user-owner and instance runners.
 
 Both containers use `restart: unless-stopped`; after Docker Desktop and the
 loopback Forgejo container return, the runner reconnects without interaction.
+`up` and `restart` atomically refresh the rendered external configuration from
+the committed template while retaining the existing UUID and token; they do not
+rotate or print either credential.
 Exercise and verify restart with:
 
 ```bash

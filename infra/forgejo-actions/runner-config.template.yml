@@ -30,7 +30,11 @@ container:
     --add-host=dind.docker.internal:host-gateway
     --volume /usr/local/bin/docker:/usr/local/bin/docker:ro
     --volume /usr/local/libexec/docker/cli-plugins:/usr/local/libexec/docker/cli-plugins:ro
-  valid_volumes: []
+  # Only the public Docker client and its plugins may be mounted into a job.
+  # Forgejo Runner filters --volume options through this exact allowlist.
+  valid_volumes:
+    - /usr/local/bin/docker
+    - /usr/local/libexec/docker/cli-plugins
   docker_host: "-"
   force_pull: false
   force_rebuild: false
