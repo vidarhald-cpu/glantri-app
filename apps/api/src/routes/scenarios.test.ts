@@ -21050,6 +21050,188 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
   });
 
+  it("rebuilds a five-key Critical review from server canon and rejects an omitted identity", async () => {
+    const fixture = makeCriticalRollMutationFixture({ c1: true });
+    const attackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+      participantId: "encounter-participant-1",
+      phase: "phase1",
+      state: fixture.state,
+    });
+    if (!attackResult) throw new Error("Expected attack result.");
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult,
+      command: { createdAt: "2026-01-01T00:05:45.000Z", createdByUserId: "gm-1" },
+      criticalDice: [4, 4],
+      rolledByParticipantId: "encounter-participant-1",
+      state: fixture.state,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:45.000Z",
+    });
+    const damageReview = afterCritical.phaseResolutionResults.find(
+      (result) => result.attackResultId === fixture.attackResultId,
+    )?.damageResult?.review;
+    expect(damageReview?.criticalEffectProposal?.critKey).toBe("sharp|chest|04");
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: afterCritical,
+        participants: fixture.encounterParticipants,
+      },
+      participants: fixture.scenarioParticipants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const missingIdentityResponse = await app.inject({
+      method: "POST",
+      payload: {
+        ...buildDownstreamTaskPayload(afterCritical, "commit_phase_damage"),
+        review: { additionalEffects: [], operationalConsequences: [] },
+      },
+      url: "/encounters/encounter-1/combat-round/save-damage-review",
+    });
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        ...buildDownstreamTaskPayload(afterCritical, "commit_phase_damage"),
+        review: {
+          ...damageReview,
+          criticalEffectProposal: {
+            ...damageReview?.criticalEffectProposal,
+            adjudication: {
+              criticalKey: "sharp|chest|04",
+              narrativeOverride: "The accepted instance prose is shorter.",
+              reason: "The target was already braced.",
+              suppressedEffectKeys: ["sharp|chest|04|02"],
+            },
+          },
+        },
+      },
+      url: "/encounters/encounter-1/combat-round/save-damage-review",
+    });
+
+    await app.close();
+
+    expect(missingIdentityResponse.statusCode).toBe(400);
+    expect(missingIdentityResponse.json()).toEqual({ error: "Critical review identity is stale." });
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    const savedState = mocks.encounterService.updateEncounter.mock.calls.at(-1)?.[0]?.session
+      .combatRoundState as CombatRoundState;
+    const savedReview = savedState.phaseResolutionResults.find(
+      (result) => result.attackResultId === fixture.attackResultId,
+    )?.damageResult?.review;
+    expect(savedReview?.criticalEffectProposal).toMatchObject({
+      adjudication: {
+        criticalKey: "sharp|chest|04",
+        narrativeOverride: "The accepted instance prose is shorter.",
+        reason: "The target was already braced.",
+        suppressedEffectKeys: ["sharp|chest|04|02"],
+      },
+      bodyText: "The accepted instance prose is shorter.",
+      canonicalReview: {
+        criticalKey: "sharp|chest|04",
+        fixtureVersion: "c1-five-key-post-393-2026-09-06",
+        title: "Pectoral slash disables attacks",
+      },
+      critKey: "sharp|chest|04",
+      title: "Pectoral slash disables attacks",
+    });
+    expect(
+      savedReview?.additionalEffects.find(
+        (effect) => effect.sourceEffectKey === "sharp|chest|04|02",
+      ),
+    ).toMatchObject({ accepted: false });
+  });
+
+  it("persists a GM-only exact Critical Bleed transition with an involved history event", async () => {
+    const fixture = makeCriticalRollMutationFixture({ c1: true });
+    const target = {
+      ...fixture.scenarioParticipants[1]!,
+      state: {
+        ...fixture.scenarioParticipants[1]!.state,
+        combatEffects: {
+          effects: [
+            {
+              createdAt: "2026-01-01T00:05:45.000Z",
+              criticalRuntime: {
+                bleed: {
+                  allowedControlStates: ["active", "partial", "staunched_zero", "resolved"],
+                  controlState: "active",
+                  currentRate: { denominator: 2, numerator: 1 },
+                  firstTickRound: 2,
+                  kind: "external",
+                  rate: { denominator: 2, numerator: 1 },
+                  sourceEffectKey: "blunt|arm|12|03",
+                  sourceRate: "1 HP / 2 rounds",
+                },
+                criticalKey: "blunt|arm|12",
+                fixtureVersion: "c1-five-key-post-393-2026-09-06",
+                kind: "bleed",
+              },
+              damage: 0,
+              description: "Bleed 1/2 HP per round.",
+              effectGroup: "bleed",
+              generalDamage: 0,
+              id: "critical-bleed",
+              sourceEventId: "critical-event",
+              status: "active",
+              targetParticipantId: "participant-2",
+              type: "bleed",
+              updatedAt: "2026-01-01T00:05:45.000Z",
+            },
+          ],
+          events: [],
+        },
+      },
+    };
+    const setup = setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: fixture.state,
+        participants: fixture.encounterParticipants,
+      },
+      participants: [fixture.scenarioParticipants[0]!, target],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        effectId: "critical-bleed",
+        expectedRevision: setup.encounter.updatedAt,
+        nextState: "partial",
+        partialRate: { denominator: 4, numerator: 1 },
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/transition-critical-bleed",
+    });
+
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(response.json().participant.state.combatEffects.effects[0]).toMatchObject({
+      criticalRuntime: {
+        bleed: {
+          controlState: "partial",
+          currentRate: { denominator: 4, numerator: 1 },
+        },
+      },
+      description: "Bleed 1/4 HP per round · controlled.",
+    });
+    const savedRoundState = response.json().encounter.combatRoundState as CombatRoundState;
+    expect(savedRoundState.events.at(-1)).toMatchObject({
+      facts: {
+        involvedOutcome: {
+          bleedKind: "external",
+          currentRate: { denominator: 4, numerator: 1 },
+          nextState: "partial",
+          previousState: "active",
+        },
+      },
+      targetParticipantId: "encounter-participant-2",
+      type: "effect_review",
+      visibility: { outcomeScope: "involved" },
+    });
+  });
+
   it("rejects player use of the GM damage review save route", async () => {
     setupCombatDeclarationRoute({ user: mocks.playerUser });
     const app = await buildScenarioTestApp();

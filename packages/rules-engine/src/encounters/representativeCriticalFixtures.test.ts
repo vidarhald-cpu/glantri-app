@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   accrueRepresentativeBleed,
   buildRepresentativeCriticalRuntimeDefinition,
+  getC1FiveKeyCanonicalReview,
   getActiveMortalityOrPermanenceMechanics,
   getRepresentativeCriticalFixture,
   getRepresentativeTreatmentSkillCandidates,
@@ -20,7 +21,7 @@ describe("#377 representative C1 Critical fixtures", () => {
     expect(REPRESENTATIVE_CRITICAL_FIXTURES).toHaveLength(34);
     expect(
       createHash("sha256").update(JSON.stringify(REPRESENTATIVE_CRITICAL_FIXTURES)).digest("hex"),
-    ).toBe("373b8e6e02efb6676667acf15000c0000a53469473677819d01c21595ca5a10d");
+    ).toBe("c25f320da6f7f02bacad8ebfd63e46455f2729fee9ed96391ddc3d2fd1e00020");
   });
 
   it("retains unique stable identities, exact workbook provenance, and current source rows", () => {
@@ -60,7 +61,7 @@ describe("#377 representative C1 Critical fixtures", () => {
       severity: 3,
     });
     expect(getRepresentativeCriticalFixture("blunt|arm|12")?.stun).toMatchObject({
-      modifier: -8,
+      modifier: -4,
       severity: 4,
     });
     expect(getRepresentativeCriticalFixture("sharp|head|04")?.stun).toMatchObject({
@@ -98,7 +99,7 @@ describe("#377 representative C1 Critical fixtures", () => {
         ),
       ),
     );
-    expect(fixedRates).toEqual(new Set(["1/8", "1/3", "1/2", "2/3", "3/4"]));
+    expect(fixedRates).toEqual(new Set(["1/8", "1/4", "1/3", "1/2", "2/3", "3/4"]));
     expect(
       new Set(
         REPRESENTATIVE_CRITICAL_FIXTURES.flatMap((fixture) =>
@@ -194,9 +195,9 @@ describe("#377 representative C1 Critical fixtures", () => {
     const mild = getRepresentativeCriticalFixture("pointed_weapons|arm|02")!.stun!;
     const severe = getRepresentativeCriticalFixture("blunt|arm|12")!.stun!;
 
-    expect(sumIndependentCriticalStuns([mild, severe], "ob_skill")).toBe(-9);
-    expect(sumIndependentCriticalStuns([mild, severe], "db_parry")).toBe(-9);
-    expect(sumIndependentCriticalStuns([mild, severe], "initiative")).toBe(-9);
+    expect(sumIndependentCriticalStuns([mild, severe], "ob_skill")).toBe(-5);
+    expect(sumIndependentCriticalStuns([mild, severe], "db_parry")).toBe(-5);
+    expect(sumIndependentCriticalStuns([mild, severe], "initiative")).toBe(-5);
   });
 
   it("adds separate external/internal Bleeds with exact rational arithmetic and carried remainder", () => {
@@ -239,31 +240,17 @@ describe("#377 representative C1 Critical fixtures", () => {
     );
   });
 
-  it("builds a retained server-owned runtime only for the 34 active fixtures", () => {
-    const rolls = [0.49, 0.99];
-    const runtime = buildRepresentativeCriticalRuntimeDefinition(
-      "falling_crushing|whole_body|10",
-      () => rolls.shift() ?? 0,
-    );
-
-    expect(runtime?.bleed).toEqual([
-      expect.objectContaining({
-        allowedControlStates: ["active", "partial", "staunched_zero", "resolved"],
-        rate: { denominator: 12, numerator: 2 },
-        rollFormula: "d4",
-        storedRoll: 2,
-      }),
-      expect.objectContaining({
-        allowedControlStates: ["active", "stabilised", "resolved"],
-        rate: { denominator: 12, numerator: 4 },
-        rollFormula: "d4",
-        storedRoll: 4,
-      }),
-    ]);
+  it("keeps #387 runtime authority while limiting the new review contract to five keys", () => {
+    expect(
+      buildRepresentativeCriticalRuntimeDefinition("falling_crushing|whole_body|10"),
+    ).toBeDefined();
     expect(buildRepresentativeCriticalRuntimeDefinition("sharp|arm|02")).toBeUndefined();
+    expect(buildRepresentativeCriticalRuntimeDefinition("pointed_weapons|arm|02")).toBeDefined();
+    expect(buildRepresentativeCriticalRuntimeDefinition("sharp|head|10")).toBeDefined();
+    expect(getC1FiveKeyCanonicalReview("falling_crushing|whole_body|10")).toBeUndefined();
   });
 
-  it("maps blunt|arm|12 into separate severe Stun, collapse, hand loss, drop, Bleed, and care facts", () => {
+  it("maps post-#393 blunt|arm|12 without the rejected collapse and with Stun -4", () => {
     const runtime = buildRepresentativeCriticalRuntimeDefinition("blunt|arm|12", () => 0);
 
     expect(runtime).toMatchObject({
@@ -274,15 +261,12 @@ describe("#377 representative C1 Critical fixtures", () => {
           rate: { denominator: 2, numerator: 1 },
         }),
       ],
-      conditions: expect.arrayContaining([
-        expect.objectContaining({ code: "collapse", target: "whole_body" }),
-        expect.objectContaining({ code: "function_unusable", target: "hand" }),
-      ]),
+      conditions: [expect.objectContaining({ code: "function_unusable", target: "hand" })],
       criticalKey: "blunt|arm|12",
       operations: ["drop_held_item"],
       stun: expect.objectContaining({
         channels: ["ob_skill", "db_parry", "initiative"],
-        modifier: -8,
+        modifier: -4,
       }),
       treatment: expect.objectContaining({
         stages: [
@@ -291,6 +275,57 @@ describe("#377 representative C1 Critical fixtures", () => {
         ],
       }),
     });
+  });
+
+  it("applies only permitted atom suppression and Stun magnitude deltas", () => {
+    const runtime = buildRepresentativeCriticalRuntimeDefinition(
+      "pointed_weapons|arm|02",
+      () => 0,
+      {
+        criticalKey: "pointed_weapons|arm|02",
+        stunModifierOverride: -4,
+        suppressedEffectKeys: ["pointed_weapons|arm|02|03", "pointed_weapons|arm|02|05"],
+      },
+    );
+
+    expect(runtime).toMatchObject({ bleed: [], operations: [], stun: { modifier: -4 } });
+    expect(() =>
+      buildRepresentativeCriticalRuntimeDefinition("pointed_weapons|arm|02", () => 0, {
+        criticalKey: "pointed_weapons|arm|02",
+        suppressedEffectKeys: ["pointed_weapons|arm|02|01"],
+      }),
+    ).toThrow("cannot be suppressed");
+    expect(() =>
+      buildRepresentativeCriticalRuntimeDefinition("sharp|head|10", () => 0, {
+        criticalKey: "sharp|head|10",
+        stunModifierOverride: -1,
+        suppressedEffectKeys: [],
+      }),
+    ).toThrow("no Stun atom");
+    expect(
+      buildRepresentativeCriticalRuntimeDefinition("sharp|head|10", () => 0)?.conditions[0],
+    ).toMatchObject({
+      duration: { storedRoll: 1, unit: "hour" },
+    });
+  });
+
+  it("publishes immutable six-kind review atoms with exact frozen provenance", () => {
+    const review = getC1FiveKeyCanonicalReview("pointed_weapons|chest|07");
+    expect(review).toMatchObject({
+      criticalKey: "pointed_weapons|chest|07",
+      provenance: {
+        effectRange: "AppFacing_Effects!A1901:AE1904",
+        resultRange: "AppFacing_Crits!A552:X552",
+      },
+      title: "Punctured lung shortens every breath",
+    });
+    expect(review?.atoms).toContainEqual(
+      expect.objectContaining({
+        kind: "periodic_loss",
+        sourceEffectKey: "pointed_weapons|chest|07|03",
+        summary: "Internal Bleed 1/4 HP per round",
+      }),
+    );
   });
 
   it("does not manufacture a Skill candidate from generic treatment language", () => {

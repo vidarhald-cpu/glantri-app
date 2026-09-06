@@ -175,6 +175,8 @@ import {
 import type { CombatCriticalRuntimeDefinition } from "./combatCriticalRuntime";
 import {
   accrueCombatCriticalBleed,
+  combatCriticalAdjudicationSchema,
+  combatCriticalCanonicalReviewSchema,
   combatCriticalBleedAccumulatorSchema,
   combatCriticalExactRationalSchema,
   getCombatCriticalBleedEffectiveRate,
@@ -1652,6 +1654,8 @@ export const combatRoundDamageResultSchema = z.object({
       armorCriticalModifierOverride: z.number().int().optional(),
       criticalEffectProposal: z
         .object({
+          adjudication: combatCriticalAdjudicationSchema.optional(),
+          canonicalReview: combatCriticalCanonicalReviewSchema.optional(),
           bodyText: z.string().min(1).optional(),
           criticalIndexStatus: z
             .enum(["no_effect", "table_lookup", "unsupported_high", "unsupported"])
@@ -1745,6 +1749,20 @@ function getAcceptedCombatRoundDamageReviewAdditionalEffects(
     (effect) =>
       effect.accepted !== false && !isCriticalEffectSourceConflictKey(effect.sourceEffectKey),
   );
+}
+
+function getAcceptedManualCombatRoundDamageReviewAdditionalEffects(
+  review?: CombatRoundDamageReview,
+): CombatRoundDamageReviewAdditionalEffect[] {
+  return getAcceptedCombatRoundDamageReviewAdditionalEffects(review).filter(
+    (effect) => !isCombatRoundCriticalTableReviewEffect(effect),
+  );
+}
+
+function isFiveKeyCriticalReviewRuntime(
+  criticalRuntime?: CombatCriticalRuntimeDefinition,
+): boolean {
+  return criticalRuntime?.fixtureVersion === "c1-five-key-post-393-2026-09-06";
 }
 
 function removeCombatRoundCriticalEffectProposalFromReview(
@@ -2238,12 +2256,25 @@ function mergeCombatRoundCriticalEffectProposalIntoReview(input: {
 
     return prior ? { ...consequence, accepted: prior.accepted } : consequence;
   });
+  const preservedAdjudication = sourceConflictSafeReview?.criticalEffectProposal?.adjudication;
+  const preservedCanonicalReview =
+    sourceConflictSafeReview?.criticalEffectProposal?.canonicalReview;
 
   return enforceCombatRoundCriticalSourceConflictRejections(
     combatRoundDamageResultSchema.shape.review.unwrap().parse({
       ...existingReview,
       additionalEffects: [...existingReview.additionalEffects, ...proposedEffects],
-      criticalEffectProposal: buildCriticalEffectProposalSummary(proposal),
+      criticalEffectProposal: {
+        ...buildCriticalEffectProposalSummary(proposal),
+        adjudication:
+          preservedAdjudication?.criticalKey === proposal.criticalResult?.critKey
+            ? preservedAdjudication
+            : undefined,
+        canonicalReview:
+          preservedCanonicalReview?.criticalKey === proposal.criticalResult?.critKey
+            ? preservedCanonicalReview
+            : undefined,
+      },
       operationalConsequences: [
         ...(existingReview.operationalConsequences ?? []),
         ...reconciledOperationalConsequences,
@@ -12823,9 +12854,11 @@ function buildCombatRoundDamageCommitRows(input: {
     roundNumber: input.command.roundNumber,
   };
   const eventId = buildCombatRoundDamageCommitEventId(idInput);
-  const reviewAdditionalEffects = input.criticalRuntime
-    ? []
-    : getAcceptedCombatRoundDamageReviewAdditionalEffects(input.damageResult.review);
+  const reviewAdditionalEffects = isFiveKeyCriticalReviewRuntime(input.criticalRuntime)
+    ? getAcceptedManualCombatRoundDamageReviewAdditionalEffects(input.damageResult.review)
+    : input.criticalRuntime
+      ? []
+      : getAcceptedCombatRoundDamageReviewAdditionalEffects(input.damageResult.review);
   const reviewOperationalConsequences = getAcceptedCombatRoundOperationalConsequences(
     input.damageResult,
   );
@@ -16869,6 +16902,9 @@ function buildCombatDamageResultPresentation(input: {
         ...(input.effectiveDamage.effectiveCriticalGrade
           ? [`Critical ${input.effectiveDamage.effectiveCriticalGrade}`]
           : []),
+        ...(input.damageResult.review?.criticalEffectProposal?.title
+          ? [input.damageResult.review.criticalEffectProposal.title]
+          : []),
       ],
       label: "Damage committed",
     },
@@ -17009,9 +17045,11 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
           }),
         ]
       : [];
-  const acceptedAdditionalEffects = input.criticalRuntime
-    ? []
-    : getAcceptedCombatRoundDamageReviewAdditionalEffects(input.damageResult.review);
+  const acceptedAdditionalEffects = isFiveKeyCriticalReviewRuntime(input.criticalRuntime)
+    ? getAcceptedManualCombatRoundDamageReviewAdditionalEffects(input.damageResult.review)
+    : input.criticalRuntime
+      ? []
+      : getAcceptedCombatRoundDamageReviewAdditionalEffects(input.damageResult.review);
   const createdAdditionalCombatEffectIds = acceptedAdditionalEffects.map((effect) =>
     buildCombatRoundDamageCommitEffectId({
       ...idInput,
@@ -17203,6 +17241,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
         },
         involvedOutcome: {
           criticalGrade: command.facts.criticalGrade,
+          criticalTitle: input.damageResult.review?.criticalEffectProposal?.title,
           finalCommittedDamage: command.facts.finalCommittedDamage,
           hitLocation: command.facts.effectiveHitLocation,
         },

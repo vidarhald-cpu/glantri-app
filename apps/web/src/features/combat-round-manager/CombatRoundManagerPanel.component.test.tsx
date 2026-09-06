@@ -152,7 +152,10 @@ vi.mock("@/features/player-combat/playerCombatPhaseModel", async (importOriginal
   };
 });
 
-import CombatRoundManagerPanel, { CombatDefenseSnapshotPanel } from "./CombatRoundManagerPanel";
+import CombatRoundManagerPanel, {
+  CombatDefenseSnapshotPanel,
+  CriticalBleedTreatmentPanel,
+} from "./CombatRoundManagerPanel";
 import { buildActiveCombatPresentation } from "./view-models/combatPresentationModel";
 import {
   beginCombatPerformanceInteraction,
@@ -1097,6 +1100,108 @@ function scenarioParticipantWithDefenseLoadout(): ScenarioParticipant {
     },
   } as unknown as ScenarioParticipant;
 }
+
+describe("CriticalBleedTreatmentPanel", () => {
+  it("keeps exact partial control keyboard-operable and shows the persisted current rate", () => {
+    const base = scenarioParticipant({
+      gmControlled: true,
+      id: "scenario-defender",
+      name: "Scyrian cavalry guy",
+      order: 1,
+    });
+    const participant = {
+      ...base,
+      state: {
+        ...base.state,
+        combatEffects: {
+          effects: [
+            {
+              createdAt: "2026-07-23T10:00:00.000Z",
+              criticalRuntime: {
+                bleed: {
+                  allowedControlStates: ["active", "partial", "staunched_zero", "resolved"],
+                  controlState: "active",
+                  currentRate: { denominator: 2, numerator: 1 },
+                  firstTickRound: 2,
+                  kind: "external",
+                  rate: { denominator: 2, numerator: 1 },
+                  sourceEffectKey: "blunt|arm|12|03",
+                  sourceRate: "1 HP / 2 rounds",
+                },
+                criticalKey: "blunt|arm|12",
+                fixtureVersion: "c1-five-key-post-393-2026-09-06",
+                kind: "bleed",
+              },
+              damage: 0,
+              effectGroup: "bleed",
+              generalDamage: 0,
+              id: "critical-bleed",
+              sourceEventId: "critical-event",
+              status: "active",
+              targetParticipantId: "scenario-defender",
+              type: "bleed",
+              updatedAt: "2026-07-23T10:00:00.000Z",
+            },
+          ],
+          events: [],
+        },
+      },
+    } as ScenarioParticipant;
+    const onTransition = vi.fn();
+
+    const view = render(
+      <CriticalBleedTreatmentPanel onTransition={onTransition} participant={participant} />,
+    );
+    const numerator = screen.getByRole("textbox", { name: "Controlled numerator" });
+    const denominator = screen.getByRole("textbox", { name: "Denominator" });
+    const markControlled = screen.getByRole("button", { name: "Mark controlled" });
+    expect(screen.getByText(/1\/2 HP\/round · active/)).toBeInTheDocument();
+    expect(markControlled).toBeDisabled();
+
+    numerator.focus();
+    expect(numerator).toHaveFocus();
+    fireEvent.change(numerator, { target: { value: "1" } });
+    fireEvent.change(denominator, { target: { value: "4" } });
+    expect(markControlled).toBeEnabled();
+    fireEvent.click(markControlled);
+    expect(onTransition).toHaveBeenCalledWith("critical-bleed", "partial", {
+      denominator: 4,
+      numerator: 1,
+    });
+
+    view.rerender(
+      <CriticalBleedTreatmentPanel
+        onTransition={onTransition}
+        participant={{
+          ...participant,
+          state: {
+            ...participant.state,
+            combatEffects: {
+              ...participant.state.combatEffects,
+              events: participant.state.combatEffects?.events ?? [],
+              effects: participant.state.combatEffects!.effects.map((effect) => ({
+                ...effect,
+                criticalRuntime:
+                  effect.criticalRuntime?.kind === "bleed"
+                    ? {
+                        ...effect.criticalRuntime,
+                        bleed: {
+                          ...effect.criticalRuntime.bleed,
+                          controlState: "partial",
+                          currentRate: { denominator: 4, numerator: 1 },
+                        },
+                      }
+                    : effect.criticalRuntime,
+              })),
+            },
+          },
+        }}
+      />,
+    );
+    expect(screen.getByText(/1\/4 HP\/round · controlled/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Restore active" })).toBeEnabled();
+  });
+});
 
 afterEach(() => {
   cleanup();

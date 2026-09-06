@@ -922,4 +922,52 @@ describe("CombatLogProjection", () => {
       }),
     );
   });
+
+  it("projects a Critical Bleed lifecycle transition as an involved state change", () => {
+    const projection = project(
+      state({
+        events: [
+          event({
+            actorParticipantId: "scyrian",
+            facts: {
+              gmReview: { effectId: "bleed-1", previousState: "active" },
+              involvedOutcome: {
+                bleedKind: "external",
+                nextState: "staunched_zero",
+                previousState: "active",
+              },
+              publicOutcome: { status: "committed" },
+              rollerPrivate: {},
+            },
+            id: "bleed-treatment-1",
+            ownerParticipantId: "scyrian",
+            sequence: 0,
+            targetParticipantId: "scyrian",
+            type: "effect_review",
+            visibility: {
+              identityRefs: [
+                { participantId: "scyrian", role: "actor" },
+                { participantId: "scyrian", role: "target" },
+              ],
+              involvedParticipantIds: ["scyrian"],
+              outcomeScope: "involved",
+            },
+          }),
+        ],
+      }),
+    );
+
+    expect(projection.events).toContainEqual(
+      expect.objectContaining({
+        category: "state_change",
+        summary: "Scyrian Cavalry’s Bleed changed from active to staunched.",
+        summaryFacts: {
+          bleedKind: "external",
+          kind: "bleed_treatment",
+          nextState: "staunched_zero",
+          previousState: "active",
+        },
+      }),
+    );
+  });
 });

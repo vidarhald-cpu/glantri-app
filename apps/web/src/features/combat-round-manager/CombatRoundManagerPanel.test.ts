@@ -596,6 +596,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("secondaryButtonLabel={");
     expect(source).not.toContain("Edit character-sheet rows");
     expect(source).toContain("Add manual row");
+    expect(source).toContain('aria-label="Canonical Critical review"');
+    expect(source).toContain("Canonical atoms are immutable");
+    expect(source).toContain("Private adjudication reason (optional)");
+    expect(source).toContain('aria-label="Critical Bleed treatment"');
+    expect(source).toContain("transitionCriticalBleedOnServer");
     expect(source).toContain("getCombatDamageReviewDraftEffectRowType");
     expect(source).toContain("getCombatDamageReviewDraftEffectTarget");
     expect(source).toContain("Add modifier row");
