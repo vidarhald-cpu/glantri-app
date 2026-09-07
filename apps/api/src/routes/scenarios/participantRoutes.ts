@@ -9,7 +9,6 @@ import {
 import {
   attachCanonicalPersistentEffectLifecycles,
   isScenarioLiveInteractive,
-  isScenarioReadOnly,
   buildScenarioPlayerVisibleParticipants,
   reusableEntityKindSchema,
   scenarioParticipantJoinSourceSchema,
@@ -129,10 +128,6 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      if (isScenarioReadOnly(scenario.status)) {
-        return reply.code(400).send({ error: "Scenario is not editable in its current status." });
-      }
-
       const campaign = await campaignService.getCampaignById(scenario.campaignId);
 
       if (!campaign) {
@@ -151,6 +146,10 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (isGameMaster && !isScenarioLiveInteractive(scenario.status)) {
+        return reply.code(400).send({ error: "Scenario is not currently open for live updates." });
+      }
+
       if (!canEditCharacterInApi(user)) {
         const character = await characterService.getOwnedCharacter(user.id, characterId);
 
@@ -162,7 +161,7 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
       }
 
       if (!isGameMaster) {
-        if (scenario.status !== "live") {
+        if (!isScenarioLiveInteractive(scenario.status)) {
           return reply.code(404).send({
             error: "Scenario not found.",
           });
@@ -327,8 +326,8 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: "Scenario not found." });
       }
 
-      if (isScenarioReadOnly(scenario.status)) {
-        return reply.code(403).send({ error: "Scenario is not editable in its current status." });
+      if (!isScenarioLiveInteractive(scenario.status)) {
+        return reply.code(403).send({ error: "Scenario is not currently open for live updates." });
       }
 
       if (access.mode === "player" && !isScenarioLiveInteractive(scenario.status)) {
@@ -435,8 +434,8 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: "Scenario not found." });
       }
 
-      if (isScenarioReadOnly(scenario.status)) {
-        return reply.code(400).send({ error: "Scenario is not editable in its current status." });
+      if (!isScenarioLiveInteractive(scenario.status)) {
+        return reply.code(400).send({ error: "Scenario is not currently open for live updates." });
       }
 
       const body = parseBodyObject(request.body, "Participant metadata payload");

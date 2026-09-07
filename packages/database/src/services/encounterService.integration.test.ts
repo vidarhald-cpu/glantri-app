@@ -322,7 +322,7 @@ if (!process.env.DATABASE_URL_TEST) {
       const encounterRepository = createPrismaEncounterRepository(prisma!);
       const encounterService = new EncounterService(encounterRepository, scenarioRepository);
 
-      for (const terminalStatus of ["completed", "archived"] as const) {
+      for (const terminalStatus of ["paused", "completed", "archived"] as const) {
         const scenario = await scenarioService.createScenario({
           campaignId: campaign.id,
           name: `Terminal ${terminalStatus}`,

@@ -4855,7 +4855,7 @@ describe("scenarios route contract", () => {
       id: "scenario-1",
       kind: "combat",
       name: "Bridge Ambush",
-      status: "prepared",
+      status: "draft",
     };
     mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
     mocks.scenarioService.createScenario.mockResolvedValue(scenario);
@@ -4866,7 +4866,7 @@ describe("scenarios route contract", () => {
       payload: {
         kind: "combat",
         name: "Bridge Ambush",
-        status: "prepared",
+        status: "draft",
       },
       url: "/campaigns/campaign-1/scenarios",
     });
@@ -4884,7 +4884,7 @@ describe("scenarios route contract", () => {
       kind: "combat",
       mapAssetId: undefined,
       name: "Bridge Ambush",
-      status: "prepared",
+      status: "draft",
     });
   });
 
@@ -5969,7 +5969,7 @@ describe("scenarios route contract", () => {
       url: "/scenarios/scenario-1",
       payload: {
         expectedRevision: "stale-revision",
-        status: "prepared",
+        status: "live",
       },
     });
 

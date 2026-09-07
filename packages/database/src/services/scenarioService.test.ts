@@ -21,7 +21,8 @@ function rosterCharacters(rosterEntries: CampaignRosterEntry[], ...characterIds:
 
 describe("ScenarioService controller assignment", () => {
   it("explicitly refreshes committed equipment while preserving live participant state", async () => {
-    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const character = createCharacterRecord({ id: "character-1", name: "Scyrian" });
     rosterCharacters(rosterEntries, character.id);
     let equipmentState: Record<string, unknown> = {
@@ -119,7 +120,8 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("prevents one player from being assigned to two active player characters in the same scenario", async () => {
-    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const characters = new Map([
       ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })],
       [
@@ -161,7 +163,8 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("uses Character ownership only while Scenario control is unassigned", async () => {
-    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const character = createCharacterRecord({
       id: "character-1",
       name: "Ari",
@@ -207,7 +210,8 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("denies player access when rostered Character is no longer rostered", async () => {
-    const { rosterEntries, repository } = createScenarioRepositoryStub();
+    const { rosterEntries, repository, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const character = createCharacterRecord({
       id: "character-1",
       name: "Ari",
@@ -254,7 +258,8 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("allows the same controller to manage multiple non-player participants", async () => {
-    const { participants, repository } = createScenarioRepositoryStub();
+    const { participants, repository, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const service = new ScenarioService(
       repository,
       {
@@ -307,7 +312,8 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("rejects an out-of-roster Character before reading or writing Character state", async () => {
-    const { participants, repository } = createScenarioRepositoryStub();
+    const { participants, repository, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     let characterReads = 0;
     const service = new ScenarioService(repository, {
       getCharacterById: async () => {
@@ -329,7 +335,8 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("preserves temporary actor build, sheet, and equipment snapshots from entity input", async () => {
-    const { repository } = createScenarioRepositoryStub();
+    const { repository, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const sourceBuild = createCharacterRecord({
       id: "template-build-1",
       name: "City Guard",
@@ -386,6 +393,7 @@ describe("ScenarioService controller assignment", () => {
 
   it("reuses one concrete entity identity while creating versioned snapshots in later scenarios", async () => {
     const { participants, repository, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const entity = {
       createdAt: "2026-08-13T08:00:00.000Z",
       gmUserId: "gm-1",
@@ -457,7 +465,8 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("enforces the active-control rule when participant metadata is reassigned", async () => {
-    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const characters = new Map([
       ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })],
       ["character-2", createCharacterRecord({ id: "character-2", name: "Bryn", ownerId: null })],
@@ -633,7 +642,7 @@ describe("ScenarioService controller assignment", () => {
       service.updateScenario({
         expectedRevision: "2026-04-21T00:00:00.000Z",
         scenarioId: "scenario-1",
-        status: "prepared",
+        status: "live",
       }),
     ).rejects.toMatchObject({ code: "stale_revision" });
 

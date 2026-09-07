@@ -1,4 +1,5 @@
 import {
+  isScenarioLiveInteractive,
   refreshScenarioParticipantPersistentCombatModifiers,
   type EncounterSession,
   type EncounterSessionSummary,
@@ -375,7 +376,7 @@ export class EncounterService {
       throw new Error("Scenario not found.");
     }
 
-    if (scenario.status === "completed" || scenario.status === "archived") {
+    if (!isScenarioLiveInteractive(scenario.status)) {
       throw new Error("Scenario is not currently live.");
     }
   }

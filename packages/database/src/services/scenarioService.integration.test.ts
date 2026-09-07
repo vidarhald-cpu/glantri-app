@@ -93,6 +93,7 @@ if (!process.env.DATABASE_URL_TEST) {
       const scenario = await service.createScenario({
         campaignId: campaign.id,
         name: "Closed Scene",
+        status: "live",
       });
 
       await expect(
@@ -109,7 +110,7 @@ if (!process.env.DATABASE_URL_TEST) {
       ).resolves.toMatchObject({ ownerId: owner.id });
     });
 
-    it("accepts exactly one terminal mutation when prepared scenarios concurrently transition", async () => {
+    it("accepts exactly one terminal mutation when draft scenarios concurrently transition", async () => {
       const gm = await createTestUser(prisma!, { roles: ["gm"] });
       const repository = createPrismaScenarioRepository(prisma!);
       const campaignService = new CampaignService(repository);
@@ -117,14 +118,14 @@ if (!process.env.DATABASE_URL_TEST) {
 
       const campaign = await campaignService.createCampaign({
         gmUserId: gm.id,
-        name: "Prepared Race",
+        name: "Draft Race",
       });
 
       for (let race = 0; race < 5; race += 1) {
         const scenario = await service.createScenario({
           campaignId: campaign.id,
-          name: `Prepared Race ${race}`,
-          status: "prepared",
+          name: `Draft Race ${race}`,
+          status: "draft",
         });
 
         const [liveResult, archivedResult] = await Promise.allSettled([

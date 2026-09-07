@@ -164,29 +164,30 @@ describe("scenario combat modifier entries", () => {
 
 describe("scenario lifecycle gates", () => {
   it.each([
-    ["draft", "draft", true],
-    ["draft", "prepared", true],
-    ["draft", "live", false],
+    ["draft", "draft", false],
+    ["draft", "live", true],
+    ["draft", "paused", false],
     ["draft", "completed", false],
     ["draft", "archived", true],
-    ["prepared", "draft", true],
-    ["prepared", "prepared", true],
-    ["prepared", "live", true],
-    ["prepared", "completed", false],
-    ["prepared", "archived", true],
     ["live", "draft", false],
-    ["live", "prepared", false],
-    ["live", "live", true],
+    ["live", "live", false],
+    ["live", "paused", true],
     ["live", "completed", true],
     ["live", "archived", false],
+    ["paused", "draft", false],
+    ["paused", "live", true],
+    ["paused", "paused", false],
+    ["paused", "completed", true],
+    ["paused", "archived", false],
     ["completed", "live", false],
-    ["completed", "completed", true],
+    ["completed", "paused", false],
+    ["completed", "completed", false],
     ["completed", "archived", true],
     ["archived", "draft", false],
-    ["archived", "prepared", false],
     ["archived", "live", false],
+    ["archived", "paused", false],
     ["archived", "completed", false],
-    ["archived", "archived", true],
+    ["archived", "archived", false],
   ])("enforces transition from %s to %s", (from, to, expected) => {
     expect(canTransitionScenarioStatus(from as ScenarioStatus, to as ScenarioStatus)).toBe(
       expected,
@@ -194,20 +195,20 @@ describe("scenario lifecycle gates", () => {
   });
 
   it.each([
-    ["draft", false],
-    ["prepared", false],
-    ["live", false],
-    ["completed", true],
-    ["archived", true],
-  ])("marks %s as %s read-only", (status, readOnly) => {
+    ["draft", false, false],
+    ["live", false, true],
+    ["paused", false, false],
+    ["completed", true, false],
+    ["archived", true, false],
+  ])("marks %s as read-only=%s and live-mutable=%s", (status, readOnly, mutable) => {
     expect(isScenarioReadOnly(status as ScenarioStatus)).toBe(readOnly);
-    expect(canMutateScenarioInStatus(status as ScenarioStatus)).toBe(!readOnly);
+    expect(canMutateScenarioInStatus(status as ScenarioStatus)).toBe(mutable);
   });
 
   it.each([
     ["draft", false],
-    ["prepared", false],
     ["live", true],
+    ["paused", false],
     ["completed", false],
     ["archived", false],
   ])("reports interactive access for %s scenarios", (status, interactive) => {

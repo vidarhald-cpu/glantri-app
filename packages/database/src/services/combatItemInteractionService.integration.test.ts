@@ -312,7 +312,7 @@ if (!process.env.DATABASE_URL_TEST) {
     });
 
     it("rejects combat-item commands for terminal Scenario states", async () => {
-      for (const terminalStatus of ["completed", "archived"] as const) {
+      for (const terminalStatus of ["paused", "completed", "archived"] as const) {
         const current = await fixture(`terminal-${terminalStatus}`);
         const commandId = `terminal-${terminalStatus}-command`;
         const cursor = current.persisted.combatRoundState!.currentCursor;

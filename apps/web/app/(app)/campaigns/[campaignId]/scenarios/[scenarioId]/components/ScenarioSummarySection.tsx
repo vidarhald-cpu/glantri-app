@@ -19,7 +19,7 @@ export function ScenarioSummarySection({
   onUpdate,
   scenarioDescription,
   scenarioName,
-  scenarioStatus
+  scenarioStatus,
 }: ScenarioSummarySectionProps) {
   return (
     <section
@@ -31,7 +31,7 @@ export function ScenarioSummarySection({
         display: "grid",
         gap: "0.75rem",
         gridTemplateColumns: "minmax(160px, 1fr) minmax(240px, 2fr) minmax(130px, 0.7fr) auto",
-        padding: "0.85rem 1rem"
+        padding: "0.85rem 1rem",
       }}
     >
       <label style={{ display: "grid", gap: "0.25rem" }}>
@@ -54,9 +54,9 @@ export function ScenarioSummarySection({
           value={scenarioStatus}
         >
           <option value="draft">Draft</option>
-          <option value="prepared">Prepared</option>
-          <option value="live">Live</option>
-          <option value="completed">Completed</option>
+          <option value="live">Active</option>
+          <option value="paused">Paused</option>
+          <option value="completed">Closed</option>
           <option value="archived">Archived</option>
         </select>
       </label>

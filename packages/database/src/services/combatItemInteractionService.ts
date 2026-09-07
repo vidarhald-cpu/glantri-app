@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { equipmentTemplatesById } from "@glantri/content";
 import {
+  isScenarioLiveInteractive,
   projectCombatItemInteractionRecipients,
   revealableEquipmentItemFacts,
   resolveWeaponDisarmMismatch,
@@ -1593,7 +1594,7 @@ export class CombatItemInteractionService {
       throw new CombatItemUnavailableError();
     }
 
-    if (scenario.status === "completed" || scenario.status === "archived") {
+    if (!isScenarioLiveInteractive(scenario.status)) {
       throw new CombatItemUnavailableError();
     }
   }

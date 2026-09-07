@@ -41,7 +41,7 @@ export async function resolveScenarioWorkspaceAccess(
     userId: input.userId,
   });
 
-  if (!hasPlayerAccess || scenario.status === "draft" || scenario.status === "prepared") {
+  if (!hasPlayerAccess || scenario.status === "draft") {
     return null;
   }
 
