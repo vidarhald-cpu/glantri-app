@@ -1,5 +1,4 @@
 import { SKILL_CONTENT_RELEASE_SCHEMA_VERSION } from "@glantri/domain";
-import { execSync } from "node:child_process";
 import type {
   PilotSkillContentCompetencyRecord,
   PilotSkillContentSpecializationRecord,
@@ -14,139 +13,31 @@ import type {
   SkillContentWrittenTraditionRecord,
   SkillTaskEnvelope,
 } from "@glantri/domain";
-import { readFileSync } from "node:fs";
-import path from "node:path";
-
 import { pilotSkillContentReleaseV1 } from "../pilotSkillContentRelease";
 
 const proposalMetadata = {
   provenance: {
     kind: "proposal" as const,
-    reference: "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/25",
+    reference:
+      "http://127.0.0.1:3001/recovery-admin/glantri-app/src/commit/" +
+      "0000000000000000000000000000000000000000" +
+      "/packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts#L1",
   },
   recordVersion: "1",
   status: "proposal" as const,
 };
 
-const proposalFilePath = __dirname;
-const repositoryRoot = path.resolve(proposalFilePath, "..", "..", "..", "..");
-const forgejoRepoSourceRevision = execSync("git rev-parse HEAD", {
-  cwd: repositoryRoot,
-  encoding: "utf8",
-}).trim();
-if (!/^[0-9a-f]{40}$/.test(forgejoRepoSourceRevision)) {
-  throw new Error(`Unexpected git revision ${forgejoRepoSourceRevision}`);
-}
-const forgejoRepoSourceUrl = `http://127.0.0.1:3001/recovery-admin/glantri-app/src/commit/${forgejoRepoSourceRevision}/`;
-
-type SourceSpec = {
-  endMarker?: string;
-  path: string;
-  startMarker?: string;
-};
-
-const recordSourceByKind: Record<string, readonly SourceSpec[]> = {
-  accessExceptions: [
-    {
-      endMarker: "backgrounds:",
-      path: "packages/content/src/pilotSkillContentRelease/release.ts",
-      startMarker: "accessExceptions:",
-    },
-  ],
-  competency: [
-    {
-      endMarker: "const authoredCompetencyDocumentationIds",
-      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
-      startMarker: "const authoredTaskEnvelopeByCompetencyId",
-    },
-  ],
-  domain: [
-    {
-      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
-      startMarker: "const domainDefinitions",
-    },
-  ],
-  history: [
-    {
-      endMarker: "const relationships = (",
-      path: "packages/content/src/pilotSkillContentRelease/release.ts",
-      startMarker: "const histories = (",
-    },
-  ],
-  profile: [
-    {
-      endMarker: ").map(([id, name, developmentStage, routeId, overrides]) => ({",
-      path: "packages/content/src/pilotSkillContentRelease/release.ts",
-      startMarker: "const profiles = (",
-    },
-  ],
-  profiles: [
-    {
-      endMarker: ").map(([id, name, developmentStage, routeId, overrides]) => ({",
-      path: "packages/content/src/pilotSkillContentRelease/release.ts",
-      startMarker: "const profiles = (",
-    },
-  ],
-  relationship: [
-    {
-      endMarker: "const specializations = [",
-      path: "packages/content/src/pilotSkillContentRelease/release.ts",
-      startMarker: "const relationships = (",
-    },
-  ],
-  route: [
-    {
-      endMarker: ").map(([id, name, developmentStage, routeId, overrides]) => ({",
-      path: "packages/content/src/pilotSkillContentRelease/release.ts",
-      startMarker: "const profiles = (",
-    },
-    {
-      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
-      startMarker: "const scythianHomeProfileUnavailabilityRouteId",
-    },
-  ],
-  script: [
-    {
-      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
-      startMarker: "const scripts:",
-    },
-  ],
-  specialization: [
-    {
-      endMarker: "const authoredCompetencyDocumentationIds",
-      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
-      startMarker: "const authoredTaskEnvelopeByCompetencyId",
-    },
-  ],
-};
-
-function readSourceLines(sourcePath: string): string[] {
-  return readFileSync(path.resolve(repositoryRoot, sourcePath), "utf8").split(/\r?\n/);
-}
-
-function extractSourceSegment(
-  sourcePath: string,
-  spec: SourceSpec,
-): { lineOffset: number; lines: string[] } {
-  const lines = readSourceLines(sourcePath);
-  const isMarkerLine = (line: string, marker: string): boolean => {
-    const trimmed = line.trim();
-    return (
-      trimmed.includes(marker) &&
-      !trimmed.startsWith("startMarker:") &&
-      !trimmed.startsWith("endMarker:")
-    );
-  };
-  const start = spec.startMarker
-    ? lines.findIndex((line) => isMarkerLine(line, spec.startMarker!))
-    : 0;
-  const safeStart = Math.max(0, start);
-  const end = spec.endMarker
-    ? lines.findIndex((line, index) => index > safeStart && isMarkerLine(line, spec.endMarker!))
-    : -1;
-  const safeEnd = end >= 0 ? end : lines.length;
-  return { lineOffset: safeStart, lines: lines.slice(safeStart, safeEnd) };
-}
+type ProposalMetadataRecordKind =
+  | "accessExceptions"
+  | "competency"
+  | "domain"
+  | "history"
+  | "profile"
+  | "profiles"
+  | "relationship"
+  | "route"
+  | "script"
+  | "specialization";
 
 const proposalMetadataReference = [
   "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/25",
@@ -158,33 +49,12 @@ const proposalMetadataReference = [
   "docs/rules/pilot-skill-content-release-v1.md",
 ];
 
-function cloneMetadata(recordId: string, kind: keyof typeof recordSourceByKind) {
-  const sourceSpecs = recordSourceByKind[kind];
-  if (!sourceSpecs || sourceSpecs.length === 0) {
-    throw new Error(`Unknown record kind ${kind} for provenance source mapping.`);
+function cloneMetadata(recordId: string, kind: ProposalMetadataRecordKind) {
+  if (!recordId) {
+    throw new Error(`Expected record id for provenance metadata (${kind}).`);
   }
   const clone = structuredClone(proposalMetadata);
-  const idEscaped = recordId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  let resolvedPath: string | undefined;
-  let lineNumber: number | undefined;
-  for (const sourceSpec of sourceSpecs) {
-    const sourcePath = sourceSpec.path;
-    const { lineOffset, lines } = extractSourceSegment(sourcePath, sourceSpec);
-    const match = lines.findIndex((line) => new RegExp(`"${idEscaped}"`).test(line));
-    if (match >= 0) {
-      resolvedPath = sourcePath;
-      lineNumber = lineOffset + match + 1;
-      break;
-    }
-  }
-
-  if (!resolvedPath || lineNumber === undefined) {
-    throw new Error(`Could not locate record ${recordId} in source files for ${kind}.`);
-  }
-  if (!resolvedPath) {
-    throw new Error(`Could not locate record ${recordId} for provenance.`);
-  }
-  clone.provenance.reference = `${forgejoRepoSourceUrl}${resolvedPath}#L${lineNumber}`;
+  clone.provenance.reference = `${proposalMetadata.provenance.reference}/${kind}/${recordId}`;
   return clone;
 }
 

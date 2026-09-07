@@ -1,7 +1,7 @@
 import type { SkillContentRelease, SkillContentWrittenTraditionRecord } from "@glantri/domain";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import path from "node:path";
 
 import { sha256 } from "../integrity/canonicalSha256";
@@ -17,7 +17,219 @@ import { pilotSkillContentReleaseProposalInput } from "./pilotSkillContentReleas
 const repositoryRoot = path.resolve(__dirname, "..", "..", "..", "..");
 
 function candidate(): SkillContentRelease {
-  return buildSkillContentRelease(structuredClone(pilotSkillContentReleaseProposalInput));
+  return buildSkillContentRelease(
+    resolveProvenanceInProposalInput(structuredClone(pilotSkillContentReleaseProposalInput)),
+  );
+}
+
+type ProposalMetadataRecordKind =
+  | "accessExceptions"
+  | "competency"
+  | "domain"
+  | "history"
+  | "profile"
+  | "profiles"
+  | "relationship"
+  | "route"
+  | "script"
+  | "specialization";
+
+type SourceSpec = {
+  endMarker?: string;
+  path: string;
+  startMarker?: string;
+};
+
+const proposalMetadataSourceByKind: Record<ProposalMetadataRecordKind, readonly SourceSpec[]> = {
+  accessExceptions: [
+    {
+      endMarker: "backgrounds:",
+      path: "packages/content/src/pilotSkillContentRelease/release.ts",
+      startMarker: "accessExceptions:",
+    },
+  ],
+  competency: [
+    {
+      endMarker: "const authoredCompetencyDocumentationIds",
+      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+      startMarker: "const authoredTaskEnvelopeByCompetencyId",
+    },
+  ],
+  domain: [
+    {
+      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+      startMarker: "const domainDefinitions",
+    },
+  ],
+  history: [
+    {
+      endMarker: "const relationships = (",
+      path: "packages/content/src/pilotSkillContentRelease/release.ts",
+      startMarker: "const histories = (",
+    },
+  ],
+  profile: [
+    {
+      endMarker: ").map(([id, name, developmentStage, routeId, overrides]) => ({",
+      path: "packages/content/src/pilotSkillContentRelease/release.ts",
+      startMarker: "const profiles = (",
+    },
+  ],
+  profiles: [
+    {
+      endMarker: ").map(([id, name, developmentStage, routeId, overrides]) => ({",
+      path: "packages/content/src/pilotSkillContentRelease/release.ts",
+      startMarker: "const profiles = (",
+    },
+  ],
+  relationship: [
+    {
+      endMarker: "const specializations = [",
+      path: "packages/content/src/pilotSkillContentRelease/release.ts",
+      startMarker: "const relationships = (",
+    },
+  ],
+  route: [
+    {
+      endMarker: ").map(([id, name, developmentStage, routeId, overrides]) => ({",
+      path: "packages/content/src/pilotSkillContentRelease/release.ts",
+      startMarker: "const profiles = (",
+    },
+    {
+      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+      startMarker: "const scythianHomeProfileUnavailabilityRouteId",
+    },
+  ],
+  script: [
+    {
+      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+      startMarker: "const scripts:",
+    },
+  ],
+  specialization: [
+    {
+      endMarker: "const authoredCompetencyDocumentationIds",
+      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+      startMarker: "const authoredTaskEnvelopeByCompetencyId",
+    },
+  ],
+};
+
+const forgejoSourceRevision = execSync("git rev-parse HEAD", {
+  cwd: repositoryRoot,
+  encoding: "utf8",
+}).trim();
+
+if (!/^[0-9a-f]{40}$/.test(forgejoSourceRevision)) {
+  throw new Error(`Unexpected git revision ${forgejoSourceRevision}`);
+}
+
+const proposalSourceBaseUrl = `http://127.0.0.1:3001/recovery-admin/glantri-app/src/commit/${forgejoSourceRevision}/`;
+
+function readSourceLines(sourcePath: string): string[] {
+  return readFileSync(path.resolve(repositoryRoot, sourcePath), "utf8").split(/\r?\n/);
+}
+
+function extractSourceSegment(
+  sourcePath: string,
+  spec: SourceSpec,
+): { lineOffset: number; lines: string[] } {
+  const lines = readSourceLines(sourcePath);
+  const isMarkerLine = (line: string, marker: string): boolean => {
+    const trimmed = line.trim();
+    return (
+      trimmed.includes(marker) &&
+      !trimmed.startsWith("startMarker:") &&
+      !trimmed.startsWith("endMarker:")
+    );
+  };
+  const start = spec.startMarker
+    ? lines.findIndex((line) => isMarkerLine(line, spec.startMarker!))
+    : 0;
+  const safeStart = Math.max(0, start);
+  const end = spec.endMarker
+    ? lines.findIndex((line, index) => index > safeStart && isMarkerLine(line, spec.endMarker!))
+    : -1;
+  const safeEnd = end >= 0 ? end : lines.length;
+  return { lineOffset: safeStart, lines: lines.slice(safeStart, safeEnd) };
+}
+
+function resolveProvenanceReference(recordId: string, kind: ProposalMetadataRecordKind): string {
+  const sourceSpecs = proposalMetadataSourceByKind[kind];
+  if (!sourceSpecs || sourceSpecs.length === 0) {
+    throw new Error(`Unknown record kind ${kind} for provenance source mapping.`);
+  }
+  const idEscaped = recordId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let resolvedPath: string | undefined;
+  let lineNumber: number | undefined;
+  for (const sourceSpec of sourceSpecs) {
+    const sourcePath = sourceSpec.path;
+    const { lineOffset, lines } = extractSourceSegment(sourcePath, sourceSpec);
+    const match = lines.findIndex((line) => new RegExp(`"${idEscaped}"`).test(line));
+    if (match >= 0) {
+      resolvedPath = sourcePath;
+      lineNumber = lineOffset + match + 1;
+      break;
+    }
+  }
+
+  if (!resolvedPath || lineNumber === undefined) {
+    throw new Error(`Could not locate record ${recordId} in source files for ${kind}.`);
+  }
+
+  return `${proposalSourceBaseUrl}${resolvedPath}#L${lineNumber}`;
+}
+
+type TestCandidateSkillContentRelease = Omit<SkillContentRelease, "manifest">;
+
+function resolveProvenanceInProposalInput(
+  input: TestCandidateSkillContentRelease,
+): TestCandidateSkillContentRelease {
+  const release = structuredClone(input);
+  for (const record of release.domains) {
+    record.metadata = structuredClone(record.metadata);
+    record.metadata.provenance.reference = resolveProvenanceReference(record.id, "domain");
+  }
+  for (const record of release.scripts) {
+    record.metadata = structuredClone(record.metadata);
+    record.metadata.provenance.reference = resolveProvenanceReference(record.id, "script");
+  }
+  for (const record of release.competencies) {
+    record.metadata = structuredClone(record.metadata);
+    const kind = record.kind === "specialization" ? "specialization" : "competency";
+    record.metadata.provenance.reference = resolveProvenanceReference(record.id, kind);
+  }
+  for (const record of release.histories) {
+    record.metadata = structuredClone(record.metadata);
+    record.metadata.provenance.reference = resolveProvenanceReference(record.id, "history");
+  }
+  for (const profile of release.profiles) {
+    profile.metadata = structuredClone(profile.metadata);
+    profile.metadata.provenance.reference = resolveProvenanceReference(profile.id, "profile");
+    for (const route of profile.normalRoutes) {
+      route.metadata = structuredClone(route.metadata);
+      route.metadata.provenance.reference = resolveProvenanceReference(route.id, "route");
+    }
+    for (const override of profile.overrides) {
+      if (!hasMetadataRecord(override)) {
+        continue;
+      }
+      override.metadata = structuredClone(override.metadata);
+      override.metadata.provenance.reference = resolveProvenanceReference(override.id, "route");
+    }
+  }
+  for (const record of release.relationships) {
+    record.metadata = structuredClone(record.metadata);
+    record.metadata.provenance.reference = resolveProvenanceReference(record.id, "relationship");
+  }
+  for (const record of release.accessExceptions) {
+    record.metadata = structuredClone(record.metadata);
+    record.metadata.provenance.reference = resolveProvenanceReference(
+      record.id,
+      "accessExceptions",
+    );
+  }
+  return release;
 }
 
 function normalizeWhitespace(value: string): string {
