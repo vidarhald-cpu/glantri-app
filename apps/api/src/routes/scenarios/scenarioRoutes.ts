@@ -217,9 +217,7 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
           return reply.code(404).send({ error: "Available Item not found." });
         }
         if (!canMutateScenarioInStatus(scenario.status)) {
-          return reply
-            .code(400)
-            .send({ error: "Scenario is not editable in its current status." });
+          return reply.code(400).send({ error: "Scenario is not editable in its current status." });
         }
         const body = parseBodyObject(request.body, "Item pickup payload");
         const expectedRevision = parseOptionalString(body, "expectedRevision");
@@ -334,7 +332,9 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const body = parseBodyObject(request.body, "Scenario update payload");
+      const expectedRevision = parseOptionalString(body, "expectedRevision");
       const scenario = await scenarioService.updateScenario({
+        expectedRevision,
         description: parseOptionalString(body, "description"),
         kind: body.kind == null ? undefined : scenarioKindSchema.parse(body.kind),
         mapAssetId: parseOptionalNullableString(body, "mapAssetId"),
@@ -345,6 +345,20 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
 
       return { scenario };
     } catch (error) {
+      const conflictCode =
+        typeof error === "object" && error !== null
+          ? (error as { code?: unknown }).code
+          : undefined;
+
+      if (conflictCode === "stale_revision" || conflictCode === "transaction_conflict") {
+        return reply.code(409).send({
+          code: conflictCode,
+          error:
+            typeof error === "object" && error !== null && "message" in error
+              ? String((error as { message?: unknown }).message ?? "")
+              : "Unable to update scenario.",
+        });
+      }
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to update scenario.",
       });

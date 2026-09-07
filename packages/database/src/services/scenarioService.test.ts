@@ -360,7 +360,11 @@ describe("ScenarioService controller assignment", () => {
     };
     repository.getReusableEntityById = async (entityId) => (entityId === entity.id ? entity : null);
     repository.getScenarioById = async (scenarioId) => {
-      if (scenarioId === scenario.id || scenarioId === "scenario-2" || scenarioId === "scenario-3") {
+      if (
+        scenarioId === scenario.id ||
+        scenarioId === "scenario-2" ||
+        scenarioId === "scenario-3"
+      ) {
         return {
           ...scenario,
           id: scenarioId,
@@ -498,6 +502,95 @@ describe("ScenarioService controller assignment", () => {
         status: "archived",
       }),
     ).resolves.toMatchObject({ status: "archived" });
+  });
+
+  it("locks completed Scenarios to status-only archived transitions", async () => {
+    const { repository, scenario } = createScenarioRepositoryStub();
+    const service = new ScenarioService(repository);
+    let appliedStatus = scenario.status;
+    repository.updateScenario = async (input) => {
+      if (input.status) {
+        scenario.status = input.status;
+        appliedStatus = input.status;
+      }
+      if (input.name !== undefined) scenario.name = input.name;
+      if (input.kind !== undefined) scenario.kind = input.kind;
+      if (input.mapAssetId !== undefined) scenario.mapAssetId = input.mapAssetId ?? undefined;
+      if (input.description !== undefined) scenario.description = input.description;
+      return scenario;
+    };
+
+    scenario.status = "completed";
+
+    await expect(
+      service.updateScenario({
+        scenarioId: "scenario-1",
+        name: "Completed read-only",
+      }),
+    ).rejects.toThrow("Scenario is not editable in its current status.");
+
+    await expect(
+      service.updateScenario({
+        scenarioId: "scenario-1",
+        status: "completed",
+      }),
+    ).rejects.toThrow("Scenario is not editable in its current status.");
+
+    await expect(
+      service.updateScenario({
+        scenarioId: "scenario-1",
+        status: "archived",
+        description: "Blocked metadata update.",
+      }),
+    ).rejects.toThrow("Scenario is not editable in its current status.");
+
+    await expect(
+      service.updateScenario({
+        scenarioId: "scenario-1",
+        status: "archived",
+      }),
+    ).resolves.toMatchObject({ status: "archived" });
+
+    expect(appliedStatus).toBe("archived");
+  });
+
+  it("blocks archived Scenario same-status metadata mutations", async () => {
+    const { repository, scenario } = createScenarioRepositoryStub();
+    const service = new ScenarioService(repository);
+    repository.updateScenario = async () => {
+      return scenario;
+    };
+
+    scenario.status = "archived";
+
+    await expect(
+      service.updateScenario({
+        scenarioId: "scenario-1",
+        status: "archived",
+      }),
+    ).rejects.toThrow("Scenario is not editable in its current status.");
+  });
+
+  it("rejects stale scenario metadata updates before writing", async () => {
+    const { repository, scenario } = createScenarioRepositoryStub();
+    const service = new ScenarioService(repository);
+    const updateInvocations: unknown[] = [];
+    repository.updateScenario = async (input) => {
+      updateInvocations.push(input);
+      scenario.status = input.status ?? scenario.status;
+      return scenario;
+    };
+    scenario.updatedAt = "2026-04-21T00:00:00.001Z";
+
+    await expect(
+      service.updateScenario({
+        expectedRevision: "2026-04-21T00:00:00.000Z",
+        scenarioId: "scenario-1",
+        status: "prepared",
+      }),
+    ).rejects.toMatchObject({ code: "stale_revision" });
+
+    expect(updateInvocations).toHaveLength(0);
   });
 
   it("blocks participant mutations on non-editable Scenario status", async () => {

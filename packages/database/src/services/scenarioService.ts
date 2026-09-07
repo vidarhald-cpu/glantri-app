@@ -12,6 +12,7 @@ import {
   createParticipantSnapshotFromEntity,
   canMutateScenarioInStatus,
   canTransitionScenarioStatus,
+  isScenarioReadOnly,
   isScenarioLiveInteractive,
   formatScenarioAvailableObjectReferenceType,
   scenarioAvailableObjectReferenceSchema,
@@ -39,6 +40,20 @@ export class ScenarioSessionWriteError extends Error {
   ) {
     super(message);
     this.name = "ScenarioSessionWriteError";
+    if (cause !== undefined) {
+      Object.defineProperty(this, "cause", { enumerable: false, value: cause });
+    }
+  }
+}
+
+export class ScenarioMutationConflictError extends Error {
+  constructor(
+    readonly code: "stale_revision" | "transaction_conflict",
+    message: string,
+    cause?: unknown,
+  ) {
+    super(message);
+    this.name = "ScenarioMutationConflictError";
     if (cause !== undefined) {
       Object.defineProperty(this, "cause", { enumerable: false, value: cause });
     }
@@ -127,6 +142,7 @@ export class ScenarioService {
   }
 
   async updateScenario(input: {
+    expectedRevision?: string;
     description?: string;
     kind?: Scenario["kind"];
     mapAssetId?: string | null;
@@ -140,14 +156,37 @@ export class ScenarioService {
       throw new Error("Scenario not found.");
     }
 
-    if (
-      input.status !== undefined &&
-      !canTransitionScenarioStatus(scenario.status, input.status)
-    ) {
+    const hasFieldMutation =
+      input.description !== undefined ||
+      input.kind !== undefined ||
+      input.mapAssetId !== undefined ||
+      input.name !== undefined;
+
+    if (isScenarioReadOnly(scenario.status)) {
+      if (input.status === undefined || input.status === scenario.status || hasFieldMutation) {
+        throw new Error("Scenario is not editable in its current status.");
+      }
+    }
+
+    if (input.expectedRevision !== undefined && scenario.updatedAt !== input.expectedRevision) {
+      throw new ScenarioMutationConflictError(
+        "stale_revision",
+        "Scenario changed before this update could be saved.",
+      );
+    }
+
+    if (input.status !== undefined && !canTransitionScenarioStatus(scenario.status, input.status)) {
       throw new Error(`Scenario cannot transition from ${scenario.status} to ${input.status}.`);
     }
 
-    return this.repository.updateScenario(input);
+    return this.repository.updateScenario({
+      description: input.description,
+      kind: input.kind,
+      mapAssetId: input.mapAssetId,
+      name: input.name,
+      scenarioId: input.scenarioId,
+      status: input.status,
+    });
   }
 
   async updateScenarioSessionState(input: {

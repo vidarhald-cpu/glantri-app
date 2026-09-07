@@ -2,21 +2,18 @@ import type { CampaignService, ScenarioService } from "@glantri/database";
 
 export async function resolveScenarioWorkspaceAccess(
   services: {
-    campaignService: Pick<CampaignService, "getCampaignById">;
+    campaignService: Pick<CampaignService, "getCampaignById" | "listCampaignsByUserAccess">;
     scenarioService: Pick<ScenarioService, "getScenarioById" | "userHasPlayerScenarioAccess">;
   },
   input: {
     scenarioId: string;
     userId: string;
     userRoles: string[];
-  }
-): Promise<
-  | {
-      campaignId: string;
-      mode: "gm" | "player";
-    }
-  | null
-> {
+  },
+): Promise<{
+  campaignId: string;
+  mode: "gm" | "player";
+} | null> {
   const scenario = await services.scenarioService.getScenarioById(input.scenarioId);
 
   if (!scenario) {
@@ -44,12 +41,23 @@ export async function resolveScenarioWorkspaceAccess(
     userId: input.userId,
   });
 
-  if (hasPlayerAccess && scenario.status !== "draft" && scenario.status !== "prepared") {
-    return {
-      campaignId: campaign.id,
-      mode: "player",
-    };
+  if (!hasPlayerAccess || scenario.status === "draft" || scenario.status === "prepared") {
+    return null;
   }
 
-  return null;
+  const campaignsWithUserAccess = await services.campaignService.listCampaignsByUserAccess(
+    input.userId,
+  );
+
+  if (
+    campaignsWithUserAccess &&
+    !campaignsWithUserAccess.some((candidate) => candidate.id === campaign.id)
+  ) {
+    return null;
+  }
+
+  return {
+    campaignId: campaign.id,
+    mode: "player",
+  };
 }

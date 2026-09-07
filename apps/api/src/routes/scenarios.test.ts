@@ -5747,6 +5747,77 @@ describe("scenarios route contract", () => {
     expect(response.body).not.toContain("Controller-only moment");
   });
 
+  it("requires Campaign-home access for player Scenario direct reads", async () => {
+    const scenario = {
+      campaignId: "campaign-1",
+      description: "Private to untrusted player",
+      id: "scenario-1",
+      name: "Hidden Campaign-linked Scenario",
+      status: "live",
+    };
+    mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.campaignService.listCampaignsByUserAccess.mockResolvedValue([]);
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Scenario not found." });
+    expect(response.body).not.toContain("Hidden Campaign-linked Scenario");
+    expect(response.body).not.toContain("Private to untrusted player");
+    expect(mocks.campaignService.listCampaignsByUserAccess).toHaveBeenCalledWith("player-1");
+    expect(mocks.scenarioService.userHasPlayerScenarioAccess).toHaveBeenCalledWith({
+      scenarioId: "scenario-1",
+      userId: "player-1",
+    });
+  });
+
+  it("returns conflict response for stale direct Scenario updates", async () => {
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      createdAt: "2026-04-21T00:00:00.000Z",
+      id: "scenario-1",
+      name: "Stale target",
+      status: "draft",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.scenarioService.updateScenario.mockRejectedValue({
+      code: "stale_revision",
+      message: "Scenario changed before this update could be saved.",
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/scenarios/scenario-1",
+      payload: {
+        expectedRevision: "stale-revision",
+        status: "prepared",
+      },
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      code: "stale_revision",
+      error: "Scenario changed before this update could be saved.",
+    });
+  });
+
   it("returns a bounded metadata-only encounter summary list for the GM workspace", async () => {
     const summaries = Array.from({ length: 50 }, (_, index) => ({
       campaignId: "campaign-1",
