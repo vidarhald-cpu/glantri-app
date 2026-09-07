@@ -1,4 +1,5 @@
 import { SKILL_CONTENT_RELEASE_SCHEMA_VERSION } from "@glantri/domain";
+import { execSync } from "node:child_process";
 import type {
   PilotSkillContentCompetencyRecord,
   PilotSkillContentSpecializationRecord,
@@ -15,7 +16,6 @@ import type {
 } from "@glantri/domain";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { pilotSkillContentReleaseV1 } from "../pilotSkillContentRelease";
 
@@ -28,7 +28,16 @@ const proposalMetadata = {
   status: "proposal" as const,
 };
 
-const forgejoRepoSourceUrl = "http://127.0.0.1:3001/recovery-admin/glantri-app/src/branch/dev/";
+const proposalFilePath = __dirname;
+const repositoryRoot = path.resolve(proposalFilePath, "..", "..", "..", "..");
+const forgejoRepoSourceRevision = execSync("git rev-parse HEAD", {
+  cwd: repositoryRoot,
+  encoding: "utf8",
+}).trim();
+if (!/^[0-9a-f]{40}$/.test(forgejoRepoSourceRevision)) {
+  throw new Error(`Unexpected git revision ${forgejoRepoSourceRevision}`);
+}
+const forgejoRepoSourceUrl = `http://127.0.0.1:3001/recovery-admin/glantri-app/src/commit/${forgejoRepoSourceRevision}/`;
 
 type SourceSpec = {
   endMarker?: string;
@@ -148,9 +157,6 @@ const proposalMetadataReference = [
   "docs/rules/pilot-skill-rules-v1.md",
   "docs/rules/pilot-skill-content-release-v1.md",
 ];
-
-const proposalFilePath = path.dirname(fileURLToPath(import.meta.url));
-const repositoryRoot = path.resolve(proposalFilePath, "..", "..", "..", "..");
 
 function cloneMetadata(recordId: string, kind: keyof typeof recordSourceByKind) {
   const sourceSpecs = recordSourceByKind[kind];

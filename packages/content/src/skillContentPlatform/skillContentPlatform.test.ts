@@ -1,6 +1,7 @@
 import type { SkillContentRelease, SkillContentWrittenTraditionRecord } from "@glantri/domain";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 import { sha256 } from "../integrity/canonicalSha256";
@@ -12,7 +13,8 @@ import {
   validateSkillContentRelease,
 } from ".";
 import { pilotSkillContentReleaseProposalInput } from "./pilotSkillContentReleaseProposal";
-import { fileURLToPath } from "node:url";
+
+const repositoryRoot = path.resolve(__dirname, "..", "..", "..", "..");
 
 function candidate(): SkillContentRelease {
   return buildSkillContentRelease(structuredClone(pilotSkillContentReleaseProposalInput));
@@ -74,29 +76,26 @@ function normalizeAdversarialTaskText(
   return normalizeWhitespace(scrubbed);
 }
 
-function resolveProvenancePath(reference: string): { path: string; line: number } {
+function resolveProvenancePath(reference: string): { path: string; line: number; lines: string[] } {
   const match =
-    /^http:\/\/127\.0\.0\.1:3001\/recovery-admin\/glantri-app\/src\/branch\/dev\/(.+?)#L([0-9]+)$/.exec(
+    /^http:\/\/127\.0\.0\.1:3001\/recovery-admin\/glantri-app\/src\/commit\/([0-9a-f]{40})\/(.+?)#L([0-9]+)$/.exec(
       reference,
     );
   if (!match) {
     throw new Error(`Malformed provenance reference ${reference}`);
   }
-  const [, rawPath, rawLine] = match;
-  const repositoryRoot = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "..",
-    "..",
-    "..",
-  );
-  const absolutePath = path.join(repositoryRoot, rawPath);
-  const lines = readFileSync(absolutePath, "utf8").split(/\r?\n/);
+  const [, sourceRevision, rawPath, rawLine] = match;
+  const absolutePath = path.resolve(repositoryRoot, rawPath);
+  const source = execFileSync("git", ["show", `${sourceRevision}:${rawPath}`], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  });
+  const lines = source.split(/\r?\n/);
   const line = Number(rawLine);
   if (!Number.isFinite(line) || line <= 0 || line > lines.length) {
     throw new Error(`Invalid provenance line ${rawLine} for ${reference}`);
   }
-  return { path: absolutePath, line };
+  return { path: absolutePath, line, lines };
 }
 
 type MetadataRecord = {
@@ -404,11 +403,12 @@ describe("documentation-complete Skill content platform", () => {
     const references = metadataRecords.map((record) => record.metadata.provenance.reference);
     const malformed = references.filter(
       (reference) =>
-        !/^http:\/\/127\.0\.0\.1:3001\/recovery-admin\/glantri-app\/src\/branch\/dev\/[^#]+#L\d+$/.test(
+        !/^http:\/\/127\.0\.0\.1:3001\/recovery-admin\/glantri-app\/src\/commit\/[0-9a-f]{40}\/[^#]+#L\d+$/.test(
           reference,
         ),
     );
     expect(malformed).toHaveLength(0);
+    expect(references.every((reference) => !reference.includes("/src/branch/dev/"))).toBe(true);
     const duplicateReferences = [...new Set(references)]
       .filter((reference) => references.filter((candidate) => candidate === reference).length > 1)
       .map((reference) => ({
@@ -418,19 +418,28 @@ describe("documentation-complete Skill content platform", () => {
     expect(duplicateReferences).toEqual([]);
     for (const reference of references) {
       const resolved = resolveProvenancePath(reference);
-      const source = readFileSync(resolved.path, "utf8").split(/\r?\n/);
       const metadataRecord = metadataRecords.find(
         (record) => record.metadata.provenance.reference === reference,
       );
       expect(metadataRecord).toBeDefined();
       if (!metadataRecord) continue;
-      const provenanceWindow = source
-        .slice(Math.max(0, resolved.line - 3), Math.min(source.length, resolved.line + 2))
-        .join("\n");
-      expect(provenanceWindow).toContain(`"${metadataRecord.id}"`);
+      expect(resolved.lines.join("\n")).toContain(`"${metadataRecord.id}"`);
     }
     expect(references.every((reference) => !reference.includes("/issues/"))).toBe(true);
     expect(references.every((reference) => !reference.includes("/pulls/"))).toBe(true);
+  });
+
+  it("rejects proposal-source fallback task-envelope generation", () => {
+    const proposalSource = readFileSync(
+      path.resolve(
+        repositoryRoot,
+        "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+      ),
+      "utf8",
+    );
+    expect(proposalSource).not.toMatch(/\bbuild(?:Shared|Record)?TaskEnvelope\b/);
+    expect(proposalSource).not.toMatch(/fallback\s+task\s+envelope/i);
+    expect(proposalSource.match(/generated common envelope/i)).toBeNull();
   });
 
   it("prevents proposal-input mutation from reusing immutable v1 nested arrays", () => {
