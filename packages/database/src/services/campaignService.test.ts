@@ -168,6 +168,30 @@ describe("CampaignService activation", () => {
     expect(next.status).toBe("active");
   });
 
+  it("lets a permitted admin activate a draft Campaign", async () => {
+    const { campaigns, repository } = createScenarioRepositoryStub();
+    const draftCampaign = {
+      ...makeCampaign({
+        gmUserId: "gm-1",
+        id: "campaign-draft",
+        name: "Draft Campaign",
+      }),
+      status: "draft" as const,
+    };
+    campaigns.push(draftCampaign);
+    repository.getCampaignById = async (campaignId) =>
+      campaignId === draftCampaign.id ? draftCampaign : null;
+    const service = new CampaignService(repository);
+
+    const next = await service.activateCampaign({
+      actorIsAdmin: true,
+      actorUserId: "admin-1",
+      campaignId: draftCampaign.id,
+    });
+
+    expect(next.status).toBe("active");
+  });
+
   it("prevents non-managing users from changing campaign status", async () => {
     const { campaigns, repository } = createScenarioRepositoryStub();
     const draftCampaign = {
@@ -184,6 +208,7 @@ describe("CampaignService activation", () => {
 
     await expect(
       service.activateCampaign({
+        actorIsAdmin: false,
         actorUserId: "not-gm",
         campaignId: draftCampaign.id,
       }),
@@ -208,6 +233,7 @@ describe("CampaignService activation", () => {
 
       await expect(
         service.activateCampaign({
+          actorIsAdmin: false,
           actorUserId: "gm-1",
           campaignId: restrictedCampaign.id,
         }),
@@ -247,6 +273,7 @@ describe("CampaignService activation", () => {
 
     await expect(
       service.activateCampaign({
+        actorIsAdmin: false,
         actorUserId: "gm-1",
         campaignId: draftCampaign.id,
       }),
@@ -272,6 +299,7 @@ describe("CampaignService activation", () => {
 
     await expect(
       service.activateCampaign({
+        actorIsAdmin: false,
         actorUserId: "gm-1",
         campaignId: "campaign-draft",
       }),

@@ -154,9 +154,11 @@ describe("scenarioRepository campaign activation transitions", () => {
       from: "active",
       to: "active",
     },
-  ])("does not mutate Campaign for blocked transition $from->$to", async (fixture) => {
+  ])("does not mutate Campaign for blocked transition from $from to $to", async ({ from, to }) => {
+    const isAllowed = from === "draft" && to === "active";
     mocks.prisma.campaign.updateMany.mockResolvedValue({ count: 0 });
 
+    expect(isAllowed).toBe(false);
     const repository = createPrismaScenarioRepository();
 
     await expect(repository.activateCampaignFromDraft({ campaignId: "campaign-1" })).resolves.toBe(

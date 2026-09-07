@@ -357,6 +357,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
       const next = await campaignService.activateCampaign({
         actorUserId: user.id,
+        actorIsAdmin: user.roles.includes("admin"),
         campaignId,
       });
 

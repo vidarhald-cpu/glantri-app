@@ -386,10 +386,14 @@ export class CampaignService {
     return this.repository.updateCampaignAssetVisibility(input.assetId, input.visibility);
   }
 
-  async activateCampaign(input: { actorUserId: string; campaignId: string }): Promise<Campaign> {
+  async activateCampaign(input: {
+    actorIsAdmin?: boolean;
+    actorUserId: string;
+    campaignId: string;
+  }): Promise<Campaign> {
     const campaign = await this.repository.getCampaignById(input.campaignId);
 
-    if (!campaign || campaign.gmUserId !== input.actorUserId) {
+    if (!campaign || (!input.actorIsAdmin && campaign.gmUserId !== input.actorUserId)) {
       throw new Error("Campaign not found.");
     }
 

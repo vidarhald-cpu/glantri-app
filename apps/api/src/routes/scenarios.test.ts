@@ -4716,7 +4716,44 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ campaign });
     expect(mocks.campaignService.activateCampaign).toHaveBeenCalledWith({
+      actorIsAdmin: false,
       actorUserId: "gm-1",
+      campaignId: "campaign-1",
+    });
+  });
+
+  it("activates a draft Campaign through the campaign activation endpoint for a permitted admin", async () => {
+    const campaign = {
+      createdAt: "2026-05-09T12:00:00.000Z",
+      description: "Campaign prelaunch.",
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      settings: { allowPlayerSelfJoin: false, defaultVisibility: "hidden" },
+      slug: "border-trouble",
+      status: "active",
+      updatedAt: "2026-05-09T12:00:00.000Z",
+    };
+    mocks.campaignService.activateCampaign.mockResolvedValue(campaign);
+    mocks.requireAdminUser.mockResolvedValue({
+      ...mocks.adminUser,
+      id: "admin-1",
+      roles: ["admin"],
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/campaigns/campaign-1/activate",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ campaign });
+    expect(mocks.campaignService.activateCampaign).toHaveBeenCalledWith({
+      actorIsAdmin: true,
+      actorUserId: "admin-1",
       campaignId: "campaign-1",
     });
   });
@@ -4739,6 +4776,7 @@ describe("scenarios route contract", () => {
       error: "Campaign can only be activated from draft status.",
     });
     expect(mocks.campaignService.activateCampaign).toHaveBeenCalledWith({
+      actorIsAdmin: false,
       actorUserId: "gm-1",
       campaignId: "campaign-1",
     });
