@@ -28,10 +28,16 @@ Before non-trivial work:
 
 Keep mandatory startup reading controlled and task-specific. Area documents are required only when the task touches that area. Decision records, audits, and historical reports are read on demand. Task contracts must name exact paths rather than say `read all architecture docs`.
 
+For an ordinary independent-QA task, the mandatory process set is only this
+file, `docs/process/qa-execution.md`, the exact QA task contract, and the exact
+task-specific sources named there. Load the broader process documents below
+only when the task or an entry/risk check requires them.
+
 Useful references:
 
 - Task contract: `docs/process/task-contract.md`
 - Isolated Builder/QA execution: `docs/process/agent-execution.md`
+- Compact independent QA execution: `docs/process/qa-execution.md`
 - Canonical development operating model: `docs/process/development-operating-model.md`
 - Functional ownership/hotspots: `docs/architecture/ownership.md`
 - Global user-facing principles: `docs/product/product-presentation-principles.md`

@@ -189,3 +189,11 @@ export function assertCurrentWorktreeTaskContainer(
     );
   }
 }
+
+export function taskContainerRemovalArguments(
+  inspection: TaskContainerInspection,
+  expected: ValidatedCurrentWorktreeTaskDatabaseEnvironment,
+): string[] {
+  assertCurrentWorktreeTaskContainer(inspection, expected);
+  return ["rm", "--force", "--volumes", expected.container];
+}
