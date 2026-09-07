@@ -596,6 +596,13 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("secondaryButtonLabel={");
     expect(source).not.toContain("Edit character-sheet rows");
     expect(source).toContain("Add manual row");
+    expect(source).toContain('aria-label="Canonical Critical review"');
+    expect(source).toContain("Canonical atoms are immutable");
+    expect(source).toContain("Private adjudication reason (optional)");
+    expect(source).toContain('aria-label="Current Action Bleed treatment"');
+    expect(source).toContain("inspectorCriticalBleedTreatmentControls");
+    expect(source).not.toContain("CriticalBleedTreatmentPanel");
+    expect(source).toContain("transitionCriticalBleedOnServer");
     expect(source).toContain("getCombatDamageReviewDraftEffectRowType");
     expect(source).toContain("getCombatDamageReviewDraftEffectTarget");
     expect(source).toContain("Add modifier row");
@@ -1131,14 +1138,21 @@ describe("CombatRoundManagerPanel", () => {
     expect(rollHandler).not.toContain("updateEncounterOnServer({");
   });
 
-  it("uses canonical current task selection after command-stack Clear", () => {
+  it("preserves an inspected Current Action selection after command-stack Clear", () => {
     const source = readSource();
 
     expect(source).toContain("const clearedSelection: CombatRoundSelectionTarget =");
+    expect(source).toContain(
+      "const retainedCurrentActionSelection = inspectorSelectionIsCurrentProgression",
+    );
     expect(source).toContain("const nextSelection = resolveCombatRoundInspectionSelection({");
-    expect(source).toContain("manualSelection: getCurrentCombatRoundTaskSelection(nextRoundState)");
+    expect(source).toContain(
+      "retainedCurrentActionSelection ?? getCurrentCombatRoundTaskSelection(nextRoundState)",
+    );
     expect(source).toContain("pendingSelectionRef.current = undefined");
-    expect(source).toContain("manualSelectionRef.current = undefined");
+    expect(source).toContain(
+      "manualSelectionRef.current = retainedCurrentActionSelection ? nextSelection : undefined",
+    );
     expect(source).toContain("setInspectionSelection(nextSelection)");
     expect(source).not.toContain(
       "nextRoundState.selectedParticipantId ?? clearedSelection.participantId",

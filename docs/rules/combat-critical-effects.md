@@ -2,23 +2,20 @@
 
 Critical effects are represented as a canonical table of critical results and effect templates.
 D1/D2 now uses that table to create GM-reviewable proposals after the attacker has rolled the
-critical die. The proposals are editable draft rows; they are not committed until the GM accepts them
-through the normal phase-damage commit.
+critical die. Proposals are not committed until the GM accepts them through the normal phase-damage
+commit.
 
-> **Accepted content versus implemented behavior:** the recovered #393 calibration in
-> [`docs/decisions/rules/0001-c1-critical-injury-recalibration.md`](../decisions/rules/0001-c1-critical-injury-recalibration.md)
-> is authoritative for future fixture activation, but the fixture code, workbook, generated data, and
-> runtime described below remain at the pre-#393 implementation. In particular, the accepted
-> Fire/Energy `1/4`, `1/3`, and `1/2 HP/round` values are content intent only. Executable non-Bleed
-> `periodic_loss` is not authorized.
+> **Post-#393 boundary:** exactly five keys use the structured canonical-atom review and bounded GM
+> delta described below. The other 29 #387 representative fixtures retain their existing runtime and
+> review behavior. Fire/Energy and other non-Bleed `periodic_loss` remain non-executable.
 
-The exact five-key post-#393 recovery is now frozen as
-[non-executable evidence](../recovery/2026-09-06-c1-five-key-post-393-payloads.json), with its
-[per-key pre/post comparison](../recovery/2026-09-06-c1-five-key-freeze-and-staging.md). The future
-six-kind authoring, immutable-canon/GM-delta, manual-provenance, Stun, ordinary-Bleed, treatment, and
-presentation contract is [decision 0004](../decisions/rules/0004-c1-critical-authoring-and-adjudication.md).
-Those records prepare future work for exactly five keys; they do not change the pre-#393 executable
-behavior documented on this page.
+The exact five-key post-#393 recovery is frozen as
+[the implementation payload](../recovery/2026-09-06-c1-five-key-post-393-payloads.json), with its
+[per-key pre/post comparison](../recovery/2026-09-06-c1-five-key-freeze-and-staging.md). The resulting
+six-kind authoring, immutable-canon/GM-delta, manual-provenance, Stun, ordinary-Bleed,
+treatment, and presentation contract is [decision 0004](../decisions/rules/0004-c1-critical-authoring-and-adjudication.md).
+The five active review keys are `pointed_weapons|arm|02`, `blunt|arm|12`,
+`pointed_weapons|chest|07`, `sharp|head|10`, and `sharp|chest|04`.
 
 ## C1 representative fixture authority
 
@@ -76,11 +73,14 @@ three channels. Separate source Stuns therefore add and can be resolved independ
 does not cancel an action or imply collapse, parry-only, no-action, unconsciousness, or functional
 loss; those are separate typed facts.
 
-Descriptions are project-authored canonical GM suggestions. Narrative is not mechanics. Under the
-future contract, an allowed GM review produces an instance delta and never rewrites canonical atoms;
-the exact permitted and prohibited fields are enumerated in
-[decision 0004](../decisions/rules/0004-c1-critical-authoring-and-adjudication.md). Current executable
-review behavior remains pre-#393 until a separately authorized implementation is accepted.
+For the five active review keys, Current Action renders immutable canonical atoms with source-effect
+identity, target, and timing. The GM may suppress a permitted Stun, condition, operation, or ordinary
+Bleed atom; choose Stun `-1`, `-2`, `-4`, or `-8`; edit instance title/narrative; and record an optional
+private reason. The server reconstructs the canonical proposal and rejects identity mismatches,
+unknown atom keys, damage-floor suppression, information suppression, and Stun changes on a result
+without Stun. Manual rows remain separately identified and co-commit without becoming canonical
+Critical atoms. The complete permitted/prohibited field contract is
+[decision 0004](../decisions/rules/0004-c1-critical-authoring-and-adjudication.md).
 
 ## Reproducing the Critical table
 
@@ -271,6 +271,15 @@ The Health-check reduction above is never applied to C1 exact Bleed. C1 treatmen
 only the fixture's explicit First Aid, Medicine, Surgery, staged guidance, equipment/removal boundary,
 or GM-managed/unresolved classification. It does not manufacture a DC, Health substitution,
 self-staunch chance, recovery duration, mortality clock, or permanent-stat effect from prose.
+
+The GM can change those accepted source-specific lifecycle states from the existing Current Action
+Damage/effects controls. External partial control requires an explicit exact rational remaining rate
+lower than the authored rate; the server never guesses it. Each transition persists on the source
+effect and appends one immutable Combat command created by the authenticated GM. The command records
+the treated participant as target/context and retains exact before/after effect facts; its linked,
+separately provenanced event appears in Results/history and Combat Log. Existing Clear authority
+reverses the latest transition atomically, including after reload, without rewriting the original
+Critical or adding a separate treatment panel or undo system.
 
 Start next round remains blocked until participant SU reviews and accepted health checks are
 complete. Undoing SU review commands restores previous durations/statuses and removes only the

@@ -2,6 +2,10 @@ import { getCombatDeclarationActionLabel } from "./combatDeclarationValidation";
 import type { CombatAdjustDistanceProposal } from "./combatAdjustDistance";
 import type { CombatFeintProposal } from "./combatFeint";
 import { getCombatRoundTimelineRoundStates, type CombatRoundState } from "./combatRoundManager";
+import {
+  combatCriticalBleedControlStateSchema,
+  getCombatCriticalBleedControlStateLabel,
+} from "./combatCriticalRuntime";
 import { deriveLegacyCombatStepEvents } from "./combatStepEvents";
 import type { CombatStepEvent } from "./combatStepEventSchema";
 
@@ -95,6 +99,12 @@ export type CombatLogSummaryFacts =
   | {
       readonly kind: "review_completed";
       readonly review: "participant";
+    }
+  | {
+      readonly bleedKind: "external" | "internal";
+      readonly kind: "bleed_treatment";
+      readonly nextState: string;
+      readonly previousState: string;
     };
 
 export interface CombatLogEventPresentation {
@@ -271,7 +281,7 @@ function booleanFact(facts: Record<string, unknown>, key: string): boolean | und
 }
 
 function phaseForEvent(event: CombatStepEvent): CombatLogPhase {
-  if (event.type === "declaration") return "declaration";
+  if (event.type === "declaration" || event.step === "select_actions") return "declaration";
   if (event.phase) return event.phase;
   return "round_end";
 }
@@ -573,6 +583,7 @@ function projectDamage(input: {
   sourceRevision: string;
 }): Candidate | undefined {
   const amount = numberFact(input.event.facts.involvedOutcome, "finalCommittedDamage");
+  const criticalTitle = stringFact(input.event.facts.involvedOutcome, "criticalTitle");
   const target = subject(
     input.event.defenderParticipantId ?? input.event.targetParticipantId,
     input.labels,
@@ -600,12 +611,50 @@ function projectDamage(input: {
       sourceEventIds: [input.event.id],
       sourceRevision: input.sourceRevision,
       sourceSequence: input.event.sequence,
-      summary: `${target.displayName} suffered ${amount} damage.`,
+      summary: `${target.displayName} suffered ${amount} damage.${criticalTitle ? ` Critical: ${criticalTitle}.` : ""}`,
       summaryFacts: { amount, kind: "damage_committed", source: "attack" },
       target,
     }),
     attackResultId: input.event.attackResultId,
   };
+}
+
+function projectCriticalBleedTreatment(input: {
+  encounterId: string;
+  event: CombatStepEvent;
+  labels: ReadonlyMap<string, string>;
+  sourceRevision: string;
+}): Candidate | undefined {
+  const previousState = stringFact(input.event.facts.involvedOutcome, "previousState");
+  const nextState = stringFact(input.event.facts.involvedOutcome, "nextState");
+  const bleedKind = stringFact(input.event.facts.involvedOutcome, "bleedKind");
+  const target = subject(
+    input.event.targetParticipantId ?? input.event.ownerParticipantId,
+    input.labels,
+  );
+  if (
+    !target ||
+    !previousState ||
+    !nextState ||
+    (bleedKind !== "external" && bleedKind !== "internal")
+  ) {
+    return undefined;
+  }
+  return baseCandidate({
+    actor: { displayName: "GM" },
+    category: "state_change",
+    encounterId: input.encounterId,
+    eventId: `${input.event.id}:bleed-treatment`,
+    occurredAt: input.event.occurredAt,
+    phase: phaseForEvent(input.event),
+    roundNumber: input.event.roundNumber,
+    sourceEventIds: [input.event.id],
+    sourceRevision: input.sourceRevision,
+    sourceSequence: input.event.sequence,
+    summary: `${target.displayName}’s ${bleedKind === "internal" ? "internal " : ""}Bleed changed from ${getCombatCriticalBleedControlStateLabel(combatCriticalBleedControlStateSchema.parse(previousState))} to ${getCombatCriticalBleedControlStateLabel(combatCriticalBleedControlStateSchema.parse(nextState))}.`,
+    summaryFacts: { bleedKind, kind: "bleed_treatment", nextState, previousState },
+    target,
+  });
 }
 
 function projectRoundEndReview(input: {
@@ -1044,6 +1093,14 @@ export function buildCombatLogProjection(input: {
           sourceRevision: input.sourceRevision,
         });
         if (damage) candidates.push(damage);
+      } else if (event.type === "effect_review") {
+        const treatment = projectCriticalBleedTreatment({
+          encounterId: input.encounterId,
+          event,
+          labels,
+          sourceRevision: input.sourceRevision,
+        });
+        if (treatment) candidates.push(treatment);
       } else if (event.type === "participant_su_review") {
         candidates.push(
           ...projectRoundEndReview({

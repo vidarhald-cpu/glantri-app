@@ -70,6 +70,7 @@ import {
   ensureDistanceEdgesForParticipantPairs,
   formatOpenEndedD20RollBreakdown,
   getCombatDistanceParticipantAliases,
+  getCombatCriticalBleedControlStateLabel,
   getDistanceEdgeBetweenParticipantAliases,
   getCombatRoundAttackResultById,
   getParticipantCombatExperienceSkillTotalLookup,
@@ -194,6 +195,7 @@ import {
   setPairDistanceOnServer,
   skipCurrentCombatPhaseActionOnServer,
   submitCombatDeclarationOnServer,
+  transitionCriticalBleedOnServer,
   loadEncounterById,
 } from "@/lib/api/encounterClient";
 import {
@@ -613,7 +615,11 @@ interface CombatDamageReviewDraft {
   armorCriticalModifierOverride: string;
   armorModifierOverride: string;
   criticalGradeOverride: string;
+  criticalAdjudicationReason: string;
   criticalLocationOverride: string;
+  criticalNarrative: string;
+  criticalStunModifier: string;
+  criticalTitle: string;
   criticalTypeModifierOverride: string;
   finalCriticalRollOverride: string;
   notes: string;
@@ -1825,6 +1831,8 @@ function buildCombatDamageReviewDraft(
     criticalRoll,
     review: damageResult?.review,
   });
+  const canonicalReview = damageResult?.review?.criticalEffectProposal?.canonicalReview;
+  const adjudication = damageResult?.review?.criticalEffectProposal?.adjudication;
 
   return {
     additionalEffects: (damageResult?.review?.additionalEffects ?? []).map((effect) => ({
@@ -1852,7 +1860,11 @@ function buildCombatDamageReviewDraft(
     armorCriticalModifierOverride: effectiveCritical.armorCriticalModifier?.toString() ?? "",
     armorModifierOverride: effectiveDamage?.effectiveArmorModifier.toString() ?? "",
     criticalGradeOverride: effectiveDamage?.effectiveCriticalGrade ?? "none",
+    criticalAdjudicationReason: adjudication?.reason ?? "",
     criticalLocationOverride: effectiveCritical.criticalLocation ?? "",
+    criticalNarrative: adjudication?.narrativeOverride ?? canonicalReview?.narrative ?? "",
+    criticalStunModifier: adjudication?.stunModifierOverride?.toString() ?? "",
+    criticalTitle: adjudication?.titleOverride ?? canonicalReview?.title ?? "",
     criticalTypeModifierOverride: effectiveCritical.criticalTypeModifier?.toString() ?? "",
     finalCriticalRollOverride: effectiveCritical.finalCriticalRoll?.toString() ?? "",
     notes: damageResult?.review?.notes ?? "",
@@ -2054,12 +2066,62 @@ function buildCombatDamageReviewFromDraft(input: {
     step: consequence.step === "A1" || consequence.step === "A2" ? consequence.step : undefined,
     targetActionId: consequence.targetActionId.trim() || undefined,
   }));
+  const canonicalReview = input.damageResult.review?.criticalEffectProposal?.canonicalReview;
+  const canonicalSuppressibleKeys = new Set(
+    canonicalReview?.atoms
+      .filter((atom) => atom.suppressible && atom.sourceEffectKey)
+      .map((atom) => atom.sourceEffectKey as string) ?? [],
+  );
+  const suppressedEffectKeys = Array.from(
+    new Set([
+      ...additionalEffects
+        .filter(
+          (effect) =>
+            effect.accepted === false &&
+            effect.sourceEffectKey &&
+            canonicalSuppressibleKeys.has(effect.sourceEffectKey),
+        )
+        .map((effect) => effect.sourceEffectKey as string),
+      ...operationalConsequences
+        .filter(
+          (consequence) =>
+            consequence.accepted === false &&
+            consequence.sourceEffectKey &&
+            canonicalSuppressibleKeys.has(consequence.sourceEffectKey),
+        )
+        .map((consequence) => consequence.sourceEffectKey as string),
+    ]),
+  );
+  const parsedStunModifier = ["-1", "-2", "-4", "-8"].includes(input.draft.criticalStunModifier)
+    ? (Number(input.draft.criticalStunModifier) as -1 | -2 | -4 | -8)
+    : undefined;
+  const criticalEffectProposal = input.damageResult.review?.criticalEffectProposal
+    ? {
+        ...input.damageResult.review.criticalEffectProposal,
+        adjudication: canonicalReview
+          ? {
+              criticalKey: canonicalReview.criticalKey,
+              narrativeOverride:
+                input.draft.criticalNarrative.trim() !== canonicalReview.narrative
+                  ? input.draft.criticalNarrative.trim() || undefined
+                  : undefined,
+              reason: input.draft.criticalAdjudicationReason.trim() || undefined,
+              stunModifierOverride: parsedStunModifier,
+              suppressedEffectKeys,
+              titleOverride:
+                input.draft.criticalTitle.trim() !== canonicalReview.title
+                  ? input.draft.criticalTitle.trim() || undefined
+                  : undefined,
+            }
+          : undefined,
+      }
+    : undefined;
   const reviewWithoutTotalDamageOverride: Omit<
     CombatRoundDamageReview,
     "reviewedAt" | "reviewedByUserId"
   > = {
     additionalEffects,
-    criticalEffectProposal: input.damageResult.review?.criticalEffectProposal,
+    criticalEffectProposal,
     operationalConsequences,
   };
 
@@ -2109,7 +2171,7 @@ function buildCombatDamageReviewFromDraft(input: {
       : undefined;
   const review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId"> = {
     additionalEffects,
-    criticalEffectProposal: input.damageResult.review?.criticalEffectProposal,
+    criticalEffectProposal,
     operationalConsequences,
   };
 
@@ -2908,6 +2970,136 @@ function CombatParryResolutionPanel(input: {
   );
 }
 
+export function CriticalBleedTreatmentControls(input: {
+  disabled?: boolean;
+  onTransition: (
+    effectId: string,
+    nextState: "active" | "partial" | "staunched_zero" | "stabilised" | "resolved",
+    partialRate?: { denominator: number; numerator: number },
+  ) => void;
+  participant: ScenarioParticipant;
+}) {
+  const [partialRates, setPartialRates] = useState<
+    Record<string, { denominator: string; numerator: string }>
+  >({});
+  const effects = (input.participant.state.combatEffects?.effects ?? []).filter(
+    (effect) =>
+      effect.criticalRuntime?.kind === "bleed" &&
+      effect.status !== "expired" &&
+      effect.status !== "resolved",
+  );
+  if (effects.length === 0) return null;
+
+  return (
+    <div
+      aria-label="Current Action Bleed treatment"
+      style={{
+        borderTop: "1px solid #d7d3c7",
+        display: "grid",
+        gap: "0.45rem",
+        paddingTop: "0.5rem",
+      }}
+    >
+      <strong>Damage/effects · Bleed treatment</strong>
+      <div style={combatDamageReviewHelperTextStyle}>
+        GM-only lifecycle controls. No roll, Skill, DC, equipment, or duration is inferred.
+      </div>
+      {effects.map((effect) => {
+        if (effect.criticalRuntime?.kind !== "bleed") return null;
+        const bleed = effect.criticalRuntime.bleed;
+        const partial = partialRates[effect.id] ?? { denominator: "", numerator: "" };
+        const states = bleed.allowedControlStates.filter((state) => state !== bleed.controlState);
+        return (
+          <section
+            key={effect.id}
+            style={{
+              borderTop: "1px solid #d7d3c7",
+              display: "grid",
+              gap: "0.4rem",
+              paddingTop: "0.5rem",
+            }}
+          >
+            <div>
+              <strong>{bleed.kind === "internal" ? "Internal Bleed" : "External Bleed"}</strong> ·{" "}
+              {(bleed.currentRate ?? bleed.rate).numerator}/
+              {(bleed.currentRate ?? bleed.rate).denominator} HP/round ·{" "}
+              {getCombatCriticalBleedControlStateLabel(bleed.controlState)}
+            </div>
+            {bleed.kind === "external" && states.includes("partial") ? (
+              <div style={{ alignItems: "end", display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                <label style={{ display: "grid", gap: "0.15rem" }}>
+                  <span style={combatDamageReviewHelperTextStyle}>Controlled numerator</span>
+                  <input
+                    disabled={input.disabled}
+                    inputMode="numeric"
+                    onChange={(event) =>
+                      setPartialRates((current) => ({
+                        ...current,
+                        [effect.id]: { ...partial, numerator: event.target.value },
+                      }))
+                    }
+                    style={{ width: "5rem" }}
+                    value={partial.numerator}
+                  />
+                </label>
+                <label style={{ display: "grid", gap: "0.15rem" }}>
+                  <span style={combatDamageReviewHelperTextStyle}>Denominator</span>
+                  <input
+                    disabled={input.disabled}
+                    inputMode="numeric"
+                    onChange={(event) =>
+                      setPartialRates((current) => ({
+                        ...current,
+                        [effect.id]: { ...partial, denominator: event.target.value },
+                      }))
+                    }
+                    style={{ width: "5rem" }}
+                    value={partial.denominator}
+                  />
+                </label>
+                <button
+                  disabled={
+                    input.disabled ||
+                    !Number.isInteger(Number(partial.numerator)) ||
+                    Number(partial.numerator) < 1 ||
+                    !Number.isInteger(Number(partial.denominator)) ||
+                    Number(partial.denominator) < 1
+                  }
+                  onClick={() =>
+                    input.onTransition(effect.id, "partial", {
+                      denominator: Number(partial.denominator),
+                      numerator: Number(partial.numerator),
+                    })
+                  }
+                  type="button"
+                >
+                  Mark controlled
+                </button>
+              </div>
+            ) : null}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+              {states
+                .filter((state) => state !== "partial")
+                .map((state) => (
+                  <button
+                    disabled={input.disabled}
+                    key={state}
+                    onClick={() => input.onTransition(effect.id, state)}
+                    type="button"
+                  >
+                    {state === "active"
+                      ? "Restore active"
+                      : `Mark ${getCombatCriticalBleedControlStateLabel(state)}`}
+                  </button>
+                ))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 function CombatDamageReviewPanel(input: {
   attackerLabel?: string;
   commitReadiness?: CombatRoundPhaseDamageCommitReadiness;
@@ -2921,6 +3113,7 @@ function CombatDamageReviewPanel(input: {
 }) {
   const disabled = input.controlsDisabled || input.saving;
   const criticalEffectProposal = input.damageResult.review?.criticalEffectProposal;
+  const canonicalReview = criticalEffectProposal?.canonicalReview;
   const effectiveDamage = getCombatRoundEffectiveDamageResult(input.damageResult);
   const commitStatus = input.commitReadiness
     ? input.commitReadiness.ready
@@ -2947,6 +3140,17 @@ function CombatDamageReviewPanel(input: {
     draft: input.draft,
   });
   const effectById = new Map(input.draft.additionalEffects.map((effect) => [effect.id, effect]));
+  const displayedProposedRows = canonicalReview
+    ? proposedRows.filter((row) => {
+        const effect = row.effectId ? effectById.get(row.effectId) : undefined;
+        return !effect?.sourceCritKey && effect?.sourceKind !== "critical_table";
+      })
+    : proposedRows;
+  const displayedOperationalConsequences = canonicalReview
+    ? input.draft.operationalConsequences.filter(
+        (consequence) => !consequence.sourceCritKey && !consequence.sourceEffectKey,
+      )
+    : input.draft.operationalConsequences;
   const acceptedEffectLabels = Array.from(
     new Set(
       proposedRows
@@ -3013,6 +3217,27 @@ function CombatDamageReviewPanel(input: {
       ),
     });
   };
+  const setCanonicalAtomAccepted = (sourceEffectKey: string, accepted: boolean) => {
+    input.onDraftChange({
+      ...input.draft,
+      additionalEffects: input.draft.additionalEffects.map((effect) =>
+        effect.sourceEffectKey === sourceEffectKey ? { ...effect, accepted } : effect,
+      ),
+      operationalConsequences: input.draft.operationalConsequences.map((consequence) =>
+        consequence.sourceEffectKey === sourceEffectKey
+          ? { ...consequence, accepted }
+          : consequence,
+      ),
+    });
+  };
+  const isCanonicalAtomAccepted = (sourceEffectKey?: string) =>
+    !sourceEffectKey ||
+    (!input.draft.additionalEffects.some(
+      (effect) => effect.sourceEffectKey === sourceEffectKey && !effect.accepted,
+    ) &&
+      !input.draft.operationalConsequences.some(
+        (consequence) => consequence.sourceEffectKey === sourceEffectKey && !consequence.accepted,
+      ));
 
   return (
     <section style={playerCombatPanelCardStyle}>
@@ -3040,7 +3265,113 @@ function CombatDamageReviewPanel(input: {
         <div style={combatDamageReviewHelperTextStyle}>
           Rows proposed for commit. Review accepted rows before saving.
         </div>
-        {criticalEffectProposal ? (
+        {canonicalReview ? (
+          <section
+            aria-label="Canonical Critical review"
+            style={{ display: "grid", gap: "0.55rem" }}
+          >
+            <strong style={{ fontSize: "0.86rem" }}>Canonical Critical · five-key runtime</strong>
+            <label style={{ display: "grid", gap: "0.2rem" }}>
+              <span style={combatDamageReviewHelperTextStyle}>Instance title</span>
+              <input
+                disabled={disabled}
+                onChange={(event) =>
+                  input.onDraftChange({ ...input.draft, criticalTitle: event.target.value })
+                }
+                value={input.draft.criticalTitle}
+              />
+            </label>
+            <label style={{ display: "grid", gap: "0.2rem" }}>
+              <span style={combatDamageReviewHelperTextStyle}>Instance narrative</span>
+              <textarea
+                disabled={disabled}
+                onChange={(event) =>
+                  input.onDraftChange({ ...input.draft, criticalNarrative: event.target.value })
+                }
+                rows={3}
+                value={input.draft.criticalNarrative}
+              />
+            </label>
+            <div style={{ display: "grid", gap: "0.35rem" }}>
+              {canonicalReview.atoms.map((atom, index) => (
+                <label
+                  key={`${atom.sourceEffectKey ?? "information"}:${index}`}
+                  style={{
+                    alignItems: "start",
+                    border: "1px solid #d7d3c7",
+                    borderRadius: "0.35rem",
+                    display: "grid",
+                    gap: "0.2rem 0.5rem",
+                    gridTemplateColumns: "auto minmax(0, 1fr)",
+                    padding: "0.45rem",
+                  }}
+                >
+                  <input
+                    aria-label={`${atom.suppressible ? "Apply" : "Canonical"} ${atom.kind} atom`}
+                    checked={isCanonicalAtomAccepted(atom.sourceEffectKey)}
+                    disabled={disabled || !atom.suppressible || !atom.sourceEffectKey}
+                    onChange={(event) =>
+                      atom.sourceEffectKey
+                        ? setCanonicalAtomAccepted(atom.sourceEffectKey, event.target.checked)
+                        : undefined
+                    }
+                    type="checkbox"
+                  />
+                  <span>
+                    <strong>{atom.kind.replaceAll("_", " ")}</strong> · {atom.summary}
+                    <small style={{ color: "#5e5a50", display: "block" }}>
+                      Target: {atom.target}. Timing: {atom.timing}.
+                      {atom.sourceEffectKey ? ` Source: ${atom.sourceEffectKey}.` : ""}
+                    </small>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {canonicalReview.atoms.some((atom) => atom.kind === "modifier") ? (
+              <label style={{ display: "grid", gap: "0.2rem", maxWidth: "18rem" }}>
+                <span style={combatDamageReviewHelperTextStyle}>Stun magnitude</span>
+                <select
+                  disabled={disabled}
+                  onChange={(event) =>
+                    input.onDraftChange({
+                      ...input.draft,
+                      criticalStunModifier: event.target.value,
+                    })
+                  }
+                  value={input.draft.criticalStunModifier}
+                >
+                  <option value="">Canonical</option>
+                  {[-1, -2, -4, -8].map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <label style={{ display: "grid", gap: "0.2rem" }}>
+              <span style={combatDamageReviewHelperTextStyle}>
+                Private adjudication reason (optional)
+              </span>
+              <textarea
+                disabled={disabled}
+                onChange={(event) =>
+                  input.onDraftChange({
+                    ...input.draft,
+                    criticalAdjudicationReason: event.target.value,
+                  })
+                }
+                rows={2}
+                value={input.draft.criticalAdjudicationReason}
+              />
+            </label>
+            <small style={combatDamageReviewHelperTextStyle}>
+              Canonical atoms are immutable. Clear a permitted atom to suppress it; Stun may only
+              use the listed magnitudes. Provenance: {canonicalReview.provenance.resultRange} and{" "}
+              {canonicalReview.provenance.effectRange}.
+            </small>
+          </section>
+        ) : criticalEffectProposal ? (
           <section style={{ display: "grid", gap: "0.35rem" }}>
             <strong style={{ fontSize: "0.86rem" }}>Critical table proposal</strong>
             <div style={{ fontSize: "0.95rem", fontWeight: 700 }}>
@@ -3072,8 +3403,10 @@ function CombatDamageReviewPanel(input: {
             ) : null}
           </section>
         ) : null}
-        <strong style={{ fontSize: "0.86rem" }}>Character-sheet rows: {proposedRows.length}</strong>
-        {proposedRows.length === 0 ? (
+        <strong style={{ fontSize: "0.86rem" }}>
+          Character-sheet rows: {displayedProposedRows.length}
+        </strong>
+        {displayedProposedRows.length === 0 ? (
           <div style={combatDamageReviewHelperTextStyle}>No character-sheet rows proposed.</div>
         ) : (
           <div style={{ overflowX: "auto" }}>
@@ -3089,7 +3422,7 @@ function CombatDamageReviewPanel(input: {
                 </tr>
               </thead>
               <tbody>
-                {proposedRows.map((row, index) => {
+                {displayedProposedRows.map((row, index) => {
                   const effect = row.effectId ? effectById.get(row.effectId) : undefined;
                   const isMechanical = effect?.kind === "modifier" || effect?.kind === "fatigue";
                   const isBleed =
@@ -3435,12 +3768,12 @@ function CombatDamageReviewPanel(input: {
             value={input.draft.notes}
           />
         </label>
-        {input.draft.operationalConsequences.length > 0 ? (
+        {displayedOperationalConsequences.length > 0 ? (
           <section style={{ display: "grid", gap: "0.5rem" }}>
             <strong style={{ fontSize: "0.86rem" }}>
-              Operational consequences: {input.draft.operationalConsequences.length}
+              Operational consequences: {displayedOperationalConsequences.length}
             </strong>
-            {input.draft.operationalConsequences.map((consequence) => (
+            {displayedOperationalConsequences.map((consequence) => (
               <label
                 key={consequence.id}
                 style={{
@@ -3468,6 +3801,7 @@ function CombatDamageReviewPanel(input: {
         ) : null}
         <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
           <strong style={{ fontSize: "0.86rem" }}>Add manual row</strong>
+          <span style={combatDamageReviewHelperTextStyle}>Stored with separate provenance.</span>
           <button
             disabled={disabled}
             onClick={() =>
@@ -7685,7 +8019,18 @@ export default function CombatRoundManagerPanel({
         ) : null}
       </div>
     ) : null;
+  const inspectorCriticalBleedTreatmentControls =
+    selectedScenarioParticipant && !inspectorIsHistorical ? (
+      <CriticalBleedTreatmentControls
+        disabled={saving}
+        onTransition={(effectId, nextState, partialRate) =>
+          void transitionInspectorCriticalBleed(effectId, nextState, partialRate)
+        }
+        participant={selectedScenarioParticipant}
+      />
+    ) : null;
   const inspectorPreActionControls =
+    inspectorCriticalBleedTreatmentControls ||
     inspectorDefenseReviewControls ||
     inspectorMissileReadinessControls ||
     inspectorCurrentActionOutcomeControls ||
@@ -7702,6 +8047,7 @@ export default function CombatRoundManagerPanel({
       <>
         {inspectorStepWorkflowStatus}
         {inspectorDeclarationProposal}
+        {inspectorCriticalBleedTreatmentControls}
         {inspectorCurrentActionOutcomeControls}
         {inspectorDefenseReviewControls}
         {inspectorMissileReadinessControls}
@@ -8744,6 +9090,12 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
+      const retainedCurrentActionSelection = inspectorSelectionIsCurrentProgression
+        ? {
+            participantId: inspector.participant?.participantId,
+            step: inspector.step,
+          }
+        : undefined;
       const currentSelection = getCurrentCombatRoundTaskSelection(roundState);
       const clearedSelection: CombatRoundSelectionTarget = {
         participantId: currentSelection?.participantId,
@@ -8757,12 +9109,13 @@ export default function CombatRoundManagerPanel({
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
       const nextSelection = resolveCombatRoundInspectionSelection({
-        manualSelection: getCurrentCombatRoundTaskSelection(nextRoundState),
+        manualSelection:
+          retainedCurrentActionSelection ?? getCurrentCombatRoundTaskSelection(nextRoundState),
         state: nextRoundState,
       });
 
       pendingSelectionRef.current = undefined;
-      manualSelectionRef.current = undefined;
+      manualSelectionRef.current = retainedCurrentActionSelection ? nextSelection : undefined;
       setInspectionSelection(nextSelection);
       setRoundState(nextRoundState, nextEncounter.updatedAt);
       setSelectedRoundNumber(nextRoundState.roundNumber);
@@ -11084,6 +11437,44 @@ export default function CombatRoundManagerPanel({
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to resolve combat damage.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function transitionInspectorCriticalBleed(
+    effectId: string,
+    nextState: "active" | "partial" | "staunched_zero" | "stabilised" | "resolved",
+    partialRate?: { denominator: number; numerator: number },
+  ) {
+    if (!selectedScenarioParticipant || inspectorIsHistorical) return;
+    setSaving(true);
+    try {
+      const { encounter: nextEncounter, participant: updatedParticipant } =
+        await transitionCriticalBleedOnServer({
+          currentEncounter: encounter,
+          effectId,
+          encounterId: encounter.id,
+          expectedRevision: roundView.encounterRevision ?? encounter.updatedAt,
+          nextState,
+          partialRate,
+          scenarioParticipantId: selectedScenarioParticipant.id,
+        });
+      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      acceptCanonicalEncounterState(nextEncounter, nextRoundState);
+      setScenarioParticipantOverrides((current) => ({
+        ...current,
+        [updatedParticipant.id]: updatedParticipant,
+      }));
+      onScenarioParticipantsUpdated?.([updatedParticipant]);
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to update Critical Bleed treatment.",
       );
     } finally {
       setSaving(false);

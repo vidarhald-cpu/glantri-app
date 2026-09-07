@@ -110,6 +110,17 @@ Personal ChatGPT capabilities such as Calendar or Sites may exist for unrelated 
 
 The personal Google Drive connector has been deliberately disconnected. Current Glantri source workbooks are tracked local snapshots, and live personal Drive access is not required or part of the default workflow. When a source workbook changes, use a deliberate source-ingestion flow: export or otherwise obtain the approved snapshot, replace the tracked repository copy, record provenance as needed, and commit the change. Do not silently substitute a live personal-Drive version.
 
+Persistent local Forgejo role identities, repository-specific token scopes,
+Keychain storage, protected-branch enforcement, verification, revocation, and
+host recreation are defined in
+[`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md). That mechanism
+supplies authentication only; the task contract and this control plane still
+govern every action. The canonical clone fails closed by combining repository
+path matching with a non-existent default username. Every routine command must
+select its assigned role explicitly; recovery administration is available only
+through its separately explicit break-glass handle. Unqualified credential
+selection is never an authorized fallback.
+
 ### Tool availability does not grant action authority
 
 Destructive and external actions remain governed by the task contract and the authority model. Installing, discovering, or being able to invoke a tool does not grant authority to push, open or update a PR, merge, deploy, delete, publish, change accounts or permissions, or alter Forgejo, production, or Azure configuration.
@@ -255,7 +266,14 @@ Recommended cadence:
 
 `dev` is the active development integration branch. Its accepted initial baseline is `2203f37e196e2de34cf911ea4fa08ac9feb6f8be`; later accepted `dev` SHAs are recorded by task contracts and merge handoffs without replacing that fixed initial reference.
 
-Ruleset `20708650` requires PRs plus successful `ci` and `docker-test` checks for `dev`, requires zero approving reviews, and blocks force-pushes and deletion. Ordinary task branches start from an exact accepted `dev` SHA and return through PRs targeting `dev`.
+The local Forgejo `dev` protected-branch rule disables direct push, requires the
+`CI / ci (pull_request)` and `CI / docker-test (pull_request)` contexts, requires
+zero approving reviews, and allows merge only to `glantri-orchestrator`. The
+rule applies to administrators. The historical GitHub ruleset `20708650` is
+provenance, not current enforcement. Ordinary task branches start from an exact
+accepted `dev` SHA and return through PRs targeting `dev`. The complete local
+identity and protection contract is in
+[`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md).
 
 PR #200 is superseded provenance, not the active development baseline. Its head `4179034ef13c1713a23bddad7bf9ce01fc4880ea` is an ancestor of `dev`; its work, the 50 local continuation commits, `main` reconciliation, and the control-plane bootstrap were incorporated into the accepted `dev` lineage. Closing it as unmerged does not reject its work, and it must not be retargeted to manufacture a new baseline.
 

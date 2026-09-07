@@ -184,6 +184,8 @@ function headingForLogEvent(event: CombatLogEventPresentation): string {
       return "Condition";
     case "review_completed":
       return "Review";
+    case "bleed_treatment":
+      return "Bleed treatment";
     case "round_opened":
       return "Round";
   }
