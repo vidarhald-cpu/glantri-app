@@ -1,0 +1,396 @@
+{
+  "version": 1,
+  "sourceMigrationHead": "20260819143000_add_scenario_lifecycle_kernel",
+  "targetMigrationHead": "20260829103000_add_retained_character_ledger",
+  "classifications": {
+    "A": "direct transform",
+    "B": "selected fields or approved value transform",
+    "C": "provenance only",
+    "D": "intentional omission",
+    "E": "unresolved"
+  },
+  "tables": [
+    {
+      "name": "Campaign",
+      "classification": "A",
+      "fields": {
+        "id": "A",
+        "name": "A",
+        "slug": "A",
+        "description": "A",
+        "gmUserId": "A",
+        "status": "A",
+        "settingsJson": "A",
+        "createdAt": "A",
+        "updatedAt": "A"
+      },
+      "reason": "The historical fields and enum values are current-schema compatible."
+    },
+    {
+      "name": "CampaignAsset",
+      "classification": "B",
+      "fields": {
+        "id": "A",
+        "campaignId": "A",
+        "type": "A",
+        "title": "A",
+        "description": "A",
+        "storageUrl": "A",
+        "mimeType": "A",
+        "visibility": "A",
+        "createdByUserId": "A",
+        "createdAt": "A",
+        "updatedAt": "A"
+      },
+      "reason": "Historical columns are copied; later storage-metadata columns use migration defaults. The verified source has no rows."
+    },
+    {
+      "name": "CampaignRosterEntry",
+      "classification": "B",
+      "fields": {
+        "id": "A",
+        "campaignId": "A",
+        "sourceType": "A",
+        "sourceId": "A",
+        "category": "A",
+        "labelSnapshot": "A",
+        "notes": "A",
+        "createdByUserId": "A",
+        "createdAt": "A",
+        "updatedAt": "A"
+      },
+      "reason": "Compatible rows are copied. Every membership for a Character found in multiple Campaigns is retained in the manifest as provenance and omitted from current roster authority."
+    },
+    {
+      "name": "CanonicalContentSnapshot",
+      "classification": "C",
+      "fields": {
+        "key": "C",
+        "content": "C",
+        "revision": "C",
+        "createdAt": "C",
+        "updatedAt": "C"
+      },
+      "reason": "Historical cached canonical content is not current repository content authority."
+    },
+    {
+      "name": "Character",
+      "classification": "A",
+      "fields": {
+        "id": "A",
+        "name": "A",
+        "level": "A",
+        "createdAt": "A",
+        "updatedAt": "A",
+        "build": "A",
+        "ownerId": "A"
+      },
+      "reason": "Base rows, stable IDs, timestamps, and historical build JSON are copied. No retained revisions or ledger events are fabricated."
+    },
+    {
+      "name": "CharacterEquipmentItem",
+      "classification": "A",
+      "fields": {
+        "id": "A",
+        "holderCharacterId": "A",
+        "templateId": "A",
+        "category": "A",
+        "displayName": "A",
+        "specificityType": "A",
+        "quantity": "A",
+        "isStackable": "A",
+        "material": "A",
+        "quality": "A",
+        "locationId": "A",
+        "carryMode": "A",
+        "conditionState": "A",
+        "durabilityCurrent": "A",
+        "durabilityMax": "A",
+        "encumbranceOverride": "A",
+        "valueOverride": "A",
+        "notes": "A",
+        "isEquipped": "A",
+        "isFavorite": "A",
+        "acquiredFrom": "A",
+        "statusTagsJson": "A",
+        "createdAt": "A",
+        "updatedAt": "A",
+        "previousLocationId": "A",
+        "previousCarryMode": "A",
+        "campaignContextId": "A",
+        "itemFactsJson": "A"
+      },
+      "reason": "The canonical item authority rows are copied without fabricating acquisition or provenance events. Embedded-versus-canonical conflicts are reported, not resolved."
+    },
+    {
+      "name": "CharacterLoadout",
+      "classification": "A",
+      "fields": {
+        "id": "A",
+        "characterId": "A",
+        "name": "A",
+        "isActive": "A",
+        "wornArmorItemId": "A",
+        "readyShieldItemId": "A",
+        "activePrimaryWeaponItemId": "A",
+        "activeSecondaryWeaponItemId": "A",
+        "activeMissileWeaponItemId": "A",
+        "activeAmmoItemIds": "A",
+        "quickAccessItemIdsJson": "A",
+        "notes": "A",
+        "createdAt": "A",
+        "updatedAt": "A"
+      },
+      "reason": "Existing loadout facts and stable IDs are compatible and copied without loadout-event history."
+    },
+    {
+      "name": "CharacterStorageLocation",
+      "classification": "A",
+      "fields": {
+        "id": "A",
+        "characterId": "A",
+        "name": "A",
+        "type": "A",
+        "parentLocationId": "A",
+        "isMobile": "A",
+        "isAccessibleInEncounter": "A",
+        "notes": "A",
+        "createdAt": "A",
+        "updatedAt": "A",
+        "availabilityClass": "A"
+      },
+      "reason": "Existing storage facts are current-schema compatible."
+    },
+    {
+      "name": "Encounter",
+      "classification": "B",
+      "fields": {
+        "id": "A",
+        "name": "A",
+        "createdAt": "A",
+        "updatedAt": "A",
+        "campaignId": "A",
+        "createdByUserId": "A",
+        "scenarioId": "A",
+        "sessionJson": "A",
+        "status": "B",
+        "combatStorageMode": "A",
+        "combatArchiveCount": "A"
+      },
+      "reason": "Rows and combat evidence are copied, but every Encounter status is normalized to archived so historical active/setup/planned rows cannot become current live play. Original status counts remain provenance."
+    },
+    {
+      "name": "EncounterActiveCombatState",
+      "classification": "A",
+      "fields": {
+        "encounterId": "A",
+        "revision": "A",
+        "stateJson": "A",
+        "schemaVersion": "A",
+        "createdAt": "A",
+        "updatedAt": "A"
+      },
+      "reason": "Historical combat state is retained as read-only evidence behind an archived Encounter. No progression service runs."
+    },
+    {
+      "name": "EncounterArchivedCombatRound",
+      "classification": "A",
+      "fields": {
+        "id": "A",
+        "encounterId": "A",
+        "roundNumber": "A",
+        "roundJson": "A",
+        "sourceRevision": "A",
+        "schemaVersion": "A",
+        "createdAt": "A"
+      },
+      "reason": "Historical archived rounds are directly representable."
+    },
+    {
+      "name": "ReusableEntity",
+      "classification": "A",
+      "fields": {
+        "id": "A",
+        "gmUserId": "A",
+        "name": "A",
+        "kind": "A",
+        "description": "A",
+        "notes": "A",
+        "snapshotJson": "A",
+        "createdAt": "A",
+        "updatedAt": "A"
+      },
+      "reason": "Historical reusable entities are current-schema compatible."
+    },
+    {
+      "name": "Role",
+      "classification": "A",
+      "fields": {
+        "id": "A",
+        "name": "A",
+        "createdAt": "A",
+        "updatedAt": "A"
+      },
+      "reason": "Role identity is directly compatible."
+    },
+    {
+      "name": "Scenario",
+      "classification": "B",
+      "fields": {
+        "id": "A",
+        "campaignId": "A",
+        "name": "A",
+        "description": "A",
+        "kind": "A",
+        "status": "B",
+        "mapAssetId": "A",
+        "liveStateJson": "A",
+        "createdAt": "A",
+        "updatedAt": "A",
+        "lifecycleRevision": "C",
+        "lifecycleCycle": "C"
+      },
+      "reason": "Compatible status values are copied and closed maps exactly to completed. Lifecycle revision/cycle values remain manifest provenance because the current schema has no approved field."
+    },
+    {
+      "name": "ScenarioEventLog",
+      "classification": "A",
+      "fields": {
+        "id": "A",
+        "scenarioId": "A",
+        "roundNumber": "A",
+        "phase": "A",
+        "eventType": "A",
+        "actorUserId": "A",
+        "participantId": "A",
+        "summary": "A",
+        "payloadJson": "A",
+        "createdAt": "A"
+      },
+      "reason": "Historical event records are directly representable and copied without replay."
+    },
+    {
+      "name": "ScenarioLifecycleTransition",
+      "classification": "C",
+      "fields": {
+        "id": "C",
+        "scenarioId": "C",
+        "actorUserId": "C",
+        "action": "C",
+        "reason": "C",
+        "fromStatus": "C",
+        "toStatus": "C",
+        "expectedRevision": "C",
+        "resultingRevision": "C",
+        "cycle": "C",
+        "transitionedAt": "C"
+      },
+      "reason": "The current schema has no approved lifecycle-transition table. The verified source has no rows."
+    },
+    {
+      "name": "ScenarioParticipant",
+      "classification": "A",
+      "fields": {
+        "id": "A",
+        "scenarioId": "A",
+        "sourceType": "A",
+        "characterId": "A",
+        "entityId": "A",
+        "role": "A",
+        "controlledByUserId": "A",
+        "joinSource": "A",
+        "initiativeSlot": "A",
+        "positionJson": "A",
+        "visibilityOverridesJson": "A",
+        "stateJson": "A",
+        "snapshotJson": "A",
+        "isActive": "A",
+        "createdAt": "A",
+        "updatedAt": "A",
+        "factionId": "A",
+        "tacticalGroupId": "A",
+        "roleTag": "A",
+        "displayOrder": "A"
+      },
+      "reason": "Participant rows and snapshots are directly representable."
+    },
+    {
+      "name": "ScenarioRelationship",
+      "classification": "A",
+      "fields": {
+        "id": "A",
+        "campaignId": "A",
+        "fromScenarioId": "A",
+        "toScenarioId": "A",
+        "relationType": "A",
+        "sortOrder": "A",
+        "createdAt": "A",
+        "updatedAt": "A"
+      },
+      "reason": "The continues_from relationship is directly compatible."
+    },
+    {
+      "name": "Session",
+      "classification": "D",
+      "fields": {
+        "id": "D",
+        "userId": "D",
+        "tokenHash": "D",
+        "expiresAt": "D",
+        "createdAt": "D",
+        "updatedAt": "D"
+      },
+      "reason": "All historical sessions and token hashes are intentionally omitted."
+    },
+    {
+      "name": "User",
+      "classification": "A",
+      "fields": {
+        "id": "A",
+        "email": "A",
+        "displayName": "A",
+        "passwordHash": "A",
+        "createdAt": "A",
+        "updatedAt": "A"
+      },
+      "reason": "Stable identity and password hashes are copied only after every hash passes the current scrypt format proof. Hash values never enter manifests or logs."
+    },
+    {
+      "name": "UserRole",
+      "classification": "A",
+      "fields": {
+        "userId": "A",
+        "roleId": "A",
+        "assignedAt": "A"
+      },
+      "reason": "Assignments are directly compatible."
+    },
+    {
+      "name": "Weapon",
+      "classification": "A",
+      "fields": {
+        "id": "A",
+        "name": "A",
+        "baseOb": "A",
+        "createdAt": "A",
+        "updatedAt": "A"
+      },
+      "reason": "Legacy standalone Weapon rows are directly compatible. The verified source has no rows."
+    },
+    {
+      "name": "_prisma_migrations",
+      "classification": "C",
+      "fields": {
+        "id": "C",
+        "checksum": "C",
+        "finished_at": "C",
+        "migration_name": "C",
+        "logs": "C",
+        "rolled_back_at": "C",
+        "started_at": "C",
+        "applied_steps_count": "C"
+      },
+      "reason": "Historical migration lineage is verified as source provenance; target migration history comes only from current committed migrations."
+    }
+  ]
+}

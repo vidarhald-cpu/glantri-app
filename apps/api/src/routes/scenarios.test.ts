@@ -96,6 +96,7 @@ const mocks = vi.hoisted(() => {
     addCampaignRosterEntry: vi.fn(),
     createCampaign: vi.fn(),
     createCampaignNpc: vi.fn(),
+    activateCampaign: vi.fn(),
     getCampaignById: vi.fn(),
     getReusableEntityById: vi.fn(),
     listCampaignRosterEntries: vi.fn(),
@@ -4584,6 +4585,37 @@ describe("scenarios route contract", () => {
     expect(JSON.stringify(response.json())).not.toContain("Private to delegated controller");
   });
 
+  it("keeps draft Campaigns out of player home discovery", async () => {
+    const campaign = {
+      createdAt: "2026-05-09T12:00:00.000Z",
+      description: "A draft campaign.",
+      gmUserId: "gm-1",
+      id: "campaign-draft",
+      name: "Draft Trouble",
+      settings: { allowPlayerSelfJoin: false, defaultVisibility: "hidden" },
+      slug: "draft-trouble",
+      status: "draft",
+      updatedAt: "2026-05-09T12:00:00.000Z",
+    };
+    mocks.campaignService.listCampaignsByUserAccess.mockResolvedValue([campaign]);
+    mocks.campaignService.listPlayerCampaignCharacters.mockResolvedValue([]);
+    mocks.scenarioService.listScenariosByCampaignPlayerAccess.mockResolvedValue([]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/campaigns/player-home",
+    });
+
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(response.json()).toEqual({
+      campaigns: [],
+    });
+    expect(mocks.scenarioService.listScenariosByCampaignPlayerAccess).not.toHaveBeenCalled();
+  });
+
   it("keeps an active roster Campaign directly accessible with no live Scenario", async () => {
     const campaign = {
       createdAt: "2026-05-09T12:00:00.000Z",
@@ -4660,6 +4692,135 @@ describe("scenarios route contract", () => {
     for (const diagnostic of ["prisma", "/srv/", "findmany", "enum", "scenariorepository"]) {
       expect(clientPayload).not.toContain(diagnostic);
     }
+  });
+
+  it("activates a draft Campaign through the campaign activation endpoint", async () => {
+    const campaign = {
+      createdAt: "2026-05-09T12:00:00.000Z",
+      description: "Campaign prelaunch.",
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      settings: { allowPlayerSelfJoin: false, defaultVisibility: "hidden" },
+      slug: "border-trouble",
+      status: "active",
+      updatedAt: "2026-05-09T12:00:00.000Z",
+    };
+    mocks.campaignService.activateCampaign.mockResolvedValue(campaign);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/campaigns/campaign-1/activate",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ campaign });
+    expect(mocks.campaignService.activateCampaign).toHaveBeenCalledWith({
+      actorIsAdmin: false,
+      actorUserId: "gm-1",
+      campaignId: "campaign-1",
+    });
+  });
+
+  it("activates a draft Campaign through the campaign activation endpoint for a permitted admin", async () => {
+    const campaign = {
+      createdAt: "2026-05-09T12:00:00.000Z",
+      description: "Campaign prelaunch.",
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      settings: { allowPlayerSelfJoin: false, defaultVisibility: "hidden" },
+      slug: "border-trouble",
+      status: "active",
+      updatedAt: "2026-05-09T12:00:00.000Z",
+    };
+    mocks.campaignService.activateCampaign.mockResolvedValue(campaign);
+    mocks.requireAdminUser.mockResolvedValue({
+      ...mocks.adminUser,
+      id: "admin-1",
+      roles: ["admin"],
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/campaigns/campaign-1/activate",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ campaign });
+    expect(mocks.campaignService.activateCampaign).toHaveBeenCalledWith({
+      actorIsAdmin: true,
+      actorUserId: "admin-1",
+      campaignId: "campaign-1",
+    });
+  });
+
+  it("prevents draft activation when campaign is no longer draft", async () => {
+    mocks.campaignService.activateCampaign.mockRejectedValue(
+      new Error("Campaign can only be activated from draft status."),
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/campaigns/campaign-1/activate",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "Campaign can only be activated from draft status.",
+    });
+    expect(mocks.campaignService.activateCampaign).toHaveBeenCalledWith({
+      actorIsAdmin: false,
+      actorUserId: "gm-1",
+      campaignId: "campaign-1",
+    });
+  });
+
+  it("returns a validation error for stale activation conflicts", async () => {
+    mocks.campaignService.activateCampaign.mockRejectedValue(
+      new Error("Campaign activation is stale and must be retried."),
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/campaigns/campaign-1/activate",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "Campaign activation is stale and must be retried.",
+    });
+  });
+
+  it("returns authorization failure for non-admin users changing campaign status", async () => {
+    mocks.requireAdminUser.mockImplementation(async (_request, reply) => {
+      await reply.code(403).send({ error: "Admin or GM role required." });
+      return null;
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/campaigns/campaign-1/activate",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: "Admin or GM role required." });
+    expect(mocks.campaignService.activateCampaign).not.toHaveBeenCalled();
   });
 
   it("returns a validation error instead of calling the service for invalid campaign creation", async () => {

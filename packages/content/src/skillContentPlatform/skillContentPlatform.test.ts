@@ -1,5 +1,8 @@
-import type { SkillContentRelease } from "@glantri/domain";
+import type { SkillContentRelease, SkillContentWrittenTraditionRecord } from "@glantri/domain";
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { execFileSync, execSync } from "node:child_process";
+import path from "node:path";
 
 import { sha256 } from "../integrity/canonicalSha256";
 import { pilotSkillContentReleaseV1 } from "../pilotSkillContentRelease";
@@ -9,186 +12,396 @@ import {
   projectSkillContentReleaseForReference,
   validateSkillContentRelease,
 } from ".";
+import { pilotSkillContentReleaseProposalInput } from "./pilotSkillContentReleaseProposal";
 
-const proposalMetadata = {
-  provenance: { kind: "proposal", reference: "forgejo:recovery-admin/glantri-app#23" },
-  recordVersion: "1",
-  status: "proposal",
-} as const;
-const envelope = {
-  coreTasks: ["Assess an injury"],
-  limits: ["Does not perform surgery"],
-  methods: ["Observation and examination"],
-  useGuidance: "Use for diagnosis and non-operative treatment.",
-} as const;
-
-const candidateInput = {
-  accessExceptions: [
-    {
-      basis: "teacher",
-      competencyIds: ["spec:diagnostic-medicine"],
-      explanation: "A named teacher opens this route and grants no competence.",
-      grantsCompetence: 0,
-      historyIds: ["hist:temple-infirmary"],
-      id: "access:teacher-neseret",
-      metadata: proposalMetadata,
-      profileId: "profile:mogreb",
-    },
-  ],
-  compatibility: {
-    characterMigrationReviewRequired: true,
-    classification: "migration-review-required",
-    rationale: "Candidate structured semantics require review before Character adoption.",
-  },
-  competencies: [
-    {
-      description:
-        "Medicine covers diagnosis, prognosis, and non-operative treatment within a coherent tradition.",
-      domainId: "domain:healing",
-      id: "skill:medicine",
-      kind: "skill",
-      metadata: proposalMetadata,
-      name: "Medicine",
-      prerequisites: [],
-      shortDescription: "Diagnose and treat illness and injury without surgery.",
-      shortLabel: "Medicine",
-      taskEnvelope: envelope,
-      weight: 3,
-    },
-    {
-      description:
-        "Spoken Mogrebi represents conversation and oral comprehension; it grants no writing.",
-      domainId: "domain:languages-text",
-      familyIds: ["language-family:mogrebi"],
-      id: "spoken:mogrebi",
-      kind: "spoken-language",
-      metadata: proposalMetadata,
-      name: "Spoken Mogrebi",
-      prerequisites: [],
-      shortDescription: "Speak and understand Mogrebi.",
-      shortLabel: "Mogrebi",
-      taskEnvelope: { ...envelope, coreTasks: ["Speak and understand Mogrebi"] },
-      weight: 2,
-    },
-    {
-      description:
-        "Written Mogrebi binds Mogrebi language, Sacred Mogrebi script, and written conventions.",
-      domainId: "domain:languages-text",
-      id: "written:mogrebi:sacred-mogrebi",
-      kind: "written-tradition",
-      metadata: proposalMetadata,
-      name: "Written Mogrebi in Sacred Mogrebi",
-      prerequisites: [],
-      scriptId: "script:sacred-mogrebi",
-      shortDescription: "Read and write Mogrebi using the Sacred Mogrebi tradition.",
-      shortLabel: "Written Mogrebi",
-      spokenLanguageId: "spoken:mogrebi",
-      taskEnvelope: { ...envelope, coreTasks: ["Read and write Mogrebi"] },
-      weight: 2,
-    },
-    {
-      acquisitionWeight: 1,
-      description: "Diagnostic Medicine applies Medicine to difficult differential diagnosis.",
-      domainId: "domain:healing",
-      id: "spec:diagnostic-medicine",
-      kind: "specialization",
-      metadata: proposalMetadata,
-      name: "Diagnostic Medicine",
-      parentCompetencyId: "skill:medicine",
-      prerequisites: [{ competencyId: "skill:medicine", threshold: 6 }],
-      shortDescription: "Specialized differential diagnosis.",
-      shortLabel: "Diagnosis",
-      taskEnvelope: { ...envelope, coreTasks: ["Resolve a difficult differential diagnosis"] },
-      transfer: { kind: "explicit-relationships", relationshipIds: ["rel:medicine-diagnosis"] },
-      weight: 1,
-    },
-  ],
-  contentVersion: "pilot-skills-content/2.0.0-candidate.1",
-  domains: [
-    {
-      description: "Healing practice navigation only.",
-      id: "domain:healing",
-      kind: "domain",
-      mechanics: "none",
-      metadata: proposalMetadata,
-      name: "Healing & Medicine",
-    },
-    {
-      description: "Language and text navigation only.",
-      id: "domain:languages-text",
-      kind: "domain",
-      mechanics: "none",
-      metadata: proposalMetadata,
-      name: "Languages & Written Tradition",
-    },
-  ],
-  histories: [
-    {
-      context: "Temple clinical training.",
-      fixedCompetencyIds: ["skill:medicine"],
-      id: "hist:temple-infirmary",
-      metadata: proposalMetadata,
-      name: "Temple Infirmary",
-      selectionSlots: [],
-    },
-  ],
-  id: "content-release:pilot-skills:2-candidate-1",
-  profiles: [
-    {
-      accessBand: "AB3",
-      developmentStage: "DS3",
-      id: "profile:mogreb",
-      metadata: proposalMetadata,
-      name: "Mogreb",
-      normalRoutes: [
-        {
-          accessBand: "AB3",
-          competencyIds: ["skill:medicine", "spoken:mogrebi", "written:mogrebi:sacred-mogrebi"],
-          description: "Temple route.",
-          id: "route:mogreb-temple",
-          metadata: proposalMetadata,
-        },
-      ],
-      overrides: [
-        {
-          attributionId: "access:teacher-neseret",
-          availability: "restricted",
-          competencyIds: ["spec:diagnostic-medicine"],
-          explanation: "Named teaching route.",
-        },
-      ],
-    },
-  ],
-  provenance: ["docs/decisions/rules/0003-skill-documentation-and-release-integrity.md"],
-  relationships: [
-    {
-      direction: "source-to-target",
-      id: "rel:medicine-diagnosis",
-      metadata: proposalMetadata,
-      rationale: "Shared diagnostic foundation.",
-      sourceCompetencyId: "skill:medicine",
-      strength: 50,
-      targetCompetencyId: "spec:diagnostic-medicine",
-    },
-  ],
-  rulesVersion: "pilot-skill-rules/v1",
-  schemaVersion: "skill-content-release/v2",
-  scripts: [
-    {
-      description: "Sacred Mogrebi script identity.",
-      familyIds: ["script-family:mogrebi"],
-      id: "script:sacred-mogrebi",
-      kind: "script",
-      metadata: proposalMetadata,
-      name: "Sacred Mogrebi",
-    },
-  ],
-  status: "proposal",
-  title: "Documentation-complete Pilot candidate",
-} as const satisfies Omit<SkillContentRelease, "manifest">;
+const repositoryRoot = path.resolve(__dirname, "..", "..", "..", "..");
 
 function candidate(): SkillContentRelease {
-  return buildSkillContentRelease(structuredClone(candidateInput));
+  return buildSkillContentRelease(
+    resolveProvenanceInProposalInput(structuredClone(pilotSkillContentReleaseProposalInput)),
+  );
+}
+
+type ProposalMetadataRecordKind =
+  | "accessExceptions"
+  | "competency"
+  | "domain"
+  | "history"
+  | "profile"
+  | "profiles"
+  | "relationship"
+  | "route"
+  | "script"
+  | "specialization";
+
+type SourceSpec = {
+  endMarker?: string;
+  path: string;
+  startMarker?: string;
+};
+
+const proposalMetadataSourceByKind: Record<ProposalMetadataRecordKind, readonly SourceSpec[]> = {
+  accessExceptions: [
+    {
+      endMarker: "backgrounds:",
+      path: "packages/content/src/pilotSkillContentRelease/release.ts",
+      startMarker: "accessExceptions:",
+    },
+  ],
+  competency: [
+    {
+      endMarker: "const authoredCompetencyDocumentationIds",
+      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+      startMarker: "const authoredTaskEnvelopeByCompetencyId",
+    },
+  ],
+  domain: [
+    {
+      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+      startMarker: "const domainDefinitions",
+    },
+  ],
+  history: [
+    {
+      endMarker: "const relationships = (",
+      path: "packages/content/src/pilotSkillContentRelease/release.ts",
+      startMarker: "const histories = (",
+    },
+  ],
+  profile: [
+    {
+      endMarker: ").map(([id, name, developmentStage, routeId, overrides]) => ({",
+      path: "packages/content/src/pilotSkillContentRelease/release.ts",
+      startMarker: "const profiles = (",
+    },
+  ],
+  profiles: [
+    {
+      endMarker: ").map(([id, name, developmentStage, routeId, overrides]) => ({",
+      path: "packages/content/src/pilotSkillContentRelease/release.ts",
+      startMarker: "const profiles = (",
+    },
+  ],
+  relationship: [
+    {
+      endMarker: "const specializations = [",
+      path: "packages/content/src/pilotSkillContentRelease/release.ts",
+      startMarker: "const relationships = (",
+    },
+  ],
+  route: [
+    {
+      endMarker: ").map(([id, name, developmentStage, routeId, overrides]) => ({",
+      path: "packages/content/src/pilotSkillContentRelease/release.ts",
+      startMarker: "const profiles = (",
+    },
+    {
+      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+      startMarker: "const scythianHomeProfileUnavailabilityRouteId",
+    },
+  ],
+  script: [
+    {
+      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+      startMarker: "const scripts:",
+    },
+  ],
+  specialization: [
+    {
+      endMarker: "const authoredCompetencyDocumentationIds",
+      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+      startMarker: "const authoredTaskEnvelopeByCompetencyId",
+    },
+  ],
+};
+
+const forgejoSourceRevision = execSync("git rev-parse HEAD", {
+  cwd: repositoryRoot,
+  encoding: "utf8",
+}).trim();
+
+if (!/^[0-9a-f]{40}$/.test(forgejoSourceRevision)) {
+  throw new Error(`Unexpected git revision ${forgejoSourceRevision}`);
+}
+
+const proposalSourceBaseUrl = `http://127.0.0.1:3001/recovery-admin/glantri-app/src/commit/${forgejoSourceRevision}/`;
+
+function readSourceLines(sourcePath: string): string[] {
+  return readFileSync(path.resolve(repositoryRoot, sourcePath), "utf8").split(/\r?\n/);
+}
+
+function extractSourceSegment(
+  sourcePath: string,
+  spec: SourceSpec,
+): { lineOffset: number; lines: string[] } {
+  const lines = readSourceLines(sourcePath);
+  const isMarkerLine = (line: string, marker: string): boolean => {
+    const trimmed = line.trim();
+    return (
+      trimmed.includes(marker) &&
+      !trimmed.startsWith("startMarker:") &&
+      !trimmed.startsWith("endMarker:")
+    );
+  };
+  const start = spec.startMarker
+    ? lines.findIndex((line) => isMarkerLine(line, spec.startMarker!))
+    : 0;
+  const safeStart = Math.max(0, start);
+  const end = spec.endMarker
+    ? lines.findIndex((line, index) => index > safeStart && isMarkerLine(line, spec.endMarker!))
+    : -1;
+  const safeEnd = end >= 0 ? end : lines.length;
+  return { lineOffset: safeStart, lines: lines.slice(safeStart, safeEnd) };
+}
+
+function resolveProvenanceReference(recordId: string, kind: ProposalMetadataRecordKind): string {
+  const sourceSpecs = proposalMetadataSourceByKind[kind];
+  if (!sourceSpecs || sourceSpecs.length === 0) {
+    throw new Error(`Unknown record kind ${kind} for provenance source mapping.`);
+  }
+  const idEscaped = recordId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let resolvedPath: string | undefined;
+  let lineNumber: number | undefined;
+  for (const sourceSpec of sourceSpecs) {
+    const sourcePath = sourceSpec.path;
+    const { lineOffset, lines } = extractSourceSegment(sourcePath, sourceSpec);
+    const match = lines.findIndex((line) => new RegExp(`"${idEscaped}"`).test(line));
+    if (match >= 0) {
+      resolvedPath = sourcePath;
+      lineNumber = lineOffset + match + 1;
+      break;
+    }
+  }
+
+  if (!resolvedPath || lineNumber === undefined) {
+    throw new Error(`Could not locate record ${recordId} in source files for ${kind}.`);
+  }
+
+  return `${proposalSourceBaseUrl}${resolvedPath}#L${lineNumber}`;
+}
+
+type TestCandidateSkillContentRelease = Omit<SkillContentRelease, "manifest">;
+
+function resolveProvenanceInProposalInput(
+  input: TestCandidateSkillContentRelease,
+): TestCandidateSkillContentRelease {
+  const release = structuredClone(input);
+  for (const record of release.domains) {
+    record.metadata = structuredClone(record.metadata);
+    record.metadata.provenance.reference = resolveProvenanceReference(record.id, "domain");
+  }
+  for (const record of release.scripts) {
+    record.metadata = structuredClone(record.metadata);
+    record.metadata.provenance.reference = resolveProvenanceReference(record.id, "script");
+  }
+  for (const record of release.competencies) {
+    record.metadata = structuredClone(record.metadata);
+    const kind = record.kind === "specialization" ? "specialization" : "competency";
+    record.metadata.provenance.reference = resolveProvenanceReference(record.id, kind);
+  }
+  for (const record of release.histories) {
+    record.metadata = structuredClone(record.metadata);
+    record.metadata.provenance.reference = resolveProvenanceReference(record.id, "history");
+  }
+  for (const profile of release.profiles) {
+    profile.metadata = structuredClone(profile.metadata);
+    profile.metadata.provenance.reference = resolveProvenanceReference(profile.id, "profile");
+    for (const route of profile.normalRoutes) {
+      route.metadata = structuredClone(route.metadata);
+      route.metadata.provenance.reference = resolveProvenanceReference(route.id, "route");
+    }
+    for (const override of profile.overrides) {
+      if (!hasMetadataRecord(override)) {
+        continue;
+      }
+      override.metadata = structuredClone(override.metadata);
+      override.metadata.provenance.reference = resolveProvenanceReference(override.id, "route");
+    }
+  }
+  for (const record of release.relationships) {
+    record.metadata = structuredClone(record.metadata);
+    record.metadata.provenance.reference = resolveProvenanceReference(record.id, "relationship");
+  }
+  for (const record of release.accessExceptions) {
+    record.metadata = structuredClone(record.metadata);
+    record.metadata.provenance.reference = resolveProvenanceReference(
+      record.id,
+      "accessExceptions",
+    );
+  }
+  return release;
+}
+
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeTaskText(
+  releaseRecord: (typeof pilotSkillContentReleaseProposalInput.competencies)[number],
+  text: string,
+): string {
+  return normalizeWhitespace(text)
+    .replace(new RegExp(escapeRegExp(releaseRecord.id), "gi"), "")
+    .replace(new RegExp(escapeRegExp(releaseRecord.description), "gi"), "")
+    .replace(new RegExp(escapeRegExp(releaseRecord.shortDescription), "gi"), "")
+    .replace(new RegExp(escapeRegExp(releaseRecord.shortLabel), "gi"), "")
+    .replace(new RegExp(escapeRegExp(releaseRecord.name), "gi"), "")
+    .replace(
+      /\b(?:skill|spec|written|spoken|hist|rel|access|route|profile|domain|script|language):[a-z0-9-']+/gi,
+      "",
+    )
+    .replace(
+      /\b(?:name|core|specialization|transfer|history|prerequisite|path|scope|limits|methods|guidance)\b/gi,
+      "",
+    )
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function normalizeAdversarialTaskText(
+  releaseRecord: (typeof pilotSkillContentReleaseProposalInput.competencies)[number],
+  text: string,
+): string {
+  const normalized = normalizeTaskText(releaseRecord, text).toLowerCase();
+  const commonTokens = new Set([
+    ...releaseRecord.description.toLowerCase().split(/\W+/),
+    ...releaseRecord.shortDescription.toLowerCase().split(/\W+/),
+  ]);
+  let scrubbed = normalized;
+  for (const token of commonTokens) {
+    if (token.length <= 4) continue;
+    if (/^[a-z-']+$/.test(token)) {
+      scrubbed = scrubbed.replace(new RegExp(`\\b${escapeRegExp(token)}\\b`, "g"), "");
+    }
+  }
+  const suffixTokens = releaseRecord.id
+    .split(":")
+    .flatMap((segment) => segment.split("-"))
+    .filter((token) => token.length > 3);
+  for (const token of suffixTokens) {
+    scrubbed = scrubbed.replace(new RegExp(`\\b${escapeRegExp(token)}\\b`, "g"), "");
+  }
+  return normalizeWhitespace(scrubbed);
+}
+
+function resolveProvenancePath(reference: string): { path: string; line: number; lines: string[] } {
+  const match =
+    /^http:\/\/127\.0\.0\.1:3001\/recovery-admin\/glantri-app\/src\/commit\/([0-9a-f]{40})\/(.+?)#L([0-9]+)$/.exec(
+      reference,
+    );
+  if (!match) {
+    throw new Error(`Malformed provenance reference ${reference}`);
+  }
+  const [, sourceRevision, rawPath, rawLine] = match;
+  const absolutePath = path.resolve(repositoryRoot, rawPath);
+  const source = execFileSync("git", ["show", `${sourceRevision}:${rawPath}`], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  });
+  const lines = source.split(/\r?\n/);
+  const line = Number(rawLine);
+  if (!Number.isFinite(line) || line <= 0 || line > lines.length) {
+    throw new Error(`Invalid provenance line ${rawLine} for ${reference}`);
+  }
+  return { path: absolutePath, line, lines };
+}
+
+type MetadataRecord = {
+  id: string;
+  metadata: {
+    provenance: {
+      reference: string;
+    };
+  };
+};
+
+function hasMetadataRecord(value: unknown): value is MetadataRecord {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value &&
+    typeof (value as { id?: unknown }).id === "string" &&
+    "metadata" in value &&
+    typeof (value as { metadata?: unknown }).metadata === "object" &&
+    (value as { metadata?: { provenance?: unknown } }).metadata !== null &&
+    "provenance" in ((value as { metadata?: { provenance?: unknown } }).metadata ?? {}) &&
+    typeof (value as { metadata?: { provenance?: { reference?: unknown } } }).metadata?.provenance
+      ?.reference === "string"
+  );
+}
+
+function collectMetadataRecords(release: SkillContentRelease): readonly MetadataRecord[] {
+  const metadataRecords: MetadataRecord[] = [
+    ...release.domains,
+    ...release.scripts,
+    ...release.competencies,
+    ...release.histories,
+    ...release.profiles,
+    ...release.relationships,
+    ...release.accessExceptions,
+    ...release.profiles.flatMap((profile) => profile.normalRoutes),
+  ];
+  release.profiles
+    .flatMap((profile) => profile.overrides)
+    .forEach((record) => {
+      if (hasMetadataRecord(record)) {
+        metadataRecords.push(record);
+      }
+    });
+  return metadataRecords;
+}
+
+function specializationIndex(release: SkillContentRelease): number {
+  const index = release.competencies.findIndex((record) => record.kind === "specialization");
+  if (index < 0) throw new Error("No specialization competency found in release fixture");
+  return index;
+}
+
+function writtenTraditionIndex(release: SkillContentRelease): number {
+  const index = release.competencies.findIndex((record) => record.kind === "written-tradition");
+  if (index < 0) throw new Error("No written-tradition competency found in release fixture");
+  return index;
+}
+
+function profileWithOverrideIndex(release: SkillContentRelease): number {
+  const index = release.profiles.findIndex((record) => record.overrides.length > 0);
+  if (index < 0) throw new Error("No profile with overrides found in release fixture");
+  return index;
+}
+
+function profileWithOverrideAttributionIndex(
+  release: SkillContentRelease,
+  attributionId: string,
+): number {
+  const index = release.profiles.findIndex((record) =>
+    record.overrides.some(
+      ({ attributionId: candidateAttributionId }) => candidateAttributionId === attributionId,
+    ),
+  );
+  if (index < 0)
+    throw new Error(`No profile with override attribution ${attributionId} found in fixture`);
+  return index;
+}
+
+function explicitTransferSpecializationIndex(release: SkillContentRelease): number {
+  const index = release.competencies.findIndex(
+    (record) =>
+      record.kind === "specialization" && record.transfer.kind === "explicit-relationships",
+  );
+  if (index < 0)
+    throw new Error("No specialization with explicit transfer found in release fixture");
+  return index;
+}
+
+function competencyById(
+  release: SkillContentRelease,
+  id: string,
+): (typeof release.competencies)[number] | undefined {
+  return release.competencies.find((record) => record.id === id);
 }
 
 describe("documentation-complete Skill content platform", () => {
@@ -213,20 +426,44 @@ describe("documentation-complete Skill content platform", () => {
     });
   });
 
+  it("uses resolvable issue and authority references", () => {
+    const release = candidate();
+    expect(release.provenance).toEqual(
+      expect.arrayContaining([
+        "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/25",
+        "http://127.0.0.1:3001/recovery-admin/glantri-app/pulls/64",
+        "docs/decisions/rules/0002-skill-catalogue-qualitative-architecture.md",
+        "docs/decisions/rules/0003-skill-documentation-and-release-integrity.md",
+        "docs/rules/pilot-skill-rules-v1.md",
+        "docs/rules/pilot-skill-content-release-v1.md",
+      ]),
+    );
+    expect(release.provenance).toEqual(
+      expect.arrayContaining([
+        "docs/process/task-contract.md",
+        "docs/rules/pilot-skill-rules-v1.md",
+      ]),
+    );
+    expect(release.compatibility.classification).toBe("mechanically-compatible");
+    expect(
+      release.provenance.some((entry) => entry.startsWith("docs/process/recovery-legacy/")),
+    ).toBe(false);
+  });
+
   it("changes only package integrity for presentation-only edits", () => {
     const original = candidate();
-    const input = structuredClone(candidateInput) as unknown as Omit<
-      SkillContentRelease,
-      "manifest"
-    >;
+    const input = structuredClone(candidate());
+    const profileOverrideIndex = profileWithOverrideIndex(input);
     input.competencies[0].shortLabel = "Med.";
     input.competencies[0].shortDescription = "Diagnose and treat without operative surgery.";
     input.competencies[0].description +=
       " This editorial clarification does not alter the task boundary.";
-    input.competencies[3].prerequisites[0]!.justification = "Editorial source explanation.";
+    input.competencies[specializationIndex(input)]!.prerequisites[0]!.justification =
+      "Editorial source explanation.";
     input.histories[0]!.name = "Mogrebi Temple Infirmary";
     input.profiles[0]!.normalRoutes[0]!.description = "Temple and medical-text route.";
-    input.profiles[0]!.overrides[0]!.explanation = "Named teaching route for review.";
+    input.profiles[profileOverrideIndex]!.overrides[0]!.explanation =
+      "Named teaching route for review.";
     input.accessExceptions[0]!.explanation =
       "The named teacher opens the route while granting no competence.";
     const edited = buildSkillContentRelease(input);
@@ -236,10 +473,7 @@ describe("documentation-complete Skill content platform", () => {
 
   it("normalizes presentation ordering out of semantic integrity", () => {
     const original = candidate();
-    const input = structuredClone(candidateInput) as unknown as Omit<
-      SkillContentRelease,
-      "manifest"
-    >;
+    const input = structuredClone(candidate());
     input.competencies = [...input.competencies].reverse();
     input.domains = [...input.domains].reverse();
     const reordered = buildSkillContentRelease(input);
@@ -250,15 +484,223 @@ describe("documentation-complete Skill content platform", () => {
 
   it("changes both integrity values for structured mechanical edits", () => {
     const original = candidate();
-    const input = structuredClone(candidateInput) as unknown as Omit<
-      SkillContentRelease,
-      "manifest"
-    >;
+    const input = structuredClone(candidate());
     input.competencies[0].weight = 2;
     input.competencies[0].taskEnvelope.coreTasks = ["Assess and diagnose an injury"];
     const edited = buildSkillContentRelease(input);
     expect(edited.manifest.packageDigest).not.toBe(original.manifest.packageDigest);
     expect(edited.manifest.semanticDigest).not.toBe(original.manifest.semanticDigest);
+  });
+
+  it("repairs accepted access semantics and specificity boundaries", () => {
+    const release = candidate();
+    const copperLatch = release.accessExceptions.find(
+      ({ id }) => id === "access:iest-contact-copper-latch",
+    );
+    expect(copperLatch).toBeDefined();
+    expect(copperLatch?.competencyIds).toHaveLength(0);
+    expect(copperLatch?.historyIds).toContain("hist:iest-night-entry-crew");
+
+    const iestProfile = release.profiles.find(({ id }) => id === "profile:iest-commercial-city");
+    expect(iestProfile).toBeDefined();
+    expect(
+      iestProfile?.normalRoutes.some((route) => route.id === "route:iest-night-entry-crew"),
+    ).toBe(false);
+    expect(
+      iestProfile?.normalRoutes.every(
+        ({ competencyIds }) => !competencyIds.includes("skill:lockpicking"),
+      ),
+    ).toBe(true);
+
+    const scythian = release.profiles.find(({ id }) => id === "profile:scythian-pastoral-clan");
+    expect(scythian).toBeDefined();
+    expect(scythian?.normalRoutes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "route:scythian-olog-unavailable",
+          competencyIds: expect.arrayContaining([
+            "skill:law:olog-princely",
+            "spec:court-administration",
+          ]),
+        }),
+      ]),
+    );
+    const scythianUnavailability = scythian?.overrides.find(
+      ({ attributionId }) => attributionId === "route:scythian-olog-unavailable",
+    );
+    expect(scythianUnavailability).toMatchObject({
+      availability: "unavailable",
+      competencyIds: expect.arrayContaining([
+        "skill:law:olog-princely",
+        "spec:court-administration",
+      ]),
+    });
+    const report = validateSkillContentRelease(release);
+    expect(report.valid).toBe(true);
+  });
+
+  it("enforces authored task envelopes, anti-boilerplate content, and deep-clone boundaries", () => {
+    const release = candidate();
+    expect(release.competencies).toHaveLength(61);
+    expect(
+      release.competencies.every(
+        (record) =>
+          record.description.length >= 40 && !/Bounded pilot practice:/i.test(record.description),
+      ),
+    ).toBe(true);
+    const normalizedEnvelopeSignatures = release.competencies.map((record) =>
+      normalizeAdversarialTaskText(
+        record,
+        [
+          ...record.taskEnvelope.coreTasks,
+          ...record.taskEnvelope.limits,
+          ...record.taskEnvelope.methods,
+          record.taskEnvelope.useGuidance,
+        ].join(" "),
+      ),
+    );
+    expect(new Set(normalizedEnvelopeSignatures).size).toBe(release.competencies.length);
+    expect(
+      release.competencies
+        .filter(
+          (record) =>
+            !record.taskEnvelope.coreTasks.every((entry) => entry.length >= 20) ||
+            !record.taskEnvelope.limits.every((entry) => entry.length >= 20) ||
+            !record.taskEnvelope.methods.every((entry) => entry.length >= 20) ||
+            record.taskEnvelope.useGuidance.length < 65 ||
+            !record.taskEnvelope.methods.some((entry) => /Failure mode/i.test(entry)),
+        )
+        .map((record) => record.id),
+    ).toEqual([]);
+    expect(release.competencies.every((record) => record.taskEnvelope.methods.length > 0)).toBe(
+      true,
+    );
+    expect(
+      release.competencies.every(
+        (record) =>
+          record.description.length >= 40 &&
+          record.shortDescription.length >= 10 &&
+          !/This competency is fully documented/i.test(record.shortDescription),
+      ),
+    ).toBe(true);
+    expect(release.competencies[0]!.taskEnvelope.coreTasks).toHaveLength(1);
+    expect(release.competencies[0]!.taskEnvelope.methods).toHaveLength(2);
+
+    const baseHistorySlot = pilotSkillContentReleaseV1.histories[0]!.selectionSlots[0]!;
+    const baseProfileRoute = pilotSkillContentReleaseV1.profiles[0]!.normalRoutes[0]!;
+    const baseSpecialization = pilotSkillContentReleaseV1.specializations.find(
+      ({ id }) => id === "spec:diagnostic-medicine",
+    );
+    const mutated = candidate();
+    (mutated.histories[0]!.selectionSlots[0]!.candidateCompetencyIds as string[]).push(
+      "skill:medicine",
+    );
+    (mutated.profiles[0]!.normalRoutes[0]!.competencyIds as string[]).push("skill:medicine");
+    const diagnosticSpecialization = competencyById(mutated, "spec:diagnostic-medicine")!;
+    if (diagnosticSpecialization.kind === "specialization") {
+      diagnosticSpecialization.prerequisites[0]!.competencyId = "skill:surgery";
+    }
+    expect(baseHistorySlot.candidateCompetencyIds).not.toContain("skill:medicine");
+    expect(baseProfileRoute.competencyIds).not.toContain("skill:medicine");
+    expect(baseSpecialization).toBeDefined();
+    if (baseSpecialization) {
+      expect(baseSpecialization.prerequisites[0]!.competencyId).not.toBe("skill:surgery");
+    }
+  });
+
+  it("enforces per-record provenance resolution over shared issue-level URLs", () => {
+    const release = candidate();
+    const metadataRecords = collectMetadataRecords(release);
+    expect(metadataRecords.length).toBeGreaterThan(20);
+    const references = metadataRecords.map((record) => record.metadata.provenance.reference);
+    const malformed = references.filter(
+      (reference) =>
+        !/^http:\/\/127\.0\.0\.1:3001\/recovery-admin\/glantri-app\/src\/commit\/[0-9a-f]{40}\/[^#]+#L\d+$/.test(
+          reference,
+        ),
+    );
+    expect(malformed).toHaveLength(0);
+    expect(references.every((reference) => !reference.includes("/src/branch/dev/"))).toBe(true);
+    const duplicateReferences = [...new Set(references)]
+      .filter((reference) => references.filter((candidate) => candidate === reference).length > 1)
+      .map((reference) => ({
+        reference,
+        count: references.filter((candidate) => candidate === reference).length,
+      }));
+    expect(duplicateReferences).toEqual([]);
+    for (const reference of references) {
+      const resolved = resolveProvenancePath(reference);
+      const metadataRecord = metadataRecords.find(
+        (record) => record.metadata.provenance.reference === reference,
+      );
+      expect(metadataRecord).toBeDefined();
+      if (!metadataRecord) continue;
+      expect(resolved.lines.join("\n")).toContain(`"${metadataRecord.id}"`);
+    }
+    expect(references.every((reference) => !reference.includes("/issues/"))).toBe(true);
+    expect(references.every((reference) => !reference.includes("/pulls/"))).toBe(true);
+  });
+
+  it("rejects proposal-source fallback task-envelope generation", () => {
+    const proposalSource = readFileSync(
+      path.resolve(
+        repositoryRoot,
+        "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+      ),
+      "utf8",
+    );
+    expect(proposalSource).not.toMatch(/\bbuild(?:Shared|Record)?TaskEnvelope\b/);
+    expect(proposalSource).not.toMatch(/fallback\s+task\s+envelope/i);
+    expect(proposalSource.match(/generated common envelope/i)).toBeNull();
+  });
+
+  it("prevents proposal-input mutation from reusing immutable v1 nested arrays", () => {
+    const proposalInput = structuredClone(pilotSkillContentReleaseProposalInput);
+    const baseHistorySlot = pilotSkillContentReleaseV1.histories[0]!.selectionSlots[0]!;
+    const baseProfileRoute = pilotSkillContentReleaseV1.profiles[0]!.normalRoutes[0]!;
+    const baseSpecialization = pilotSkillContentReleaseV1.specializations.find(
+      ({ id }) => id === "spec:diagnostic-medicine",
+    );
+    expect(baseSpecialization).toBeDefined();
+    if (!baseSpecialization) return;
+
+    const mutableHistory = proposalInput.histories.find(
+      ({ id }) => id === "hist:glantri-household-retainer-service",
+    );
+    expect(mutableHistory).toBeDefined();
+    if (!mutableHistory || !mutableHistory.selectionSlots[0]) return;
+    const mutableProfile = proposalInput.profiles[0];
+    expect(mutableProfile).toBeDefined();
+    if (!mutableProfile || !mutableProfile.normalRoutes[0]) return;
+    const mutableSpecialization = proposalInput.competencies.find(
+      ({ id }) => id === "spec:diagnostic-medicine",
+    );
+    expect(mutableSpecialization).toBeDefined();
+    if (mutableSpecialization?.kind !== "specialization") return;
+
+    (mutableHistory.selectionSlots[0].candidateCompetencyIds as string[]).push("skill:medicine");
+    (mutableProfile.normalRoutes[0].competencyIds as string[]).push("skill:medicine");
+    if (mutableSpecialization.transfer.kind === "explicit-relationships") {
+      (mutableSpecialization.transfer.relationshipIds as string[]).push(
+        "rel:diagnostic-medicine:test",
+      );
+    }
+    mutableSpecialization.prerequisites[0]!.competencyId = "skill:surgery";
+
+    expect(baseHistorySlot.candidateCompetencyIds).not.toContain("skill:medicine");
+    expect(baseProfileRoute.competencyIds).not.toContain("skill:medicine");
+    if (baseSpecialization.kind === "specialization") {
+      if (baseSpecialization.transfer.kind === "explicit-relationships") {
+        expect(
+          (
+            baseSpecialization as (typeof pilotSkillContentReleaseV1.specializations)[number] & {
+              transfer: { relationshipIds: readonly string[] };
+            }
+          ).transfer.relationshipIds,
+        ).not.toContain("rel:diagnostic-medicine:test");
+      }
+      expect(baseSpecialization.prerequisites[0]!.competencyId).not.toBe("skill:surgery");
+    }
   });
 
   it("keeps compatibility classification explicit rather than inferred from digests", () => {
@@ -300,21 +742,24 @@ describe("documentation-complete Skill content platform", () => {
       [
         "SKILL_CONTENT_UNKNOWN_PREREQUISITE",
         (release) => {
-          release.competencies[3]!.prerequisites[0]!.competencyId = "skill:unknown";
+          release.competencies[specializationIndex(release)]!.prerequisites[0]!.competencyId =
+            "skill:unknown";
         },
       ],
       [
         "SKILL_CONTENT_UNKNOWN_SCRIPT",
         (release) => {
-          if (release.competencies[2]!.kind === "written-tradition")
-            release.competencies[2]!.scriptId = "script:unknown";
+          const index = writtenTraditionIndex(release);
+          (release.competencies[index]! as SkillContentWrittenTraditionRecord).scriptId =
+            "script:unknown";
         },
       ],
       [
         "SKILL_CONTENT_INVALID_LANGUAGE_BINDING",
         (release) => {
-          if (release.competencies[2]!.kind === "written-tradition")
-            release.competencies[2]!.spokenLanguageId = "skill:medicine";
+          const index = writtenTraditionIndex(release);
+          (release.competencies[index]! as SkillContentWrittenTraditionRecord).spokenLanguageId =
+            "skill:medicine";
         },
       ],
     ];
@@ -332,8 +777,16 @@ describe("documentation-complete Skill content platform", () => {
     expect(validateSkillContentRelease(candidate()).valid).toBe(true);
 
     const routeAttributed = candidate();
-    routeAttributed.profiles[0]!.overrides[0]!.attributionId = "route:mogreb-temple";
-    routeAttributed.profiles[0]!.overrides[0]!.competencyIds = ["skill:medicine"];
+    const routeAttributedProfileIndex = profileWithOverrideAttributionIndex(
+      routeAttributed,
+      "access:mogreb-surgeon-neseret",
+    );
+    routeAttributed.profiles[routeAttributedProfileIndex]!.overrides[0]!.attributionId =
+      "route:mogreb-temple";
+    routeAttributed.profiles[routeAttributedProfileIndex]!.overrides[0]!.competencyIds = [
+      "skill:medicine",
+      "skill:first-aid",
+    ];
     routeAttributed.manifest = {
       ...routeAttributed.manifest,
       ...computeSkillContentReleaseIntegrity(routeAttributed),
@@ -341,7 +794,8 @@ describe("documentation-complete Skill content platform", () => {
     expect(validateSkillContentRelease(routeAttributed).valid).toBe(true);
 
     const unresolved = candidate();
-    unresolved.profiles[0]!.overrides[0]!.attributionId = "source:does-not-exist";
+    unresolved.profiles[routeAttributedProfileIndex]!.overrides[0]!.attributionId =
+      "source:does-not-exist";
     unresolved.manifest = {
       ...unresolved.manifest,
       ...computeSkillContentReleaseIntegrity(unresolved),
@@ -350,32 +804,39 @@ describe("documentation-complete Skill content platform", () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: "SKILL_CONTENT_UNKNOWN_OVERRIDE_ATTRIBUTION",
-          path: "profiles[0].overrides[0].attributionId",
+          path: `profiles[${routeAttributedProfileIndex}].overrides[0].attributionId`,
         }),
       ]),
     );
 
     const missing = candidate();
-    delete (missing.profiles[0]!.overrides[0] as Partial<{ attributionId: string }>).attributionId;
+    delete (
+      missing.profiles[routeAttributedProfileIndex]!.overrides[0] as Partial<{
+        attributionId: string;
+      }>
+    ).attributionId;
     expect(validateSkillContentRelease(missing).diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           code: "SKILL_CONTENT_INVALID_SHAPE",
-          path: "profiles[0].overrides[0].attributionId",
+          path: `profiles[${routeAttributedProfileIndex}].overrides[0].attributionId`,
         }),
       ]),
     );
 
     const wrongProfile = candidate();
+    const wrongProfileAttributionProfileIndex = profileWithOverrideIndex(wrongProfile);
     wrongProfile.profiles = [
       ...wrongProfile.profiles,
       {
-        ...structuredClone(wrongProfile.profiles[0]!),
+        ...structuredClone(wrongProfile.profiles[wrongProfileAttributionProfileIndex]!),
         id: "profile:other",
         name: "Other",
         normalRoutes: [
           {
-            ...structuredClone(wrongProfile.profiles[0]!.normalRoutes[0]!),
+            ...structuredClone(
+              wrongProfile.profiles[wrongProfileAttributionProfileIndex]!.normalRoutes[0]!,
+            ),
             id: "route:other-medicine",
             competencyIds: ["skill:medicine"],
           },
@@ -383,8 +844,9 @@ describe("documentation-complete Skill content platform", () => {
         overrides: [],
       },
     ];
-    wrongProfile.profiles[0]!.overrides[0]!.attributionId = "route:other-medicine";
-    wrongProfile.manifest.counts.profiles = 2;
+    wrongProfile.profiles[wrongProfileAttributionProfileIndex]!.overrides[0]!.attributionId =
+      "route:other-medicine";
+    wrongProfile.manifest.counts.profiles = wrongProfile.profiles.length;
     wrongProfile.manifest = {
       ...wrongProfile.manifest,
       ...computeSkillContentReleaseIntegrity(wrongProfile),
@@ -393,13 +855,17 @@ describe("documentation-complete Skill content platform", () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: "SKILL_CONTENT_OVERRIDE_ATTRIBUTION_PROFILE_MISMATCH",
-          path: "profiles[0].overrides[0].attributionId",
+          path: `profiles[${wrongProfileAttributionProfileIndex}].overrides[0].attributionId`,
         }),
       ]),
     );
 
     const wrongScope = candidate();
-    wrongScope.profiles[0]!.overrides[0]!.attributionId = "route:mogreb-temple";
+    wrongScope.profiles[routeAttributedProfileIndex]!.overrides[0]!.attributionId =
+      "access:mogreb-surgeon-neseret";
+    wrongScope.profiles[routeAttributedProfileIndex]!.overrides[0]!.competencyIds = [
+      "skill:lockpicking",
+    ];
     wrongScope.manifest = {
       ...wrongScope.manifest,
       ...computeSkillContentReleaseIntegrity(wrongScope),
@@ -408,7 +874,7 @@ describe("documentation-complete Skill content platform", () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: "SKILL_CONTENT_OVERRIDE_ATTRIBUTION_SCOPE_MISMATCH",
-          path: "profiles[0].overrides[0].competencyIds[0]",
+          path: `profiles[${routeAttributedProfileIndex}].overrides[0].competencyIds[0]`,
         }),
       ]),
     );
@@ -431,7 +897,7 @@ describe("documentation-complete Skill content platform", () => {
       [
         "SKILL_CONTENT_SPECIALIZATION_PARENT_PREREQUISITE_MISSING",
         (release) => {
-          release.competencies[3]!.prerequisites = [];
+          release.competencies[specializationIndex(release)]!.prerequisites = [];
         },
       ],
     ];
@@ -447,7 +913,8 @@ describe("documentation-complete Skill content platform", () => {
 
   it("rejects a zero-transfer declaration that contradicts an authored parent edge", () => {
     const contradictory = candidate();
-    const specialization = contradictory.competencies[3]!;
+    const specializationIndexInRelease = explicitTransferSpecializationIndex(contradictory);
+    const specialization = contradictory.competencies[specializationIndexInRelease]!;
     expect(specialization.kind).toBe("specialization");
     if (specialization.kind !== "specialization") return;
     specialization.transfer = {
@@ -462,21 +929,24 @@ describe("documentation-complete Skill content platform", () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: "SKILL_CONTENT_CONTRADICTORY_SPECIALIZATION_TRANSFER",
-          path: "competencies[3].transfer",
+          path: `competencies[${specializationIndexInRelease}].transfer`,
         }),
       ]),
     );
 
     const zeroTransfer = candidate();
-    const zeroTransferSpecialization = zeroTransfer.competencies[3]!;
+    const zeroTransferSpecializationIndex = specializationIndex(zeroTransfer);
+    const zeroTransferSpecialization = zeroTransfer.competencies[zeroTransferSpecializationIndex]!;
     expect(zeroTransferSpecialization.kind).toBe("specialization");
     if (zeroTransferSpecialization.kind !== "specialization") return;
     zeroTransferSpecialization.transfer = {
       kind: "zero-transfer",
       rationale: "No parent-to-Specialization relationship is authored.",
     };
-    zeroTransfer.relationships = [];
-    zeroTransfer.manifest.counts.relationships = 0;
+    zeroTransfer.relationships = zeroTransfer.relationships.filter(
+      ({ targetCompetencyId }) => targetCompetencyId !== zeroTransferSpecialization.id,
+    );
+    zeroTransfer.manifest.counts.relationships = zeroTransfer.relationships.length;
     zeroTransfer.manifest = {
       ...zeroTransfer.manifest,
       ...computeSkillContentReleaseIntegrity(zeroTransfer),
@@ -486,7 +956,8 @@ describe("documentation-complete Skill content platform", () => {
 
   it("requires justification only for nonstandard prerequisite thresholds", () => {
     const unexplained = candidate();
-    unexplained.competencies[3]!.prerequisites[0]!.threshold = 7;
+    const targetSpecializationIndex = specializationIndex(unexplained);
+    unexplained.competencies[targetSpecializationIndex]!.prerequisites[0]!.threshold = 7;
     unexplained.manifest = {
       ...unexplained.manifest,
       ...computeSkillContentReleaseIntegrity(unexplained),
@@ -495,15 +966,16 @@ describe("documentation-complete Skill content platform", () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: "SKILL_CONTENT_NONSTANDARD_PREREQUISITE_JUSTIFICATION_REQUIRED",
-          path: "competencies[3].prerequisites[0].justification",
+          path: `competencies[${targetSpecializationIndex}].prerequisites[0].justification`,
         }),
       ]),
     );
 
     const explained = candidate();
-    explained.competencies[3]!.prerequisites[0]!.justification =
+    const explainedTargetIndex = specializationIndex(explained);
+    explained.competencies[explainedTargetIndex]!.prerequisites[0]!.justification =
       "This narrow diagnostic practice is taught after seven acquired ranks.";
-    explained.competencies[3]!.prerequisites[0]!.threshold = 7;
+    explained.competencies[explainedTargetIndex]!.prerequisites[0]!.threshold = 7;
     explained.manifest = {
       ...explained.manifest,
       ...computeSkillContentReleaseIntegrity(explained),
@@ -628,12 +1100,20 @@ describe("documentation-complete Skill content platform", () => {
       },
     });
     expect(
-      projection.records.competencies.find(({ kind }) => kind === "specialization"),
-    ).toMatchObject({ domainId: "domain:healing", parentCompetencyId: "skill:medicine" });
+      projection.records.competencies.find(({ id }) => id === "spec:diagnostic-medicine"),
+    ).toMatchObject({
+      domainId: "domain:healing",
+      id: "spec:diagnostic-medicine",
+      parentCompetencyId: "skill:medicine",
+    });
     expect(Object.isFrozen(projection)).toBe(true);
     expect(Object.isFrozen(projection.records.competencies[0]!.metadata)).toBe(true);
-    release.competencies[0]!.name = "Changed after projection";
-    expect(projection.records.competencies[0]!.name).toBe("Medicine");
+    const projectedMedicine = projection.records.competencies.find(
+      ({ id }) => id === "skill:medicine",
+    )!;
+    const mutableMedicine = release.competencies.find(({ id }) => id === "skill:medicine")!;
+    mutableMedicine.name = "Changed after projection";
+    expect(projectedMedicine.name).toBe("Medicine");
 
     const canonical = candidate();
     canonical.status = "canonical";

@@ -23,15 +23,15 @@ or resume the live context they are entitled to see.
 
 ## Operational portfolio
 
-| Order | Forgejo case                                                      | Purpose                                                                       | State observed 2026-09-06                                      | Execution authority                             |
-| ----: | ----------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------- |
-|     1 | [#34](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/34) | Record the accepted lifecycle, access, kind, history, and portfolio decisions | `status/Active`; assigned documentation Builder                | Documentation/product-decision work only        |
-|     2 | [#35](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/35) | Campaign activation and rostered-player discovery                             | `status/Ready`; inactive; unassigned                           | Not authorized                                  |
-|     3 | [#36](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/36) | Scenario lifecycle, player authorization, and derived live context            | `status/Ready`; inactive; unassigned                           | Not authorized                                  |
-|     4 | [#37](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/37) | Encounter lifecycle, kind gate, and Combat return                             | `status/Ready`; dependency/hotspot-gated; inactive; unassigned | Not authorized                                  |
-|     5 | [#38](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/38) | Resumable Campaign -> Scenario -> Encounter -> Combat UI context              | `status/Design`; dependency-gated; inactive; unassigned        | Not authorized; UI contract still needs refresh |
-|     6 | [#39](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/39) | Player-safe completed Scenario and Encounter history                          | `status/Ready`; dependency-gated; inactive; unassigned         | Not authorized                                  |
-|     7 | [#40](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/40) | Complete two-user Campaign-session acceptance journey                         | `status/Ready`; dependency-gated; inactive; unassigned         | Not authorized                                  |
+| Order | Forgejo case                                                      | Purpose                                                                       | State observed 2026-09-06                                     | Execution authority                             |
+| ----: | ----------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------- |
+|     1 | [#34](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/34) | Record the accepted lifecycle, access, kind, history, and portfolio decisions | `status/Active`; assigned documentation Builder               | Documentation/product-decision work only        |
+|     2 | [#35](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/35) | Campaign activation and rostered-player discovery                             | `status/Ready`; inactive; unassigned                          | Not authorized                                  |
+|     3 | [#36](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/36) | Scenario lifecycle, player authorization, and derived live context            | `status/Ready`; inactive; unassigned                          | Not authorized                                  |
+|     4 | [#37](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/37) | Encounter lifecycle, Scenario coupling, Combat continuity, and chronology     | `status/Ready`; dependency-gated on #36; inactive; unassigned | Not authorized                                  |
+|     5 | [#38](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/38) | Resumable Campaign -> Scenario -> Encounter -> Combat UI context              | `status/Design`; dependency-gated; inactive; unassigned       | Not authorized; UI contract still needs refresh |
+|     6 | [#39](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/39) | Player-safe completed Scenario and Encounter history                          | `status/Ready`; dependency-gated; inactive; unassigned        | Not authorized                                  |
+|     7 | [#40](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/40) | Complete two-user Campaign-session acceptance journey                         | `status/Ready`; dependency-gated; inactive; unassigned        | Not authorized                                  |
 
 `Ready` and placement in this roadmap mean that a contract is prepared. They do
 not grant implementation permission. `Design` is also non-authorizing.
@@ -40,7 +40,7 @@ not grant implementation permission. `Design` is also non-authorizing.
 
 ```text
 #34 lifecycle decision -> #35 Campaign activation
-#34 lifecycle decision -> #36 Scenario lifecycle -> #37 Encounter lifecycle/Combat return
+#34 lifecycle decision -> #36 Scenario lifecycle -> #37 Encounter lifecycle/Combat continuity
 
 #16 Campaign shell + #35 + #36 + #37 -> #38 resumable UI
 #36 + #37                           -> #39 safe history
@@ -52,7 +52,10 @@ Each implementation case -> current lifecycle-document links and focused evidenc
 The graph is a sequencing constraint, not dispatch authority. #35 and #36 may
 proceed independently only after separate authorization and clean hotspot
 ownership. #37 follows the applicable Scenario lifecycle seam and the
-Critical/Combat gate. #38 remains Design until its UI details are refreshed
+Critical/Combat gate. #37 uses the common product lifecycle Draft -> Active <->
+Paused -> Closed -> Archived (plus Draft -> Archived), treats legacy Encounter
+kind as descriptive rather than a Combat gate, and returns from Combat to the
+same Active Encounter. #38 remains Design until its UI details are refreshed
 against this decision and the integrated #16 Campaign shell. #39 depends on the
 enforced Scenario and Encounter terminal behavior. #40 proves the integrated
 journey after the preceding slices are accepted.
@@ -120,8 +123,8 @@ contracts.
 Each case supplies its focused transition, authorization, projection, reload,
 and presentation evidence. #40 owns one integrated two-user desktop and 390px
 journey covering activation, rostered discovery, Scenario start, participant
-setup, roleplay, optional Combat, same-context return, public outcome/private
-note separation, Encounter close, Scenario completion, history reopening,
+preparation, roleplay, optional Combat, same-context return, public
+outcome/private note separation, Encounter Close, Scenario Close, history reopening,
 reload/reconnect, and negative payload assertions.
 
 Every Builder publishes an immutable exact head for separate independent QA.

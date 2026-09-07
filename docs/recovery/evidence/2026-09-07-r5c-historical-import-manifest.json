@@ -1,0 +1,446 @@
+{
+  "credentialCompatibility": {
+    "algorithm": "scrypt",
+    "compatibleHashes": 5,
+    "incompatibleHashes": 0,
+    "totalUsers": 5
+  },
+  "deterministicIdMaps": {
+    "generated": [],
+    "strategy": "stable-source-ids"
+  },
+  "historiesNotFabricated": {
+    "artifactAuditEvents": 0,
+    "characterLedgerEvents": 0,
+    "characterRevisions": 0,
+    "scenarioArtifactReferences": 0
+  },
+  "importer": {
+    "version": 2
+  },
+  "manifestVersion": 1,
+  "mappingInventoryVersion": 1,
+  "provenance": {
+    "embeddedEquipmentConflicts": [
+      {
+        "characterId": "23831e49-9060-493d-9eaf-65667c210ce5",
+        "characterName": "The Gladiator",
+        "embeddedItemCount": 0,
+        "canonicalItemCount": 20
+      },
+      {
+        "characterId": "4331ff50-1bb7-49d7-84c0-cdd9555f6c19",
+        "characterName": "Player test character",
+        "embeddedItemCount": 0,
+        "canonicalItemCount": 9
+      },
+      {
+        "characterId": "ef0e0c82-09e9-43b2-a942-2d12264096ef",
+        "characterName": "Scyrian cavalry guy",
+        "embeddedItemCount": 0,
+        "canonicalItemCount": 4
+      }
+    ],
+    "encounterSourceStatusCounts": {
+      "active": 3,
+      "archived": 67,
+      "planned": 2,
+      "setup": 1
+    },
+    "multiCampaignMemberships": [
+      {
+        "rosterEntryId": "cmt3eyruj0003zgt329tzg1cj",
+        "characterId": "23831e49-9060-493d-9eaf-65667c210ce5",
+        "characterName": "The Gladiator",
+        "campaignId": "cmoeqtd0c00056d1zjr3xhkeu",
+        "campaignName": "Local Dev Campaign"
+      },
+      {
+        "rosterEntryId": "cmoq7bl6x0003zgbr3n9uwh8r",
+        "characterId": "23831e49-9060-493d-9eaf-65667c210ce5",
+        "characterName": "The Gladiator",
+        "campaignId": "cmoq74or20001zgvtpdxdjxpy",
+        "campaignName": "The test campaign"
+      },
+      {
+        "rosterEntryId": "cmp6u2vhf00036dg9eiiddhqp",
+        "characterId": "23831e49-9060-493d-9eaf-65667c210ce5",
+        "characterName": "The Gladiator",
+        "campaignId": "cmp6sva200001zgjijvxydl62",
+        "campaignName": "The test is strong in this campaign"
+      },
+      {
+        "rosterEntryId": "cmt7syfb800056ddpdniu85w6",
+        "characterId": "23831e49-9060-493d-9eaf-65667c210ce5",
+        "characterName": "The Gladiator",
+        "campaignId": "cmt7sw2z600016ddphfysonbg",
+        "campaignName": "Brave new world"
+      },
+      {
+        "rosterEntryId": "cmt3eyv6b0005zgt3p4vo8m6b",
+        "characterId": "ef0e0c82-09e9-43b2-a942-2d12264096ef",
+        "characterName": "Scyrian cavalry guy",
+        "campaignId": "cmoeqtd0c00056d1zjr3xhkeu",
+        "campaignName": "Local Dev Campaign"
+      },
+      {
+        "rosterEntryId": "cmrety8f70009zgme4fgcfynf",
+        "characterId": "ef0e0c82-09e9-43b2-a942-2d12264096ef",
+        "characterName": "Scyrian cavalry guy",
+        "campaignId": "cmoq74or20001zgvtpdxdjxpy",
+        "campaignName": "The test campaign"
+      },
+      {
+        "rosterEntryId": "cmt7syi7a00076ddpu1r9fcz0",
+        "characterId": "ef0e0c82-09e9-43b2-a942-2d12264096ef",
+        "characterName": "Scyrian cavalry guy",
+        "campaignId": "cmt7sw2z600016ddphfysonbg",
+        "campaignName": "Brave new world"
+      },
+      {
+        "rosterEntryId": "cmor3y4lu0003zgvkyuhe4f47",
+        "characterId": "f3f0f892-1dc1-4a5d-b0ca-0133759eeb30",
+        "characterName": "Test Glantrian soldier",
+        "campaignId": "cmoq74or20001zgvtpdxdjxpy",
+        "campaignName": "The test campaign"
+      },
+      {
+        "rosterEntryId": "cmp6v4w470001zgislk1cxe0n",
+        "characterId": "f3f0f892-1dc1-4a5d-b0ca-0133759eeb30",
+        "characterName": "Test Glantrian soldier",
+        "campaignId": "cmp6sva200001zgjijvxydl62",
+        "campaignName": "The test is strong in this campaign"
+      }
+    ],
+    "scenarioLifecycle": [
+      {
+        "scenarioId": "cmoq5vf8800036dcc2dzv2hyu",
+        "sourceStatus": "draft",
+        "lifecycleRevision": 0,
+        "lifecycleCycle": 0
+      },
+      {
+        "scenarioId": "cmoq7cpxp0005zgbrfy6bdy9d",
+        "sourceStatus": "archived",
+        "lifecycleRevision": 0,
+        "lifecycleCycle": 0
+      },
+      {
+        "scenarioId": "cmor3xecu0001zgvk8071b8sa",
+        "sourceStatus": "draft",
+        "lifecycleRevision": 0,
+        "lifecycleCycle": 0
+      },
+      {
+        "scenarioId": "cmp476mai00016d0ubdpn9l6n",
+        "sourceStatus": "closed",
+        "lifecycleRevision": 0,
+        "lifecycleCycle": 1
+      },
+      {
+        "scenarioId": "cmp6oo7rp00096d4uw5lmauyt",
+        "sourceStatus": "live",
+        "lifecycleRevision": 0,
+        "lifecycleCycle": 1
+      },
+      {
+        "scenarioId": "cmst9mogl000f6dyvbzdujy7z",
+        "sourceStatus": "live",
+        "lifecycleRevision": 0,
+        "lifecycleCycle": 1
+      },
+      {
+        "scenarioId": "cmt3ez26o0007zgt3tqcjv5io",
+        "sourceStatus": "draft",
+        "lifecycleRevision": 0,
+        "lifecycleCycle": 0
+      },
+      {
+        "scenarioId": "cmt7sxstk00036ddpt94svvo9",
+        "sourceStatus": "live",
+        "lifecycleRevision": 0,
+        "lifecycleCycle": 0
+      }
+    ],
+    "scenarioSourceStatusCounts": {
+      "draft": 3,
+      "live": 3,
+      "closed": 1,
+      "archived": 1
+    }
+  },
+  "reconciliation": [
+    {
+      "family": "Campaign",
+      "imported": 6,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "The historical fields and enum values are current-schema compatible.",
+      "source": 6,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "CampaignAsset",
+      "imported": 0,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "Historical columns are copied; later storage-metadata columns use migration defaults. The verified source has no rows.",
+      "source": 0,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "CampaignRosterEntry",
+      "imported": 12,
+      "omitted": 0,
+      "provenanceOnly": 9,
+      "reason": "Compatible rows are copied. Every membership for a Character found in multiple Campaigns is retained in the manifest as provenance and omitted from current roster authority.",
+      "source": 21,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "CanonicalContentSnapshot",
+      "imported": 0,
+      "omitted": 0,
+      "provenanceOnly": 1,
+      "reason": "Historical cached canonical content is not current repository content authority.",
+      "source": 1,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "Character",
+      "imported": 8,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "Base rows, stable IDs, timestamps, and historical build JSON are copied. No retained revisions or ledger events are fabricated.",
+      "source": 8,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "CharacterEquipmentItem",
+      "imported": 34,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "The canonical item authority rows are copied without fabricating acquisition or provenance events. Embedded-versus-canonical conflicts are reported, not resolved.",
+      "source": 34,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "CharacterLoadout",
+      "imported": 8,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "Existing loadout facts and stable IDs are compatible and copied without loadout-event history.",
+      "source": 8,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "CharacterStorageLocation",
+      "imported": 35,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "Existing storage facts are current-schema compatible.",
+      "source": 35,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "Encounter",
+      "imported": 73,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "Rows and combat evidence are copied, but every Encounter status is normalized to archived so historical active/setup/planned rows cannot become current live play. Original status counts remain provenance.",
+      "source": 73,
+      "transformed": 73,
+      "unresolved": 0
+    },
+    {
+      "family": "EncounterActiveCombatState",
+      "imported": 16,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "Historical combat state is retained as read-only evidence behind an archived Encounter. No progression service runs.",
+      "source": 16,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "EncounterArchivedCombatRound",
+      "imported": 36,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "Historical archived rounds are directly representable.",
+      "source": 36,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "ReusableEntity",
+      "imported": 3,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "Historical reusable entities are current-schema compatible.",
+      "source": 3,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "Role",
+      "imported": 2,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "Role identity is directly compatible.",
+      "source": 2,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "Scenario",
+      "imported": 8,
+      "omitted": 0,
+      "provenanceOnly": 8,
+      "reason": "Compatible status values are copied and closed maps exactly to completed. Lifecycle revision/cycle values remain manifest provenance because the current schema has no approved field.",
+      "source": 8,
+      "transformed": 1,
+      "unresolved": 0
+    },
+    {
+      "family": "ScenarioEventLog",
+      "imported": 5097,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "Historical event records are directly representable and copied without replay.",
+      "source": 5097,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "ScenarioLifecycleTransition",
+      "imported": 0,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "The current schema has no approved lifecycle-transition table. The verified source has no rows.",
+      "source": 0,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "ScenarioParticipant",
+      "imported": 25,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "Participant rows and snapshots are directly representable.",
+      "source": 25,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "ScenarioRelationship",
+      "imported": 1,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "The continues_from relationship is directly compatible.",
+      "source": 1,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "Session",
+      "imported": 0,
+      "omitted": 89,
+      "provenanceOnly": 0,
+      "reason": "All historical sessions and token hashes are intentionally omitted.",
+      "source": 89,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "User",
+      "imported": 5,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "Stable identity and password hashes are copied only after every hash passes the current scrypt format proof. Hash values never enter manifests or logs.",
+      "source": 5,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "UserRole",
+      "imported": 6,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "Assignments are directly compatible.",
+      "source": 6,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "Weapon",
+      "imported": 0,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "Legacy standalone Weapon rows are directly compatible. The verified source has no rows.",
+      "source": 0,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "_prisma_migrations",
+      "imported": 0,
+      "omitted": 0,
+      "provenanceOnly": 15,
+      "reason": "Historical migration lineage is verified as source provenance; target migration history comes only from current committed migrations.",
+      "source": 15,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "CharacterRevision",
+      "imported": 0,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "No historical source table exists; no modern Character history was fabricated.",
+      "source": 0,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "CharacterLedgerEvent",
+      "imported": 0,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "No historical source table exists; no acquisition or provenance history was fabricated.",
+      "source": 0,
+      "transformed": 0,
+      "unresolved": 0
+    },
+    {
+      "family": "ArtifactAuditEvent/ScenarioArtifactReference",
+      "imported": 0,
+      "omitted": 0,
+      "provenanceOnly": 0,
+      "reason": "No historical source tables exist; no modern artifact history was fabricated.",
+      "source": 0,
+      "transformed": 0,
+      "unresolved": 0
+    }
+  ],
+  "source": {
+    "dataFingerprintSha256": "07fc47b8b77779a6fd139cfa7cd6db43efe39adbc44437f7ad34b4d3c07bf47e",
+    "dumpSha256": "6fa92f4486ba97328e3abe26e5bafe1c46f51628d012dfa17dd26e61b929bed1",
+    "migrationHead": "20260819143000_add_scenario_lifecycle_kernel",
+    "postImportFingerprintSha256": "07fc47b8b77779a6fd139cfa7cd6db43efe39adbc44437f7ad34b4d3c07bf47e",
+    "publicTableCount": 23
+  },
+  "target": {
+    "dataFingerprintSha256": "b78fccfa80325133a0d9f44e4cd52bc59c93d07b95c16e18bb0a2b72bca7c210",
+    "migrationHead": "20260829103000_add_retained_character_ledger"
+  },
+  "unresolved": []
+}
