@@ -1,19 +1,16 @@
-import {
-  SKILL_CONTENT_RELEASE_SCHEMA_VERSION,
-} from "@glantri/domain";
+import { SKILL_CONTENT_RELEASE_SCHEMA_VERSION } from "@glantri/domain";
 import type {
   PilotSkillContentCompetencyRecord,
-  PilotSkillContentRelease,
   PilotSkillContentSpecializationRecord,
-  SkillContentSkillRecord,
-  SkillContentSpokenLanguageRecord,
-  SkillContentSpecializationRecord,
-  SkillContentWrittenTraditionRecord,
   SkillContentCompetencyRecord,
   SkillContentDomainRecord,
   SkillContentLearningHistoryRecord,
   SkillContentRelease,
   SkillContentScriptRecord,
+  SkillContentSkillRecord,
+  SkillContentSpokenLanguageRecord,
+  SkillContentSpecializationRecord,
+  SkillContentWrittenTraditionRecord,
   SkillTaskEnvelope,
 } from "@glantri/domain";
 
@@ -22,17 +19,19 @@ import { pilotSkillContentReleaseV1 } from "../pilotSkillContentRelease";
 const proposalMetadata = {
   provenance: {
     kind: "proposal" as const,
-    reference: "docs/process/recovery-legacy/forgejo-operational-portfolio-crosswalk-issue-25.html",
+    reference: "https://github.com/vidarhald-cpu/glantri-app/issues/25",
   },
   recordVersion: "1",
   status: "proposal" as const,
 };
 
 const proposalMetadataReference = [
-  "docs/process/recovery-legacy/forgejo-operational-portfolio-crosswalk-issue-25.html",
-  "docs/product/skills-product-roadmap.md",
-  "docs/decisions/rules/0003-skill-documentation-and-release-integrity.md",
+  "https://github.com/vidarhald-cpu/glantri-app/issues/25",
+  "docs/process/task-contract.md",
   "docs/decisions/rules/0002-skill-catalogue-qualitative-architecture.md",
+  "docs/decisions/rules/0003-skill-documentation-and-release-integrity.md",
+  "docs/rules/pilot-skill-rules-v1.md",
+  "docs/rules/pilot-skill-content-release-v1.md",
 ];
 
 function cloneMetadata() {
@@ -43,38 +42,233 @@ function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function ensureDescription(value: string): string {
-  const normalized = normalizeWhitespace(value);
-  if (normalized.length >= 40) return normalized;
-  return `${normalized}. This competency is fully documented for bounded Pilot Skill authorization pathways and explicit domain-bound relationships.`;
-}
-
 function shortLabel(value: string): string {
   return normalizeWhitespace(value);
 }
 
-function shortDescription(value: string): string {
-  const cleaned = normalizeWhitespace(value);
-  const firstSentence = cleaned.includes(".") ? cleaned.slice(0, cleaned.indexOf(".") + 1) : cleaned;
-  return firstSentence.length >= 12 ? firstSentence : cleaned.slice(0, Math.max(12, cleaned.length));
+function deriveShortDescription(rawDescription: string, label: string): string {
+  const description = normalizeWhitespace(rawDescription);
+  const firstSentence = description.includes(".")
+    ? description.slice(0, description.indexOf(".") + 1)
+    : description;
+  if (firstSentence.length >= 12) return firstSentence;
+  return `${label} has explicit release mechanics, route binding, and explicit qualification context.`;
 }
 
-function taskEnvelope(recordName: string): SkillTaskEnvelope {
+function taskEnvelope(recordName: string, domainId: string): SkillTaskEnvelope {
+  const scope = domainDefinitions[domainId]?.name ?? "Pilot Skill";
   return {
-    coreTasks: [`Apply ${recordName} according to this release's authored scope.`],
+    coreTasks: [
+      `${recordName} is trained and applied only through the route, history, and transfer structures in this release.`,
+    ],
     limits: [
-      `Mechanical outcomes are restricted to explicit entries in this release and do not include undocumented authority.`,
+      `${recordName} does not replace the explicit prerequisites, access rules, or transfer edges for ${scope} content outside this scope.`,
     ],
     methods: [
-      "Use the authored routes, histories, access sources, and explicit relationships for qualification.",
+      `Resolve progression with the named histories, routes, and transfer links before inferring broader competency behavior.`,
     ],
-    useGuidance: `Treat ${recordName} as the described practice with the authored domain, accessibility, and dependency boundaries.`,
+    useGuidance: `${recordName} binds only to this release's authored profile and competency graph.`,
   };
 }
 
+interface AuthoredCompetencyDocumentation {
+  description: string;
+  shortDescription: string;
+  shortLabel?: string;
+  taskEnvelope?: SkillTaskEnvelope;
+}
+
+const authoredCompetencyDocumentation: Record<string, AuthoredCompetencyDocumentation> = {
+  "skill:sword": {
+    description:
+      "Practice directed weapon-motion control in close quarters, including guard transitions, timing, and controlled parries for sword and shield pairings.",
+    shortDescription: "Close-quarters defense and offense with guard transitions.",
+  },
+  "skill:shield": {
+    description:
+      "Develop reliable parry structures and body alignment that reduce incoming pressure while preserving mobility and counter-readiness.",
+    shortDescription: "Maintain cover and pressure control through shield posture.",
+  },
+  "skill:knife-dagger": {
+    description:
+      "Use precise short-weapon movement with narrow spacing discipline, including retention and rapid edge transition under tight contact.",
+    shortDescription: "Short-weapon handling with compact range and controlled transitions.",
+  },
+  "skill:spear": {
+    description:
+      "Project distance management and binding pressure with thrust lines, footwork timing, and anti-overextension recovery.",
+    shortDescription: "Extended-distance thrust and distance management discipline.",
+  },
+  "skill:perception": {
+    description:
+      "Track anomalies and cues across social, tactical, and environmental layers before acting on any immediate assumption.",
+    shortDescription: "Detect and triage unusual sensory, social, and tactical signals.",
+  },
+  "skill:athletics": {
+    description:
+      "Apply conditioned body movement for load carriage, acceleration changes, and sustained exertion under time pressure.",
+    shortDescription: "Conditioned movement, balance, and exertion control.",
+  },
+  "skill:survival": {
+    description:
+      "Sustain movement and decision quality in adverse terrain with heat, weather, and deprivation-aware routines.",
+    shortDescription: "Terrain survival planning under adverse field conditions.",
+  },
+  "skill:leadership": {
+    description:
+      "Coordinate role alignment and timing pressure in mixed units with clear command, morale, and response pacing.",
+    shortDescription: "Coordinate team response with authority and pacing control.",
+  },
+  "skill:pharmacy": {
+    description:
+      "Prepare and evaluate remedies, herb balances, and administration timing using controlled dosing and observability rules.",
+    shortDescription: "Prepare and sequence pharmaceutical support safely.",
+  },
+  "skill:plant-lore": {
+    description:
+      "Identify practical botanical sources and seasonal behaviors relevant to medicine, ritual use, and travel preparation.",
+    shortDescription: "Identify practical uses of plants by season and behavior.",
+  },
+  "skill:streetwise": {
+    description:
+      "Assess crowd sentiment, civic risk, and rumor pathways before committing to social or investigative moves.",
+    shortDescription: "Navigate streets, rumor networks, and practical city behavior.",
+  },
+  "skill:underworld": {
+    description:
+      "Track illicit channels, hidden intermediaries, and illicit trust relationships without mistaking intent for certainty.",
+    shortDescription: "Map underground exchanges and risk-laden intermediaries.",
+  },
+  "skill:deception": {
+    description:
+      "Construct and sustain deceptive presentations with timing, social cues, and fallback exits for plausible denial.",
+    shortDescription: "Build and sustain deliberate false presentations.",
+  },
+  "skill:stealth": {
+    description:
+      "Move through social and physical threat zones by minimizing signature, timing movement with ambient distraction, and reducing detection pressure.",
+    shortDescription: "Reduce detection via controlled movement and timing.",
+  },
+  "skill:lockpicking": {
+    description:
+      "Work precision tactile manipulation of warded components and key geometries with controlled entry risk.",
+    shortDescription: "Manipulate locks via precise tactile and structural reading.",
+  },
+  "skill:sleight-of-hand": {
+    description:
+      "Transfer small objects and create controlled misdirection without collapsing composure or routine body pattern.",
+    shortDescription: "Execute subtle hand-based manipulation and concealment.",
+  },
+  "skill:insight": {
+    description:
+      "Read intent cues and trust signals from language, gesture, and routine contradiction patterns.",
+    shortDescription: "Infer motive by reading verbal and physical cues.",
+  },
+  "skill:disguise": {
+    description:
+      "Create and sustain role-consistent personas that blend behavior, posture, and appearance across repeated contact windows.",
+    shortDescription: "Sustain role-consistent disguise across scrutiny loops.",
+  },
+  "skill:administration": {
+    description:
+      "Run low-friction administrative sequencing across requests, routing, and institutional expectations under procedural pressure.",
+    shortDescription: "Coordinate institutional process and case routing under pressure.",
+  },
+  "skill:customs": {
+    description:
+      "Track local custom law, expectation hierarchies, and social consequences when acting across institutions and households.",
+    shortDescription: "Track local custom law and institutional expectations.",
+  },
+  "skill:oratory": {
+    description:
+      "Deliver formal and informal rhetoric calibrated to audience authority, urgency, and procedural posture.",
+    shortDescription: "Use structured rhetoric aligned to audience and procedure.",
+  },
+  "skill:bookkeeping": {
+    description:
+      "Balance ledgers, verify records, and reconcile recurring obligations across accounts and obligations with traceable consistency.",
+    shortDescription: "Maintain and reconcile records with audit-friendly consistency.",
+  },
+  "skill:trade": {
+    description:
+      "Navigate commodity exchange, valuation, and settlement routines with explicit terms, obligations, and margin awareness.",
+    shortDescription: "Conduct commercial exchange with valuation and settlement rules.",
+  },
+  "skill:bargaining": {
+    description:
+      "Negotiate terms under pressure with incremental tradeoffs while preserving routeable outcomes and future leverage.",
+    shortDescription: "Negotiate structured outcomes while preserving leverage.",
+  },
+  "skill:appraisal": {
+    description:
+      "Classify and compare material quality, provenance signals, and hidden defects before committing exchange value.",
+    shortDescription: "Evaluate item quality, provenance, and defects.",
+  },
+  "skill:smithing": {
+    description:
+      "Shape and reinforce materials through repeated forging process control, heat discipline, and structural review.",
+    shortDescription: "Forge and finish tools with heat and structural control.",
+  },
+  "skill:seamanship": {
+    description:
+      "Coordinate deck discipline, vessel movement, and tide-aware operation with practical load-and-risk management.",
+    shortDescription: "Control vessel movement with deck discipline and risk awareness.",
+  },
+  "skill:pilotage": {
+    description:
+      "Pilot local waters through tide windows, obstacle memory, and channel-safe approach discipline.",
+    shortDescription: "Run local-water movement with channel-safe sequencing.",
+  },
+  "skill:swimming": {
+    description:
+      "Sustain buoyancy, propulsion, and controlled return options under surf, load, and fatigue constraints.",
+    shortDescription: "Maintain swim control under fatigue, load, and water dynamics.",
+  },
+  "skill:weather-lore": {
+    description:
+      "Forecast short-horizon conditions with pressure, cloud, wind, and smell cues for route and hazard decisions.",
+    shortDescription: "Read short-horizon weather for route and hazard judgment.",
+  },
+  "skill:wayfinding": {
+    description:
+      "Resolve local travel with terrain memory, sightlines, and route selection under uncertainty.",
+    shortDescription: "Resolve directional progress with terrain and uncertainty.",
+  },
+  "skill:animal-handling": {
+    description:
+      "Condition and direct mount behavior through body-language cues, pace control, and stable handling under stress.",
+    shortDescription: "Control mounts with cue discipline and pace management.",
+  },
+  "skill:tracking": {
+    description:
+      "Interpret signs, disturbances, and repeatability patterns into likely movement pathways and likely intent.",
+    shortDescription: "Trace movement paths from physical signs and repeatability.",
+  },
+  "skill:hunting": {
+    description:
+      "Integrate scent, sign, and concealment discipline into acquisition decisions with minimal noise and waste.",
+    shortDescription: "Run pursuit routines with concealment and sign discipline.",
+  },
+  "skill:riding": {
+    description:
+      "Train gait transitions, terrain adaptation, and endurance pacing for long route coverage with mounted stability.",
+    shortDescription: "Manage mounted movement, gaits, and endurance pacing.",
+  },
+};
+
+const languageFamilyBySpokenId: Record<string, string[]> = {
+  "spoken:common": ["language-family:common"],
+  "spoken:mogrebi": ["language-family:mogrebi"],
+  "spoken:ologian": ["language-family:ologian"],
+  "spoken:phoenician": ["language-family:phoenician"],
+  "spoken:nkolian": ["language-family:nkolian"],
+  "spoken:scythian": ["language-family:scythian"],
+};
+
 const domainDefinitions: Record<string, { description: string; name: string }> = {
   "domain:awareness-investigation": {
-    description: "Perceptional and investigative interpretation used to identify, assess, and confirm facts.",
+    description:
+      "Perceptional and investigative interpretation used to identify, assess, and confirm facts.",
     name: "Awareness & Investigation",
   },
   "domain:athletics-movement": {
@@ -82,7 +276,8 @@ const domainDefinitions: Record<string, { description: string; name: string }> =
     name: "Athletics & Movement",
   },
   "domain:agriculture-husbandry": {
-    description: "Animal husbandry and practical farm-route maintenance by repeated handling and management.",
+    description:
+      "Animal husbandry and practical farm-route maintenance by repeated handling and management.",
     name: "Agriculture & Husbandry",
   },
   "domain:craft-making": {
@@ -102,7 +297,8 @@ const domainDefinitions: Record<string, { description: string; name: string }> =
     name: "Healing",
   },
   "domain:languages-text": {
-    description: "Spoken-language and written-text competence for communication and textual practice.",
+    description:
+      "Spoken-language and written-text competence for communication and textual practice.",
     name: "Languages & Textual Practice",
   },
   "domain:law-administration": {
@@ -143,9 +339,26 @@ const domainDefinitions: Record<string, { description: string; name: string }> =
   },
 };
 
-const v1DomainIds = Array.from(new Set(pilotSkillContentReleaseV1.competencies.map(({ domainId }) => domainId)).values()).sort();
+function documentationForRecord(record: PilotSkillContentCompetencyRecord) {
+  const authored = authoredCompetencyDocumentation[record.id];
+  const normalizedDescription = normalizeWhitespace(authored?.description ?? record.description);
+  const normalizedShortDescription = authored?.shortDescription
+    ? normalizeWhitespace(authored.shortDescription)
+    : deriveShortDescription(normalizedDescription, record.name);
 
-const domains = v1DomainIds
+  return {
+    description: normalizedDescription,
+    shortLabel: shortLabel(authored?.shortLabel ?? record.name),
+    shortDescription: normalizedShortDescription,
+    taskEnvelope: authored?.taskEnvelope ?? taskEnvelope(record.name, record.domainId),
+  };
+}
+
+const v1DomainIds = Array.from(
+  new Set(pilotSkillContentReleaseV1.competencies.map(({ domainId }) => domainId)),
+).values();
+
+const domains = [...v1DomainIds]
   .map((id) => {
     const definition = domainDefinitions[id];
     if (!definition) {
@@ -188,36 +401,19 @@ const scripts: SkillContentScriptRecord[] = [
   },
 ];
 
-const languageFamilyBySpokenId: Record<string, string[]> = {
-  "spoken:common": ["language-family:common"],
-  "spoken:mogrebi": ["language-family:mogrebi"],
-  "spoken:nkolian": ["language-family:nkolian"],
-  "spoken:ologian": ["language-family:ologian"],
-  "spoken:phoenician": ["language-family:phoenician"],
-  "spoken:scythian": ["language-family:scythian"],
-};
-
-const scythianUnavailableExceptionCompetencyIds = new Set([
-  "spoken:ologian",
-  "written:ologian:church-ologian",
-  "skill:customs",
-  "skill:insight",
-  "skill:administration",
-]);
-
-const iestCopperLatchExceptionCompetencyIds = ["skill:lockpicking"];
-
 function toSkillRecord(record: PilotSkillContentCompetencyRecord): SkillContentCompetencyRecord {
+  const documented = documentationForRecord(record);
+
   const baseRecord = {
-    description: ensureDescription(record.description),
+    description: documented.description,
     domainId: record.domainId,
     id: record.id,
     metadata: cloneMetadata(),
-    name: record.name,
+    name: documented.shortLabel,
     prerequisites: [],
-    shortDescription: shortDescription(ensureDescription(record.description)),
-    shortLabel: shortLabel(record.name),
-    taskEnvelope: taskEnvelope(record.name),
+    shortDescription: documented.shortDescription,
+    shortLabel: documented.shortLabel,
+    taskEnvelope: documented.taskEnvelope,
     weight: record.weight,
   };
 
@@ -252,11 +448,27 @@ function toSkillRecord(record: PilotSkillContentCompetencyRecord): SkillContentC
   } as SkillContentWrittenTraditionRecord;
 }
 
+const scythianHomeProfileUnavailableCompetencyIds = [
+  "spoken:ologian",
+  "written:ologian:church-ologian",
+  "skill:customs",
+  "skill:insight",
+  "skill:administration",
+  "skill:law:olog-princely",
+  "spec:court-administration",
+];
+
+const scythianHomeProfileUnavailabilityRouteId = "route:scythian-olog-unavailable";
+const iestCommercialNightEntryRouteId = "route:iest-night-entry-crew";
+const iestCommercialNightEntryRouteCompetencies = ["skill:lockpicking"];
+
 function toSpecializationRecord(
   specialization: PilotSkillContentSpecializationRecord,
 ): SkillContentSpecializationRecord {
   const parentCompetencyId = specialization.prerequisites.find(({ competencyId }) => {
-    const prerequisite = pilotSkillContentReleaseV1.competencies.find(({ id }) => id === competencyId);
+    const prerequisite = pilotSkillContentReleaseV1.competencies.find(
+      ({ id }) => id === competencyId,
+    );
     return prerequisite?.kind === "skill";
   })?.competencyId;
 
@@ -264,9 +476,13 @@ function toSpecializationRecord(
     throw new Error(`No parent Skill found for specialization ${specialization.id}`);
   }
 
-  const parent = pilotSkillContentReleaseV1.competencies.find(({ id }) => id === parentCompetencyId);
+  const parent = pilotSkillContentReleaseV1.competencies.find(
+    ({ id }) => id === parentCompetencyId,
+  );
   if (!parent) {
-    throw new Error(`Parent ${parentCompetencyId} not found for specialization ${specialization.id}`);
+    throw new Error(
+      `Parent ${parentCompetencyId} not found for specialization ${specialization.id}`,
+    );
   }
 
   return {
@@ -276,12 +492,12 @@ function toSpecializationRecord(
     metadata: cloneMetadata(),
     parentCompetencyId,
     shortLabel: shortLabel(specialization.name),
-    shortDescription: shortDescription(ensureDescription(specialization.description)),
-    taskEnvelope: taskEnvelope(specialization.name),
+    shortDescription: deriveShortDescription(specialization.description, specialization.name),
+    taskEnvelope: taskEnvelope(specialization.name, parent.domainId),
     transfer: specialization.transfer,
     weight: specialization.acquisitionWeight,
-    prerequisites: specialization.prerequisites,
-  } as SkillContentSpecializationRecord;
+    prerequisites: structuredClone(specialization.prerequisites),
+  } satisfies SkillContentSpecializationRecord;
 }
 
 const competencies: SkillContentCompetencyRecord[] = [
@@ -289,33 +505,69 @@ const competencies: SkillContentCompetencyRecord[] = [
   ...pilotSkillContentReleaseV1.specializations.map(toSpecializationRecord),
 ];
 
-const profiles = pilotSkillContentReleaseV1.profiles.map((profile) => ({
-  accessBand: profile.accessBand,
-  developmentStage: profile.developmentStage,
-  id: profile.id,
-  metadata: cloneMetadata(),
-  name: profile.name,
-  normalRoutes: profile.normalRoutes.map((route) => ({
+const profiles = pilotSkillContentReleaseV1.profiles.map((profile) => {
+  const normalRoutes = profile.normalRoutes.map((route) => ({
     ...route,
+    competencyIds: [...route.competencyIds],
     metadata: cloneMetadata(),
-  })),
-  overrides: [...profile.overrides].map((override) => {
+  }));
+  if (profile.id === "profile:scythian-pastoral-clan") {
+    normalRoutes.push({
+      accessBand: "AB1",
+      competencyIds: [...scythianHomeProfileUnavailableCompetencyIds],
+      description:
+        "Olog court, language, and administrative exclusion scope for the home-profile fosterage pathway.",
+      id: scythianHomeProfileUnavailabilityRouteId,
+      metadata: cloneMetadata(),
+    });
+  }
+  if (profile.id === "profile:iest-commercial-city") {
+    normalRoutes.push({
+      accessBand: "AB1",
+      competencyIds: [...iestCommercialNightEntryRouteCompetencies],
+      description: "Copper Latch unlock training for night-entry crew routes.",
+      id: iestCommercialNightEntryRouteId,
+      metadata: cloneMetadata(),
+    });
+  }
+
+  const overrides = profile.overrides.map((override) => {
+    const normalizedOverride = {
+      ...override,
+      competencyIds: [...override.competencyIds],
+    };
     if (
       profile.id === "profile:scythian-pastoral-clan" &&
       override.attributionId === "profile:scythian-olog-unavailable"
     ) {
       return {
-        ...override,
-        attributionId: "access:olog-fosterage-house-vorodin",
-        competencyIds: override.competencyIds.filter((competencyId) =>
-          scythianUnavailableExceptionCompetencyIds.has(competencyId),
-        ),
+        ...normalizedOverride,
+        attributionId: scythianHomeProfileUnavailabilityRouteId,
+        competencyIds: [...scythianHomeProfileUnavailableCompetencyIds],
       };
     }
+    if (
+      profile.id === "profile:iest-commercial-city" &&
+      override.attributionId === "access:iest-contact-copper-latch"
+    ) {
+      return {
+        ...normalizedOverride,
+        attributionId: iestCommercialNightEntryRouteId,
+      };
+    }
+    return normalizedOverride;
+  });
 
-    return override;
-  }),
-}));
+  return {
+    accessBand: profile.accessBand,
+    developmentStage: profile.developmentStage,
+    id: profile.id,
+    metadata: cloneMetadata(),
+    name: profile.name,
+    normalRoutes,
+    overrides,
+  };
+});
 
 const relationships = pilotSkillContentReleaseV1.relationships.map((relationship) => ({
   direction: relationship.direction,
@@ -329,18 +581,16 @@ const relationships = pilotSkillContentReleaseV1.relationships.map((relationship
 
 const accessExceptions = pilotSkillContentReleaseV1.accessExceptions.map((entry) => ({
   ...entry,
-  competencyIds:
-    entry.id === "access:iest-contact-copper-latch"
-      ? iestCopperLatchExceptionCompetencyIds
-      : entry.competencyIds,
+  competencyIds: [...entry.competencyIds],
+  historyIds: [...entry.historyIds],
   metadata: cloneMetadata(),
 }));
 
-const histories: readonly SkillContentLearningHistoryRecord[] = pilotSkillContentReleaseV1.histories.map(
-  (history) => {
+const histories: readonly SkillContentLearningHistoryRecord[] =
+  pilotSkillContentReleaseV1.histories.map((history) => {
     const selectionSlots = history.selectionSlots.map(
       ({ candidateCompetencyIds, chooseCount, id, label }) => ({
-        candidateCompetencyIds,
+        candidateCompetencyIds: [...candidateCompetencyIds],
         chooseCount,
         id,
         label,
@@ -349,21 +599,21 @@ const histories: readonly SkillContentLearningHistoryRecord[] = pilotSkillConten
 
     return {
       context: history.context,
-      fixedCompetencyIds: history.fixedCompetencyIds,
+      fixedCompetencyIds: [...history.fixedCompetencyIds],
       id: history.id,
       metadata: cloneMetadata(),
       name: history.name,
       selectionSlots,
     } satisfies SkillContentLearningHistoryRecord;
-  },
-);
+  });
 
 export const pilotSkillContentReleaseProposalInput = {
   accessExceptions,
   compatibility: {
     characterMigrationReviewRequired: false,
-    classification: "presentation-only",
-    rationale: "The candidate adds complete documentation, task-envelope scaffolding, and explicit bindings while preserving bounded Pilot mechanics.",
+    classification: "mechanically-compatible",
+    rationale:
+      "The release repairs authored documentation, task scopes, and access attribution recovery while preserving direct inherited mechanics.",
   },
   competencies,
   contentVersion: "pilot-skills-content/2.0.0-candidate.1",

@@ -1,7 +1,4 @@
-import type {
-  SkillContentRelease,
-  SkillContentWrittenTraditionRecord,
-} from "@glantri/domain";
+import type { SkillContentRelease, SkillContentWrittenTraditionRecord } from "@glantri/domain";
 import { describe, expect, it } from "vitest";
 
 import { sha256 } from "../integrity/canonicalSha256";
@@ -41,8 +38,8 @@ function profileWithOverrideAttributionIndex(
   attributionId: string,
 ): number {
   const index = release.profiles.findIndex((record) =>
-    record.overrides.some(({ attributionId: candidateAttributionId }) =>
-      candidateAttributionId === attributionId,
+    record.overrides.some(
+      ({ attributionId: candidateAttributionId }) => candidateAttributionId === attributionId,
     ),
   );
   if (index < 0)
@@ -58,6 +55,13 @@ function explicitTransferSpecializationIndex(release: SkillContentRelease): numb
   if (index < 0)
     throw new Error("No specialization with explicit transfer found in release fixture");
   return index;
+}
+
+function competencyById(
+  release: SkillContentRelease,
+  id: string,
+): (typeof release.competencies)[number] | undefined {
+  return release.competencies.find((record) => record.id === id);
 }
 
 describe("documentation-complete Skill content platform", () => {
@@ -82,6 +86,23 @@ describe("documentation-complete Skill content platform", () => {
     });
   });
 
+  it("uses resolvable issue and authority references", () => {
+    const release = candidate();
+    expect(release.provenance).toEqual(
+      expect.arrayContaining([
+        "https://github.com/vidarhald-cpu/glantri-app/issues/25",
+        "docs/decisions/rules/0002-skill-catalogue-qualitative-architecture.md",
+        "docs/decisions/rules/0003-skill-documentation-and-release-integrity.md",
+        "docs/rules/pilot-skill-rules-v1.md",
+        "docs/rules/pilot-skill-content-release-v1.md",
+      ]),
+    );
+    expect(release.compatibility.classification).toBe("mechanically-compatible");
+    expect(
+      release.provenance.some((entry) => entry.startsWith("docs/process/recovery-legacy/")),
+    ).toBe(false);
+  });
+
   it("changes only package integrity for presentation-only edits", () => {
     const original = candidate();
     const input = structuredClone(candidate());
@@ -94,7 +115,8 @@ describe("documentation-complete Skill content platform", () => {
       "Editorial source explanation.";
     input.histories[0]!.name = "Mogrebi Temple Infirmary";
     input.profiles[0]!.normalRoutes[0]!.description = "Temple and medical-text route.";
-    input.profiles[profileOverrideIndex]!.overrides[0]!.explanation = "Named teaching route for review.";
+    input.profiles[profileOverrideIndex]!.overrides[0]!.explanation =
+      "Named teaching route for review.";
     input.accessExceptions[0]!.explanation =
       "The named teacher opens the route while granting no competence.";
     const edited = buildSkillContentRelease(input);
@@ -121,6 +143,85 @@ describe("documentation-complete Skill content platform", () => {
     const edited = buildSkillContentRelease(input);
     expect(edited.manifest.packageDigest).not.toBe(original.manifest.packageDigest);
     expect(edited.manifest.semanticDigest).not.toBe(original.manifest.semanticDigest);
+  });
+
+  it("repairs accepted access semantics and specificity boundaries", () => {
+    const release = candidate();
+    const copperLatch = release.accessExceptions.find(
+      ({ id }) => id === "access:iest-contact-copper-latch",
+    );
+    expect(copperLatch).toBeDefined();
+    expect(copperLatch?.competencyIds).toHaveLength(0);
+    expect(copperLatch?.historyIds).toContain("hist:iest-night-entry-crew");
+
+    const scythian = release.profiles.find(({ id }) => id === "profile:scythian-pastoral-clan");
+    expect(scythian).toBeDefined();
+    expect(scythian?.normalRoutes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "route:scythian-olog-unavailable",
+          competencyIds: expect.arrayContaining([
+            "skill:law:olog-princely",
+            "spec:court-administration",
+          ]),
+        }),
+      ]),
+    );
+    const scythianUnavailability = scythian?.overrides.find(
+      ({ attributionId }) => attributionId === "route:scythian-olog-unavailable",
+    );
+    expect(scythianUnavailability).toMatchObject({
+      availability: "unavailable",
+      competencyIds: expect.arrayContaining([
+        "skill:law:olog-princely",
+        "spec:court-administration",
+      ]),
+    });
+    const report = validateSkillContentRelease(release);
+    expect(report.valid).toBe(true);
+  });
+
+  it("enforces explicit documentation for all competencies and mutation-safe nested array cloning", () => {
+    const release = candidate();
+    expect(
+      release.competencies.every((record) => record.description.length >= 40 && record.description),
+    ).toBe(true);
+    const hasFillerText = release.competencies.some(
+      (record) =>
+        /Bounded pilot practice:/.test(record.description) ||
+        /This competency is fully documented/.test(record.description),
+    );
+    expect(hasFillerText).toBe(false);
+    expect(
+      release.competencies.every(
+        (record) =>
+          record.shortDescription.length >= 12 &&
+          !/This competency is fully documented/.test(record.shortDescription),
+      ),
+    ).toBe(true);
+    const first = release.competencies[0]!;
+    expect(first.taskEnvelope.coreTasks.length).toBeGreaterThan(0);
+
+    const baseHistorySlot = pilotSkillContentReleaseV1.histories[0]!.selectionSlots[0]!;
+    const baseProfileRoute = pilotSkillContentReleaseV1.profiles[0]!.normalRoutes[0]!;
+    const baseSpecialization = pilotSkillContentReleaseV1.specializations.find(
+      ({ id }) => id === "spec:diagnostic-medicine",
+    );
+    const mutated = candidate();
+    (mutated.histories[0]!.selectionSlots[0]!.candidateCompetencyIds as string[]).push(
+      "skill:medicine",
+    );
+    (mutated.profiles[0]!.normalRoutes[0]!.competencyIds as string[]).push("skill:medicine");
+    const diagnosticSpecialization = competencyById(mutated, "spec:diagnostic-medicine")!;
+    if (diagnosticSpecialization.kind === "specialization") {
+      diagnosticSpecialization.prerequisites[0]!.competencyId = "skill:surgery";
+    }
+    expect(baseHistorySlot.candidateCompetencyIds).not.toContain("skill:medicine");
+    expect(baseProfileRoute.competencyIds).not.toContain("skill:medicine");
+    expect(baseSpecialization).toBeDefined();
+    if (baseSpecialization) {
+      expect(baseSpecialization.prerequisites[0]!.competencyId).not.toBe("skill:surgery");
+    }
   });
 
   it("keeps compatibility classification explicit rather than inferred from digests", () => {
@@ -230,9 +331,11 @@ describe("documentation-complete Skill content platform", () => {
     );
 
     const missing = candidate();
-    delete (missing.profiles[routeAttributedProfileIndex]!.overrides[0] as Partial<{
-      attributionId: string;
-    }>).attributionId;
+    delete (
+      missing.profiles[routeAttributedProfileIndex]!.overrides[0] as Partial<{
+        attributionId: string;
+      }>
+    ).attributionId;
     expect(validateSkillContentRelease(missing).diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -281,7 +384,9 @@ describe("documentation-complete Skill content platform", () => {
     const wrongScope = candidate();
     wrongScope.profiles[routeAttributedProfileIndex]!.overrides[0]!.attributionId =
       "access:mogreb-surgeon-neseret";
-    wrongScope.profiles[routeAttributedProfileIndex]!.overrides[0]!.competencyIds = ["skill:lockpicking"];
+    wrongScope.profiles[routeAttributedProfileIndex]!.overrides[0]!.competencyIds = [
+      "skill:lockpicking",
+    ];
     wrongScope.manifest = {
       ...wrongScope.manifest,
       ...computeSkillContentReleaseIntegrity(wrongScope),
@@ -343,7 +448,7 @@ describe("documentation-complete Skill content platform", () => {
     };
     expect(validateSkillContentRelease(contradictory).diagnostics).toEqual(
       expect.arrayContaining([
-      expect.objectContaining({
+        expect.objectContaining({
           code: "SKILL_CONTENT_CONTRADICTORY_SPECIALIZATION_TRANSFER",
           path: `competencies[${specializationIndexInRelease}].transfer`,
         }),
@@ -524,7 +629,9 @@ describe("documentation-complete Skill content platform", () => {
     });
     expect(Object.isFrozen(projection)).toBe(true);
     expect(Object.isFrozen(projection.records.competencies[0]!.metadata)).toBe(true);
-    const projectedMedicine = projection.records.competencies.find(({ id }) => id === "skill:medicine")!;
+    const projectedMedicine = projection.records.competencies.find(
+      ({ id }) => id === "skill:medicine",
+    )!;
     const mutableMedicine = release.competencies.find(({ id }) => id === "skill:medicine")!;
     mutableMedicine.name = "Changed after projection";
     expect(projectedMedicine.name).toBe("Medicine");
