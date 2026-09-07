@@ -514,6 +514,33 @@ export type ScenarioPlayerControlledParticipant = z.infer<
 >;
 export type ScenarioPlayerProjection = z.infer<typeof scenarioPlayerProjectionSchema>;
 
+export const scenarioLifecycleTransitions: Record<ScenarioStatus, ScenarioStatus[]> = {
+  draft: ["draft", "prepared", "archived"],
+  prepared: ["draft", "prepared", "live", "archived"],
+  live: ["live", "completed"],
+  completed: ["completed", "archived"],
+  archived: ["archived"],
+};
+
+export function canTransitionScenarioStatus(
+  currentStatus: ScenarioStatus,
+  nextStatus: ScenarioStatus,
+): boolean {
+  return scenarioLifecycleTransitions[currentStatus]?.includes(nextStatus) ?? false;
+}
+
+export function canMutateScenarioInStatus(status: ScenarioStatus): boolean {
+  return !isScenarioReadOnly(status);
+}
+
+export function isScenarioLiveInteractive(status: ScenarioStatus): boolean {
+  return status === "live";
+}
+
+export function isScenarioReadOnly(status: ScenarioStatus): boolean {
+  return status === "completed" || status === "archived";
+}
+
 function clampHealth(value: number, max: number): number {
   return Math.max(0, Math.min(value, max));
 }

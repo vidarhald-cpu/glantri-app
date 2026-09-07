@@ -462,6 +462,84 @@ describe("ScenarioService controller assignment", () => {
 
     expect(first.controlledByUserId).toBe("user-1");
   });
+
+  it("rejects Scenario lifecycle regressions not present in the transition matrix", async () => {
+    const { repository } = createScenarioRepositoryStub();
+    const service = new ScenarioService(repository);
+
+    repository.updateScenario = async () => ({
+      campaignId: "campaign-1",
+      createdAt: "2026-04-21T00:00:00.000Z",
+      description: "",
+      id: "scenario-1",
+      kind: "mixed",
+      name: "Scenario One",
+      status: "live",
+      updatedAt: "2026-04-21T00:00:00.000Z",
+    });
+
+    await expect(
+      service.updateScenario({
+        scenarioId: "scenario-1",
+        status: "live",
+      }),
+    ).resolves.toMatchObject({ status: "live" });
+
+    await expect(
+      service.updateScenario({
+        scenarioId: "scenario-1",
+        status: "completed",
+      }),
+    ).rejects.toThrow("Scenario cannot transition from draft to completed.");
+  });
+
+  it("blocks participant mutations on non-editable Scenario status", async () => {
+    const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+    rosterCharacters(rosterEntries, "character-1");
+
+    scenario.status = "completed";
+
+    const service = new ScenarioService(repository, {
+      getCharacterById: async () => createCharacterRecord({ id: "character-1", name: "Ari" }),
+    } as never);
+
+    await expect(
+      service.addCharacterParticipant({
+        characterId: "character-1",
+        joinSource: "gm_added",
+        scenarioId: "scenario-1",
+      }),
+    ).rejects.toThrow("Scenario is not editable in its current status.");
+  });
+
+  it("requires live status for session state mutations", async () => {
+    const { repository, scenario } = createScenarioRepositoryStub();
+
+    scenario.status = "completed";
+
+    const service = new ScenarioService(repository);
+
+    await expect(
+      service.updateScenarioSessionState({
+        availableObjects: [],
+        expectedRevision: "rev-1",
+        gmPrivateNotes: "",
+        scenarioId: "scenario-1",
+      }),
+    ).rejects.toThrow("Scenario is not currently live.");
+
+    await expect(
+      service.pickUpScenarioAvailableItem({
+        actorUserId: "user-1",
+        availabilityId: "item-1",
+        expectedRevision: "rev-1",
+        requestId: "request-1",
+        scenarioId: "scenario-1",
+        targetParticipantId: "participant-1",
+        viewerMode: "player",
+      }),
+    ).rejects.toThrow("Scenario is not currently live.");
+  });
 });
 
 describe("ScenarioService scenario relationships", () => {

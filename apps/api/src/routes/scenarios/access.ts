@@ -44,10 +44,12 @@ export async function resolveScenarioWorkspaceAccess(
     userId: input.userId,
   });
 
-  return hasPlayerAccess
-    ? {
-        campaignId: campaign.id,
-        mode: "player",
-      }
-    : null;
+  if (hasPlayerAccess && scenario.status !== "draft" && scenario.status !== "prepared") {
+    return {
+      campaignId: campaign.id,
+      mode: "player",
+    };
+  }
+
+  return null;
 }

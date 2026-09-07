@@ -10,6 +10,9 @@ import type {
 import {
   createParticipantSnapshotFromCharacter,
   createParticipantSnapshotFromEntity,
+  canMutateScenarioInStatus,
+  canTransitionScenarioStatus,
+  isScenarioLiveInteractive,
   formatScenarioAvailableObjectReferenceType,
   scenarioAvailableObjectReferenceSchema,
   scenarioSessionStateSchema,
@@ -131,6 +134,19 @@ export class ScenarioService {
     scenarioId: string;
     status?: Scenario["status"];
   }): Promise<Scenario> {
+    const scenario = await this.getScenarioById(input.scenarioId);
+
+    if (!scenario) {
+      throw new Error("Scenario not found.");
+    }
+
+    if (
+      input.status !== undefined &&
+      !canTransitionScenarioStatus(scenario.status, input.status)
+    ) {
+      throw new Error(`Scenario cannot transition from ${scenario.status} to ${input.status}.`);
+    }
+
     return this.repository.updateScenario(input);
   }
 
@@ -142,6 +158,9 @@ export class ScenarioService {
   }): Promise<Scenario> {
     const scenario = await this.getScenarioById(input.scenarioId);
     if (!scenario) throw new Error("Scenario not found.");
+    if (!isScenarioLiveInteractive(scenario.status)) {
+      throw new Error("Scenario is not currently live.");
+    }
     const currentItems = await this.equipmentService.getCampaignEquipmentState(scenario.campaignId);
     const assets = await this.repository.listCampaignAssets(scenario.campaignId);
     const roster = await this.repository.listCampaignRosterEntries(scenario.campaignId);
@@ -296,6 +315,9 @@ export class ScenarioService {
   }) {
     const scenario = await this.repository.getScenarioById(input.scenarioId);
     if (!scenario) throw new Error("Scenario not found.");
+    if (!isScenarioLiveInteractive(scenario.status)) {
+      throw new Error("Scenario is not currently live.");
+    }
     const participant = await this.repository.getScenarioParticipantById(
       input.targetParticipantId,
       input.scenarioId,
@@ -352,6 +374,10 @@ export class ScenarioService {
 
     if (!scenario) {
       throw new Error("Scenario not found.");
+    }
+
+    if (!canMutateScenarioInStatus(scenario.status)) {
+      throw new Error("Scenario is not editable in its current status.");
     }
 
     const campaignRoster = await this.repository.listCampaignRosterEntries(scenario.campaignId);
@@ -428,6 +454,16 @@ export class ScenarioService {
     participantId: string;
     scenarioId: string;
   }): Promise<ScenarioParticipant> {
+    const scenario = await this.repository.getScenarioById(input.scenarioId);
+
+    if (!scenario) {
+      throw new Error("Scenario not found.");
+    }
+
+    if (!canMutateScenarioInStatus(scenario.status)) {
+      throw new Error("Scenario is not editable in its current status.");
+    }
+
     const participant = await this.repository.getScenarioParticipantById(
       input.participantId,
       input.scenarioId,
@@ -487,6 +523,16 @@ export class ScenarioService {
     scenarioId: string;
     tacticalGroupId?: string | null;
   }): Promise<ScenarioParticipant> {
+    const scenario = await this.repository.getScenarioById(input.scenarioId);
+
+    if (!scenario) {
+      throw new Error("Scenario not found.");
+    }
+
+    if (!canMutateScenarioInStatus(scenario.status)) {
+      throw new Error("Scenario is not editable in its current status.");
+    }
+
     const entity = await resolveEntityParticipantSource(this.repository, input);
 
     if (!entity) {
@@ -562,6 +608,16 @@ export class ScenarioService {
     scenarioId: string;
     tacticalGroupId?: string | null;
   }): Promise<ScenarioParticipant> {
+    const scenario = await this.repository.getScenarioById(input.scenarioId);
+
+    if (!scenario) {
+      throw new Error("Scenario not found.");
+    }
+
+    if (!canMutateScenarioInStatus(scenario.status)) {
+      throw new Error("Scenario is not editable in its current status.");
+    }
+
     const participants = await this.repository.listScenarioParticipants(input.scenarioId);
     const existingParticipant = participants.find(
       (participant) => participant.id === input.participantId,

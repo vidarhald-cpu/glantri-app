@@ -8,6 +8,8 @@ import {
 } from "@glantri/database";
 import {
   attachCanonicalPersistentEffectLifecycles,
+  isScenarioLiveInteractive,
+  isScenarioReadOnly,
   buildScenarioPlayerVisibleParticipants,
   reusableEntityKindSchema,
   scenarioParticipantJoinSourceSchema,
@@ -125,6 +127,10 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({
           error: "Scenario not found.",
         });
+      }
+
+      if (isScenarioReadOnly(scenario.status)) {
+        return reply.code(400).send({ error: "Scenario is not editable in its current status." });
       }
 
       const campaign = await campaignService.getCampaignById(scenario.campaignId);
@@ -315,6 +321,22 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: "Scenario not found." });
       }
 
+      const scenario = await scenarioService.getScenarioById(scenarioId);
+
+      if (!scenario) {
+        return reply.code(404).send({ error: "Scenario not found." });
+      }
+
+      if (isScenarioReadOnly(scenario.status)) {
+        return reply.code(403).send({ error: "Scenario is not editable in its current status." });
+      }
+
+      if (access.mode === "player" && !isScenarioLiveInteractive(scenario.status)) {
+        return reply
+          .code(403)
+          .send({ error: "Scenario is not currently open for live participant updates." });
+      }
+
       if (access.mode === "player") {
         const participant = await scenarioService.getScenarioParticipantById(
           participantId,
@@ -405,6 +427,16 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
 
       if (!access || access.mode !== "gm") {
         return reply.code(404).send({ error: "Scenario not found." });
+      }
+
+      const scenario = await scenarioService.getScenarioById(scenarioId);
+
+      if (!scenario) {
+        return reply.code(404).send({ error: "Scenario not found." });
+      }
+
+      if (isScenarioReadOnly(scenario.status)) {
+        return reply.code(400).send({ error: "Scenario is not editable in its current status." });
       }
 
       const body = parseBodyObject(request.body, "Participant metadata payload");
