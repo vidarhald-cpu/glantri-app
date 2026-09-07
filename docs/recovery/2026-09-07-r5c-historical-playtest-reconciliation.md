@@ -20,20 +20,20 @@ The importer connected as `glantri_r5c_reader`. That role was proven to have `de
 
 ## Disposable proof topology
 
-All containers used PostgreSQL 16, Docker-assigned loopback ports, unique named volumes, and the required disposable recovery labels.
+All containers used PostgreSQL 16, Docker-assigned loopback ports, unique named volumes, and the required disposable recovery labels. The repair proof re-derived `d543` from this linked Builder worktree; a different linked Builder or QA worktree derives its own names, databases, volumes, labels, confirmations, migration target, and markers.
 
 | Purpose       | Container                                      | Database                                  | Volume                                         |  Port |
 | ------------- | ---------------------------------------------- | ----------------------------------------- | ---------------------------------------------- | ----: |
-| Source        | `glantri-task-issue-61-d543-r5c-source-pg16`   | `glantri_task_issue_61_d543_r5c_source`   | `glantri-task-issue-61-d543-r5c-source-data`   | 54720 |
-| Target A      | `glantri-task-issue-61-d543-r5c-target-a-pg16` | `glantri_task_issue_61_d543_r5c_target_a` | `glantri-task-issue-61-d543-r5c-target-a-data` | 54727 |
-| Target B      | `glantri-task-issue-61-d543-r5c-target-b-pg16` | `glantri_task_issue_61_d543_r5c_target_b` | `glantri-task-issue-61-d543-r5c-target-b-data` | 54724 |
-| Failure proof | `glantri-task-issue-61-d543-r5c-failure-pg16`  | `glantri_task_issue_61_d543_r5c_failure`  | `glantri-task-issue-61-d543-r5c-failure-data`  | 54723 |
+| Source        | `glantri-task-issue-61-d543-r5c-source-pg16`   | `glantri_task_issue_61_d543_r5c_source`   | `glantri-task-issue-61-d543-r5c-source-data`   | 59495 |
+| Target A      | `glantri-task-issue-61-d543-r5c-target-a-pg16` | `glantri_task_issue_61_d543_r5c_target_a` | `glantri-task-issue-61-d543-r5c-target-a-data` | 59506 |
+| Target B      | `glantri-task-issue-61-d543-r5c-target-b-pg16` | `glantri_task_issue_61_d543_r5c_target_b` | `glantri-task-issue-61-d543-r5c-target-b-data` | 59514 |
+| Failure proof | `glantri-task-issue-61-d543-r5c-failure-pg16`  | `glantri_task_issue_61_d543_r5c_failure`  | `glantri-task-issue-61-d543-r5c-failure-data`  | 59537 |
 
 Exact-name checks proved all eight resources absent before creation. Each target began with zero public tables, received its purpose-specific marker, and migrated through the exact 17 committed current migrations to `20260829103000_add_retained_character_ledger`.
 
 ## Mapping and reconciliation
 
-The complete table-and-field A-E inventory is [`historical-playtest-mapping.json`](../../scripts/recovery/historical-playtest-mapping.json). The committed machine-readable result is [`2026-09-07-r5c-historical-import-manifest.json`](evidence/2026-09-07-r5c-historical-import-manifest.json). Every restored table and field is inventoried; no populated mapping remains unresolved.
+The complete table-and-field A-E inventory is [`historical-playtest-mapping.json`](../../scripts/recovery/historical-playtest-mapping.json). The committed machine-readable result is [`2026-09-07-r5c-historical-import-manifest.json`](evidence/2026-09-07-r5c-historical-import-manifest.json), which records deterministic importer version 2. Every restored table and field is inventoried; no populated mapping remains unresolved.
 
 | Family                                 | Source | Imported | Transformed |          Provenance only | Omitted | Unresolved |
 | -------------------------------------- | -----: | -------: | ----------: | -----------------------: | ------: | ---------: |
@@ -74,9 +74,9 @@ The Scenario provenance count is field-level: all eight base rows were imported,
 14. CharacterRevision, CharacterLedgerEvent, ArtifactAuditEvent, and ScenarioArtifactReference counts are zero. No Character, acquisition, item, loadout, or provenance history was fabricated.
 15. The source fingerprint is identical before and after all importer executions.
 16. An idempotent rerun on target A produced the same target data fingerprint and byte-identical manifest.
-17. Targets A and B produced target data fingerprint `b78fccfa80325133a0d9f44e4cd52bc59c93d07b95c16e18bb0a2b72bca7c210` and byte-identical manifest SHA-256 `b7fd4d02d80983837affae7c8f3d5562c57f16593294ef02b1b8e39fb3d5a006`.
+17. Targets A and B produced target data fingerprint `b78fccfa80325133a0d9f44e4cd52bc59c93d07b95c16e18bb0a2b72bca7c210` and byte-identical versioned manifest SHA-256 `656b6fdd24873632dee1a12a5501c7cf0344f58f577e3b1f2eb2d261a0b9f381`.
 18. Failure injection after the Character family left a known checkpoint with Users, Roles, UserRoles, Campaigns, and Characters committed, no later families, and no manifest. A normal rerun recovered to the same successful manifest.
-19. Guard tests reject the protected development endpoint, the persistent playtest endpoint, remote hosts, ambiguous database names, wrong labels/containers, mismatched migrations, mutable source roles, and mapping drift. A real port-5433/playtest preparation attempt was refused before any Docker or database access. Secret scanning of the changed files found no credentials, password hashes, session tokens, or token hashes.
+19. Guard tests reject the protected development endpoint, the persistent playtest endpoint, remote hosts, ambiguous database names, wrong labels/containers, cross-worktree source and target identities, explicit recovery-client ownership mismatches, mismatched migrations, mutable source roles, and mapping drift. Current-worktree identity acceptance covers derived names, databases, volumes, labels, confirmations, markers, and client URLs. A real port-5433/playtest preparation attempt was refused before any Docker or database access. Secret scanning of the changed files found no credentials, password hashes, session tokens, or token hashes.
 20. After evidence capture, only the four exact disposable containers and four exact named volumes above are removed and re-inspected as absent. Cleanup outcome is recorded below after execution.
 
 ## Embedded equipment conflict evidence
@@ -85,9 +85,9 @@ Historical embedded Character equipment arrays were empty while canonical item r
 
 ## Verification
 
-- Focused importer tests: 11 passed.
+- Focused importer tests: 14 passed, including cross-worktree acceptance/rejection and deterministic importer-version coverage.
 - Repository typecheck: 17 tasks passed.
-- Repository lint: 17 tasks passed.
+- Repository lint: root recovery/database/bootstrap lint plus 11 package tasks passed.
 - Repository tests: 11 tasks passed; all enabled tests passed. Database/API suites that require their separate integration environment remained explicitly skipped by their existing harness; the disposable database proof above exercised the importer against PostgreSQL 16 directly.
 - Repository production build: 11 tasks passed.
 - Every issue-61 file passes a direct Prettier check, and `git diff --check` passes. The repository helper's wider comparison also selected hundreds of accepted-baseline files and reported only two unrelated pre-existing recovery documents; neither is part of this change.

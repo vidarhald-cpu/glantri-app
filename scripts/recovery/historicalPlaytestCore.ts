@@ -6,6 +6,7 @@ import type {
 } from "../../packages/database/src/recoveryClient";
 
 import {
+  RECOVERY_IDENTITY,
   TARGET_MIGRATION_HEAD,
   currentMigrationChecksums,
   mappingInventory,
@@ -17,6 +18,8 @@ import {
   type SafeDatabaseTarget,
   type TargetPurpose,
 } from "./historicalPlaytestSafety";
+
+export const IMPORTER_VERSION = 2;
 
 type QueryClient = RecoveryPrismaClient | RecoveryTransactionClient;
 type JsonRecord = Record<string, unknown>;
@@ -125,6 +128,9 @@ export interface HistoricalImportManifest {
     characterLedgerEvents: number;
     characterRevisions: number;
     scenarioArtifactReferences: number;
+  };
+  importer: {
+    version: number;
   };
   manifestVersion: 1;
   mappingInventoryVersion: number;
@@ -967,9 +973,9 @@ export async function runImport(input: {
 }
 
 const TARGET_DATABASE: Record<TargetPurpose, string> = {
-  "target-a": "glantri_task_issue_61_d543_r5c_target_a",
-  "target-b": "glantri_task_issue_61_d543_r5c_target_b",
-  failure: "glantri_task_issue_61_d543_r5c_failure",
+  "target-a": RECOVERY_IDENTITY.targets["target-a"].database,
+  "target-b": RECOVERY_IDENTITY.targets["target-b"].database,
+  failure: RECOVERY_IDENTITY.targets.failure.database,
 };
 
 function buildManifest(input: {
@@ -1060,6 +1066,7 @@ function buildManifest(input: {
     },
     deterministicIdMaps: { generated: [], strategy: "stable-source-ids" },
     historiesNotFabricated: input.historiesNotFabricated,
+    importer: { version: IMPORTER_VERSION },
     manifestVersion: 1,
     mappingInventoryVersion: input.inventory.version,
     provenance: {

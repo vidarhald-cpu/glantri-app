@@ -1,15 +1,13 @@
 import { createHash } from "node:crypto";
-import { createReadStream, existsSync, readFileSync, readdirSync } from "node:fs";
+import { createReadStream, existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import type { RecoveryPrismaClient } from "../../packages/database/src/recoveryClient";
+import { deriveCurrentWorktreeTaskDatabaseIdentity } from "../../packages/database/src/worktreeDatabaseOwnership";
 
 export const ISSUE = "61";
-export const WORKTREE_KEY = "d543";
-export const SOURCE_DATABASE = "glantri_task_issue_61_d543_r5c_source";
-export const SOURCE_CONTAINER = "glantri-task-issue-61-d543-r5c-source-pg16";
 export const SOURCE_READER_ROLE = "glantri_r5c_reader";
 export const EXPECTED_DUMP_SHA256 =
   "6fa92f4486ba97328e3abe26e5bafe1c46f51628d012dfa17dd26e61b929bed1";
@@ -26,33 +24,79 @@ export const migrationsDirectory = resolve(
   "migrations",
 );
 
+export type TargetPurpose = "target-a" | "target-b" | "failure";
+export type RecoveryPurpose = "source" | TargetPurpose;
+
+export interface RecoveryResourceIdentity {
+  container: string;
+  database: string;
+  purpose: RecoveryPurpose;
+  volume: string;
+}
+
+export interface RecoveryIdentity {
+  issue: string;
+  source: RecoveryResourceIdentity;
+  targets: Record<TargetPurpose, RecoveryResourceIdentity>;
+  worktreeKey: string;
+}
+
+export function deriveRecoveryIdentity(root: string): RecoveryIdentity {
+  const worktreeKey = deriveCurrentWorktreeTaskDatabaseIdentity(root, ISSUE).worktreeKey;
+  const containerPrefix = `glantri-task-issue-${ISSUE}-${worktreeKey}-r5c`;
+  const databasePrefix = `glantri_task_issue_${ISSUE}_${worktreeKey.replace(/-/g, "_")}_r5c`;
+
+  const resource = (purpose: RecoveryPurpose): RecoveryResourceIdentity => {
+    const suffix = purpose.replace(/-/g, "_");
+    return {
+      container: `${containerPrefix}-${purpose}-pg16`,
+      database: `${databasePrefix}_${suffix}`,
+      purpose,
+      volume: `${containerPrefix}-${purpose}-data`,
+    };
+  };
+
+  return {
+    issue: ISSUE,
+    source: resource("source"),
+    targets: {
+      "target-a": resource("target-a"),
+      "target-b": resource("target-b"),
+      failure: resource("failure"),
+    },
+    worktreeKey,
+  };
+}
+
+export const RECOVERY_IDENTITY = deriveRecoveryIdentity(repositoryRoot);
+export const WORKTREE_KEY = RECOVERY_IDENTITY.worktreeKey;
+export const SOURCE_DATABASE = RECOVERY_IDENTITY.source.database;
+export const SOURCE_CONTAINER = RECOVERY_IDENTITY.source.container;
+
+export function recoveryLabels(
+  identity: RecoveryIdentity,
+  purpose: RecoveryPurpose,
+): Record<string, string> {
+  return {
+    "glantri.db.issue": identity.issue,
+    "glantri.db.kind": "disposable-recovery",
+    "glantri.db.purpose": purpose,
+    "glantri.db.worktree": identity.worktreeKey,
+  };
+}
+
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 const FORBIDDEN_PORTS = new Set(["5432", "5433"]);
 const FORBIDDEN_DATABASES = new Set(["glantri", "glantri_playtest", "glantri_restore_verify"]);
 
-export type TargetPurpose = "target-a" | "target-b" | "failure";
-
-const TARGETS: Record<TargetPurpose, { container: string; database: string }> = {
-  "target-a": {
-    container: "glantri-task-issue-61-d543-r5c-target-a-pg16",
-    database: "glantri_task_issue_61_d543_r5c_target_a",
-  },
-  "target-b": {
-    container: "glantri-task-issue-61-d543-r5c-target-b-pg16",
-    database: "glantri_task_issue_61_d543_r5c_target_b",
-  },
-  failure: {
-    container: "glantri-task-issue-61-d543-r5c-failure-pg16",
-    database: "glantri_task_issue_61_d543_r5c_failure",
-  },
-};
-
 export interface SafeDatabaseTarget {
   database: string;
   host: string;
+  issue: string;
   port: string;
   url: string;
   username: string;
+  worktreeKey: string;
 }
 
 interface ContainerInspection {
@@ -90,6 +134,14 @@ function fail(message: string): never {
   throw new Error(message);
 }
 
+export function assertCurrentRecoveryWorktree(): void {
+  const gitMarker = resolve(repositoryRoot, ".git");
+
+  if (!existsSync(gitMarker) || !lstatSync(gitMarker).isFile()) {
+    fail("Historical recovery commands require the current linked task worktree.");
+  }
+}
+
 function parsePostgresUrl(name: string, value: string): SafeDatabaseTarget {
   let parsed: URL;
 
@@ -122,9 +174,11 @@ function parsePostgresUrl(name: string, value: string): SafeDatabaseTarget {
   return {
     database,
     host,
+    issue: ISSUE,
     port,
     url: value,
     username: decodeURIComponent(parsed.username),
+    worktreeKey: WORKTREE_KEY,
   };
 }
 
@@ -156,14 +210,15 @@ function assertContainer(
   const inspection = inspectContainer(container);
   const labels = inspection.Config?.Labels ?? {};
   const binding = inspection.NetworkSettings?.Ports?.["5432/tcp"]?.[0];
+  const expectedLabels = recoveryLabels(RECOVERY_IDENTITY, purpose);
 
   if (
     inspection.Config?.Image !== "postgres:16" ||
     inspection.State?.Running !== true ||
-    labels["glantri.db.kind"] !== "disposable-recovery" ||
-    labels["glantri.db.issue"] !== ISSUE ||
-    labels["glantri.db.worktree"] !== WORKTREE_KEY ||
-    labels["glantri.db.purpose"] !== purpose ||
+    labels["glantri.db.kind"] !== expectedLabels["glantri.db.kind"] ||
+    labels["glantri.db.issue"] !== expectedLabels["glantri.db.issue"] ||
+    labels["glantri.db.worktree"] !== expectedLabels["glantri.db.worktree"] ||
+    labels["glantri.db.purpose"] !== expectedLabels["glantri.db.purpose"] ||
     binding?.HostIp !== "127.0.0.1" ||
     binding.HostPort !== target.port
   ) {
@@ -175,6 +230,7 @@ export function validateSourceEndpoint(
   url: string,
   container = SOURCE_CONTAINER,
 ): SafeDatabaseTarget {
+  assertCurrentRecoveryWorktree();
   const target = parsePostgresUrl("--source-url", url);
 
   if (target.database !== SOURCE_DATABASE) {
@@ -190,10 +246,11 @@ export function validateTargetEndpoint(
   purpose: TargetPurpose,
   container: string,
 ): SafeDatabaseTarget {
+  assertCurrentRecoveryWorktree();
   const target = parsePostgresUrl("--target-url", url);
-  const expected = TARGETS[purpose];
+  const expected = RECOVERY_IDENTITY.targets[purpose];
 
-  if (target.database !== expected.database || container !== expected.container) {
+  if (!expected || target.database !== expected.database || container !== expected.container) {
     fail(`--target-url and --target-container must name the exact ${purpose} resource.`);
   }
 
@@ -276,8 +333,24 @@ export function currentMigrationChecksums(): Array<{ checksum: string; name: str
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
+export function targetMarkerFor(
+  identity: RecoveryIdentity,
+  purpose: TargetPurpose,
+  state = "prepared",
+): string {
+  return `glantri:r5c:issue-${identity.issue}:worktree-${identity.worktreeKey}:${purpose}:${state}`;
+}
+
 export function targetMarker(purpose: TargetPurpose, state = "prepared"): string {
-  return `glantri:r5c:issue-61:worktree-d543:${purpose}:${state}`;
+  return targetMarkerFor(RECOVERY_IDENTITY, purpose, state);
+}
+
+export function targetConfirmationFor(identity: RecoveryIdentity, purpose: TargetPurpose): string {
+  return `issue-${identity.issue}-${identity.worktreeKey}-${purpose}`;
+}
+
+export function targetConfirmation(purpose: TargetPurpose): string {
+  return targetConfirmationFor(RECOVERY_IDENTITY, purpose);
 }
 
 export async function readDatabaseComment(client: RecoveryPrismaClient): Promise<string | null> {
@@ -294,13 +367,15 @@ export async function writeDatabaseComment(
   database: string,
   comment: string,
 ): Promise<void> {
-  if (!/^glantri_task_issue_61_d543_r5c_(target_a|target_b|failure)$/.test(database)) {
+  const targetDatabases = new Set(
+    Object.values(RECOVERY_IDENTITY.targets).map((target) => target.database),
+  );
+  if (!targetDatabases.has(database)) {
     fail("Refusing to comment an unexpected database.");
   }
 
-  if (
-    !/^glantri:r5c:issue-61:worktree-d543:(target-a|target-b|failure):[a-z0-9:-]+$/.test(comment)
-  ) {
+  const markerPrefix = `glantri:r5c:issue-${ISSUE}:worktree-${WORKTREE_KEY}:`;
+  if (!comment.startsWith(markerPrefix) || !/^[a-z0-9:-]+$/.test(comment)) {
     fail("Refusing an invalid recovery target marker.");
   }
 

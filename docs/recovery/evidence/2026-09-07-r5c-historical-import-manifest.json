@@ -15,6 +15,9 @@
     "characterRevisions": 0,
     "scenarioArtifactReferences": 0
   },
+  "importer": {
+    "version": 2
+  },
   "manifestVersion": 1,
   "mappingInventoryVersion": 1,
   "provenance": {

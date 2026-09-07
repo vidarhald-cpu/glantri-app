@@ -15,9 +15,14 @@ import {
   assertSourceManifestCounts,
 } from "./historicalPlaytestCore";
 import {
+  RECOVERY_IDENTITY,
   SOURCE_READER_ROLE,
+  assertCurrentRecoveryWorktree,
+  recoveryLabels,
   sanitizeError,
   sanitizedTarget,
+  targetConfirmation,
+  targetMarker,
   validateSourceEndpoint,
   validateTargetEndpoint,
   verifyBackupDirectory,
@@ -53,6 +58,35 @@ function readerUrl(adminUrl: string): string {
   return parsed.toString();
 }
 
+function identityCommand(): void {
+  assertCurrentRecoveryWorktree();
+  console.log(
+    JSON.stringify(
+      {
+        issue: RECOVERY_IDENTITY.issue,
+        source: {
+          ...RECOVERY_IDENTITY.source,
+          labels: recoveryLabels(RECOVERY_IDENTITY, "source"),
+        },
+        targets: Object.fromEntries(
+          Object.entries(RECOVERY_IDENTITY.targets).map(([purpose, resource]) => [
+            purpose,
+            {
+              ...resource,
+              confirmation: targetConfirmation(purpose as TargetPurpose),
+              labels: recoveryLabels(RECOVERY_IDENTITY, purpose as TargetPurpose),
+              preparedMarker: targetMarker(purpose as TargetPurpose),
+            },
+          ]),
+        ),
+        worktreeKey: RECOVERY_IDENTITY.worktreeKey,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 async function prepareSourceCommand(): Promise<void> {
   const backup = await verifyBackupDirectory(requiredArgument("--backup-dir"));
   const sourceUrl = requiredArgument("--source-url");
@@ -63,7 +97,7 @@ async function prepareSourceCommand(): Promise<void> {
     fail("Source preparation requires the disposable container's postgres administration role.");
   }
 
-  const source = createRecoveryClient(sourceUrl);
+  const source = createRecoveryClient(sourceUrl, endpoint);
   try {
     const inventory = loadMappingInventory();
     await assertSourceSchemaInventory(source, inventory);
@@ -101,7 +135,7 @@ async function prepareSourceCommand(): Promise<void> {
     await source.$disconnect();
   }
 
-  const readOnlySource = createRecoveryClient(readerUrl(sourceUrl));
+  const readOnlySource = createRecoveryClient(readerUrl(sourceUrl), endpoint);
   try {
     await assertSourceReadOnly(readOnlySource);
     await analyzeSource(readOnlySource);
@@ -120,12 +154,12 @@ async function prepareTargetCommand(): Promise<void> {
   const targetContainer = requiredArgument("--target-container");
   const confirmation = requiredArgument("--confirm-disposable-target");
 
-  if (confirmation !== `issue-61-d543-${purpose}`) {
+  if (confirmation !== targetConfirmation(purpose)) {
     fail("Disposable target confirmation does not match issue, worktree, and purpose.");
   }
 
   const endpoint = validateTargetEndpoint(targetUrl, purpose, targetContainer);
-  const target = createRecoveryClient(targetUrl);
+  const target = createRecoveryClient(targetUrl, endpoint);
   try {
     await prepareTarget(target, endpoint, purpose);
   } finally {
@@ -155,8 +189,8 @@ async function importCommand(): Promise<void> {
   );
   console.log(`Historical import target: purpose=${purpose} ${sanitizedTarget(targetEndpoint)}`);
 
-  const source = createRecoveryClient(sourceUrl);
-  const target = createRecoveryClient(targetUrl);
+  const source = createRecoveryClient(sourceUrl, sourceEndpoint);
+  const target = createRecoveryClient(targetUrl, targetEndpoint);
   try {
     const manifest = await runImport({
       backup,
@@ -184,14 +218,16 @@ async function importCommand(): Promise<void> {
 
 async function main(): Promise<void> {
   const command = process.argv[2];
-  if (command === "prepare-source") {
+  if (command === "identity") {
+    identityCommand();
+  } else if (command === "prepare-source") {
     await prepareSourceCommand();
   } else if (command === "prepare-target") {
     await prepareTargetCommand();
   } else if (command === "import") {
     await importCommand();
   } else {
-    fail("Expected prepare-source, prepare-target, or import.");
+    fail("Expected identity, prepare-source, prepare-target, or import.");
   }
 }
 
