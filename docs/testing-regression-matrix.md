@@ -67,6 +67,22 @@ PLAYWRIGHT_BASE_URL=http://localhost:3000 PLAYWRIGHT_API_URL=http://localhost:40
 The suite seeds deterministic smoke users, a campaign/scenario, and a player
 character through the API in `apps/web/e2e/global-setup.ts`.
 
+## Selecting independent-QA regression breadth
+
+The compact QA procedure is `docs/process/qa-execution.md`. INITIAL QA selects
+the broad, proportionate rows and gaps relevant to the complete approved claim.
+REPAIR QA re-runs the exact failed gate and directly affected regressions; it
+may carry forward a prior PASS only for a direct-child repair whose actual delta
+cannot affect that surface.
+
+Escalate REPAIR QA to broader or full relevant regression when the delta
+touches schema/migrations, shared authorization/projection/serialization/API or
+domain authority, concurrency/transactions, cross-cutting exports/toolchain,
+major Combat/Scenario projections, unexpectedly broad scope, or unclear
+non-direct-child/rebased topology. Privacy/security, browser, and database gates
+remain conditional on impact and are never skipped solely because the mode is
+REPAIR.
+
 ## Refactor-Critical Areas
 
 Treat these paths as high-value coverage targets:

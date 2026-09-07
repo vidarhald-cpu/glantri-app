@@ -7,6 +7,12 @@ owns role authority, workflow, exclusive Forgejo lifecycle, visible-lane rules,
 and standing execution authority. This document owns the self-contained
 contract schema and acceptance detail.
 
+At authorization time, the current Forgejo issue body becomes the executable
+task contract. Comments remain evidence/history rather than a second contract.
+If a repository recovery contract describes an older execution state, mark it
+clearly `provenance/superseded` and link the current issue; QA should not have to
+reconstruct authorized scope from a long comment chain or stale recovery file.
+
 `Ready` and `Authorized` are consecutive, exclusive lifecycle states. `Ready`
 means the contract below is complete and current but execution is not
 permitted. The Product Owner advances it to `Authorized` by copying an explicit
@@ -49,7 +55,8 @@ Explain impact and why this task has priority.
 - Execution role (Builder, independent QA, or bounded Investigator):
 - Resolved visible Work/Codex thread ID (required):
 - Direct task/thread link (required when the client provides one; otherwise unavailable):
-- Dispatch state (`queued`, `running`, `completed`, or `failed`):
+- Dispatch/child state (Builder/Investigator: `queued`, `running`, `completed`,
+  or `failed`; independent QA: use the states in `qa-execution.md`):
 - Accepted baseline branch:
 - Accepted baseline commit SHA:
 - Isolated worktree:
@@ -63,6 +70,12 @@ Explain impact and why this task has priority.
 - Disposable PostgreSQL 16 setup, verification, and cleanup commands, when database-capable:
 
 Name only the documents needed to execute this task safely. `AGENTS.md` is always required; area-specific contracts apply only when the task touches that area. Decision records, audits, and historical reports are on-demand references, not blanket startup reading. Do not use instructions such as `read all architecture docs`.
+
+For independent QA, use `docs/process/qa-execution.md`: ordinary mandatory
+reading is `AGENTS.md`, that compact guide, this issue's exact QA contract, and
+only explicitly named task-specific sources or sections. Do not automatically
+assign the full process, ownership, baseline, or regression documents. Name
+on-demand escalation references separately from startup reading.
 
 Substantial Builder, independent QA, and dispatched Investigator work uses
 separate visible Work/Codex tasks; QA must be a different visible task from the
@@ -308,7 +321,12 @@ List only decisions that genuinely require product/rule/UX judgment. Use `None` 
 
 ### Handoff requirements
 
-For an authorized Builder/QA loop, use the standard exact-SHA Builder and independent QA returns in `docs/process/agent-execution.md` in addition to the evidence below. The Development Orchestrator harvests the Builder result and sends the immutable exact-head contract directly to the pinned QA Orchestrator; the Product Owner is not the routine relay.
+For an authorized Builder/QA loop, use the exact-SHA Builder return in
+`docs/process/agent-execution.md` and the mode-aware QA handoff and return in
+`docs/process/qa-execution.md` in addition to the evidence below. The
+Development Orchestrator harvests the Builder result and sends the compact
+immutable-head INITIAL or REPAIR contract directly to the pinned QA
+Orchestrator; the Product Owner is not the routine relay.
 
 - Result and files changed.
 - Decision records created/updated.
