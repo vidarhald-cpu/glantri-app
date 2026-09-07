@@ -3,5 +3,12 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["./*.ts", "../../packages/database/src/databaseTargetSafety.ts"]
+  "include": [
+    "./*.ts",
+    "../recovery/*.ts",
+    "../../packages/database/src/recoveryClient.ts",
+    "../../packages/database/src/databaseTargetSafety.ts",
+    "../../packages/database/src/worktreeDatabaseOwnership.ts",
+    "../../packages/database/src/worktreeDatabaseRuntimeSafety.ts"
+  ]
 }
