@@ -7,7 +7,9 @@ Use this procedure for an authorized implementation case or other named durable 
 - The [canonical development operating model](./development-operating-model.md)
   owns the role map, workflow, lifecycle, visible-lane requirements, standing
   authority, and return gates. This document owns the detailed isolated
-  Builder/QA procedure and exact return formats.
+  Builder procedure and Builder return. The compact
+  [independent QA procedure](./qa-execution.md) owns QA startup, INITIAL versus
+  REPAIR QA, QA handoffs, entry checks, child states, and the QA return.
 - The Product Owner decides priority, product and rule behavior, UX,
   consequential architecture, authorization, acceptance, and `dev`
   integration. Architecture/control plane proposes and interprets; it does not
@@ -45,19 +47,13 @@ Use this procedure for an authorized implementation case or other named durable 
    `Ready for Independent QA`. Builder self-review does not make the PR
    accepted.
 4. **Hand off and review the exact head independently.** The Development
-   Orchestrator sends the immutable exact-head QA contract directly to the
-   pinned QA Orchestrator. The QA Orchestrator creates a separate visible QA
-   task. A fresh QA reviewer uses a separate clean worktree, fetches the PR,
-   resolves and records its exact head SHA, and reviews that immutable head
-   against the task contract. QA checks acceptance, scope, regressions,
-   required perspectives, presentation, privacy, product quality, database
-   evidence, and relevant CI/local checks. For protected facts, QA applies the
-   [Authority and Information Projection Principle](../architecture/information-authority-and-projection.md)
-   and reviews action authorization/zero mutation, server
-   payload/DTO/serialized-response absence, and UI rendering as separate gates.
-   A rejected action or absent control does not prove a safe projection. QA
-   does not repair Builder-owned code. If the PR head changes during review,
-   the result is stale and QA reviews the new head before issuing a verdict.
+   Orchestrator applies only the shallow dispatch gate in
+   [`qa-execution.md`](./qa-execution.md) and sends the applicable immutable
+   INITIAL or REPAIR tuple directly to the pinned QA Orchestrator. A fresh QA
+   reviewer in a separate visible task and clean worktree independently checks
+   topology, scope, the actual delta, and the selected substantive gates. A
+   mismatch returns quickly as `BLOCKED`; the Orchestrators do not duplicate
+   that substantive verification.
 5. **Harvest and route the verdict.** The QA Orchestrator harvests the separate
    QA task and records `PASS`, `PASS WITH FOLLOW-UP`, or `FAIL` with durable
    evidence, then returns directly to the Development Orchestrator.
@@ -66,7 +62,10 @@ Use this procedure for an authorized implementation case or other named durable 
    `Ready for Control-plane Acceptance`. FAIL never does: clear in-scope
    defects return through the Development Orchestrator to the same Builder and
    PR as an `Active` bounded repair. The Builder publishes a new exact head,
-   followed by a new direct handoff and fresh independent QA.
+   followed by a compact REPAIR handoff and fresh independent QA. A direct-child
+   narrow repair may retain demonstrably unaffected prior PASS evidence;
+   high-risk or unclear topology triggers broader verification as defined in
+   `qa-execution.md`.
 6. **Accept and integrate.** On a passing QA verdict, Architecture/control plane
    evaluates the durable result and the Product Owner decides acceptance and
    integration. An authorized integration actor may merge the accepted ordinary
@@ -95,7 +94,7 @@ creation is unavailable, the Development Orchestrator reports the capability
 problem and uses only an explicitly authorized manual visible fallback; it does
 not claim that a hidden substitute fulfilled the role.
 
-At dispatch, record:
+At Builder or Investigator dispatch, record:
 
 - canonical Codex project (`Glantri app — Forgejo`);
 - role and Forgejo issue when applicable;
@@ -105,6 +104,11 @@ At dispatch, record:
 - branch when applicable;
 - exact accepted baseline SHA; and
 - current state: `queued`, `running`, `completed`, or `failed`.
+
+Independent-QA dispatch and the explicit `Running`, `Blocked`,
+`Completed-unharvested`, `Completed-harvested`, `Failed`, and `Stalled`
+child states are defined in `qa-execution.md`. These coordination states do not
+replace the exclusive Forgejo issue lifecycle.
 
 The Development Orchestrator must follow each Builder/Investigator task through
 completion, retrieve its exact head/result, reconcile Forgejo evidence/status,
@@ -118,7 +122,7 @@ remaining queued, is not operational completion.
 After a bounded lane is Product Owner authorized, the Development Orchestrator
 may claim task/issue ownership, mark it `Active`, transfer or release ownership at
 Builder-to-QA-to-orchestrator boundaries, clear ownership at completion, and
-apply defined lifecycle transitions for Builder completion, QA PASS/FAIL,
+apply defined lifecycle transitions for Builder completion, QA outcomes,
 bounded repair, or control-plane return without repeated product-owner
 confirmation. Normal execution also proceeds without repeated confirmation for
 worktree/branch setup, authorized task dispatch, local Forgejo push/PR/evidence,
@@ -164,27 +168,12 @@ Risks/follow-ups: <none or durable links>
 State: READY FOR INDEPENDENT QA | BLOCKED — <one concrete blocker>
 ```
 
-## Standard independent QA return
+## Independent QA return
 
-Post this to the PR after reviewing the exact head:
-
-```text
-QA RETURN
-Dispatch: Glantri app — Forgejo / independent QA / completed
-Thread ID: <mandatory resolved visible Work/Codex thread ID>
-Direct task/thread link: <link when the client provides one; otherwise unavailable>
-Worktree: <absolute path>
-PR / exact reviewed head: #<PR> / <full SHA>
-Verdict: PASS | PASS WITH FOLLOW-UP | FAIL
-Criteria reviewed: <issue acceptance criteria and applicable dimensions>
-Independent tests/checks: <commands, evidence, and results>
-Findings/severity: <none or each finding with severity and durable link>
-Integration blockers: <none or exact blockers>
-Follow-ups: <none or non-blocking durable links and why integration is safe>
-State: READY FOR CONTROL-PLANE ACCEPTANCE | REPAIR REQUIRED | NEEDS DECISION
-```
-
-Only `PASS` or `PASS WITH FOLLOW-UP` may use `READY FOR CONTROL-PLANE ACCEPTANCE`. A QA return always identifies the exact reviewed head; a branch name alone is insufficient.
+Use the compact mode-aware return in [`qa-execution.md`](./qa-execution.md).
+Only `PASS` or `PASS WITH FOLLOW-UP` may advance to
+`READY FOR CONTROL-PLANE ACCEPTANCE`. A QA return always identifies the exact
+reviewed head; a branch name alone is insufficient.
 
 ## Isolation and database safety
 
