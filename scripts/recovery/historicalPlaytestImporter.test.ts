@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { assertRecoveryClientEndpoint } from "../../packages/database/src/recoveryClient";
@@ -12,11 +13,11 @@ import {
 import {
   ISSUE,
   RECOVERY_IDENTITY,
-  TARGET_MIGRATION_HEAD,
   currentMigrationChecksums,
   deriveRecoveryIdentity,
   recoveryLabels,
   repositoryRoot,
+  migrationsDirectory,
   sanitizeError,
   targetConfirmationFor,
   targetMarker,
@@ -46,10 +47,15 @@ describe("historical playtest mapping", () => {
     expect(inventory.tables.find((table) => table.name === "Encounter")?.fields.status).toBe("B");
   });
 
-  it("matches the exact 17-file current migration head", () => {
+  it("matches the authoritative current migration set and head", () => {
     const migrations = currentMigrationChecksums();
-    expect(migrations).toHaveLength(17);
-    expect(migrations.at(-1)?.name).toBe(TARGET_MIGRATION_HEAD);
+    const authoritativeMigrationNames = readdirSync(migrationsDirectory, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort((left, right) => left.localeCompare(right));
+
+    expect(migrations.map((migration) => migration.name)).toEqual(authoritativeMigrationNames);
+    expect(migrations.at(-1)?.name).toBe(authoritativeMigrationNames.at(-1));
     expect(migrations.every((migration) => /^[0-9a-f]{64}$/.test(migration.checksum))).toBe(true);
   });
 

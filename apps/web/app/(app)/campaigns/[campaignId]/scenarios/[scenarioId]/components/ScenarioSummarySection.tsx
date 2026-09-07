@@ -21,6 +21,9 @@ export function ScenarioSummarySection({
   scenarioName,
   scenarioStatus,
 }: ScenarioSummarySectionProps) {
+  const isTerminal = scenarioStatus === "completed" || scenarioStatus === "archived";
+  const scenarioStatusLabel = scenarioStatus === "completed" ? "Closed" : "Archived";
+
   return (
     <section
       aria-label="Scenario summary"
@@ -36,11 +39,16 @@ export function ScenarioSummarySection({
     >
       <label style={{ display: "grid", gap: "0.25rem" }}>
         <span>Name</span>
-        <input onChange={(event) => onNameChange(event.target.value)} value={scenarioName} />
+        <input
+          disabled={isTerminal}
+          onChange={(event) => onNameChange(event.target.value)}
+          value={scenarioName}
+        />
       </label>
       <label style={{ display: "grid", gap: "0.25rem" }}>
         <span>Description</span>
         <input
+          disabled={isTerminal}
           onChange={(event) => onDescriptionChange(event.target.value)}
           placeholder="No description yet."
           type="text"
@@ -49,18 +57,22 @@ export function ScenarioSummarySection({
       </label>
       <label style={{ display: "grid", gap: "0.25rem" }}>
         <span>Status</span>
-        <select
-          onChange={(event) => onStatusChange(event.target.value as Scenario["status"])}
-          value={scenarioStatus}
-        >
-          <option value="draft">Draft</option>
-          <option value="live">Active</option>
-          <option value="paused">Paused</option>
-          <option value="completed">Closed</option>
-          <option value="archived">Archived</option>
-        </select>
+        {isTerminal ? (
+          <output aria-label="Scenario status">{scenarioStatusLabel}</output>
+        ) : (
+          <select
+            onChange={(event) => onStatusChange(event.target.value as Scenario["status"])}
+            value={scenarioStatus}
+          >
+            <option value="draft">Draft</option>
+            <option value="live">Active</option>
+            <option value="paused">Paused</option>
+            <option value="completed">Closed</option>
+            <option value="archived">Archived</option>
+          </select>
+        )}
       </label>
-      <button onClick={onUpdate} type="button">
+      <button disabled={isTerminal} onClick={onUpdate} type="button">
         Update scenario
       </button>
     </section>
