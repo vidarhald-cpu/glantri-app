@@ -346,7 +346,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.put("/campaigns/:campaignId/status", async (request, reply) => {
+  app.post("/campaigns/:campaignId/activate", async (request, reply) => {
     const user = await requireAdminUser(request, reply);
 
     if (!user) {
@@ -355,12 +355,9 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
-      const body = parseBodyObject(request.body, "Campaign status payload");
-      const status = campaignStatusSchema.parse(body.status);
-      const next = await campaignService.updateCampaignStatus({
+      const next = await campaignService.activateCampaign({
         actorUserId: user.id,
         campaignId,
-        status,
       });
 
       return { campaign: next };
@@ -371,14 +368,17 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      if (error instanceof Error && error.message === "Campaign cannot be moved from active back to draft.") {
+      if (
+        error instanceof Error &&
+        error.message === "Campaign can only be activated from draft status."
+      ) {
         return reply.code(400).send({
           error: error.message,
         });
       }
 
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to update campaign status.",
+        error: error instanceof Error ? error.message : "Unable to activate campaign.",
       });
     }
   });

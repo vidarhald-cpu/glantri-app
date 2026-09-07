@@ -160,10 +160,9 @@ describe("CampaignService activation", () => {
       campaignId === draftCampaign.id ? draftCampaign : null;
     const service = new CampaignService(repository);
 
-    const next = await service.updateCampaignStatus({
+    const next = await service.activateCampaign({
       actorUserId: "gm-1",
       campaignId: draftCampaign.id,
-      status: "active",
     });
 
     expect(next.status).toBe("active");
@@ -184,35 +183,99 @@ describe("CampaignService activation", () => {
     const service = new CampaignService(repository);
 
     await expect(
-      service.updateCampaignStatus({
+      service.activateCampaign({
         actorUserId: "not-gm",
         campaignId: draftCampaign.id,
-        status: "active",
       }),
     ).rejects.toThrow("Campaign not found.");
   });
 
-  it("blocks ordinary active to draft transitions", async () => {
+  it.each(["active", "archived"] as const)(
+    "blocks activation when campaign is %s",
+    async (status) => {
+      const { campaigns, repository } = createScenarioRepositoryStub();
+      const restrictedCampaign = {
+        ...makeCampaign({
+          gmUserId: "gm-1",
+          id: `campaign-${status}`,
+        }),
+        status,
+      };
+      campaigns.push(restrictedCampaign);
+      repository.getCampaignById = async (campaignId) =>
+        campaignId === restrictedCampaign.id ? restrictedCampaign : null;
+      const service = new CampaignService(repository);
+
+      await expect(
+        service.activateCampaign({
+          actorUserId: "gm-1",
+          campaignId: restrictedCampaign.id,
+        }),
+      ).rejects.toThrow("Campaign can only be activated from draft status.");
+    },
+  );
+
+  it("blocks repeated activation after campaign becomes active", async () => {
     const { campaigns, repository } = createScenarioRepositoryStub();
-    const activeCampaign = {
+    const draftCampaign = {
       ...makeCampaign({
         gmUserId: "gm-1",
-        id: "campaign-active",
+        id: "campaign-draft",
       }),
-      status: "active" as const,
+      status: "draft" as const,
     };
-    campaigns.push(activeCampaign);
-    repository.getCampaignById = async (campaignId) =>
-      campaignId === activeCampaign.id ? activeCampaign : null;
+    campaigns.push(draftCampaign);
+    let seen = 0;
+    repository.getCampaignById = async (campaignId) => {
+      if (campaignId !== draftCampaign.id) {
+        return null;
+      }
+      seen += 1;
+      return seen === 1
+        ? draftCampaign
+        : {
+            ...draftCampaign,
+            status: "active" as const,
+          };
+    };
     const service = new CampaignService(repository);
 
+    await service.activateCampaign({
+      actorUserId: "gm-1",
+      campaignId: draftCampaign.id,
+    });
+
     await expect(
-      service.updateCampaignStatus({
+      service.activateCampaign({
         actorUserId: "gm-1",
-        campaignId: activeCampaign.id,
-        status: "draft",
+        campaignId: draftCampaign.id,
       }),
-    ).rejects.toThrow("Campaign cannot be moved from active back to draft.");
+    ).rejects.toThrow("Campaign can only be activated from draft status.");
+  });
+
+  it("rejects stale interleaving when a draft Campaign is already activated elsewhere", async () => {
+    const { campaigns, repository } = createScenarioRepositoryStub();
+    const draftCampaign = {
+      ...makeCampaign({
+        gmUserId: "gm-1",
+        id: "campaign-draft",
+      }),
+      status: "draft" as const,
+    };
+    const staleRepository = {
+      ...repository,
+      getCampaignById: async () => draftCampaign,
+      activateCampaignFromDraft: async () => null,
+    };
+    campaigns.push(draftCampaign);
+    const service = new CampaignService(staleRepository);
+
+    await expect(
+      service.activateCampaign({
+        actorUserId: "gm-1",
+        campaignId: "campaign-draft",
+      }),
+    ).rejects.toThrow("Campaign activation is stale and must be retried.");
   });
 });
 

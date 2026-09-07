@@ -481,7 +481,7 @@ export default function CampaignDetailPageContent({
     try {
       setError(undefined);
       setFeedback(undefined);
-      const nextCampaign = await activateCampaignOnServer({ campaignId, status: "active" });
+      const nextCampaign = await activateCampaignOnServer({ campaignId });
 
       setCampaign(nextCampaign);
       setFeedback(`Activated ${nextCampaign.name}.`);
@@ -593,6 +593,11 @@ export default function CampaignDetailPageContent({
         <p style={{ margin: 0 }}>{campaign.description || "No description yet."}</p>
         {campaign.status === "draft" ? (
           <div>
+            <p>
+              Once activated, rostered players can discover this Campaign in their active campaign
+              list. Unrostered players remain blocked.
+            </p>
+            <p>Campaigns can be activated once, and cannot return to draft through this action.</p>
             <button
               onClick={() => void handleActivateCampaign()}
               type="button"

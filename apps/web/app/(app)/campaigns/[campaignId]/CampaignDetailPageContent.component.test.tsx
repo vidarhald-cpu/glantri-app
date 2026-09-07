@@ -148,7 +148,6 @@ describe("CampaignDetailPageContent roster membership interaction", () => {
 
     expect(mocks.activateCampaignOnServer).toHaveBeenCalledWith({
       campaignId: "campaign-1",
-      status: "active",
     });
     await screen.findByText("Activated Border Trouble.");
   });

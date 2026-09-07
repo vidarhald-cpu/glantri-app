@@ -115,6 +115,23 @@ export function createScenarioRepositoryStub() {
       campaigns[index] = updatedCampaign;
       return updatedCampaign;
     },
+    activateCampaignFromDraft: async (input) => {
+      const campaign = campaigns.find((entry) => entry.id === input.campaignId);
+
+      if (!campaign || campaign.status !== "draft") {
+        return null;
+      }
+
+      const index = campaigns.indexOf(campaign);
+      const updatedCampaign = {
+        ...campaign,
+        status: "active",
+        updatedAt: "2026-04-22T00:00:00.000Z",
+      };
+
+      campaigns[index] = updatedCampaign;
+      return updatedCampaign;
+    },
     getCampaignById: async () => null,
     listCampaignsByGameMaster: async () => [],
     listCampaignsAllowingPlayerSelfJoin: async () => [],

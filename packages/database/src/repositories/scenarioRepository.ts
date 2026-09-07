@@ -317,10 +317,8 @@ export interface ScenarioRepository {
     slug: string;
     status: Campaign["status"];
   }): Promise<Campaign>;
-  updateCampaign(input: {
-    campaignId: string;
-    status: Campaign["status"];
-  }): Promise<Campaign>;
+  updateCampaign(input: { campaignId: string; status: Campaign["status"] }): Promise<Campaign>;
+  activateCampaignFromDraft(input: { campaignId: string }): Promise<Campaign | null>;
   getCampaignById(campaignId: string): Promise<Campaign | null>;
   listCampaignsByGameMaster(gmUserId: string): Promise<Campaign[]>;
   listCampaignsAllowingPlayerSelfJoin(): Promise<Campaign[]>;
@@ -512,6 +510,27 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
       });
 
       return mapCampaign(record);
+    },
+    async activateCampaignFromDraft(input) {
+      const result = await prisma.campaign.updateMany({
+        data: {
+          status: "active",
+        },
+        where: {
+          id: input.campaignId,
+          status: "draft",
+        },
+      });
+
+      if (result.count === 0) {
+        return null;
+      }
+
+      const record = await prisma.campaign.findUnique({
+        where: { id: input.campaignId },
+      });
+
+      return record ? mapCampaign(record) : null;
     },
     async getCampaignById(campaignId) {
       const record = await prisma.campaign.findUnique({

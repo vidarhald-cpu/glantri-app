@@ -96,6 +96,7 @@ const mocks = vi.hoisted(() => {
     addCampaignRosterEntry: vi.fn(),
     createCampaign: vi.fn(),
     createCampaignNpc: vi.fn(),
+    activateCampaign: vi.fn(),
     getCampaignById: vi.fn(),
     getReusableEntityById: vi.fn(),
     listCampaignRosterEntries: vi.fn(),
@@ -106,7 +107,6 @@ const mocks = vi.hoisted(() => {
     listCampaignsByUserAccess: vi.fn(),
     listPlayerCampaignCharacters: vi.fn(),
     removeCampaignRosterEntryBySource: vi.fn(),
-    updateCampaignStatus: vi.fn(),
   };
   const characterService = {
     getCharacterById: vi.fn(),
@@ -4691,7 +4691,7 @@ describe("scenarios route contract", () => {
     }
   });
 
-  it("activates a draft Campaign through the campaign status endpoint", async () => {
+  it("activates a draft Campaign through the campaign activation endpoint", async () => {
     const campaign = {
       createdAt: "2026-05-09T12:00:00.000Z",
       description: "Campaign prelaunch.",
@@ -4703,52 +4703,63 @@ describe("scenarios route contract", () => {
       status: "active",
       updatedAt: "2026-05-09T12:00:00.000Z",
     };
-    mocks.campaignService.updateCampaignStatus.mockResolvedValue(campaign);
+    mocks.campaignService.activateCampaign.mockResolvedValue(campaign);
     const app = await buildScenarioTestApp();
 
     const response = await app.inject({
-      method: "PUT",
-      payload: {
-        status: "active",
-      },
-      url: "/campaigns/campaign-1/status",
+      method: "POST",
+      url: "/campaigns/campaign-1/activate",
     });
 
     await app.close();
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ campaign });
-    expect(mocks.campaignService.updateCampaignStatus).toHaveBeenCalledWith({
+    expect(mocks.campaignService.activateCampaign).toHaveBeenCalledWith({
       actorUserId: "gm-1",
       campaignId: "campaign-1",
-      status: "active",
     });
   });
 
-  it("prevents deactivation from active back to draft for campaign status transitions", async () => {
-    mocks.campaignService.updateCampaignStatus.mockRejectedValue(
-      new Error("Campaign cannot be moved from active back to draft."),
+  it("prevents draft activation when campaign is no longer draft", async () => {
+    mocks.campaignService.activateCampaign.mockRejectedValue(
+      new Error("Campaign can only be activated from draft status."),
     );
     const app = await buildScenarioTestApp();
 
     const response = await app.inject({
-      method: "PUT",
-      payload: {
-        status: "draft",
-      },
-      url: "/campaigns/campaign-1/status",
+      method: "POST",
+      url: "/campaigns/campaign-1/activate",
     });
 
     await app.close();
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({
-      error: "Campaign cannot be moved from active back to draft.",
+      error: "Campaign can only be activated from draft status.",
     });
-    expect(mocks.campaignService.updateCampaignStatus).toHaveBeenCalledWith({
+    expect(mocks.campaignService.activateCampaign).toHaveBeenCalledWith({
       actorUserId: "gm-1",
       campaignId: "campaign-1",
-      status: "draft",
+    });
+  });
+
+  it("returns a validation error for stale activation conflicts", async () => {
+    mocks.campaignService.activateCampaign.mockRejectedValue(
+      new Error("Campaign activation is stale and must be retried."),
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/campaigns/campaign-1/activate",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "Campaign activation is stale and must be retried.",
     });
   });
 
@@ -4760,18 +4771,15 @@ describe("scenarios route contract", () => {
     const app = await buildScenarioTestApp();
 
     const response = await app.inject({
-      method: "PUT",
-      payload: {
-        status: "active",
-      },
-      url: "/campaigns/campaign-1/status",
+      method: "POST",
+      url: "/campaigns/campaign-1/activate",
     });
 
     await app.close();
 
     expect(response.statusCode).toBe(403);
     expect(response.json()).toEqual({ error: "Admin or GM role required." });
-    expect(mocks.campaignService.updateCampaignStatus).not.toHaveBeenCalled();
+    expect(mocks.campaignService.activateCampaign).not.toHaveBeenCalled();
   });
 
   it("returns a validation error instead of calling the service for invalid campaign creation", async () => {
