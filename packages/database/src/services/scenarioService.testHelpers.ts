@@ -98,6 +98,23 @@ export function createScenarioRepositoryStub() {
     createCampaign: async () => {
       throw new Error("Not implemented in test stub.");
     },
+    updateCampaign: async (input) => {
+      const campaign = campaigns.find((entry) => entry.id === input.campaignId);
+
+      if (!campaign) {
+        throw new Error("Campaign not found.");
+      }
+
+      const index = campaigns.indexOf(campaign);
+      const updatedCampaign = {
+        ...campaign,
+        status: input.status,
+        updatedAt: "2026-04-22T00:00:00.000Z",
+      };
+
+      campaigns[index] = updatedCampaign;
+      return updatedCampaign;
+    },
     getCampaignById: async () => null,
     listCampaignsByGameMaster: async () => [],
     listCampaignsAllowingPlayerSelfJoin: async () => [],

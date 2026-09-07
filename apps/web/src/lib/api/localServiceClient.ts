@@ -46,6 +46,7 @@ export {
 } from "./characterClient";
 export {
   addCampaignRosterEntryOnServer,
+  activateCampaignOnServer,
   createCampaignAssetOnServer,
   createCampaignNpcOnServer,
   createCampaignOnServer,

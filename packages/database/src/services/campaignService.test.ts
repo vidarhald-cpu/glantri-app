@@ -144,6 +144,78 @@ describe("CampaignService access listing", () => {
   });
 });
 
+describe("CampaignService activation", () => {
+  it("lets a managing GM activate a draft Campaign", async () => {
+    const { campaigns, repository } = createScenarioRepositoryStub();
+    const draftCampaign = {
+      ...makeCampaign({
+        gmUserId: "gm-1",
+        id: "campaign-draft",
+        name: "Draft Campaign",
+      }),
+      status: "draft" as const,
+    };
+    campaigns.push(draftCampaign);
+    repository.getCampaignById = async (campaignId) =>
+      campaignId === draftCampaign.id ? draftCampaign : null;
+    const service = new CampaignService(repository);
+
+    const next = await service.updateCampaignStatus({
+      actorUserId: "gm-1",
+      campaignId: draftCampaign.id,
+      status: "active",
+    });
+
+    expect(next.status).toBe("active");
+  });
+
+  it("prevents non-managing users from changing campaign status", async () => {
+    const { campaigns, repository } = createScenarioRepositoryStub();
+    const draftCampaign = {
+      ...makeCampaign({
+        gmUserId: "gm-1",
+        id: "campaign-draft",
+      }),
+      status: "draft" as const,
+    };
+    campaigns.push(draftCampaign);
+    repository.getCampaignById = async (campaignId) =>
+      campaignId === draftCampaign.id ? draftCampaign : null;
+    const service = new CampaignService(repository);
+
+    await expect(
+      service.updateCampaignStatus({
+        actorUserId: "not-gm",
+        campaignId: draftCampaign.id,
+        status: "active",
+      }),
+    ).rejects.toThrow("Campaign not found.");
+  });
+
+  it("blocks ordinary active to draft transitions", async () => {
+    const { campaigns, repository } = createScenarioRepositoryStub();
+    const activeCampaign = {
+      ...makeCampaign({
+        gmUserId: "gm-1",
+        id: "campaign-active",
+      }),
+      status: "active" as const,
+    };
+    campaigns.push(activeCampaign);
+    repository.getCampaignById = async (campaignId) =>
+      campaignId === activeCampaign.id ? activeCampaign : null;
+    const service = new CampaignService(repository);
+
+    await expect(
+      service.updateCampaignStatus({
+        actorUserId: "gm-1",
+        campaignId: activeCampaign.id,
+        status: "draft",
+      }),
+    ).rejects.toThrow("Campaign cannot be moved from active back to draft.");
+  });
+});
+
 describe("CampaignService campaign roster", () => {
   it("projects all finalized server Characters with only safe Campaign candidate fields", async () => {
     const { repository, rosterEntries } = createScenarioRepositoryStub();

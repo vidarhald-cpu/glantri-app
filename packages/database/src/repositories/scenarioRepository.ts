@@ -317,6 +317,10 @@ export interface ScenarioRepository {
     slug: string;
     status: Campaign["status"];
   }): Promise<Campaign>;
+  updateCampaign(input: {
+    campaignId: string;
+    status: Campaign["status"];
+  }): Promise<Campaign>;
   getCampaignById(campaignId: string): Promise<Campaign | null>;
   listCampaignsByGameMaster(gmUserId: string): Promise<Campaign[]>;
   listCampaignsAllowingPlayerSelfJoin(): Promise<Campaign[]>;
@@ -495,6 +499,16 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
           slug: input.slug,
           status: input.status,
         },
+      });
+
+      return mapCampaign(record);
+    },
+    async updateCampaign(input) {
+      const record = await prisma.campaign.update({
+        data: {
+          status: input.status,
+        },
+        where: { id: input.campaignId },
       });
 
       return mapCampaign(record);

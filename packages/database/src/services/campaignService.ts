@@ -386,6 +386,24 @@ export class CampaignService {
     return this.repository.updateCampaignAssetVisibility(input.assetId, input.visibility);
   }
 
+  async updateCampaignStatus(input: {
+    actorUserId: string;
+    campaignId: string;
+    status: Campaign["status"];
+  }): Promise<Campaign> {
+    const campaign = await this.repository.getCampaignById(input.campaignId);
+
+    if (!campaign || campaign.gmUserId !== input.actorUserId) {
+      throw new Error("Campaign not found.");
+    }
+
+    if (campaign.status === "active" && input.status === "draft") {
+      throw new Error("Campaign cannot be moved from active back to draft.");
+    }
+
+    return this.repository.updateCampaign({ campaignId: input.campaignId, status: input.status });
+  }
+
   private async resolveCampaignRosterLabel(input: {
     actorIsAdmin?: boolean;
     actorUserId?: string;
