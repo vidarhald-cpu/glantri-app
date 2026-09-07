@@ -38,6 +38,12 @@ Current Skill authority is split deliberately:
 
 The qualitative decision does not change or generalize Pilot v1 mechanics.
 
+Current Critical-effect behavior and its explicit pre/post-#393 boundary are documented in
+[Glantri Critical Effects](./combat-critical-effects.md). The future six-kind authoring and bounded
+GM-adjudication contract is
+[decision 0004](../decisions/rules/0004-c1-critical-authoring-and-adjudication.md); its exact five-key
+payload is non-executable recovery evidence until separately authorized implementation work lands.
+
 ## Maintainer Indexes
 
 - [Combat Action Rule Inventory](./combat-action-rule-inventory.md) — source extraction,

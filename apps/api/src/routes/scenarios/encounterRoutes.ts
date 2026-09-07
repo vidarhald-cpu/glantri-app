@@ -39,6 +39,9 @@ import {
   buildCombatObservationSkillContestContribution,
   projectProcessNumericContributionToCanonicalModifierLifecycle,
   transitionCanonicalCombatModifierEffect,
+  transitionCombatCriticalBleedEffect,
+  combatCriticalBleedControlStateSchema,
+  combatCriticalExactRationalSchema,
   buildPlayerSafeCombatObservationAttempts,
   buildPlayerSafeCombatObservationRelationships,
   activateCombatGenericAction,
@@ -161,6 +164,7 @@ import {
   normalizeCombatArmorModifierClass,
   rollCombatRoundCombatExperience,
   recordCombatRoundCriticalRoll,
+  recordCombatCriticalBleedTreatmentCommand,
   recordCombatGenericActionRoll,
   recordCombatRoundDamageResult,
   recordCombatRoundDeclaration,
@@ -313,6 +317,7 @@ import {
   assignRoleplayStatCheck,
   buildCharacterSheetSummary,
   buildRepresentativeCriticalRuntimeDefinition,
+  getC1FiveKeyCanonicalReview,
   buildCombatStateCharacterInputs,
   calculateWorkbookPercentageAdjustmentTrace,
   deriveParryPrimaryActionModifier,
@@ -3104,6 +3109,63 @@ function parseCombatDamageReviewBody(body: unknown): ParsedCombatDamageTaskBody 
   };
 }
 
+function normalizeC1FiveKeyDamageReview(
+  review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId">,
+): Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId"> {
+  const proposal = review.criticalEffectProposal;
+  const criticalKey = proposal?.critKey;
+  const canonicalReview = criticalKey ? getC1FiveKeyCanonicalReview(criticalKey) : undefined;
+
+  if (!canonicalReview || !proposal || !criticalKey) {
+    if (proposal?.adjudication) {
+      throw new RangeError("Critical adjudication is available only for the five active C1 keys.");
+    }
+    return review;
+  }
+
+  buildRepresentativeCriticalRuntimeDefinition(criticalKey, () => 0, proposal.adjudication);
+  const suppressedEffectKeys = new Set(proposal.adjudication?.suppressedEffectKeys ?? []);
+  return {
+    ...review,
+    additionalEffects: review.additionalEffects.map((effect) =>
+      effect.sourceCritKey === criticalKey && effect.sourceEffectKey
+        ? { ...effect, accepted: !suppressedEffectKeys.has(effect.sourceEffectKey) }
+        : effect,
+    ),
+    criticalEffectProposal: {
+      ...proposal,
+      bodyText: proposal.adjudication?.narrativeOverride ?? canonicalReview.narrative,
+      canonicalReview,
+      title: proposal.adjudication?.titleOverride ?? canonicalReview.title,
+    },
+    operationalConsequences: review.operationalConsequences.map((consequence) =>
+      consequence.sourceCritKey === criticalKey && consequence.sourceEffectKey
+        ? {
+            ...consequence,
+            accepted: !suppressedEffectKeys.has(consequence.sourceEffectKey),
+          }
+        : consequence,
+    ),
+  };
+}
+
+function attachC1FiveKeyCanonicalReviews(state: CombatRoundState): CombatRoundState {
+  return {
+    ...state,
+    phaseResolutionResults: state.phaseResolutionResults.map((result) => {
+      const damageResult = result.damageResult;
+      if (!damageResult?.review) return result;
+      return {
+        ...result,
+        damageResult: {
+          ...damageResult,
+          review: normalizeC1FiveKeyDamageReview(damageResult.review),
+        },
+      };
+    }),
+  };
+}
+
 function clearScenarioParticipantCombatDeclaration(
   participant: ScenarioParticipant,
 ): ScenarioParticipant["state"] {
@@ -5369,6 +5431,25 @@ function getContinuedContactEffectTransitionFactsList(command: CombatRoundComman
   return singular ? [singular] : [];
 }
 
+function getCriticalBleedTreatmentTransitionFact(command: CombatRoundCommand) {
+  if (command.type !== "transition_critical_bleed") return undefined;
+  const previousEffect = combatEffectSchema.safeParse(command.facts.previousEffect);
+  const nextEffect = combatEffectSchema.safeParse(command.facts.nextEffect);
+  const scenarioParticipantId = command.facts.scenarioParticipantId;
+  const combatEffectEventId = command.facts.combatEffectEventId;
+  return previousEffect.success &&
+    nextEffect.success &&
+    typeof scenarioParticipantId === "string" &&
+    typeof combatEffectEventId === "string"
+    ? {
+        combatEffectEventId,
+        nextEffect: nextEffect.data,
+        previousEffect: previousEffect.data,
+        scenarioParticipantId,
+      }
+    : undefined;
+}
+
 function attachCombatNpcDeclarationProposalProvenance(input: {
   commandId: string;
   proposal: CombatNpcDeclarationProposal;
@@ -6084,6 +6165,12 @@ function buildPlayerSafeCombatRoundCommandForUser(input: {
   controlledEncounterParticipantIds: Set<string>;
   visibleParticipantIds: Set<string>;
 }): CombatRoundCommand | undefined {
+  // Treatment commands retain exact before/after effect snapshots and the authenticated GM actor.
+  // Players receive only the separately sanitized involved event/current-effect projection.
+  if (input.command.type === "transition_critical_bleed") {
+    return undefined;
+  }
+
   // Feint command facts retain undo provenance, including both raw rolls and GM notes.
   // Player live state uses the separately sanitized proposal and projected event history.
   if (
@@ -15028,15 +15115,26 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       if (!resolution?.damageResult) {
         throw new Error("No current damage proposal is open.");
       }
+      const currentCriticalKey = resolution.damageResult.review?.criticalEffectProposal?.critKey;
+      const submittedCriticalKey = body.review.criticalEffectProposal?.critKey;
+      if (
+        currentCriticalKey && getC1FiveKeyCanonicalReview(currentCriticalKey)
+          ? submittedCriticalKey !== currentCriticalKey
+          : Boolean(submittedCriticalKey && submittedCriticalKey !== currentCriticalKey)
+      ) {
+        throw new RangeError("Critical review identity is stale.");
+      }
 
       const submittedAt = new Date().toISOString();
-      const reviewedState = reviewCombatRoundDamageResult({
-        attackResultId: resolution.damageResult.attackResultId,
-        review: body.review,
-        reviewedAt: submittedAt,
-        reviewedByUserId: user.id,
-        state: roundState,
-      });
+      const reviewedState = attachC1FiveKeyCanonicalReviews(
+        reviewCombatRoundDamageResult({
+          attackResultId: resolution.damageResult.attackResultId,
+          review: normalizeC1FiveKeyDamageReview(body.review),
+          reviewedAt: submittedAt,
+          reviewedByUserId: user.id,
+          state: roundState,
+        }),
+      );
       const savedEncounter = await encounterService.updateCombatEncounter({
         expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
@@ -15156,6 +15254,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       if (!resolution?.damageResult) {
         throw new Error("No current damage proposal is open.");
       }
+      const currentCriticalKey = resolution.damageResult.review?.criticalEffectProposal?.critKey;
+      const submittedCriticalKey = body.review.criticalEffectProposal?.critKey;
+      if (
+        currentCriticalKey && getC1FiveKeyCanonicalReview(currentCriticalKey)
+          ? submittedCriticalKey !== currentCriticalKey
+          : Boolean(submittedCriticalKey && submittedCriticalKey !== currentCriticalKey)
+      ) {
+        throw new RangeError("Critical review identity is stale.");
+      }
 
       const defenderEncounterParticipant = encounter.participants.find((participant) =>
         participantAliasesInclude({ id: attackResult.defenderParticipantId, participant }),
@@ -15177,19 +15284,23 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const submittedAt = new Date().toISOString();
-      const reviewedState = reviewCombatRoundDamageResult({
-        attackResultId: resolution.damageResult.attackResultId,
-        review: body.review,
-        reviewedAt: submittedAt,
-        reviewedByUserId: user.id,
-        state: roundState,
-      });
+      const reviewedState = attachC1FiveKeyCanonicalReviews(
+        reviewCombatRoundDamageResult({
+          attackResultId: resolution.damageResult.attackResultId,
+          review: normalizeC1FiveKeyDamageReview(body.review),
+          reviewedAt: submittedAt,
+          reviewedByUserId: user.id,
+          state: roundState,
+        }),
+      );
       const reviewedDamageResult = reviewedState.phaseResolutionResults.find(
         (candidate) => candidate.attackResultId === resolution.damageResult?.attackResultId,
       )?.damageResult;
       const criticalRuntime = reviewedDamageResult?.review?.criticalEffectProposal?.critKey
         ? buildRepresentativeCriticalRuntimeDefinition(
             reviewedDamageResult.review.criticalEffectProposal.critKey,
+            Math.random,
+            reviewedDamageResult.review.criticalEffectProposal.adjudication,
           )
         : undefined;
       const committed = commitCombatRoundPhaseDamage({
@@ -15234,6 +15345,128 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
     }
   });
+
+  app.post(
+    "/encounters/:encounterId/combat-round/transition-critical-bleed",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+        if (!encounter?.scenarioId) {
+          return reply.code(404).send({ error: "Encounter not found." });
+        }
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId, userId: user.id, userRoles: user.roles },
+        );
+        if (!access || access.mode !== "gm") {
+          return reply
+            .code(403)
+            .send({ error: "Only GM users can update Critical Bleed treatment." });
+        }
+        const value = parseBodyObject(request.body, "Critical Bleed treatment payload");
+        const expectedRevision = parseNonEmptyString(value.expectedRevision, "expectedRevision");
+        if (expectedRevision !== encounter.updatedAt) {
+          return reply.code(409).send({
+            code: "stale_revision",
+            error: "Combat state changed. Review current Bleed treatment before continuing.",
+          });
+        }
+        const scenarioParticipantId = parseNonEmptyString(
+          value.scenarioParticipantId,
+          "scenarioParticipantId",
+        );
+        const effectId = parseNonEmptyString(value.effectId, "effectId");
+        const nextState = combatCriticalBleedControlStateSchema.parse(value.nextState);
+        const partialRate =
+          value.partialRate === undefined
+            ? undefined
+            : combatCriticalExactRationalSchema.parse(value.partialRate);
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const scenarioParticipant = scenarioParticipants.find(
+          (participant) => participant.id === scenarioParticipantId,
+        );
+        const encounterParticipant = encounter.participants.find((participant) =>
+          participantAliasesInclude({ id: scenarioParticipantId, participant }),
+        );
+        if (!scenarioParticipant || !encounterParticipant) {
+          return reply.code(404).send({ error: "Encounter participant not found." });
+        }
+        const submittedAt = new Date().toISOString();
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const previousEffect = combatEffectsStateSchema
+          .parse(scenarioParticipant.state.combatEffects)
+          .effects.find((effect) => effect.id === effectId);
+        if (!previousEffect) {
+          return reply.code(404).send({ error: "Critical Bleed source not found." });
+        }
+        const transitioned = transitionCombatCriticalBleedEffect({
+          combatEffects: scenarioParticipant.state.combatEffects,
+          createdAt: submittedAt,
+          createdByUserId: user.id,
+          effectId,
+          encounterId,
+          nextState,
+          partialRate,
+          roundNumber: roundState.roundNumber,
+          scenarioId,
+        });
+        const sourceEffect = transitioned.combatEffects.effects.find(
+          (effect) => effect.id === effectId,
+        );
+        if (!sourceEffect) {
+          throw new RangeError("Critical Bleed transition did not preserve its source effect.");
+        }
+        const recorded = recordCombatCriticalBleedTreatmentCommand({
+          combatEffectEventId: transitioned.treatmentEventId,
+          createdAt: submittedAt,
+          createdByUserId: user.id,
+          encounterParticipantId: encounterParticipant.id,
+          nextEffect: sourceEffect,
+          partialRate,
+          previousEffect,
+          scenarioParticipantId,
+          state: roundState,
+        });
+        const nextRoundState = recorded.state;
+        const saved = await encounterService.commitCombatParticipantStateMutation({
+          campaignId: access.campaignId,
+          encounterId,
+          expectedEncounterRevision: encounter.updatedAt,
+          participant: scenarioParticipant,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: nextRoundState,
+            currentRound: nextRoundState.roundNumber,
+            updatedAt: submittedAt,
+          },
+          state: {
+            ...scenarioParticipant.state,
+            combatEffects: transitioned.combatEffects,
+          },
+        });
+        return {
+          command: recorded.command,
+          commandEnvelope: buildCombatRoundCommandEnvelope({ state: nextRoundState }),
+          encounter: saved.encounter,
+          participant: saved.participant,
+        };
+      } catch (error) {
+        return reply.code(400).send({
+          error:
+            error instanceof Error ? error.message : "Unable to update Critical Bleed treatment.",
+        });
+      }
+    },
+  );
 
   app.post(
     "/encounters/:encounterId/combat-round/commit-phase-initiative-resolution",
@@ -18068,17 +18301,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const submittedAt = new Date().toISOString();
-      const nextRoundState = recordCombatRoundCriticalRoll({
-        attackResult,
-        command: {
-          createdAt: submittedAt,
-          createdByUserId: user.id,
-        },
-        rolledByParticipantId: encounterParticipant.id,
-        state: roundState,
-        submittedBy: access.mode === "gm" ? "gm" : "player",
-        updatedAt: submittedAt,
-      });
+      const nextRoundState = attachC1FiveKeyCanonicalReviews(
+        recordCombatRoundCriticalRoll({
+          attackResult,
+          command: {
+            createdAt: submittedAt,
+            createdByUserId: user.id,
+          },
+          rolledByParticipantId: encounterParticipant.id,
+          state: roundState,
+          submittedBy: access.mode === "gm" ? "gm" : "player",
+          updatedAt: submittedAt,
+        }),
+      );
       const savedEncounter = await encounterService.updateCombatEncounter({
         expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
@@ -18252,6 +18487,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           command.type === "commit_phase_damage" &&
           !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
       );
+      const removedCriticalBleedTreatmentCommands = roundState.commands.filter(
+        (command) =>
+          command.roundNumber === roundState.roundNumber &&
+          command.type === "transition_critical_bleed" &&
+          !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
+      );
       const removedCombatExperienceCommands = roundState.commands.filter(
         (command) =>
           command.roundNumber === roundState.roundNumber &&
@@ -18378,6 +18619,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const submittedAt = new Date().toISOString();
       const atomicParticipantEffectCommands = [
+        ...removedCriticalBleedTreatmentCommands,
         ...removedModifierReviewCommands,
         ...removedRoundEndHealthCheckCommands,
         ...removedRoundEndParticipantReviewCommands,
@@ -18396,12 +18638,55 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         ...removedContinuedContactMaintenanceCommands,
         ...removedBreakOffCommitCommands,
       ].some((command) => getContinuedContactEffectTransitionFactsList(command).length > 0);
+      const hasExactCriticalBleedTreatmentRestoration =
+        removedCriticalBleedTreatmentCommands.length > 0;
       if (atomicParticipantEffectCommands.length > 0) {
         const restorationStates = new Map(
           scenarioParticipants.map((participant) => [participant.id, participant.state]),
         );
         let completeAtomicRestoration = true;
         for (const command of atomicParticipantEffectCommands) {
+          const criticalBleedTreatment = getCriticalBleedTreatmentTransitionFact(command);
+          if (criticalBleedTreatment) {
+            const scenarioParticipant = scenarioParticipants.find(
+              (participant) => participant.id === criticalBleedTreatment.scenarioParticipantId,
+            );
+            if (!scenarioParticipant) {
+              completeAtomicRestoration = false;
+              break;
+            }
+            const currentState = restorationStates.get(scenarioParticipant.id)!;
+            const effects = combatEffectsStateSchema.parse(currentState.combatEffects);
+            const currentEffect = effects.effects.find(
+              (effect) => effect.id === criticalBleedTreatment.nextEffect.id,
+            );
+            if (
+              !currentEffect ||
+              JSON.stringify(currentEffect) !== JSON.stringify(criticalBleedTreatment.nextEffect)
+            ) {
+              completeAtomicRestoration = false;
+              break;
+            }
+            restorationStates.set(scenarioParticipant.id, {
+              ...currentState,
+              combatEffects: combatEffectsStateSchema.parse({
+                ...effects,
+                effects: effects.effects.map((effect) =>
+                  effect.id === criticalBleedTreatment.nextEffect.id
+                    ? criticalBleedTreatment.previousEffect
+                    : effect,
+                ),
+                events: effects.events.filter(
+                  (event) => event.id !== criticalBleedTreatment.combatEffectEventId,
+                ),
+              }),
+            });
+            continue;
+          }
+          if (command.type === "transition_critical_bleed") {
+            completeAtomicRestoration = false;
+            break;
+          }
           const continuedContactEffectTransitions =
             getContinuedContactEffectTransitionFactsList(command);
           if (continuedContactEffectTransitions.length > 0) {
@@ -18495,6 +18780,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         if (completeAtomicRestoration) {
           const affectedParticipantIds = new Set(
             atomicParticipantEffectCommands.flatMap((command) => {
+              const criticalBleedTreatment = getCriticalBleedTreatmentTransitionFact(command);
+              if (criticalBleedTreatment) {
+                return [criticalBleedTreatment.scenarioParticipantId];
+              }
               const transitions = getContinuedContactEffectTransitionFactsList(command);
               if (transitions.length > 0) {
                 return transitions.map((transition) => transition.scenarioParticipantId);
@@ -18590,6 +18879,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         if (hasExactContinuedContactEffectRestoration) {
           throw new RangeError(
             "Continued Contact effect state changed before exact undo could be applied.",
+          );
+        }
+        if (hasExactCriticalBleedTreatmentRestoration) {
+          throw new RangeError(
+            "Critical Bleed treatment changed before exact undo could be applied.",
           );
         }
       }

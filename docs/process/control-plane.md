@@ -5,23 +5,38 @@
 The control plane keeps product decisions, implementation work, and repository state understandable while several agents work independently. It optimizes the product owner's time by making decisions and acceptance visible without using chat history as the backlog.
 
 This document describes durable operating policy. The current operational issue
-tracker and linked pull requests show what work is happening now. During local
-control-plane recovery, that tracker is the loopback-only Forgejo repository
-identified by the recovery register; historical GitHub records are evidence.
+tracker and linked pull requests show what work is happening now. Current Git
+and case-management authority is the loopback-only Forgejo repository
+`recovery-admin/glantri-app`; historical GitHub records are provenance and
+recovery evidence.
+
+The canonical role, workflow, lifecycle, and repository/project map is
+[`development-operating-model.md`](./development-operating-model.md). This
+document owns the supporting authority, tooling, source-of-truth, governance,
+and integration policy.
+
+The canonical MacBook clone is `/Users/vidarhald/dev/glantri-app-forgejo`, and
+the canonical Codex project is `Glantri app — Forgejo`. The historical
+`Glantri app` project and `/Users/vidarhald/dev/glantri-app` checkout are
+read-only, non-mutable recovery/history evidence. Do not use them for new
+implementation, Builder work, QA mutation, branch creation,
+reset/rebase/cleanup, migration, or routine current-development fetch/push.
+Repository documents are authoritative; Codex project references are navigation
+aids, not policy or authorization records.
 
 ## Sources of truth
 
 | Information                                 | Authoritative location                                                         |
 | ------------------------------------------- | ------------------------------------------------------------------------------ |
-| Product priorities and current work status  | GitHub Project and linked Issues/PRs                                           |
-| Task contract and implementation discussion | GitHub Issue and PR                                                            |
+| Product priorities and current work status  | Local Forgejo issues, labels, and linked PRs                                   |
+| Task contract and implementation discussion | Local Forgejo issue, when applicable, and PR                                   |
 | Product and presentation quality            | `docs/product/product-presentation-principles.md` plus area and task contracts |
 | Architecture and ownership policy           | Repository documentation                                                       |
 | Approved rule and architecture rulings      | `docs/decisions/`                                                              |
 | Source evidence and provenance              | `docs/source/`, `docs/rules/`, cited external material                         |
 | Current implementation behavior             | Code plus tests, interpreted with approved decisions                           |
 
-Chat is useful for exploration and product discussion but is not durable project state. Material decisions must be recorded in the repository or linked GitHub issue before dependent implementation is accepted.
+Chat is useful for exploration and product discussion but is not durable project state. Material decisions must be recorded in the repository or linked Forgejo issue before dependent implementation is accepted.
 
 Historical issues, milestones, and Claude-created architecture work are preserved as input. They do not become the current operational backlog until triaged and deliberately adopted.
 
@@ -40,13 +55,19 @@ This is an efficiency and resource principle, not a rigid line-count rule. The t
 
 ## Authority model
 
-| Role                             | Owns                                                                                                                                                                      | Does not own                                                                                                  |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Product owner                    | Priority, Glantri rule/UX rulings, acceptance, portfolio choices, `dev` creation/protection, ordinary task-PR review/merge, development integration and release readiness | Production deployment mechanics                                                                               |
-| External maintainer              | Production-release/deployment support at the future `dev -> main -> Azure` boundary                                                                                       | Development baselines, `dev`, routine task work, ordinary development PRs, backlog, or architecture decisions |
-| Architecture/control-plane agent | Task decomposition, ownership, contract design, cross-area planning, decision records, verification review                                                                | Unapproved product rulings or production authority                                                            |
-| Implementation agent             | Changes and tests inside an authorized task contract                                                                                                                      | Undeclared scope, unapproved rules, shared-baseline selection, `main` merge, production actions               |
-| Integration owner                | Coordination and merge order for one cross-area task                                                                                                                      | Standing authority over `main` or production                                                                  |
+Role authority and the deliberate
+`Architecture/control plane -> Product Owner decision and authorization copy -> Development Orchestrator`
+boundary are defined in the
+[canonical operating model](./development-operating-model.md#roles-and-decision-authority).
+The Product Owner owns priority, product/rule/UX and consequential architecture
+decisions, authorization, acceptance, and development integration. Operational
+coordination does not transfer those decisions to Architecture/control plane,
+the Development Orchestrator, a Builder, or QA.
+
+The external maintainer owns production-release/deployment support only at the
+future `dev -> main -> Azure` boundary. They do not own development baselines,
+routine task work, ordinary development PRs, backlog, or architecture
+decisions.
 
 Credentials do not confer product or release authority. Agents must not merge to `main`, approve/cancel deployments, deploy, change Azure production configuration/secrets, or request production write access. `dev` authority does not broaden into `main` or production authority.
 
@@ -58,7 +79,7 @@ An agent's default operating boundary is:
 
 - the assigned Glantri repository or isolated worktree;
 - existing standard local development and file-processing tools;
-- the Glantri GitHub repository, subject to the separate read/write, push, PR, merge, and release authority in this control plane and the task contract; and
+- the local Glantri Forgejo repository, subject to the separate read/write, push, PR, merge, and release authority in this control plane and the task contract; and
 - Glantri source material explicitly stored in the repository or supplied through the Glantri project context.
 
 Anything outside that boundary needs a concrete task reason and the approval required below. Technical reachability, an existing login, a credential, or an installed tool does not expand the task's scope or the agent's authority.
@@ -83,25 +104,35 @@ If an existing tool cannot complete the task without one of these changes, stop 
 
 ### External transmission and personal services
 
-An installed VS Code extension or local tool is not automatically approved to transmit Glantri repository or source content. External AI or cloud analysis, signed-in personal services, publishing/deployment services, and any other tool that sends project content outside the approved Glantri/GitHub environment require explicit approval before use.
+An installed VS Code extension or local tool is not automatically approved to transmit Glantri repository or source content. External AI or cloud analysis, signed-in personal services, publishing/deployment services, and any other tool that sends project content outside the approved Glantri/Forgejo environment require explicit approval before use.
 
 Personal ChatGPT capabilities such as Calendar or Sites may exist for unrelated user purposes. Glantri agents must not use them unless the Glantri task explicitly requires them and the user approves their use where appropriate. Their presence does not make them part of the Glantri control plane.
 
 The personal Google Drive connector has been deliberately disconnected. Current Glantri source workbooks are tracked local snapshots, and live personal Drive access is not required or part of the default workflow. When a source workbook changes, use a deliberate source-ingestion flow: export or otherwise obtain the approved snapshot, replace the tracked repository copy, record provenance as needed, and commit the change. Do not silently substitute a live personal-Drive version.
 
+Persistent local Forgejo role identities, repository-specific token scopes,
+Keychain storage, protected-branch enforcement, verification, revocation, and
+host recreation are defined in
+[`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md). That mechanism
+supplies authentication only; the task contract and this control plane still
+govern every action. The canonical clone fails closed by combining repository
+path matching with a non-existent default username. Every routine command must
+select its assigned role explicitly; recovery administration is available only
+through its separately explicit break-glass handle. Unqualified credential
+selection is never an authorized fallback.
+
 ### Tool availability does not grant action authority
 
-Destructive and external actions remain governed by the task contract and the authority model. Installing, discovering, or being able to invoke a tool does not grant authority to push, open or update a PR, merge, deploy, delete, publish, change accounts or permissions, or alter GitHub, production, or Azure configuration.
+Destructive and external actions remain governed by the task contract and the authority model. Installing, discovering, or being able to invoke a tool does not grant authority to push, open or update a PR, merge, deploy, delete, publish, change accounts or permissions, or alter Forgejo, production, or Azure configuration.
 
 ## Work lifecycle
 
-Use these Project statuses:
+Use the exclusive Forgejo lifecycle defined in the
+[canonical operating model](./development-operating-model.md#forgejo-lifecycle):
 
-`Inbox -> Triage -> Needs decision -> Ready -> In progress -> In review -> Acceptance -> Done`
+`Design -> Ready -> Authorized -> Active -> Ready for Independent QA -> Ready for Control-plane Acceptance -> Integrated`
 
-Terminal alternative: `Cancelled / Duplicate`.
-
-Suggested Project fields:
+Suggested case fields:
 
 - Area
 - Type: feature, bug, rule decision, technical debt, investigation, operations
@@ -116,9 +147,21 @@ Suggested Project fields:
 
 Priority is separate from defect severity. Small defects can remain durably recorded at P3 without interrupting active work.
 
-An issue reaches `Ready` only when its task contract supplies an exact baseline, acceptance examples, ownership, rule basis, affected contracts/hotspots, verification, required decisions, and an applicability result for every acceptance dimension. See `docs/process/task-contract.md`.
+An issue reaches `Ready` only when its task contract supplies an exact baseline,
+acceptance examples, ownership, rule basis, affected contracts/hotspots,
+verification, required decisions, and an applicability result for every
+acceptance dimension. See [`task-contract.md`](./task-contract.md).
 
-`Ready` is a completeness state, not implementation permission. `Authorized` is a separate, explicit product-owner/control-plane dispatch decision recorded in durable operational issue state. `Active` means a Builder or repair loop is in flight. `Blocked`, `Design only`, `Completed`, and `Stale/needs refresh` remain non-dispatchable; a stale contract must be reconciled to live `origin/dev` before it can return to `Ready`. No more than four authorized implementation Builders may be active concurrently, and hotspot or dependency conflicts can reduce that number.
+`Ready` is complete preparation, not permission. The Product Owner advances a
+bounded task to `Authorized`; the Development Orchestrator moves it to `Active`
+only when a named lane owns live work. Builder completion moves to
+`Ready for Independent QA`; QA PASS moves to
+`Ready for Control-plane Acceptance`; `Integrated` follows required acceptance
+and development integration. QA FAIL returns to bounded repair or another
+appropriate pre-acceptance gate. Stale contracts and blockers are recorded as
+supporting state and reconciled before lifecycle advancement. No more than four
+implementation Builders may be active concurrently, and hotspot or dependency
+conflicts can reduce that ceiling.
 
 Portfolio discovery follows
 `Proposal -> Architecture review -> Design -> Ready -> Authorized -> Active`.
@@ -127,29 +170,48 @@ is implementation permission. The current dated portfolio guidance and future
 areas are kept in the
 [strategic portfolio and future register](../product/2026-09-03-strategic-future-register.md).
 
+## Visible execution and standing authority
+
+Visible-lane requirements, mandatory dispatch evidence, completion harvesting,
+direct Development-Orchestrator-to-QA-Orchestrator routing, standing execution
+authority, return gates, and the concurrency ceiling are defined in the
+[canonical operating model](./development-operating-model.md#visible-threads-and-dispatch-evidence).
+The detailed isolated execution and exact return formats remain in
+[`agent-execution.md`](./agent-execution.md).
+
+These linked rules are mandatory: substantial Builder/Investigator and
+independent-QA work uses separate visible tasks in `Glantri app — Forgejo`; a
+thread ID is always recorded; hidden helpers do not satisfy a lane; the
+Development Orchestrator harvests every child result; and the Product Owner is
+not expected to relay QA prompts or notice completion manually.
+
 ## When I approve a case, what happens next?
 
-Approval for implementation makes a complete issue `Ready + Authorized`. From there the normal path is:
+Approval advances a complete, current `Ready` issue to `Authorized`. From there
+the normal path follows the
+[canonical workflow](./development-operating-model.md#canonical-workflow):
 
-`Approved issue -> isolated Builder -> draft PR to dev -> independent QA -> control-plane acceptance -> dev integration -> optional release PR -> external-maintainer production release`
+`Authorized issue -> isolated Builder -> draft PR to dev -> Development Orchestrator -> direct QA Orchestrator handoff -> independent QA -> control-plane acceptance -> dev integration -> optional release PR -> external-maintainer production release`
 
-| Stage                | Who acts and what is produced                                                                                                                      | Message the product owner should expect                                       | Product-owner action                                                                  |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Authorize            | Product owner/control plane records a self-contained authorized issue, exact baseline, scope, acceptance, hotspots, and Git authority.             | The issue is `Ready + Authorized`; a Builder lane is assigned.                | Decide priority and any product/rule/consequential architecture questions.            |
-| Build                | An isolated Builder verifies live `origin/dev`, implements only the issue, verifies, and publishes a draft PR to `dev` with an exact-head handoff. | **Builder complete / QA pending** or **Needs decision**.                      | None unless a decision or coordination blocker is reported.                           |
-| Independent QA       | A fresh QA reviewer tests the exact PR head in a separate worktree and posts `PASS`, `PASS WITH FOLLOW-UP`, or `FAIL` with evidence.               | **QA failed / repair required** or **QA passed / ready for dev integration**. | Review acceptance evidence; decide genuinely consequential follow-ups.                |
-| Accept and integrate | Control plane/product owner accepts the slice; an authorized integration actor merges the checked PR into shared `dev`.                            | **Integrated to dev**, including the resulting exact `dev` SHA.               | Accept/reject and choose integration order.                                           |
-| Optional release     | Under separate authority, a narrow `dev -> main` release PR is prepared after release readiness is chosen.                                         | **Narrow release PR ready for external maintainer**.                          | Decide product release readiness; do not perform production mechanics by implication. |
-| Production boundary  | The external maintainer performs production release/deployment support and records verification.                                                   | **Production deployment verified**, when applicable.                          | Confirm product outcome; ordinary agents remain read-only at this boundary.           |
+| Stage                | Who acts and what is produced                                                                                                                                                                              | Message the product owner should expect                                                               | Product-owner action                                                                  |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Authorize            | Architecture/control plane prepares a complete prompt; the Product Owner decides and copies authorization for a self-contained issue with exact baseline, scope, acceptance, hotspots, and Git authority.  | The issue is `Authorized`; the Development Orchestrator may validate gates and assign a Builder lane. | Decide priority and any product/rule/UX or consequential architecture questions.      |
+| Build                | A visible isolated Builder verifies live `origin/dev`, implements only the issue, verifies, and publishes a draft PR to `dev` with an exact-head handoff. The Development Orchestrator harvests it.        | **Ready for Independent QA** or a concrete control-plane return.                                      | None unless a decision or coordination blocker is reported.                           |
+| Independent QA       | The Development Orchestrator hands the immutable contract directly to the QA Orchestrator, which dispatches a separate visible QA task, harvests it, and records `PASS`, `PASS WITH FOLLOW-UP`, or `FAIL`. | **Repair required** or **Ready for Control-plane Acceptance**.                                        | Review acceptance evidence and decide genuinely consequential follow-ups.             |
+| Accept and integrate | Architecture/control plane evaluates the durable result; the Product Owner accepts or rejects it and decides integration; an authorized integration actor merges the accepted PR into shared `dev`.        | **Integrated to dev**, including the resulting exact `dev` SHA.                                       | Accept/reject and choose integration order.                                           |
+| Optional release     | Under separate authority, a narrow `dev -> main` release PR is prepared after release readiness is chosen.                                                                                                 | **Narrow release PR ready for external maintainer**.                                                  | Decide product release readiness; do not perform production mechanics by implication. |
+| Production boundary  | The external maintainer performs production release/deployment support and records verification.                                                                                                           | **Production deployment verified**, when applicable.                                                  | Confirm product outcome; ordinary agents remain read-only at this boundary.           |
 
 Exception paths stay narrow:
 
 - Missing product/rule/UX/privacy or consequential architecture decision: the Builder or QA posts **Needs decision** with one concrete question and stops affected work.
-- QA `FAIL`: the same Builder repairs the same PR where in scope, publishes a new exact head, and fresh independent QA runs again.
+- QA `FAIL`: the Development Orchestrator routes an in-scope bounded repair to
+  the same Builder/PR, harvests the new exact head, and sends a new immutable
+  handoff to the QA Orchestrator for fresh independent QA.
 - Dependency or hotspot collision: stop and coordinate ownership/merge order; do not widen scope.
 - Production-only problem: ordinary agents may diagnose safely when authorized, but do not mutate production, merge `main`, change Azure, or deploy.
 
-The issue and PR hold the durable status, exact SHAs, evidence, decisions, and follow-ups. Chat may notify the product owner, but chat-only context never authorizes work or substitutes for those records.
+The Forgejo issue, when applicable, and PR hold the durable status, exact SHAs, evidence, decisions, and follow-ups. Chat may notify the product owner, but chat-only context never substitutes for those records.
 
 ## Implementation flow
 
@@ -160,10 +222,10 @@ The issue and PR hold the durable status, exact SHAs, evidence, decisions, and f
 5. Create one isolated, short-lived task branch/worktree.
 6. Implement only the coherent slice; record newly discovered non-blocking work separately.
 7. Run `pnpm format:check:changed` against the task's exact accepted parent. Changed files must pass Prettier and `git diff --check`; inherited untouched formatting debt does not block the task.
-8. Open a development PR only when the target and push/PR authority are confirmed.
+8. Open a development PR only when the target and push/PR authority are confirmed; move Builder completion to `Ready for Independent QA` and route it through the Development Orchestrator.
 9. Review code, decisions, tests, compatibility, hotspot coordination, and user-visible evidence.
-10. Move user-visible work to `Acceptance`; only the product owner accepts product behavior.
-11. Merge an accepted ordinary task PR into `dev` under the product-owner-controlled development process. Release preparation from `dev` to `main` is a separate production-boundary workflow.
+10. After required QA passes, move the exact result to `Ready for Control-plane Acceptance`; only the Product Owner accepts product behavior.
+11. Merge an accepted ordinary task PR into `dev` only after the Product Owner's development-integration decision. Release preparation from `dev` to `main` is a separate production-boundary workflow.
 
 One coherent behavior or architecture slice is the governing PR size rule. There is no rigid changed-file cap. An unusually large, high-risk, or cross-area PR must include an integration plan describing why it cannot be sliced safely, contract/merge order, hotspot ownership, review stages, verification, compatibility, rollback, and follow-up modularization.
 
@@ -189,7 +251,7 @@ Agents must cite relevant evidence, record conflicts and deviations, and never s
 The product owner should normally need to monitor three queues:
 
 - **Needs decision:** rule, UX, priority, or consequential architecture choice.
-- **Acceptance:** completed user-visible slices with a short test script/evidence.
+- **Ready for Control-plane Acceptance:** QA-passed user-visible slices with a short test script/evidence.
 - **Portfolio choices:** initiative ordering, capacity, and deferred work.
 
 Recommended cadence:
@@ -198,19 +260,26 @@ Recommended cadence:
 - Weekly short portfolio checkpoint: priorities and product/rule decisions.
 - Architecture checkpoint only for material cross-area tradeoffs.
 - Acceptance checkpoint for completed user-visible slices.
-- Monthly reconciliation of the Project, issues, documentation, branches, and released version.
+- Monthly reconciliation of Forgejo cases, documentation, branches, and the released version.
 
 ## Published `dev` and PR #200 provenance
 
 `dev` is the active development integration branch. Its accepted initial baseline is `2203f37e196e2de34cf911ea4fa08ac9feb6f8be`; later accepted `dev` SHAs are recorded by task contracts and merge handoffs without replacing that fixed initial reference.
 
-Ruleset `20708650` requires PRs plus successful `ci` and `docker-test` checks for `dev`, requires zero approving reviews, and blocks force-pushes and deletion. Ordinary task branches start from an exact accepted `dev` SHA and return through PRs targeting `dev`.
+The local Forgejo `dev` protected-branch rule disables direct push, requires the
+`CI / ci (pull_request)` and `CI / docker-test (pull_request)` contexts, requires
+zero approving reviews, and allows merge only to `glantri-orchestrator`. The
+rule applies to administrators. The historical GitHub ruleset `20708650` is
+provenance, not current enforcement. Ordinary task branches start from an exact
+accepted `dev` SHA and return through PRs targeting `dev`. The complete local
+identity and protection contract is in
+[`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md).
 
 PR #200 is superseded provenance, not the active development baseline. Its head `4179034ef13c1713a23bddad7bf9ce01fc4880ea` is an ancestor of `dev`; its work, the 50 local continuation commits, `main` reconciliation, and the control-plane bootstrap were incorporated into the accepted `dev` lineage. Closing it as unmerged does not reject its work, and it must not be retargeted to manufacture a new baseline.
 
 `main` remains production/release only. A future accepted release moves from `dev` toward `main` with the required production-boundary support, and the released `main` state is then reconciled back into `dev` before a newer development baseline is accepted.
 
-## Repository versus GitHub work
+## Repository versus Forgejo work
 
 Keep in the repository:
 
@@ -221,7 +290,7 @@ Keep in the repository:
 - issue/PR templates;
 - machine-enforceable architecture checks where valuable.
 
-Keep in GitHub:
+Keep in Forgejo:
 
 - current backlog and status;
 - assignees, priority, dependencies, and checkpoints;

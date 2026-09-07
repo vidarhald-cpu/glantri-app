@@ -14,6 +14,7 @@ import {
   containerPort,
   deriveCurrentWorktreeTaskDatabaseIdentity,
   readTaskDatabaseEnvironmentFile,
+  taskContainerRemovalArguments,
   validateCurrentWorktreeTaskDatabaseEnvironment,
   type CurrentWorktreeTaskDatabaseIdentity,
   type TaskContainerInspection,
@@ -508,14 +509,16 @@ function cleanup(): void {
   const inspection = inspectContainer(validated.container);
 
   if (inspection) {
-    assertCurrentWorktreeTaskContainer(inspection, validated);
+    const removalArguments = taskContainerRemovalArguments(inspection, validated);
     printPreflight("cleanup", "application", validated);
     printPreflight("cleanup", "test", validated);
-    run("docker", ["rm", "-f", validated.container]);
+    run("docker", removalArguments);
   }
 
   unlinkSync(defaultEnvironmentFile);
-  console.log(`Removed disposable task target ${validated.container} and .env.task.`);
+  console.log(
+    `Removed disposable task target ${validated.container}, its anonymous volumes, and .env.task.`,
+  );
 }
 
 const command = process.argv[2];

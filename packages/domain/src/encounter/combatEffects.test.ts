@@ -1,8 +1,70 @@
 import { describe, expect, it } from "vitest";
 
-import { combatEffectsStateSchema, getCombatEffectEffectiveStatus } from "./combatEffects";
+import {
+  combatEffectsStateSchema,
+  getCombatEffectEffectiveStatus,
+  transitionCombatCriticalBleedEffect,
+} from "./combatEffects";
 
 describe("combat effect state", () => {
+  it("persists an auditable exact-rate Critical Bleed treatment transition", () => {
+    const transitioned = transitionCombatCriticalBleedEffect({
+      combatEffects: {
+        effects: [
+          {
+            createdAt: "2026-09-06T10:00:00.000Z",
+            criticalRuntime: {
+              bleed: {
+                allowedControlStates: ["active", "partial", "staunched_zero", "resolved"],
+                controlState: "active",
+                currentRate: { denominator: 2, numerator: 1 },
+                firstTickRound: 3,
+                kind: "external",
+                rate: { denominator: 2, numerator: 1 },
+                sourceEffectKey: "blunt|arm|12|03",
+                sourceRate: "1 HP / 2 rounds",
+              },
+              criticalKey: "blunt|arm|12",
+              fixtureVersion: "c1-five-key-post-393-2026-09-06",
+              kind: "bleed",
+            },
+            damage: 0,
+            effectGroup: "bleed",
+            generalDamage: 0,
+            id: "critical-bleed",
+            sourceEventId: "critical-event",
+            status: "active",
+            targetParticipantId: "participant-1",
+            type: "bleed",
+            updatedAt: "2026-09-06T10:00:00.000Z",
+          },
+        ],
+        events: [],
+      },
+      createdAt: "2026-09-06T10:05:00.000Z",
+      createdByUserId: "gm-1",
+      effectId: "critical-bleed",
+      encounterId: "encounter-1",
+      nextState: "partial",
+      partialRate: { denominator: 4, numerator: 1 },
+      roundNumber: 2,
+      scenarioId: "scenario-1",
+    });
+
+    expect(transitioned).toMatchObject({
+      nextState: "partial",
+      previousState: "active",
+      rate: { denominator: 4, numerator: 1 },
+    });
+    expect(transitioned.combatEffects.effects[0]?.criticalRuntime).toMatchObject({
+      bleed: { controlState: "partial", currentRate: { denominator: 4, numerator: 1 } },
+    });
+    expect(transitioned.combatEffects.events[0]).toMatchObject({
+      sourceType: "healing",
+      targetParticipantId: "participant-1",
+    });
+  });
+
   it("derives pending initiative effects as active after their group boundary closes", () => {
     const effect = combatEffectsStateSchema.parse({
       effects: [

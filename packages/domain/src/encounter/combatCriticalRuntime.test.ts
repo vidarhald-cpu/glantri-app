@@ -68,5 +68,12 @@ describe("C1 Critical runtime", () => {
         partialRate: { denominator: 4, numerator: 1 },
       }),
     ).toThrow("not an allowed control state");
+    expect(() =>
+      transitionCombatCriticalBleedControl({
+        bleed: { ...external, allowedControlStates: [...external.allowedControlStates] },
+        nextState: "partial",
+        partialRate: { denominator: 1, numerator: 0 },
+      }),
+    ).toThrow("must retain a positive current rate");
   });
 });

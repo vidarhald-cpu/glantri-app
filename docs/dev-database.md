@@ -1,5 +1,10 @@
 # Local Development Database Workflow
 
+Role authority, visible Builder/QA lanes, and standing execution boundaries are
+defined in the
+[canonical development operating model](./process/development-operating-model.md).
+This document owns database isolation and safety procedure.
+
 The normal database at `localhost:5432/glantri` is **protected shared user state**. It can contain valuable development users, characters, campaigns, scenarios, and other records. A separate Git worktree only isolates files; it does not isolate PostgreSQL.
 
 ## Two Supported Database Modes
@@ -43,6 +48,35 @@ Set up and verify the target:
 pnpm db:task:setup -- --task 312
 pnpm db:task:verify
 ```
+
+#### Independent QA quick-start
+
+QA that needs PostgreSQL uses only its own linked worktree and issue number:
+
+```bash
+pnpm db:task:setup -- --task <issue>
+pnpm db:task:verify
+pnpm db:task:migrate
+pnpm db:task:test
+# run any database-capable app/check through the guarded environment
+pnpm db:task:exec -- <command>
+pnpm db:task:cleanup
+```
+
+After setup and verification, run `db:task:migrate` before any guarded
+application or check; setup creates the databases, while `db:task:test` migrates
+only the test database. Before the first database-capable command, record the
+sanitized ownership marker, loopback host/port, application and `_test`
+database names, and PostgreSQL 16 result printed by verification. Never copy
+the primary checkout `.env`, inherit another worktree's environment, use
+`localhost:5432/glantri`, run direct Prisma commands, or clean a container whose
+current-worktree ownership labels do not match. On any guard mismatch, stop as
+`BLOCKED`; do not repair around the guard. Record cleanup or the explicit reason
+an owned disposable target was retained.
+
+This quick-start is sufficient ordinary database reading for QA. The primary
+checkout, backup, and recovery-administration sections below are on-demand and
+do not belong in routine QA startup.
 
 Setup creates an ignored, mode-`0600` `.env.task` with all six required values:
 

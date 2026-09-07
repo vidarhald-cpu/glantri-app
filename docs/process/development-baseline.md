@@ -1,5 +1,10 @@
 # Development baseline and integration policy
 
+The [canonical development operating model](./development-operating-model.md)
+owns the high-level role, workflow, lifecycle, execution-lane, and
+repository/project map. This document owns branch, accepted-baseline,
+integration, verification, and release-boundary policy.
+
 ## Branch model and authority
 
 `dev` is Glantri's non-production integration branch. Short-lived task branches start from an accepted `dev` commit and return through coherent task PRs.
@@ -17,7 +22,11 @@ short-lived task branches/worktrees
         Azure production
 ```
 
-- The product owner/project development process controls `dev`: baseline selection, branch creation/protection, ordinary task-PR review and merge, integration order, and development acceptance.
+- The Product Owner owns `dev` baseline selection, development acceptance, and
+  integration decisions. Within an already authorized bounded lane, the
+  Development Orchestrator may perform the routine branch, PR, evidence, and
+  lifecycle operations granted by the canonical operating model; an authorized
+  integration actor merges only after the required acceptance gate.
 - The external maintainer is not part of routine development. Their role is limited to production-release/deployment support at the future `dev -> main -> Azure` boundary.
 - `main` is production-coupled and remains outside ordinary agent authority. Agents do not push or merge to it, change its rules, deploy, or alter Azure/production configuration.
 - Pushes to `dev` run `.github/workflows/ci.yml`. They do not trigger `.github/workflows/deploy.yml`, whose push trigger is restricted to `main`.
@@ -25,10 +34,36 @@ short-lived task branches/worktrees
 
 Credentials never replace task authorization. Pushes, PR creation/updates, branch-rule changes, and merges require the authority stated in the task contract and this policy.
 
+## Canonical development environment
+
+- Current Git and case-management authority is the loopback-only Forgejo repository `recovery-admin/glantri-app`.
+- The canonical MacBook clone is `/Users/vidarhald/dev/glantri-app-forgejo`.
+- The canonical Codex project is `Glantri app — Forgejo`.
+- The historical `Glantri app` project and `/Users/vidarhald/dev/glantri-app` checkout are read-only, non-mutable recovery/history evidence. Do not use them for new implementation, Builder work, QA mutation, branch creation, reset/rebase/cleanup, migration, or routine current-development fetch/push.
+- Repository documents are authoritative. Codex project references are navigation aids and do not grant task, Git, integration, release, or production authority.
+- The canonical clone's repository-local Git configuration sets
+  `credential.useHttpPath=true` and
+  `credential.username=glantri-no-default`. Because that username has no
+  Keychain item, unqualified access fails with prompting disabled. Every role,
+  including separately authorized recovery administration, must be selected
+  explicitly through the repository-path-scoped handles in
+  [`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md).
+- `main`, Azure, and production remain the external-maintainer release boundary described above.
+- The current pinned Development and QA Orchestrator tasks may coordinate from
+  their verified historical-project UI association, but must not mutate or use
+  that historical project/clone as current development authority. All new
+  substantial Builder, Investigator, and independent-QA execution uses
+  `Glantri app — Forgejo`.
+
 ## Operational baseline status (2026-08-11)
 
 - `dev` is the active integration branch. Its accepted initial baseline is `2203f37e196e2de34cf911ea4fa08ac9feb6f8be`.
-- Ruleset `20708650` requires a PR plus successful `ci` and `docker-test` checks for `dev`. It requires zero approving reviews and blocks force-pushes and deletion.
+- The local Forgejo `dev` protected-branch rule disables direct push, requires
+  the `CI / ci (pull_request)` and `CI / docker-test (pull_request)` contexts,
+  requires zero approving reviews, applies to administrators, and allows merge
+  only to `glantri-orchestrator`. The historical GitHub ruleset `20708650` is
+  provenance, not current enforcement. See
+  [`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md).
 - Ordinary task branches start from an exact accepted `dev` SHA and their PRs target `dev`.
 - `main` remains production/release only. After every production release, reconcile the released `main` state back into `dev` before accepting a newer development baseline.
 - PR #200 is superseded provenance, not the active development baseline. Its head, `4179034ef13c1713a23bddad7bf9ce01fc4880ea`, is an ancestor of the accepted `dev` lineage.
@@ -50,7 +85,9 @@ The merge topology preserves correspondence with PR #200, the 50 local continuat
 
 1. Every task contract names the exact accepted `dev` SHA, task branch/worktree, intended target, and Git authority.
 2. Work occurs in a clean, isolated, short-lived task branch/worktree.
-3. Ordinary development PRs target `dev`; the product owner/project development process may review and merge them when required checks and acceptance are satisfied.
+3. Ordinary local Forgejo development PRs target `dev`; the Product Owner
+   decides acceptance and integration, and an authorized integration actor may
+   merge when the required checks and acceptance are satisfied.
 4. Changes arrive as coherent behavior or architecture slices. `dev` must not become another unbounded long-lived feature stream.
 5. Reserved hotspots and cross-area contract order are coordinated before implementation.
 6. Completed work records parent SHA, resulting SHA, verification, dependencies, compatibility, and follow-ups.

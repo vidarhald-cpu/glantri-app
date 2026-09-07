@@ -4,6 +4,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type {
   ArtifactBlackboardCandidate,
+  BlackboardCategory,
   BlackboardGmCreate,
   BlackboardGmRevision,
   BlackboardRestrictedDetailInput,
@@ -47,6 +48,13 @@ export interface BlackboardBoardRecords {
   layout: Awaited<ReturnType<PrismaClient["campaignBlackboardLayout"]["findUnique"]>>;
   placements: Awaited<ReturnType<PrismaClient["campaignBlackboardPlacement"]["findMany"]>>;
   revisions: Awaited<ReturnType<PrismaClient["campaignBlackboardEntryRevision"]["findMany"]>>;
+}
+
+export interface BlackboardSearchRecord {
+  category: string;
+  entryId: string;
+  pinned: boolean;
+  title: string;
 }
 
 type BlackboardDetailMembership = Awaited<
@@ -225,6 +233,62 @@ export class BlackboardRepository {
         })
       : [];
     return { entries, layout, placements, revisions };
+  }
+
+  async searchCommonEntries(
+    campaignId: string,
+    input: {
+      category?: BlackboardCategory;
+      pinned?: "pinned" | "unpinned";
+      query: string;
+    },
+  ): Promise<BlackboardSearchRecord[]> {
+    const category = input.category ?? null;
+    const pinned = input.pinned === "pinned" ? true : input.pinned === "unpinned" ? false : null;
+
+    return this.client.$queryRaw<BlackboardSearchRecord[]>(Prisma.sql`
+      SELECT
+        revision."category" AS "category",
+        entry."id" AS "entryId",
+        (placement."entryId" IS NOT NULL) AS "pinned",
+        revision."title" AS "title"
+      FROM "CampaignBlackboardEntry" entry
+      JOIN "CampaignBlackboardEntryRevision" revision
+        ON revision."campaignId" = entry."campaignId"
+        AND revision."entryId" = entry."id"
+        AND revision."revisionNumber" = entry."currentRevisionNumber"
+      LEFT JOIN "CampaignBlackboardPlacement" placement
+        ON placement."campaignId" = entry."campaignId"
+        AND placement."entryId" = entry."id"
+      WHERE entry."campaignId" = ${campaignId}
+        AND entry."state" = 'published'
+        AND (${category}::text IS NULL OR revision."category" = ${category})
+        AND (${pinned}::boolean IS NULL OR (placement."entryId" IS NOT NULL) = ${pinned})
+        AND (
+          ${input.query} = ''
+          OR POSITION(
+            LOWER(${input.query}) IN LOWER(
+              CONCAT_WS(
+                ' ',
+                revision."title",
+                CASE revision."category"
+                  WHEN 'clue_fact' THEN CONCAT_WS(' ', revision."clueFact", revision."contextText")
+                  WHEN 'document_text' THEN CONCAT_WS(' ', revision."documentText", revision."contextText")
+                  WHEN 'image_map' THEN CONCAT_WS(
+                    ' ',
+                    revision."imageCaption",
+                    revision."sourceArtifactTitle",
+                    revision."sourceArtifactAltText"
+                  )
+                  WHEN 'recap' THEN revision."recapText"
+                  ELSE ''
+                END
+              )
+            )
+          ) > 0
+        )
+      ORDER BY LOWER(revision."title"), entry."id"
+    `);
   }
 
   async loadEntry(campaignId: string, entryId: string) {
