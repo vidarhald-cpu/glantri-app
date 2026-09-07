@@ -338,7 +338,7 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("reuses one concrete entity identity while creating versioned snapshots in later scenarios", async () => {
-    const { participants, repository } = createScenarioRepositoryStub();
+    const { participants, repository, scenario } = createScenarioRepositoryStub();
     const entity = {
       createdAt: "2026-08-13T08:00:00.000Z",
       gmUserId: "gm-1",
@@ -359,6 +359,15 @@ describe("ScenarioService controller assignment", () => {
       updatedAt: "2026-08-13T08:05:00.000Z",
     };
     repository.getReusableEntityById = async (entityId) => (entityId === entity.id ? entity : null);
+    repository.getScenarioById = async (scenarioId) => {
+      if (scenarioId === scenario.id || scenarioId === "scenario-2" || scenarioId === "scenario-3") {
+        return {
+          ...scenario,
+          id: scenarioId,
+        };
+      }
+      return null;
+    };
     const service = new ScenarioService(repository);
 
     const first = await service.addEntityParticipant({
@@ -464,26 +473,17 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("rejects Scenario lifecycle regressions not present in the transition matrix", async () => {
-    const { repository } = createScenarioRepositoryStub();
+    const { repository, scenario } = createScenarioRepositoryStub();
     const service = new ScenarioService(repository);
 
-    repository.updateScenario = async () => ({
-      campaignId: "campaign-1",
-      createdAt: "2026-04-21T00:00:00.000Z",
-      description: "",
-      id: "scenario-1",
-      kind: "mixed",
-      name: "Scenario One",
-      status: "live",
-      updatedAt: "2026-04-21T00:00:00.000Z",
-    });
+    repository.updateScenario = async (input) => {
+      if (input.status) scenario.status = input.status;
+      if (input.mapAssetId !== undefined) {
+        scenario.mapAssetId = input.mapAssetId ?? undefined;
+      }
 
-    await expect(
-      service.updateScenario({
-        scenarioId: "scenario-1",
-        status: "live",
-      }),
-    ).resolves.toMatchObject({ status: "live" });
+      return scenario;
+    };
 
     await expect(
       service.updateScenario({
@@ -491,6 +491,13 @@ describe("ScenarioService controller assignment", () => {
         status: "completed",
       }),
     ).rejects.toThrow("Scenario cannot transition from draft to completed.");
+
+    await expect(
+      service.updateScenario({
+        scenarioId: "scenario-1",
+        status: "archived",
+      }),
+    ).resolves.toMatchObject({ status: "archived" });
   });
 
   it("blocks participant mutations on non-editable Scenario status", async () => {

@@ -163,8 +163,8 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
 
       if (!isGameMaster) {
         if (scenario.status !== "live") {
-          return reply.code(403).send({
-            error: "No live scenario is currently available for this character.",
+          return reply.code(404).send({
+            error: "Scenario not found.",
           });
         }
       }

@@ -639,7 +639,6 @@ export class ScenarioService {
     });
 
     const participant = await this.repository.updateScenarioParticipantMetadata(input);
-    const scenario = await this.repository.getScenarioById(input.scenarioId);
 
     await this.repository.createScenarioEventLog({
       eventType:
