@@ -5,7 +5,9 @@
 - Decision owner: Product owner / architecture control plane
 - Functional areas: Campaign and narrative encounters; Combat experience; information projection
 - Related issues/PRs: Forgejo #34-#40; Blackboard #16 / PR #33
-- Supersedes: none
+- Supersedes: the earlier Scenario `draft/prepared/live/completed/archived` product
+  wording and Encounter `setup/planned/.../complete` plus kind-gated Combat
+  wording in this record
 - Superseded by: none
 
 ## Context
@@ -42,7 +44,8 @@ authorities:
 - Scenario owns the concrete story situation and its participant snapshots.
 - Encounter owns one bounded moment of play, its explicit membership, situation,
   roleplay activity, lifecycle, public outcome, and private GM closing note.
-- Encounter `kind` owns tool capability. It is not a parallel lifecycle.
+- Encounter `kind`, where retained for compatibility, is descriptive metadata.
+  It is neither a lifecycle nor an authoritative Combat gate.
 - Combat Manager and Player Combat retain canonical Combat progression,
   commands, results, and history. Entering or leaving Combat does not create a
   second Encounter or Scenario.
@@ -74,115 +77,118 @@ draft -> active
 - Activation does not change Campaign roster authority or make the Campaign a
   self-join space.
 
-### Scenario lifecycle
+### Common Scenario and Encounter lifecycle
 
 Multiple live Scenarios per Campaign are allowed. There is no global
 authoritative `currentScenarioId`.
 
-| State       | Accepted meaning                                              |
-| ----------- | ------------------------------------------------------------- |
-| `draft`     | GM preparation.                                               |
-| `prepared`  | Ready for the GM to begin, but not ordinary player play.      |
-| `live`      | Entitled interactive play.                                    |
-| `completed` | Entitled player-safe, read-only history.                      |
-| `archived`  | Historical and read-only; omitted from ordinary active lists. |
+| Product state | Accepted meaning                                                                |
+| ------------- | ------------------------------------------------------------------------------- |
+| Draft         | GM preparation; not open for ordinary participant play.                         |
+| Active        | Open for actual play and ordinary entitled participant controls.                |
+| Paused        | Unfinished and expected to resume; visible, but without ordinary play controls. |
+| Closed        | Finished, inspectable, and read-only for entitled participants.                 |
+| Archived      | Historical and read-only; omitted from ordinary working/current lists.          |
 
 Allowed normal transitions are exactly:
 
 ```text
-draft <-> prepared
-prepared -> live
-live -> completed
-completed -> archived
+draft -> active
+active <-> paused
+paused -> closed
+closed -> archived
 draft -> archived
-prepared -> archived
 ```
 
-There is no ordinary `completed -> live` or `archived -> live` transition.
+`Closed` is the canonical product term. Where the existing Scenario/domain enum
+uses `completed`, implementation `completed` means product state Closed; this
+decision does not require a needless data migration merely to rename that enum.
+There is no ordinary Closed or Archived to Active transition.
 
 The current Scenario is derived for the entitled user and current session
 context:
 
-- exactly one entitled live Scenario resumes directly;
-- several entitled live Scenarios present a choice; and
-- zero entitled live Scenarios returns the user to Campaign Home and available
+- exactly one entitled Active Scenario resumes directly;
+- several entitled Active Scenarios present a choice; and
+- zero entitled Active Scenarios returns the user to Campaign Home and available
   history.
 
 The derived context is navigation state, not new canonical Campaign state.
 
 ### Player Scenario access and terminal restrictions
 
-| Scenario state       | Ordinary player access                                                                                      |
-| -------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `draft` / `prepared` | No access.                                                                                                  |
-| `live`               | Interactive access for entitled participants.                                                               |
-| `completed`          | Entitled, player-safe, read-only outcomes, history, and shared information.                                 |
-| `archived`           | Safe entitled historical direct-link access may remain, but the Scenario is omitted from active navigation. |
+| Scenario product state | Ordinary player access                                                                          |
+| ---------------------- | ----------------------------------------------------------------------------------------------- |
+| Draft                  | No ordinary player access.                                                                      |
+| Active                 | Interactive access for entitled participants.                                                   |
+| Paused                 | Visible to entitled participants without ordinary play controls.                                |
+| Closed                 | Entitled, player-safe, read-only outcomes, history, and shared information.                     |
+| Archived               | Safe entitled historical access through explicit history views; omitted from active navigation. |
 
 Every route and open rechecks server authority. A stable or previously valid
 link does not preserve access after the underlying entitlement changes.
 
-Completed and archived Scenarios deny new rolls, participant mutations,
+Paused, Closed, and Archived Scenarios deny new rolls, participant mutations,
 Encounter activation, Combat entry, and every other live command. A disabled or
 hidden client control is not sufficient; the server must reject the command with
 zero mutation, and unauthorized payloads must exclude protected facts.
 
-### Encounter kind and Combat capability
+### Encounter situation and Combat capability
 
-`EncounterSession.kind` is authoritative for tool capability:
+An Encounter is a bounded situation involving Scenario participants, not a
+pre-classified activity modality. Conversation, Skill rolls, opposed checks,
+Items/actions, Combat, post-Combat roleplay, and outcome may all occur in the
+same Encounter. Create another Encounter when the situational or presence
+context changes materially, not merely because the type of action changes.
 
-- a Combat-kind Encounter may use roleplay and situation tools;
-- only a Combat-kind Encounter may enter Combat Manager or Player Combat;
-- a non-Combat Encounter never silently changes kind or becomes Combat; and
-- the GM explicitly establishes a Combat-capable Encounter with the relevant
-  Scenario participants before entering Combat.
+Any suitable Active Encounter may enter Combat subject to existing participant
+and Combat-readiness authority. Encounter kind must not gate Combat. Combat
+start and end do not change Encounter lifecycle: leaving Combat returns to the
+same Active Encounter, and Combat completion does not Close it.
 
 This preserves the mature Combat Manager and Player Combat. It does not redesign
 their tracker, panels, command ownership, calculations, history, or privacy
 projection.
 
-### Encounter lifecycle and history
+### Parent lifecycle, closure, and history
 
-| State      | Accepted meaning                                             |
-| ---------- | ------------------------------------------------------------ |
-| `setup`    | GM setup before readiness is established.                    |
-| `planned`  | Prepared for later activation.                               |
-| `active`   | Live Encounter activity.                                     |
-| `paused`   | The same live Encounter context is suspended and may resume. |
-| `complete` | Terminal, read-only Encounter with a public outcome.         |
-| `archived` | Terminal, read-only historical Encounter.                    |
+- An Encounter may remain Draft while its Scenario is Draft, Active, or Paused.
+- An Encounter may become Active only while its parent Scenario is Active.
+- Pausing a Scenario automatically pauses its Active Encounters. Resuming the
+  Scenario does not automatically resume them; the GM explicitly resumes each
+  relevant situation.
+- A Scenario cannot be Closed while any Encounter remains Active or Paused.
+- Unused Draft Encounters may be Archived.
+- Closed or Archived Scenarios cannot contain newly activated play.
 
-Allowed normal transitions are exactly:
+Multiple disjoint Active Encounters remain valid where participant overlap
+invariants permit. A participant cannot simultaneously occupy incompatible
+Active Encounter contexts. Paused Encounters remain visible and resumable but
+offer no ordinary participant play controls.
 
-```text
-setup <-> planned
-setup -> active
-planned -> active
-active -> paused
-paused -> active
-active -> complete
-paused -> complete
-complete -> archived
-setup -> archived
-planned -> archived
-```
-
-Transitions from `setup` or `planned` to `active` are subject to the applicable
-readiness and participant invariants. `complete` and `archived` have no ordinary
-reactivation path.
-
-Complete and archived Encounters are read-only. They deny new rolls,
+Closed and Archived Encounters are read-only. They deny new rolls,
 participant or membership mutations, roleplay commands, Combat entry, and other
 live commands at the server boundary.
 
-Completing an active or paused Encounter requires a public outcome. That outcome
+Closing an Encounter requires a public outcome. That outcome
 is distinct from the private GM closing note: entitled players may receive the
 public outcome, while the private note remains absent from player projections.
-Completed Encounters reopen read-only from Scenario history.
+The outcome becomes durable Scenario/Encounter history, live controls disappear,
+and ordinary reactivation is not allowed. Archived is later organization, not
+deletion.
 
-Combat entry and exit do not independently alter Encounter lifecycle. Leaving
-Combat returns to the same active Encounter and Scenario context. Completing
-Combat does not automatically complete the Encounter.
+### Scenario chronology
+
+Scenario owns the authoritative chronological story across play. Encounter and
+Combat histories are contextual views of relevant events. Server-authoritative
+event sequence orders events from multiple or interleaved Encounters; whole
+Encounters are not ordered as indivisible blocks, and timestamps are metadata
+rather than the sole ordering authority.
+
+Each relevant event retains Scenario identity, Encounter identity where
+applicable, event kind, appropriate actor/context, player-safe presentation, and
+authoritative order. Private GM information is never duplicated into the
+player-visible chronology.
 
 ### Preserved authorities
 
@@ -208,10 +214,10 @@ contract.
 - **One global current Scenario:** rejected because several Scenarios may be live
   and entitlement is viewer-specific.
 - **Treat roleplay and Combat as separate session universes:** rejected because
-  Combat is a capability inside the selected Combat-kind Encounter and must
+  Combat is an activity inside the selected Active Encounter and must
   return to the same context.
-- **Let any Encounter enter Combat and change kind implicitly:** rejected because
-  kind is authoritative and Combat capability is a consequential GM choice.
+- **Gate Combat by Encounter kind:** rejected because a situation may move
+  naturally between conversation, checks, Combat, and post-Combat activity.
 - **Reactivate completed or archived play:** not accepted for the ordinary
   lifecycle; terminal records remain read-only.
 - **Create a new session engine or duplicate Campaign-object authorities:**
@@ -234,6 +240,16 @@ Scenario Artifacts, Blackboard relevance, Item and snapshot readiness,
 Campaign-local NPC entry, temporary-actor promotion, durable spontaneous rolls,
 richer summaries, and the complete Campaign edit/archive/delete/reopen
 lifecycle.
+
+#37 owns Encounter lifecycle; Scenario/Encounter parent coupling; situational
+identity; Combat start and return inside the same Encounter; pause/resume;
+public-outcome/private-note closure semantics; and event/history linkage needed
+for Scenario chronology. #38 later owns integrated Campaign -> Scenario ->
+Encounter navigation and presentation, multiple-live selection, role-aware
+workspace composition, chronology presentation, and desktop/narrow layouts.
+The final play-workspace layout remains deliberate follow-on design after
+Blackboard, Artifacts/maps, equipment, lifecycle, Skills/actions, and relevant
+Character Knowledge settle.
 
 ## Integration and verification
 
