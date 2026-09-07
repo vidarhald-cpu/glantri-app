@@ -19,14 +19,15 @@ import { pilotSkillContentReleaseV1 } from "../pilotSkillContentRelease";
 const proposalMetadata = {
   provenance: {
     kind: "proposal" as const,
-    reference: "https://github.com/vidarhald-cpu/glantri-app/issues/25",
+    reference: "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/25",
   },
   recordVersion: "1",
   status: "proposal" as const,
 };
 
 const proposalMetadataReference = [
-  "https://github.com/vidarhald-cpu/glantri-app/issues/25",
+  "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/25",
+  "http://127.0.0.1:3001/recovery-admin/glantri-app/pulls/64",
   "docs/process/task-contract.md",
   "docs/decisions/rules/0002-skill-catalogue-qualitative-architecture.md",
   "docs/decisions/rules/0003-skill-documentation-and-release-integrity.md",
@@ -46,28 +47,28 @@ function shortLabel(value: string): string {
   return normalizeWhitespace(value);
 }
 
-function deriveShortDescription(rawDescription: string, label: string): string {
-  const description = normalizeWhitespace(rawDescription);
-  const firstSentence = description.includes(".")
-    ? description.slice(0, description.indexOf(".") + 1)
-    : description;
-  if (firstSentence.length >= 12) return firstSentence;
-  return `${label} has explicit release mechanics, route binding, and explicit qualification context.`;
-}
-
-function taskEnvelope(recordName: string, domainId: string): SkillTaskEnvelope {
+function buildRecordTaskEnvelope(
+  record: { id: string; name: string; kind: string },
+  domainId: string,
+): SkillTaskEnvelope {
   const scope = domainDefinitions[domainId]?.name ?? "Pilot Skill";
+  const isSpecialization = record.kind === "specialization";
   return {
     coreTasks: [
-      `${recordName} is trained and applied only through the route, history, and transfer structures in this release.`,
+      `${record.name} (${record.id}) in ${scope} tracks explicit source-of-truth routes and prerequisites before use.`,
     ],
     limits: [
-      `${recordName} does not replace the explicit prerequisites, access rules, or transfer edges for ${scope} content outside this scope.`,
+      `Do not infer ${record.name} behavior from narrative notes, legacy assumptions, or adjacent ${scope} records outside this authored scope.`,
     ],
     methods: [
-      `Resolve progression with the named histories, routes, and transfer links before inferring broader competency behavior.`,
+      `Apply ${record.name} by resolving histories, routes, prerequisites, and transfer constraints in this release.`,
+      `${
+        isSpecialization
+          ? `Failure mode: applying ${record.name} outside its explicit parent-to-specialization structure can create invalid progression paths.`
+          : `Failure mode: applying ${record.name} outside route and history provenance can cause non-deterministic access attribution.`
+      } Resolve by reverting to this release's parent/route/selection model.`,
     ],
-    useGuidance: `${recordName} binds only to this release's authored profile and competency graph.`,
+    useGuidance: `${record.name} (${record.id}) uses this authored profile and competency graph only; cross-scope reuse must remain explicit per documented access and transfer structure.`,
   };
 }
 
@@ -342,15 +343,15 @@ const domainDefinitions: Record<string, { description: string; name: string }> =
 function documentationForRecord(record: PilotSkillContentCompetencyRecord) {
   const authored = authoredCompetencyDocumentation[record.id];
   const normalizedDescription = normalizeWhitespace(authored?.description ?? record.description);
-  const normalizedShortDescription = authored?.shortDescription
-    ? normalizeWhitespace(authored.shortDescription)
-    : deriveShortDescription(normalizedDescription, record.name);
+  const normalizedShortDescription = normalizeWhitespace(
+    authored?.shortDescription ?? record.description,
+  );
 
   return {
     description: normalizedDescription,
     shortLabel: shortLabel(authored?.shortLabel ?? record.name),
     shortDescription: normalizedShortDescription,
-    taskEnvelope: authored?.taskEnvelope ?? taskEnvelope(record.name, record.domainId),
+    taskEnvelope: authored?.taskEnvelope ?? buildRecordTaskEnvelope(record, record.domainId),
   };
 }
 
@@ -459,8 +460,6 @@ const scythianHomeProfileUnavailableCompetencyIds = [
 ];
 
 const scythianHomeProfileUnavailabilityRouteId = "route:scythian-olog-unavailable";
-const iestCommercialNightEntryRouteId = "route:iest-night-entry-crew";
-const iestCommercialNightEntryRouteCompetencies = ["skill:lockpicking"];
 
 function toSpecializationRecord(
   specialization: PilotSkillContentSpecializationRecord,
@@ -492,9 +491,16 @@ function toSpecializationRecord(
     metadata: cloneMetadata(),
     parentCompetencyId,
     shortLabel: shortLabel(specialization.name),
-    shortDescription: deriveShortDescription(specialization.description, specialization.name),
-    taskEnvelope: taskEnvelope(specialization.name, parent.domainId),
-    transfer: specialization.transfer,
+    shortDescription: normalizeWhitespace(specialization.description),
+    taskEnvelope: buildRecordTaskEnvelope(
+      {
+        id: specialization.id,
+        kind: "specialization",
+        name: specialization.name,
+      },
+      parent.domainId,
+    ),
+    transfer: structuredClone(specialization.transfer),
     weight: specialization.acquisitionWeight,
     prerequisites: structuredClone(specialization.prerequisites),
   } satisfies SkillContentSpecializationRecord;
@@ -521,15 +527,6 @@ const profiles = pilotSkillContentReleaseV1.profiles.map((profile) => {
       metadata: cloneMetadata(),
     });
   }
-  if (profile.id === "profile:iest-commercial-city") {
-    normalRoutes.push({
-      accessBand: "AB1",
-      competencyIds: [...iestCommercialNightEntryRouteCompetencies],
-      description: "Copper Latch unlock training for night-entry crew routes.",
-      id: iestCommercialNightEntryRouteId,
-      metadata: cloneMetadata(),
-    });
-  }
 
   const overrides = profile.overrides.map((override) => {
     const normalizedOverride = {
@@ -552,7 +549,7 @@ const profiles = pilotSkillContentReleaseV1.profiles.map((profile) => {
     ) {
       return {
         ...normalizedOverride,
-        attributionId: iestCommercialNightEntryRouteId,
+        competencyIds: [],
       };
     }
     return normalizedOverride;
@@ -581,7 +578,7 @@ const relationships = pilotSkillContentReleaseV1.relationships.map((relationship
 
 const accessExceptions = pilotSkillContentReleaseV1.accessExceptions.map((entry) => ({
   ...entry,
-  competencyIds: [...entry.competencyIds],
+  competencyIds: entry.id === "access:iest-contact-copper-latch" ? [] : [...entry.competencyIds],
   historyIds: [...entry.historyIds],
   metadata: cloneMetadata(),
 }));
