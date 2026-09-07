@@ -7,6 +7,7 @@ import {
 import type {
   AdminContentConflictResponse,
   AdminContentGetResponse,
+  AdminSkillReferenceResponse,
   AdminContentPutRequest,
   AdminContentPutResponse
 } from "@glantri/shared";
@@ -95,5 +96,19 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
 
       throw error;
     }
+  });
+
+  app.get("/content/reference", async (request, reply) => {
+    const user = await requireStrictAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    const snapshot = await canonicalContentService.getSkillReference();
+
+    return {
+      ...snapshot
+    } satisfies AdminSkillReferenceResponse;
   });
 };

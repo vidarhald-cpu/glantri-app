@@ -42,9 +42,9 @@ export const adminNavGroups: AdminNavGroup[] = [
     label: "Skills & Societies",
     items: [
       {
-        description: "Inspect and edit skill definitions and access.",
+        description: "Inspect and edit the legacy skill definitions and access model.",
         href: "/admin/skills",
-        label: "Skills"
+        label: "Legacy Catalogue"
       },
       {
         description: "Inspect and edit skill group structure.",

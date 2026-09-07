@@ -251,9 +251,9 @@ export default function SkillsAdminPage() {
             Export CSV
           </AdminButton>
         }
-        eyebrow="Admin / Skills"
-        summary="The skills workspace now focuses on the canonical skill graph itself: group membership, skill dependencies, parent-skill relationships, and society level. Those fields are intended to become the foundation that later profession and society tooling consumes."
-        title="Skills"
+        eyebrow="Admin / Legacy Catalogue"
+        summary="Legacy Catalogue preserves current editable canonical skill records and existing dependency/grouping edits for immediate operational needs. It is intentionally separate from the read-only Skill Reference surface."
+        title="Legacy Catalogue"
       />
 
       <SkillsWorkspaceTabs />
