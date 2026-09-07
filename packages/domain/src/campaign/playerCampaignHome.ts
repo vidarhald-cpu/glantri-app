@@ -30,9 +30,7 @@ function encounterStatusRank(status: EncounterSession["status"]): number {
       return 0;
     case "paused":
       return 1;
-    case "planned":
-      return 2;
-    case "setup":
+    case "draft":
       return 3;
     default:
       return 99;

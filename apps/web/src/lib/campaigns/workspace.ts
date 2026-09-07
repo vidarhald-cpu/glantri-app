@@ -187,13 +187,11 @@ function getEncounterStatusRank(status: EncounterSessionSummary["status"]): numb
   switch (status) {
     case "active":
       return 0;
-    case "planned":
+    case "draft":
       return 1;
     case "paused":
       return 2;
-    case "setup":
-      return 3;
-    case "complete":
+    case "completed":
       return 4;
     case "archived":
       return 99;
@@ -203,7 +201,7 @@ function getEncounterStatusRank(status: EncounterSessionSummary["status"]): numb
 }
 
 function isSelectableWorkspaceEncounter(encounter: WorkspaceEncounterSummary): boolean {
-  return encounter.status !== "archived" && encounter.status !== "complete";
+  return encounter.status !== "archived" && encounter.status !== "completed";
 }
 
 function isPlayerAssignedToEncounter(input: {
@@ -232,12 +230,14 @@ function resolvePlayerEncounterSelection(input: {
   requestedEncounterId?: string | null;
   scenarioParticipants: ScenarioParticipant[];
   userId?: string | null;
+  requireActive?: boolean;
 }): WorkspaceEncounterSummary | undefined {
   const candidateEncounters = input.encounters
     .filter(
       (encounter) => !input.activeScenarioId || encounter.scenarioId === input.activeScenarioId,
     )
     .filter(isSelectableWorkspaceEncounter)
+    .filter((encounter) => !input.requireActive || encounter.status === "active")
     .filter((encounter) =>
       isPlayerAssignedToEncounter({
         encounter,
@@ -272,7 +272,7 @@ function resolveGmCombatEncounterSelection(input: {
     .filter(
       (encounter) => !input.activeScenarioId || encounter.scenarioId === input.activeScenarioId,
     )
-    .filter(isSelectableWorkspaceEncounter);
+    .filter((encounter) => encounter.status === "active");
 
   if (input.requestedEncounterId) {
     return candidateEncounters.find((encounter) => encounter.id === input.requestedEncounterId);
@@ -356,6 +356,7 @@ export function resolveCampaignWorkspaceState(input: {
         requestedEncounterId,
         scenarioParticipants: input.scenarioParticipants ?? [],
         userId: input.currentUserId,
+        requireActive: requestedTab === "combat" || requestedTab === "player-combat",
       });
 
       if (playerEncounter) {
@@ -375,7 +376,7 @@ export function resolveCampaignWorkspaceState(input: {
           (encounter) =>
             encounter.id === input.requestedEncounterId &&
             (!activeScenarioId || encounter.scenarioId === activeScenarioId) &&
-            isSelectableWorkspaceEncounter(encounter),
+            encounter.status === "active",
         )
       : undefined;
 

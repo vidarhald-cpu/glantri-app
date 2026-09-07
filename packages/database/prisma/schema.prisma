@@ -249,7 +249,7 @@ model Encounter {
   name                 String
   campaignId           String?
   scenarioId           String?
-  status               String                         @default("setup")
+  status               String                         @default("draft")
   sessionJson          Json?
   combatStorageMode    String                         @default("legacy")
   combatArchiveCount   Int                            @default(0)
@@ -807,6 +807,7 @@ model CampaignBlackboardPlacement {
 model ScenarioEventLog {
   id            String   @id @default(cuid())
   scenarioId     String
+  sequence       Int      @default(autoincrement()) @unique
   roundNumber    Int?
   phase          Int?
   eventType      String
@@ -820,6 +821,7 @@ model ScenarioEventLog {
   scenario       Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
 
   @@index([scenarioId])
+  @@index([scenarioId, sequence])
   @@index([participantId])
   @@index([actorUserId])
 }

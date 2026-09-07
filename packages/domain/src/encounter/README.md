@@ -10,7 +10,7 @@ Den godkjente produktlivssyklusen er dokumentert i
 ```
 EncounterSession                      ← lagret i databasen (encounter-tabell)
   ├─ kind: "combat" | "roleplay"     ← autoritativt verktøysett, ikke livssyklus
-  ├─ status                           ← setup/planned/active/paused/complete/archived
+  ├─ status                           ← draft/active/paused/completed/archived
   ├─ participants: EncounterParticipant[]
   │    ├─ characterId?               ← kobling til ScenarioParticipant
   │    ├─ declaration                (handlingstype, forsvarspostur, mål)
@@ -69,7 +69,7 @@ Vanskelighetsgrader (`RoleplayDifficulty`) og terskler er hardkodet fra Rolemast
   Combat Manager eller Player Combat; en roleplay-kind endres aldri stille til Combat.
 - Å forlate Combat returnerer til samme aktive Encounter og Scenario. Ferdig Combat
   lukker ikke Encounter automatisk.
-- `complete` og `archived` er skrivebeskyttet og har ingen ordinær reaktivering.
+- `completed` (vist som Closed) og `archived` er skrivebeskyttet og har ingen ordinær reaktivering.
 
 ## Testkommandoer
 

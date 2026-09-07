@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   buildRoleplayCalculationPreview,
   combatEffectsStateSchema,
+  combatStepEventSchema,
   encounterSessionSchema,
   initializeCombatRoundState,
   normalizeRoleplayState,
@@ -40,7 +41,7 @@ function buildPendingStatCheck() {
       },
     ],
     scenarioId: "scenario-roleplay-concurrency",
-    status: "planned",
+    status: "draft",
     title: "Council chamber",
     updatedAt: "2026-08-13T10:00:00.000Z",
   });
@@ -237,7 +238,7 @@ if (!process.env.DATABASE_URL_TEST) {
               },
             ],
             scenarioId: scenario.id,
-            status: "planned",
+            status: "draft",
             title: id,
             updatedAt: "2026-08-22T10:00:00.000Z",
           }),
@@ -291,6 +292,83 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(rejected?.reason).toMatchObject({
         code: expect.stringMatching(/^(participant_already_active|transaction_conflict)$/),
       });
+
+      const currentScenario = await scenarioService.getScenarioById(scenario.id);
+      const pausedScenario = await scenarioService.updateScenario({
+        expectedRevision: currentScenario!.updatedAt,
+        scenarioId: scenario.id,
+        status: "paused",
+      });
+      const pausedEncounters = await service.listEncountersByScenario(scenario.id);
+      expect(pausedEncounters.filter((encounter) => encounter.status === "active")).toEqual([]);
+      expect(pausedEncounters.filter((encounter) => encounter.status === "paused").length).toBe(3);
+      await expect(
+        scenarioService.updateScenario({
+          expectedRevision: pausedScenario.updatedAt,
+          scenarioId: scenario.id,
+          status: "completed",
+        }),
+      ).rejects.toThrow("Close every active or paused Encounter");
+
+      const resumedScenario = await scenarioService.updateScenario({
+        expectedRevision: pausedScenario.updatedAt,
+        scenarioId: scenario.id,
+        status: "live",
+      });
+      expect(resumedScenario.status).toBe("live");
+      const sameLibrary = pausedEncounters.find((encounter) => encounter.id === library.id)!;
+      const resumedLibrary = await service.updateEncounter({
+        encounterId: sameLibrary.id,
+        expectedRevision: sameLibrary.updatedAt,
+        scenarioId: scenario.id,
+        session: { ...sameLibrary, status: "active" },
+      });
+      expect(resumedLibrary).toMatchObject({ id: library.id, status: "active" });
+      await expect(
+        service.updateEncounter({
+          encounterId: resumedLibrary.id,
+          expectedRevision: resumedLibrary.updatedAt,
+          scenarioId: scenario.id,
+          session: { ...resumedLibrary, status: "completed" },
+        }),
+      ).rejects.toMatchObject({ code: "invalid_transition" });
+      const pausedAgain = await service.updateEncounter({
+        encounterId: resumedLibrary.id,
+        expectedRevision: resumedLibrary.updatedAt,
+        scenarioId: scenario.id,
+        session: { ...resumedLibrary, status: "paused" },
+      });
+      const closedLibrary = await service.updateEncounter({
+        encounterId: pausedAgain.id,
+        expectedRevision: pausedAgain.updatedAt,
+        objectiveEvent: {
+          eventType: "encounter_closed",
+          summary: "Closed encounter library: The clue was secured.",
+        },
+        scenarioId: scenario.id,
+        session: {
+          ...pausedAgain,
+          gmPrivateClosingNote: "The rival escaped unseen.",
+          playerOutcome: "The clue was secured.",
+          status: "completed",
+        },
+      });
+      expect(closedLibrary).toMatchObject({
+        gmPrivateClosingNote: "The rival escaped unseen.",
+        playerOutcome: "The clue was secured.",
+        status: "completed",
+      });
+      const lifecycleEvents = await scenarioRepository.listScenarioEventLogs(scenario.id);
+      expect(lifecycleEvents.map((event) => event.sequence)).toEqual(
+        [...lifecycleEvents]
+          .map((event) => event.sequence)
+          .sort((left, right) => left! - right!),
+      );
+      const closureEvent = lifecycleEvents.find(
+        (event) => event.eventType === "encounter_closed",
+      );
+      expect(JSON.stringify(closureEvent)).toContain("The clue was secured.");
+      expect(JSON.stringify(closureEvent)).not.toContain("The rival escaped unseen.");
     });
 
     it("blocks Encounter creation, updates, and participant state transitions in terminal Scenarios", async () => {
@@ -349,7 +427,7 @@ if (!process.env.DATABASE_URL_TEST) {
             },
           ],
           scenarioId: scenario.id,
-          status: "planned",
+          status: "draft",
           title: `Terminal ${terminalStatus}`,
           updatedAt: "2026-08-30T10:00:00.000Z",
         });
@@ -359,8 +437,13 @@ if (!process.env.DATABASE_URL_TEST) {
           session: baseEncounter,
         });
 
-        await scenarioService.updateScenario({
+        const pausedScenario = await scenarioService.updateScenario({
           expectedRevision: scenario.updatedAt,
+          scenarioId: scenario.id,
+          status: "paused",
+        });
+        await scenarioService.updateScenario({
+          expectedRevision: pausedScenario.updatedAt,
           scenarioId: scenario.id,
           status: "completed",
         });
@@ -370,6 +453,9 @@ if (!process.env.DATABASE_URL_TEST) {
           status: "archived",
         });
         scenario.updatedAt = archivedScenario.updatedAt;
+        await expect(encounterService.getEncounterById(encounter.id)).resolves.toMatchObject({
+          status: "archived",
+        });
 
         await expect(
           encounterService.createEncounter({
@@ -381,7 +467,7 @@ if (!process.env.DATABASE_URL_TEST) {
               title: `blocked-${terminalStatus}`,
             },
           }),
-        ).rejects.toThrow("Scenario is not currently live.");
+        ).rejects.toThrow("Closed or archived Scenarios");
 
         await expect(
           encounterService.updateCombatEncounter({
@@ -395,7 +481,7 @@ if (!process.env.DATABASE_URL_TEST) {
               status: "active",
             },
           }),
-        ).rejects.toThrow("Scenario is not currently live.");
+        ).rejects.toThrow("Combat activity requires an active Encounter.");
 
         await expect(
           encounterService.updateScenarioParticipantState({
@@ -431,7 +517,7 @@ if (!process.env.DATABASE_URL_TEST) {
       const campaign = await campaignService.createCampaign({
         gmUserId: gm.id,
         name: "C1 persistence",
-        status: "active",
+        status: "draft",
       });
       await campaignService.addCampaignRosterEntry({
         campaignId: campaign.id,
@@ -458,7 +544,7 @@ if (!process.env.DATABASE_URL_TEST) {
         createdAt: "2026-08-29T10:00:00.000Z",
         currentRound: 2,
         id: "c1-persistence",
-        kind: "combat",
+        kind: "roleplay",
         participantMembershipMode: "explicit",
         participants: [
           {
@@ -469,17 +555,24 @@ if (!process.env.DATABASE_URL_TEST) {
           },
         ],
         scenarioId: scenario.id,
-        status: "active",
+        status: "draft",
         title: "C1 persistence",
         updatedAt: "2026-08-29T10:00:00.000Z",
       });
-      const encounter = await service.createEncounter({
+      const createdEncounter = await service.createEncounter({
         campaignId: campaign.id,
         scenarioId: scenario.id,
         session: encounterSessionSchema.parse({
           ...sessionBase,
           combatRoundState: initializeCombatRoundState({ encounter: sessionBase }),
         }),
+      });
+      const encounter = await service.updateEncounter({
+        campaignId: campaign.id,
+        encounterId: createdEncounter.id,
+        expectedRevision: createdEncounter.updatedAt,
+        scenarioId: scenario.id,
+        session: { ...createdEncounter, status: "active" },
       });
       const combatEffects = combatEffectsStateSchema.parse({
         criticalBleedAccumulator: {
@@ -532,13 +625,39 @@ if (!process.env.DATABASE_URL_TEST) {
         ...participant.state,
         combatEffects,
       });
+      const combatEvent = combatStepEventSchema.parse({
+        actorParticipantId: participant.id,
+        completeness: "complete",
+        encounterId: encounter.id,
+        facts: { publicOutcome: { declaration: "ready" } },
+        id: "c1-combat-event",
+        occurredAt: "2026-08-29T10:02:00.000Z",
+        roundNumber: 2,
+        schemaVersion: 1,
+        sequence: 0,
+        source: { kind: "canonical" },
+        status: "recorded",
+        step: "select_actions",
+        type: "declaration",
+        visibility: {
+          involvedParticipantIds: [participant.id],
+          outcomeScope: "involved",
+        },
+      });
+      const encounterWithCombatEvent = encounterSessionSchema.parse({
+        ...encounter,
+        combatRoundState: {
+          ...encounter.combatRoundState!,
+          events: [...encounter.combatRoundState!.events, combatEvent],
+        },
+      });
       const saved = await service.commitCombatParticipantStateMutation({
         campaignId: campaign.id,
         encounterId: encounter.id,
         expectedEncounterRevision: encounter.updatedAt,
         participant,
         scenarioId: scenario.id,
-        session: encounter,
+        session: encounterWithCombatEvent,
         state,
       });
       const reloaded = await scenarioRepository.getScenarioParticipantById(
@@ -548,6 +667,25 @@ if (!process.env.DATABASE_URL_TEST) {
 
       expect(reloaded?.state.combatEffects).toEqual(combatEffects);
       expect(saved.participant.state.combatEffects).toEqual(combatEffects);
+      const objectiveEvents = await scenarioRepository.listScenarioEventLogs(scenario.id);
+      expect(
+        objectiveEvents.filter((event) => event.eventType === "encounter_combat_outcome"),
+      ).toEqual([
+        expect.objectContaining({
+          eventType: "encounter_combat_outcome",
+          scenarioId: scenario.id,
+          sequence: expect.any(Number),
+        }),
+      ]);
+      expect(
+        objectiveEvents.find((event) => event.eventType === "encounter_combat_outcome")?.payload,
+      ).toMatchObject({
+        actorParticipantId: participant.id,
+        audienceParticipantIds: [participant.id],
+        combatEventId: combatEvent.id,
+        encounterId: encounter.id,
+        eventKind: "declaration",
+      });
       await expect(
         service.commitCombatParticipantStateMutation({
           campaignId: campaign.id,
@@ -555,7 +693,7 @@ if (!process.env.DATABASE_URL_TEST) {
           expectedEncounterRevision: encounter.updatedAt,
           participant,
           scenarioId: scenario.id,
-          session: encounter,
+          session: encounterWithCombatEvent,
           state,
         }),
       ).rejects.toMatchObject({ code: "stale_revision" });

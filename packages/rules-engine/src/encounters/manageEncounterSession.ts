@@ -264,7 +264,7 @@ export function createEncounterSession(title: string): EncounterSession {
     id: createId("encounter"),
     kind: "combat",
     participants: [],
-    status: "setup",
+    status: "draft",
     title: title.trim() || "Untitled encounter",
     turnOrderMode: "manual",
     updatedAt: now

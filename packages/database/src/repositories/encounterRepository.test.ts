@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
       update: vi.fn(),
     },
     scenarioEventLog: { create: vi.fn() },
+    scenario: { findUnique: vi.fn() },
     scenarioParticipant: { findMany: vi.fn() },
   },
 }));
@@ -33,7 +34,7 @@ const baseSession: EncounterSession = {
   id: "encounter-1",
   kind: "roleplay",
   participants: [],
-  status: "planned",
+  status: "draft",
   title: "Courtyard",
   turnOrderMode: "manual",
   updatedAt: "2026-01-01T00:00:00.000Z",
@@ -42,6 +43,8 @@ const baseSession: EncounterSession = {
 describe("encounterRepository trusted identifiers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.prisma.$transaction.mockImplementation(async (callback) => callback(mocks.prisma));
+    mocks.prisma.scenario.findUnique.mockResolvedValue({ status: "live" });
   });
   it("uses trusted scenario and campaign ids when creating an encounter", async () => {
     const repository = createPrismaEncounterRepository();
@@ -87,7 +90,6 @@ describe("encounterRepository trusted identifiers", () => {
   it("updates the trusted encounter id instead of the body id", async () => {
     const repository = createPrismaEncounterRepository();
     const persistedUpdatedAt = "2026-01-01T00:00:01.000Z";
-    mocks.prisma.$transaction.mockImplementation(async (callback) => callback(mocks.prisma));
     mocks.prisma.encounter.findUniqueOrThrow.mockResolvedValue({
       activeCombatState: null,
       archivedCombatRounds: [],
@@ -204,7 +206,6 @@ describe("encounterRepository trusted identifiers", () => {
       scenarioId: "scenario-1",
       status: "active",
     });
-    mocks.prisma.$transaction.mockImplementation(async (callback) => callback(mocks.prisma));
     mocks.prisma.encounter.findUniqueOrThrow.mockResolvedValue({
       activeCombatState: null,
       archivedCombatRounds: [],
@@ -216,7 +217,7 @@ describe("encounterRepository trusted identifiers", () => {
       name: active.title,
       scenarioId: "scenario-1",
       sessionJson: baseSession,
-      status: "planned",
+      status: "draft",
       updatedAt: new Date(baseSession.updatedAt),
     });
     mocks.prisma.scenarioParticipant.findMany.mockResolvedValue([{ id: "participant-a" }]);

@@ -142,7 +142,10 @@ describe("Scenario session privacy projection", () => {
     expect(history).toEqual([
       {
         createdAt: now,
+        eventKind: "encounter_skill_outcome",
         id: "event-a",
+        scenarioId: "scenario-1",
+        sequence: 1,
         summary: "Player A found a clue.",
         type: "encounter_skill_outcome",
       },

@@ -3,6 +3,7 @@ import {
   encounterSessionSummarySchema,
   type EncounterSession,
   type EncounterSessionSummary,
+  type CombatStepEvent,
   type ScenarioParticipantState,
 } from "@glantri/domain";
 import { Prisma, type PrismaClient } from "@prisma/client";
@@ -90,6 +91,7 @@ export interface EncounterRepository {
     expectedRevision: string;
     scenarioId?: string | null;
     session: EncounterSession;
+    objectiveEvents?: CombatStepEvent[];
     participantStateUpdates?: Array<{
       expectedRevision: string;
       participantId: string;
@@ -104,7 +106,8 @@ export class EncounterPresenceError extends Error {
     readonly code:
       | "inactive_participant"
       | "invalid_active_membership"
-      | "participant_already_active",
+      | "participant_already_active"
+      | "parent_scenario_not_active",
     message: string,
   ) {
     super(message);
@@ -149,6 +152,16 @@ async function assertActiveEncounterPresence(input: {
   await input.transaction.$queryRaw(
     Prisma.sql`SELECT "id" FROM "Scenario" WHERE "id" = ${input.scenarioId} FOR UPDATE`,
   );
+  const scenario = await input.transaction.scenario.findUnique({
+    select: { status: true },
+    where: { id: input.scenarioId },
+  });
+  if (scenario?.status !== "live") {
+    throw new EncounterPresenceError(
+      "parent_scenario_not_active",
+      "The parent Scenario must be active before this Encounter can be active.",
+    );
+  }
   const activeParticipants = await input.transaction.scenarioParticipant.findMany({
     select: { id: true },
     where: {
@@ -209,16 +222,31 @@ export function createPrismaEncounterRepository(
         campaignId: input.campaignId ?? input.session.campaignId,
         scenarioId: input.scenarioId,
       });
-      const record = await client.encounter.create({
-        data: {
-          campaignId: normalized.campaignId ?? null,
-          createdByUserId: input.createdByUserId ?? null,
-          id: normalized.id,
-          name: normalized.title,
-          scenarioId: input.scenarioId,
-          sessionJson: asJson(normalized),
-          status: normalized.status,
-        },
+      const record = await client.$transaction(async (transaction) => {
+        await transaction.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "Scenario" WHERE "id" = ${input.scenarioId} FOR UPDATE`,
+        );
+        const scenario = await transaction.scenario.findUnique({
+          select: { status: true },
+          where: { id: input.scenarioId },
+        });
+        if (!scenario || scenario.status === "completed" || scenario.status === "archived") {
+          throw new EncounterPresenceError(
+            "parent_scenario_not_active",
+            "Closed or archived Scenarios cannot contain new Encounters.",
+          );
+        }
+        return transaction.encounter.create({
+          data: {
+            campaignId: normalized.campaignId ?? null,
+            createdByUserId: input.createdByUserId ?? null,
+            id: normalized.id,
+            name: normalized.title,
+            scenarioId: input.scenarioId,
+            sessionJson: asJson(normalized),
+            status: normalized.status,
+          },
+        });
       });
 
       return mapEncounterRecord(record);
@@ -306,7 +334,55 @@ export function createPrismaEncounterRepository(
       });
     },
     async updateCombatEncounter(input) {
-      return combatPersistenceRepository.updateCombatEncounter(input);
+      return combatPersistenceRepository.updateCombatEncounter({
+        ...input,
+        afterPersist: async (transaction, encounter) => {
+          if (!encounter.scenarioId) return;
+          for (const event of input.objectiveEvents ?? []) {
+            const toScenarioParticipantId = (participantId: string | undefined) =>
+              encounter.participants.find(
+                (participant) =>
+                  participant.id === participantId ||
+                  participant.scenarioParticipantId === participantId,
+              )?.scenarioParticipantId;
+            const actorParticipantId = toScenarioParticipantId(event.actorParticipantId);
+            const audienceParticipantIds =
+              event.visibility.outcomeScope === "public"
+                ? undefined
+                : event.visibility.involvedParticipantIds.flatMap((participantId) => {
+                    const scenarioParticipantId = toScenarioParticipantId(participantId);
+                    return scenarioParticipantId ? [scenarioParticipantId] : [];
+                  });
+            await transaction.scenarioEventLog.create({
+              data: {
+                eventType: "encounter_combat_outcome",
+                participantId: null,
+                payloadJson: asJson({
+                  ...(audienceParticipantIds ? { audienceParticipantIds } : {}),
+                  actorParticipantId,
+                  combatEventId: event.id,
+                  combatSequence: event.sequence,
+                  encounterId: encounter.id,
+                  eventKind: event.type,
+                  sourceOccurredAt: event.occurredAt,
+                }),
+                phase: event.phase === "phase1" ? 1 : event.phase === "phase2" ? 2 : null,
+                roundNumber: event.roundNumber,
+                scenarioId: encounter.scenarioId,
+                summary: `Combat: ${event.type.replaceAll("_", " ")}.`,
+              },
+            });
+          }
+        },
+        beforePersist: async (transaction, encounter) => {
+          if (!encounter.scenarioId) return;
+          await assertActiveEncounterPresence({
+            encounter,
+            scenarioId: encounter.scenarioId,
+            transaction,
+          });
+        },
+      });
     },
   };
 }

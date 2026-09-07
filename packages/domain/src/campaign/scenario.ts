@@ -386,6 +386,7 @@ export const scenarioEventLogSchema = z.object({
   phase: z.union([z.literal(1), z.literal(2)]).optional(),
   roundNumber: z.number().int().positive().optional(),
   scenarioId: idSchema,
+  sequence: z.number().int().positive().optional(),
   summary: z.string().min(1),
 });
 
@@ -516,7 +517,7 @@ export type ScenarioPlayerProjection = z.infer<typeof scenarioPlayerProjectionSc
 
 export const scenarioLifecycleTransitions: Record<ScenarioStatus, ScenarioStatus[]> = {
   draft: ["live", "archived"],
-  live: ["paused", "completed"],
+  live: ["paused"],
   paused: ["live", "completed"],
   completed: ["archived"],
   archived: [],

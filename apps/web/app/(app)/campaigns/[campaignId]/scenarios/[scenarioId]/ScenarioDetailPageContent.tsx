@@ -254,7 +254,7 @@ export default function ScenarioDetailPageContent({
   const nonArchivedEncounters = useMemo(
     () =>
       orderedEncounters.filter(
-        (encounter) => encounter.status !== "archived" && encounter.status !== "complete",
+        (encounter) => encounter.status !== "archived" && encounter.status !== "completed",
       ),
     [orderedEncounters],
   );
@@ -590,7 +590,7 @@ export default function ScenarioDetailPageContent({
           description: encounterDescription.trim() || undefined,
           kind: encounterKind,
           scenarioId,
-          status: "planned",
+          status: "draft",
           timelineLabel: encounterTimelineLabel.trim() || undefined,
         },
       });
@@ -644,8 +644,8 @@ export default function ScenarioDetailPageContent({
       setError(undefined);
       setFeedback(undefined);
       const updatedScenario = await updateScenarioOnServer({
-        description: scenarioDescription,
-        name: scenarioName,
+        description: scenario?.status === "completed" ? undefined : scenarioDescription,
+        name: scenario?.status === "completed" ? undefined : scenarioName,
         scenarioId,
         status: scenarioStatus,
       });

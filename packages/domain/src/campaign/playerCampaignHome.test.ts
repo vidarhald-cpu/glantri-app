@@ -196,7 +196,7 @@ describe("player Campaign Home projection", () => {
               kind: "roleplay",
               participant: ari,
               scenarioId: bridge.id,
-              status: "setup",
+              status: "draft",
               title: "Secret preparation",
             }),
             encounter({
@@ -204,7 +204,7 @@ describe("player Campaign Home projection", () => {
               kind: "roleplay",
               participant: ari,
               scenarioId: bridge.id,
-              status: "complete",
+              status: "completed",
               title: "Old audience",
             }),
             encounter({

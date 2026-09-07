@@ -109,7 +109,7 @@ function renderAssignmentSection(
 describe("scenario encounter controls", () => {
   afterEach(() => cleanup());
 
-  it("fires pause and archive status handlers from button clicks", async () => {
+  it("offers only Pause for an active Encounter", async () => {
     const user = userEvent.setup();
     const onUpdateEncounterStatus = vi.fn();
 
@@ -132,10 +132,37 @@ describe("scenario encounter controls", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Pause" }));
-    await user.click(screen.getByRole("button", { name: "Archive" }));
 
-    expect(onUpdateEncounterStatus).toHaveBeenNthCalledWith(1, encounter, "paused");
-    expect(onUpdateEncounterStatus).toHaveBeenNthCalledWith(2, encounter, "archived");
+    expect(onUpdateEncounterStatus).toHaveBeenCalledWith(encounter, "paused");
+    expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Close encounter" })).not.toBeInTheDocument();
+  });
+
+  it("allows a Draft Encounter to be archived directly", async () => {
+    const user = userEvent.setup();
+    const onUpdateEncounterStatus = vi.fn();
+    const draftEncounter = { ...encounter, status: "draft" as const };
+
+    render(
+      <ScenarioEncountersSection
+        campaignId="campaign-1"
+        encounterDescription=""
+        encounterKind="combat"
+        encounterTimelineLabel=""
+        encounterTitle=""
+        onCreateEncounter={vi.fn()}
+        onDescriptionChange={vi.fn()}
+        onKindChange={vi.fn()}
+        onTimelineLabelChange={vi.fn()}
+        onTitleChange={vi.fn()}
+        onUpdateEncounterStatus={onUpdateEncounterStatus}
+        orderedEncounters={[draftEncounter]}
+        scenarioId="scenario-1"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Archive" }));
+    expect(onUpdateEncounterStatus).toHaveBeenCalledWith(draftEncounter, "archived");
   });
 
   it("captures row selection before assigning or withdrawing selected participants", async () => {

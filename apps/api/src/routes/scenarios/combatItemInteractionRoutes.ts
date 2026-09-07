@@ -200,7 +200,7 @@ export function createCombatItemInteractionRoutes(
       );
       const current = services();
       const encounter = await current.encounterService.getEncounterById(encounterId);
-      if (!encounter?.scenarioId || encounter.kind !== "combat") return null;
+      if (!encounter?.scenarioId || encounter.status !== "active") return null;
       const access = await resolveScenarioWorkspaceAccess(current, {
         scenarioId: encounter.scenarioId,
         userId: user.id,

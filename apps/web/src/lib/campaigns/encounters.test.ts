@@ -17,7 +17,7 @@ function createEncounter(input: Partial<EncounterSession> & Pick<EncounterSessio
     id: input.id,
     kind: input.kind ?? "combat",
     participants: [],
-    status: "setup",
+    status: "draft",
     title: input.title,
     turnOrderMode: "manual",
     updatedAt: "2026-04-25T00:00:00.000Z",
@@ -94,4 +94,3 @@ describe("campaign encounter visibility", () => {
     expect(visible.map((encounter) => encounter.id)).toEqual(["enc-1"]);
   });
 });
-

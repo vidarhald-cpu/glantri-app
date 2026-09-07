@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { isUserAssignedToEncounterMembership, type EncounterSession } from "../encounter/session";
+import {
+  encounterStatusSchema,
+  isUserAssignedToEncounterMembership,
+  type EncounterSession,
+} from "../encounter/session";
 import {
   campaignAssetTypeSchema,
   scenarioAvailableObjectSourceKindSchema,
@@ -25,6 +29,7 @@ export const scenarioObjectiveHistoryEventTypeSchema = z.enum([
   "encounter_resumed",
   "encounter_paused",
   "encounter_closed",
+  "encounter_archived",
   "item_transferred",
   "encounter_skill_outcome",
   "encounter_combat_outcome",
@@ -61,15 +66,19 @@ export const scenarioSessionEncounterSchema = z.object({
   id: idSchema,
   kind: z.enum(["combat", "roleplay"]),
   outcome: z.string().optional(),
-  status: z.enum(["setup", "planned", "active", "paused", "complete", "archived"]),
+  status: encounterStatusSchema,
   title: z.string().min(1),
   updatedAt: timestampSchema,
 });
 
 export const scenarioSessionHistoryEventSchema = z.object({
+  actorParticipantId: idSchema.optional(),
   createdAt: timestampSchema,
   encounterId: idSchema.optional(),
+  eventKind: z.string().min(1),
   id: idSchema,
+  scenarioId: idSchema,
+  sequence: z.number().int().positive(),
   summary: z.string().min(1),
   type: scenarioObjectiveHistoryEventTypeSchema,
 });
@@ -127,6 +136,16 @@ function eventEncounterId(event: ScenarioEventLog): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+function eventActorParticipantId(event: ScenarioEventLog): string | undefined {
+  const value = readEventPayload(event).actorParticipantId;
+  return typeof value === "string" && value.length > 0 ? value : event.participantId;
+}
+
+function eventKind(event: ScenarioEventLog): string {
+  const value = readEventPayload(event).eventKind;
+  return typeof value === "string" && value.length > 0 ? value : event.eventType;
+}
+
 function valueReferencesParticipant(value: unknown, participantIds: ReadonlySet<string>): boolean {
   if (typeof value === "string") return participantIds.has(value);
   if (Array.isArray(value)) {
@@ -157,7 +176,14 @@ export function projectScenarioObjectiveHistory(input: {
   excludedParticipantNames?: ReadonlySet<string>;
   viewerMode: "gm" | "player";
 }): z.infer<typeof scenarioSessionHistoryEventSchema>[] {
-  return input.eventLogs
+  return [...input.eventLogs]
+    .sort(
+      (left, right) =>
+        (left.sequence ?? Number.MAX_SAFE_INTEGER) -
+          (right.sequence ?? Number.MAX_SAFE_INTEGER) ||
+        left.createdAt.localeCompare(right.createdAt) ||
+        left.id.localeCompare(right.id),
+    )
     .flatMap((event) => {
       const parsedType = scenarioObjectiveHistoryEventTypeSchema.safeParse(event.eventType);
       if (!parsedType.success || !playerSafeHistoryTypes.has(parsedType.data)) return [];
@@ -184,18 +210,20 @@ export function projectScenarioObjectiveHistory(input: {
 
       return [
         scenarioSessionHistoryEventSchema.parse({
+          ...(eventActorParticipantId(event)
+            ? { actorParticipantId: eventActorParticipantId(event) }
+            : {}),
           createdAt: event.createdAt,
-          encounterId: eventEncounterId(event),
+          ...(eventEncounterId(event) ? { encounterId: eventEncounterId(event) } : {}),
+          eventKind: eventKind(event),
           id: event.id,
+          scenarioId: event.scenarioId,
+          sequence: event.sequence ?? input.eventLogs.indexOf(event) + 1,
           summary: event.summary,
           type: parsedType.data,
         }),
       ];
-    })
-    .sort(
-      (left, right) =>
-        left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
-    );
+    });
 }
 
 export function buildScenarioSessionView(input: {
