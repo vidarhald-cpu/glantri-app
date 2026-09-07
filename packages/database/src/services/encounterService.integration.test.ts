@@ -360,13 +360,9 @@ if (!process.env.DATABASE_URL_TEST) {
       });
       const lifecycleEvents = await scenarioRepository.listScenarioEventLogs(scenario.id);
       expect(lifecycleEvents.map((event) => event.sequence)).toEqual(
-        [...lifecycleEvents]
-          .map((event) => event.sequence)
-          .sort((left, right) => left! - right!),
+        [...lifecycleEvents].map((event) => event.sequence).sort((left, right) => left! - right!),
       );
-      const closureEvent = lifecycleEvents.find(
-        (event) => event.eventType === "encounter_closed",
-      );
+      const closureEvent = lifecycleEvents.find((event) => event.eventType === "encounter_closed");
       expect(JSON.stringify(closureEvent)).toContain("The clue was secured.");
       expect(JSON.stringify(closureEvent)).not.toContain("The rival escaped unseen.");
     });

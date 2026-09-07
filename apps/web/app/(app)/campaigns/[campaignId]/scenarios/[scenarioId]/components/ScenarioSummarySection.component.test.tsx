@@ -35,9 +35,7 @@ describe("ScenarioSummarySection", () => {
 
     expect(screen.getByRole("textbox", { name: "Name" })).toBeDisabled();
     expect(screen.getByRole("textbox", { name: "Description" })).toBeDisabled();
-    expect(screen.getByRole("combobox", { name: "Status" })).toHaveTextContent(
-      "ClosedArchived",
-    );
+    expect(screen.getByRole("combobox", { name: "Status" })).toHaveTextContent("ClosedArchived");
     expect(screen.getByRole("button", { name: "Update scenario" })).toBeEnabled();
   });
 

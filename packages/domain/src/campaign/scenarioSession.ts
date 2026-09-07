@@ -179,8 +179,7 @@ export function projectScenarioObjectiveHistory(input: {
   return [...input.eventLogs]
     .sort(
       (left, right) =>
-        (left.sequence ?? Number.MAX_SAFE_INTEGER) -
-          (right.sequence ?? Number.MAX_SAFE_INTEGER) ||
+        (left.sequence ?? Number.MAX_SAFE_INTEGER) - (right.sequence ?? Number.MAX_SAFE_INTEGER) ||
         left.createdAt.localeCompare(right.createdAt) ||
         left.id.localeCompare(right.id),
     )

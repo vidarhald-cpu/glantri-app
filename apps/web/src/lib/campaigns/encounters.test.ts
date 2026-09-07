@@ -2,12 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { EncounterSession } from "@glantri/domain";
 
-import {
-  getCampaignWorkspaceVisibleEncounters,
-  getScenarioVisibleEncounters,
-} from "./encounters";
+import { getCampaignWorkspaceVisibleEncounters, getScenarioVisibleEncounters } from "./encounters";
 
-function createEncounter(input: Partial<EncounterSession> & Pick<EncounterSession, "id" | "title">): EncounterSession {
+function createEncounter(
+  input: Partial<EncounterSession> & Pick<EncounterSession, "id" | "title">,
+): EncounterSession {
   return {
     actionLog: [],
     createdAt: "2026-04-25T00:00:00.000Z",

@@ -16,12 +16,15 @@ import type {
   SkillDefinition,
   SkillGroupDefinition,
   SkillSpecialization,
-  SocietyLevelAccess
+  SocietyLevelAccess,
 } from "@glantri/domain";
 
 import { encounterSessionSchema } from "@glantri/domain";
 
-import { buildCharacterSheetSummary, type CharacterSheetSummary } from "../sheets/buildCharacterSheetSummary";
+import {
+  buildCharacterSheetSummary,
+  type CharacterSheetSummary,
+} from "../sheets/buildCharacterSheetSummary";
 
 interface CanonicalContentShape {
   professionFamilies: ProfessionFamilyDefinition[];
@@ -71,8 +74,7 @@ export interface EncounterParticipantDeclarationValidation {
   warnings: string[];
 }
 
-export interface EncounterParticipantDeclarationSummary
-  extends EncounterParticipantDeclarationValidation {
+export interface EncounterParticipantDeclarationSummary extends EncounterParticipantDeclarationValidation {
   actionLabel: string;
   actionType: EncounterActionType;
   defenseFocusLabel?: string;
@@ -149,7 +151,7 @@ function createDefaultDeclaration(): EncounterParticipantDeclaration {
     actionType: "none",
     defenseFocus: "none",
     defensePosture: "none",
-    targetLocation: "any"
+    targetLocation: "any",
   };
 }
 
@@ -201,7 +203,10 @@ function getDefenseFocusLabel(defenseFocus: EncounterDefenseFocus): string | und
   }
 }
 
-function getParticipantDisplayName(participant: EncounterParticipant, build?: CharacterBuild): string {
+function getParticipantDisplayName(
+  participant: EncounterParticipant,
+  build?: CharacterBuild,
+): string {
   if (build) {
     return build.name;
   }
@@ -217,38 +222,38 @@ function normalizeSession(session: EncounterSession): EncounterSession {
       ...participant,
       declaration: {
         ...createDefaultDeclaration(),
-        ...participant.declaration
+        ...participant.declaration,
       },
-      order: index
+      order: index,
     }));
   const maxIndex = Math.max(0, participants.length - 1);
 
   return {
     ...parsed,
     currentTurnIndex: Math.min(parsed.currentTurnIndex, maxIndex),
-    participants
+    participants,
   };
 }
 
 function touchSession(session: EncounterSession): EncounterSession {
   return {
     ...session,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 }
 
 function updateParticipant(
   session: EncounterSession,
   participantId: string,
-  updater: (participant: EncounterParticipant) => EncounterParticipant
+  updater: (participant: EncounterParticipant) => EncounterParticipant,
 ): EncounterSession {
   const normalized = normalizeSession(session);
 
   return touchSession({
     ...normalized,
     participants: normalized.participants.map((participant) =>
-      participant.id === participantId ? updater(participant) : participant
-    )
+      participant.id === participantId ? updater(participant) : participant,
+    ),
   });
 }
 
@@ -267,7 +272,7 @@ export function createEncounterSession(title: string): EncounterSession {
     status: "draft",
     title: title.trim() || "Untitled encounter",
     turnOrderMode: "manual",
-    updatedAt: now
+    updatedAt: now,
   });
 }
 
@@ -290,13 +295,13 @@ export function addCharacterParticipant(input: {
     position: {
       x: 0,
       y: 0,
-      zone: "center"
-    }
+      zone: "center",
+    },
   };
 
   return touchSession({
     ...normalized,
-    participants: [...normalized.participants, participant]
+    participants: [...normalized.participants, participant],
   });
 }
 
@@ -319,13 +324,13 @@ export function addAdHocParticipant(input: {
     position: {
       x: 0,
       y: 0,
-      zone: "center"
-    }
+      zone: "center",
+    },
   };
 
   return touchSession({
     ...normalized,
-    participants: [...normalized.participants, participant]
+    participants: [...normalized.participants, participant],
   });
 }
 
@@ -339,9 +344,9 @@ export function removeEncounterParticipant(input: {
     touchSession({
       ...normalized,
       participants: normalized.participants.filter(
-        (participant) => participant.id !== input.participantId
-      )
-    })
+        (participant) => participant.id !== input.participantId,
+      ),
+    }),
   );
 }
 
@@ -370,8 +375,8 @@ export function moveEncounterParticipant(input: {
   return normalizeSession(
     touchSession({
       ...normalized,
-      participants
-    })
+      participants,
+    }),
   );
 }
 
@@ -388,7 +393,7 @@ export function updateEncounterParticipantTurnData(input: {
     facing: input.facing ?? participant.facing,
     initiative: input.initiative ?? participant.initiative,
     orientation: input.orientation ?? participant.orientation,
-    position: input.position ?? participant.position
+    position: input.position ?? participant.position,
   }));
 }
 
@@ -401,7 +406,7 @@ export function setEncounterCurrentTurnIndex(input: {
 
   return touchSession({
     ...normalized,
-    currentTurnIndex: Math.max(0, Math.min(input.currentTurnIndex, maxIndex))
+    currentTurnIndex: Math.max(0, Math.min(input.currentTurnIndex, maxIndex)),
   });
 }
 
@@ -417,7 +422,7 @@ export function validateEncounterTargetSelection(input: {
     return {
       errors,
       isComplete: true,
-      warnings: []
+      warnings: [],
     };
   }
 
@@ -426,7 +431,7 @@ export function validateEncounterTargetSelection(input: {
   }
 
   const targetExists = session.participants.some(
-    (participant) => participant.id === input.targetParticipantId
+    (participant) => participant.id === input.targetParticipantId,
   );
 
   if (!targetExists) {
@@ -436,7 +441,7 @@ export function validateEncounterTargetSelection(input: {
   return {
     errors,
     isComplete: errors.length === 0,
-    warnings: []
+    warnings: [],
   };
 }
 
@@ -447,19 +452,21 @@ export function validateEncounterParticipantDeclaration(input: {
 }): EncounterParticipantDeclarationValidation {
   const declaration = {
     ...createDefaultDeclaration(),
-    ...input.participant.declaration
+    ...input.participant.declaration,
   };
   const errors: string[] = [];
   const warnings: string[] = [];
   const targetValidation = validateEncounterTargetSelection({
     participantId: input.participant.id,
     session: input.session,
-    targetParticipantId: declaration.targetParticipantId
+    targetParticipantId: declaration.targetParticipantId,
   });
   const equippedWeapons =
-    input.build?.equipment.items.filter((item) => item.equipped && item.itemType === "weapon") ?? [];
+    input.build?.equipment.items.filter((item) => item.equipped && item.itemType === "weapon") ??
+    [];
   const equippedShields =
-    input.build?.equipment.items.filter((item) => item.equipped && item.itemType === "shield") ?? [];
+    input.build?.equipment.items.filter((item) => item.equipped && item.itemType === "shield") ??
+    [];
 
   errors.push(...targetValidation.errors);
 
@@ -467,7 +474,7 @@ export function validateEncounterParticipantDeclaration(input: {
     return {
       errors,
       isComplete: false,
-      warnings
+      warnings,
     };
   }
 
@@ -475,7 +482,11 @@ export function validateEncounterParticipantDeclaration(input: {
     errors.push("Attack declarations require a selected target.");
   }
 
-  if (declaration.actionType === "attack" && equippedWeapons.length > 0 && !declaration.weaponItemId) {
+  if (
+    declaration.actionType === "attack" &&
+    equippedWeapons.length > 0 &&
+    !declaration.weaponItemId
+  ) {
     errors.push("Attack declarations require a selected equipped weapon.");
   }
 
@@ -501,7 +512,11 @@ export function validateEncounterParticipantDeclaration(input: {
     errors.push("Parry posture requires a selected weapon or shield.");
   }
 
-  if (declaration.defensePosture === "shield" && equippedShields.length > 0 && !declaration.shieldItemId) {
+  if (
+    declaration.defensePosture === "shield" &&
+    equippedShields.length > 0 &&
+    !declaration.shieldItemId
+  ) {
     errors.push("Shield defense requires a selected equipped shield.");
   }
 
@@ -512,7 +527,7 @@ export function validateEncounterParticipantDeclaration(input: {
   return {
     errors,
     isComplete: errors.length === 0,
-    warnings
+    warnings,
   };
 }
 
@@ -532,8 +547,8 @@ export function updateEncounterParticipantDeclaration(input: {
     declaration: {
       ...createDefaultDeclaration(),
       ...participant.declaration,
-      ...input.declaration
-    }
+      ...input.declaration,
+    },
   }));
 }
 
@@ -549,13 +564,11 @@ export function clearEncounterParticipantDeclaration(input: {
 
   return updateParticipant(normalized, input.participantId, (participant) => ({
     ...participant,
-    declaration: createDefaultDeclaration()
+    declaration: createDefaultDeclaration(),
   }));
 }
 
-export function clearEncounterDeclarations(input: {
-  session: EncounterSession;
-}): EncounterSession {
+export function clearEncounterDeclarations(input: { session: EncounterSession }): EncounterSession {
   const normalized = normalizeSession(input.session);
 
   if (normalized.declarationsLocked) {
@@ -566,8 +579,8 @@ export function clearEncounterDeclarations(input: {
     ...normalized,
     participants: normalized.participants.map((participant) => ({
       ...participant,
-      declaration: createDefaultDeclaration()
-    }))
+      declaration: createDefaultDeclaration(),
+    })),
   });
 }
 
@@ -579,13 +592,11 @@ export function setEncounterDeclarationsLocked(input: {
 
   return touchSession({
     ...normalized,
-    declarationsLocked: input.locked
+    declarationsLocked: input.locked,
   });
 }
 
-export function advanceEncounterRound(input: {
-  session: EncounterSession;
-}): EncounterSession {
+export function advanceEncounterRound(input: { session: EncounterSession }): EncounterSession {
   const normalized = normalizeSession(input.session);
 
   return normalizeSession(
@@ -596,9 +607,9 @@ export function advanceEncounterRound(input: {
       declarationsLocked: false,
       participants: normalized.participants.map((participant) => ({
         ...participant,
-        declaration: createDefaultDeclaration()
-      }))
-    })
+        declaration: createDefaultDeclaration(),
+      })),
+    }),
   );
 }
 
@@ -610,12 +621,12 @@ function buildEncounterParticipantDeclarationSummary(input: {
 }): EncounterParticipantDeclarationSummary {
   const declaration = {
     ...createDefaultDeclaration(),
-    ...input.participant.declaration
+    ...input.participant.declaration,
   };
   const validation = validateEncounterParticipantDeclaration({
     build: input.build,
     participant: input.participant,
-    session: input.session
+    session: input.session,
   });
   const selectedWeaponName = declaration.weaponItemId
     ? input.build?.equipment.items.find((item) => item.id === declaration.weaponItemId)?.name
@@ -636,7 +647,7 @@ function buildEncounterParticipantDeclarationSummary(input: {
       ? input.targetNameById[declaration.targetParticipantId]
       : undefined,
     selectedWeaponName,
-    warnings: validation.warnings
+    warnings: validation.warnings,
   };
 }
 
@@ -646,10 +657,10 @@ function buildEncounterActionLogEntry(input: {
   session: EncounterSession;
 }): EncounterActionLogEntry {
   const attacker = input.session.participants.find(
-    (participant) => participant.id === input.resolution.attackerParticipantId
+    (participant) => participant.id === input.resolution.attackerParticipantId,
   );
   const defender = input.session.participants.find(
-    (participant) => participant.id === input.resolution.defenderParticipantId
+    (participant) => participant.id === input.resolution.defenderParticipantId,
   );
   const attackerBuild = attacker?.characterId
     ? input.characterBuildsById[attacker.characterId]
@@ -658,10 +669,14 @@ function buildEncounterActionLogEntry(input: {
     ? input.characterBuildsById[defender.characterId]
     : undefined;
   const attackerItemName = input.resolution.selectedWeaponItemId
-    ? attackerBuild?.equipment.items.find((item) => item.id === input.resolution.selectedWeaponItemId)?.name
+    ? attackerBuild?.equipment.items.find(
+        (item) => item.id === input.resolution.selectedWeaponItemId,
+      )?.name
     : undefined;
   const defenderShieldName = input.resolution.selectedShieldItemId
-    ? defenderBuild?.equipment.items.find((item) => item.id === input.resolution.selectedShieldItemId)?.name
+    ? defenderBuild?.equipment.items.find(
+        (item) => item.id === input.resolution.selectedShieldItemId,
+      )?.name
     : undefined;
 
   return {
@@ -695,7 +710,7 @@ function buildEncounterActionLogEntry(input: {
     roundNumber: input.resolution.roundNumber,
     selectedShieldName: defenderShieldName,
     selectedWeaponName: attackerItemName,
-    weaponArmorModifier: input.resolution.damage?.weaponArmorModifier
+    weaponArmorModifier: input.resolution.damage?.weaponArmorModifier,
   };
 }
 
@@ -717,24 +732,24 @@ export function buildEncounterParticipantSummary(input: {
       hasLinkedCharacter: false,
       keyStats: [],
       parry: 0,
-      professionName: undefined
+      professionName: undefined,
     };
   }
 
   const sheetSummary = buildCharacterSheetSummary({
     build: input.build,
-    content: input.content
+    content: input.content,
   });
 
   return {
     armorSummary: sheetSummary.equipment.armorSummary,
     combatGroups: sheetSummary.combat.combatGroups.map((group) => ({
       groupLevel: group.groupLevel,
-      name: group.name
+      name: group.name,
     })),
     combatSkills: sheetSummary.combat.weaponSkills.map((skill) => ({
       name: skill.name,
-      totalSkill: skill.totalSkill
+      totalSkill: skill.totalSkill,
     })),
     displayName: input.build.name,
     dodge: sheetSummary.combat.dodge,
@@ -745,12 +760,12 @@ export function buildEncounterParticipantSummary(input: {
     keyStats: ["str", "dex", "health"]
       .map((stat) => ({
         stat,
-        value: sheetSummary.adjustedStats[stat]
+        value: sheetSummary.adjustedStats[stat],
       }))
       .filter((entry) => entry.value !== undefined),
     parry: sheetSummary.combat.parry,
     professionName: sheetSummary.professionName,
-    sheetSummary
+    sheetSummary,
   };
 }
 
@@ -763,8 +778,8 @@ export function buildEncounterSessionView(input: {
   const targetNameById = Object.fromEntries(
     session.participants.map((participant) => [
       participant.id,
-      participant.adHocName ?? participant.label
-    ])
+      participant.adHocName ?? participant.label,
+    ]),
   );
   const participants = session.participants.map((participant, index) => {
     const build = participant.characterId
@@ -776,15 +791,15 @@ export function buildEncounterSessionView(input: {
         build,
         participant,
         session,
-        targetNameById
+        targetNameById,
       }),
       isCurrentTurn: index === session.currentTurnIndex,
       participant,
       summary: buildEncounterParticipantSummary({
         build,
         content: input.content,
-        participant
-      })
+        participant,
+      }),
     };
   });
 
@@ -795,14 +810,15 @@ export function buildEncounterSessionView(input: {
         buildEncounterActionLogEntry({
           characterBuildsById: input.characterBuildsById,
           resolution,
-          session
-        })
+          session,
+        }),
       ),
     currentRound: session.currentRound,
     currentTurnIndex: session.currentTurnIndex,
     currentTurnParticipantId: participants[session.currentTurnIndex]?.participant.id,
     declarationsComplete:
-      participants.length > 0 && participants.every((participant) => participant.declarationSummary.isComplete),
+      participants.length > 0 &&
+      participants.every((participant) => participant.declarationSummary.isComplete),
     declarationsLocked: session.declarationsLocked,
     participants,
     roundSummary: participants.map((participant) => ({
@@ -814,8 +830,8 @@ export function buildEncounterSessionView(input: {
       participantId: participant.participant.id,
       selectedShieldName: participant.declarationSummary.selectedShieldName,
       selectedTargetName: participant.declarationSummary.selectedTargetName,
-      selectedWeaponName: participant.declarationSummary.selectedWeaponName
+      selectedWeaponName: participant.declarationSummary.selectedWeaponName,
     })),
-    session
+    session,
   };
 }

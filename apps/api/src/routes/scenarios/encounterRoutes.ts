@@ -7870,7 +7870,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               ? "encounter_closed"
               : encounterSession.status === "archived"
                 ? "encounter_archived"
-              : undefined
+                : undefined
         : participantsChanged
           ? "encounter_participants_updated"
           : undefined;
@@ -7967,7 +7967,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               ? "encounter_closed"
               : status === "archived"
                 ? "encounter_archived"
-              : undefined;
+                : undefined;
       const encounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
         encounterId,

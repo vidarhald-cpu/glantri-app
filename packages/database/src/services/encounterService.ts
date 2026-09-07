@@ -215,9 +215,7 @@ export class EncounterService {
       }
     }
     try {
-      const existingEventIds = new Set(
-        collectCombatStepEvents(existing).map((event) => event.id),
-      );
+      const existingEventIds = new Set(collectCombatStepEvents(existing).map((event) => event.id));
       return await this.encounterRepository.updateCombatEncounter({
         ...input,
         objectiveEvents: collectCombatStepEvents(input.session).filter(

@@ -428,7 +428,9 @@ export function canTransitionEncounterStatus(
   current: EncounterStatus,
   next: EncounterStatus,
 ): boolean {
-  return current === next || encounterLifecycleTransitions[current].some((status) => status === next);
+  return (
+    current === next || encounterLifecycleTransitions[current].some((status) => status === next)
+  );
 }
 
 export function isEncounterMutable(status: EncounterStatus): boolean {
