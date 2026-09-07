@@ -159,6 +159,7 @@ export {
   moveCharacterEquipmentItemOnServer,
   removeCharacterEquipmentItemOnServer,
   removeCharacterStorageLocationOnServer,
+  setCharacterActiveAmmunitionOnServer,
   setCharacterActiveMissileWeaponOnServer,
   setCharacterActivePrimaryWeaponOnServer,
   setCharacterActiveSecondaryWeaponOnServer,

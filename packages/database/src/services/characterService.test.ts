@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import { characterBuildSchema, type CharacterBuild } from "@glantri/domain";
 
 import type { CharacterRecord, CharacterRepository } from "../repositories/characterRepository";
-import { CharacterMutationConflictError, CharacterService } from "./characterService";
+import {
+  CharacterMutationConflictError,
+  CharacterService,
+  LegacyCharacterEquipmentWriteError,
+} from "./characterService";
 
 const baseBuild: CharacterBuild = {
   equipment: { items: [] },
@@ -117,6 +121,44 @@ function createRepositoryStub(existingCharacter?: CharacterRecord | null) {
 }
 
 describe("CharacterService edit persistence", () => {
+  it("rejects legacy CharacterBuild.equipment as current write authority", async () => {
+    const existing: CharacterRecord = {
+      build: baseBuild,
+      createdAt: "2026-04-14T00:00:00.000Z",
+      id: baseBuild.id,
+      level: baseBuild.progression.level,
+      name: baseBuild.name,
+      ownerId: "owner-1",
+      updatedAt: "2026-04-14T00:00:00.000Z",
+    };
+    const { calls, repository } = createRepositoryStub(existing);
+    const service = new CharacterService(repository);
+
+    await expect(
+      service.saveExistingCharacter({
+        build: {
+          ...baseBuild,
+          equipment: {
+            items: [
+              {
+                armorValue: 0,
+                equipped: false,
+                id: "legacy-sword",
+                itemType: "weapon",
+                name: "Legacy sword",
+                shieldBonus: 0,
+                slot: "pack",
+                weaponBonus: 0,
+              },
+            ],
+          },
+        },
+        characterId: baseBuild.id,
+        expectedUpdatedAt: existing.updatedAt,
+      }),
+    ).rejects.toBeInstanceOf(LegacyCharacterEquipmentWriteError);
+    expect(calls.updateVersioned).toEqual([]);
+  });
   it("loads an existing character by id from the authoritative repository path", async () => {
     const existingCharacter: CharacterRecord = {
       build: baseBuild,

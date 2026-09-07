@@ -2,6 +2,7 @@ import type { FastifyPluginAsync, FastifyReply } from "fastify";
 
 import {
   CharacterMutationConflictError,
+  LegacyCharacterEquipmentWriteError,
   CharacterService,
   CharacterValidationError,
   RetainedCharacterMutationError,
@@ -52,6 +53,9 @@ function handleCharacterMutationError(error: unknown, reply: FastifyReply) {
       new BadRequestError("Character build validation failed.", { issues: error.issues }),
       reply,
     );
+  }
+  if (error instanceof LegacyCharacterEquipmentWriteError) {
+    return handleRouteError(new BadRequestError(error.message), reply);
   }
 
   return handleRouteError(error, reply);

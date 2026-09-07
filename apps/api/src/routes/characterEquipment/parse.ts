@@ -17,6 +17,15 @@ export function parseCharacterId(params: unknown): string {
   return id;
 }
 
+function parseExpectedEquipmentRevision(body: object): number {
+  const revision =
+    "expectedRevision" in body ? (body as Record<string, unknown>).expectedRevision : undefined;
+  if (typeof revision !== "number" || !Number.isInteger(revision) || revision < 0) {
+    throw new Error("A valid expected equipment revision is required. Reload before trying again.");
+  }
+  return revision;
+}
+
 export function parseMoveItemBody(body: unknown) {
   if (!body || typeof body !== "object") {
     throw new Error("Move payload is required.");
@@ -36,6 +45,7 @@ export function parseMoveItemBody(body: unknown) {
 
   return {
     carryMode: CarryModeSchema.parse(carryMode),
+    expectedRevision: parseExpectedEquipmentRevision(body),
     itemId,
     locationId,
   };
@@ -43,7 +53,9 @@ export function parseMoveItemBody(body: unknown) {
 
 export function parseTransferItemBody(body: unknown): {
   campaignId: string;
+  sourceExpectedRevision: number;
   targetCharacterId: string;
+  targetExpectedRevision: number;
   targetStorageLocationId?: string;
 } {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -70,6 +82,21 @@ export function parseTransferItemBody(body: unknown): {
 
   return {
     campaignId,
+    sourceExpectedRevision: parseExpectedEquipmentRevision(body),
+    targetExpectedRevision: (() => {
+      const targetRevision =
+        "targetExpectedRevision" in body ? body.targetExpectedRevision : undefined;
+      if (
+        typeof targetRevision !== "number" ||
+        !Number.isInteger(targetRevision) ||
+        targetRevision < 0
+      ) {
+        throw new Error(
+          "A valid target equipment revision is required. Reload before trying again.",
+        );
+      }
+      return targetRevision;
+    })(),
     targetCharacterId,
     ...(targetStorageLocationId ? { targetStorageLocationId } : {}),
   };
@@ -90,12 +117,16 @@ export function parseCreateLocationBody(body: unknown) {
 
   return {
     availabilityClass: LocationAvailabilityClassSchema.parse(availabilityClass),
+    expectedRevision: parseExpectedEquipmentRevision(body),
     name,
     type: StorageLocationTypeSchema.parse(type),
   };
 }
 
-export function parseDeleteLocationBody(body: unknown): { locationId: string } {
+export function parseDeleteLocationBody(body: unknown): {
+  expectedRevision: number;
+  locationId: string;
+} {
   if (!body || typeof body !== "object") {
     throw new Error("Delete location payload is required.");
   }
@@ -106,10 +137,13 @@ export function parseDeleteLocationBody(body: unknown): { locationId: string } {
     throw new Error("locationId is required.");
   }
 
-  return { locationId };
+  return { expectedRevision: parseExpectedEquipmentRevision(body), locationId };
 }
 
-export function parseNullableItemIdBody(body: unknown): { itemId: string | null } {
+export function parseNullableItemIdBody(body: unknown): {
+  expectedRevision: number;
+  itemId: string | null;
+} {
   if (!body || typeof body !== "object") {
     throw new Error("Loadout payload is required.");
   }
@@ -121,8 +155,26 @@ export function parseNullableItemIdBody(body: unknown): { itemId: string | null 
   }
 
   return {
+    expectedRevision: parseExpectedEquipmentRevision(body),
     itemId: typeof itemId === "string" && itemId.length === 0 ? null : (itemId ?? null),
   };
+}
+
+export function parseActiveAmmoBody(body: unknown): {
+  expectedRevision: number;
+  itemIds: string[];
+} {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Active ammunition payload is required.");
+  }
+  const itemIds = "itemIds" in body ? body.itemIds : undefined;
+  if (
+    !Array.isArray(itemIds) ||
+    itemIds.some((itemId) => typeof itemId !== "string" || itemId.length === 0)
+  ) {
+    throw new Error("itemIds must be a list of Item ids.");
+  }
+  return { expectedRevision: parseExpectedEquipmentRevision(body), itemIds };
 }
 
 export function parseBootstrapSampleBody(body: unknown): { overwrite: boolean } {
@@ -179,6 +231,7 @@ export function parseAddItemBody(body: unknown) {
 
   return {
     displayName: displayName ?? null,
+    expectedRevision: parseExpectedEquipmentRevision(body),
     initialCarryMode: CarryModeSchema.parse(initialCarryMode),
     initialLocationId,
     material: material == null ? undefined : MaterialTypeSchema.parse(material),
@@ -189,7 +242,7 @@ export function parseAddItemBody(body: unknown) {
   };
 }
 
-export function parseRemoveItemBody(body: unknown): { itemId: string } {
+export function parseRemoveItemBody(body: unknown): { expectedRevision: number; itemId: string } {
   if (!body || typeof body !== "object") {
     throw new Error("Remove item payload is required.");
   }
@@ -200,10 +253,14 @@ export function parseRemoveItemBody(body: unknown): { itemId: string } {
     throw new Error("itemId is required.");
   }
 
-  return { itemId };
+  return { expectedRevision: parseExpectedEquipmentRevision(body), itemId };
 }
 
-export function parseUpdateQuantityBody(body: unknown): { itemId: string; quantity: number } {
+export function parseUpdateQuantityBody(body: unknown): {
+  expectedRevision: number;
+  itemId: string;
+  quantity: number;
+} {
   if (!body || typeof body !== "object") {
     throw new Error("Quantity payload is required.");
   }
@@ -219,7 +276,7 @@ export function parseUpdateQuantityBody(body: unknown): { itemId: string; quanti
     throw new Error("quantity must be a number.");
   }
 
-  return { itemId, quantity };
+  return { expectedRevision: parseExpectedEquipmentRevision(body), itemId, quantity };
 }
 
 export function parseUpdateMetadataBody(body: unknown) {
@@ -252,6 +309,7 @@ export function parseUpdateMetadataBody(body: unknown) {
   return {
     conditionState: ItemConditionStateSchema.parse(conditionState),
     displayName: displayName ?? null,
+    expectedRevision: parseExpectedEquipmentRevision(body),
     isFavorite: isFavorite ?? null,
     itemId,
     notes: notes ?? null,

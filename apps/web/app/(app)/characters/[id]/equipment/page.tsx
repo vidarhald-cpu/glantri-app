@@ -317,6 +317,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       const nextState = await moveCharacterEquipmentItemOnServer({
         carryMode: carryMode as typeof item.storageAssignment.carryMode,
         characterId: id,
+        expectedRevision: state.revision ?? -1,
         itemId,
         locationId,
       });
@@ -353,6 +354,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       const nextState = await createCharacterStorageLocationOnServer({
         availabilityClass: locationAvailabilityClass,
         characterId: id,
+        expectedRevision: state?.revision ?? -1,
         name: trimmedName,
         type: locationType,
       });
@@ -371,6 +373,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     try {
       const nextState = await removeCharacterStorageLocationOnServer({
         characterId: id,
+        expectedRevision: state?.revision ?? -1,
         locationId,
       });
       setState(nextState);
@@ -437,6 +440,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     try {
       const nextState = await addCharacterEquipmentItemOnServer({
         characterId: id,
+        expectedRevision: state?.revision ?? -1,
         displayName: addDisplayName.trim() || null,
         initialCarryMode: initialCarryMode as CarryMode,
         initialLocationId,
@@ -463,6 +467,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     try {
       const nextState = await removeCharacterEquipmentItemOnServer({
         characterId: id,
+        expectedRevision: state?.revision ?? -1,
         itemId,
       });
       setState(nextState);
@@ -495,6 +500,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     try {
       const nextState = await updateCharacterEquipmentQuantityOnServer({
         characterId: id,
+        expectedRevision: state?.revision ?? -1,
         itemId,
         quantity,
       });
@@ -525,6 +531,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       const nextState = await updateCharacterEquipmentMetadataOnServer({
         characterId: id,
         conditionState: draft.conditionState,
+        expectedRevision: state?.revision ?? -1,
         displayName: draft.displayName,
         isFavorite: draft.isFavorite,
         itemId,

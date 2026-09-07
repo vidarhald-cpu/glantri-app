@@ -23,6 +23,7 @@ export interface CharacterEquipmentReadModel {
   itemsById: Record<string, AssignedEquipmentItem>;
   locationsById: Record<string, StorageLocation>;
   templatesById: Record<string, EquipmentTemplate>;
+  revision: number;
 }
 
 export interface CampaignEquipmentReadModel {
@@ -87,6 +88,7 @@ export class CharacterEquipmentReadModelService {
         activeLoadoutByCharacterId: {},
         itemsById: {},
         locationsById: {},
+        revision: snapshot.revision,
         templatesById: {},
       };
     }
@@ -97,6 +99,7 @@ export class CharacterEquipmentReadModelService {
       activeLoadoutByCharacterId: activeLoadout ? { [characterId]: activeLoadout } : {},
       itemsById: indexById(projectItemsForViewer(snapshot.items, viewer)),
       locationsById: indexById(snapshot.locations),
+      revision: snapshot.revision,
       templatesById: equipmentTemplatesById as Record<string, EquipmentTemplate>,
     };
   }

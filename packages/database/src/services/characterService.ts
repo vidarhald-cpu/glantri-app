@@ -27,6 +27,29 @@ export class CharacterMutationConflictError extends Error {
   }
 }
 
+/** `CharacterBuild.equipment` remains readable history, never current equipment authority. */
+export class LegacyCharacterEquipmentWriteError extends Error {
+  constructor() {
+    super(
+      "CharacterBuild.equipment is legacy history and cannot be used to change current equipment.",
+    );
+    this.name = "LegacyCharacterEquipmentWriteError";
+  }
+}
+
+function assertNoLegacyEquipmentWrite(
+  build: ReturnType<typeof characterBuildSchema.parse>,
+  existingBuild?: ReturnType<typeof characterBuildSchema.parse>,
+): void {
+  if (existingBuild) {
+    if (!isDeepStrictEqual(build.equipment, existingBuild.equipment)) {
+      throw new LegacyCharacterEquipmentWriteError();
+    }
+    return;
+  }
+  if (build.equipment.items.length > 0) throw new LegacyCharacterEquipmentWriteError();
+}
+
 function sortNewestFirst(characters: CharacterRecord[]): CharacterRecord[] {
   return [...characters].sort(
     (left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt),
@@ -48,6 +71,7 @@ export class CharacterService {
 
   async saveCharacter(input: CreateCharacterRecordInput): Promise<CharacterRecord> {
     const build = characterBuildSchema.parse(input.build);
+    assertNoLegacyEquipmentWrite(build);
     const validation = validateCharacterBuild({
       build,
     });
@@ -151,6 +175,7 @@ export class CharacterService {
     }
 
     const build = characterBuildSchema.parse(input.build);
+    assertNoLegacyEquipmentWrite(build, characterBuildSchema.parse(existingCharacter.build));
     const validation = validateCharacterBuild({ build });
 
     if (!validation.valid) {

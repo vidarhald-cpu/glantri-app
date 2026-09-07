@@ -27,6 +27,12 @@ function repositoryStub() {
   const clone = (item: CanonicalEquipmentItem) => CanonicalEquipmentItemSchema.parse(item);
 
   const repository: CharacterEquipmentRepository = {
+    async getCharacterEquipmentAggregateState() {
+      return { items: [], loadouts: [], locations, revision: 0 };
+    },
+    async mutateCharacterEquipmentAggregate(input) {
+      return { result: await input.mutation(repository), revision: input.expectedRevision + 1 };
+    },
     async createCampaignEquipmentItem(item) {
       items.set(item.id, clone(item));
       return clone(item);
@@ -50,7 +56,7 @@ function repositoryStub() {
       return [];
     },
     async getCharacterEquipmentState() {
-      return { items: [], loadouts: [], locations };
+      return { items: [], loadouts: [], locations, revision: 0 };
     },
     async getCharacterLoadouts() {
       return [];

@@ -12,10 +12,11 @@ export async function loadDevSampleCharacterEquipment(): Promise<SampleCharacter
 }
 
 export function toEquipmentFeatureState(
-  state: Awaited<ReturnType<CharacterEquipmentReadModelService["getCharacterEquipmentState"]>>
+  state: Awaited<ReturnType<CharacterEquipmentReadModelService["getCharacterEquipmentState"]>>,
 ) {
   return {
     activeLoadoutByCharacterId: state.activeLoadoutByCharacterId,
+    revision: state.revision,
     itemsById: state.itemsById,
     locationsById: state.locationsById,
     templates: {

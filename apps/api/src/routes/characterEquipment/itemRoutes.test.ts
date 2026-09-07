@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { StaleCharacterEquipmentAggregateError } from "@glantri/database";
 
 import { NotFoundError } from "../../lib/errors";
 
@@ -27,6 +28,7 @@ vi.mock("@glantri/database", () => ({
     updateCharacterEquipmentMetadata = mocks.metadata;
     updateCharacterEquipmentQuantity = mocks.quantity;
   },
+  StaleCharacterEquipmentAggregateError: class StaleCharacterEquipmentAggregateError extends Error {},
 }));
 
 vi.mock("../../lib/sessionAuth", () => ({
@@ -88,6 +90,7 @@ describe("Character Equipment item route authority", () => {
       payload: {
         conditionState: "damaged",
         displayName: "Unauthorized rewrite",
+        expectedRevision: 0,
         itemId: campaignItemId,
         notes: "Unauthorized notes",
       },
@@ -95,7 +98,7 @@ describe("Character Equipment item route authority", () => {
     });
     const removeResponse = await app.inject({
       method: "POST",
-      payload: { itemId: campaignItemId },
+      payload: { expectedRevision: 0, itemId: campaignItemId },
       url: `/characters/${characterId}/equipment/items/remove`,
     });
 
@@ -113,6 +116,7 @@ describe("Character Equipment item route authority", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
+        expectedRevision: 0,
         initialCarryMode: "equipped",
         initialLocationId: `${characterId}:loc-equipped`,
         quantity: 1,
@@ -125,9 +129,38 @@ describe("Character Equipment item route authority", () => {
     expect(mocks.addItem).toHaveBeenCalledWith(
       characterId,
       expect.objectContaining({
+        expectedRevision: 0,
         initialCarryMode: "equipped",
         templateId: "weapon-template-dagger",
       }),
+      0,
+    );
+  });
+
+  it("returns the established aggregate conflict for a stale item metadata write", async () => {
+    mocks.requireAccess.mockResolvedValue({ characterId, kind: "holder" });
+    mocks.metadata.mockRejectedValue(new StaleCharacterEquipmentAggregateError());
+    const app = await buildApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        conditionState: "damaged",
+        expectedRevision: 3,
+        itemId: "item-1",
+      },
+      url: `/characters/${characterId}/equipment/items/metadata`,
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "Character equipment changed. Reload it before trying again.",
+    });
+    expect(mocks.metadata).toHaveBeenCalledWith(
+      characterId,
+      "item-1",
+      expect.objectContaining({ conditionState: "damaged" }),
+      3,
     );
   });
 
