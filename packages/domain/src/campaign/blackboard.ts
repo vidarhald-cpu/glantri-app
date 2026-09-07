@@ -11,6 +11,13 @@ export const blackboardCategorySchema = z.enum([
   "image_map",
   "recap",
 ]);
+export const blackboardSearchQuerySchema = z
+  .object({
+    category: blackboardCategorySchema.optional(),
+    pinned: z.enum(["pinned", "unpinned"]).optional(),
+    q: z.string().trim().max(200).default(""),
+  })
+  .strict();
 export const blackboardEntryStateSchema = z.enum(["published", "retracted", "archived"]);
 export const blackboardRevisionKindSchema = z.enum([
   "initial",
@@ -266,6 +273,21 @@ export const blackboardCommonEntrySchema = z.discriminatedUnion("category", [
     .strict(),
 ]);
 
+export const blackboardSearchResultSchema = z
+  .object({
+    results: z.array(
+      z
+        .object({
+          category: blackboardCategorySchema,
+          entryId: idSchema,
+          pinned: z.boolean(),
+          title: titleSchema,
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
 export const blackboardPlacementDtoSchema = z
   .object({
     entryId: idSchema,
@@ -386,6 +408,8 @@ export const blackboardSafeHistorySchema = z
   .strict();
 
 export type BlackboardCategory = z.infer<typeof blackboardCategorySchema>;
+export type BlackboardSearchQuery = z.infer<typeof blackboardSearchQuerySchema>;
+export type BlackboardSearchResult = z.infer<typeof blackboardSearchResultSchema>;
 export type BlackboardCreate = z.infer<typeof blackboardCreateSchema>;
 export type BlackboardGmCreate = z.infer<typeof blackboardGmCreateSchema>;
 export type BlackboardRevision = z.infer<typeof blackboardRevisionSchema>;
@@ -437,5 +461,21 @@ export function serializeBlackboardViewerCapabilities(
 ): BlackboardViewerCapabilities {
   return blackboardViewerCapabilitiesSchema.parse({
     entries: [...entries].sort((left, right) => left.entryId.localeCompare(right.entryId, "en")),
+  });
+}
+
+/**
+ * The search projection exposes only the opaque Blackboard identity and the
+ * common catalogue labels needed to open the existing detail surface.
+ */
+export function serializeBlackboardSearchResult(
+  results: BlackboardSearchResult["results"],
+): BlackboardSearchResult {
+  return blackboardSearchResultSchema.parse({
+    results: [...results].sort(
+      (left, right) =>
+        left.title.localeCompare(right.title, "en", { sensitivity: "base" }) ||
+        left.entryId.localeCompare(right.entryId, "en"),
+    ),
   });
 }

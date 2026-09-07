@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
 
-import { buildCampaignWorkspaceTabs, resolveCampaignWorkspaceState } from "./workspace";
+import {
+  buildCampaignWorkspaceHref,
+  buildCampaignWorkspaceTabs,
+  resolveCampaignWorkspaceState,
+} from "./workspace";
 
 function scenario(input: Pick<Scenario, "id" | "name">): Scenario {
   return {
@@ -156,6 +160,21 @@ describe("campaign workspace", () => {
         }).activeTab,
       ).toBe("blackboard");
     }
+  });
+
+  it("builds stable Blackboard entry links with reload-safe search filters", () => {
+    expect(
+      buildCampaignWorkspaceHref({
+        blackboardCategory: "image_map",
+        blackboardPinned: "pinned",
+        blackboardQuery: "eastern road",
+        campaignId: "camp-1",
+        entryId: "opaque-entry",
+        tab: "blackboard",
+      }),
+    ).toBe(
+      "/campaigns/camp-1?tab=blackboard&entryId=opaque-entry&blackboardQuery=eastern+road&blackboardCategory=image_map&blackboardPinned=pinned",
+    );
   });
 
   it("opens Items only for a GM and fails a player request closed to Campaign", () => {

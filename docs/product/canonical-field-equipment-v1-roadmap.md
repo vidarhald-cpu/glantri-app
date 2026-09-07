@@ -2,8 +2,8 @@
 
 Status: accepted product sequencing and portfolio boundary on 2026-09-05.
 
-Observed against local Forgejo
-`dev@369418a7dd89e13146c356a1b5357199c2de8b3f`. Live Forgejo issues and pull
+Reconciled against local Forgejo
+`dev@321b00f5f27bba6fbd25347b99c1d2cc6681874a`. Live Forgejo issues and pull
 requests remain operational truth for current labels, ownership, authorization,
 exact heads, QA, and integration. This roadmap does not authorize any inactive
 case.
@@ -22,19 +22,19 @@ general consumables initiative.
 
 ## Operational portfolio
 
-| Order | Forgejo case                                                      | Purpose                                                           | Current authority                                                                                               |
-| ----: | ----------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-|     0 | [#8](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/8)   | Investigate the intermittent equipment read-model race            | Ready/inactive Mandatory Recovery; not authorized and causally separate                                         |
-|     1 | [#44](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/44) | Repair GM-private Item projection authority                       | Authorized/Active narrow security repair; independent only while avoiding aggregate, Scenario, and Combat scope |
-|     2 | [#45](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/45) | Make Character equipment one atomic revision-controlled aggregate | Ready/inactive/unassigned; not authorized; dependency-gated                                                     |
-|     3 | [#46](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/46) | Reconcile canonical equipment with Scenario play                  | Ready/inactive/unassigned; not authorized; dependency-gated                                                     |
-|     4 | [#47](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/47) | Deliver the integrated Canonical Field Equipment v1 milestone     | Ready/inactive/unassigned; not authorized; dependency-gated                                                     |
+| Order | Forgejo case                                                      | Purpose                                                           | Current authority                                                       |
+| ----: | ----------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------- |
+|     0 | [#8](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/8)   | Investigate the intermittent equipment read-model race            | Ready/inactive Mandatory Recovery; not authorized and causally separate |
+|     1 | [#44](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/44) | Repair GM-private Item projection authority                       | Integrated                                                              |
+|     2 | [#45](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/45) | Make Character equipment one atomic revision-controlled aggregate | Ready/inactive/unassigned; not authorized                               |
+|     3 | [#46](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/46) | Reconcile canonical equipment with Scenario play                  | Ready/inactive/unassigned; not authorized; dependency-gated             |
+|     4 | [#47](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/47) | Deliver the integrated Canonical Field Equipment v1 milestone     | Ready/inactive/unassigned; not authorized; dependency-gated             |
 
 `Ready` never grants execution authority. #8, #45, #46, and #47 require a fresh
 exact-baseline gate and separate Product Owner authorization before a Builder
-may start. #44 remains a bounded security repair and does not authorize the
-later aggregate or Scenario work. Forgejo #43 governs this documentation record
-and follows its own Builder-to-independent-QA lifecycle.
+may start. Integrated #44 remains a bounded security repair and does not
+authorize the later aggregate or Scenario work. Forgejo #43 governs this
+documentation record.
 
 ## Delivery sequence
 
@@ -73,8 +73,7 @@ The portfolio crosses these reserved surfaces:
 Coordination rules:
 
 - one migration owner controls schema and data-change order;
-- #44 may proceed independently only while avoiding aggregate, Scenario, and
-  Combat hotspots;
+- integrated #44 remains bounded to its relationship-authority repair;
 - #45 and #46 serialize their shared Character equipment and Scenario services;
 - Combat-facing Field Equipment work serializes with active Critical/Encounter
   owners;
@@ -120,27 +119,14 @@ ledger is not required.
 - Scenario availability is play-context authority, not a world, storage, or
   container engine.
 
-## Concurrent documentation integration order
+## Documentation integration reconciliation
 
-This roadmap was authored while Blackboard PR #33 and Campaign lifecycle PR #42
-were open at exact heads
-`efb62b7456e3fe63cbd26d19a3897222ba8eadad` and
-`6864b0314547f172cf7b9b7ef776f4d09bb78462` respectively.
-
-PR #33 owns `docs/architecture/ownership.md`,
-`docs/product/campaign-scenario-encounter-workflows.md`, and
-`docs/testing-regression-matrix.md`; #43 deliberately does not edit them. After
-#33 is integrated, the Field Equipment integration owner must add the accepted
-aggregate/Scenario/Combat hotspot map to ownership, the canonical-versus-stale
-equipment workflow to the Campaign guide, and the #45-#47 evidence expectations
-to the regression matrix without dropping Blackboard changes.
-
-PR #42 owns the Campaign lifecycle decision/roadmap, both decision indexes, and
-`docs/product/2026-09-03-strategic-future-register.md`. PR #43 uses architecture
-decision number `0004` and limits index overlap to additive `0004`/roadmap links.
-Integrate #42 first, then rebase #43 and preserve both `0003` and `0004` index
-entries. Add the Field Equipment roadmap to the strategic future register in
-that same reconciliation; #43 does not overwrite PR #42's owned register.
+Blackboard PR #33 and Campaign lifecycle PR #42 were integrated before this
+record. The reconciliation preserves their accepted content and adds the Field
+Equipment aggregate/Scenario/Combat hotspots to ownership, the
+canonical-versus-stale equipment workflow to the Campaign guide, the #45-#47
+evidence expectations to the regression matrix, both `0003` and `0004` decision
+index entries, and this roadmap in the strategic future register.
 
 No source code, schema, migration, tests, product behavior, `main`, Azure,
 production, deployment, acceptance, or integration is authorized by this

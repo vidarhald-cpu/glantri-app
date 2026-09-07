@@ -7,6 +7,8 @@ import type {
   BlackboardGmRevision,
   BlackboardPlacementDto,
   BlackboardRevision,
+  BlackboardSearchQuery,
+  BlackboardSearchResult,
   BlackboardTombstone,
   BlackboardViewerCapabilities,
 } from "@glantri/domain";
@@ -67,6 +69,20 @@ export async function loadBlackboardCapabilities(
     `/campaigns/${campaignId}/blackboard/capabilities`,
     { method: "GET" },
   );
+}
+
+export async function searchBlackboard(
+  campaignId: string,
+  input: BlackboardSearchQuery,
+): Promise<BlackboardSearchResult> {
+  const query = new URLSearchParams();
+  if (input.q) query.set("q", input.q);
+  if (input.category) query.set("category", input.category);
+  if (input.pinned) query.set("pinned", input.pinned);
+  const suffix = query.size ? `?${query.toString()}` : "";
+  return sendJson<BlackboardSearchResult>(`/campaigns/${campaignId}/blackboard/search${suffix}`, {
+    method: "GET",
+  });
 }
 
 export async function loadBlackboardHistory(input: {

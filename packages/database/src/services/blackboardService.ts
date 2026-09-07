@@ -21,8 +21,10 @@ import {
   blackboardRevisionContentSchema,
   blackboardRevisionSchema,
   blackboardSafeHistorySchema,
+  blackboardSearchQuerySchema,
   blackboardTombstoneSchema,
   serializeBlackboardCommonDto,
+  serializeBlackboardSearchResult,
   serializeBlackboardViewerCapabilities,
   type ArtifactBlackboardCandidate,
   type BlackboardCommonEntry,
@@ -220,6 +222,24 @@ export class BlackboardService {
           },
         ];
       }),
+    );
+  }
+
+  async search(campaignId: string, userId: string, rawQuery: unknown) {
+    await this.requireCommonAccess(campaignId, userId);
+    const query = blackboardSearchQuerySchema.parse(rawQuery);
+    const records = await this.repository.searchCommonEntries(campaignId, {
+      category: query.category,
+      pinned: query.pinned,
+      query: query.q,
+    });
+    return serializeBlackboardSearchResult(
+      records.map((record) => ({
+        category: record.category as "clue_fact" | "document_text" | "image_map" | "recap",
+        entryId: record.entryId,
+        pinned: record.pinned,
+        title: record.title,
+      })),
     );
   }
 

@@ -43,6 +43,31 @@ Player Campaign pages should not show:
 - Hidden scenarios.
 - Implementation details about why a scenario is accessible.
 
+### Shared Campaign Blackboard
+
+The Blackboard is the Campaign's shared reference surface. A GM or Campaign player may share a
+clue or fact, document text, or Campaign-visible map/image; only the GM may share an approved
+recap. Sharing is immediate: submitting **Share reference** exposes the entry to everyone who can
+access the Campaign.
+
+The shared catalogue and board are one common safe projection. Search is authorized and executed
+on the server before its small result projection is serialized. It searches the current shared
+title and the category-specific shared text: clue/fact and context, document text and context,
+map/image caption plus its frozen shared Artifact title and alt text, or approved recap text. It
+does not search restricted Character detail, private Artifact metadata, source provenance, or
+Artifact bytes. Category and pinned/unpinned filters may be combined. Retracted and archived
+entries do not appear in ordinary results.
+
+Opening a result uses the existing entry detail and shared revision history. Campaign-scoped links
+keep the opaque Blackboard entry identity so the same link follows a correction, replacement, or
+explicit Artifact snapshot refresh. Every load rechecks Campaign access. A removed, archived,
+foreign, or otherwise unavailable identity yields only the safe unavailable state; Artifact bytes
+remain behind their separately authorized content action.
+
+`Current` and `Corrected` describe the shared revision state. They are not publication-review
+states. Pinning, moving, and unpinning remain shared layout actions available to both GM and
+Campaign players.
+
 ## Scenario Workspace
 
 The Scenario workspace answers: "Who is concretely in this story situation?"
@@ -79,6 +104,31 @@ Player Scenario pages should not show:
 - GM assignment controls.
 - Visibility models or read-model source labels.
 - Internal fallback mechanics.
+
+### Canonical equipment in Scenario play
+
+A Character's current equipment is canonical Character state. A Scenario may
+hold an operational equipment projection with frozen supported mechanical facts
+and enough provenance or fingerprint information to explain the interpretation
+used in play; that projection is not a second Item identity or inventory.
+
+Character-to-Character handover transfers the same concrete Item directly from
+one Character holder to another. Scenario pickup is different: the GM makes an
+unheld Campaign Item available in a Scenario, and an entitled Character picks up
+that same Item. Scenario availability is play-context authority, not a general
+world-object or container system.
+
+If canonical Character equipment changes outside the active Scenario or Combat
+flow after capture, the projection becomes visibly `STALE`. It is not silently
+refreshed, and dependent authoritative play is blocked until the GM explicitly
+reconciles it. An authoritative in-play pickup, handover, drop, draw, stow,
+ammunition consumption, or other supported Item mutation instead reconciles the
+canonical and operational state as part of the operation and remains coherent
+after reload.
+
+GM-private Item facts derive from the viewer's actual Campaign-management
+relationship. A global `game_master` role by itself grants no private Item
+projection.
 
 ## Encounter Workspace
 

@@ -41,6 +41,13 @@ Credentials never replace task authorization. Pushes, PR creation/updates, branc
 - The canonical Codex project is `Glantri app — Forgejo`.
 - The historical `Glantri app` project and `/Users/vidarhald/dev/glantri-app` checkout are read-only, non-mutable recovery/history evidence. Do not use them for new implementation, Builder work, QA mutation, branch creation, reset/rebase/cleanup, migration, or routine current-development fetch/push.
 - Repository documents are authoritative. Codex project references are navigation aids and do not grant task, Git, integration, release, or production authority.
+- The canonical clone's repository-local Git configuration sets
+  `credential.useHttpPath=true` and
+  `credential.username=glantri-no-default`. Because that username has no
+  Keychain item, unqualified access fails with prompting disabled. Every role,
+  including separately authorized recovery administration, must be selected
+  explicitly through the repository-path-scoped handles in
+  [`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md).
 - `main`, Azure, and production remain the external-maintainer release boundary described above.
 - The current pinned Development and QA Orchestrator tasks may coordinate from
   their verified historical-project UI association, but must not mutate or use
@@ -51,7 +58,12 @@ Credentials never replace task authorization. Pushes, PR creation/updates, branc
 ## Operational baseline status (2026-08-11)
 
 - `dev` is the active integration branch. Its accepted initial baseline is `2203f37e196e2de34cf911ea4fa08ac9feb6f8be`.
-- Ruleset `20708650` requires a PR plus successful `ci` and `docker-test` checks for `dev`. It requires zero approving reviews and blocks force-pushes and deletion.
+- The local Forgejo `dev` protected-branch rule disables direct push, requires
+  the `CI / ci (pull_request)` and `CI / docker-test (pull_request)` contexts,
+  requires zero approving reviews, applies to administrators, and allows merge
+  only to `glantri-orchestrator`. The historical GitHub ruleset `20708650` is
+  provenance, not current enforcement. See
+  [`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md).
 - Ordinary task branches start from an exact accepted `dev` SHA and their PRs target `dev`.
 - `main` remains production/release only. After every production release, reconcile the released `main` state back into `dev` before accepting a newer development baseline.
 - PR #200 is superseded provenance, not the active development baseline. Its head, `4179034ef13c1713a23bddad7bf9ce01fc4880ea`, is an ancestor of the accepted `dev` lineage.

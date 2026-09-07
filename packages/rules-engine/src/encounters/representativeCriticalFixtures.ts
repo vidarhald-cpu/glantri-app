@@ -2,8 +2,11 @@ import {
   accrueCombatCriticalBleed,
   addCombatCriticalExactRationals,
   combatCriticalRuntimeDefinitionSchema,
+  combatCriticalCanonicalReviewSchema,
   getCriticalResultWithEffects,
   type CombatCriticalDuration,
+  type CombatCriticalAdjudication,
+  type CombatCriticalCanonicalReview,
   type CombatCriticalExactRational,
   type CombatCriticalRuntimeDefinition,
   type CriticalBand,
@@ -56,6 +59,7 @@ export interface RepresentativeCriticalCondition {
   readonly duration: RepresentativeCriticalDuration;
   readonly mechanicallyActive: boolean;
   readonly onset: "immediate" | "next_round";
+  readonly sourceEffectKey?: string;
   readonly target: string;
 }
 
@@ -214,7 +218,15 @@ const condition = (
   duration: RepresentativeCriticalDuration,
   onset: "immediate" | "next_round" = "immediate",
   mechanicallyActive = true,
-): RepresentativeCriticalCondition => ({ code, duration, mechanicallyActive, onset, target });
+  sourceEffectKey?: string,
+): RepresentativeCriticalCondition => ({
+  code,
+  duration,
+  mechanicallyActive,
+  onset,
+  sourceEffectKey,
+  target,
+});
 
 const stun = (
   sourceEffectKey: string,
@@ -401,22 +413,29 @@ const seeds: readonly FixtureSeed[] = [
   {
     authority: "canonical_with_gm_adjudication",
     bleed: [],
-    canonicalName: "Severe concussion.",
-    conditions: [condition("unconscious", "consciousness", rollRounds("d4", "D4 hours"))],
+    canonicalName: "Severe concussion causes unconsciousness",
+    conditions: [
+      condition(
+        "unconscious",
+        "consciousness",
+        {
+          formula: "d4",
+          kind: "roll_once",
+          text: "1d4 hours or until appropriate care",
+          unit: "hour",
+        },
+        "immediate",
+        true,
+        "sharp|head|10|02",
+      ),
+    ],
     criticalKey: "sharp|head|10",
     damageFloor: 3,
-    description:
-      "The victim slumps unconscious with a severe concussion; the rolled duration is retained once.",
+    description: "A heavy head wound causes a severe concussion; the target slumps unconscious.",
     effectRange: "AppFacing_Effects!A88:AE89",
     information: [info("recovery", "The alternative generic treatment end remains GM-managed.")],
     operations: [],
     resultRange: "AppFacing_Crits!A27:X27",
-    stun: stun("sharp|head|10|02", 5, null, {
-      formula: "d4",
-      kind: "roll_once",
-      text: "D4 hours",
-      unit: "hour",
-    }),
     treatment: care(
       "The source says treatment or time may end unconsciousness but does not identify a Skill.",
       "until treated or time passes",
@@ -425,20 +444,33 @@ const seeds: readonly FixtureSeed[] = [
   {
     authority: "canonical_approved",
     bleed: [],
-    canonicalName: "Chest slash; shield parries only.",
+    canonicalName: "Pectoral slash disables attacks",
     conditions: [
-      condition("impaired", "stance", rollRounds("d4", "D4 rounds while regaining footing")),
-      condition("parry_only", "general_action", rollRounds("d4", "D4 rounds")),
+      condition(
+        "impaired",
+        "stance",
+        rollRounds("d4", "D4 rounds while regaining footing"),
+        "immediate",
+        true,
+        "sharp|chest|04|02",
+      ),
+      condition(
+        "parry_only",
+        "general_action",
+        rollRounds("d4", "D4 rounds"),
+        "immediate",
+        true,
+        "sharp|chest|04|03",
+      ),
     ],
     criticalKey: "sharp|chest|04",
     damageFloor: 2,
     description:
-      "The painful chest slash leaves the victim off balance and limited to shield parries while recovering.",
+      "A slash tears across the weapon-side chest and shoulder; the target drops the weapon and can brace a shield but cannot drive an attack.",
     effectRange: "AppFacing_Effects!A114:AE117",
     information: [],
     operations: ["drop_held_item"],
     resultRange: "AppFacing_Crits!A37:X37",
-    stun: stun("sharp|chest|04|03", 5, null, rollRounds("d4", "D4 rounds")),
     treatment: care("Generic treatment remains GM-managed.", "until treated"),
   },
   {
@@ -509,22 +541,33 @@ const seeds: readonly FixtureSeed[] = [
   {
     authority: "canonical_with_gm_adjudication",
     bleed: [fixedBleed("blunt|arm|12|03", "external", 1, 2, "1 HP / 2 rounds")],
-    canonicalName: "Hand crushed to ruin.",
+    canonicalName: "Hand crushed beyond use",
     conditions: [
-      condition("collapse", "whole_body", immediate("collapse; end is GM-managed")),
-      condition("function_unusable", "hand", until("until separately resolved")),
+      condition(
+        "function_unusable",
+        "hand",
+        until("until separately resolved"),
+        "immediate",
+        true,
+        "blunt|arm|12|04",
+      ),
     ],
     criticalKey: "blunt|arm|12",
     damageFloor: 5,
     description:
-      "The hand is pulped by shattered bone and torn vessels. The victim collapses helplessly but is not automatically unconscious; controlling the ragged bleeding is difficult under combat pressure.",
+      "The blow shatters the hand into torn bone and tissue; the hand is unusable and the victim drops what it held.",
     effectRange: "AppFacing_Effects!A340:AE345",
     information: [
       info("permanence", "The ruined hand and recovery remain GM-managed information."),
     ],
     operations: ["drop_held_item"],
     resultRange: "AppFacing_Crits!A109:X109",
-    stun: stun("blunt|arm|12|02", 4, -8, immediate("collapse; hand unusable until treated")),
+    stun: stun("blunt|arm|12|02", 4, -4, {
+      kind: "fixed_rounds",
+      rounds: 1,
+      text: "1 full round",
+      unit: "round",
+    }),
     treatment: care(
       "First Aid pressure and splinting are field stages; Surgery is the authored definitive stage.",
       "pressure dressing / splint; surgery",
@@ -893,12 +936,21 @@ const seeds: readonly FixtureSeed[] = [
   {
     authority: "canonical_approved",
     bleed: [fixedBleed("pointed_weapons|arm|02|03", "external", 1, 8, "1 HP / 8 rounds")],
-    canonicalName: "Hand puncture; grip broken.",
-    conditions: [condition("impaired", "hand", rollRounds("d4", "D4 rounds"))],
+    canonicalName: "Hand puncture breaks the grip",
+    conditions: [
+      condition(
+        "impaired",
+        "hand",
+        rollRounds("d4", "D4 rounds"),
+        "immediate",
+        true,
+        "pointed_weapons|arm|02|04",
+      ),
+    ],
     criticalKey: "pointed_weapons|arm|02",
     damageFloor: 3,
     description:
-      "The punctured hand opens immediately, dropping what it held. The hand remains painful and impaired until bound.",
+      "The point passes through the fleshy hand; the fingers open and whatever was held drops.",
     effectRange: "AppFacing_Effects!A1738:AE1742",
     information: [],
     operations: ["drop_held_item"],
@@ -1031,13 +1083,22 @@ const seeds: readonly FixtureSeed[] = [
   },
   {
     authority: "canonical_with_gm_adjudication",
-    bleed: [fixedBleed("pointed_weapons|chest|07|03", "internal", 1, 2, "1 HP / round")],
-    canonicalName: "Lung nicked.",
-    conditions: [condition("impaired", "general_action", until("until appropriate care"))],
+    bleed: [fixedBleed("pointed_weapons|chest|07|03", "internal", 1, 4, "1 HP / 4 rounds")],
+    canonicalName: "Punctured lung shortens every breath",
+    conditions: [
+      condition(
+        "impaired",
+        "breathing_and_general_action",
+        until("until appropriate care"),
+        "immediate",
+        true,
+        "pointed_weapons|chest|07|04",
+      ),
+    ],
     criticalKey: "pointed_weapons|chest|07",
     damageFloor: 5,
     description:
-      "The point nicks a lung; breathing grows shorter and bloodier while internal bleeding continues.",
+      "The point slips between the ribs and punctures a lung; breathing becomes short and blood-tinged.",
     effectRange: "AppFacing_Effects!A1901:AE1904",
     information: [
       info(
@@ -1220,7 +1281,11 @@ export function verifyRepresentativeCriticalFixtureSources(): readonly string[] 
       const sourceBleed = source.effects.find(
         (effect) => effect.effectKey === bleed.sourceEffectKey,
       );
-      if (sourceBleed?.rateRaw !== bleed.sourceRate) {
+      const acceptedPost393RateOverride =
+        fixture.criticalKey === "pointed_weapons|chest|07" &&
+        bleed.sourceEffectKey === "pointed_weapons|chest|07|03" &&
+        bleed.sourceRate === "1 HP / 4 rounds";
+      if (sourceBleed?.rateRaw !== bleed.sourceRate && !acceptedPost393RateOverride) {
         failures.push(
           `${fixture.criticalKey}: source rate '${sourceBleed?.rateRaw}' does not match '${bleed.sourceRate}'`,
         );
@@ -1294,52 +1359,412 @@ function rollRepresentativeDuration(
   return { ...duration, rounds: duration.unit === "round" ? storedRoll : undefined, storedRoll };
 }
 
+export const C1_FIVE_KEY_CRITICAL_RUNTIME_VERSION = "c1-five-key-post-393-2026-09-06";
+
+const C1_FIVE_KEY_ADJUDICATION = {
+  "blunt|arm|12": {
+    operationKeys: { drop_held_item: "blunt|arm|12|05" },
+    suppressible: ["blunt|arm|12|02", "blunt|arm|12|03", "blunt|arm|12|04", "blunt|arm|12|05"],
+  },
+  "pointed_weapons|arm|02": {
+    operationKeys: { drop_held_item: "pointed_weapons|arm|02|05" },
+    suppressible: [
+      "pointed_weapons|arm|02|02",
+      "pointed_weapons|arm|02|03",
+      "pointed_weapons|arm|02|04",
+      "pointed_weapons|arm|02|05",
+    ],
+  },
+  "pointed_weapons|chest|07": {
+    operationKeys: {},
+    suppressible: [
+      "pointed_weapons|chest|07|02",
+      "pointed_weapons|chest|07|03",
+      "pointed_weapons|chest|07|04",
+    ],
+  },
+  "sharp|chest|04": {
+    operationKeys: { drop_held_item: "sharp|chest|04|04" },
+    suppressible: ["sharp|chest|04|02", "sharp|chest|04|03", "sharp|chest|04|04"],
+  },
+  "sharp|head|10": {
+    operationKeys: {},
+    suppressible: ["sharp|head|10|02"],
+  },
+} as const satisfies Record<
+  string,
+  {
+    operationKeys: Partial<Record<RepresentativeCriticalOperation, string>>;
+    suppressible: readonly string[];
+  }
+>;
+
+export function isC1FiveKeyCriticalRuntimeKey(criticalKey: string): boolean {
+  return Object.hasOwn(C1_FIVE_KEY_ADJUDICATION, criticalKey);
+}
+
+const atom = (
+  kind: CombatCriticalCanonicalReview["atoms"][number]["kind"],
+  sourceEffectKey: string | undefined,
+  summary: string,
+  target: string,
+  timing: string,
+  suppressible = kind !== "damage_floor" && kind !== "information",
+) => ({ kind, sourceEffectKey, summary, suppressible, target, timing });
+
+const C1_FIVE_KEY_CANONICAL_REVIEWS: Record<string, CombatCriticalCanonicalReview> = {
+  "pointed_weapons|arm|02": combatCriticalCanonicalReviewSchema.parse({
+    atoms: [
+      atom(
+        "damage_floor",
+        "pointed_weapons|arm|02|01",
+        "Minimum total damage 3 HP",
+        "combatant",
+        "commit",
+      ),
+      atom(
+        "modifier",
+        "pointed_weapons|arm|02|02",
+        "Stun -1 to OB/Skill, DB/Parry, and Initiative for retained 1d4 rounds",
+        "combatant",
+        "immediate",
+      ),
+      atom(
+        "periodic_loss",
+        "pointed_weapons|arm|02|03",
+        "External Bleed 1/8 HP per round",
+        "arm",
+        "following round SU after one full 3-second interval",
+      ),
+      atom(
+        "condition",
+        "pointed_weapons|arm|02|04",
+        "Hand impaired for retained 1d4 rounds",
+        "hand",
+        "immediate",
+      ),
+      atom(
+        "operation",
+        "pointed_weapons|arm|02|05",
+        "Drop held item",
+        "struck-hand item",
+        "immediate",
+      ),
+      atom(
+        "information",
+        undefined,
+        "First Aid bandaging is the field-control candidate; source gate: bandage",
+        "GM guidance",
+        "read-only",
+      ),
+    ],
+    criticalKey: "pointed_weapons|arm|02",
+    fixtureVersion: C1_FIVE_KEY_CRITICAL_RUNTIME_VERSION,
+    narrative:
+      "The point passes through the fleshy hand; the fingers open and whatever was held drops.",
+    provenance: {
+      acceptedCommentId: 5464671257,
+      acceptedPart: "Part 3/4",
+      effectRange: "AppFacing_Effects!A1738:AE1742",
+      resultRange: "AppFacing_Crits!A515:X515",
+    },
+    title: "Hand puncture breaks the grip",
+  }),
+  "blunt|arm|12": combatCriticalCanonicalReviewSchema.parse({
+    atoms: [
+      atom("damage_floor", "blunt|arm|12|01", "Minimum total damage 5 HP", "combatant", "commit"),
+      atom(
+        "modifier",
+        "blunt|arm|12|02",
+        "Stun -4 to OB/Skill, DB/Parry, and Initiative for 1 full round",
+        "combatant",
+        "immediate",
+      ),
+      atom(
+        "periodic_loss",
+        "blunt|arm|12|03",
+        "External Bleed 1/2 HP per round",
+        "arm",
+        "following round SU after one full 3-second interval",
+      ),
+      atom(
+        "condition",
+        "blunt|arm|12|04",
+        "Hand function unusable until separately resolved",
+        "hand",
+        "immediate",
+      ),
+      atom("operation", "blunt|arm|12|05", "Drop held item", "struck-hand item", "immediate"),
+      atom(
+        "information",
+        undefined,
+        "First Aid pressure and splinting are field stages; Surgery is definitive",
+        "GM guidance",
+        "read-only",
+      ),
+      atom(
+        "information",
+        "blunt|arm|12|06",
+        "Permanent deficit and recovery remain GM-managed",
+        "GM guidance",
+        "read-only",
+      ),
+    ],
+    criticalKey: "blunt|arm|12",
+    fixtureVersion: C1_FIVE_KEY_CRITICAL_RUNTIME_VERSION,
+    narrative:
+      "The blow shatters the hand into torn bone and tissue; the hand is unusable and the victim drops what it held.",
+    provenance: {
+      acceptedCommentId: 5464670911,
+      acceptedPart: "Part 2/4",
+      effectRange: "AppFacing_Effects!A340:AE345",
+      resultRange: "AppFacing_Crits!A109:X109",
+    },
+    title: "Hand crushed beyond use",
+  }),
+  "pointed_weapons|chest|07": combatCriticalCanonicalReviewSchema.parse({
+    atoms: [
+      atom(
+        "damage_floor",
+        "pointed_weapons|chest|07|01",
+        "Minimum total damage 5 HP",
+        "combatant",
+        "commit",
+      ),
+      atom(
+        "modifier",
+        "pointed_weapons|chest|07|02",
+        "Stun -4 to OB/Skill, DB/Parry, and Initiative until appropriate care",
+        "combatant",
+        "immediate",
+      ),
+      atom(
+        "periodic_loss",
+        "pointed_weapons|chest|07|03",
+        "Internal Bleed 1/4 HP per round",
+        "chest",
+        "following round SU after one full 3-second interval",
+      ),
+      atom(
+        "condition",
+        "pointed_weapons|chest|07|04",
+        "Breathing and general action impaired until appropriate care",
+        "breathing and general action",
+        "immediate",
+      ),
+      atom(
+        "information",
+        undefined,
+        "Generic immediate care identifies no Skill",
+        "GM guidance",
+        "read-only",
+      ),
+    ],
+    criticalKey: "pointed_weapons|chest|07",
+    fixtureVersion: C1_FIVE_KEY_CRITICAL_RUNTIME_VERSION,
+    narrative:
+      "The point slips between the ribs and punctures a lung; breathing becomes short and blood-tinged.",
+    provenance: {
+      acceptedCommentId: 5464671539,
+      acceptedPart: "Part 4/4",
+      effectRange: "AppFacing_Effects!A1901:AE1904",
+      resultRange: "AppFacing_Crits!A552:X552",
+    },
+    title: "Punctured lung shortens every breath",
+  }),
+  "sharp|head|10": combatCriticalCanonicalReviewSchema.parse({
+    atoms: [
+      atom("damage_floor", "sharp|head|10|01", "Minimum total damage 3 HP", "combatant", "commit"),
+      atom(
+        "condition",
+        "sharp|head|10|02",
+        "Unconscious for retained 1d4 hours or until appropriate care",
+        "consciousness",
+        "immediate",
+      ),
+      atom(
+        "information",
+        undefined,
+        "Generic-care end and recovery remain GM-managed; no Skill is identified",
+        "GM guidance",
+        "read-only",
+      ),
+    ],
+    criticalKey: "sharp|head|10",
+    fixtureVersion: C1_FIVE_KEY_CRITICAL_RUNTIME_VERSION,
+    narrative: "A heavy head wound causes a severe concussion; the target slumps unconscious.",
+    provenance: {
+      acceptedCommentId: 5464670629,
+      acceptedPart: "Part 1/4",
+      effectRange: "AppFacing_Effects!A88:AE89",
+      resultRange: "AppFacing_Crits!A27:X27",
+    },
+    title: "Severe concussion causes unconsciousness",
+  }),
+  "sharp|chest|04": combatCriticalCanonicalReviewSchema.parse({
+    atoms: [
+      atom("damage_floor", "sharp|chest|04|01", "Minimum total damage 2 HP", "combatant", "commit"),
+      atom(
+        "condition",
+        "sharp|chest|04|02",
+        "Stance impaired for retained 1d4 rounds",
+        "stance",
+        "immediate",
+      ),
+      atom(
+        "condition",
+        "sharp|chest|04|03",
+        "General action limited to parry for retained 1d4 rounds",
+        "general action",
+        "immediate",
+      ),
+      atom(
+        "operation",
+        "sharp|chest|04|04",
+        "Drop held weapon",
+        "weapon-side held item",
+        "immediate",
+      ),
+      atom(
+        "information",
+        undefined,
+        "Generic treatment remains GM-managed and identifies no Skill",
+        "GM guidance",
+        "read-only",
+      ),
+    ],
+    criticalKey: "sharp|chest|04",
+    fixtureVersion: C1_FIVE_KEY_CRITICAL_RUNTIME_VERSION,
+    narrative:
+      "A slash tears across the weapon-side chest and shoulder; the target drops the weapon and can brace a shield but cannot drive an attack.",
+    provenance: {
+      acceptedCommentId: 5464670629,
+      acceptedPart: "Part 1/4",
+      effectRange: "AppFacing_Effects!A114:AE117",
+      resultRange: "AppFacing_Crits!A37:X37",
+    },
+    title: "Pectoral slash disables attacks",
+  }),
+};
+
+export function getC1FiveKeyCanonicalReview(
+  criticalKey: string,
+): CombatCriticalCanonicalReview | undefined {
+  return C1_FIVE_KEY_CANONICAL_REVIEWS[criticalKey];
+}
+
+function validateC1FiveKeyAdjudication(
+  criticalKey: string,
+  adjudication?: CombatCriticalAdjudication,
+): Set<string> {
+  const contract = C1_FIVE_KEY_ADJUDICATION[
+    criticalKey as keyof typeof C1_FIVE_KEY_ADJUDICATION
+  ] as
+    | {
+        operationKeys: Partial<Record<RepresentativeCriticalOperation, string>>;
+        suppressible: readonly string[];
+      }
+    | undefined;
+  if (!contract) return new Set();
+  if (!adjudication) return new Set();
+  if (adjudication.criticalKey !== criticalKey) {
+    throw new RangeError("Critical adjudication identity does not match the canonical result.");
+  }
+  if (
+    new Set(adjudication.suppressedEffectKeys).size !== adjudication.suppressedEffectKeys.length
+  ) {
+    throw new RangeError("Critical adjudication contains a duplicate atom identity.");
+  }
+  const permitted = new Set<string>(contract.suppressible);
+  for (const sourceEffectKey of adjudication.suppressedEffectKeys) {
+    if (!permitted.has(sourceEffectKey)) {
+      throw new RangeError(
+        `Critical atom '${sourceEffectKey}' cannot be suppressed for this result.`,
+      );
+    }
+  }
+  return new Set(adjudication.suppressedEffectKeys);
+}
+
 /**
- * Resolves one of the 34 accepted C1 fixtures into a server-owned runtime definition.
+ * Resolves an accepted C1 fixture into a server-owned runtime definition. Only the five
+ * post-#393 keys accept the bounded adjudication delta; the other #387 fixtures are unchanged.
  * Every authored roll-once value is retained in the returned state and is never rerolled by SU.
  */
 export function buildRepresentativeCriticalRuntimeDefinition(
   criticalKey: string,
   rng: () => number = Math.random,
+  adjudication?: CombatCriticalAdjudication,
 ): CombatCriticalRuntimeDefinition | undefined {
+  const contract = C1_FIVE_KEY_ADJUDICATION[
+    criticalKey as keyof typeof C1_FIVE_KEY_ADJUDICATION
+  ] as
+    | {
+        operationKeys: Partial<Record<RepresentativeCriticalOperation, string>>;
+        suppressible: readonly string[];
+      }
+    | undefined;
   const fixture = getRepresentativeCriticalFixture(criticalKey);
   if (!fixture) return undefined;
+  if (!contract && adjudication) {
+    throw new RangeError(
+      "Critical adjudication is available only for the five active review keys.",
+    );
+  }
+  const suppressed = validateC1FiveKeyAdjudication(criticalKey, adjudication);
+  const stun = fixture.stun
+    ? {
+        ...fixture.stun,
+        duration: rollRepresentativeDuration(fixture.stun.duration, rng),
+        modifier: adjudication?.stunModifierOverride ?? fixture.stun.modifier,
+      }
+    : undefined;
+  if (adjudication?.stunModifierOverride !== undefined && !stun) {
+    throw new RangeError("This Critical has no Stun atom to change.");
+  }
 
   return combatCriticalRuntimeDefinitionSchema.parse({
-    bleed: fixture.bleed.map((bleed) => {
-      const storedRoll =
-        bleed.rate.kind === "roll_once"
-          ? Math.floor(rng() * (bleed.rate.formula === "d4" ? 4 : 6)) + 1
-          : undefined;
-      return {
-        allowedControlStates:
-          bleed.kind === "external"
-            ? ["active", "partial", "staunched_zero", "resolved"]
-            : ["active", "stabilised", "resolved"],
-        controlState: "active",
-        currentRate: resolveRepresentativeBleedRate(bleed, storedRoll),
-        firstTickRound: 1,
-        kind: bleed.kind,
-        rate: resolveRepresentativeBleedRate(bleed, storedRoll),
-        rollFormula: bleed.rate.kind === "roll_once" ? bleed.rate.formula : undefined,
-        sourceEffectKey: bleed.sourceEffectKey,
-        sourceRate: bleed.sourceRate,
-        storedRoll,
-      };
-    }),
-    canonicalName: fixture.canonicalName,
-    conditions: fixture.conditions.map((condition) => ({
-      ...condition,
-      duration: rollRepresentativeDuration(condition.duration, rng),
-    })),
+    bleed: fixture.bleed
+      .filter((bleed) => !suppressed.has(bleed.sourceEffectKey))
+      .map((bleed) => {
+        const storedRoll =
+          bleed.rate.kind === "roll_once"
+            ? Math.floor(rng() * (bleed.rate.formula === "d4" ? 4 : 6)) + 1
+            : undefined;
+        return {
+          allowedControlStates:
+            bleed.kind === "external"
+              ? ["active", "partial", "staunched_zero", "resolved"]
+              : ["active", "stabilised", "resolved"],
+          controlState: "active",
+          currentRate: resolveRepresentativeBleedRate(bleed, storedRoll),
+          firstTickRound: 1,
+          kind: bleed.kind,
+          rate: resolveRepresentativeBleedRate(bleed, storedRoll),
+          rollFormula: bleed.rate.kind === "roll_once" ? bleed.rate.formula : undefined,
+          sourceEffectKey: bleed.sourceEffectKey,
+          sourceRate: bleed.sourceRate,
+          storedRoll,
+        };
+      }),
+    canonicalName: adjudication?.titleOverride ?? fixture.canonicalName,
+    conditions: fixture.conditions
+      .filter(
+        (condition) => !condition.sourceEffectKey || !suppressed.has(condition.sourceEffectKey),
+      )
+      .map((condition) => ({
+        ...condition,
+        duration: rollRepresentativeDuration(condition.duration, rng),
+      })),
     criticalKey: fixture.criticalKey,
-    description: fixture.description,
-    fixtureVersion: fixture.fixtureVersion,
+    description: adjudication?.narrativeOverride ?? fixture.description,
+    fixtureVersion: contract ? C1_FIVE_KEY_CRITICAL_RUNTIME_VERSION : fixture.fixtureVersion,
     information: fixture.information,
-    operations: fixture.operations,
-    stun: fixture.stun
-      ? { ...fixture.stun, duration: rollRepresentativeDuration(fixture.stun.duration, rng) }
-      : undefined,
+    operations: fixture.operations.filter((operation) => {
+      const sourceEffectKey = contract?.operationKeys[operation];
+      return !sourceEffectKey || !suppressed.has(sourceEffectKey);
+    }),
+    stun: stun && !suppressed.has(stun.sourceEffectKey) ? stun : undefined,
     treatment: fixture.treatment,
   });
 }

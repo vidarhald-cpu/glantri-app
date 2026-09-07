@@ -18,6 +18,42 @@ The machine-readable release is in `packages/content/src/pilotSkillContentReleas
 from the synthetic Gate A fixtures described in [Pilot Skill Rules v1](./pilot-skill-rules-v1.md),
 legacy broad `canonicalContent`, Character persistence, and runtime catalogue activation.
 
+## Additive documentation-complete content platform
+
+The accepted `1.0.1` release above remains immutable under
+`pilot-skill-content-release/v1`. It is not converted or rewritten in place.
+
+Future documentation-complete candidates use the additive
+`skill-content-release/v2` contract. That contract requires full and concise names and
+descriptions plus a structured task envelope for every competence-bearing record. It also carries
+versioned domain and script identities, explicit language/written-tradition bindings,
+Specialization parents and transfer declarations, access profiles, histories, provenance, and the
+existing `proposal` or `canonical` publication status. Candidate and canonical releases can both
+be projected read-only for the later Admin Skill Reference; this does not publish or activate
+content.
+
+The v2 validator applies conservative presentation floors so presence cannot be satisfied by
+placeholder fragments: trimmed names and short labels require at least 2 characters, concise
+descriptions at least 12, and substantive descriptions at least 40. These are minimum integrity
+checks, not a substitute for the production-quality editorial review required by the content gate.
+Prerequisite thresholds `6` and `11` are standard; any other positive threshold must carry an
+authored justification. A Specialization declaring explicit zero transfer cannot coexist with an
+authored parent-to-Specialization relationship edge.
+
+Each v2 manifest carries two deterministic values:
+
+- `packageDigest` covers the complete release except the digest fields themselves, including
+  presentation and documentation;
+- `semanticDigest` covers structured interpretation facts, including identity/kind, weight, task
+  envelope, prerequisites, relationships, access, histories, Specializations, and
+  language/script/written-tradition bindings.
+
+Editorial prose and presentation ordering therefore alter the package digest without altering the
+semantic digest. Record status and provenance remain paired and validated separately from those
+mechanical facts. Compatibility remains an explicit release classification; no digest comparison
+by itself decides Character migration. The governing architecture is
+[Rule decision 0003](../decisions/rules/0003-skill-documentation-and-release-integrity.md).
+
 This release contains only the accepted content needed by eight retained pilot Character concepts:
 53 base/language/written competencies, 17 histories, 8 inert Professions, 8 backgrounds, 15
 directional relationships, 8 Specializations, 7 society profiles, and 4 narrow access exceptions.
@@ -149,7 +185,9 @@ band distinctions:
   Olog Princely Law, and Court Administration. The narrow fosterage exception still excludes the
   latter two.
 
-Every listed route or override is access metadata only and grants zero competence or XP.
+Every listed route or override is access metadata only and grants zero competence or XP. Each
+profile override attributes its scope to an authored normal route or access exception for the same
+profile, and every competency in the override is included in that source's competency scope.
 
 Four narrow exceptions are retained:
 

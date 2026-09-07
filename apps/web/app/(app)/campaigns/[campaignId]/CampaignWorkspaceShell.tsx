@@ -464,7 +464,11 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
 
   const buildWorkspaceHref = useCallback(
     (partial: {
+      blackboardCategory?: string | null;
+      blackboardPinned?: string | null;
+      blackboardQuery?: string | null;
       encounterId?: string | null;
+      entryId?: string | null;
       participantId?: string | null;
       scenarioId?: string | null;
       tab?: CampaignWorkspaceTabId | null;
@@ -495,9 +499,23 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         nextParams.set("participantId", partial.participantId);
       }
 
+      for (const [key, value] of [
+        ["entryId", partial.entryId],
+        ["blackboardQuery", partial.blackboardQuery],
+        ["blackboardCategory", partial.blackboardCategory],
+        ["blackboardPinned", partial.blackboardPinned],
+      ] as const) {
+        if (value === null) nextParams.delete(key);
+        else if (value !== undefined) nextParams.set(key, value);
+      }
+
       return buildCampaignWorkspaceHref({
+        blackboardCategory: nextParams.get("blackboardCategory"),
+        blackboardPinned: nextParams.get("blackboardPinned"),
+        blackboardQuery: nextParams.get("blackboardQuery"),
         campaignId,
         encounterId: nextParams.get("encounterId"),
+        entryId: nextParams.get("entryId"),
         participantId: nextParams.get("participantId"),
         scenarioId: nextParams.get("scenarioId"),
         tab: (nextParams.get("tab") as CampaignWorkspaceTabId | null) ?? undefined,
@@ -731,7 +749,25 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       ) : null}
 
       {!workspaceLoadError && accessMode !== "none" && workspaceState.activeTab === "blackboard" ? (
-        <BlackboardWorkspace campaignId={campaignId} isGameMaster={canAccessGmEncounter} />
+        <BlackboardWorkspace
+          campaignId={campaignId}
+          isGameMaster={canAccessGmEncounter}
+          onRouteChange={(next) => {
+            router.replace(
+              buildWorkspaceHref({
+                blackboardCategory: next.category ?? null,
+                blackboardPinned: next.pinned ?? null,
+                blackboardQuery: next.query || null,
+                entryId: next.entryId ?? null,
+                tab: "blackboard",
+              }),
+            );
+          }}
+          routeCategory={searchParams.get("blackboardCategory")}
+          routeEntryId={searchParams.get("entryId")}
+          routePinned={searchParams.get("blackboardPinned")}
+          routeQuery={searchParams.get("blackboardQuery")}
+        />
       ) : null}
 
       {!workspaceLoadError && accessMode !== "none" && workspaceState.activeTab === "scenario" ? (

@@ -94,6 +94,31 @@ usable catalogue rollout, and only then preserved Chargen/Character integration.
 Its six operational cases remain governed by their live Forgejo status and
 separate authorization; the roadmap itself grants no implementation authority.
 
+### Campaign play lifecycle
+
+The accepted
+[Campaign play lifecycle decision](../decisions/architecture/0003-campaign-play-lifecycle.md)
+defines the first game-usable Campaign, Scenario, Encounter, and optional Combat
+journey without replacing the mature Combat surfaces or creating a new session
+engine. The bounded
+[#34-#40 roadmap](./campaign-play-lifecycle-roadmap.md) records current sequencing,
+the #16 Campaign-shell dependency, Critical/Combat hotspot gate, and single-owner
+migration and shared-E2E rules. Live Forgejo state remains authoritative; the
+roadmap does not authorize its inactive Ready or Design cases.
+
+### Canonical Field Equipment
+
+The accepted
+[Canonical Field Equipment v1 decision](../decisions/architecture/0004-canonical-field-equipment-v1.md)
+and [product roadmap](./canonical-field-equipment-v1-roadmap.md) establish one
+durable Item identity across Campaign, Character, Scenario, and Combat. They
+separate direct Character handover from Scenario availability and pickup,
+require visible external staleness plus explicit reconciliation, and require
+authoritative in-play Item operations to keep canonical and operational state
+coherent. The relationship-derived Item privacy repair in #44 is integrated;
+the aggregate, Scenario reconciliation, and integrated milestone cases #45-#47
+remain separately governed by live Forgejo status and authorization.
+
 ### Player-authored Campaign objects
 
 [Forgejo #17](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/17)
@@ -118,11 +143,11 @@ inactive, and separate from Blackboard detail grants and safe search.
 ### Safe search, filters, and canonical reference index
 
 [Forgejo #16](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/16)
-remains Ready but inactive and not authorized. Its contract must be refreshed
-against the four-entry Blackboard boundary, current Artifact authority,
-Character Knowledge #15, and server-side projection rules before authorization.
-Search does not become canonical content, publication, visibility, knowledge,
-or mechanical authority.
+is `status/Integrated`, and PR #33 is merged. Its accepted safe-search contract
+preserves the four-entry Blackboard boundary, current Artifact authority,
+Character Knowledge #15, and server-side projection rules. Search does not
+become canonical content, publication, visibility, knowledge, or mechanical
+authority.
 
 ### Structured conditions and accumulated damage
 

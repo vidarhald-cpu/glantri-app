@@ -127,6 +127,32 @@
   box-shadow: 0 0 0 2px rgba(47, 93, 98, 0.16);
 }
 
+.searchForm {
+  align-items: end;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(12rem, 1fr) minmax(9rem, auto) minmax(10rem, auto) auto;
+  margin-bottom: 1rem;
+}
+
+.searchForm label {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.searchForm input,
+.searchForm select {
+  font: inherit;
+  min-width: 0;
+  padding: 0.5rem;
+}
+
+.searchActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
 .detail {
   align-content: start;
   display: grid;
@@ -244,6 +270,11 @@
   }
 
   .fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .searchForm {
+    align-items: stretch;
     grid-template-columns: minmax(0, 1fr);
   }
 }

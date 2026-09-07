@@ -148,6 +148,7 @@ export const combatStepEventCommandTypeSchema = z.enum([
   "complete_damage_review_phase2",
   "resolve_damage",
   "commit_phase_damage",
+  "transition_critical_bleed",
   "roll_combat_experience",
   "set_pair_distance",
   "prepare_round_end_review",

@@ -126,6 +126,7 @@ describe("BlackboardService public and privileged projections", () => {
       loadGmAudit: vi.fn(),
       loadSafeHistory: vi.fn(),
       resolveViewerCharacter: vi.fn().mockResolvedValue({ id: "character-1" }),
+      searchCommonEntries: vi.fn().mockResolvedValue([]),
       retractEntry: vi.fn().mockResolvedValue(undefined),
       reviseEntry: vi.fn().mockResolvedValue(undefined),
       updatePlacement: vi.fn().mockResolvedValue(undefined),
@@ -225,6 +226,35 @@ describe("BlackboardService public and privileged projections", () => {
         { canCorrect: true, canRemove: true, entryId: "entry-recap" },
       ],
     });
+  });
+
+  it("authorizes search before returning the bounded common findability projection", async () => {
+    repositoryMock.searchCommonEntries.mockResolvedValue([
+      { category: "image_map", entryId: "entry-map", pinned: true, title: "Eastern road" },
+    ]);
+
+    await expect(
+      service.search(campaignId, "player", {
+        category: "image_map",
+        pinned: "pinned",
+        q: "road",
+      }),
+    ).resolves.toEqual({
+      results: [
+        { category: "image_map", entryId: "entry-map", pinned: true, title: "Eastern road" },
+      ],
+    });
+    expect(repositoryMock.searchCommonEntries).toHaveBeenCalledWith(campaignId, {
+      category: "image_map",
+      pinned: "pinned",
+      query: "road",
+    });
+
+    campaignMock.listCampaignsByUserAccess.mockResolvedValueOnce([]);
+    await expect(
+      service.search(campaignId, "player", { q: "hidden", viewerCharacterId: "protected" }),
+    ).rejects.toBeInstanceOf(BlackboardUnavailableError);
+    expect(repositoryMock.searchCommonEntries).toHaveBeenCalledTimes(1);
   });
 
   it("keeps Character-sensitive expansion explicit and fail-closed", async () => {

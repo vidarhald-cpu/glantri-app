@@ -7,6 +7,7 @@ import {
   loadBlackboardArtifactCandidates,
   moveBlackboardEntry,
   retractBlackboardEntry,
+  searchBlackboard,
 } from "./blackboardClient";
 
 const fetchMock = vi.fn();
@@ -132,5 +133,28 @@ describe("blackboardClient", () => {
       expectedRowVersion: 2,
       x: 280,
     });
+  });
+
+  it("encodes server-side search and filter parameters", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          results: [
+            { category: "image_map", entryId: "entry-1", pinned: true, title: "Hill route" },
+          ],
+        }),
+      ),
+    );
+
+    await expect(
+      searchBlackboard("campaign-1", {
+        category: "image_map",
+        pinned: "pinned",
+        q: "hill route",
+      }),
+    ).resolves.toMatchObject({ results: [{ entryId: "entry-1" }] });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "http://localhost:4000/campaigns/campaign-1/blackboard/search?q=hill+route&category=image_map&pinned=pinned",
+    );
   });
 });
