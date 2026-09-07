@@ -1,0 +1,53 @@
+name: glantri-forgejo-actions
+
+services:
+  docker-in-docker:
+    image: docker.io/library/docker:29-dind@sha256:5efed980cba3fc126cf54e21a5a6ff8849d05b6e0623d6e7612f48e9cd6cd17e
+    container_name: glantri-forgejo-actions-dind
+    privileged: true
+    command:
+      - dockerd
+      - --host=unix:///var/run/docker.sock
+      - --host=tcp://0.0.0.0:2375
+      - --tls=false
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 15s
+    volumes:
+      - docker-data:/var/lib/docker
+    mem_limit: 6g
+    cpus: 10
+
+  runner:
+    image: data.forgejo.org/forgejo/runner:13.1.0@sha256:c4af85fd9f0dd03788676a534781a87c71aa2c6a37737143e017eb94d4312952
+    container_name: glantri-forgejo-actions-runner
+    user: "${RUNNER_UID:?RUNNER_UID is required}:${RUNNER_GID:?RUNNER_GID is required}"
+    depends_on:
+      docker-in-docker:
+        condition: service_healthy
+    environment:
+      DOCKER_HOST: tcp://docker-in-docker:2375
+      HOME: /data
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - ./state:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=256m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    command: ["forgejo-runner", "daemon", "--config", "/data/runner-config.yml"]
+
+volumes:
+  docker-data:
+    name: glantri-forgejo-actions-docker-data

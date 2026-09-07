@@ -21,6 +21,52 @@ export type CombatCriticalDuration = z.infer<typeof combatCriticalDurationSchema
 export const combatCriticalStunChannelSchema = z.enum(["ob_skill", "db_parry", "initiative"]);
 export type CombatCriticalStunChannel = z.infer<typeof combatCriticalStunChannelSchema>;
 
+export const combatCriticalAdjudicationSchema = z.object({
+  criticalKey: z.string().min(1),
+  narrativeOverride: z.string().trim().min(1).max(2_000).optional(),
+  reason: z.string().trim().min(1).max(1_000).optional(),
+  stunModifierOverride: z
+    .union([z.literal(-1), z.literal(-2), z.literal(-4), z.literal(-8)])
+    .optional(),
+  suppressedEffectKeys: z.array(z.string().min(1)).max(12).default([]),
+  titleOverride: z.string().trim().min(1).max(200).optional(),
+});
+export type CombatCriticalAdjudication = z.infer<typeof combatCriticalAdjudicationSchema>;
+
+export const combatCriticalCanonicalAtomPresentationSchema = z.object({
+  kind: z.enum([
+    "damage_floor",
+    "modifier",
+    "periodic_loss",
+    "condition",
+    "operation",
+    "information",
+  ]),
+  sourceEffectKey: z.string().min(1).optional(),
+  summary: z.string().min(1),
+  suppressible: z.boolean(),
+  target: z.string().min(1),
+  timing: z.string().min(1),
+});
+export type CombatCriticalCanonicalAtomPresentation = z.infer<
+  typeof combatCriticalCanonicalAtomPresentationSchema
+>;
+
+export const combatCriticalCanonicalReviewSchema = z.object({
+  atoms: z.array(combatCriticalCanonicalAtomPresentationSchema).min(2),
+  criticalKey: z.string().min(1),
+  fixtureVersion: z.string().min(1),
+  narrative: z.string().min(1),
+  provenance: z.object({
+    acceptedCommentId: z.number().int().positive(),
+    acceptedPart: z.string().min(1),
+    effectRange: z.string().min(1),
+    resultRange: z.string().min(1),
+  }),
+  title: z.string().min(1),
+});
+export type CombatCriticalCanonicalReview = z.infer<typeof combatCriticalCanonicalReviewSchema>;
+
 export const combatCriticalStunRuntimeSchema = z.object({
   channels: z
     .array(combatCriticalStunChannelSchema)
@@ -48,6 +94,7 @@ export const combatCriticalConditionRuntimeSchema = z.object({
   duration: combatCriticalDurationSchema,
   mechanicallyActive: z.boolean(),
   onset: z.enum(["immediate", "next_round"]),
+  sourceEffectKey: z.string().min(1).optional(),
   target: z.string().min(1),
 });
 
@@ -59,6 +106,14 @@ export const combatCriticalBleedControlStateSchema = z.enum([
   "resolved",
 ]);
 export type CombatCriticalBleedControlState = z.infer<typeof combatCriticalBleedControlStateSchema>;
+
+export function getCombatCriticalBleedControlStateLabel(
+  state: CombatCriticalBleedControlState,
+): string {
+  if (state === "partial") return "controlled";
+  if (state === "staunched_zero") return "staunched";
+  return state;
+}
 
 export const combatCriticalBleedRuntimeSchema = z
   .object({
@@ -247,6 +302,9 @@ export function transitionCombatCriticalBleedControl(input: {
       throw new RangeError("External partial control requires an explicit exact current rate.");
     }
     const partialRate = normalizeCombatCriticalExactRational(input.partialRate);
+    if (partialRate.numerator === 0) {
+      throw new RangeError("Partial control must retain a positive current rate.");
+    }
     if (
       partialRate.numerator * bleed.rate.denominator >=
       bleed.rate.numerator * partialRate.denominator

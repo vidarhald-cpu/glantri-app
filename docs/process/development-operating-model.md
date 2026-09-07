@@ -16,6 +16,10 @@ snapshot or chat summary can identify what to inspect, but it cannot substitute
 for fetching the live branch, resolving the exact SHA, and reading the durable
 issue, PR, and QA record.
 
+At authorization, the Forgejo issue body is the current executable task
+contract. Comments are evidence/history. Older recovery contracts are
+provenance only once superseded and must point readers to the current issue.
+
 ## Repository, project, and operating-lane map
 
 | Surface                                                                       | Purpose and boundary                                                                                                                                                                                                              |
@@ -85,6 +89,12 @@ supervision, completion harvesting, direct QA handoff, bounded repair loops,
 durable execution evidence, and meaningful returns to Architecture/control
 plane.
 
+For QA dispatch it performs only the shallow gate in
+[`qa-execution.md`](./qa-execution.md): QA authorization/state, supplied head,
+prior FAIL for repair, complete handoff tuple, and no duplicate active QA owner.
+The independent QA worker—not the Development Orchestrator—owns substantive
+topology, scope, and delta verification.
+
 It coordinates the required visible lanes. Hidden helpers cannot replace a
 substantial Builder, dispatched Investigator, or independent-QA task.
 
@@ -94,8 +104,12 @@ The pinned QA Orchestrator/process chat is the stable independent-QA lane. It
 receives an immutable exact-head handoff directly from the Development
 Orchestrator, creates and supervises a separate visible independent-QA task,
 ensures exact-head verification in an appropriate clean environment, records a
-durable PASS or FAIL, harvests the QA result, and returns directly to the
+durable verdict or BLOCKED outcome, harvests the QA result, and returns directly to the
 Development Orchestrator.
+
+It uses known project/lane and child IDs rather than repeatedly discovering
+projects or unrelated conversations. Its work is thin: create, record,
+supervise, harvest, publish, and return.
 
 ### Visible execution roles
 
@@ -116,7 +130,7 @@ Product Owner sets direction
   -> Development Orchestrator harvests exact result and Forgejo evidence
   -> direct exact-head handoff to pinned QA Orchestrator, when QA applies
   -> separate visible independent QA
-  -> QA Orchestrator harvests and records PASS or FAIL
+  -> QA Orchestrator harvests and records the verdict or BLOCKED outcome
   -> direct return to Development Orchestrator
   -> bounded repair and fresh QA, or meaningful control-plane gate
   -> Architecture/control plane evaluates the durable result
@@ -172,8 +186,8 @@ to reconstruct any of these facts.
 
 The complete schema and acceptance-dimension guidance live in
 [`task-contract.md`](./task-contract.md). Exact Builder, QA, database-isolation,
-and handoff mechanics live in
-[`agent-execution.md`](./agent-execution.md) and
+and handoff mechanics live in [`agent-execution.md`](./agent-execution.md), the
+compact [`qa-execution.md`](./qa-execution.md), and
 [`../dev-database.md`](../dev-database.md).
 
 ## Visible threads and dispatch evidence
@@ -194,9 +208,14 @@ For every visible lane, the Development Orchestrator records:
 - worktree;
 - applicable branch;
 - exact accepted baseline SHA; and
-- `queued`, `running`, `completed`, or `failed` state.
+- Builder/Investigator `queued`, `running`, `completed`, or `failed` state.
 
 The thread ID is always required. A direct link never substitutes for it.
+
+QA child coordination uses `Running`, `Blocked`,
+`Completed-unharvested`, `Completed-harvested`, `Failed`, and `Stalled` as
+defined in `qa-execution.md`. `Running` begins only after a visible child passes
+its entry gate. These are not additional Forgejo issue lifecycle statuses.
 
 ## Harvesting, direct QA, and repair
 
@@ -206,10 +225,11 @@ and includes the outcome in its consolidated return. The Product Owner is not
 expected to monitor child tasks.
 
 At `Ready for Independent QA`, the Development Orchestrator sends the immutable
-QA contract directly to the pinned QA Orchestrator. The QA Orchestrator
-dispatches a separate visible QA task, verifies the exact head in appropriate
-isolation, records durable PASS/FAIL evidence in Forgejo, harvests the QA task,
-and returns directly to the Development Orchestrator.
+INITIAL or REPAIR QA contract directly to the pinned QA Orchestrator. The QA
+Orchestrator dispatches a separate visible QA task, harvests its exact result,
+records durable evidence in Forgejo, and returns directly to the Development
+Orchestrator. The QA worker independently verifies the exact head, topology,
+scope, and actual delta; any tuple mismatch produces a quick `BLOCKED` return.
 
 On FAIL, the loop is:
 
@@ -217,6 +237,10 @@ On FAIL, the loop is:
 
 It repeats until PASS or until a genuine product, rule, UX, architecture,
 priority, scope, dependency, or hotspot issue requires a control-plane return.
+Direct-child narrow repairs may carry forward only demonstrably unaffected
+prior PASS evidence. Schema/migration, shared authority/projection/API/domain,
+concurrency/transaction, cross-cutting toolchain/export, major Combat/Scenario,
+broad-scope, or unclear/rebased topology changes require broader QA.
 
 ## Standing execution authority and return gates
 
@@ -285,8 +309,10 @@ This document owns the high-level operating map. Details stay with:
   governance, sources of truth, and integration policy;
 - [`task-contract.md`](./task-contract.md): self-contained contract and
   acceptance schema;
-- [`agent-execution.md`](./agent-execution.md): isolated Builder/QA procedures,
-  exact returns, and repair mechanics;
+- [`agent-execution.md`](./agent-execution.md): isolated Builder procedure and
+  exact Builder return;
+- [`qa-execution.md`](./qa-execution.md): compact INITIAL/REPAIR QA dispatch,
+  worker entry, verification breadth, child states, and QA return;
 - [`development-baseline.md`](./development-baseline.md): branch, baseline,
   integration, and release-boundary policy;
 - [`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md): persistent
