@@ -34,6 +34,7 @@ import {
 } from "../repositories/characterEquipmentRepository";
 
 export { StaleEquipmentTransferError } from "../repositories/characterEquipmentRepository";
+export { StaleCharacterEquipmentAggregateError } from "../repositories/characterEquipmentRepository";
 
 export type ActiveWeaponSlot = "primary" | "secondary" | "missile";
 
@@ -135,7 +136,9 @@ export interface TransferCampaignEquipmentItemInput {
   campaignId: string;
   itemId: string;
   sourceCharacterId: string;
+  sourceExpectedRevision?: number;
   targetCharacterId: string;
+  targetExpectedRevision?: number;
   targetStorageLocationId?: string;
 }
 
@@ -209,7 +212,21 @@ function getReferencedLoadoutLabel(loadout: CharacterLoadout, itemId: string): s
 export class CharacterEquipmentWriteService {
   constructor(
     private readonly repository: CharacterEquipmentRepository = createPrismaCharacterEquipmentRepository(),
+    private readonly isWithinAggregate = false,
   ) {}
+
+  private async mutateAggregate<T>(
+    characterId: string,
+    expectedRevision: number,
+    mutation: (service: CharacterEquipmentWriteService) => Promise<T>,
+  ): Promise<T> {
+    const committed = await this.repository.mutateCharacterEquipmentAggregate({
+      characterId,
+      expectedRevision,
+      mutation: (repository) => mutation(new CharacterEquipmentWriteService(repository, true)),
+    });
+    return committed.result;
+  }
 
   async createCampaignEquipmentItem(
     input: CreateCampaignEquipmentItemInput,
@@ -264,6 +281,14 @@ export class CharacterEquipmentWriteService {
     });
 
     projectEquipmentItem(item, template);
+    if (item.holderCharacterId) {
+      const aggregate = await this.repository.getCharacterEquipmentAggregateState(
+        item.holderCharacterId,
+      );
+      return this.mutateAggregate(item.holderCharacterId, aggregate.revision, (service) =>
+        service.repository.createCampaignEquipmentItem(item),
+      );
+    }
     return this.repository.createCampaignEquipmentItem(item);
   }
 
@@ -328,47 +353,64 @@ export class CharacterEquipmentWriteService {
       campaignId: input.campaignId,
       itemId: input.itemId,
       sourceCharacterId: input.sourceCharacterId,
+      sourceExpectedRevision: input.sourceExpectedRevision,
       targetCharacterId: input.targetCharacterId,
+      targetExpectedRevision: input.targetExpectedRevision,
       targetStorageAssignment,
     });
   }
 
-  async ensureCharacterEquipmentInitialized(characterId: string): Promise<{
+  async ensureCharacterEquipmentInitialized(
+    characterId: string,
+    withinAggregate = false,
+  ): Promise<{
     items: AssignedEquipmentItem[];
     loadouts: CharacterLoadout[];
     locations: StorageLocation[];
   }> {
-    await this.repository.ensureDefaultEquipmentLocations(characterId);
-
     const snapshot = await this.repository.getCharacterEquipmentState(characterId);
 
-    if (snapshot.loadouts.length === 0) {
+    const needsInitialization =
+      snapshot.locations.length === 0 ||
+      snapshot.loadouts.length === 0 ||
+      !snapshot.loadouts.some((loadout) => loadout.isActive);
+    if (needsInitialization && !withinAggregate && !this.isWithinAggregate) {
+      return this.mutateAggregate(characterId, snapshot.revision, (service) =>
+        service.ensureCharacterEquipmentInitialized(characterId, true),
+      );
+    }
+
+    await this.repository.ensureDefaultEquipmentLocations(characterId);
+
+    const initialized = await this.repository.getCharacterEquipmentState(characterId);
+
+    if (initialized.loadouts.length === 0) {
       const loadout = await this.repository.upsertCharacterLoadout(
         buildDefaultLoadout(characterId),
       );
 
       return {
-        items: snapshot.items,
+        items: initialized.items,
         loadouts: [loadout],
-        locations: snapshot.locations,
+        locations: initialized.locations,
       };
     }
 
-    if (!snapshot.loadouts.some((loadout) => loadout.isActive)) {
-      const first = snapshot.loadouts[0];
+    if (!initialized.loadouts.some((loadout) => loadout.isActive)) {
+      const first = initialized.loadouts[0];
       const activeLoadout = await this.repository.upsertCharacterLoadout({
         ...first,
         isActive: true,
       });
 
       return {
-        items: snapshot.items,
-        loadouts: [activeLoadout, ...snapshot.loadouts.slice(1)],
-        locations: snapshot.locations,
+        items: initialized.items,
+        loadouts: [activeLoadout, ...initialized.loadouts.slice(1)],
+        locations: initialized.locations,
       };
     }
 
-    return snapshot;
+    return initialized;
   }
 
   async createCharacterStorageLocation(
@@ -376,7 +418,13 @@ export class CharacterEquipmentWriteService {
     name: string,
     type: StorageLocationType,
     availabilityClass: LocationAvailabilityClass,
+    expectedRevision?: number,
   ): Promise<StorageLocation> {
+    if (expectedRevision !== undefined) {
+      return this.mutateAggregate(characterId, expectedRevision, (service) =>
+        service.createCharacterStorageLocation(characterId, name, type, availabilityClass),
+      );
+    }
     await this.ensureCharacterEquipmentInitialized(characterId);
 
     const trimmedName = name.trim();
@@ -408,7 +456,16 @@ export class CharacterEquipmentWriteService {
     );
   }
 
-  async removeCharacterStorageLocation(characterId: string, locationId: string): Promise<void> {
+  async removeCharacterStorageLocation(
+    characterId: string,
+    locationId: string,
+    expectedRevision?: number,
+  ): Promise<void> {
+    if (expectedRevision !== undefined) {
+      return this.mutateAggregate(characterId, expectedRevision, (service) =>
+        service.removeCharacterStorageLocation(characterId, locationId),
+      );
+    }
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
     const location = assertLocationBelongsToCharacter(
       snapshot.locations.find((entry) => entry.id === locationId),
@@ -426,13 +483,21 @@ export class CharacterEquipmentWriteService {
     await this.repository.removeCharacterStorageLocation(characterId, locationId);
   }
 
-  async createCharacterEquipmentItem(input: EquipmentItemInput): Promise<AssignedEquipmentItem> {
+  async createCharacterEquipmentItem(
+    input: EquipmentItemInput,
+    expectedRevision?: number,
+  ): Promise<AssignedEquipmentItem> {
     const canonicalItem = CanonicalEquipmentItemSchema.parse(input);
     if (!canonicalItem.holderCharacterId || !canonicalItem.storageAssignment) {
       throw new Error("This pilot workflow requires a Character holder and valid holder location.");
     }
 
     const item = EquipmentItemSchema.parse(canonicalItem);
+    if (expectedRevision !== undefined) {
+      return this.mutateAggregate(item.characterId, expectedRevision, (service) =>
+        service.createCharacterEquipmentItem(item),
+      );
+    }
     await this.ensureCharacterEquipmentInitialized(item.characterId);
 
     const locations = await this.repository.getCharacterStorageLocations(item.characterId);
@@ -452,7 +517,13 @@ export class CharacterEquipmentWriteService {
   async addCharacterEquipmentItem(
     characterId: string,
     input: AddCharacterEquipmentItemInput,
+    expectedRevision?: number,
   ): Promise<AssignedEquipmentItem> {
+    if (expectedRevision !== undefined) {
+      return this.mutateAggregate(characterId, expectedRevision, (service) =>
+        service.addCharacterEquipmentItem(characterId, input),
+      );
+    }
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
     const template = equipmentTemplatesById[input.templateId];
 
@@ -517,8 +588,16 @@ export class CharacterEquipmentWriteService {
     return this.repository.createCharacterEquipmentItem(item);
   }
 
-  async updateCharacterEquipmentItem(input: EquipmentItemInput): Promise<AssignedEquipmentItem> {
+  async updateCharacterEquipmentItem(
+    input: EquipmentItemInput,
+    expectedRevision?: number,
+  ): Promise<AssignedEquipmentItem> {
     const item = EquipmentItemSchema.parse(input);
+    if (expectedRevision !== undefined) {
+      return this.mutateAggregate(item.characterId, expectedRevision, (service) =>
+        service.updateCharacterEquipmentItem(item),
+      );
+    }
     const snapshot = await this.ensureCharacterEquipmentInitialized(item.characterId);
 
     assertItemBelongsToCharacter(
@@ -558,7 +637,13 @@ export class CharacterEquipmentWriteService {
     itemId: string,
     locationId: string,
     carryMode: CarryMode,
+    expectedRevision?: number,
   ): Promise<AssignedEquipmentItem> {
+    if (expectedRevision !== undefined) {
+      return this.mutateAggregate(characterId, expectedRevision, (service) =>
+        service.moveCharacterEquipmentItem(characterId, itemId, locationId, carryMode),
+      );
+    }
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
     const item = assertItemBelongsToCharacter(
       snapshot.items.find((entry) => entry.id === itemId),
@@ -607,7 +692,16 @@ export class CharacterEquipmentWriteService {
     return this.repository.updateCharacterEquipmentItem(updatedItem);
   }
 
-  async removeCharacterEquipmentItem(characterId: string, itemId: string): Promise<void> {
+  async removeCharacterEquipmentItem(
+    characterId: string,
+    itemId: string,
+    expectedRevision?: number,
+  ): Promise<void> {
+    if (expectedRevision !== undefined) {
+      return this.mutateAggregate(characterId, expectedRevision, (service) =>
+        service.removeCharacterEquipmentItem(characterId, itemId),
+      );
+    }
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
     const item = assertItemBelongsToCharacter(
       snapshot.items.find((entry) => entry.id === itemId),
@@ -630,7 +724,13 @@ export class CharacterEquipmentWriteService {
     characterId: string,
     itemId: string,
     quantity: number,
+    expectedRevision?: number,
   ): Promise<AssignedEquipmentItem> {
+    if (expectedRevision !== undefined) {
+      return this.mutateAggregate(characterId, expectedRevision, (service) =>
+        service.updateCharacterEquipmentQuantity(characterId, itemId, quantity),
+      );
+    }
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
     const item = assertItemBelongsToCharacter(
       snapshot.items.find((entry) => entry.id === itemId),
@@ -679,7 +779,13 @@ export class CharacterEquipmentWriteService {
     characterId: string,
     itemId: string,
     input: UpdateCharacterEquipmentMetadataInput,
+    expectedRevision?: number,
   ): Promise<AssignedEquipmentItem> {
+    if (expectedRevision !== undefined) {
+      return this.mutateAggregate(characterId, expectedRevision, (service) =>
+        service.updateCharacterEquipmentMetadata(characterId, itemId, input),
+      );
+    }
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
     const item = assertItemBelongsToCharacter(
       snapshot.items.find((entry) => entry.id === itemId),
@@ -721,23 +827,76 @@ export class CharacterEquipmentWriteService {
   async setCharacterWornArmor(
     characterId: string,
     itemId: string | null,
+    expectedRevision?: number,
   ): Promise<CharacterLoadout> {
-    return this.updateLoadoutSelection(characterId, "armor", itemId);
+    return this.updateLoadoutSelection(characterId, "armor", itemId, expectedRevision);
   }
 
   async setCharacterReadyShield(
     characterId: string,
     itemId: string | null,
+    expectedRevision?: number,
   ): Promise<CharacterLoadout> {
-    return this.updateLoadoutSelection(characterId, "shield", itemId);
+    return this.updateLoadoutSelection(characterId, "shield", itemId, expectedRevision);
   }
 
   async setCharacterActiveWeapon(
     characterId: string,
     slot: ActiveWeaponSlot,
     itemId: string | null,
+    expectedRevision?: number,
   ): Promise<CharacterLoadout> {
-    return this.updateLoadoutSelection(characterId, slot, itemId);
+    return this.updateLoadoutSelection(characterId, slot, itemId, expectedRevision);
+  }
+
+  async setCharacterActiveAmmunition(
+    characterId: string,
+    itemIds: string[],
+    expectedRevision?: number,
+  ): Promise<CharacterLoadout> {
+    if (expectedRevision !== undefined) {
+      return this.mutateAggregate(characterId, expectedRevision, (service) =>
+        service.setCharacterActiveAmmunition(characterId, itemIds),
+      );
+    }
+    if (new Set(itemIds).size !== itemIds.length) {
+      throw new Error("Active ammunition cannot contain the same Item twice.");
+    }
+    const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
+    const loadout = getActiveLoadoutForSnapshot(characterId, snapshot.loadouts);
+    if (itemIds.length > 0 && !loadout.activeMissileWeaponItemId) {
+      throw new Error("Choose an active missile weapon before selecting ammunition.");
+    }
+    const missileWeapon = loadout.activeMissileWeaponItemId
+      ? assertItemBelongsToCharacter(
+          snapshot.items.find((item) => item.id === loadout.activeMissileWeaponItemId),
+          characterId,
+        )
+      : undefined;
+    const missileTemplate = missileWeapon
+      ? equipmentTemplatesById[missileWeapon.templateId]
+      : undefined;
+    const missileProfile =
+      missileTemplate?.category === "weapon" ? missileTemplate.missileProfile : undefined;
+    if (itemIds.length > 0 && !missileProfile) {
+      throw new Error("The active missile weapon does not support ammunition selection.");
+    }
+    for (const itemId of itemIds) {
+      const item = assertItemBelongsToCharacter(
+        snapshot.items.find((candidate) => candidate.id === itemId),
+        characterId,
+      );
+      const ammoTemplate = equipmentTemplatesById[item.templateId];
+      const ammoProfile =
+        ammoTemplate?.category === "gear" ? ammoTemplate.ammunitionProfile : undefined;
+      if (!ammoProfile || ammoProfile.family !== missileProfile?.ammoFamily) {
+        throw new Error("Selected ammunition is not compatible with the active missile weapon.");
+      }
+    }
+    const nextLoadout = CharacterLoadoutSchema.parse({ ...loadout, activeAmmoItemIds: itemIds });
+    const errors = validateLoadout(nextLoadout, { itemsById: indexById(snapshot.items) });
+    if (errors.length > 0) throw new Error(errors.join("; "));
+    return this.repository.upsertCharacterLoadout(nextLoadout);
   }
 
   async bootstrapSampleCharacterEquipment(
@@ -938,7 +1097,13 @@ export class CharacterEquipmentWriteService {
     characterId: string,
     kind: LoadoutSelectionKind,
     itemId: string | null,
+    expectedRevision?: number,
   ): Promise<CharacterLoadout> {
+    if (expectedRevision !== undefined) {
+      return this.mutateAggregate(characterId, expectedRevision, (service) =>
+        service.updateLoadoutSelection(characterId, kind, itemId),
+      );
+    }
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
     const currentLoadout = getActiveLoadoutForSnapshot(characterId, snapshot.loadouts);
     const previousItemId = this.getSlotItemId(currentLoadout, kind) ?? null;

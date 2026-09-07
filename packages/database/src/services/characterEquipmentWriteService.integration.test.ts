@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { StorageLocationSchema } from "@glantri/domain";
 
 import { createPrismaCharacterEquipmentRepository } from "../repositories/characterEquipmentRepository";
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
@@ -551,22 +552,152 @@ if (!process.env.DATABASE_URL_TEST) {
         },
         templateId: "weapon-template-dagger",
       });
+      const sourceAggregate = await repo.getCharacterEquipmentAggregateState(source.id);
+      const targetAggregate = await repo.getCharacterEquipmentAggregateState(target.id);
       const transfer = {
         campaignId: campaign.id,
         itemId: item.id,
+        sourceExpectedRevision: sourceAggregate.revision,
         sourceCharacterId: source.id,
         targetCharacterId: target.id,
+        targetExpectedRevision: targetAggregate.revision,
       };
 
-      await service.transferCampaignEquipmentItem(transfer);
-      await expect(service.transferCampaignEquipmentItem(transfer)).rejects.toThrow(
-        "no longer held by the expected Character",
-      );
+      const attempts = await Promise.allSettled([
+        service.transferCampaignEquipmentItem(transfer),
+        service.transferCampaignEquipmentItem(transfer),
+      ]);
+      expect(attempts.filter((attempt) => attempt.status === "fulfilled")).toHaveLength(1);
+      expect(attempts.filter((attempt) => attempt.status === "rejected")).toHaveLength(1);
       expect(await prisma!.characterEquipmentItem.count({ where: { id: item.id } })).toBe(1);
       expect(await repo.getCanonicalEquipmentItemById(item.id)).toMatchObject({
         holderCharacterId: target.id,
         id: item.id,
       });
+    });
+
+    it("rejects stale aggregate writes, keeps reads coherent, and rolls back a fault", async () => {
+      const user = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, user.id);
+      const repo = createPrismaCharacterEquipmentRepository(prisma!);
+      const service = new CharacterEquipmentWriteService(repo);
+      const initialized = await service.ensureCharacterEquipmentInitialized(character.id);
+      const before = await repo.getCharacterEquipmentAggregateState(character.id);
+      const personLocation = initialized.locations.find(
+        (location) => location.type === "person_system",
+      )!;
+
+      await service.addCharacterEquipmentItem(
+        character.id,
+        {
+          initialCarryMode: "on_person",
+          initialLocationId: personLocation.id,
+          quantity: 1,
+          templateId: "weapon-template-dagger",
+        },
+        before.revision,
+      );
+      await expect(
+        service.addCharacterEquipmentItem(
+          character.id,
+          {
+            initialCarryMode: "on_person",
+            initialLocationId: personLocation.id,
+            quantity: 1,
+            templateId: "weapon-template-dagger",
+          },
+          before.revision,
+        ),
+      ).rejects.toThrow("Character equipment changed");
+
+      const afterWrite = await repo.getCharacterEquipmentAggregateState(character.id);
+      expect(afterWrite.items).toHaveLength(1);
+      expect(afterWrite.revision).toBe(before.revision + 1);
+
+      const loadout = afterWrite.loadouts[0]!;
+      await expect(
+        repo.mutateCharacterEquipmentAggregate({
+          characterId: character.id,
+          expectedRevision: afterWrite.revision,
+          mutation: async (transaction) => {
+            await transaction.createCharacterStorageLocation(
+              StorageLocationSchema.parse({
+                availabilityClass: "elsewhere",
+                characterId: character.id,
+                id: `${character.id}:fault-location`,
+                isAccessibleInEncounter: false,
+                isMobile: false,
+                name: "Fault location",
+                notes: null,
+                parentLocationId: null,
+                type: "home",
+              }),
+            );
+            await transaction.upsertCharacterLoadout({ ...loadout, notes: "must not persist" });
+            throw new Error("injected aggregate fault");
+          },
+        }),
+      ).rejects.toThrow("injected aggregate fault");
+
+      const afterFault = await repo.getCharacterEquipmentAggregateState(character.id);
+      expect(afterFault.revision).toBe(afterWrite.revision);
+      expect(afterFault.locations.some((location) => location.id.endsWith("fault-location"))).toBe(
+        false,
+      );
+      expect(afterFault.loadouts[0]?.notes).not.toBe("must not persist");
+      expect(afterFault.items.map((item) => item.id)).toEqual(
+        afterWrite.items.map((item) => item.id),
+      );
+    });
+
+    it("persists compatible active ammunition with its active missile loadout", async () => {
+      const user = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, user.id);
+      const repo = createPrismaCharacterEquipmentRepository(prisma!);
+      const service = new CharacterEquipmentWriteService(repo);
+      const initialized = await service.ensureCharacterEquipmentInitialized(character.id);
+      const personLocation = initialized.locations.find(
+        (location) => location.type === "person_system",
+      )!;
+
+      let aggregate = await repo.getCharacterEquipmentAggregateState(character.id);
+      const bow = await service.addCharacterEquipmentItem(
+        character.id,
+        {
+          initialCarryMode: "on_person",
+          initialLocationId: personLocation.id,
+          quantity: 1,
+          templateId: "weapon-template-bow",
+        },
+        aggregate.revision,
+      );
+      aggregate = await repo.getCharacterEquipmentAggregateState(character.id);
+      const arrows = await service.addCharacterEquipmentItem(
+        character.id,
+        {
+          initialCarryMode: "on_person",
+          initialLocationId: personLocation.id,
+          quantity: 1,
+          templateId: "gear-template-arrows",
+        },
+        aggregate.revision,
+      );
+      aggregate = await repo.getCharacterEquipmentAggregateState(character.id);
+      await service.setCharacterActiveWeapon(
+        character.id,
+        "missile",
+        bow.id,
+        aggregate.revision,
+      );
+      aggregate = await repo.getCharacterEquipmentAggregateState(character.id);
+      await service.setCharacterActiveAmmunition(character.id, [arrows.id], aggregate.revision);
+
+      const reloaded = await repo.getCharacterEquipmentAggregateState(character.id);
+      expect(reloaded.loadouts.find((loadout) => loadout.isActive)).toMatchObject({
+        activeAmmoItemIds: [arrows.id],
+        activeMissileWeaponItemId: bow.id,
+      });
+      expect(reloaded.revision).toBe(aggregate.revision + 1);
     });
 
     it("draws and stows one canonical Campaign Item with revision-safe repository writes", async () => {

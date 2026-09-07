@@ -172,9 +172,21 @@ model Character {
   retainedRevisions CharacterRevision[]      @relation("CharacterRetainedRevisionHistory")
   retainedLedgerEvents CharacterLedgerEvent[]
   equipmentItems   CharacterEquipmentItem[]
+  equipmentAggregate CharacterEquipmentAggregate?
   storageLocations CharacterStorageLocation[]
   loadouts         CharacterLoadout[]
   scenarioParticipants ScenarioParticipant[]
+}
+
+// The revision is the optimistic-concurrency token for the complete durable
+// equipment state of one Character. Item rows, locations, and loadouts remain
+// normalized records; this row makes their unit of consistency explicit.
+model CharacterEquipmentAggregate {
+  characterId String    @id
+  revision    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
 }
 
 model CharacterRevision {

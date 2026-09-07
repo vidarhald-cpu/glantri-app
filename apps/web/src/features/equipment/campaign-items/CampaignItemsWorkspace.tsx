@@ -9,6 +9,7 @@ import type {
 
 import {
   createCampaignItemOnServer,
+  loadCharacterEquipmentState,
   loadCampaignItems,
   transferCampaignItemOnServer,
   updateCampaignItemOnServer,
@@ -577,11 +578,17 @@ function TransferItemDialog({
     setSaving(true);
     setError(undefined);
     try {
+      const [sourceState, targetState] = await Promise.all([
+        loadCharacterEquipmentState(item.holderCharacterId),
+        loadCharacterEquipmentState(targetCharacterId),
+      ]);
       const response = await transferCampaignItemOnServer({
         campaignId: item.campaignContextId,
         itemId: item.id,
+        sourceExpectedRevision: sourceState.revision ?? -1,
         sourceCharacterId: item.holderCharacterId,
         targetCharacterId,
+        targetExpectedRevision: targetState.revision ?? -1,
       });
       onTransferred(response, targetName);
     } catch (caught) {

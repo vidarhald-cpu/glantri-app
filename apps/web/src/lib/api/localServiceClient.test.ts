@@ -1430,6 +1430,7 @@ describe("localServiceClient wire contract", () => {
       client.moveCharacterEquipmentItemOnServer({
         carryMode: "backpack",
         characterId: "character-1",
+        expectedRevision: 0,
         itemId: "item-1",
         locationId: "location-1",
       }),
@@ -1438,6 +1439,7 @@ describe("localServiceClient wire contract", () => {
     expectFetchCall(fetchMock, {
       body: {
         carryMode: "backpack",
+        expectedRevision: 0,
         itemId: "item-1",
         locationId: "location-1",
       },

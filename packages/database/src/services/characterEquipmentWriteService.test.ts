@@ -39,6 +39,12 @@ function createRepositoryStub(input?: {
   );
 
   const repository: CharacterEquipmentRepository = {
+    async getCharacterEquipmentAggregateState(currentCharacterId) {
+      return repository.getCharacterEquipmentState(currentCharacterId);
+    },
+    async mutateCharacterEquipmentAggregate(input) {
+      return { result: await input.mutation(repository), revision: input.expectedRevision + 1 };
+    },
     async createCharacterStorageLocation(location) {
       locations.set(location.id, cloneLocation(location));
       return cloneLocation(location);
@@ -118,6 +124,7 @@ function createRepositoryStub(input?: {
         items: await repository.getCharacterEquipmentItems(currentCharacterId),
         loadouts: await repository.getCharacterLoadouts(currentCharacterId),
         locations: await repository.getCharacterStorageLocations(currentCharacterId),
+        revision: 0,
       };
     },
   };

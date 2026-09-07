@@ -62,6 +62,12 @@ function revealedItem(): AssignedEquipmentItem {
 
 function repositoryWith(item: AssignedEquipmentItem): CharacterEquipmentRepository {
   return {
+    async getCharacterEquipmentAggregateState() {
+      return { items: [item], loadouts: [], locations: [], revision: 0 };
+    },
+    async mutateCharacterEquipmentAggregate(input) {
+      return { result: await input.mutation(this), revision: input.expectedRevision + 1 };
+    },
     async createCharacterEquipmentItem(value) {
       return value;
     },
@@ -84,7 +90,7 @@ function repositoryWith(item: AssignedEquipmentItem): CharacterEquipmentReposito
       return [item];
     },
     async getCharacterEquipmentState() {
-      return { items: [item], loadouts: [], locations: [] };
+      return { items: [item], loadouts: [], locations: [], revision: 0 };
     },
     async getCharacterLoadouts() {
       return [];
@@ -156,6 +162,7 @@ describe("CharacterEquipmentReadModelService viewer projection", () => {
       activeLoadoutByCharacterId: {},
       itemsById: {},
       locationsById: {},
+      revision: 0,
       templatesById: {},
     });
   });

@@ -387,7 +387,7 @@ export default function CharacterLoadoutView({
         }
       }
 
-      const operations: Array<() => Promise<EquipmentFeatureState>> = [];
+      const operations: Array<(expectedRevision: number) => Promise<EquipmentFeatureState>> = [];
 
       const queueOperation = (
         kind: "armor" | "primary" | "secondary" | "missile" | "shield",
@@ -409,16 +409,24 @@ export default function CharacterLoadoutView({
           return;
         }
 
-        operations.push(() =>
+        operations.push((expectedRevision) =>
           kind === "armor"
-            ? setCharacterWornArmorOnServer({ characterId, itemId })
+            ? setCharacterWornArmorOnServer({ characterId, expectedRevision, itemId })
             : kind === "shield"
-              ? setCharacterReadyShieldOnServer({ characterId, itemId })
+              ? setCharacterReadyShieldOnServer({ characterId, expectedRevision, itemId })
               : kind === "primary"
-                ? setCharacterActivePrimaryWeaponOnServer({ characterId, itemId })
+                ? setCharacterActivePrimaryWeaponOnServer({ characterId, expectedRevision, itemId })
                 : kind === "secondary"
-                  ? setCharacterActiveSecondaryWeaponOnServer({ characterId, itemId })
-                  : setCharacterActiveMissileWeaponOnServer({ characterId, itemId }),
+                  ? setCharacterActiveSecondaryWeaponOnServer({
+                      characterId,
+                      expectedRevision,
+                      itemId,
+                    })
+                  : setCharacterActiveMissileWeaponOnServer({
+                      characterId,
+                      expectedRevision,
+                      itemId,
+                    }),
         );
       };
 
@@ -430,7 +438,7 @@ export default function CharacterLoadoutView({
 
       let nextState = state;
       for (const operation of operations) {
-        nextState = await operation();
+        nextState = await operation(nextState.revision ?? -1);
       }
 
       setState(nextState);
