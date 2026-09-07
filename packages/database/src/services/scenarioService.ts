@@ -179,14 +179,23 @@ export class ScenarioService {
       throw new Error(`Scenario cannot transition from ${scenario.status} to ${input.status}.`);
     }
 
-    return this.repository.updateScenario({
-      description: input.description,
-      kind: input.kind,
-      mapAssetId: input.mapAssetId,
-      name: input.name,
-      scenarioId: input.scenarioId,
-      status: input.status,
-    });
+    try {
+      return await this.repository.updateScenario({
+        description: input.description,
+        kind: input.kind,
+        mapAssetId: input.mapAssetId,
+        name: input.name,
+        expectedRevision: input.expectedRevision,
+        expectedStatus: input.status === undefined ? undefined : scenario.status,
+        scenarioId: input.scenarioId,
+        status: input.status,
+      });
+    } catch (error) {
+      if (error instanceof ScenarioPersistenceError) {
+        throw new ScenarioMutationConflictError(error.code, error.message, error);
+      }
+      throw error;
+    }
   }
 
   async updateScenarioSessionState(input: {

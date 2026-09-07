@@ -751,6 +751,7 @@ export class CombatItemInteractionService {
             await transaction.$queryRaw(
               Prisma.sql`SELECT "id" FROM "Encounter" WHERE "id" = ${input.encounterId} FOR UPDATE`,
             );
+            await this.assertScenarioAllowsCombatMutation(input.scenarioId, transaction);
             const persistedEncounter = (
               await createPrismaCombatStateReadRepository(transaction).getFullEncounterById(
                 input.encounterId,
@@ -868,6 +869,7 @@ export class CombatItemInteractionService {
             await transaction.$queryRaw(
               Prisma.sql`SELECT "id" FROM "Encounter" WHERE "id" = ${input.encounterId} FOR UPDATE`,
             );
+            await this.assertScenarioAllowsCombatMutation(input.scenarioId, transaction);
             const persistedEncounter = (
               await createPrismaCombatStateReadRepository(transaction).getFullEncounterById(
                 input.encounterId,
@@ -1026,6 +1028,7 @@ export class CombatItemInteractionService {
             await transaction.$queryRaw(
               Prisma.sql`SELECT "id" FROM "Encounter" WHERE "id" = ${input.encounterId} FOR UPDATE`,
             );
+            await this.assertScenarioAllowsCombatMutation(input.scenarioId, transaction);
             const persistedEncounter = (
               await createPrismaCombatStateReadRepository(transaction).getFullEncounterById(
                 input.encounterId,
@@ -1186,6 +1189,7 @@ export class CombatItemInteractionService {
         await transaction.$queryRaw(
           Prisma.sql`SELECT "id" FROM "Encounter" WHERE "id" = ${input.encounterId} FOR UPDATE`,
         );
+        await this.assertScenarioAllowsCombatMutation(input.scenarioId, transaction);
         const persistedEncounter = (
           await createPrismaCombatStateReadRepository(transaction).getFullEncounterById(
             input.encounterId,
@@ -1266,6 +1270,7 @@ export class CombatItemInteractionService {
         await transaction.$queryRaw(
           Prisma.sql`SELECT "id" FROM "Encounter" WHERE "id" = ${input.encounterId} FOR UPDATE`,
         );
+        await this.assertScenarioAllowsCombatMutation(input.scenarioId, transaction);
         const persistedEncounter = (
           await createPrismaCombatStateReadRepository(transaction).getFullEncounterById(
             input.encounterId,
@@ -1349,6 +1354,7 @@ export class CombatItemInteractionService {
         await transaction.$queryRaw(
           Prisma.sql`SELECT "id" FROM "Encounter" WHERE "id" = ${input.encounterId} FOR UPDATE`,
         );
+        await this.assertScenarioAllowsCombatMutation(input.scenarioId, transaction);
         const persistedEncounter = (
           await createPrismaCombatStateReadRepository(transaction).getFullEncounterById(
             input.encounterId,
@@ -1446,6 +1452,7 @@ export class CombatItemInteractionService {
             await transaction.$queryRaw(
               Prisma.sql`SELECT "id" FROM "Encounter" WHERE "id" = ${input.encounterId} FOR UPDATE`,
             );
+            await this.assertScenarioAllowsCombatMutation(input.scenarioId, transaction);
             const persistedEncounter = (
               await createPrismaCombatStateReadRepository(transaction).getFullEncounterById(
                 input.encounterId,
@@ -1571,5 +1578,23 @@ export class CombatItemInteractionService {
       "transaction_conflict",
       "Combat state changed while saving. Refresh and try again.",
     );
+  }
+
+  private async assertScenarioAllowsCombatMutation(
+    scenarioId: string,
+    transaction: Pick<Prisma.TransactionClient, "scenario">,
+  ): Promise<void> {
+    const scenario = await transaction.scenario.findUnique({
+      where: { id: scenarioId },
+      select: { status: true },
+    });
+
+    if (!scenario) {
+      throw new CombatItemUnavailableError();
+    }
+
+    if (scenario.status === "completed" || scenario.status === "archived") {
+      throw new CombatItemUnavailableError();
+    }
   }
 }

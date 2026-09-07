@@ -12,7 +12,10 @@ import { createPrismaCombatStatePersistenceRepository } from "../repositories/co
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
 import { createTestCampaign, createTestCharacter, createTestUser } from "../testing/factories";
 import { CharacterEquipmentWriteService } from "./characterEquipmentWriteService";
-import { CombatItemInteractionService } from "./combatItemInteractionService";
+import {
+  CombatItemInteractionService,
+  CombatItemUnavailableError,
+} from "./combatItemInteractionService";
 
 const prisma = getTestPrismaClient();
 
@@ -305,6 +308,56 @@ if (!process.env.DATABASE_URL_TEST) {
         expect(
           await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
         ).toBe(1);
+      }
+    });
+
+    it("rejects combat-item commands for terminal Scenario states", async () => {
+      for (const terminalStatus of ["completed", "archived"] as const) {
+        const current = await fixture(`terminal-${terminalStatus}`);
+        const commandId = `terminal-${terminalStatus}-command`;
+        const cursor = current.persisted.combatRoundState!.currentCursor;
+        const commandType = terminalStatus === "completed" ? "miss" : "hit";
+        const session = encounterSessionSchema.parse({
+          ...current.persisted,
+          combatRoundState: {
+            ...current.persisted.combatRoundState!,
+            commands: [
+              ...current.persisted.combatRoundState!.commands,
+              {
+                afterCursor: cursor,
+                beforeCursor: cursor,
+                createdAt: "2026-08-16T10:04:00.000Z",
+                facts: { attackResult: commandType },
+                id: commandId,
+                participantId: `participant-terminal-${terminalStatus}`,
+                roundNumber: 1,
+                type: "roll_attack",
+              },
+            ],
+          },
+        });
+
+        await prisma!.scenario.update({
+          data: { status: terminalStatus },
+          where: { id: current.scenario.id },
+        });
+
+        const service = new CombatItemInteractionService(current.itemRepository, prisma!);
+        await expect(
+          service.commitThrownWeaponAttack({
+            actorUserId: current.gm.id,
+            campaignId: current.campaign.id,
+            commandId,
+            encounterId: current.encounterId,
+            expectedEncounterRevision: current.persisted.updatedAt,
+            itemId: current.item.id,
+            ownerCharacterId: current.character.id,
+            roundNumber: 1,
+            scenarioId: current.scenario.id,
+            session,
+            templateId: current.item.templateId,
+          }),
+        ).rejects.toBeInstanceOf(CombatItemUnavailableError);
       }
     });
 

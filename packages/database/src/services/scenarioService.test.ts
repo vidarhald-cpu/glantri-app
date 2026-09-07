@@ -206,6 +206,53 @@ describe("ScenarioService controller assignment", () => {
     ).resolves.toBe(true);
   });
 
+  it("denies player access when rostered Character is no longer rostered", async () => {
+    const { rosterEntries, repository } = createScenarioRepositoryStub();
+    const character = createCharacterRecord({
+      id: "character-1",
+      name: "Ari",
+      ownerId: "owner-1",
+    });
+    rosterCharacters(rosterEntries, character.id);
+    const service = new ScenarioService(
+      repository,
+      {
+        getCharacterById: async () => character,
+      } as never,
+      {
+        getCharacterEquipmentState: async () => ({
+          activeLoadoutByCharacterId: {},
+          itemsById: {},
+          locationsById: {},
+          templatesById: {},
+        }),
+      } as never,
+    );
+
+    const participant = await service.addCharacterParticipant({
+      characterId: character.id,
+      joinSource: "gm_added",
+      scenarioId: "scenario-1",
+    });
+
+    await expect(
+      service.userHasPlayerScenarioAccess({ scenarioId: "scenario-1", userId: "owner-1" }),
+    ).resolves.toBe(true);
+
+    rosterEntries.length = 0;
+    await repository.updateScenarioParticipantMetadata({
+      controlledByUserId: "controller-1",
+      participantId: participant.id,
+    });
+
+    await expect(
+      service.userHasPlayerScenarioAccess({ scenarioId: "scenario-1", userId: "owner-1" }),
+    ).resolves.toBe(false);
+    await expect(
+      service.userHasPlayerScenarioAccess({ scenarioId: "scenario-1", userId: "controller-1" }),
+    ).resolves.toBe(false);
+  });
+
   it("allows the same controller to manage multiple non-player participants", async () => {
     const { participants, repository } = createScenarioRepositoryStub();
     const service = new ScenarioService(

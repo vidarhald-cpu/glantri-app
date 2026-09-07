@@ -339,6 +339,8 @@ export interface ScenarioRepository {
     kind?: Scenario["kind"];
     mapAssetId?: string | null;
     name?: string;
+    expectedRevision?: string;
+    expectedStatus?: Scenario["status"];
     scenarioId: string;
     status?: Scenario["status"];
   }): Promise<Scenario>;
@@ -651,18 +653,85 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
       return records.map(mapScenario);
     },
     async updateScenario(input) {
-      const record = await prisma.scenario.update({
-        data: {
-          description: input.description,
-          kind: input.kind,
-          mapAssetId: input.mapAssetId,
-          name: input.name,
-          status: input.status,
-        },
-        where: { id: input.scenarioId },
-      });
+      if (input.expectedRevision === undefined && input.expectedStatus === undefined) {
+        const record = await prisma.scenario.update({
+          data: {
+            description: input.description,
+            kind: input.kind,
+            mapAssetId: input.mapAssetId,
+            name: input.name,
+            status: input.status,
+          },
+          where: { id: input.scenarioId },
+        });
 
-      return mapScenario(record);
+        return mapScenario(record);
+      }
+
+      try {
+        return await prisma.$transaction(
+          async (transaction) => {
+            await transaction.$queryRaw(
+              Prisma.sql`SELECT "id" FROM "Scenario" WHERE "id" = ${input.scenarioId} FOR UPDATE`,
+            );
+            const existing = await transaction.scenario.findUnique({
+              where: { id: input.scenarioId },
+            });
+
+            if (!existing) {
+              throw new Error("Scenario not found.");
+            }
+
+            if (
+              input.expectedRevision &&
+              existing.updatedAt.toISOString() !== input.expectedRevision
+            ) {
+              throw new ScenarioPersistenceError(
+                "stale_revision",
+                "The Scenario changed before this update could be saved.",
+              );
+            }
+
+            if (input.expectedStatus != null && existing.status !== input.expectedStatus) {
+              throw new ScenarioPersistenceError(
+                "stale_revision",
+                "The Scenario changed before this update could be saved.",
+              );
+            }
+
+            const record = await transaction.scenario.update({
+              data: {
+                description: input.description,
+                kind: input.kind,
+                mapAssetId: input.mapAssetId,
+                name: input.name,
+                status: input.status,
+              },
+              where: { id: input.scenarioId },
+            });
+
+            return mapScenario(record);
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        if (error instanceof ScenarioPersistenceError) throw error;
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          (error.code === "P2034" ||
+            (error.code === "P2010" &&
+              error.message
+                .toLowerCase()
+                .includes("could not serialize access due to concurrent update")))
+        ) {
+          throw new ScenarioPersistenceError(
+            "transaction_conflict",
+            "The Scenario changed while saving. Refresh and try again.",
+            error,
+          );
+        }
+        throw error;
+      }
     },
     async createReusableEntity(input) {
       const record = await prisma.reusableEntity.create({

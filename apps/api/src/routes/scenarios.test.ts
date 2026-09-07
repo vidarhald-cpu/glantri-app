@@ -3745,6 +3745,8 @@ function preparePhaseCombatExperienceBackOutRouteFixture(
 describe("scenarios route contract", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.campaignService.listCampaignsByUserAccess.mockResolvedValue([{ id: "campaign-1" }]);
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
     mocks.encounterService.commitCombatModifierReview.mockImplementation(
       async (update: {
         participant: Record<string, unknown>;
@@ -3781,6 +3783,7 @@ describe("scenarios route contract", () => {
         return encounter ? combatHistorySource(encounter as EncounterSession) : null;
       },
     );
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
     mocks.combatStateReadService.listEncounterAccessMetadataByScenario.mockImplementation(
       async (scenarioId: string) => {
         const encounters = await mocks.encounterService.listEncountersByScenario(scenarioId);

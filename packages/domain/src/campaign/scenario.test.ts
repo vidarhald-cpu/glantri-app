@@ -188,7 +188,9 @@ describe("scenario lifecycle gates", () => {
     ["archived", "completed", false],
     ["archived", "archived", true],
   ])("enforces transition from %s to %s", (from, to, expected) => {
-    expect(canTransitionScenarioStatus(from as ScenarioStatus, to as ScenarioStatus)).toBe(expected);
+    expect(canTransitionScenarioStatus(from as ScenarioStatus, to as ScenarioStatus)).toBe(
+      expected,
+    );
   });
 
   it.each([
