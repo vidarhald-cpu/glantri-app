@@ -35,6 +35,7 @@ describe("repository-owned Prisma client entry points", () => {
     expect(entryPoints).toEqual([
       "packages/database/scripts/profileCombatPersistenceSplit.ts",
       "packages/database/src/client.ts",
+      "packages/database/src/recoveryClient.ts",
       "packages/database/src/testing/scenarioPrivacy.ts",
       "packages/database/src/testing/testDatabase.ts",
     ]);
