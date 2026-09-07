@@ -152,6 +152,7 @@ function realItemService() {
 function services(currentEncounter = encounterWithActions()): CombatItemInteractionRouteServices {
   return {
     campaignService: {
+      listCampaignsByUserAccess: vi.fn(async () => [{ id: "campaign-1" }]),
       getCampaignById: vi.fn(async () => ({ gmUserId: gm.id, id: "campaign-1" })),
     } as unknown as CombatItemInteractionRouteServices["campaignService"],
     encounterService: {

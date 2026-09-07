@@ -99,10 +99,37 @@ if (!process.env.DATABASE_URL_TEST) {
     });
 
     it("accepts exactly one concurrent Stat result and returns the durable winner", async () => {
-      const service = new EncounterService(createPrismaEncounterRepository(prisma!));
+      const scenarioRepository = createPrismaScenarioRepository(prisma!);
+      const campaignService = new CampaignService(
+        scenarioRepository,
+        new CharacterService(createPrismaCharacterRepository(prisma!)),
+      );
+      const scenarioService = new ScenarioService(
+        scenarioRepository,
+        new CharacterService(createPrismaCharacterRepository(prisma!)),
+        new CharacterEquipmentReadModelService(createPrismaCharacterEquipmentRepository(prisma!)),
+      );
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Concurrent Stat",
+      });
+      const scenario = await scenarioService.createScenario({
+        campaignId: campaign.id,
+        name: "Concurrent Stat",
+        status: "live",
+      });
+      const service = new EncounterService(
+        createPrismaEncounterRepository(prisma!),
+        scenarioRepository,
+      );
       const created = await service.createEncounter({
-        scenarioId: "scenario-roleplay-concurrency",
-        session: buildPendingStatCheck(),
+        scenarioId: scenario.id,
+        session: {
+          ...buildPendingStatCheck(),
+          scenarioId: scenario.id,
+          id: `stat-${scenario.id}`,
+        },
       });
       const candidates = [4, 19] as const;
 
@@ -264,6 +291,126 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(rejected?.reason).toMatchObject({
         code: expect.stringMatching(/^(participant_already_active|transaction_conflict)$/),
       });
+    });
+
+    it("blocks Encounter creation, updates, and participant state transitions in terminal Scenarios", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const owner = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, owner.id, { name: "Ari" });
+      const scenarioRepository = createPrismaScenarioRepository(prisma!);
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const equipmentService = new CharacterEquipmentReadModelService(
+        createPrismaCharacterEquipmentRepository(prisma!),
+      );
+      const campaignService = new CampaignService(scenarioRepository, characterService);
+      const scenarioService = new ScenarioService(
+        scenarioRepository,
+        characterService,
+        equipmentService,
+      );
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Terminal Encounter",
+        status: "active",
+      });
+      await campaignService.addCampaignRosterEntry({
+        campaignId: campaign.id,
+        category: "pc",
+        sourceId: character.id,
+        sourceType: "character",
+      });
+      const encounterRepository = createPrismaEncounterRepository(prisma!);
+      const encounterService = new EncounterService(encounterRepository, scenarioRepository);
+
+      for (const terminalStatus of ["paused", "completed", "archived"] as const) {
+        const scenario = await scenarioService.createScenario({
+          campaignId: campaign.id,
+          name: `Terminal ${terminalStatus}`,
+          status: "live",
+        });
+        const participant = await scenarioService.addCharacterParticipant({
+          characterId: character.id,
+          controlledByUserId: owner.id,
+          joinSource: "gm_added",
+          scenarioId: scenario.id,
+        });
+        const baseEncounter = encounterSessionSchema.parse({
+          createdAt: "2026-08-30T10:00:00.000Z",
+          currentRound: 1,
+          id: `terminal-${terminalStatus}-encounter`,
+          kind: "combat",
+          participantMembershipMode: "explicit",
+          participants: [
+            {
+              id: `terminal-${terminalStatus}-participant`,
+              label: "Ari",
+              participantType: "scenario",
+              scenarioParticipantId: participant.id,
+            },
+          ],
+          scenarioId: scenario.id,
+          status: "planned",
+          title: `Terminal ${terminalStatus}`,
+          updatedAt: "2026-08-30T10:00:00.000Z",
+        });
+        const encounter = await encounterService.createEncounter({
+          campaignId: campaign.id,
+          scenarioId: scenario.id,
+          session: baseEncounter,
+        });
+
+        await scenarioService.updateScenario({
+          expectedRevision: scenario.updatedAt,
+          scenarioId: scenario.id,
+          status: "completed",
+        });
+        const archivedScenario = await scenarioService.updateScenario({
+          expectedRevision: (await scenarioService.getScenarioById(scenario.id))!.updatedAt,
+          scenarioId: scenario.id,
+          status: "archived",
+        });
+        scenario.updatedAt = archivedScenario.updatedAt;
+
+        await expect(
+          encounterService.createEncounter({
+            campaignId: campaign.id,
+            scenarioId: scenario.id,
+            session: {
+              ...baseEncounter,
+              id: `blocked-${terminalStatus}`,
+              title: `blocked-${terminalStatus}`,
+            },
+          }),
+        ).rejects.toThrow("Scenario is not currently live.");
+
+        await expect(
+          encounterService.updateCombatEncounter({
+            encounterId: encounter.id,
+            expectedRevision: encounter.updatedAt,
+            scenarioId: scenario.id,
+            session: {
+              ...baseEncounter,
+              id: encounter.id,
+              title: encounter.title,
+              status: "active",
+            },
+          }),
+        ).rejects.toThrow("Scenario is not currently live.");
+
+        await expect(
+          encounterService.updateScenarioParticipantState({
+            participantId: participant.id,
+            scenarioId: scenario.id,
+            state: {
+              ...participant.state,
+              health: {
+                ...participant.state.health,
+                currentHp: participant.state.health.currentHp - 1,
+              },
+            },
+          }),
+        ).rejects.toThrow("Scenario is not currently live.");
+      }
     });
 
     it("atomically persists and reloads C1 source state, roll-once rate, and exact remainder", async () => {

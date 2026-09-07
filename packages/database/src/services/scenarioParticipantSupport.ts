@@ -55,10 +55,26 @@ export async function userHasPlayerScenarioAccess(
     userId: string;
   },
 ): Promise<boolean> {
+  const scenario = await repository.getScenarioById(input.scenarioId);
+
+  if (!scenario) {
+    return false;
+  }
+
+  const rosterEntries = await repository.listCampaignRosterEntries(scenario.campaignId);
+  const rosterCharacterIds = new Set(
+    rosterEntries
+      .filter((entry) => entry.sourceType === "character")
+      .map((entry) => entry.sourceId),
+  );
   const participants = await repository.listScenarioParticipants(input.scenarioId);
 
   for (const participant of participants) {
     if (!participant.isActive || participant.role !== "player_character") {
+      continue;
+    }
+
+    if (!participant.characterId || !rosterCharacterIds.has(participant.characterId)) {
       continue;
     }
 

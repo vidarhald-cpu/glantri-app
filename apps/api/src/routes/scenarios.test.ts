@@ -3746,6 +3746,8 @@ function preparePhaseCombatExperienceBackOutRouteFixture(
 describe("scenarios route contract", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.campaignService.listCampaignsByUserAccess.mockResolvedValue([{ id: "campaign-1" }]);
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
     mocks.encounterService.commitCombatModifierReview.mockImplementation(
       async (update: {
         participant: Record<string, unknown>;
@@ -3782,6 +3784,7 @@ describe("scenarios route contract", () => {
         return encounter ? combatHistorySource(encounter as EncounterSession) : null;
       },
     );
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
     mocks.combatStateReadService.listEncounterAccessMetadataByScenario.mockImplementation(
       async (scenarioId: string) => {
         const encounters = await mocks.encounterService.listEncountersByScenario(scenarioId);
@@ -4852,7 +4855,7 @@ describe("scenarios route contract", () => {
       id: "scenario-1",
       kind: "combat",
       name: "Bridge Ambush",
-      status: "prepared",
+      status: "draft",
     };
     mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
     mocks.scenarioService.createScenario.mockResolvedValue(scenario);
@@ -4863,7 +4866,7 @@ describe("scenarios route contract", () => {
       payload: {
         kind: "combat",
         name: "Bridge Ambush",
-        status: "prepared",
+        status: "draft",
       },
       url: "/campaigns/campaign-1/scenarios",
     });
@@ -4881,7 +4884,7 @@ describe("scenarios route contract", () => {
       kind: "combat",
       mapAssetId: undefined,
       name: "Bridge Ambush",
-      status: "prepared",
+      status: "draft",
     });
   });
 
@@ -5687,6 +5690,43 @@ describe("scenarios route contract", () => {
     expect(mocks.scenarioService.addCharacterParticipant).not.toHaveBeenCalled();
   });
 
+  it.each(["draft", "prepared"])(
+    "hides %s Scenario workspace access from players even with ownership",
+    async (status) => {
+      mocks.scenarioService.getScenarioById.mockResolvedValue({
+        campaignId: "campaign-1",
+        id: "scenario-1",
+        kind: "mixed",
+        name: "Early Scenario",
+        status,
+      });
+      mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+      mocks.campaignService.getCampaignById.mockResolvedValue({
+        gmUserId: "gm-1",
+        id: "campaign-1",
+        name: "Border Trouble",
+        status: "active",
+      });
+      const app = await buildScenarioTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          characterId: "character-1",
+          joinSource: "player_joined",
+          role: "player_character",
+        },
+        url: "/scenarios/scenario-1/participants/character",
+      });
+
+      await app.close();
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({ error: "Scenario not found." });
+      expect(mocks.scenarioService.addCharacterParticipant).not.toHaveBeenCalled();
+    },
+  );
+
   it("lets the scenario GM explicitly refresh a character participant equipment snapshot", async () => {
     const participant = { characterId: "character-1", id: "participant-1" };
     mocks.requireAuthenticatedUser.mockResolvedValue(mocks.adminUser);
@@ -5869,6 +5909,77 @@ describe("scenarios route contract", () => {
     expect(response.body).not.toContain("Private to delegated controller");
     expect(response.body).not.toContain("Delegated Private Encounter");
     expect(response.body).not.toContain("Controller-only moment");
+  });
+
+  it("requires Campaign-home access for player Scenario direct reads", async () => {
+    const scenario = {
+      campaignId: "campaign-1",
+      description: "Private to untrusted player",
+      id: "scenario-1",
+      name: "Hidden Campaign-linked Scenario",
+      status: "live",
+    };
+    mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.campaignService.listCampaignsByUserAccess.mockResolvedValue([]);
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Scenario not found." });
+    expect(response.body).not.toContain("Hidden Campaign-linked Scenario");
+    expect(response.body).not.toContain("Private to untrusted player");
+    expect(mocks.campaignService.listCampaignsByUserAccess).toHaveBeenCalledWith("player-1");
+    expect(mocks.scenarioService.userHasPlayerScenarioAccess).toHaveBeenCalledWith({
+      scenarioId: "scenario-1",
+      userId: "player-1",
+    });
+  });
+
+  it("returns conflict response for stale direct Scenario updates", async () => {
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      createdAt: "2026-04-21T00:00:00.000Z",
+      id: "scenario-1",
+      name: "Stale target",
+      status: "draft",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.scenarioService.updateScenario.mockRejectedValue({
+      code: "stale_revision",
+      message: "Scenario changed before this update could be saved.",
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/scenarios/scenario-1",
+      payload: {
+        expectedRevision: "stale-revision",
+        status: "live",
+      },
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      code: "stale_revision",
+      error: "Scenario changed before this update could be saved.",
+    });
   });
 
   it("returns a bounded metadata-only encounter summary list for the GM workspace", async () => {
@@ -6318,6 +6429,68 @@ describe("scenarios route contract", () => {
           (participant: { displayName: string }) => participant.displayName,
         ),
     ).toEqual(["Player A", "Visible Ally", "Hidden Steward", "GM Only Witness"]);
+  });
+
+  it("allows completed Scenario projection read-only access for players", async () => {
+    const scenario = {
+      campaignId: "campaign-1",
+      description: "Recovered the relic after play.",
+      id: "scenario-1",
+      kind: "mixed",
+      name: "Completed Chapter",
+      status: "completed",
+    };
+    mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/player-projection",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().projection.scenario.status).toBe("completed");
+  });
+
+  it("blocks completed-scenario session editing as read-only", async () => {
+    const scenario = {
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      kind: "mixed",
+      name: "Completed Chapter",
+      status: "completed",
+    };
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
+    mocks.scenarioService.updateScenarioSessionState.mockResolvedValue(scenario);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/scenarios/scenario-1/session",
+      payload: {
+        availableObjects: [],
+        expectedRevision: "rev-1",
+        gmPrivateNotes: "No edits.",
+      },
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: "Scenario is not editable in its current status." });
+    expect(mocks.scenarioService.updateScenarioSessionState).not.toHaveBeenCalled();
   });
 
   it("returns a compact canonical active-encounter revision", async () => {
