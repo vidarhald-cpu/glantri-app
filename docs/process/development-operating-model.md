@@ -261,6 +261,12 @@ consequential architecture, or priority decision; acceptance or integration
 gate; unexpected hotspot conflict; destructive persistent/recovery-data action;
 the `main`/Azure/production boundary; or unresolved behavior.
 
+Persistent Forgejo authentication follows the fail-closed contract in
+[`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md). Every Git or
+API operation selects its assigned role explicitly. An unqualified repository
+credential lookup must fail with prompting disabled; recovery administration
+is a separate, explicitly selected break-glass path and never a default.
+
 ## QA independence
 
 A Builder never self-accepts. Architecture/control plane and the Development
@@ -309,6 +315,9 @@ This document owns the high-level operating map. Details stay with:
   worker entry, verification breadth, child states, and QA return;
 - [`development-baseline.md`](./development-baseline.md): branch, baseline,
   integration, and release-boundary policy;
+- [`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md): persistent
+  local Forgejo identities, explicit fail-closed credential selection, secure
+  storage, scoped permissions, and branch enforcement;
 - [`../architecture/ownership.md`](../architecture/ownership.md): functional
   ownership and reserved hotspots; and
 - [`../dev-database.md`](../dev-database.md): protected and disposable database
