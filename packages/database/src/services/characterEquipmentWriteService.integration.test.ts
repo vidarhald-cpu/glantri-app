@@ -683,12 +683,7 @@ if (!process.env.DATABASE_URL_TEST) {
         aggregate.revision,
       );
       aggregate = await repo.getCharacterEquipmentAggregateState(character.id);
-      await service.setCharacterActiveWeapon(
-        character.id,
-        "missile",
-        bow.id,
-        aggregate.revision,
-      );
+      await service.setCharacterActiveWeapon(character.id, "missile", bow.id, aggregate.revision);
       aggregate = await repo.getCharacterEquipmentAggregateState(character.id);
       await service.setCharacterActiveAmmunition(character.id, [arrows.id], aggregate.revision);
 

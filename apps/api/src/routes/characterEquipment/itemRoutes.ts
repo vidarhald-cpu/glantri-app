@@ -192,7 +192,12 @@ export const equipmentItemRoutes: FastifyPluginAsync = async (app) => {
         ),
       };
     } catch (error) {
-      return handleRouteError(error, reply);
+      return handleRouteError(
+        error instanceof StaleCharacterEquipmentAggregateError
+          ? new ConflictError("Character equipment changed. Reload it before trying again.")
+          : error,
+        reply,
+      );
     }
   });
 };
