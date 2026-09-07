@@ -6,7 +6,14 @@ import {
 } from "./combatModifierLifecycle";
 import {
   combatCriticalBleedAccumulatorSchema,
+  combatCriticalBleedControlStateSchema,
   combatCriticalEffectRuntimeSchema,
+  combatCriticalExactRationalSchema,
+  getCombatCriticalBleedControlStateLabel,
+  getCombatCriticalBleedEffectiveRate,
+  transitionCombatCriticalBleedControl,
+  type CombatCriticalBleedControlState,
+  type CombatCriticalExactRational,
 } from "./combatCriticalRuntime";
 
 const idSchema = z.string().min(1);
@@ -163,6 +170,84 @@ export type CombatEffectsState = z.infer<typeof combatEffectsStateSchema>;
 
 export interface CombatEffectInitiativeTimingContext {
   currentInitiativeGroupId?: string;
+}
+
+export function transitionCombatCriticalBleedEffect(input: {
+  combatEffects?: CombatEffectsState;
+  createdAt: string;
+  createdByUserId?: string;
+  effectId: string;
+  encounterId?: string;
+  nextState: CombatCriticalBleedControlState;
+  partialRate?: CombatCriticalExactRational;
+  roundNumber?: number;
+  scenarioId?: string;
+}): {
+  combatEffects: CombatEffectsState;
+  nextState: CombatCriticalBleedControlState;
+  previousState: CombatCriticalBleedControlState;
+  rate: CombatCriticalExactRational;
+  treatmentEventId: string;
+} {
+  const combatEffects = combatEffectsStateSchema.parse(input.combatEffects);
+  const nextState = combatCriticalBleedControlStateSchema.parse(input.nextState);
+  const partialRate = input.partialRate
+    ? combatCriticalExactRationalSchema.parse(input.partialRate)
+    : undefined;
+  const source = combatEffects.effects.find((effect) => effect.id === input.effectId);
+  if (!source || source.criticalRuntime?.kind !== "bleed") {
+    throw new RangeError("The selected consequence is not an active structured Bleed source.");
+  }
+  if (source.status === "resolved" || source.status === "expired") {
+    throw new RangeError("The selected Bleed source is no longer available for treatment.");
+  }
+  const previousState = source.criticalRuntime.bleed.controlState;
+  if (previousState === nextState) {
+    throw new RangeError("Choose a different Bleed lifecycle state.");
+  }
+  const bleed = transitionCombatCriticalBleedControl({
+    bleed: source.criticalRuntime.bleed,
+    nextState,
+    partialRate,
+  });
+  const rate = getCombatCriticalBleedEffectiveRate(bleed);
+  const treatmentEventId = `${source.id}:treatment:${input.createdAt}`;
+  const stateLabel = getCombatCriticalBleedControlStateLabel(nextState);
+
+  return {
+    combatEffects: combatEffectsStateSchema.parse({
+      ...combatEffects,
+      effects: combatEffects.effects.map((effect) =>
+        effect.id === source.id
+          ? {
+              ...effect,
+              criticalRuntime: { ...source.criticalRuntime, bleed },
+              description: `${bleed.kind === "internal" ? "Internal Bleed" : "Bleed"} ${rate.numerator}/${rate.denominator} HP per round · ${stateLabel}.`,
+              updatedAt: input.createdAt,
+            }
+          : effect,
+      ),
+      events: [
+        ...combatEffects.events,
+        combatEffectEventSchema.parse({
+          createdAt: input.createdAt,
+          createdByUserId: input.createdByUserId,
+          description: `${bleed.kind === "internal" ? "Internal Bleed" : "Bleed"} changed from ${getCombatCriticalBleedControlStateLabel(previousState)} to ${stateLabel}.`,
+          encounterId: input.encounterId,
+          id: treatmentEventId,
+          roundNumber: input.roundNumber,
+          scenarioId: input.scenarioId,
+          sourceLabel: "Critical Bleed treatment",
+          sourceType: "healing",
+          targetParticipantId: source.targetParticipantId,
+        }),
+      ],
+    }),
+    nextState,
+    previousState,
+    rate,
+    treatmentEventId,
+  };
 }
 
 /**

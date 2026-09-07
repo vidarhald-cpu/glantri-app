@@ -175,6 +175,8 @@ import {
 import type { CombatCriticalRuntimeDefinition } from "./combatCriticalRuntime";
 import {
   accrueCombatCriticalBleed,
+  combatCriticalAdjudicationSchema,
+  combatCriticalCanonicalReviewSchema,
   combatCriticalBleedAccumulatorSchema,
   combatCriticalExactRationalSchema,
   getCombatCriticalBleedEffectiveRate,
@@ -535,6 +537,7 @@ export const combatRoundCommandTypeSchema = z.enum([
   "complete_damage_review_phase2",
   "resolve_damage",
   "commit_phase_damage",
+  "transition_critical_bleed",
   "roll_combat_experience",
   "set_pair_distance",
   "prepare_round_end_review",
@@ -1652,6 +1655,8 @@ export const combatRoundDamageResultSchema = z.object({
       armorCriticalModifierOverride: z.number().int().optional(),
       criticalEffectProposal: z
         .object({
+          adjudication: combatCriticalAdjudicationSchema.optional(),
+          canonicalReview: combatCriticalCanonicalReviewSchema.optional(),
           bodyText: z.string().min(1).optional(),
           criticalIndexStatus: z
             .enum(["no_effect", "table_lookup", "unsupported_high", "unsupported"])
@@ -1745,6 +1750,20 @@ function getAcceptedCombatRoundDamageReviewAdditionalEffects(
     (effect) =>
       effect.accepted !== false && !isCriticalEffectSourceConflictKey(effect.sourceEffectKey),
   );
+}
+
+function getAcceptedManualCombatRoundDamageReviewAdditionalEffects(
+  review?: CombatRoundDamageReview,
+): CombatRoundDamageReviewAdditionalEffect[] {
+  return getAcceptedCombatRoundDamageReviewAdditionalEffects(review).filter(
+    (effect) => !isCombatRoundCriticalTableReviewEffect(effect),
+  );
+}
+
+function isFiveKeyCriticalReviewRuntime(
+  criticalRuntime?: CombatCriticalRuntimeDefinition,
+): boolean {
+  return criticalRuntime?.fixtureVersion === "c1-five-key-post-393-2026-09-06";
 }
 
 function removeCombatRoundCriticalEffectProposalFromReview(
@@ -2238,12 +2257,25 @@ function mergeCombatRoundCriticalEffectProposalIntoReview(input: {
 
     return prior ? { ...consequence, accepted: prior.accepted } : consequence;
   });
+  const preservedAdjudication = sourceConflictSafeReview?.criticalEffectProposal?.adjudication;
+  const preservedCanonicalReview =
+    sourceConflictSafeReview?.criticalEffectProposal?.canonicalReview;
 
   return enforceCombatRoundCriticalSourceConflictRejections(
     combatRoundDamageResultSchema.shape.review.unwrap().parse({
       ...existingReview,
       additionalEffects: [...existingReview.additionalEffects, ...proposedEffects],
-      criticalEffectProposal: buildCriticalEffectProposalSummary(proposal),
+      criticalEffectProposal: {
+        ...buildCriticalEffectProposalSummary(proposal),
+        adjudication:
+          preservedAdjudication?.criticalKey === proposal.criticalResult?.critKey
+            ? preservedAdjudication
+            : undefined,
+        canonicalReview:
+          preservedCanonicalReview?.criticalKey === proposal.criticalResult?.critKey
+            ? preservedCanonicalReview
+            : undefined,
+      },
       operationalConsequences: [
         ...(existingReview.operationalConsequences ?? []),
         ...reconciledOperationalConsequences,
@@ -4135,6 +4167,131 @@ export function buildCombatRoundCommandId(input: {
   ].join(":");
 }
 
+export function recordCombatCriticalBleedTreatmentCommand(input: {
+  combatEffectEventId: string;
+  createdAt: string;
+  createdByUserId: string;
+  encounterParticipantId: string;
+  nextEffect: CombatEffect;
+  partialRate?: { denominator: number; numerator: number };
+  previousEffect: CombatEffect;
+  scenarioParticipantId: string;
+  state: CombatRoundState;
+}): { command: CombatRoundCommand; state: CombatRoundState } {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const previousEffect = combatEffectSchema.parse(input.previousEffect);
+  const nextEffect = combatEffectSchema.parse(input.nextEffect);
+  const previousBleed = previousEffect.criticalRuntime;
+  const nextBleed = nextEffect.criticalRuntime;
+
+  if (
+    previousEffect.id !== nextEffect.id ||
+    previousBleed?.kind !== "bleed" ||
+    nextBleed?.kind !== "bleed" ||
+    previousBleed.criticalKey !== nextBleed.criticalKey ||
+    previousBleed.fixtureVersion !== nextBleed.fixtureVersion
+  ) {
+    throw new RangeError("Critical Bleed treatment must preserve the canonical source identity.");
+  }
+  if (
+    !normalized.participants.some(
+      (participant) => participant.participantId === input.encounterParticipantId,
+    )
+  ) {
+    throw new RangeError("The treated participant is not in the active combat round.");
+  }
+
+  const beforeCursor =
+    normalized.currentCursor ??
+    getDefaultCombatRoundCursor({
+      participantId: input.encounterParticipantId,
+      roundNumber: normalized.roundNumber,
+      step: normalized.currentStep,
+    });
+  const commandId = buildCombatRoundCommandId({
+    createdAt: input.createdAt,
+    participantId: input.encounterParticipantId,
+    state: normalized,
+    type: "transition_critical_bleed",
+  });
+  const command = combatRoundCommandSchema.parse({
+    afterCursor: beforeCursor,
+    beforeCursor,
+    createdAt: input.createdAt,
+    createdByUserId: input.createdByUserId,
+    facts: {
+      actorUserId: input.createdByUserId,
+      combatEffectEventId: input.combatEffectEventId,
+      effectId: previousEffect.id,
+      nextEffect,
+      nextState: nextBleed.bleed.controlState,
+      partialRate: input.partialRate,
+      previousEffect,
+      previousState: previousBleed.bleed.controlState,
+      scenarioParticipantId: input.scenarioParticipantId,
+      targetParticipantId: input.encounterParticipantId,
+    },
+    id: commandId,
+    participantId: input.encounterParticipantId,
+    roundNumber: normalized.roundNumber,
+    step: beforeCursor.step,
+    type: "transition_critical_bleed",
+  });
+  const rate = getCombatCriticalBleedEffectiveRate(nextBleed.bleed);
+  const event = combatStepEventSchema.parse({
+    combatEffectEventId: input.combatEffectEventId,
+    combatEffectIds: [previousEffect.id],
+    commandId,
+    completeness: "complete",
+    encounterId: normalized.encounterId,
+    facts: {
+      gmReview: {
+        actorUserId: input.createdByUserId,
+        effectId: previousEffect.id,
+        partialRate: input.partialRate,
+        previousState: previousBleed.bleed.controlState,
+      },
+      involvedOutcome: {
+        bleedKind: nextBleed.bleed.kind,
+        currentRate: rate,
+        nextState: nextBleed.bleed.controlState,
+        previousState: previousBleed.bleed.controlState,
+      },
+      publicOutcome: { status: "committed" },
+    },
+    id: `${commandId}:event`,
+    missingFacts: [],
+    occurredAt: input.createdAt,
+    ownerParticipantId: input.encounterParticipantId,
+    roundNumber: normalized.roundNumber,
+    schemaVersion: 1,
+    sequence: getCombatRoundNextEventSequence(normalized),
+    source: {
+      commandType: "transition_critical_bleed",
+      kind: "canonical",
+      sourceIds: [commandId, previousEffect.id, input.combatEffectEventId],
+    },
+    status: "committed",
+    step: normalized.currentStep,
+    targetParticipantId: input.encounterParticipantId,
+    type: "effect_review",
+    visibility: {
+      identityRefs: [{ participantId: input.encounterParticipantId, role: "target" }],
+      involvedParticipantIds: [input.encounterParticipantId],
+      outcomeScope: "involved",
+    },
+  });
+
+  return {
+    command,
+    state: combatRoundStateSchema.parse({
+      ...normalized,
+      commands: [...normalized.commands, command],
+      events: [...normalized.events, event],
+    }),
+  };
+}
+
 export function recordCombatRoundGlobalParticipantCommand(input: {
   commandId?: string;
   createdAt: string;
@@ -5754,6 +5911,7 @@ function isUndoableCombatRoundCommandType(type: CombatRoundCommandType): boolean
     type === "complete_damage_review_phase2" ||
     type === "resolve_damage" ||
     type === "commit_phase_damage" ||
+    type === "transition_critical_bleed" ||
     type === "prepare_round_end_review" ||
     type === "commit_round_end_participant_review" ||
     type === "roll_round_end_health_check" ||
@@ -12823,9 +12981,11 @@ function buildCombatRoundDamageCommitRows(input: {
     roundNumber: input.command.roundNumber,
   };
   const eventId = buildCombatRoundDamageCommitEventId(idInput);
-  const reviewAdditionalEffects = input.criticalRuntime
-    ? []
-    : getAcceptedCombatRoundDamageReviewAdditionalEffects(input.damageResult.review);
+  const reviewAdditionalEffects = isFiveKeyCriticalReviewRuntime(input.criticalRuntime)
+    ? getAcceptedManualCombatRoundDamageReviewAdditionalEffects(input.damageResult.review)
+    : input.criticalRuntime
+      ? []
+      : getAcceptedCombatRoundDamageReviewAdditionalEffects(input.damageResult.review);
   const reviewOperationalConsequences = getAcceptedCombatRoundOperationalConsequences(
     input.damageResult,
   );
@@ -16869,6 +17029,9 @@ function buildCombatDamageResultPresentation(input: {
         ...(input.effectiveDamage.effectiveCriticalGrade
           ? [`Critical ${input.effectiveDamage.effectiveCriticalGrade}`]
           : []),
+        ...(input.damageResult.review?.criticalEffectProposal?.title
+          ? [input.damageResult.review.criticalEffectProposal.title]
+          : []),
       ],
       label: "Damage committed",
     },
@@ -17009,9 +17172,11 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
           }),
         ]
       : [];
-  const acceptedAdditionalEffects = input.criticalRuntime
-    ? []
-    : getAcceptedCombatRoundDamageReviewAdditionalEffects(input.damageResult.review);
+  const acceptedAdditionalEffects = isFiveKeyCriticalReviewRuntime(input.criticalRuntime)
+    ? getAcceptedManualCombatRoundDamageReviewAdditionalEffects(input.damageResult.review)
+    : input.criticalRuntime
+      ? []
+      : getAcceptedCombatRoundDamageReviewAdditionalEffects(input.damageResult.review);
   const createdAdditionalCombatEffectIds = acceptedAdditionalEffects.map((effect) =>
     buildCombatRoundDamageCommitEffectId({
       ...idInput,
@@ -17203,6 +17368,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
         },
         involvedOutcome: {
           criticalGrade: command.facts.criticalGrade,
+          criticalTitle: input.damageResult.review?.criticalEffectProposal?.title,
           finalCommittedDamage: command.facts.finalCommittedDamage,
           hitLocation: command.facts.effectiveHitLocation,
         },
@@ -26757,6 +26923,18 @@ function undoCombatRoundCommandAtIndex(input: {
     return undoCombatRoundCommittedDamageCommandAtIndex({
       commandIndex: input.commandIndex,
       state: normalized,
+    });
+  }
+
+  if (command.type === "transition_critical_bleed") {
+    const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
+    return combatRoundStateSchema.parse({
+      ...normalized,
+      commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+      currentCursor: command.beforeCursor,
+      currentStep: selectedStep,
+      selectedParticipantId: command.beforeCursor.participantId ?? normalized.selectedParticipantId,
+      selectedStep,
     });
   }
 

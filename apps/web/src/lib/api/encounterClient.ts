@@ -1112,6 +1112,25 @@ export async function saveCurrentCombatDamageReviewOnServer(
   );
 }
 
+export async function transitionCriticalBleedOnServer(input: {
+  currentEncounter?: EncounterSession;
+  effectId: string;
+  encounterId: string;
+  expectedRevision: string;
+  nextState: "active" | "partial" | "staunched_zero" | "stabilised" | "resolved";
+  partialRate?: { denominator: number; numerator: number };
+  scenarioParticipantId: string;
+}): Promise<{ encounter: EncounterSession; participant: ScenarioParticipant }> {
+  return sendCombatMutationJson(
+    `/encounters/${input.encounterId}/combat-round/transition-critical-bleed`,
+    {
+      body: combatMutationBody(input),
+      method: "POST",
+    },
+    input.currentEncounter,
+  );
+}
+
 export async function resolveCurrentCombatPhaseDamageOnServer(
   input: CombatDownstreamTaskRequestIdentity & {
     commandType: "resolve_damage";

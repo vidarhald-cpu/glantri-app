@@ -105,6 +105,7 @@ import {
   recordCombatRoundDefenseReview,
   recordCombatRoundHitLocationRoll,
   recordCombatRoundCriticalRoll,
+  recordCombatCriticalBleedTreatmentCommand,
   reviewCombatRoundDamageResult,
   recordCombatRoundInitiative,
   recordCombatRoundNoAttackPhaseReview,
@@ -146,7 +147,11 @@ import {
 import { encounterSessionSchema } from "./session";
 import { getDistanceBetween, makeDistancePairKey, setDistanceBetween } from "./combatDistance";
 import type { CombatRoundStepSnapshot } from "./combatRoundManager";
-import { combatEffectsStateSchema, type CombatEffectsState } from "./combatEffects";
+import {
+  combatEffectSchema,
+  combatEffectsStateSchema,
+  type CombatEffectsState,
+} from "./combatEffects";
 import {
   buildLiveCombatModifierContributionProjection,
   mergePersistentCombatEffectModifiers,
@@ -5817,6 +5822,90 @@ describe("combat round manager", () => {
 
     expect(canClearCombatRoundStep({ state, step: "select_actions" })).toBe(false);
     expect(canClearCombatRoundStep({ state: declared, step: "select_actions" })).toBe(true);
+  });
+
+  it("records Critical Bleed treatment as a real-GM command that existing Clear can undo", () => {
+    const state = initializeCombatRoundState({ encounter: encounter() });
+    const previousEffect = combatEffectSchema.parse({
+      createdAt: "2026-09-06T10:00:00.000Z",
+      criticalRuntime: {
+        bleed: {
+          allowedControlStates: ["active", "partial", "staunched_zero", "resolved"],
+          controlState: "active",
+          currentRate: { denominator: 2, numerator: 1 },
+          firstTickRound: 3,
+          kind: "external",
+          rate: { denominator: 2, numerator: 1 },
+          sourceEffectKey: "blunt|arm|12|03",
+          sourceRate: "1 HP / 2 rounds",
+        },
+        criticalKey: "blunt|arm|12",
+        fixtureVersion: "c1-five-key-post-393-2026-09-06",
+        kind: "bleed",
+      },
+      damage: 0,
+      effectGroup: "bleed",
+      generalDamage: 0,
+      id: "critical-bleed",
+      sourceEventId: "critical-event",
+      status: "active",
+      targetParticipantId: "scenario-guard",
+      type: "bleed",
+      updatedAt: "2026-09-06T10:00:00.000Z",
+    });
+    if (previousEffect.criticalRuntime?.kind !== "bleed") {
+      throw new Error("Expected a Critical Bleed fixture.");
+    }
+    const nextEffect = combatEffectSchema.parse({
+      ...previousEffect,
+      criticalRuntime: {
+        ...previousEffect.criticalRuntime,
+        bleed: {
+          ...previousEffect.criticalRuntime!.bleed,
+          controlState: "partial",
+          currentRate: { denominator: 4, numerator: 1 },
+        },
+      },
+      updatedAt: "2026-09-06T10:05:00.000Z",
+    });
+    const recorded = recordCombatCriticalBleedTreatmentCommand({
+      combatEffectEventId: "critical-bleed:treatment:1",
+      createdAt: "2026-09-06T10:05:00.000Z",
+      createdByUserId: "gm-user-1",
+      encounterParticipantId: "guard",
+      nextEffect,
+      partialRate: { denominator: 4, numerator: 1 },
+      previousEffect,
+      scenarioParticipantId: "scenario-guard",
+      state,
+    });
+
+    expect(recorded.command).toMatchObject({
+      createdByUserId: "gm-user-1",
+      participantId: "guard",
+      type: "transition_critical_bleed",
+      facts: {
+        actorUserId: "gm-user-1",
+        scenarioParticipantId: "scenario-guard",
+        targetParticipantId: "guard",
+      },
+    });
+    expect(recorded.state.events.at(-1)).toMatchObject({
+      commandId: recorded.command.id,
+      facts: { gmReview: { actorUserId: "gm-user-1" } },
+      targetParticipantId: "guard",
+    });
+    expect(recorded.state.events.at(-1)).not.toHaveProperty("actorParticipantId");
+    const reloaded = initializeCombatRoundState({
+      encounter: encounter({ combatRoundState: recorded.state }),
+    });
+    expect(reloaded.commands.at(-1)).toEqual(recorded.command);
+    expect(canClearCombatRoundStep({ state: reloaded, step: state.currentStep })).toBe(true);
+
+    const cleared = clearCurrentCombatRoundStepAndRewind(reloaded);
+    expect(cleared.commands).toHaveLength(0);
+    expect(cleared.events).toHaveLength(0);
+    expect(cleared.currentStep).toBe(state.currentStep);
   });
 
   it("parses legacy round state without commands or current cursor", () => {

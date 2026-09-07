@@ -6,6 +6,16 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync(resolve(__dirname, "encounterRoutes.ts"), "utf8");
 
 describe("combat route canonical-conformance guards", () => {
+  it("keeps five-key adjudication and Bleed treatment server-owned", () => {
+    expect(source).toContain("normalizeC1FiveKeyDamageReview(body.review)");
+    expect(source).toContain("getC1FiveKeyCanonicalReview(criticalKey)");
+    expect(source).toContain("buildRepresentativeCriticalRuntimeDefinition(criticalKey");
+    expect(source).toContain('"/encounters/:encounterId/combat-round/transition-critical-bleed"');
+    expect(source).toContain("Only GM users can update Critical Bleed treatment.");
+    expect(source).toContain("transitionCombatCriticalBleedEffect({");
+    expect(source).toContain("commitCombatParticipantStateMutation({");
+  });
+
   it("negotiates compact active-only mutation responses before serialization", () => {
     expect(source).toContain('app.addHook("preSerialization"');
     expect(source).toContain("buildRequestedCombatMutationResponse({");
