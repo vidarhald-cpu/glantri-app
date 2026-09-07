@@ -16,6 +16,7 @@ import type {
 import {
   addCampaignRosterEntryOnServer,
   createScenarioOnServer,
+  activateCampaignOnServer,
   loadCampaignById,
   loadCampaignCharacterRosterCandidates,
   loadCampaignEntities,
@@ -476,6 +477,19 @@ export default function CampaignDetailPageContent({
     }
   }
 
+  async function handleActivateCampaign() {
+    try {
+      setError(undefined);
+      setFeedback(undefined);
+      const nextCampaign = await activateCampaignOnServer({ campaignId });
+
+      setCampaign(nextCampaign);
+      setFeedback(`Activated ${nextCampaign.name}.`);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to activate campaign.");
+    }
+  }
+
   async function handleRosterMembershipToggle(candidate: RosterCandidate, member: boolean) {
     try {
       setError(undefined);
@@ -575,7 +589,24 @@ export default function CampaignDetailPageContent({
       <div>
         {!embedded ? <Link href="/campaigns">Campaigns</Link> : null}
         <h1 style={{ marginBottom: "0.5rem" }}>{campaign.name}</h1>
+        <div style={{ marginBottom: "0.5rem" }}>Status: {campaign.status}</div>
         <p style={{ margin: 0 }}>{campaign.description || "No description yet."}</p>
+        {campaign.status === "draft" ? (
+          <div>
+            <p>
+              Once activated, rostered players can discover this Campaign in their active campaign
+              list. Unrostered players remain blocked.
+            </p>
+            <p>Campaigns can be activated once, and cannot return to draft through this action.</p>
+            <button
+              onClick={() => void handleActivateCampaign()}
+              type="button"
+              style={{ background: "#2f5d62", color: "white", padding: "0.55rem 1rem" }}
+            >
+              Activate campaign
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {!embedded ? (

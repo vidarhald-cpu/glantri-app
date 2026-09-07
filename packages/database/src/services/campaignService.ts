@@ -386,6 +386,32 @@ export class CampaignService {
     return this.repository.updateCampaignAssetVisibility(input.assetId, input.visibility);
   }
 
+  async activateCampaign(input: {
+    actorIsAdmin?: boolean;
+    actorUserId: string;
+    campaignId: string;
+  }): Promise<Campaign> {
+    const campaign = await this.repository.getCampaignById(input.campaignId);
+
+    if (!campaign || (!input.actorIsAdmin && campaign.gmUserId !== input.actorUserId)) {
+      throw new Error("Campaign not found.");
+    }
+
+    if (campaign.status !== "draft") {
+      throw new Error("Campaign can only be activated from draft status.");
+    }
+
+    const next = await this.repository.activateCampaignFromDraft({
+      campaignId: input.campaignId,
+    });
+
+    if (!next) {
+      throw new Error("Campaign activation is stale and must be retried.");
+    }
+
+    return next;
+  }
+
   private async resolveCampaignRosterLabel(input: {
     actorIsAdmin?: boolean;
     actorUserId?: string;
