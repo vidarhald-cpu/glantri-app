@@ -68,6 +68,18 @@ export async function createCampaignOnServer(input: {
   return payload.campaign;
 }
 
+export async function activateCampaignOnServer(input: { campaignId: string }): Promise<Campaign> {
+  const payload = await sendJson<{ campaign: Campaign }>(
+    `/campaigns/${input.campaignId}/activate`,
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+    },
+  );
+
+  return payload.campaign;
+}
+
 export async function createTemplateOnServer(input: {
   description?: string;
   kind: ReusableEntity["kind"];

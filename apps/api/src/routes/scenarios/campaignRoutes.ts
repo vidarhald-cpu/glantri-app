@@ -196,9 +196,11 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const campaigns = await campaignService.listCampaignsByUserAccess(user.id);
+      const activeCampaigns = (await campaignService.listCampaignsByUserAccess(user.id)).filter(
+        (campaign) => campaign.status === "active",
+      );
       const accessibleCampaigns = await Promise.all(
-        campaigns.map(async (campaign) => ({
+        activeCampaigns.map(async (campaign) => ({
           campaign: buildPlayerAccessibleCampaign(campaign),
           scenarios: (
             await scenarioService.listScenariosByCampaignPlayerControl(campaign.id, user.id)
@@ -220,9 +222,11 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const campaigns = await campaignService.listCampaignsByUserAccess(user.id);
+      const activeCampaigns = (await campaignService.listCampaignsByUserAccess(user.id)).filter(
+        (campaign) => campaign.status === "active",
+      );
       const playerCampaigns = await Promise.all(
-        campaigns.map(async (campaign) => {
+        activeCampaigns.map(async (campaign) => {
           const [rosterCharacters, scenarios] = await Promise.all([
             campaignService.listPlayerCampaignCharacters({
               campaignId: campaign.id,
@@ -267,9 +271,10 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
-      const campaign = (await campaignService.listCampaignsByUserAccess(user.id)).find(
-        (candidate) => candidate.id === campaignId,
+      const activeCampaigns = (await campaignService.listCampaignsByUserAccess(user.id)).filter(
+        (candidate) => candidate.status === "active",
       );
+      const campaign = activeCampaigns.find((candidate) => candidate.id === campaignId);
 
       if (!campaign) {
         return reply.code(404).send({
@@ -338,6 +343,44 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       return { campaign };
     } catch (error) {
       return sendCampaignLoadFailure(request, reply, error);
+    }
+  });
+
+  app.post("/campaigns/:campaignId/activate", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const campaignId = parseId(request.params, "campaignId", "Campaign id");
+      const next = await campaignService.activateCampaign({
+        actorUserId: user.id,
+        actorIsAdmin: user.roles.includes("admin"),
+        campaignId,
+      });
+
+      return { campaign: next };
+    } catch (error) {
+      if (error instanceof Error && error.message === "Campaign not found.") {
+        return reply.code(404).send({
+          error: "Campaign not found.",
+        });
+      }
+
+      if (
+        error instanceof Error &&
+        error.message === "Campaign can only be activated from draft status."
+      ) {
+        return reply.code(400).send({
+          error: error.message,
+        });
+      }
+
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to activate campaign.",
+      });
     }
   });
 
