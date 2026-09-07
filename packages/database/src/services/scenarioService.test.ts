@@ -21,7 +21,8 @@ function rosterCharacters(rosterEntries: CampaignRosterEntry[], ...characterIds:
 
 describe("ScenarioService controller assignment", () => {
   it("explicitly refreshes committed equipment while preserving live participant state", async () => {
-    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const character = createCharacterRecord({ id: "character-1", name: "Scyrian" });
     rosterCharacters(rosterEntries, character.id);
     let equipmentState: Record<string, unknown> = {
@@ -119,7 +120,8 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("prevents one player from being assigned to two active player characters in the same scenario", async () => {
-    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const characters = new Map([
       ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })],
       [
@@ -161,7 +163,8 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("uses Character ownership only while Scenario control is unassigned", async () => {
-    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const character = createCharacterRecord({
       id: "character-1",
       name: "Ari",
@@ -206,8 +209,57 @@ describe("ScenarioService controller assignment", () => {
     ).resolves.toBe(true);
   });
 
+  it("denies player access when rostered Character is no longer rostered", async () => {
+    const { rosterEntries, repository, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
+    const character = createCharacterRecord({
+      id: "character-1",
+      name: "Ari",
+      ownerId: "owner-1",
+    });
+    rosterCharacters(rosterEntries, character.id);
+    const service = new ScenarioService(
+      repository,
+      {
+        getCharacterById: async () => character,
+      } as never,
+      {
+        getCharacterEquipmentState: async () => ({
+          activeLoadoutByCharacterId: {},
+          itemsById: {},
+          locationsById: {},
+          templatesById: {},
+        }),
+      } as never,
+    );
+
+    const participant = await service.addCharacterParticipant({
+      characterId: character.id,
+      joinSource: "gm_added",
+      scenarioId: "scenario-1",
+    });
+
+    await expect(
+      service.userHasPlayerScenarioAccess({ scenarioId: "scenario-1", userId: "owner-1" }),
+    ).resolves.toBe(true);
+
+    rosterEntries.length = 0;
+    await repository.updateScenarioParticipantMetadata({
+      controlledByUserId: "controller-1",
+      participantId: participant.id,
+    });
+
+    await expect(
+      service.userHasPlayerScenarioAccess({ scenarioId: "scenario-1", userId: "owner-1" }),
+    ).resolves.toBe(false);
+    await expect(
+      service.userHasPlayerScenarioAccess({ scenarioId: "scenario-1", userId: "controller-1" }),
+    ).resolves.toBe(false);
+  });
+
   it("allows the same controller to manage multiple non-player participants", async () => {
-    const { participants, repository } = createScenarioRepositoryStub();
+    const { participants, repository, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const service = new ScenarioService(
       repository,
       {
@@ -260,7 +312,8 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("rejects an out-of-roster Character before reading or writing Character state", async () => {
-    const { participants, repository } = createScenarioRepositoryStub();
+    const { participants, repository, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     let characterReads = 0;
     const service = new ScenarioService(repository, {
       getCharacterById: async () => {
@@ -282,7 +335,8 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("preserves temporary actor build, sheet, and equipment snapshots from entity input", async () => {
-    const { repository } = createScenarioRepositoryStub();
+    const { repository, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const sourceBuild = createCharacterRecord({
       id: "template-build-1",
       name: "City Guard",
@@ -338,7 +392,8 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("reuses one concrete entity identity while creating versioned snapshots in later scenarios", async () => {
-    const { participants, repository } = createScenarioRepositoryStub();
+    const { participants, repository, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const entity = {
       createdAt: "2026-08-13T08:00:00.000Z",
       gmUserId: "gm-1",
@@ -359,6 +414,19 @@ describe("ScenarioService controller assignment", () => {
       updatedAt: "2026-08-13T08:05:00.000Z",
     };
     repository.getReusableEntityById = async (entityId) => (entityId === entity.id ? entity : null);
+    repository.getScenarioById = async (scenarioId) => {
+      if (
+        scenarioId === scenario.id ||
+        scenarioId === "scenario-2" ||
+        scenarioId === "scenario-3"
+      ) {
+        return {
+          ...scenario,
+          id: scenarioId,
+        };
+      }
+      return null;
+    };
     const service = new ScenarioService(repository);
 
     const first = await service.addEntityParticipant({
@@ -397,7 +465,8 @@ describe("ScenarioService controller assignment", () => {
   });
 
   it("enforces the active-control rule when participant metadata is reassigned", async () => {
-    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const characters = new Map([
       ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })],
       ["character-2", createCharacterRecord({ id: "character-2", name: "Bryn", ownerId: null })],
@@ -461,6 +530,171 @@ describe("ScenarioService controller assignment", () => {
     });
 
     expect(first.controlledByUserId).toBe("user-1");
+  });
+
+  it("rejects Scenario lifecycle regressions not present in the transition matrix", async () => {
+    const { repository, scenario } = createScenarioRepositoryStub();
+    const service = new ScenarioService(repository);
+
+    repository.updateScenario = async (input) => {
+      if (input.status) scenario.status = input.status;
+      if (input.mapAssetId !== undefined) {
+        scenario.mapAssetId = input.mapAssetId ?? undefined;
+      }
+
+      return scenario;
+    };
+
+    await expect(
+      service.updateScenario({
+        scenarioId: "scenario-1",
+        status: "completed",
+      }),
+    ).rejects.toThrow("Scenario cannot transition from draft to completed.");
+
+    await expect(
+      service.updateScenario({
+        scenarioId: "scenario-1",
+        status: "archived",
+      }),
+    ).resolves.toMatchObject({ status: "archived" });
+  });
+
+  it("locks completed Scenarios to status-only archived transitions", async () => {
+    const { repository, scenario } = createScenarioRepositoryStub();
+    const service = new ScenarioService(repository);
+    let appliedStatus = scenario.status;
+    repository.updateScenario = async (input) => {
+      if (input.status) {
+        scenario.status = input.status;
+        appliedStatus = input.status;
+      }
+      if (input.name !== undefined) scenario.name = input.name;
+      if (input.kind !== undefined) scenario.kind = input.kind;
+      if (input.mapAssetId !== undefined) scenario.mapAssetId = input.mapAssetId ?? undefined;
+      if (input.description !== undefined) scenario.description = input.description;
+      return scenario;
+    };
+
+    scenario.status = "completed";
+
+    await expect(
+      service.updateScenario({
+        scenarioId: "scenario-1",
+        name: "Completed read-only",
+      }),
+    ).rejects.toThrow("Scenario is not editable in its current status.");
+
+    await expect(
+      service.updateScenario({
+        scenarioId: "scenario-1",
+        status: "completed",
+      }),
+    ).rejects.toThrow("Scenario is not editable in its current status.");
+
+    await expect(
+      service.updateScenario({
+        scenarioId: "scenario-1",
+        status: "archived",
+        description: "Blocked metadata update.",
+      }),
+    ).rejects.toThrow("Scenario is not editable in its current status.");
+
+    await expect(
+      service.updateScenario({
+        scenarioId: "scenario-1",
+        status: "archived",
+      }),
+    ).resolves.toMatchObject({ status: "archived" });
+
+    expect(appliedStatus).toBe("archived");
+  });
+
+  it("blocks archived Scenario same-status metadata mutations", async () => {
+    const { repository, scenario } = createScenarioRepositoryStub();
+    const service = new ScenarioService(repository);
+    repository.updateScenario = async () => {
+      return scenario;
+    };
+
+    scenario.status = "archived";
+
+    await expect(
+      service.updateScenario({
+        scenarioId: "scenario-1",
+        status: "archived",
+      }),
+    ).rejects.toThrow("Scenario is not editable in its current status.");
+  });
+
+  it("rejects stale scenario metadata updates before writing", async () => {
+    const { repository, scenario } = createScenarioRepositoryStub();
+    const service = new ScenarioService(repository);
+    const updateInvocations: unknown[] = [];
+    repository.updateScenario = async (input) => {
+      updateInvocations.push(input);
+      scenario.status = input.status ?? scenario.status;
+      return scenario;
+    };
+    scenario.updatedAt = "2026-04-21T00:00:00.001Z";
+
+    await expect(
+      service.updateScenario({
+        expectedRevision: "2026-04-21T00:00:00.000Z",
+        scenarioId: "scenario-1",
+        status: "live",
+      }),
+    ).rejects.toMatchObject({ code: "stale_revision" });
+
+    expect(updateInvocations).toHaveLength(0);
+  });
+
+  it("blocks participant mutations on non-editable Scenario status", async () => {
+    const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+    rosterCharacters(rosterEntries, "character-1");
+
+    scenario.status = "completed";
+
+    const service = new ScenarioService(repository, {
+      getCharacterById: async () => createCharacterRecord({ id: "character-1", name: "Ari" }),
+    } as never);
+
+    await expect(
+      service.addCharacterParticipant({
+        characterId: "character-1",
+        joinSource: "gm_added",
+        scenarioId: "scenario-1",
+      }),
+    ).rejects.toThrow("Scenario is not editable in its current status.");
+  });
+
+  it("requires live status for session state mutations", async () => {
+    const { repository, scenario } = createScenarioRepositoryStub();
+
+    scenario.status = "completed";
+
+    const service = new ScenarioService(repository);
+
+    await expect(
+      service.updateScenarioSessionState({
+        availableObjects: [],
+        expectedRevision: "rev-1",
+        gmPrivateNotes: "",
+        scenarioId: "scenario-1",
+      }),
+    ).rejects.toThrow("Scenario is not currently live.");
+
+    await expect(
+      service.pickUpScenarioAvailableItem({
+        actorUserId: "user-1",
+        availabilityId: "item-1",
+        expectedRevision: "rev-1",
+        requestId: "request-1",
+        scenarioId: "scenario-1",
+        targetParticipantId: "participant-1",
+        viewerMode: "player",
+      }),
+    ).rejects.toThrow("Scenario is not currently live.");
   });
 });
 

@@ -28,7 +28,7 @@ const scenarioCanonicalCombatModifierTransitionSchema = z
 export const scenarioVisibilitySchema = z.enum(["hidden", "visible_to_all", "gm_only"]);
 export const campaignStatusSchema = z.enum(["draft", "active", "archived"]);
 export const scenarioKindSchema = z.enum(["combat", "social", "travel", "mixed"]);
-export const scenarioStatusSchema = z.enum(["draft", "prepared", "live", "completed", "archived"]);
+export const scenarioStatusSchema = z.enum(["draft", "live", "paused", "completed", "archived"]);
 export const scenarioCombatStatusSchema = z.enum(["not_started", "in_progress", "paused", "ended"]);
 export const scenarioAvailableObjectSourceKindSchema = z.enum([
   "campaign_asset",
@@ -513,6 +513,33 @@ export type ScenarioPlayerControlledParticipant = z.infer<
   typeof scenarioPlayerControlledParticipantSchema
 >;
 export type ScenarioPlayerProjection = z.infer<typeof scenarioPlayerProjectionSchema>;
+
+export const scenarioLifecycleTransitions: Record<ScenarioStatus, ScenarioStatus[]> = {
+  draft: ["live", "archived"],
+  live: ["paused", "completed"],
+  paused: ["live", "completed"],
+  completed: ["archived"],
+  archived: [],
+};
+
+export function canTransitionScenarioStatus(
+  currentStatus: ScenarioStatus,
+  nextStatus: ScenarioStatus,
+): boolean {
+  return scenarioLifecycleTransitions[currentStatus]?.includes(nextStatus) ?? false;
+}
+
+export function canMutateScenarioInStatus(status: ScenarioStatus): boolean {
+  return isScenarioLiveInteractive(status);
+}
+
+export function isScenarioLiveInteractive(status: ScenarioStatus): boolean {
+  return status === "live";
+}
+
+export function isScenarioReadOnly(status: ScenarioStatus): boolean {
+  return status === "completed" || status === "archived";
+}
 
 function clampHealth(value: number, max: number): number {
   return Math.max(0, Math.min(value, max));

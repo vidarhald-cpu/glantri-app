@@ -88,8 +88,8 @@ enum ScenarioKind {
 
 enum ScenarioStatus {
   draft
-  prepared
   live
+  paused
   completed
   archived
 }

@@ -12,7 +12,8 @@ import { createScenarioRepositoryStub } from "./scenarioService.testHelpers";
 
 describe("EncounterService participant effect modifier refresh", () => {
   it("persists and logs participant state with imported rows refreshed atomically", async () => {
-    const { eventLogs, repository } = createScenarioRepositoryStub();
+    const { eventLogs, repository, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const initialState = scenarioParticipantStateSchema.parse({
       combat: {},
       equipment: {},
@@ -96,7 +97,8 @@ describe("EncounterService participant effect modifier refresh", () => {
   });
 
   it("passes participant and encounter SU state through one combat transaction", async () => {
-    const { repository } = createScenarioRepositoryStub();
+    const { repository, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
     const state = scenarioParticipantStateSchema.parse({
       combat: {},
       equipment: {},

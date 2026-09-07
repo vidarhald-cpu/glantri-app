@@ -8,6 +8,7 @@ import {
 } from "@glantri/database";
 import {
   attachCanonicalPersistentEffectLifecycles,
+  isScenarioLiveInteractive,
   buildScenarioPlayerVisibleParticipants,
   reusableEntityKindSchema,
   scenarioParticipantJoinSourceSchema,
@@ -145,6 +146,10 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (isGameMaster && !isScenarioLiveInteractive(scenario.status)) {
+        return reply.code(400).send({ error: "Scenario is not currently open for live updates." });
+      }
+
       if (!canEditCharacterInApi(user)) {
         const character = await characterService.getOwnedCharacter(user.id, characterId);
 
@@ -156,9 +161,9 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
       }
 
       if (!isGameMaster) {
-        if (scenario.status !== "live") {
-          return reply.code(403).send({
-            error: "No live scenario is currently available for this character.",
+        if (!isScenarioLiveInteractive(scenario.status)) {
+          return reply.code(404).send({
+            error: "Scenario not found.",
           });
         }
       }
@@ -315,6 +320,22 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: "Scenario not found." });
       }
 
+      const scenario = await scenarioService.getScenarioById(scenarioId);
+
+      if (!scenario) {
+        return reply.code(404).send({ error: "Scenario not found." });
+      }
+
+      if (!isScenarioLiveInteractive(scenario.status)) {
+        return reply.code(403).send({ error: "Scenario is not currently open for live updates." });
+      }
+
+      if (access.mode === "player" && !isScenarioLiveInteractive(scenario.status)) {
+        return reply
+          .code(403)
+          .send({ error: "Scenario is not currently open for live participant updates." });
+      }
+
       if (access.mode === "player") {
         const participant = await scenarioService.getScenarioParticipantById(
           participantId,
@@ -405,6 +426,16 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
 
       if (!access || access.mode !== "gm") {
         return reply.code(404).send({ error: "Scenario not found." });
+      }
+
+      const scenario = await scenarioService.getScenarioById(scenarioId);
+
+      if (!scenario) {
+        return reply.code(404).send({ error: "Scenario not found." });
+      }
+
+      if (!isScenarioLiveInteractive(scenario.status)) {
+        return reply.code(400).send({ error: "Scenario is not currently open for live updates." });
       }
 
       const body = parseBodyObject(request.body, "Participant metadata payload");

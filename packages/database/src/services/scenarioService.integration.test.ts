@@ -93,6 +93,7 @@ if (!process.env.DATABASE_URL_TEST) {
       const scenario = await service.createScenario({
         campaignId: campaign.id,
         name: "Closed Scene",
+        status: "live",
       });
 
       await expect(
@@ -107,6 +108,67 @@ if (!process.env.DATABASE_URL_TEST) {
       await expect(
         prisma!.character.findUnique({ where: { id: character.id } }),
       ).resolves.toMatchObject({ ownerId: owner.id });
+    });
+
+    it("accepts exactly one terminal mutation when draft scenarios concurrently transition", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["gm"] });
+      const repository = createPrismaScenarioRepository(prisma!);
+      const campaignService = new CampaignService(repository);
+      const service = new ScenarioService(repository);
+
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Draft Race",
+      });
+
+      for (let race = 0; race < 5; race += 1) {
+        const scenario = await service.createScenario({
+          campaignId: campaign.id,
+          name: `Draft Race ${race}`,
+          status: "draft",
+        });
+
+        const [liveResult, archivedResult] = await Promise.allSettled([
+          service.updateScenario({
+            expectedRevision: scenario.updatedAt,
+            scenarioId: scenario.id,
+            status: "live",
+          }),
+          service.updateScenario({
+            expectedRevision: scenario.updatedAt,
+            scenarioId: scenario.id,
+            status: "archived",
+          }),
+        ]);
+
+        const fulfilled =
+          liveResult.status === "fulfilled" || archivedResult.status === "fulfilled";
+        const failed = liveResult.status === "rejected" || archivedResult.status === "rejected";
+        expect(fulfilled).toBe(true);
+        expect(failed).toBe(true);
+
+        const winner =
+          liveResult.status === "fulfilled"
+            ? liveResult.value
+            : archivedResult.status === "fulfilled"
+              ? archivedResult.value
+              : null;
+        expect(winner).not.toBeNull();
+
+        const finalScenario = await service.getScenarioById(scenario.id);
+        expect(finalScenario?.status).toBe(winner!.status);
+
+        let loser: PromiseRejectedResult | null = null;
+        if (liveResult.status === "rejected") {
+          loser = liveResult;
+        } else if (archivedResult.status === "rejected") {
+          loser = archivedResult;
+        }
+        expect(loser).not.toBeNull();
+        expect(loser!.reason).toMatchObject({
+          code: expect.stringMatching(/^(stale_revision|transaction_conflict)$/),
+        });
+      }
     });
 
     it("withholds a delegated live Scenario from its Character owner", async () => {

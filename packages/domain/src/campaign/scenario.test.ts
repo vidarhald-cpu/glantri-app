@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ScenarioStatus,
+  canMutateScenarioInStatus,
+  canTransitionScenarioStatus,
+  isScenarioLiveInteractive,
+  isScenarioReadOnly,
   scenarioCombatModifierEntrySchema,
   scenarioParticipantCombatContextSchema,
 } from "./scenario";
@@ -154,5 +159,59 @@ describe("scenario combat modifier entries", () => {
         targetParticipantId: "participant-target-1",
       }).targetParticipantId,
     ).toBe("participant-target-1");
+  });
+});
+
+describe("scenario lifecycle gates", () => {
+  it.each([
+    ["draft", "draft", false],
+    ["draft", "live", true],
+    ["draft", "paused", false],
+    ["draft", "completed", false],
+    ["draft", "archived", true],
+    ["live", "draft", false],
+    ["live", "live", false],
+    ["live", "paused", true],
+    ["live", "completed", true],
+    ["live", "archived", false],
+    ["paused", "draft", false],
+    ["paused", "live", true],
+    ["paused", "paused", false],
+    ["paused", "completed", true],
+    ["paused", "archived", false],
+    ["completed", "live", false],
+    ["completed", "paused", false],
+    ["completed", "completed", false],
+    ["completed", "archived", true],
+    ["archived", "draft", false],
+    ["archived", "live", false],
+    ["archived", "paused", false],
+    ["archived", "completed", false],
+    ["archived", "archived", false],
+  ])("enforces transition from %s to %s", (from, to, expected) => {
+    expect(canTransitionScenarioStatus(from as ScenarioStatus, to as ScenarioStatus)).toBe(
+      expected,
+    );
+  });
+
+  it.each([
+    ["draft", false, false],
+    ["live", false, true],
+    ["paused", false, false],
+    ["completed", true, false],
+    ["archived", true, false],
+  ])("marks %s as read-only=%s and live-mutable=%s", (status, readOnly, mutable) => {
+    expect(isScenarioReadOnly(status as ScenarioStatus)).toBe(readOnly);
+    expect(canMutateScenarioInStatus(status as ScenarioStatus)).toBe(mutable);
+  });
+
+  it.each([
+    ["draft", false],
+    ["live", true],
+    ["paused", false],
+    ["completed", false],
+    ["archived", false],
+  ])("reports interactive access for %s scenarios", (status, interactive) => {
+    expect(isScenarioLiveInteractive(status as ScenarioStatus)).toBe(interactive);
   });
 });

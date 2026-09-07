@@ -7,6 +7,7 @@ import {
   ScenarioSessionWriteError,
 } from "@glantri/database";
 import {
+  canMutateScenarioInStatus,
   buildPlayerSafeScenario,
   buildScenarioSessionView,
   buildScenarioPlayerProjection,
@@ -164,13 +165,20 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
       if (!access || access.mode !== "gm") {
         return reply.code(404).send({ error: "Scenario not found." });
       }
+      const scenario = await scenarioService.getScenarioById(scenarioId);
+      if (!scenario) {
+        return reply.code(404).send({ error: "Scenario not found." });
+      }
+      if (!canMutateScenarioInStatus(scenario.status)) {
+        return reply.code(400).send({ error: "Scenario is not editable in its current status." });
+      }
       const body = parseBodyObject(request.body, "Scenario session payload");
       if (!Array.isArray(body.availableObjects)) {
         throw new Error("Available objects must be a list.");
       }
       const expectedRevision = parseOptionalString(body, "expectedRevision");
       if (!expectedRevision) throw new Error("Refresh the Scenario before saving.");
-      const scenario = await scenarioService.updateScenarioSessionState({
+      const updated = await scenarioService.updateScenarioSessionState({
         availableObjects: body.availableObjects.map((reference) =>
           scenarioAvailableObjectReferenceSchema.parse(reference),
         ),
@@ -178,7 +186,7 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
         gmPrivateNotes: parseOptionalString(body, "gmPrivateNotes") ?? "",
         scenarioId,
       });
-      return { scenario };
+      return { scenario: updated };
     } catch (error) {
       if (error instanceof ScenarioSessionWriteError) {
         return reply.code(409).send({ error: error.message });
@@ -203,6 +211,14 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
           { scenarioId, userId: user.id, userRoles: user.roles },
         );
         if (!access) return reply.code(404).send({ error: "Available Item not found." });
+        const scenario = await scenarioService.getScenarioById(scenarioId);
+
+        if (!scenario) {
+          return reply.code(404).send({ error: "Available Item not found." });
+        }
+        if (!canMutateScenarioInStatus(scenario.status)) {
+          return reply.code(400).send({ error: "Scenario is not editable in its current status." });
+        }
         const body = parseBodyObject(request.body, "Item pickup payload");
         const expectedRevision = parseOptionalString(body, "expectedRevision");
         const requestId = parseOptionalString(body, "requestId");
@@ -270,10 +286,13 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const scenario = await scenarioService.getScenarioById(scenarioId);
+      if (!scenario) {
+        return reply.code(404).send({ error: "Scenario not found." });
+      }
       const participants = await scenarioService.listScenarioParticipants(scenarioId);
       const projection = buildScenarioPlayerProjection({
         participants,
-        scenario: scenario!,
+        scenario,
         userId: user.id,
         viewerMode: access.mode,
       });
@@ -313,7 +332,9 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const body = parseBodyObject(request.body, "Scenario update payload");
+      const expectedRevision = parseOptionalString(body, "expectedRevision");
       const scenario = await scenarioService.updateScenario({
+        expectedRevision,
         description: parseOptionalString(body, "description"),
         kind: body.kind == null ? undefined : scenarioKindSchema.parse(body.kind),
         mapAssetId: parseOptionalNullableString(body, "mapAssetId"),
@@ -324,6 +345,20 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
 
       return { scenario };
     } catch (error) {
+      const conflictCode =
+        typeof error === "object" && error !== null
+          ? (error as { code?: unknown }).code
+          : undefined;
+
+      if (conflictCode === "stale_revision" || conflictCode === "transaction_conflict") {
+        return reply.code(409).send({
+          code: conflictCode,
+          error:
+            typeof error === "object" && error !== null && "message" in error
+              ? String((error as { message?: unknown }).message ?? "")
+              : "Unable to update scenario.",
+        });
+      }
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to update scenario.",
       });
@@ -356,6 +391,9 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const body = parseBodyObject(request.body, "Scenario live state payload");
+      if (!canMutateScenarioInStatus(existingScenario.status)) {
+        return reply.code(400).send({ error: "Scenario is not editable in its current status." });
+      }
       const scenario = await encounterService.updateScenarioLiveState({
         liveState: scenarioLiveStateSchema.parse(body.liveState),
         scenarioId,

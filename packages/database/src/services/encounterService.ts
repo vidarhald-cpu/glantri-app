@@ -1,4 +1,5 @@
 import {
+  isScenarioLiveInteractive,
   refreshScenarioParticipantPersistentCombatModifiers,
   type EncounterSession,
   type EncounterSessionSummary,
@@ -79,6 +80,7 @@ export class EncounterService {
     scenarioId: string;
     session: EncounterSession;
   }): Promise<EncounterSession> {
+    await this.assertScenarioAllowsLiveMutation(input.scenarioId);
     return this.encounterRepository.createEncounter(input);
   }
 
@@ -110,6 +112,9 @@ export class EncounterService {
     scenarioId?: string | null;
     session: EncounterSession;
   }): Promise<EncounterSession> {
+    if (input.scenarioId) {
+      await this.assertScenarioAllowsLiveMutation(input.scenarioId);
+    }
     try {
       return await this.encounterRepository.updateEncounter(input);
     } catch (error) {
@@ -139,6 +144,9 @@ export class EncounterService {
       state: ScenarioParticipantState;
     }>;
   }): Promise<EncounterSession> {
+    if (input.scenarioId) {
+      await this.assertScenarioAllowsLiveMutation(input.scenarioId);
+    }
     try {
       return await this.encounterRepository.updateCombatEncounter(input);
     } catch (error) {
@@ -328,6 +336,7 @@ export class EncounterService {
     scenarioId: string;
     state: ScenarioParticipantState;
   }): Promise<ScenarioParticipant> {
+    await this.assertScenarioAllowsLiveMutation(input.scenarioId);
     // This is the shared persisted-state boundary for participant effect mutations from
     // combat commands, undo, round-end duration changes, and direct GM effect editing.
     const state = refreshScenarioParticipantPersistentCombatModifiers({ state: input.state });
@@ -358,5 +367,17 @@ export class EncounterService {
     }
 
     return scenario;
+  }
+
+  private async assertScenarioAllowsLiveMutation(scenarioId: string): Promise<void> {
+    const scenario = await this.scenarioRepository.getScenarioById(scenarioId);
+
+    if (!scenario) {
+      throw new Error("Scenario not found.");
+    }
+
+    if (!isScenarioLiveInteractive(scenario.status)) {
+      throw new Error("Scenario is not currently live.");
+    }
   }
 }
