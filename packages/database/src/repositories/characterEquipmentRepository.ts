@@ -190,6 +190,20 @@ function mapLoadout(record: {
 }
 
 export interface CharacterEquipmentRepository {
+  /** A repeatable-read snapshot of every normalized record in one Character aggregate. */
+  getCharacterEquipmentAggregateState(
+    characterId: string,
+  ): Promise<CharacterEquipmentAggregateState>;
+  /**
+   * Runs one equipment mutation under the aggregate revision lock.  Callers
+   * must supply the revision they read; stale callers change no participating
+   * record.
+   */
+  mutateCharacterEquipmentAggregate<T>(input: {
+    characterId: string;
+    expectedRevision: number;
+    mutation: (repository: CharacterEquipmentRepository) => Promise<T>;
+  }): Promise<{ result: T; revision: number }>;
   createCharacterStorageLocation(location: StorageLocation): Promise<StorageLocation>;
   removeCharacterStorageLocation(characterId: string, locationId: string): Promise<void>;
   createCharacterEquipmentItem(item: AssignedEquipmentItem): Promise<AssignedEquipmentItem>;
@@ -225,7 +239,22 @@ export interface CharacterEquipmentRepository {
     items: AssignedEquipmentItem[];
     loadouts: DomainCharacterLoadout[];
     locations: StorageLocation[];
+    revision: number;
   }>;
+}
+
+export interface CharacterEquipmentAggregateState {
+  items: AssignedEquipmentItem[];
+  loadouts: DomainCharacterLoadout[];
+  locations: StorageLocation[];
+  revision: number;
+}
+
+export class StaleCharacterEquipmentAggregateError extends Error {
+  constructor() {
+    super("Character equipment changed. Reload it before trying again.");
+    this.name = "StaleCharacterEquipmentAggregateError";
+  }
 }
 
 export interface CombatItemInteractionRecord {
@@ -284,7 +313,9 @@ export interface TransferCampaignEquipmentItemInput {
   campaignId: string;
   itemId: string;
   sourceCharacterId: string;
+  sourceExpectedRevision?: number;
   targetCharacterId: string;
+  targetExpectedRevision?: number;
   targetStorageAssignment: ItemStorageAssignment;
 }
 
@@ -300,7 +331,94 @@ export function createPrismaCharacterEquipmentRepository(
 ): CharacterEquipmentRepository {
   const prisma = (client ?? defaultPrisma) as PrismaClient;
   const transactionClient = client && !("$transaction" in client) ? client : undefined;
+
+  const loadAggregateState = async (
+    transaction: Prisma.TransactionClient,
+    characterId: string,
+  ): Promise<CharacterEquipmentAggregateState> => {
+    await transaction.characterEquipmentAggregate.upsert({
+      create: { characterId },
+      update: {},
+      where: { characterId },
+    });
+    const aggregates = await transaction.$queryRaw<Array<{ revision: number }>>(
+      Prisma.sql`SELECT "revision" FROM "CharacterEquipmentAggregate" WHERE "characterId" = ${characterId} FOR SHARE`,
+    );
+    const aggregate = aggregates[0];
+    if (!aggregate) throw new Error("Character equipment aggregate not found.");
+    const [items, locations, loadouts] = await Promise.all([
+      transaction.characterEquipmentItem.findMany({
+        orderBy: { createdAt: "asc" },
+        where: {
+          carryMode: { not: null },
+          holderCharacterId: characterId,
+          locationId: { not: null },
+        },
+      }),
+      transaction.characterStorageLocation.findMany({
+        orderBy: { createdAt: "asc" },
+        where: { characterId },
+      }),
+      transaction.characterLoadout.findMany({
+        orderBy: [{ isActive: "desc" }, { createdAt: "asc" }],
+        where: { characterId },
+      }),
+    ]);
+    return {
+      items: items.map(mapEquipmentItem),
+      loadouts: loadouts.map(mapLoadout),
+      locations: locations.map(mapStorageLocation),
+      revision: aggregate.revision,
+    };
+  };
+
   return {
+    async getCharacterEquipmentAggregateState(characterId) {
+      const read = async (transaction: Prisma.TransactionClient) =>
+        loadAggregateState(transaction, characterId);
+      return transactionClient
+        ? read(transactionClient)
+        : prisma.$transaction(read, {
+            isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+          });
+    },
+    async mutateCharacterEquipmentAggregate(input) {
+      if (input.expectedRevision < 0 || !Number.isInteger(input.expectedRevision)) {
+        throw new StaleCharacterEquipmentAggregateError();
+      }
+      const mutate = async (transaction: Prisma.TransactionClient) => {
+        await transaction.characterEquipmentAggregate.upsert({
+          create: { characterId: input.characterId },
+          update: {},
+          where: { characterId: input.characterId },
+        });
+        const locked = await transaction.$queryRaw<Array<{ revision: number }>>(
+          Prisma.sql`SELECT "revision" FROM "CharacterEquipmentAggregate" WHERE "characterId" = ${input.characterId} FOR UPDATE`,
+        );
+        if (locked[0]?.revision !== input.expectedRevision) {
+          throw new StaleCharacterEquipmentAggregateError();
+        }
+        const result = await input.mutation(createPrismaCharacterEquipmentRepository(transaction));
+        const advanced = await transaction.characterEquipmentAggregate.updateMany({
+          data: { revision: { increment: 1 } },
+          where: { characterId: input.characterId, revision: input.expectedRevision },
+        });
+        if (advanced.count !== 1) throw new StaleCharacterEquipmentAggregateError();
+        return { result, revision: input.expectedRevision + 1 };
+      };
+      try {
+        return transactionClient
+          ? await mutate(transactionClient)
+          : await prisma.$transaction(mutate, {
+              isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+          throw new StaleCharacterEquipmentAggregateError();
+        }
+        throw error;
+      }
+    },
     async createCharacterStorageLocation(location) {
       const created = await prisma.characterStorageLocation.create({
         data: {
@@ -424,6 +542,30 @@ export function createPrismaCharacterEquipmentRepository(
     },
     async transferCampaignEquipmentItem(input) {
       const persist = async (transaction: Prisma.TransactionClient) => {
+        const aggregateCharacterIds = [input.sourceCharacterId, input.targetCharacterId].sort();
+        for (const characterId of aggregateCharacterIds) {
+          await transaction.characterEquipmentAggregate.upsert({
+            create: { characterId },
+            update: {},
+            where: { characterId },
+          });
+        }
+        const aggregates = await transaction.$queryRaw<
+          Array<{ characterId: string; revision: number }>
+        >(
+          Prisma.sql`SELECT "characterId", "revision" FROM "CharacterEquipmentAggregate" WHERE "characterId" IN (${Prisma.join(aggregateCharacterIds)}) ORDER BY "characterId" FOR UPDATE`,
+        );
+        const revisionByCharacterId = new Map(
+          aggregates.map((aggregate) => [aggregate.characterId, aggregate.revision]),
+        );
+        if (
+          (input.sourceExpectedRevision !== undefined &&
+            revisionByCharacterId.get(input.sourceCharacterId) !== input.sourceExpectedRevision) ||
+          (input.targetExpectedRevision !== undefined &&
+            revisionByCharacterId.get(input.targetCharacterId) !== input.targetExpectedRevision)
+        ) {
+          throw new StaleCharacterEquipmentAggregateError();
+        }
         await transaction.$queryRaw(
           Prisma.sql`SELECT "id" FROM "CharacterEquipmentItem" WHERE "id" = ${input.itemId} FOR UPDATE`,
         );
@@ -495,6 +637,25 @@ export function createPrismaCharacterEquipmentRepository(
           throw new Error("The receiving Character has no valid storage for this transfer.");
         }
 
+        await transaction.characterLoadout.upsert({
+          create: {
+            activeAmmoItemIds: [],
+            activeMissileWeaponItemId: null,
+            activePrimaryWeaponItemId: null,
+            activeSecondaryWeaponItemId: null,
+            characterId: input.targetCharacterId,
+            id: `${input.targetCharacterId}:loadout-current`,
+            isActive: true,
+            name: "Current",
+            notes: null,
+            quickAccessItemIdsJson: [],
+            readyShieldItemId: null,
+            wornArmorItemId: null,
+          },
+          update: {},
+          where: { id: `${input.targetCharacterId}:loadout-current` },
+        });
+
         const sourceLoadouts = await transaction.characterLoadout.findMany({
           where: { characterId: input.sourceCharacterId },
         });
@@ -551,13 +712,38 @@ export function createPrismaCharacterEquipmentRepository(
           throw new Error("Campaign item not found after transfer.");
         }
 
+        const sourceAdvanced = await transaction.characterEquipmentAggregate.updateMany({
+          data: { revision: { increment: 1 } },
+          where: {
+            characterId: input.sourceCharacterId,
+            revision: revisionByCharacterId.get(input.sourceCharacterId),
+          },
+        });
+        const targetAdvanced = await transaction.characterEquipmentAggregate.updateMany({
+          data: { revision: { increment: 1 } },
+          where: {
+            characterId: input.targetCharacterId,
+            revision: revisionByCharacterId.get(input.targetCharacterId),
+          },
+        });
+        if (sourceAdvanced.count !== 1 || targetAdvanced.count !== 1) {
+          throw new StaleCharacterEquipmentAggregateError();
+        }
+
         return mapCanonicalEquipmentItem(updated);
       };
-      return transactionClient
-        ? persist(transactionClient)
-        : prisma.$transaction(persist, {
-            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-          });
+      try {
+        return transactionClient
+          ? await persist(transactionClient)
+          : await prisma.$transaction(persist, {
+              isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+          throw new StaleCharacterEquipmentAggregateError();
+        }
+        throw error;
+      }
     },
     async getCombatItemInteractionRecords(campaignId) {
       const items = await prisma.characterEquipmentItem.findMany({
@@ -1050,7 +1236,7 @@ export function createPrismaCharacterEquipmentRepository(
       ].filter((id): id is string => Boolean(id));
       const uniqueReferencedItemIds = [...new Set(referencedItemIds)];
 
-      const upserted = await prisma.$transaction(async (transaction) => {
+      const persist = async (transaction: Prisma.TransactionClient) => {
         if (uniqueReferencedItemIds.length > 0) {
           await transaction.$queryRaw(
             Prisma.sql`SELECT "id" FROM "CharacterEquipmentItem" WHERE "id" IN (${Prisma.join(uniqueReferencedItemIds)}) FOR UPDATE`,
@@ -1097,42 +1283,49 @@ export function createPrismaCharacterEquipmentRepository(
             id: loadout.id,
           },
         });
-      });
+      };
+      const upserted = transactionClient
+        ? await persist(transactionClient)
+        : await prisma.$transaction(persist);
 
       return mapLoadout(upserted);
     },
     async ensureDefaultEquipmentLocations(characterId) {
       const defaults = createDefaultEquipmentLocations(characterId);
 
-      await prisma.$transaction(
-        defaults.map((location) =>
-          prisma.characterStorageLocation.upsert({
-            create: {
-              availabilityClass: location.availabilityClass,
-              characterId: location.characterId,
-              id: location.id,
-              isAccessibleInEncounter: location.isAccessibleInEncounter,
-              isMobile: location.isMobile,
-              name: location.name,
-              notes: location.notes ?? null,
-              parentLocationId: location.parentLocationId ?? null,
-              type: location.type,
-            } as Prisma.CharacterStorageLocationUncheckedCreateInput,
-            update: {
-              availabilityClass: location.availabilityClass,
-              isAccessibleInEncounter: location.isAccessibleInEncounter,
-              isMobile: location.isMobile,
-              name: location.name,
-              notes: location.notes ?? null,
-              parentLocationId: location.parentLocationId ?? null,
-              type: location.type,
-            } as Prisma.CharacterStorageLocationUncheckedUpdateInput,
-            where: {
-              id: location.id,
-            },
-          }),
-        ),
-      );
+      const persist = async (transaction: Prisma.TransactionClient) => {
+        await Promise.all(
+          defaults.map((location) =>
+            transaction.characterStorageLocation.upsert({
+              create: {
+                availabilityClass: location.availabilityClass,
+                characterId: location.characterId,
+                id: location.id,
+                isAccessibleInEncounter: location.isAccessibleInEncounter,
+                isMobile: location.isMobile,
+                name: location.name,
+                notes: location.notes ?? null,
+                parentLocationId: location.parentLocationId ?? null,
+                type: location.type,
+              } as Prisma.CharacterStorageLocationUncheckedCreateInput,
+              update: {
+                availabilityClass: location.availabilityClass,
+                isAccessibleInEncounter: location.isAccessibleInEncounter,
+                isMobile: location.isMobile,
+                name: location.name,
+                notes: location.notes ?? null,
+                parentLocationId: location.parentLocationId ?? null,
+                type: location.type,
+              } as Prisma.CharacterStorageLocationUncheckedUpdateInput,
+              where: {
+                id: location.id,
+              },
+            }),
+          ),
+        );
+      };
+      if (transactionClient) await persist(transactionClient);
+      else await prisma.$transaction(persist);
 
       return this.getCharacterStorageLocations(characterId);
     },
@@ -1195,17 +1388,7 @@ export function createPrismaCharacterEquipmentRepository(
       return loadouts.map(mapLoadout);
     },
     async getCharacterEquipmentState(characterId) {
-      const [items, locations, loadouts] = await Promise.all([
-        this.getCharacterEquipmentItems(characterId),
-        this.getCharacterStorageLocations(characterId),
-        this.getCharacterLoadouts(characterId),
-      ]);
-
-      return {
-        items,
-        loadouts,
-        locations,
-      };
+      return this.getCharacterEquipmentAggregateState(characterId);
     },
   };
 }

@@ -97,6 +97,26 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("persists active ammunition through the Character equipment aggregate", async () => {
+    const state = { revision: 3 };
+    const fetchMock = stubFetch({ state });
+    const client = await loadClient();
+
+    await expect(
+      client.setCharacterActiveAmmunitionOnServer({
+        characterId: "character-1",
+        expectedRevision: 2,
+        itemIds: ["item-arrows"],
+      }),
+    ).resolves.toEqual(state);
+
+    expectFetchCall(fetchMock, {
+      body: { expectedRevision: 2, itemIds: ["item-arrows"] },
+      method: "POST",
+      url: "https://api.example.test/characters/character-1/equipment/loadout/active-ammunition",
+    });
+  });
+
   it("loads Campaign-scoped privacy-safe Character roster candidates", async () => {
     const characters = [
       {
@@ -1430,6 +1450,7 @@ describe("localServiceClient wire contract", () => {
       client.moveCharacterEquipmentItemOnServer({
         carryMode: "backpack",
         characterId: "character-1",
+        expectedRevision: 0,
         itemId: "item-1",
         locationId: "location-1",
       }),
@@ -1438,6 +1459,7 @@ describe("localServiceClient wire contract", () => {
     expectFetchCall(fetchMock, {
       body: {
         carryMode: "backpack",
+        expectedRevision: 0,
         itemId: "item-1",
         locationId: "location-1",
       },

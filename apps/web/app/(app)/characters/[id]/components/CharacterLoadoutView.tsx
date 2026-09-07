@@ -21,6 +21,7 @@ import { isValidLoadoutThrowingWeaponItem } from "@/features/equipment/loadoutWe
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import {
   loadCharacterEquipmentState,
+  setCharacterActiveAmmunitionOnServer,
   setCharacterActiveMissileWeaponOnServer,
   setCharacterActivePrimaryWeaponOnServer,
   setCharacterActiveSecondaryWeaponOnServer,
@@ -94,6 +95,7 @@ export default function CharacterLoadoutView({
   const [characterContext, setCharacterContext] = useState<CharacterLoadoutContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string>();
+  const [activeAmmunitionError, setActiveAmmunitionError] = useState<string>();
   const [throwingWeaponItemId, setThrowingWeaponItemId] = useState<string>("");
   const [errors, setErrors] = useState<
     Record<"armor" | "missile" | "primary" | "secondary" | "shield", string | undefined>
@@ -212,6 +214,40 @@ export default function CharacterLoadoutView({
       showPhysicalState,
     ],
   );
+  const activeLoadout = state?.activeLoadoutByCharacterId[characterId];
+  const activeMissileWeapon = activeLoadout?.activeMissileWeaponItemId
+    ? state?.itemsById[activeLoadout.activeMissileWeaponItemId]
+    : undefined;
+  const activeMissileTemplate =
+    state && activeMissileWeapon
+      ? getEquipmentTemplateById(state, activeMissileWeapon.templateId)
+      : undefined;
+  const activeAmmunitionOptions = useMemo(() => {
+    const ammunitionFamily =
+      activeMissileTemplate?.category === "weapon"
+        ? activeMissileTemplate.missileProfile?.ammoFamily
+        : undefined;
+    if (!state || !ammunitionFamily) {
+      return [];
+    }
+
+    return Object.values(state.itemsById)
+      .filter((item) => item.characterId === characterId && item.category === "gear")
+      .filter((item) => {
+        const template = getEquipmentTemplateById(state, item.templateId);
+        return (
+          template?.category === "gear" && template.ammunitionProfile?.family === ammunitionFamily
+        );
+      })
+      .map((item) => ({
+        id: item.id,
+        label:
+          item.displayName ??
+          getEquipmentTemplateById(state, item.templateId)?.name ??
+          "Unknown item",
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label));
+  }, [activeMissileTemplate, characterId, state]);
 
   function createCombatEffectId(prefix: string): string {
     return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
@@ -387,7 +423,7 @@ export default function CharacterLoadoutView({
         }
       }
 
-      const operations: Array<() => Promise<EquipmentFeatureState>> = [];
+      const operations: Array<(expectedRevision: number) => Promise<EquipmentFeatureState>> = [];
 
       const queueOperation = (
         kind: "armor" | "primary" | "secondary" | "missile" | "shield",
@@ -409,16 +445,24 @@ export default function CharacterLoadoutView({
           return;
         }
 
-        operations.push(() =>
+        operations.push((expectedRevision) =>
           kind === "armor"
-            ? setCharacterWornArmorOnServer({ characterId, itemId })
+            ? setCharacterWornArmorOnServer({ characterId, expectedRevision, itemId })
             : kind === "shield"
-              ? setCharacterReadyShieldOnServer({ characterId, itemId })
+              ? setCharacterReadyShieldOnServer({ characterId, expectedRevision, itemId })
               : kind === "primary"
-                ? setCharacterActivePrimaryWeaponOnServer({ characterId, itemId })
+                ? setCharacterActivePrimaryWeaponOnServer({ characterId, expectedRevision, itemId })
                 : kind === "secondary"
-                  ? setCharacterActiveSecondaryWeaponOnServer({ characterId, itemId })
-                  : setCharacterActiveMissileWeaponOnServer({ characterId, itemId }),
+                  ? setCharacterActiveSecondaryWeaponOnServer({
+                      characterId,
+                      expectedRevision,
+                      itemId,
+                    })
+                  : setCharacterActiveMissileWeaponOnServer({
+                      characterId,
+                      expectedRevision,
+                      itemId,
+                    }),
         );
       };
 
@@ -430,7 +474,7 @@ export default function CharacterLoadoutView({
 
       let nextState = state;
       for (const operation of operations) {
-        nextState = await operation();
+        nextState = await operation(nextState.revision ?? -1);
       }
 
       setState(nextState);
@@ -445,6 +489,32 @@ export default function CharacterLoadoutView({
         ...current,
         [input.kind]: message,
       }));
+    }
+  }
+
+  async function toggleActiveAmmunition(itemId: string, selected: boolean) {
+    if (!state) {
+      return;
+    }
+
+    const currentItemIds = activeLoadout?.activeAmmoItemIds ?? [];
+    const nextItemIds = selected
+      ? [...new Set([...currentItemIds, itemId])]
+      : currentItemIds.filter((currentItemId) => currentItemId !== itemId);
+
+    try {
+      const nextState = await setCharacterActiveAmmunitionOnServer({
+        characterId,
+        expectedRevision: state.revision ?? -1,
+        itemIds: nextItemIds,
+      });
+      setState(nextState);
+      await onEquipmentStateChange?.(nextState);
+      setActiveAmmunitionError(undefined);
+    } catch (error) {
+      setActiveAmmunitionError(
+        error instanceof Error ? error.message : "Unable to update active ammunition.",
+      );
     }
   }
 
@@ -486,33 +556,74 @@ export default function CharacterLoadoutView({
       ) : null}
 
       {!loading && !pageError ? (
-        <EquipmentLoadoutModule
-          beforeEquipmentChoices={
-            physicalStateModel ? (
-              <PhysicalStateSection
-                canEditCombatEffects={canEditCombatEffects}
-                currentRoundNumber={physicalStateCurrentRoundNumber}
-                model={physicalStateModel}
-                onDeleteCombatEffect={deleteCombatEffect}
-                onSaveCombatEffect={saveCombatEffect}
-              />
-            ) : undefined
-          }
-          mode="editable"
-          model={model}
-          onFieldChange={(fieldId, itemId) => {
-            if (fieldId === "throwing") {
-              setThrowingWeaponItemId(itemId ?? "");
-              return;
+        <>
+          <EquipmentLoadoutModule
+            beforeEquipmentChoices={
+              physicalStateModel ? (
+                <PhysicalStateSection
+                  canEditCombatEffects={canEditCombatEffects}
+                  currentRoundNumber={physicalStateCurrentRoundNumber}
+                  model={physicalStateModel}
+                  onDeleteCombatEffect={deleteCombatEffect}
+                  onSaveCombatEffect={saveCombatEffect}
+                />
+              ) : undefined
             }
+            mode="editable"
+            model={model}
+            onFieldChange={(fieldId, itemId) => {
+              if (fieldId === "throwing") {
+                setThrowingWeaponItemId(itemId ?? "");
+                return;
+              }
 
-            void applySelection({
-              itemId,
-              kind: fieldId,
-            });
-          }}
-          stickyControls
-        />
+              void applySelection({
+                itemId,
+                kind: fieldId,
+              });
+            }}
+            stickyControls
+          />
+          <section
+            aria-label="Active ammunition"
+            style={{
+              background: "#f6f5ef",
+              border: "1px solid #d9ddd8",
+              borderRadius: 12,
+              display: "grid",
+              gap: "0.6rem",
+              padding: "1rem",
+            }}
+          >
+            <h2 style={{ fontSize: "1rem", margin: 0 }}>Active ammunition</h2>
+            {!activeMissileWeapon ? (
+              <p style={{ margin: 0 }}>
+                Choose an active missile weapon to select compatible ammunition.
+              </p>
+            ) : activeAmmunitionOptions.length === 0 ? (
+              <p style={{ margin: 0 }}>No compatible ammunition is held by this Character.</p>
+            ) : (
+              activeAmmunitionOptions.map((option) => (
+                <label
+                  key={option.id}
+                  style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}
+                >
+                  <input
+                    checked={activeLoadout?.activeAmmoItemIds.includes(option.id) ?? false}
+                    onChange={(event) =>
+                      void toggleActiveAmmunition(option.id, event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                  {option.label}
+                </label>
+              ))
+            )}
+            {activeAmmunitionError ? (
+              <p style={{ color: "#8b3a1a", margin: 0 }}>{activeAmmunitionError}</p>
+            ) : null}
+          </section>
+        </>
       ) : null}
     </section>
   );

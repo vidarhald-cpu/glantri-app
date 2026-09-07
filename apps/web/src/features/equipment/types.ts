@@ -17,6 +17,8 @@ export interface EquipmentFeatureState {
   itemsById: Record<string, EquipmentItem>;
   locationsById: Record<string, StorageLocation>;
   activeLoadoutByCharacterId: Record<string, CharacterLoadout>;
+  /** Server aggregate revision. Local static fixtures may omit it. */
+  revision?: number;
 }
 
 export interface InventoryRow {

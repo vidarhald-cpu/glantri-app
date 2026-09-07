@@ -15,9 +15,9 @@ import {
   RECOVERY_IDENTITY,
   currentMigrationChecksums,
   deriveRecoveryIdentity,
+  migrationsDirectory,
   recoveryLabels,
   repositoryRoot,
-  migrationsDirectory,
   sanitizeError,
   targetConfirmationFor,
   targetMarker,
@@ -56,6 +56,9 @@ describe("historical playtest mapping", () => {
 
     expect(migrations.map((migration) => migration.name)).toEqual(authoritativeMigrationNames);
     expect(migrations.at(-1)?.name).toBe(authoritativeMigrationNames.at(-1));
+    expect(
+      authoritativeMigrationNames.indexOf("20260907100000_add_character_equipment_aggregate"),
+    ).toBe(17);
     expect(migrations.every((migration) => /^[0-9a-f]{64}$/.test(migration.checksum))).toBe(true);
   });
 

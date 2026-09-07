@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
+  equipment: vi.fn(),
   load: vi.fn(),
   transfer: vi.fn(),
   update: vi.fn(),
@@ -11,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/api/equipmentClient", () => ({
   createCampaignItemOnServer: mocks.create,
+  loadCharacterEquipmentState: mocks.equipment,
   loadCampaignItems: mocks.load,
   transferCampaignItemOnServer: mocks.transfer,
   updateCampaignItemOnServer: mocks.update,
@@ -77,6 +79,7 @@ describe("CampaignItemsWorkspace", () => {
     vi.clearAllMocks();
     mocks.load.mockResolvedValue(emptyResponse);
     mocks.create.mockResolvedValue(emptyResponse);
+    mocks.equipment.mockResolvedValue({ revision: 4 });
     mocks.transfer.mockResolvedValue(assignedResponse);
     mocks.update.mockResolvedValue(assignedResponse);
   });
@@ -204,8 +207,10 @@ describe("CampaignItemsWorkspace", () => {
       expect(mocks.transfer).toHaveBeenCalledWith({
         campaignId: "campaign-1",
         itemId: "item-silverston",
+        sourceExpectedRevision: 4,
         sourceCharacterId: "character-1",
         targetCharacterId: "character-2",
+        targetExpectedRevision: 4,
       }),
     );
     expect(screen.getByRole("status")).toHaveTextContent(

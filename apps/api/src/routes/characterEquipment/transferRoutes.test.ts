@@ -57,7 +57,12 @@ describe("campaign item transfer route", () => {
     const app = await appWith(routeServices);
     const response = await app.inject({
       method: "POST",
-      payload: { campaignId: "campaign-1", targetCharacterId: "character-2" },
+      payload: {
+        campaignId: "campaign-1",
+        expectedRevision: 0,
+        targetCharacterId: "character-2",
+        targetExpectedRevision: 0,
+      },
       url: "/characters/character-1/equipment/items/item-1/transfer",
     });
 
@@ -65,8 +70,10 @@ describe("campaign item transfer route", () => {
     expect(routeServices.writeService.transferCampaignEquipmentItem).toHaveBeenCalledWith({
       campaignId: "campaign-1",
       itemId: "item-1",
+      sourceExpectedRevision: 0,
       sourceCharacterId: "character-1",
       targetCharacterId: "character-2",
+      targetExpectedRevision: 0,
     });
     expect(response.json().characters).toEqual([
       { id: "character-1", name: "Alaric" },
@@ -84,7 +91,12 @@ describe("campaign item transfer route", () => {
     const app = await appWith(routeServices);
     const response = await app.inject({
       method: "POST",
-      payload: { campaignId: "campaign-1", targetCharacterId: "character-2" },
+      payload: {
+        campaignId: "campaign-1",
+        expectedRevision: 0,
+        targetCharacterId: "character-2",
+        targetExpectedRevision: 0,
+      },
       url: "/characters/character-1/equipment/items/hidden-item/transfer",
     });
 
@@ -103,7 +115,12 @@ describe("campaign item transfer route", () => {
     const otherCampaignApp = await appWith(otherCampaignServices);
     const hidden = await otherCampaignApp.inject({
       method: "POST",
-      payload: { campaignId: "campaign-1", targetCharacterId: "character-2" },
+      payload: {
+        campaignId: "campaign-1",
+        expectedRevision: 0,
+        targetCharacterId: "character-2",
+        targetExpectedRevision: 0,
+      },
       url: "/characters/character-1/equipment/items/item-1/transfer",
     });
     expect(hidden.statusCode).toBe(404);
@@ -114,7 +131,12 @@ describe("campaign item transfer route", () => {
     const app = await appWith(routeServices);
     const invalid = await app.inject({
       method: "POST",
-      payload: { campaignId: "campaign-1", targetCharacterId: "character-other" },
+      payload: {
+        campaignId: "campaign-1",
+        expectedRevision: 0,
+        targetCharacterId: "character-other",
+        targetExpectedRevision: 0,
+      },
       url: "/characters/character-1/equipment/items/item-1/transfer",
     });
     expect(invalid.statusCode).toBe(400);
@@ -127,7 +149,12 @@ describe("campaign item transfer route", () => {
     const app = await appWith(routeServices);
     const invalid = await app.inject({
       method: "POST",
-      payload: { campaignId: "campaign-1", targetCharacterId: 42 },
+      payload: {
+        campaignId: "campaign-1",
+        expectedRevision: 0,
+        targetCharacterId: 42,
+        targetExpectedRevision: 0,
+      },
       url: "/characters/character-1/equipment/items/item-1/transfer",
     });
     expect(invalid.statusCode).toBe(400);
@@ -138,7 +165,12 @@ describe("campaign item transfer route", () => {
     );
     const stale = await app.inject({
       method: "POST",
-      payload: { campaignId: "campaign-1", targetCharacterId: "character-2" },
+      payload: {
+        campaignId: "campaign-1",
+        expectedRevision: 0,
+        targetCharacterId: "character-2",
+        targetExpectedRevision: 0,
+      },
       url: "/characters/character-1/equipment/items/item-1/transfer",
     });
     expect(stale.statusCode).toBe(409);

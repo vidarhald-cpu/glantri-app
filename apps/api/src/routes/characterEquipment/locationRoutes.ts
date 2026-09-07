@@ -2,9 +2,10 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   CharacterEquipmentReadModelService,
   CharacterEquipmentWriteService,
+  StaleCharacterEquipmentAggregateError,
 } from "@glantri/database";
 import { requireAuthenticatedUser } from "../../lib/sessionAuth";
-import { handleRouteError } from "../../lib/errors";
+import { ConflictError, handleRouteError } from "../../lib/errors";
 import { requireAccessibleCharacter } from "./access";
 import { toEquipmentFeatureState } from "./helpers";
 import { parseCharacterId, parseCreateLocationBody, parseDeleteLocationBody } from "./parse";
@@ -27,6 +28,7 @@ export const equipmentLocationRoutes: FastifyPluginAsync = async (app) => {
         body.name,
         body.type,
         body.availabilityClass,
+        body.expectedRevision,
       );
 
       return {
@@ -35,7 +37,12 @@ export const equipmentLocationRoutes: FastifyPluginAsync = async (app) => {
         ),
       };
     } catch (error) {
-      return handleRouteError(error, reply);
+      return handleRouteError(
+        error instanceof StaleCharacterEquipmentAggregateError
+          ? new ConflictError("Character equipment changed. Reload it before trying again.")
+          : error,
+        reply,
+      );
     }
   });
 
@@ -48,7 +55,11 @@ export const equipmentLocationRoutes: FastifyPluginAsync = async (app) => {
     try {
       const body = parseDeleteLocationBody(request.body);
       const viewer = await requireAccessibleCharacter(user, id);
-      await equipmentWriteService.removeCharacterStorageLocation(id, body.locationId);
+      await equipmentWriteService.removeCharacterStorageLocation(
+        id,
+        body.locationId,
+        body.expectedRevision,
+      );
 
       return {
         state: toEquipmentFeatureState(
@@ -56,7 +67,12 @@ export const equipmentLocationRoutes: FastifyPluginAsync = async (app) => {
         ),
       };
     } catch (error) {
-      return handleRouteError(error, reply);
+      return handleRouteError(
+        error instanceof StaleCharacterEquipmentAggregateError
+          ? new ConflictError("Character equipment changed. Reload it before trying again.")
+          : error,
+        reply,
+      );
     }
   });
 };

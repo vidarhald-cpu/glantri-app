@@ -3,6 +3,7 @@ import {
   CampaignService,
   CharacterEquipmentReadModelService,
   CharacterEquipmentWriteService,
+  StaleCharacterEquipmentAggregateError,
   CharacterService,
   StaleEquipmentTransferError,
 } from "@glantri/database";
@@ -103,7 +104,11 @@ export function createEquipmentTransferRoutes(
             ? new ConflictError(
                 "This item has already moved. Refresh Campaign Items before trying again.",
               )
-            : error,
+            : error instanceof StaleCharacterEquipmentAggregateError
+              ? new ConflictError(
+                  "Character equipment changed. Refresh Campaign Items before trying again.",
+                )
+              : error,
           reply,
         );
       }
