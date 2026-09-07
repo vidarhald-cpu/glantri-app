@@ -1,5 +1,7 @@
 import type { SkillContentRelease, SkillContentWrittenTraditionRecord } from "@glantri/domain";
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 import { sha256 } from "../integrity/canonicalSha256";
 import { pilotSkillContentReleaseV1 } from "../pilotSkillContentRelease";
@@ -10,6 +12,7 @@ import {
   validateSkillContentRelease,
 } from ".";
 import { pilotSkillContentReleaseProposalInput } from "./pilotSkillContentReleaseProposal";
+import { fileURLToPath } from "node:url";
 
 function candidate(): SkillContentRelease {
   return buildSkillContentRelease(structuredClone(pilotSkillContentReleaseProposalInput));
@@ -29,6 +32,9 @@ function normalizeTaskText(
 ): string {
   return normalizeWhitespace(text)
     .replace(new RegExp(escapeRegExp(releaseRecord.id), "gi"), "")
+    .replace(new RegExp(escapeRegExp(releaseRecord.description), "gi"), "")
+    .replace(new RegExp(escapeRegExp(releaseRecord.shortDescription), "gi"), "")
+    .replace(new RegExp(escapeRegExp(releaseRecord.shortLabel), "gi"), "")
     .replace(new RegExp(escapeRegExp(releaseRecord.name), "gi"), "")
     .replace(
       /\b(?:skill|spec|written|spoken|hist|rel|access|route|profile|domain|script|language):[a-z0-9-']+/gi,
@@ -40,6 +46,57 @@ function normalizeTaskText(
     )
     .replace(/\s{2,}/g, " ")
     .trim();
+}
+
+function normalizeAdversarialTaskText(
+  releaseRecord: (typeof pilotSkillContentReleaseProposalInput.competencies)[number],
+  text: string,
+): string {
+  const normalized = normalizeTaskText(releaseRecord, text).toLowerCase();
+  const commonTokens = new Set([
+    ...releaseRecord.description.toLowerCase().split(/\W+/),
+    ...releaseRecord.shortDescription.toLowerCase().split(/\W+/),
+  ]);
+  let scrubbed = normalized;
+  for (const token of commonTokens) {
+    if (token.length <= 4) continue;
+    if (/^[a-z-']+$/.test(token)) {
+      scrubbed = scrubbed.replace(new RegExp(`\\b${escapeRegExp(token)}\\b`, "g"), "");
+    }
+  }
+  const suffixTokens = releaseRecord.id
+    .split(":")
+    .flatMap((segment) => segment.split("-"))
+    .filter((token) => token.length > 3);
+  for (const token of suffixTokens) {
+    scrubbed = scrubbed.replace(new RegExp(`\\b${escapeRegExp(token)}\\b`, "g"), "");
+  }
+  return normalizeWhitespace(scrubbed);
+}
+
+function resolveProvenancePath(reference: string): { path: string; line: number } {
+  const match =
+    /^http:\/\/127\.0\.0\.1:3001\/recovery-admin\/glantri-app\/src\/branch\/dev\/(.+?)#L([0-9]+)$/.exec(
+      reference,
+    );
+  if (!match) {
+    throw new Error(`Malformed provenance reference ${reference}`);
+  }
+  const [, rawPath, rawLine] = match;
+  const repositoryRoot = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+    "..",
+    "..",
+  );
+  const absolutePath = path.join(repositoryRoot, rawPath);
+  const lines = readFileSync(absolutePath, "utf8").split(/\r?\n/);
+  const line = Number(rawLine);
+  if (!Number.isFinite(line) || line <= 0 || line > lines.length) {
+    throw new Error(`Invalid provenance line ${rawLine} for ${reference}`);
+  }
+  return { path: absolutePath, line };
 }
 
 type MetadataRecord = {
@@ -281,7 +338,7 @@ describe("documentation-complete Skill content platform", () => {
       ),
     ).toBe(true);
     const normalizedEnvelopeSignatures = release.competencies.map((record) =>
-      normalizeTaskText(
+      normalizeAdversarialTaskText(
         record,
         [
           ...record.taskEnvelope.coreTasks,
@@ -293,20 +350,25 @@ describe("documentation-complete Skill content platform", () => {
     );
     expect(new Set(normalizedEnvelopeSignatures).size).toBe(release.competencies.length);
     expect(
-      release.competencies.every(
-        (record) =>
-          record.taskEnvelope.coreTasks.every((entry) => entry.length >= 20) &&
-          record.taskEnvelope.limits.every((entry) => entry.length >= 20) &&
-          record.taskEnvelope.methods.every((entry) => entry.length >= 20) &&
-          record.taskEnvelope.useGuidance.length >= 65 &&
-          record.taskEnvelope.methods.some((entry) => /Failure mode/i.test(entry)),
-      ),
-    ).toBe(true);
+      release.competencies
+        .filter(
+          (record) =>
+            !record.taskEnvelope.coreTasks.every((entry) => entry.length >= 20) ||
+            !record.taskEnvelope.limits.every((entry) => entry.length >= 20) ||
+            !record.taskEnvelope.methods.every((entry) => entry.length >= 20) ||
+            record.taskEnvelope.useGuidance.length < 65 ||
+            !record.taskEnvelope.methods.some((entry) => /Failure mode/i.test(entry)),
+        )
+        .map((record) => record.id),
+    ).toEqual([]);
+    expect(release.competencies.every((record) => record.taskEnvelope.methods.length > 0)).toBe(
+      true,
+    );
     expect(
       release.competencies.every(
         (record) =>
-          normalizeTaskText(record, record.description).length >= 40 &&
-          normalizeTaskText(record, record.shortDescription).length >= 10 &&
+          record.description.length >= 40 &&
+          record.shortDescription.length >= 10 &&
           !/This competency is fully documented/i.test(record.shortDescription),
       ),
     ).toBe(true);
@@ -342,15 +404,33 @@ describe("documentation-complete Skill content platform", () => {
     const references = metadataRecords.map((record) => record.metadata.provenance.reference);
     const malformed = references.filter(
       (reference) =>
-        !/^http:\/\/127\.0\.0\.1:3001\/recovery-admin\/glantri-app\/src\/branch\/dev\/[^#]+#/.test(
+        !/^http:\/\/127\.0\.0\.1:3001\/recovery-admin\/glantri-app\/src\/branch\/dev\/[^#]+#L\d+$/.test(
           reference,
         ),
     );
     expect(malformed).toHaveLength(0);
-    expect(new Set(references).size).toBe(references.length);
-    const hasSharedIssueAnchor = references.some((reference) => reference.includes("/issues/25"));
-    expect(hasSharedIssueAnchor).toBe(false);
-    expect(references.every((reference) => /%3A/.test(reference))).toBe(true);
+    const duplicateReferences = [...new Set(references)]
+      .filter((reference) => references.filter((candidate) => candidate === reference).length > 1)
+      .map((reference) => ({
+        reference,
+        count: references.filter((candidate) => candidate === reference).length,
+      }));
+    expect(duplicateReferences).toEqual([]);
+    for (const reference of references) {
+      const resolved = resolveProvenancePath(reference);
+      const source = readFileSync(resolved.path, "utf8").split(/\r?\n/);
+      const metadataRecord = metadataRecords.find(
+        (record) => record.metadata.provenance.reference === reference,
+      );
+      expect(metadataRecord).toBeDefined();
+      if (!metadataRecord) continue;
+      const provenanceWindow = source
+        .slice(Math.max(0, resolved.line - 3), Math.min(source.length, resolved.line + 2))
+        .join("\n");
+      expect(provenanceWindow).toContain(`"${metadataRecord.id}"`);
+    }
+    expect(references.every((reference) => !reference.includes("/issues/"))).toBe(true);
+    expect(references.every((reference) => !reference.includes("/pulls/"))).toBe(true);
   });
 
   it("prevents proposal-input mutation from reusing immutable v1 nested arrays", () => {
