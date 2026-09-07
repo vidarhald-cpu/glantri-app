@@ -10,6 +10,7 @@ import type {
 } from "@glantri/domain";
 
 const mocks = vi.hoisted(() => ({
+  activateCampaignOnServer: vi.fn(),
   addCampaignRosterEntryOnServer: vi.fn(),
   createCampaignAssetOnServer: vi.fn(),
   createScenarioOnServer: vi.fn(),
@@ -27,6 +28,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api/localServiceClient", () => ({
+  activateCampaignOnServer: mocks.activateCampaignOnServer,
   addCampaignRosterEntryOnServer: mocks.addCampaignRosterEntryOnServer,
   createCampaignAssetOnServer: mocks.createCampaignAssetOnServer,
   createScenarioOnServer: mocks.createScenarioOnServer,
@@ -131,6 +133,24 @@ describe("CampaignDetailPageContent roster membership interaction", () => {
       }),
     );
   }, 10_000);
+
+  it("lets a draft Campaign be activated with GM ownership", async () => {
+    const CampaignDetailPageContent = await importCampaignDetailPageContent();
+    const user = userEvent.setup();
+    mocks.loadCampaignById.mockResolvedValue({ ...campaign, status: "draft" });
+    mocks.activateCampaignOnServer.mockResolvedValue({ ...campaign, status: "active" });
+
+    render(<CampaignDetailPageContent campaignId="campaign-1" />);
+
+    expect(await screen.findByRole("button", { name: "Activate campaign" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Activate campaign" }));
+
+    expect(mocks.activateCampaignOnServer).toHaveBeenCalledWith({
+      campaignId: "campaign-1",
+    });
+    await screen.findByText("Activated Border Trouble.");
+  });
 
   it("prefers the stored roster entry source key when removing an existing membership", async () => {
     const { getRosterRemovalSource } = await import("./CampaignDetailPageContent");

@@ -14,6 +14,10 @@ Scenario is a concrete story situation inside a campaign. It manages the actors 
 
 Encounter is a specific moment of play inside a scenario. It manages the actors who are present in that encounter, the current player-facing situation, access, membership, visibility, and participant descriptions. Skill rolls, Character, and Combat are tools used inside that shared encounter context rather than separate encounter universes.
 
+Scenario and Encounter share the product lifecycle Draft -> Active <-> Paused -> Closed -> Archived, with Draft -> Archived also permitted. `Closed` is the product term; an existing Scenario implementation value `completed` represents Closed without requiring a rename-only migration. An Encounter is a bounded situation rather than a roleplay/Combat kind: an Active Encounter may move through conversation, checks, Combat, and post-Combat activity, and leaving Combat returns to that same Active Encounter.
+
+Pausing a Scenario pauses its Active Encounters; resuming the Scenario does not resume them automatically. A Scenario cannot Close while an Encounter remains Active or Paused. Closing an Encounter requires a player-visible outcome and may include a separate private GM note. Scenario chronology interleaves relevant Encounter and Combat events by server-authoritative sequence while retaining context and safe projection; it does not order whole Encounters as indivisible blocks. Detailed integrated play navigation and layout remain deferred to #38.
+
 ## Campaign Workspace
 
 The Campaign workspace answers: "Who and what is available to this campaign?"
