@@ -106,6 +106,19 @@ the #16 Campaign-shell dependency, Critical/Combat hotspot gate, and single-owne
 migration and shared-E2E rules. Live Forgejo state remains authoritative; the
 roadmap does not authorize its inactive Ready or Design cases.
 
+### Canonical Field Equipment
+
+The accepted
+[Canonical Field Equipment v1 decision](../decisions/architecture/0004-canonical-field-equipment-v1.md)
+and [product roadmap](./canonical-field-equipment-v1-roadmap.md) establish one
+durable Item identity across Campaign, Character, Scenario, and Combat. They
+separate direct Character handover from Scenario availability and pickup,
+require visible external staleness plus explicit reconciliation, and require
+authoritative in-play Item operations to keep canonical and operational state
+coherent. The relationship-derived Item privacy repair in #44 is integrated;
+the aggregate, Scenario reconciliation, and integrated milestone cases #45-#47
+remain separately governed by live Forgejo status and authorization.
+
 ### Player-authored Campaign objects
 
 [Forgejo #17](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/17)

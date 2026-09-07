@@ -33,6 +33,9 @@ The following require declaration in the task contract and scheduling by an inte
 | Encounter API clients, live synchronization, and mutation responses               | GM/player consistency and backward compatibility                                |
 | Campaign workspace/scenario orchestration                                         | Shared shell across roleplay and combat experiences                             |
 | Campaign Blackboard domain, service, API, client, and workspace                   | Privacy projection, stable links, history, Artifact boundary, and shared layout |
+| Character equipment repository, read/write services, and inventory/loadout UI     | Atomic aggregate revision, ownership, loadout, and ammunition consistency       |
+| Campaign/Scenario Item routes, services, repositories, and UI                     | Same-Item transfer/pickup, availability, projection, and staleness authority    |
+| Combat Item services/projections and shared Item/Combat/Lost Seal fixtures        | Operational reconciliation, persistence, privacy, undo, and fixture stability   |
 | Root package/toolchain/configuration files                                        | Repository-wide developer and CI behavior                                       |
 | `.github/workflows/` and `infra/`                                                 | Release and production boundary                                                 |
 

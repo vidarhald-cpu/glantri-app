@@ -105,6 +105,31 @@ Player Scenario pages should not show:
 - Visibility models or read-model source labels.
 - Internal fallback mechanics.
 
+### Canonical equipment in Scenario play
+
+A Character's current equipment is canonical Character state. A Scenario may
+hold an operational equipment projection with frozen supported mechanical facts
+and enough provenance or fingerprint information to explain the interpretation
+used in play; that projection is not a second Item identity or inventory.
+
+Character-to-Character handover transfers the same concrete Item directly from
+one Character holder to another. Scenario pickup is different: the GM makes an
+unheld Campaign Item available in a Scenario, and an entitled Character picks up
+that same Item. Scenario availability is play-context authority, not a general
+world-object or container system.
+
+If canonical Character equipment changes outside the active Scenario or Combat
+flow after capture, the projection becomes visibly `STALE`. It is not silently
+refreshed, and dependent authoritative play is blocked until the GM explicitly
+reconciles it. An authoritative in-play pickup, handover, drop, draw, stow,
+ammunition consumption, or other supported Item mutation instead reconciles the
+canonical and operational state as part of the operation and remains coherent
+after reload.
+
+GM-private Item facts derive from the viewer's actual Campaign-management
+relationship. A global `game_master` role by itself grants no private Item
+projection.
+
 ## Encounter Workspace
 
 The Encounter workspace answers: "Who is present in this specific moment, and what is currently happening?"
