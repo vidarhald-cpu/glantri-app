@@ -25,6 +25,21 @@ const proposalMetadata = {
   status: "proposal" as const,
 };
 
+const forgejoRepoSourceUrl = "http://127.0.0.1:3001/recovery-admin/glantri-app/src/branch/dev/";
+
+const recordSourceByKind: Record<string, string> = {
+  accessExceptions: "packages/content/src/pilotSkillContentRelease/release.ts",
+  competency: "packages/content/src/pilotSkillContentRelease/release.ts",
+  domain: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+  history: "packages/content/src/pilotSkillContentRelease/release.ts",
+  profile: "packages/content/src/pilotSkillContentRelease/release.ts",
+  profiles: "packages/content/src/pilotSkillContentRelease/release.ts",
+  relationship: "packages/content/src/pilotSkillContentRelease/release.ts",
+  route: "packages/content/src/pilotSkillContentRelease/release.ts",
+  script: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+  specialization: "packages/content/src/pilotSkillContentRelease/release.ts",
+};
+
 const proposalMetadataReference = [
   "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/25",
   "http://127.0.0.1:3001/recovery-admin/glantri-app/pulls/64",
@@ -35,8 +50,14 @@ const proposalMetadataReference = [
   "docs/rules/pilot-skill-content-release-v1.md",
 ];
 
-function cloneMetadata() {
-  return structuredClone(proposalMetadata);
+function cloneMetadata(recordId: string, kind: keyof typeof recordSourceByKind) {
+  const sourcePath = recordSourceByKind[kind];
+  if (!sourcePath) {
+    throw new Error(`Unknown record kind ${kind} for provenance source mapping.`);
+  }
+  const clone = structuredClone(proposalMetadata);
+  clone.provenance.reference = `${forgejoRepoSourceUrl}${sourcePath}#${encodeURIComponent(recordId)}`;
+  return clone;
 }
 
 function normalizeWhitespace(value: string): string {
@@ -48,27 +69,26 @@ function shortLabel(value: string): string {
 }
 
 function buildRecordTaskEnvelope(
-  record: { id: string; name: string; kind: string },
+  record: { description: string; id: string; name: string; kind: string },
   domainId: string,
 ): SkillTaskEnvelope {
   const scope = domainDefinitions[domainId]?.name ?? "Pilot Skill";
-  const isSpecialization = record.kind === "specialization";
+  const authored = authoredCompetencyDocumentation[record.id];
+  const authoredDescription = normalizeWhitespace(
+    authored?.description ?? record.description,
+  ).toLowerCase();
+  const domainContext = scope.toLowerCase();
   return {
-    coreTasks: [
-      `${record.name} (${record.id}) in ${scope} tracks explicit source-of-truth routes and prerequisites before use.`,
-    ],
+    coreTasks: [`${record.name} in ${scope} applies this sequence: ${authoredDescription}.`],
     limits: [
-      `Do not infer ${record.name} behavior from narrative notes, legacy assumptions, or adjacent ${scope} records outside this authored scope.`,
+      `Limit ${record.name} to explicitly listed routes, histories, and prerequisites that remain in the current authored ${domainContext} chain.`,
+      `Do not carry ${record.name} across unrelated ${domainContext} or cross-profile rules outside this release metadata surface.`,
     ],
     methods: [
-      `Apply ${record.name} by resolving histories, routes, prerequisites, and transfer constraints in this release.`,
-      `${
-        isSpecialization
-          ? `Failure mode: applying ${record.name} outside its explicit parent-to-specialization structure can create invalid progression paths.`
-          : `Failure mode: applying ${record.name} outside route and history provenance can cause non-deterministic access attribution.`
-      } Resolve by reverting to this release's parent/route/selection model.`,
+      `Apply ${record.name} by validating provenance, access, and prerequisite structure before assignment.`,
+      `Failure mode: using ${record.name} without explicit route and history checks can create non-deterministic access. Resolve through the authored ${domainContext} attribution chain and precedence rules before replaying.`,
     ],
-    useGuidance: `${record.name} (${record.id}) uses this authored profile and competency graph only; cross-scope reuse must remain explicit per documented access and transfer structure.`,
+    useGuidance: `${record.name} resolves through explicit profile, history, and relationship edges for this record; prefer inherited graph edits over narrative inference.`,
   };
 }
 
@@ -80,6 +100,137 @@ interface AuthoredCompetencyDocumentation {
 }
 
 const authoredCompetencyDocumentation: Record<string, AuthoredCompetencyDocumentation> = {
+  "skill:first-aid": {
+    description:
+      "Perform immediate stabilization, triage tagging, and safe transfer procedures without substituting long-form diagnosis.",
+    shortDescription: "Stabilize urgent wounds with safe immediate response sequencing.",
+  },
+  "skill:dodge": {
+    description:
+      "Recover balance against unexpected force vectors and preserve spacing in close engagements without escalating commitment.",
+    shortDescription: "Preserve life and mobility under direct physical pressure.",
+  },
+  "skill:battle-tactics": {
+    description:
+      "Coordinate small-unit posture, command timing, and fallback options while preserving formation intent.",
+    shortDescription: "Coordinate engagements through timing, formation, and fallback posture.",
+  },
+  "skill:medicine": {
+    description:
+      "Assess symptoms, prognosis windows, and treatment priorities while keeping intervention risk explicit.",
+    shortDescription: "Run structured medical assessment and treatment pathway triage.",
+  },
+  "skill:surgery": {
+    description:
+      "Operate with explicit pre-op checks, sterile sequencing, and post-op recovery obligations.",
+    shortDescription: "Run operative intervention with strict procedural controls.",
+  },
+  "skill:research": {
+    description:
+      "Locate corroborating records and test claims before adopting conclusions across domains.",
+    shortDescription: "Validate source material through cross-checked research procedures.",
+  },
+  "skill:law:olog-princely": {
+    description:
+      "Apply princely Olog legal reasoning where court channels authorize scope and enforcement outcomes.",
+    shortDescription:
+      "Use olog-princely legal authority within explicit court-channel constraints.",
+  },
+  "skill:dead-reckoning": {
+    description:
+      "Project travel position from distance, speed, and course assumptions under uncertainty.",
+    shortDescription: "Track movement state when external cues are missing.",
+  },
+  "skill:chart-navigation": {
+    description:
+      "Read map and chart systems for bearing, waypoint logic, and safe hazard interpretation.",
+    shortDescription: "Convert chart data into safe, reproducible navigation outcomes.",
+  },
+  "spoken:common": {
+    description:
+      "Use Common speech for civic and field coordination with conventions shared across multiple regional contexts.",
+    shortDescription: "Coordinate through Common-language communication and negotiation.",
+  },
+  "spoken:mogrebi": {
+    description:
+      "Communicate in Mogrebi with institutional terminology suitable for clinics, temple environments, and civic records.",
+    shortDescription: "Use Mogrebi for context-specific medical and civic talk.",
+  },
+  "spoken:ologian": {
+    description:
+      "Apply Ologian speech with court and clerical conventions, especially when handling legal testimony and records.",
+    shortDescription: "Use Ologian speech for court-facing and clerical discourse.",
+  },
+  "spoken:phoenician": {
+    description:
+      "Use Phoenician for trade correspondence and maritime commercial signaling where historical convention defines meaning.",
+    shortDescription: "Handle Phoenician language in trade and seafaring communication.",
+  },
+  "spoken:nkolian": {
+    description:
+      "Use N'kolian language for frontier caravan and frontier-administrative movement channels.",
+    shortDescription: "Convey caravan and settlement coordination through N'kolian speech.",
+  },
+  "spoken:scythian": {
+    description:
+      "Use Scythian speech for home-region negotiation and oral tradition exchange where oral law applies.",
+    shortDescription: "Coordinate social and clan context with Scythian oral language.",
+  },
+  "written:mogrebi:sacred-mogrebi": {
+    description:
+      "Read and apply written Sacred Mogrebi conventions for medical and devotional records while avoiding spoken substitution.",
+    shortDescription: "Use Sacred Mogrebi text conventions for documented references.",
+  },
+  "written:ologian:church-ologian": {
+    description:
+      "Interpret Church Ologian written conventions in legal, clerical, and instructional records.",
+    shortDescription: "Use Church Ologian writing for court and clerical documentation.",
+  },
+  "written:phoenician:phoenician": {
+    description:
+      "Handle Phoenician script text conventions for trade and maritime archival documentation.",
+    shortDescription: "Use Phoenician writing for trade-route archival interpretation.",
+  },
+  "spec:household-guard-sword-shield-drill": {
+    description:
+      "Advance from household retainer training into paired sword-shield doctrine with dual proficiency thresholds.",
+    shortDescription: "Progress weapon doctrine from household drill to paired progression.",
+  },
+  "spec:diagnostic-medicine": {
+    description:
+      "Apply advanced diagnostic practice once baseline medical and pharmacy competencies are established.",
+    shortDescription: "Advance medicine through explicit diagnostic specialization thresholds.",
+  },
+  "spec:warded-lock-entry": {
+    description:
+      "Specialize lock-entry method under warded systems where baseline deception and covert-entry knowledge is already active.",
+    shortDescription: "Refine lock-entry through warded systems with explicit thresholds.",
+  },
+  "spec:court-administration": {
+    description:
+      "Handle court-administration routines where legal, procedural, and reporting obligations converge.",
+    shortDescription: "Run court-level administrative progression after baseline legal training.",
+  },
+  "spec:weaponsmithing": {
+    description:
+      "Develop specialist forging and inspection discipline building directly on smithing foundations.",
+    shortDescription: "Progress to weaponsmithing-specific crafting rules and inspections.",
+  },
+  "spec:home-coast-pilotage": {
+    description:
+      "Apply home-coast pilotage patterns after seamanship, navigation, and route exposure foundations.",
+    shortDescription: "Specialize pilotage for coastal conditions and transfer routing.",
+  },
+  "spec:desert-wayfinding": {
+    description:
+      "Extend wayfinding with arid-route heuristics and long-distance orientation constraints.",
+    shortDescription: "Specialize wayfinding for desert distances and route risk.",
+  },
+  "spec:steppe-remount-training": {
+    description:
+      "Advance mounted remount and recovery discipline for steppe travel and rapid redeployment.",
+    shortDescription: "Specialize remount handling and mounted sustainability.",
+  },
   "skill:sword": {
     description:
       "Practice directed weapon-motion control in close quarters, including guard transitions, timing, and controlled parries for sword and shield pairings.",
@@ -369,7 +520,7 @@ const domains = [...v1DomainIds]
       ...definition,
       id,
       kind: "domain" as const,
-      metadata: cloneMetadata(),
+      metadata: cloneMetadata(id, "domain"),
       mechanics: "none" as const,
     } satisfies SkillContentDomainRecord;
   })
@@ -381,7 +532,7 @@ const scripts: SkillContentScriptRecord[] = [
     familyIds: ["script-family:mogrebi"],
     id: "script:sacred-mogrebi",
     kind: "script",
-    metadata: cloneMetadata(),
+    metadata: cloneMetadata("script:sacred-mogrebi", "script"),
     name: "Sacred Mogrebi",
   },
   {
@@ -389,7 +540,7 @@ const scripts: SkillContentScriptRecord[] = [
     familyIds: ["script-family:ologian"],
     id: "script:church-ologian",
     kind: "script",
-    metadata: cloneMetadata(),
+    metadata: cloneMetadata("script:church-ologian", "script"),
     name: "Church Ologian",
   },
   {
@@ -397,7 +548,7 @@ const scripts: SkillContentScriptRecord[] = [
     familyIds: ["script-family:phoenician"],
     id: "script:phoenician",
     kind: "script",
-    metadata: cloneMetadata(),
+    metadata: cloneMetadata("script:phoenician", "script"),
     name: "Phoenician",
   },
 ];
@@ -409,7 +560,7 @@ function toSkillRecord(record: PilotSkillContentCompetencyRecord): SkillContentC
     description: documented.description,
     domainId: record.domainId,
     id: record.id,
-    metadata: cloneMetadata(),
+    metadata: cloneMetadata(record.id, "competency"),
     name: documented.shortLabel,
     prerequisites: [],
     shortDescription: documented.shortDescription,
@@ -488,7 +639,7 @@ function toSpecializationRecord(
     ...specialization,
     acquisitionWeight: specialization.acquisitionWeight,
     domainId: parent.domainId,
-    metadata: cloneMetadata(),
+    metadata: cloneMetadata(specialization.id, "specialization"),
     parentCompetencyId,
     shortLabel: shortLabel(specialization.name),
     shortDescription: normalizeWhitespace(specialization.description),
@@ -496,6 +647,7 @@ function toSpecializationRecord(
       {
         id: specialization.id,
         kind: "specialization",
+        description: specialization.description,
         name: specialization.name,
       },
       parent.domainId,
@@ -515,7 +667,7 @@ const profiles = pilotSkillContentReleaseV1.profiles.map((profile) => {
   const normalRoutes = profile.normalRoutes.map((route) => ({
     ...route,
     competencyIds: [...route.competencyIds],
-    metadata: cloneMetadata(),
+    metadata: cloneMetadata(route.id, "route"),
   }));
   if (profile.id === "profile:scythian-pastoral-clan") {
     normalRoutes.push({
@@ -524,7 +676,7 @@ const profiles = pilotSkillContentReleaseV1.profiles.map((profile) => {
       description:
         "Olog court, language, and administrative exclusion scope for the home-profile fosterage pathway.",
       id: scythianHomeProfileUnavailabilityRouteId,
-      metadata: cloneMetadata(),
+      metadata: cloneMetadata(scythianHomeProfileUnavailabilityRouteId, "route"),
     });
   }
 
@@ -559,7 +711,7 @@ const profiles = pilotSkillContentReleaseV1.profiles.map((profile) => {
     accessBand: profile.accessBand,
     developmentStage: profile.developmentStage,
     id: profile.id,
-    metadata: cloneMetadata(),
+    metadata: cloneMetadata(profile.id, "profile"),
     name: profile.name,
     normalRoutes,
     overrides,
@@ -569,7 +721,7 @@ const profiles = pilotSkillContentReleaseV1.profiles.map((profile) => {
 const relationships = pilotSkillContentReleaseV1.relationships.map((relationship) => ({
   direction: relationship.direction,
   id: relationship.id,
-  metadata: cloneMetadata(),
+  metadata: cloneMetadata(relationship.id, "relationship"),
   rationale: relationship.rationale,
   sourceCompetencyId: relationship.sourceCompetencyId,
   strength: relationship.strength,
@@ -580,7 +732,7 @@ const accessExceptions = pilotSkillContentReleaseV1.accessExceptions.map((entry)
   ...entry,
   competencyIds: entry.id === "access:iest-contact-copper-latch" ? [] : [...entry.competencyIds],
   historyIds: [...entry.historyIds],
-  metadata: cloneMetadata(),
+  metadata: cloneMetadata(entry.id, "accessExceptions"),
 }));
 
 const histories: readonly SkillContentLearningHistoryRecord[] =
@@ -598,7 +750,7 @@ const histories: readonly SkillContentLearningHistoryRecord[] =
       context: history.context,
       fixedCompetencyIds: [...history.fixedCompetencyIds],
       id: history.id,
-      metadata: cloneMetadata(),
+      metadata: cloneMetadata(history.id, "history"),
       name: history.name,
       selectionSlots,
     } satisfies SkillContentLearningHistoryRecord;

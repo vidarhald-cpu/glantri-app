@@ -15,6 +15,78 @@ function candidate(): SkillContentRelease {
   return buildSkillContentRelease(structuredClone(pilotSkillContentReleaseProposalInput));
 }
 
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeTaskText(
+  releaseRecord: (typeof pilotSkillContentReleaseProposalInput.competencies)[number],
+  text: string,
+): string {
+  return normalizeWhitespace(text)
+    .replace(new RegExp(escapeRegExp(releaseRecord.id), "gi"), "")
+    .replace(new RegExp(escapeRegExp(releaseRecord.name), "gi"), "")
+    .replace(
+      /\b(?:skill|spec|written|spoken|hist|rel|access|route|profile|domain|script|language):[a-z0-9-']+/gi,
+      "",
+    )
+    .replace(
+      /\b(?:name|core|specialization|transfer|history|prerequisite|path|scope|limits|methods|guidance)\b/gi,
+      "",
+    )
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+type MetadataRecord = {
+  id: string;
+  metadata: {
+    provenance: {
+      reference: string;
+    };
+  };
+};
+
+function hasMetadataRecord(value: unknown): value is MetadataRecord {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value &&
+    typeof (value as { id?: unknown }).id === "string" &&
+    "metadata" in value &&
+    typeof (value as { metadata?: unknown }).metadata === "object" &&
+    (value as { metadata?: { provenance?: unknown } }).metadata !== null &&
+    "provenance" in ((value as { metadata?: { provenance?: unknown } }).metadata ?? {}) &&
+    typeof (value as { metadata?: { provenance?: { reference?: unknown } } }).metadata?.provenance
+      ?.reference === "string"
+  );
+}
+
+function collectMetadataRecords(release: SkillContentRelease): readonly MetadataRecord[] {
+  const metadataRecords: MetadataRecord[] = [
+    ...release.domains,
+    ...release.scripts,
+    ...release.competencies,
+    ...release.histories,
+    ...release.profiles,
+    ...release.relationships,
+    ...release.accessExceptions,
+    ...release.profiles.flatMap((profile) => profile.normalRoutes),
+  ];
+  release.profiles
+    .flatMap((profile) => profile.overrides)
+    .forEach((record) => {
+      if (hasMetadataRecord(record)) {
+        metadataRecords.push(record);
+      }
+    });
+  return metadataRecords;
+}
+
 function specializationIndex(release: SkillContentRelease): number {
   const index = release.competencies.findIndex((record) => record.kind === "specialization");
   if (index < 0) throw new Error("No specialization competency found in release fixture");
@@ -199,15 +271,18 @@ describe("documentation-complete Skill content platform", () => {
     expect(report.valid).toBe(true);
   });
 
-  it("enforces explicit documentation for all competencies and mutation-safe nested array cloning", () => {
-    const normalizeWhitespace = (value: string) => value.replace(/\s+/g, " ").trim();
+  it("enforces authored task envelopes, anti-boilerplate content, and deep-clone boundaries", () => {
     const release = candidate();
     expect(release.competencies).toHaveLength(61);
     expect(
-      release.competencies.every((record) => record.description.length >= 40 && record.description),
+      release.competencies.every(
+        (record) =>
+          record.description.length >= 40 && !/Bounded pilot practice:/i.test(record.description),
+      ),
     ).toBe(true);
     const normalizedEnvelopeSignatures = release.competencies.map((record) =>
-      normalizeWhitespace(
+      normalizeTaskText(
+        record,
         [
           ...record.taskEnvelope.coreTasks,
           ...record.taskEnvelope.limits,
@@ -220,35 +295,23 @@ describe("documentation-complete Skill content platform", () => {
     expect(
       release.competencies.every(
         (record) =>
-          [
-            record.taskEnvelope.coreTasks,
-            record.taskEnvelope.limits,
-            record.taskEnvelope.methods,
-          ].every((section) =>
-            section.some((entry) => entry.includes(record.id) || entry.includes(record.name)),
-          ) && record.taskEnvelope.useGuidance.includes(record.id),
+          record.taskEnvelope.coreTasks.every((entry) => entry.length >= 20) &&
+          record.taskEnvelope.limits.every((entry) => entry.length >= 20) &&
+          record.taskEnvelope.methods.every((entry) => entry.length >= 20) &&
+          record.taskEnvelope.useGuidance.length >= 65 &&
+          record.taskEnvelope.methods.some((entry) => /Failure mode/i.test(entry)),
       ),
     ).toBe(true);
-    expect(
-      release.competencies.every((record) =>
-        record.taskEnvelope.methods.some((entry) => /Failure mode/i.test(entry)),
-      ),
-    ).toBe(true);
-    const hasFillerText = release.competencies.some(
-      (record) =>
-        /Bounded pilot practice:/.test(record.description) ||
-        /This competency is fully documented/.test(record.description),
-    );
-    expect(hasFillerText).toBe(false);
     expect(
       release.competencies.every(
         (record) =>
-          record.shortDescription.length >= 12 &&
-          !/This competency is fully documented/.test(record.shortDescription),
+          normalizeTaskText(record, record.description).length >= 40 &&
+          normalizeTaskText(record, record.shortDescription).length >= 10 &&
+          !/This competency is fully documented/i.test(record.shortDescription),
       ),
     ).toBe(true);
-    const first = release.competencies[0]!;
-    expect(first.taskEnvelope.coreTasks.length).toBeGreaterThan(0);
+    expect(release.competencies[0]!.taskEnvelope.coreTasks).toHaveLength(1);
+    expect(release.competencies[0]!.taskEnvelope.methods).toHaveLength(2);
 
     const baseHistorySlot = pilotSkillContentReleaseV1.histories[0]!.selectionSlots[0]!;
     const baseProfileRoute = pilotSkillContentReleaseV1.profiles[0]!.normalRoutes[0]!;
@@ -272,34 +335,71 @@ describe("documentation-complete Skill content platform", () => {
     }
   });
 
-  it("prevents proposal-input specialization transfer array mutation from mutating immutable v1", () => {
+  it("enforces per-record provenance resolution over shared issue-level URLs", () => {
     const release = candidate();
-    const frozenSpecialization = pilotSkillContentReleaseV1.specializations.find(
+    const metadataRecords = collectMetadataRecords(release);
+    expect(metadataRecords.length).toBeGreaterThan(20);
+    const references = metadataRecords.map((record) => record.metadata.provenance.reference);
+    const malformed = references.filter(
+      (reference) =>
+        !/^http:\/\/127\.0\.0\.1:3001\/recovery-admin\/glantri-app\/src\/branch\/dev\/[^#]+#/.test(
+          reference,
+        ),
+    );
+    expect(malformed).toHaveLength(0);
+    expect(new Set(references).size).toBe(references.length);
+    const hasSharedIssueAnchor = references.some((reference) => reference.includes("/issues/25"));
+    expect(hasSharedIssueAnchor).toBe(false);
+    expect(references.every((reference) => /%3A/.test(reference))).toBe(true);
+  });
+
+  it("prevents proposal-input mutation from reusing immutable v1 nested arrays", () => {
+    const proposalInput = structuredClone(pilotSkillContentReleaseProposalInput);
+    const baseHistorySlot = pilotSkillContentReleaseV1.histories[0]!.selectionSlots[0]!;
+    const baseProfileRoute = pilotSkillContentReleaseV1.profiles[0]!.normalRoutes[0]!;
+    const baseSpecialization = pilotSkillContentReleaseV1.specializations.find(
       ({ id }) => id === "spec:diagnostic-medicine",
     );
-    expect(frozenSpecialization).toBeDefined();
-    if (
-      !frozenSpecialization ||
-      frozenSpecialization.kind !== "specialization" ||
-      frozenSpecialization.transfer.kind !== "explicit-relationships"
-    ) {
-      return;
-    }
-    const baseRelationshipIds = [...frozenSpecialization.transfer.relationshipIds];
+    expect(baseSpecialization).toBeDefined();
+    if (!baseSpecialization) return;
 
-    const mutableSpecialization = competencyById(release, "spec:diagnostic-medicine");
+    const mutableHistory = proposalInput.histories.find(
+      ({ id }) => id === "hist:glantri-household-retainer-service",
+    );
+    expect(mutableHistory).toBeDefined();
+    if (!mutableHistory || !mutableHistory.selectionSlots[0]) return;
+    const mutableProfile = proposalInput.profiles[0];
+    expect(mutableProfile).toBeDefined();
+    if (!mutableProfile || !mutableProfile.normalRoutes[0]) return;
+    const mutableSpecialization = proposalInput.competencies.find(
+      ({ id }) => id === "spec:diagnostic-medicine",
+    );
     expect(mutableSpecialization).toBeDefined();
     if (mutableSpecialization?.kind !== "specialization") return;
-    if (mutableSpecialization.transfer.kind !== "explicit-relationships") return;
 
-    (mutableSpecialization.transfer.relationshipIds as string[]).push(
-      "rel:diagnostic-medicine:test",
-    );
+    (mutableHistory.selectionSlots[0].candidateCompetencyIds as string[]).push("skill:medicine");
+    (mutableProfile.normalRoutes[0].competencyIds as string[]).push("skill:medicine");
+    if (mutableSpecialization.transfer.kind === "explicit-relationships") {
+      (mutableSpecialization.transfer.relationshipIds as string[]).push(
+        "rel:diagnostic-medicine:test",
+      );
+    }
+    mutableSpecialization.prerequisites[0]!.competencyId = "skill:surgery";
 
-    expect(frozenSpecialization.transfer.relationshipIds).toEqual(baseRelationshipIds);
-    expect(frozenSpecialization.transfer.relationshipIds).not.toContain(
-      "rel:diagnostic-medicine:test",
-    );
+    expect(baseHistorySlot.candidateCompetencyIds).not.toContain("skill:medicine");
+    expect(baseProfileRoute.competencyIds).not.toContain("skill:medicine");
+    if (baseSpecialization.kind === "specialization") {
+      if (baseSpecialization.transfer.kind === "explicit-relationships") {
+        expect(
+          (
+            baseSpecialization as (typeof pilotSkillContentReleaseV1.specializations)[number] & {
+              transfer: { relationshipIds: readonly string[] };
+            }
+          ).transfer.relationshipIds,
+        ).not.toContain("rel:diagnostic-medicine:test");
+      }
+      expect(baseSpecialization.prerequisites[0]!.competencyId).not.toBe("skill:surgery");
+    }
   });
 
   it("keeps compatibility classification explicit rather than inferred from digests", () => {
