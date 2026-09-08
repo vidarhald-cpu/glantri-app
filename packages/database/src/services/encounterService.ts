@@ -21,6 +21,8 @@ import {
   createPrismaScenarioRepository,
   type ScenarioRepository,
 } from "../repositories/scenarioRepository";
+import { prisma as defaultPrisma } from "../client";
+import { assertScenarioEquipmentCurrent } from "./scenarioEquipmentReconciliation";
 import {
   advanceScenarioRound,
   createScenarioLiveState,
@@ -82,10 +84,19 @@ export class EncounterWriteError extends Error {
 }
 
 export class EncounterService {
+  private readonly equipmentGuard?: (scenarioId: string) => Promise<void>;
+
   constructor(
     private readonly encounterRepository: EncounterRepository = createPrismaEncounterRepository(),
     private readonly scenarioRepository: ScenarioRepository = createPrismaScenarioRepository(),
-  ) {}
+    equipmentGuard?: (scenarioId: string) => Promise<void>,
+  ) {
+    this.equipmentGuard =
+      equipmentGuard ??
+      (arguments.length === 0
+        ? (scenarioId) => assertScenarioEquipmentCurrent({ client: defaultPrisma, scenarioId })
+        : undefined);
+  }
 
   async createEncounter(input: {
     campaignId?: string | null;
@@ -160,6 +171,9 @@ export class EncounterService {
           "The parent Scenario must be active before this Encounter can be active.",
         );
       }
+      if (input.session.status === "active" && existing.status !== "active") {
+        await this.equipmentGuard?.(scenarioId);
+      }
       if (
         scenario.status === "archived" ||
         (scenario.status === "completed" && input.session.status !== "archived")
@@ -213,6 +227,7 @@ export class EncounterService {
           "Combat activity requires an active parent Scenario.",
         );
       }
+      await this.equipmentGuard?.(scenarioId);
     }
     try {
       const existingEventIds = new Set(collectCombatStepEvents(existing).map((event) => event.id));

@@ -239,7 +239,12 @@ if (!process.env.DATABASE_URL_TEST) {
       const equipmentReadService = new CharacterEquipmentReadModelService(equipmentRepository);
       const equipmentWriteService = new CharacterEquipmentWriteService(equipmentRepository);
       const campaignService = new CampaignService(repository, characterService);
-      const service = new ScenarioService(repository, characterService, equipmentReadService);
+      const service = new ScenarioService(
+        repository,
+        characterService,
+        equipmentReadService,
+        prisma!,
+      );
       const campaign = await campaignService.createCampaign({
         gmUserId: gm.id,
         name: "Lost Seal",
@@ -269,7 +274,7 @@ if (!process.env.DATABASE_URL_TEST) {
         equipmentWriteService.createCampaignEquipmentItem({
           campaignId: campaign.id,
           displayName: name,
-          holderCharacterId: source.id,
+          holderCharacterId: null,
           itemFacts: {
             activeMechanics: [],
             descriptiveTraits: [],
@@ -308,6 +313,17 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(await equipmentRepository.getCanonicalEquipmentItemById(seal.id)).toMatchObject({
         holderCharacterId: target.id,
       });
+      await expect(
+        service.resolveEquipmentStatuses({
+          participants: [
+            (await service.getScenarioParticipantById(targetParticipant.id, scenario.id))!,
+          ],
+          userId: targetOwner.id,
+          viewerMode: "player",
+        }),
+      ).resolves.toMatchObject({
+        [targetParticipant.id]: { canReconcile: false, status: "current" },
+      });
       const retried = await service.pickUpScenarioAvailableItem({
         actorUserId: targetOwner.id,
         availabilityId: "available-seal",
@@ -335,6 +351,48 @@ if (!process.env.DATABASE_URL_TEST) {
         ),
       ).toHaveLength(1);
 
+      const raceSeal = await createSeal("Contested Seal");
+      const beforeRace = await service.getScenarioById(scenario.id);
+      const racePrepared = await service.updateScenarioSessionState({
+        availableObjects: [
+          {
+            addedAt: "2026-08-22T10:05:00.000Z",
+            id: "available-contested-seal",
+            sourceId: raceSeal.id,
+            sourceKind: "campaign_item",
+            visibility: "players",
+          },
+        ],
+        expectedRevision: beforeRace!.updatedAt,
+        gmPrivateNotes: "",
+        scenarioId: scenario.id,
+      });
+      const raced = await Promise.allSettled(
+        ["pickup-race-a", "pickup-race-b"].map((requestId) =>
+          service.pickUpScenarioAvailableItem({
+            actorUserId: targetOwner.id,
+            availabilityId: "available-contested-seal",
+            expectedRevision: racePrepared.updatedAt,
+            requestId,
+            scenarioId: scenario.id,
+            targetParticipantId: targetParticipant.id,
+            viewerMode: "player",
+          }),
+        ),
+      );
+      expect(raced.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      expect(raced.filter((result) => result.status === "rejected")).toHaveLength(1);
+      expect(await equipmentRepository.getCanonicalEquipmentItemById(raceSeal.id)).toMatchObject({
+        holderCharacterId: target.id,
+        id: raceSeal.id,
+      });
+      expect(await prisma!.characterEquipmentItem.count({ where: { id: raceSeal.id } })).toBe(1);
+      expect(
+        (await service.listScenarioEventLogs(scenario.id)).filter(
+          (event) => event.eventType === "item_transferred",
+        ),
+      ).toHaveLength(2);
+
       const staleSeal = await createSeal("Stale Seal");
       const latestScenario = await service.getScenarioById(scenario.id);
       const stalePrepared = await service.updateScenarioSessionState({
@@ -351,11 +409,14 @@ if (!process.env.DATABASE_URL_TEST) {
         gmPrivateNotes: "",
         scenarioId: scenario.id,
       });
-      await equipmentWriteService.transferCampaignEquipmentItem({
+      await equipmentRepository.acquireUnheldCampaignEquipmentItem!({
         campaignId: campaign.id,
         itemId: staleSeal.id,
-        sourceCharacterId: source.id,
-        targetCharacterId: target.id,
+        targetCharacterId: source.id,
+        targetStorageAssignment: {
+          carryMode: "stored",
+          locationId: `${source.id}:loc-person`,
+        },
       });
       await expect(
         service.pickUpScenarioAvailableItem({
@@ -375,6 +436,104 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(
         (await service.listScenarioEventLogs(scenario.id)).filter(
           (event) => event.eventType === "item_transferred",
+        ),
+      ).toHaveLength(2);
+    });
+
+    it("marks an external canonical equipment change stale until the GM explicitly reconciles it", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const owner = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, owner.id, { name: "Ari" });
+      const repository = createPrismaScenarioRepository(prisma!);
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const equipmentRepository = createPrismaCharacterEquipmentRepository(prisma!);
+      const equipmentReadService = new CharacterEquipmentReadModelService(equipmentRepository);
+      const equipmentWriteService = new CharacterEquipmentWriteService(equipmentRepository);
+      const campaignService = new CampaignService(repository, characterService);
+      const service = new ScenarioService(
+        repository,
+        characterService,
+        equipmentReadService,
+        prisma!,
+      );
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Equipment drift",
+        status: "active",
+      });
+      await campaignService.addCampaignRosterEntry({
+        campaignId: campaign.id,
+        category: "pc",
+        sourceId: character.id,
+        sourceType: "character",
+      });
+      await equipmentWriteService.ensureCharacterEquipmentInitialized(character.id);
+      const scenario = await service.createScenario({
+        campaignId: campaign.id,
+        name: "Frozen projection",
+        status: "live",
+      });
+      const participant = await service.addCharacterParticipant({
+        characterId: character.id,
+        controlledByUserId: owner.id,
+        joinSource: "gm_added",
+        scenarioId: scenario.id,
+      });
+
+      await expect(
+        service.resolveEquipmentStatuses({
+          participants: [participant],
+          userId: owner.id,
+          viewerMode: "player",
+        }),
+      ).resolves.toMatchObject({
+        [participant.id]: { canReconcile: false, status: "current" },
+      });
+
+      const externalItem = await equipmentWriteService.createCampaignEquipmentItem({
+        campaignId: campaign.id,
+        displayName: "Externally added dagger",
+        holderCharacterId: character.id,
+        itemFacts: {
+          activeMechanics: [],
+          descriptiveTraits: [],
+          templateOverrides: [],
+          unsupportedCapabilities: [],
+          version: 1,
+        },
+        templateId: "weapon-template-dagger",
+      });
+      const beforeReconcile = await service.getScenarioParticipantById(participant.id, scenario.id);
+      await expect(
+        service.resolveEquipmentStatuses({
+          participants: [beforeReconcile!],
+          userId: gm.id,
+          viewerMode: "gm",
+        }),
+      ).resolves.toMatchObject({
+        [participant.id]: { canReconcile: true, status: "stale" },
+      });
+
+      const reconciled = await service.refreshCharacterParticipantEquipmentSnapshot({
+        participantId: participant.id,
+        scenarioId: scenario.id,
+      });
+      expect(reconciled.snapshot.equipmentState).toMatchObject({
+        itemsById: { [externalItem.id]: { id: externalItem.id } },
+      });
+      expect(reconciled.state.equipment.carriedItemIds).toContain(externalItem.id);
+      await expect(
+        service.resolveEquipmentStatuses({
+          participants: [reconciled],
+          userId: gm.id,
+          viewerMode: "gm",
+        }),
+      ).resolves.toMatchObject({
+        [participant.id]: { canReconcile: false, status: "current" },
+      });
+      expect(
+        (await service.listScenarioEventLogs(scenario.id)).filter(
+          (event) => event.eventType === "equipment_reconciled",
         ),
       ).toHaveLength(1);
     });

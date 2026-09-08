@@ -6,7 +6,9 @@ import type {
   ScenarioParticipant,
   ScenarioParticipantRole,
   ScenarioSessionAvailableObject,
+  ScenarioSessionParticipantEquipment,
 } from "@glantri/domain";
+import type { PrismaClient } from "@prisma/client";
 import {
   createParticipantSnapshotFromCharacter,
   createParticipantSnapshotFromEntity,
@@ -31,6 +33,11 @@ import {
   resolveEntityParticipantSource,
   userHasPlayerScenarioAccess,
 } from "./scenarioParticipantSupport";
+import { prisma as defaultPrisma } from "../client";
+import {
+  fingerprintScenarioEquipment,
+  resolveScenarioEquipmentStatuses,
+} from "./scenarioEquipmentReconciliation";
 
 export class ScenarioSessionWriteError extends Error {
   constructor(
@@ -65,7 +72,16 @@ export class ScenarioService {
     private readonly repository: ScenarioRepository = createPrismaScenarioRepository(),
     private readonly characterService = new CharacterService(),
     private readonly equipmentService = new CharacterEquipmentReadModelService(),
+    private readonly client: PrismaClient = defaultPrisma,
   ) {}
+
+  async resolveEquipmentStatuses(input: {
+    participants: ScenarioParticipant[];
+    userId: string;
+    viewerMode: "gm" | "player";
+  }): Promise<Record<string, ScenarioSessionParticipantEquipment>> {
+    return resolveScenarioEquipmentStatuses({ client: this.client, ...input });
+  }
 
   async createScenario(input: {
     campaignId: string;
@@ -237,12 +253,10 @@ export class ScenarioService {
         if (!item || item.campaignContextId !== scenario.campaignId) {
           throw new Error("Choose an Item from this Campaign.");
         }
-        const expectedHolderCharacterId =
-          reference.expectedHolderCharacterId ?? item.holderCharacterId ?? undefined;
-        if (!expectedHolderCharacterId) {
-          throw new Error("Only an Item currently held by a Character can be made available.");
+        if (item.holderCharacterId) {
+          throw new Error("Only an unheld Campaign Item can be made available for pickup.");
         }
-        availableObjects.push({ ...reference, expectedHolderCharacterId });
+        availableObjects.push({ ...reference, expectedHolderCharacterId: undefined });
         continue;
       }
 
@@ -324,9 +338,7 @@ export class ScenarioService {
         const template = equipment.templatesById[item.templateId];
         return [
           {
-            canPickUp:
-              Boolean(item.holderCharacterId) &&
-              item.holderCharacterId === reference.expectedHolderCharacterId,
+            canPickUp: !item.holderCharacterId,
             id: reference.id,
             name: item.displayName || template?.name || "Item",
             referenceType: "Item",
@@ -466,6 +478,16 @@ export class ScenarioService {
       retainedCharacterRevision: character.retainedRevision ?? undefined,
       sourceUpdatedAt: character.updatedAt,
     });
+    snapshotState.snapshot.equipmentProjection = {
+      aggregateRevision: equipmentState.revision,
+      capturedAt: new Date().toISOString(),
+      contractVersion: "scenario-equipment-projection/v1",
+      fingerprint: fingerprintScenarioEquipment(equipmentState),
+      provenance: {
+        characterId: character.id,
+        source: "character_equipment_aggregate",
+      },
+    };
     const participant = await this.repository.createScenarioParticipant({
       characterId: character.id,
       controlledByUserId: input.controlledByUserId ?? character.ownerId ?? null,
@@ -497,7 +519,7 @@ export class ScenarioService {
     return participant;
   }
 
-  /** Explicitly recommits current character equipment into the scenario-owned snapshot. */
+  /** Explicitly reconciles current canonical equipment into the Scenario-owned projection. */
   async refreshCharacterParticipantEquipmentSnapshot(input: {
     participantId: string;
     scenarioId: string;
@@ -536,10 +558,22 @@ export class ScenarioService {
       sourceUpdatedAt: character.updatedAt,
     });
 
-    return this.repository.updateScenarioParticipantSnapshotAndState(
+    const capturedAt = new Date().toISOString();
+    const fingerprint = fingerprintScenarioEquipment(equipmentState);
+    const reconciled = await this.repository.updateScenarioParticipantSnapshotAndState(
       participant.id,
       {
         ...participant.snapshot,
+        equipmentProjection: {
+          aggregateRevision: equipmentState.revision,
+          capturedAt,
+          contractVersion: "scenario-equipment-projection/v1",
+          fingerprint,
+          provenance: {
+            characterId: participant.characterId,
+            source: "character_equipment_aggregate",
+          },
+        },
         equipmentState: refreshed.snapshot.equipmentState,
         sourceUpdatedAt: refreshed.snapshot.sourceUpdatedAt,
       },
@@ -548,6 +582,18 @@ export class ScenarioService {
         equipment: refreshed.state.equipment,
       },
     );
+    await this.repository.createScenarioEventLog({
+      eventType: "equipment_reconciled",
+      participantId: participant.id,
+      payload: {
+        aggregateRevision: equipmentState.revision,
+        characterId: participant.characterId,
+        fingerprint,
+      },
+      scenarioId: input.scenarioId,
+      summary: `${participant.snapshot.displayName}’s equipment was reconciled for Scenario play.`,
+    });
+    return reconciled;
   }
 
   async addEntityParticipant(input: {

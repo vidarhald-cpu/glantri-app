@@ -30,6 +30,7 @@ export const scenarioObjectiveHistoryEventTypeSchema = z.enum([
   "encounter_paused",
   "encounter_closed",
   "encounter_archived",
+  "equipment_reconciled",
   "item_transferred",
   "encounter_skill_outcome",
   "encounter_combat_outcome",
@@ -55,6 +56,13 @@ export const scenarioSessionParticipantPresenceSchema = z.discriminatedUnion("ki
 
 export const scenarioSessionParticipantSchema = z.object({
   displayName: z.string().min(1),
+  equipment: z
+    .object({
+      canReconcile: z.boolean().default(false),
+      message: z.string().min(1),
+      status: z.enum(["current", "stale", "unavailable"]),
+    })
+    .optional(),
   id: idSchema,
   isControlledByViewer: z.boolean().default(false),
   presence: scenarioSessionParticipantPresenceSchema,
@@ -112,6 +120,9 @@ export type ScenarioObjectiveHistoryEventType = z.infer<
 >;
 export type ScenarioSessionAvailableObject = z.infer<typeof scenarioSessionAvailableObjectSchema>;
 export type ScenarioSessionParticipant = z.infer<typeof scenarioSessionParticipantSchema>;
+export type ScenarioSessionParticipantEquipment = NonNullable<
+  ScenarioSessionParticipant["equipment"]
+>;
 export type ScenarioSessionView = z.infer<typeof scenarioSessionViewSchema>;
 
 const playerSafeHistoryTypes = new Set<ScenarioObjectiveHistoryEventType>(
@@ -228,6 +239,7 @@ export function projectScenarioObjectiveHistory(input: {
 export function buildScenarioSessionView(input: {
   availableObjects: ScenarioSessionAvailableObject[];
   encounters: EncounterSession[];
+  equipmentByParticipantId?: Readonly<Record<string, ScenarioSessionParticipantEquipment>>;
   eventLogs: ScenarioEventLog[];
   participants: ScenarioParticipant[];
   scenario: Scenario;
@@ -294,6 +306,9 @@ export function buildScenarioSessionView(input: {
     return [
       scenarioSessionParticipantSchema.parse({
         displayName: participant.snapshot.displayName,
+        ...(input.equipmentByParticipantId?.[participant.id]
+          ? { equipment: input.equipmentByParticipantId[participant.id] }
+          : {}),
         id: participant.id,
         isControlledByViewer: controlled,
         presence: activeEncounter

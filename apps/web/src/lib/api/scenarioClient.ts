@@ -285,7 +285,7 @@ export async function refreshScenarioParticipantEquipmentOnServer(input: {
   scenarioId: string;
 }): Promise<ScenarioParticipant> {
   const payload = await sendJson<{ participant: ScenarioParticipant }>(
-    `/scenarios/${input.scenarioId}/participants/${input.participantId}/refresh-character-equipment`,
+    `/scenarios/${input.scenarioId}/participants/${input.participantId}/reconcile-character-equipment`,
     { method: "POST" },
   );
   return payload.participant;

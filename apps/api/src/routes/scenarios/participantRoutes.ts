@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 
 import {
   CampaignService,
@@ -377,36 +377,41 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  const reconcileCharacterEquipment = async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+
+    try {
+      const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
+      const participantId = parseId(request.params, "participantId", "Participant id");
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles },
+      );
+
+      if (!access || access.mode !== "gm") {
+        return reply.code(404).send({ error: "Scenario not found." });
+      }
+
+      const participant = await scenarioService.refreshCharacterParticipantEquipmentSnapshot({
+        participantId,
+        scenarioId,
+      });
+      return { participant };
+    } catch (error) {
+      return reply.code(400).send({
+        error:
+          error instanceof Error ? error.message : "Unable to reconcile participant equipment.",
+      });
+    }
+  };
+  app.post(
+    "/scenarios/:scenarioId/participants/:participantId/reconcile-character-equipment",
+    reconcileCharacterEquipment,
+  );
   app.post(
     "/scenarios/:scenarioId/participants/:participantId/refresh-character-equipment",
-    async (request, reply) => {
-      const user = await requireAuthenticatedUser(request, reply);
-      if (!user) return;
-
-      try {
-        const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
-        const participantId = parseId(request.params, "participantId", "Participant id");
-        const access = await resolveScenarioWorkspaceAccess(
-          { campaignService, scenarioService },
-          { scenarioId, userId: user.id, userRoles: user.roles },
-        );
-
-        if (!access || access.mode !== "gm") {
-          return reply.code(404).send({ error: "Scenario not found." });
-        }
-
-        const participant = await scenarioService.refreshCharacterParticipantEquipmentSnapshot({
-          participantId,
-          scenarioId,
-        });
-        return { participant };
-      } catch (error) {
-        return reply.code(400).send({
-          error:
-            error instanceof Error ? error.message : "Unable to refresh participant equipment.",
-        });
-      }
-    },
+    reconcileCharacterEquipment,
   );
 
   app.put("/scenarios/:scenarioId/participants/:participantId/metadata", async (request, reply) => {

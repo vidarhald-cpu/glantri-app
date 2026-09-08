@@ -173,7 +173,7 @@ test.describe("Lost Seal Scenario happy path", () => {
         data: {
           displayName: "Lost Seal",
           facts: { descriptiveTraits: [], unsupportedCapabilities: [] },
-          holderCharacterId: characterBId,
+          holderCharacterId: null,
           templateId: "weapon-template-dagger",
         },
       }),
@@ -385,9 +385,14 @@ test.describe("Lost Seal Scenario happy path", () => {
           data: { expectedRevision: paused.encounter.updatedAt, status: "active" },
         }),
       );
+      const rePaused = await json<{ encounter: { updatedAt: string } }>(
+        await page.request.patch(`${API_URL}/encounters/${encounterId}/status`, {
+          data: { expectedRevision: resumed.encounter.updatedAt, status: "paused" },
+        }),
+      );
       return page.request.patch(`${API_URL}/encounters/${encounterId}/status`, {
         data: {
-          expectedRevision: resumed.encounter.updatedAt,
+          expectedRevision: rePaused.encounter.updatedAt,
           gmPrivateClosingNote: privateNote,
           playerOutcome: outcome,
           status: "completed",
@@ -446,6 +451,45 @@ test.describe("Lost Seal Scenario happy path", () => {
         },
       }),
     );
+
+    await json(
+      await page.request.post(`${API_URL}/campaigns/${campaign.campaign.id}/items`, {
+        data: {
+          displayName: "Externally issued dagger",
+          facts: { descriptiveTraits: [], unsupportedCapabilities: [] },
+          holderCharacterId: characterAId,
+          templateId: "weapon-template-dagger",
+        },
+      }),
+    );
+    const stalePlayerSession = await playerAContext.request.get(
+      `${API_URL}/scenarios/${scenario.scenario.id}/session`,
+    );
+    expect(stalePlayerSession.status()).toBe(200);
+    expect(await stalePlayerSession.text()).toContain('"status":"stale"');
+    const staleGmSession = await page.request.get(
+      `${API_URL}/scenarios/${scenario.scenario.id}/session`,
+    );
+    expect(staleGmSession.status()).toBe(200);
+    expect(await staleGmSession.text()).toContain('"canReconcile":true');
+    const blockedCombatStart = await page.request.patch(
+      `${API_URL}/encounters/${sharedCombat.encounter.id}/status`,
+      {
+        data: { expectedRevision: sharedCombat.encounter.updatedAt, status: "active" },
+      },
+    );
+    expect(blockedCombatStart.status()).toBe(400);
+    expect(await blockedCombatStart.text()).toContain("must reconcile");
+    await json(
+      await page.request.post(
+        `${API_URL}/scenarios/${scenario.scenario.id}/participants/${participantA.participant.id}/reconcile-character-equipment`,
+      ),
+    );
+    const reconciledPlayerSession = await playerAContext.request.get(
+      `${API_URL}/scenarios/${scenario.scenario.id}/session`,
+    );
+    expect(reconciledPlayerSession.status()).toBe(200);
+    expect(await reconciledPlayerSession.text()).toContain('"status":"current"');
     const activeSharedCombat = await json<{ encounter: { id: string; updatedAt: string } }>(
       await page.request.patch(`${API_URL}/encounters/${sharedCombat.encounter.id}/status`, {
         data: { expectedRevision: sharedCombat.encounter.updatedAt, status: "active" },

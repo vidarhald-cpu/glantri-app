@@ -286,6 +286,18 @@ export const scenarioParticipantStateSchema = z.object({
 export const scenarioParticipantSnapshotSchema = z.object({
   build: z.unknown().optional(),
   displayName: z.string().min(1),
+  equipmentProjection: z
+    .object({
+      aggregateRevision: z.number().int().nonnegative(),
+      capturedAt: timestampSchema,
+      contractVersion: z.literal("scenario-equipment-projection/v1"),
+      fingerprint: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+      provenance: z.object({
+        characterId: idSchema,
+        source: z.literal("character_equipment_aggregate"),
+      }),
+    })
+    .optional(),
   entity: z
     .object({
       description: z.string().optional(),
@@ -566,7 +578,7 @@ function inferHealthFromCharacter(build: CharacterBuild): ScenarioParticipantSta
   };
 }
 
-function inferEquipmentArrays(equipmentState: unknown): {
+export function projectScenarioParticipantEquipment(equipmentState: unknown): {
   carriedItemIds?: string[];
   equippedItemIds?: string[];
   readyItemIds?: string[];
@@ -701,7 +713,7 @@ export function createParticipantSnapshotFromCharacter(input: {
         engaged: false,
       },
       conditions: [],
-      equipment: inferEquipmentArrays(input.equipmentState),
+      equipment: projectScenarioParticipantEquipment(input.equipmentState),
       health,
       modifiers: [],
       resources: {},
@@ -787,7 +799,7 @@ export function createParticipantSnapshotFromEntity(input: {
         engaged: false,
       },
       conditions: [],
-      equipment: inferEquipmentArrays(equipmentState),
+      equipment: projectScenarioParticipantEquipment(equipmentState),
       health: {
         bleeding: 0,
         currentHp: clampHealth(maxHp, maxHp),

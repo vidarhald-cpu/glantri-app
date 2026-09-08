@@ -8,14 +8,20 @@ import {
 } from "@glantri/domain";
 
 import { createPrismaCharacterEquipmentRepository } from "../repositories/characterEquipmentRepository";
+import { createPrismaCharacterRepository } from "../repositories/characterRepository";
 import { createPrismaCombatStatePersistenceRepository } from "../repositories/combatStatePersistenceRepository";
+import { createPrismaScenarioRepository } from "../repositories/scenarioRepository";
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
 import { createTestCampaign, createTestCharacter, createTestUser } from "../testing/factories";
+import { CharacterEquipmentReadModelService } from "./characterEquipmentReadModelService";
 import { CharacterEquipmentWriteService } from "./characterEquipmentWriteService";
+import { CharacterService } from "./characterService";
 import {
   CombatItemInteractionService,
   CombatItemUnavailableError,
+  ScenarioEquipmentStaleError,
 } from "./combatItemInteractionService";
+import { ScenarioService } from "./scenarioService";
 
 const prisma = getTestPrismaClient();
 
@@ -71,6 +77,27 @@ if (!process.env.DATABASE_URL_TEST) {
       });
       await equipmentService.setCharacterActiveWeapon(character.id, "primary", createdItem.id);
       const item = (await itemRepository.getCanonicalEquipmentItemById(createdItem.id))!;
+      const scenarioService = new ScenarioService(
+        createPrismaScenarioRepository(prisma!),
+        new CharacterService(createPrismaCharacterRepository(prisma!)),
+        new CharacterEquipmentReadModelService(itemRepository),
+        prisma!,
+      );
+      const scenarioParticipants = [
+        await scenarioService.addCharacterParticipant({
+          characterId: character.id,
+          controlledByUserId: player.id,
+          joinSource: "gm_added",
+          scenarioId: scenario.id,
+        }),
+        await scenarioService.addCharacterParticipant({
+          characterId: recipient.id,
+          controlledByUserId: recipientUser.id,
+          joinSource: "gm_added",
+          scenarioId: scenario.id,
+        }),
+      ];
+      await prisma!.scenarioEventLog.deleteMany({ where: { scenarioId: scenario.id } });
 
       const encounterId = `atomic-encounter-${suffix}`;
       const base = encounterSessionSchema.parse({
@@ -185,6 +212,8 @@ if (!process.env.DATABASE_URL_TEST) {
         persisted,
         recipient,
         scenario,
+        scenarioParticipants,
+        scenarioService,
       };
     }
 
@@ -309,6 +338,54 @@ if (!process.env.DATABASE_URL_TEST) {
           await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
         ).toBe(1);
       }
+    });
+
+    it("blocks authoritative Combat after an external equipment change until GM reconciliation", async () => {
+      const current = await fixture("external-stale");
+      const equipmentService = new CharacterEquipmentWriteService(current.itemRepository);
+      await equipmentService.createCampaignEquipmentItem({
+        campaignId: current.campaign.id,
+        displayName: "External change",
+        holderCharacterId: current.character.id,
+        itemFacts: {
+          activeMechanics: [],
+          descriptiveTraits: [],
+          templateOverrides: [],
+          unsupportedCapabilities: [],
+          version: 1,
+        },
+        templateId: "weapon-template-dagger",
+      });
+      const input = {
+        actionId: current.actionId,
+        actorUserId: current.gm.id,
+        campaignId: current.campaign.id,
+        encounterId: current.encounterId,
+        encounterSession: current.completedSession,
+        expectedEncounterRevision: current.persisted.updatedAt,
+        interaction: current.completedSession.combatRoundState!.genericActions[0]!.itemInteraction!,
+        ownerCharacterId: current.character.id,
+        roundNumber: 1,
+        scenarioId: current.scenario.id,
+      };
+      const service = new CombatItemInteractionService(current.itemRepository, prisma!);
+
+      await expect(service.commitResolution(input)).rejects.toBeInstanceOf(
+        ScenarioEquipmentStaleError,
+      );
+      await expect(
+        current.itemRepository.getCanonicalEquipmentItemById(current.item.id),
+      ).resolves.toMatchObject({ holderCharacterId: current.character.id });
+
+      await current.scenarioService.refreshCharacterParticipantEquipmentSnapshot({
+        participantId: current.scenarioParticipants[0]!.id,
+        scenarioId: current.scenario.id,
+      });
+      const committed = await service.commitResolution(input);
+      expect(committed.item.item).toMatchObject({
+        holderCharacterId: null,
+        id: current.item.id,
+      });
     });
 
     it("rejects combat-item commands for terminal Scenario states", async () => {
@@ -619,6 +696,11 @@ if (!process.env.DATABASE_URL_TEST) {
         ...loadout,
         activeAmmoItemIds: [ammo.id],
       });
+      await current.scenarioService.refreshCharacterParticipantEquipmentSnapshot({
+        participantId: current.scenarioParticipants[0]!.id,
+        scenarioId: current.scenario.id,
+      });
+      await prisma!.scenarioEventLog.deleteMany({ where: { scenarioId: current.scenario.id } });
       const commandId = "missile-ammo-command";
       const cursor = current.persisted.combatRoundState!.currentCursor;
       const session = encounterSessionSchema.parse({
@@ -901,6 +983,10 @@ if (!process.env.DATABASE_URL_TEST) {
         holderCharacterId: current.character.id,
         id: current.item.id,
       });
+      await current.scenarioService.refreshCharacterParticipantEquipmentSnapshot({
+        participantId: current.scenarioParticipants[0]!.id,
+        scenarioId: current.scenario.id,
+      });
 
       const secondEncounterId = "atomic-encounter-collision-second";
       const secondBase = encounterSessionSchema.parse({
@@ -1091,7 +1177,7 @@ if (!process.env.DATABASE_URL_TEST) {
       );
       expect(
         await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
-      ).toBe(2);
+      ).toBe(beforeEvents + 1);
 
       const exactRetry = await service.commitResolution(secondInput);
       expect(exactRetry.item).toMatchObject({
@@ -1102,7 +1188,7 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(exactRetry.encounter.updatedAt).toBe(second.encounter.updatedAt);
       expect(
         await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
-      ).toBe(2);
+      ).toBe(beforeEvents + 1);
       const stored = await prisma!.characterEquipmentItem.findUniqueOrThrow({
         where: { id: current.item.id },
       });

@@ -54,6 +54,17 @@ function repository(records: CombatItemInteractionRecord[]) {
   } as unknown as CharacterEquipmentRepository;
 }
 
+function combatService(records: CombatItemInteractionRecord[]) {
+  return new CombatItemInteractionService(repository(records), {
+    encounter: {
+      findUnique: vi.fn(async () => ({ scenarioId: "scenario-1" })),
+    },
+    scenarioParticipant: {
+      findMany: vi.fn(async () => []),
+    },
+  } as never);
+}
+
 const participants = [
   { characterId: "character-1", label: "Aster", participantId: "participant-1" },
   { characterId: "character-2", label: "Bram", participantId: "participant-2" },
@@ -62,29 +73,27 @@ const participants = [
 
 describe("CombatItemInteractionService privacy and declaration authority", () => {
   it("shows only controlled Items and revealed Encounter-present Items to a player", async () => {
-    const service = new CombatItemInteractionService(
-      repository([
-        record({ holderCharacterId: "character-1", id: "owned-dagger" }),
-        record({ hidden: true, holderCharacterId: "character-1", id: "hidden-owned-dagger" }),
-        record({ holderCharacterId: "character-2", id: "other-dagger" }),
-        record({
-          availableInEncounter: false,
-          holderCharacterId: "character-1",
-          id: "stored-elsewhere",
-        }),
-        record({
-          holderCharacterId: null,
-          id: "visible-dagger",
-          presentEncounterId: "encounter-1",
-        }),
-        record({
-          hidden: true,
-          holderCharacterId: null,
-          id: "hidden-dagger",
-          presentEncounterId: "encounter-1",
-        }),
-      ]),
-    );
+    const service = combatService([
+      record({ holderCharacterId: "character-1", id: "owned-dagger" }),
+      record({ hidden: true, holderCharacterId: "character-1", id: "hidden-owned-dagger" }),
+      record({ holderCharacterId: "character-2", id: "other-dagger" }),
+      record({
+        availableInEncounter: false,
+        holderCharacterId: "character-1",
+        id: "stored-elsewhere",
+      }),
+      record({
+        holderCharacterId: null,
+        id: "visible-dagger",
+        presentEncounterId: "encounter-1",
+      }),
+      record({
+        hidden: true,
+        holderCharacterId: null,
+        id: "hidden-dagger",
+        presentEncounterId: "encounter-1",
+      }),
+    ]);
 
     const options = await service.getOptions({
       campaignId: "campaign-1",
@@ -110,11 +119,9 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
   });
 
   it("gives the GM precise unsupported actor state without inventing NPC Item holders", async () => {
-    const service = new CombatItemInteractionService(
-      repository([
-        record({ hidden: true, holderCharacterId: "character-1", id: "hidden-owned-dagger" }),
-      ]),
-    );
+    const service = combatService([
+      record({ hidden: true, holderCharacterId: "character-1", id: "hidden-owned-dagger" }),
+    ]);
     const options = await service.getOptions({
       campaignId: "campaign-1",
       encounterId: "encounter-1",
@@ -136,17 +143,15 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
   });
 
   it("makes hidden, nonexistent, wrong-owner, and forged-revision declarations fail identically", async () => {
-    const service = new CombatItemInteractionService(
-      repository([
-        record({ holderCharacterId: "character-2", id: "other-dagger" }),
-        record({
-          hidden: true,
-          holderCharacterId: null,
-          id: "hidden-dagger",
-          presentEncounterId: "encounter-1",
-        }),
-      ]),
-    );
+    const service = combatService([
+      record({ holderCharacterId: "character-2", id: "other-dagger" }),
+      record({
+        hidden: true,
+        holderCharacterId: null,
+        id: "hidden-dagger",
+        presentEncounterId: "encounter-1",
+      }),
+    ]);
     const attempt = (itemId: string) =>
       service.resolveDeclaration({
         campaignId: "campaign-1",
@@ -169,9 +174,9 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
   });
 
   it("makes hidden and nonexistent pass recipients fail identically", async () => {
-    const service = new CombatItemInteractionService(
-      repository([record({ holderCharacterId: "character-1", id: "owned-dagger" })]),
-    );
+    const service = combatService([
+      record({ holderCharacterId: "character-1", id: "owned-dagger" }),
+    ]);
     const attempt = (recipientParticipantId: string) =>
       service.resolveDeclaration({
         campaignId: "campaign-1",
@@ -225,9 +230,7 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
         viewer,
       });
 
-    await expect(
-      resolve(new CombatItemInteractionService(repository([actor, target])), actor),
-    ).resolves.toMatchObject({
+    await expect(resolve(combatService([actor, target]), actor)).resolves.toMatchObject({
       actingWeapon: { capability: "trap", itemId: "main-gauche" },
       targetWeapon: { itemId: "target-dagger" },
     });
@@ -252,11 +255,7 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
       },
     });
     await expect(
-      resolve(
-        new CombatItemInteractionService(repository([added, target])),
-        added,
-        "reactive_parry",
-      ),
+      resolve(combatService([added, target]), added, "reactive_parry"),
     ).resolves.toMatchObject({
       actingWeapon: { capability: "trap", itemId: "modified-dagger" },
     });
@@ -281,9 +280,9 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
       },
       templateId: "weapon-template-main-gauche",
     });
-    await expect(
-      resolve(new CombatItemInteractionService(repository([removed, target])), removed),
-    ).rejects.toEqual(new CombatItemUnavailableError());
+    await expect(resolve(combatService([removed, target]), removed)).rejects.toEqual(
+      new CombatItemUnavailableError(),
+    );
   });
 
   it("projects only revealed Disarm override facts to players while retaining GM mechanics", async () => {
@@ -326,7 +325,7 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
         version: 1,
       },
     });
-    const service = new CombatItemInteractionService(repository([hiddenCapability, hiddenControl]));
+    const service = combatService([hiddenCapability, hiddenControl]);
     const playerViewer = {
       controlledParticipantIds: new Set(["participant-1"]),
       kind: "player" as const,
@@ -388,7 +387,7 @@ describe("CombatItemInteractionService privacy and declaration authority", () =>
       holderCharacterId: "character-2",
       id: "hidden-target",
     });
-    const service = new CombatItemInteractionService(repository([actor, hiddenTarget]));
+    const service = combatService([actor, hiddenTarget]);
     const attempt = (targetItemId: string) =>
       service.resolveDisarmDeclaration({
         actingItemId: actor.item.id,
