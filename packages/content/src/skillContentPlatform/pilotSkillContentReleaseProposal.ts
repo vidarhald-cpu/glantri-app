@@ -23,7 +23,7 @@ const proposalMetadata = {
       "0000000000000000000000000000000000000000" +
       "/packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts#L1",
   },
-  recordVersion: "3",
+  recordVersion: "4",
   status: "proposal" as const,
 };
 
@@ -40,7 +40,7 @@ type ProposalMetadataRecordKind =
   | "specialization";
 
 const proposalMetadataReference = [
-  "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/79",
+  "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/83",
   "docs/process/task-contract.md",
   "docs/decisions/rules/0002-skill-catalogue-qualitative-architecture.md",
   "docs/decisions/rules/0003-skill-documentation-and-release-integrity.md",
@@ -433,6 +433,903 @@ const authoredCompetencyDocumentation: Record<string, AuthoredCompetencyDocument
   },
 };
 
+interface Candidate4AuthoredCompetencyDocumentation extends AuthoredCompetencyDocumentation {
+  boundaries: readonly string[];
+  typicalUses: readonly string[];
+}
+
+export const pilotSkillContentReleaseCandidate4AuthoritativeSourceSha256 =
+  "e9d5e6800dde213bfd3f8cb42e626791863b0144f90ec52bcd76557758f3a10c";
+
+export const pilotSkillContentReleaseCandidate4ExceptionCompetencyIds = [
+  "skill:law:olog-princely",
+  "spoken:mogrebi",
+  "spoken:ologian",
+  "spoken:phoenician",
+  "spoken:nkolian",
+  "spoken:scythian",
+  "written:mogrebi:sacred-mogrebi",
+  "written:ologian:church-ologian",
+  "written:phoenician:phoenician",
+  "spec:household-guard-sword-shield-drill",
+  "spec:steppe-remount-training",
+] as const;
+
+export const pilotSkillContentReleaseCandidate4ExceptionNotes = {
+  "skill:law:olog-princely":
+    "named legal body; recommend removal from the generic catalogue or movement to setting-specific material.",
+  "spoken:mogrebi": "named setting language; move to setting-specific language material.",
+  "spoken:ologian": "named setting language; move to setting-specific language material.",
+  "spoken:phoenician": "named setting language; move to setting-specific language material.",
+  "spoken:nkolian": "named setting language; move to setting-specific language material.",
+  "spoken:scythian": "named setting language; move to setting-specific language material.",
+  "written:mogrebi:sacred-mogrebi":
+    "named setting language and script tradition; move to setting-specific language material.",
+  "written:ologian:church-ologian":
+    "named setting language and script tradition; move to setting-specific language material.",
+  "written:phoenician:phoenician":
+    "named setting language and script; move to setting-specific language material.",
+  "spec:household-guard-sword-shield-drill":
+    "the “household guard” identity is setting- or institution-specific; move to setting-specific material unless that identity is intentionally generic in the wider catalogue.",
+  "spec:steppe-remount-training":
+    "the named regional-cultural identity is not cleanly campaign-agnostic; move to setting-specific material unless it is deliberately retained as a generic environmental specialism.",
+} as const satisfies Record<
+  (typeof pilotSkillContentReleaseCandidate4ExceptionCompetencyIds)[number],
+  string
+>;
+
+export const pilotSkillContentReleaseCandidate4AuthoredDocumentation: Record<
+  string,
+  Candidate4AuthoredCompetencyDocumentation
+> = {
+  "skill:first-aid": {
+    boundaries: [
+      "Does not replace Medicine, Surgery, or Pharmacy.",
+      "Does not establish the full cause of an illness.",
+      "Does not make dangerous travel or treatment safe.",
+    ],
+    description:
+      "First aid is the prompt assessment and care of someone who has been injured or has suddenly become ill. A capable practitioner first makes the scene safe, checks the person’s condition, supports breathing, controls serious bleeding, prevents further harm, and seeks appropriate assistance. It is immediate and limited care, guided by priorities and safety rather than prolonged treatment or diagnosis.",
+    shortDescription:
+      "Give immediate, practical care after injury or sudden illness until further help is available.",
+    typicalUses: [
+      "Control bleeding after an accident.",
+      "Keep an injured companion warm, still, and monitored.",
+      "Assess whether an unconscious person is breathing.",
+      "Make an injury safe enough for transport or further care.",
+    ],
+  },
+  "skill:dodge": {
+    boundaries: [
+      "Avoids an attack rather than intercepting it.",
+      "Weapon and shield defence belong to their relevant competences.",
+      "Cannot create room to move where none exists.",
+    ],
+    description:
+      "Dodge is the ability to avoid being struck, caught, or intercepted by moving clear at the right moment. It depends on awareness, reaction, balance, timing, and enough room to move. A capable practitioner reads an opponent’s line of movement, keeps a stable stance, and recovers quickly after evasion rather than merely throwing themselves aside.",
+    shortDescription:
+      "Avoid an attack or interception through movement, timing, and body position.",
+    typicalUses: [
+      "Step clear of a blow or thrust.",
+      "Avoid a charging person or animal.",
+      "Escape a grasp in a crowded or confined space.",
+      "Move through immediate danger without losing balance.",
+    ],
+  },
+  "skill:battle-tactics": {
+    boundaries: [
+      "Does not make someone personally skilled with a weapon.",
+      "Does not replace Leadership’s broader management of people.",
+      "Concerns an engagement, not long-term military strategy.",
+    ],
+    description:
+      "Battle tactics is the practical conduct of a particular armed engagement. A capable tactician reads terrain, visibility, formations, morale, movement, and the opponent’s likely intentions; then gives workable instructions that people can act on under pressure. It concerns immediate decisions during a fight: where to hold, when to move, whom to protect, and how to respond when a plan begins to fail.",
+    shortDescription:
+      "Direct people during an armed engagement by coordinating position, timing, and response.",
+    typicalUses: [
+      "Place defenders at a choke point or strong position.",
+      "Coordinate a withdrawal or counterattack.",
+      "Assign scouts, reserves, or rearguard duties.",
+      "Adapt a plan when visibility, terrain, or casualties change.",
+    ],
+  },
+  "skill:medicine": {
+    boundaries: [
+      "Surgery concerns operative intervention.",
+      "Pharmacy concerns preparing and managing medicines.",
+      "Does not guarantee a certain diagnosis.",
+    ],
+    description:
+      "Medicine is the assessment and non-operative treatment of illness and injury. A capable practitioner gathers a history, examines the patient, weighs possible causes, chooses proportionate treatment, and observes whether the patient improves or worsens. Good medicine includes recognizing uncertainty and knowing when a condition requires more specialised care.",
+    shortDescription:
+      "Assess illness and injury, provide non-operative treatment, and follow recovery.",
+    typicalUses: [
+      "Examine a fever, infection, wound, or persistent pain.",
+      "Decide how to rest, feed, protect, or monitor a patient.",
+      "Recognise signs that an injury needs surgery.",
+      "Follow recovery and alter treatment when it fails.",
+    ],
+  },
+  "skill:surgery": {
+    boundaries: [
+      "Does not replace general diagnosis or long-term medical care.",
+      "Does not prepare medicines.",
+      "Does not make a hazardous operation certain to succeed.",
+    ],
+    description:
+      "Surgery treats injury or disease by deliberate physical intervention. A capable surgeon plans the procedure, prepares instruments and the patient, controls bleeding and contamination, works accurately around vulnerable structures, and manages closure and immediate recovery. Surgery has always depended on anatomy, dexterity, cleanliness, and judgment about whether an operation is justified at all.",
+    shortDescription:
+      "Treat injury or disease through planned operative intervention and careful perioperative care.",
+    typicalUses: [
+      "Remove damaged or diseased tissue.",
+      "Repair a serious wound.",
+      "Set or treat an injury requiring operative work.",
+      "Manage bleeding and closure during an operation.",
+    ],
+  },
+  "skill:research": {
+    boundaries: [
+      "Does not make incomplete evidence complete.",
+      "Does not guarantee access to records or witnesses.",
+      "Perception notices immediate details; Research develops an answer from evidence.",
+    ],
+    description:
+      "Research is the systematic search for a reliable answer through records, testimony, observation, experiment, or comparison. A capable researcher frames a clear question, finds relevant material, checks its origin and limitations, compares conflicting accounts, and distinguishes evidence from inference. Its result may be a firm conclusion, a useful lead, or an honest account of what remains uncertain.",
+    shortDescription:
+      "Find, compare, and evaluate evidence in order to reach a supportable conclusion.",
+    typicalUses: [
+      "Trace the history or ownership of an object.",
+      "Compare accounts of an event.",
+      "Identify relevant laws, records, or technical writings.",
+      "Test whether a rumour has credible support.",
+    ],
+  },
+  "skill:dead-reckoning": {
+    boundaries: [
+      "Chart Navigation uses prepared maps or charts.",
+      "It is an estimate, not a direct observation of position.",
+      "Does not supply local knowledge of hazards.",
+    ],
+    description:
+      "Dead reckoning estimates present position by carrying forward a route from a known point. A capable navigator records each leg, estimates course and distance, allows for drift or obstacles where possible, and corrects the estimate when a reliable observation becomes available. It is useful at sea, in open country, or whenever landmarks are poor, but small errors accumulate steadily.",
+    shortDescription:
+      "Estimate current position from a known start, direction, speed, and elapsed travel time.",
+    typicalUses: [
+      "Estimate a vessel’s position between sightings.",
+      "Keep track of distance travelled in fog or darkness.",
+      "Reconstruct a route after losing sight of landmarks.",
+      "Compare an estimated position with a later observation.",
+    ],
+  },
+  "skill:chart-navigation": {
+    boundaries: [
+      "Does not guarantee that a chart is current or accurate.",
+      "Pilotage concerns close navigation where immediate local hazards dominate.",
+      "Does not replace observation of weather, water, or terrain.",
+    ],
+    description:
+      "Chart navigation uses maps, charts, and their conventions to plan and follow a route. A capable navigator understands scale, symbols, bearings, elevations or depths, plots positions and waypoints, and compares the planned route with terrain and present conditions. It is a disciplined way to use recorded geographic information, not a substitute for looking outside.",
+    shortDescription:
+      "Use maps or charts to plan and follow routes while accounting for recorded hazards.",
+    typicalUses: [
+      "Plot a sea passage, road journey, or mountain route.",
+      "Identify recorded shoals, crossings, passes, and settlements.",
+      "Measure bearing and distance between known points.",
+      "Check a route against a current position.",
+    ],
+  },
+  "skill:sword": {
+    boundaries: [
+      "Does not make other weapon types interchangeable.",
+      "Shield use is separate.",
+      "Does not provide tactical command.",
+    ],
+    description:
+      "Sword skill is controlled use of a sword in combat. A capable fighter manages range and footwork, uses cuts or thrusts appropriately, maintains guard, and recovers after an action without leaving an easy opening. The details vary with the sword’s shape and balance, but the central competence is making its reach and edge serve deliberate movement.",
+    shortDescription:
+      "Fight with a sword by controlling distance, guard, timing, attack, defence, and recovery.",
+    typicalUses: [
+      "Deliver a controlled cut or thrust.",
+      "Maintain distance against another armed opponent.",
+      "Defend and recover from an exchange.",
+      "Fight effectively while moving over uneven ground.",
+    ],
+  },
+  "skill:shield": {
+    boundaries: [
+      "Does not replace moving clear of danger.",
+      "Does not grant sword or other weapon skill.",
+      "Cannot protect every angle at once.",
+    ],
+    description:
+      "Shield skill is the active use of a shield to protect the body, close lines of attack, and create safer movement. A capable user positions, angles, and moves the shield without obscuring vision, losing balance, or preventing action with the other hand. A shield is not passive cover: it must be brought into the right place at the right time.",
+    shortDescription:
+      "Intercept attacks and control openings with a shield while preserving sight, balance, and movement.",
+    typicalUses: [
+      "Intercept a blow, missile, or thrust.",
+      "Advance while protecting an exposed side.",
+      "Cover a companion during withdrawal.",
+      "Control the space between two opponents.",
+    ],
+  },
+  "skill:knife-dagger": {
+    boundaries: [
+      "Does not provide the reach of a sword or spear.",
+      "Does not cover general tool use with a knife.",
+      "Close range remains dangerous even for a skilled user.",
+    ],
+    description:
+      "Knife and dagger skill covers attack, defence, retention, and control with short blades. A capable fighter uses compact movement, accurate point or edge placement, and careful body position while recognising the danger of operating within an opponent’s reach. Short blades are portable and quick at close quarters, but lack the reach and leverage of longer weapons.",
+    shortDescription: "Use and retain a short blade in close-range fighting.",
+    typicalUses: [
+      "Fight in a cramped room or alley.",
+      "Retain a blade during a close struggle.",
+      "Use a short blade where a longer weapon cannot be moved freely.",
+      "Defend at very short range.",
+    ],
+  },
+  "skill:spear": {
+    boundaries: [
+      "Loses much of its advantage when distance closes.",
+      "Does not make other polearms or swords interchangeable.",
+      "Does not replace battle tactics.",
+    ],
+    description:
+      "Spear skill is the use of a hafted thrusting weapon for attack and defence. A capable fighter preserves useful distance, controls the point, uses leverage and footwork, and recovers before an overextended thrust becomes a liability. Its central advantage is reach; good practice is therefore as much about preserving space as striking.",
+    shortDescription:
+      "Fight with a spear by controlling reach, point, leverage, footwork, and recovery.",
+    typicalUses: [
+      "Hold an opponent beyond close striking distance.",
+      "Defend a narrow approach.",
+      "Threaten a mounted or charging opponent.",
+      "Fight in a line with others.",
+    ],
+  },
+  "skill:perception": {
+    boundaries: [
+      "Does not reveal hidden facts beyond the senses.",
+      "Does not prove why a detail is significant.",
+      "Insight concerns people’s likely motives and feelings.",
+    ],
+    description:
+      "Perception is deliberate observation through sight, hearing, smell, touch, and other available senses. A capable observer scans methodically, notices changes and inconsistencies, separates what was observed from what was assumed, and directs attention to details worth checking. It produces information from what can be sensed; interpretation can still be mistaken.",
+    shortDescription: "Notice relevant sensory details and judge what they may indicate.",
+    typicalUses: [
+      "Notice movement, a faint sound, or a disturbed surface.",
+      "Spot a concealed object or unusual detail.",
+      "Detect changes in a room, route, or person’s surroundings.",
+      "Compare what is present with what should be present.",
+    ],
+  },
+  "skill:athletics": {
+    boundaries: [
+      "Swimming and Riding are distinct competences.",
+      "Does not make impossible lifts or jumps safe.",
+      "Specialised acrobatics may require separate training.",
+    ],
+    description:
+      "Athletics is trained whole-body movement: running, jumping, climbing, lifting, carrying, and similar exertion. A capable athlete uses efficient technique, manages momentum and balance, and understands how fatigue, load, injury, or poor footing changes what is possible. It is broad physical competence rather than mastery of every specialised movement.",
+    shortDescription:
+      "Perform demanding physical movement with trained strength, balance, speed, endurance, and control.",
+    typicalUses: [
+      "Climb a wall, rope, or steep surface.",
+      "Jump a gap or obstacle.",
+      "Carry a heavy load over distance.",
+      "Sprint, scramble, or keep balance on difficult ground.",
+    ],
+  },
+  "skill:survival": {
+    boundaries: [
+      "Does not replace Medicine, Hunting, Tracking, or Navigation.",
+      "Does not make unsafe food or water safe.",
+      "Does not guarantee survival in extreme conditions.",
+    ],
+    description:
+      "Survival is practical judgment in conditions where water, warmth, food, shelter, rescue, or safe travel cannot be assumed. A capable practitioner sets priorities, protects against exposure, conserves strength and supplies, finds or makes shelter, and avoids turning discomfort into a crisis. It concerns staying alive and capable, not proving toughness through avoidable danger.",
+    shortDescription:
+      "Keep people alive and functional when ordinary shelter, supplies, and help are unavailable.",
+    typicalUses: [
+      "Make shelter before dangerous weather arrives.",
+      "Locate or conserve safe water.",
+      "Manage cold, heat, fatigue, and limited supplies.",
+      "Keep a group functional while awaiting rescue.",
+    ],
+  },
+  "skill:leadership": {
+    boundaries: [
+      "Does not supply the technical competence being directed.",
+      "Does not guarantee obedience or loyalty.",
+      "Battle Tactics concerns armed engagements specifically.",
+    ],
+    description:
+      "Leadership is the ability to organise people around a purpose. A capable leader gives clear instructions, assigns responsibilities, resolves uncertainty, maintains discipline and morale, and adapts direction when conditions change. Leadership can rest on formal authority, reputation, persuasion, example, experience, or accepted hierarchy. It applies equally to crews, expeditions, households, work parties, offices, and military groups.",
+    shortDescription:
+      "Direct and coordinate people toward a shared objective while maintaining order, morale, and cooperation.",
+    typicalUses: [
+      "Organise a group during danger or confusion.",
+      "Assign roles for a journey or difficult task.",
+      "Maintain cooperation during a long effort.",
+      "Give practical direction when a plan changes.",
+    ],
+  },
+  "skill:pharmacy": {
+    boundaries: [
+      "Does not diagnose a patient’s condition.",
+      "Does not perform surgery.",
+      "Plant Lore identifies plants more broadly; Pharmacy concerns medicinal preparation.",
+    ],
+    description:
+      "Pharmacy concerns medicinal substances and their safe preparation and use. A capable practitioner identifies materials, measures ingredients and doses, prevents contamination, stores preparations correctly, recognises important incompatibilities, and gives clear instructions for use. Historically, pharmacy developed from practical knowledge of plants, minerals, preparations, preservation, and dose.",
+    shortDescription: "Identify, prepare, preserve, measure, and dispense medicines safely.",
+    typicalUses: [
+      "Prepare a measured medicinal remedy.",
+      "Store medicines without spoilage or contamination.",
+      "Identify an unsafe mixture or dose.",
+      "Label and dispense a preparation clearly.",
+    ],
+  },
+  "skill:plant-lore": {
+    boundaries: [
+      "Does not by itself prepare medicines safely.",
+      "Does not make an uncertain identification reliable.",
+      "Does not replace Agriculture or horticultural practice.",
+    ],
+    description:
+      "Plant lore is practical knowledge of plants in their natural settings. A capable practitioner identifies specimens from several features, understands season and habitat, distinguishes useful plants from harmful lookalikes, and treats uncertain identification as a real danger. It can support gathering food, fibre, dyes, medicines, or materials, but careful identification remains essential.",
+    shortDescription:
+      "Recognise plants, their habitats, seasons, useful properties, dangers, and lookalikes.",
+    typicalUses: [
+      "Identify edible, poisonous, medicinal, or useful plants.",
+      "Find plants in their likely habitat and season.",
+      "Avoid dangerous lookalikes.",
+      "Gather plant material without ruining the source.",
+    ],
+  },
+  "skill:streetwise": {
+    boundaries: [
+      "Does not guarantee criminal contacts or protection.",
+      "Customs concerns social expectations; Streetwise concerns practical urban judgment.",
+      "Rumour remains uncertain evidence.",
+    ],
+    description:
+      "Streetwise is practical judgment about how an unfamiliar town or city works at ground level. A capable practitioner reads local behaviour, finds services and information, notices likely scams or dangerous situations, and approaches people without treating rumour as fact. It is knowledge of everyday urban life: what is normal, what is risky, and where useful help may be found.",
+    shortDescription:
+      "Navigate urban life by reading local behaviour, finding ordinary resources, and recognising common risks.",
+    typicalUses: [
+      "Find lodging, food, transport, or ordinary services.",
+      "Learn which areas are unsafe after dark.",
+      "Recognise a common scam or pressure tactic.",
+      "Find a reliable local source of information.",
+    ],
+  },
+  "skill:underworld": {
+    boundaries: [
+      "Does not guarantee access, trust, protection, or loyalty.",
+      "Does not replace Deception, Stealth, or Lockpicking.",
+      "Reputation and rumour are not proof.",
+    ],
+    description:
+      "Underworld is knowledge of concealed and illicit activity: its markets, roles, intermediaries, codes, risks, and reputations. A capable practitioner recognises likely points of contact and warning signs, seeks information cautiously, and understands that claims of influence or loyalty may be false. It is knowledge of such networks, not membership in them.",
+    shortDescription:
+      "Understand illicit networks, hidden markets, intermediaries, customs, reputations, and warning signs.",
+    typicalUses: [
+      "Identify a likely intermediary or fence.",
+      "Recognise the signs of an illicit market or arrangement.",
+      "Ask cautiously about a concealed service or person.",
+      "Judge whether a supposed contact is probably dangerous.",
+    ],
+  },
+  "skill:deception": {
+    boundaries: [
+      "Does not alter facts or erase evidence.",
+      "Disguise changes appearance; Deception manages belief.",
+      "Insight may form an informed suspicion but does not prove a lie.",
+    ],
+    description:
+      "Deception is the deliberate shaping of another person’s belief through false statements, misleading conduct, omission, or arranged appearances. A capable deceiver keeps a claim plausible, limits details that can be checked, notices the audience’s reactions, and maintains consistency when questioned. It works on belief and interpretation, not on reality itself.",
+    shortDescription:
+      "Create and maintain a plausible false impression through words, behaviour, omission, or staged evidence.",
+    typicalUses: [
+      "Give a plausible false explanation.",
+      "Conceal a relevant fact by omission.",
+      "Support an assumed role with credible behaviour.",
+      "Mislead an observer about what has occurred.",
+    ],
+  },
+  "skill:stealth": {
+    boundaries: [
+      "Does not make invisibility possible.",
+      "Disguise concerns a false appearance; Stealth concerns avoiding notice.",
+      "Does not overcome barriers or locks.",
+    ],
+    description:
+      "Stealth is reducing the chance of being noticed. A capable practitioner uses cover, light, sound, pace, timing, and observation to avoid drawing attention or leaving obvious signs of passage. It is always conditional: bare ground, bright light, noise, confinement, or alert observers may make concealment impractical.",
+    shortDescription:
+      "Move or remain present without notice by controlling visibility, sound, timing, and signs of passage.",
+    typicalUses: [
+      "Cross a guarded or occupied area quietly.",
+      "Remain hidden while observing.",
+      "Avoid disturbing a sleeping person or animal.",
+      "Leave an area without attracting notice.",
+    ],
+  },
+  "skill:lockpicking": {
+    boundaries: [
+      "Does not overcome bars, seals, traps, or unrelated barriers.",
+      "Does not guarantee quiet or undetectable entry.",
+      "Warded-Lock Entry concerns a specific class of mechanism.",
+    ],
+    description:
+      "Lockpicking is the careful opening of a mechanical lock without its intended key. A capable practitioner understands feedback from the mechanism, applies delicate pressure with suitable tools, and avoids damage that could jam the lock or reveal the attempt. Different mechanisms demand different knowledge and techniques.",
+    shortDescription:
+      "Open a mechanical lock without its intended key by sensing and manipulating its internal parts.",
+    typicalUses: [
+      "Open a locked door, chest, or cabinet.",
+      "Assess whether a lock has been tampered with.",
+      "Open a lock while limiting visible damage.",
+      "Decide when a particular mechanism is beyond available tools or knowledge.",
+    ],
+  },
+  "skill:sleight-of-hand": {
+    boundaries: [
+      "Does not make a large or implausible action unnoticeable.",
+      "Does not make a missing object impossible to discover later.",
+      "Does not replace Stealth or Lockpicking.",
+    ],
+    description:
+      "Sleight of hand is concealed or misleading manipulation of small objects. A capable practitioner coordinates hands, posture, timing, and an observer’s attention so movements appear ordinary and the object’s location is misunderstood. It is commonly associated with performance, cheating, concealment, and subtle exchanges.",
+    shortDescription:
+      "Conceal or manipulate small objects through dexterity, timing, and control of attention.",
+    typicalUses: [
+      "Conceal a small object on one’s person.",
+      "Exchange, palm, or produce a small item discreetly.",
+      "Perform a convincing close-hand demonstration.",
+      "Move an object while an observer is distracted.",
+    ],
+  },
+  "skill:insight": {
+    boundaries: [
+      "Does not read minds.",
+      "Does not reveal concealed facts.",
+      "Does not prove deception.",
+    ],
+    description:
+      "Insight is the interpretation of another person’s emotions, motives, and likely intentions from speech, conduct, and context. A capable observer notices changes of manner, tensions between words and behaviour, and signs of fear, confidence, hostility, uncertainty, sincerity, or evasion. Its conclusions are informed judgments, not direct access to another person’s thoughts.",
+    shortDescription:
+      "Judge likely emotions, motives, and intentions from what a person says and does.",
+    typicalUses: [
+      "Judge whether someone is anxious, angry, guarded, or receptive.",
+      "Notice that an explanation does not fit a speaker’s behaviour.",
+      "Decide how to frame a difficult conversation.",
+      "Distinguish confidence from uncertainty or bluffing.",
+    ],
+  },
+  "skill:disguise": {
+    boundaries: [
+      "Does not supply knowledge needed to sustain a detailed false identity.",
+      "Deception concerns false claims; Disguise concerns presentation.",
+      "Close scrutiny can expose inconsistencies.",
+    ],
+    description:
+      "Disguise is the deliberate alteration of appearance and behaviour so that someone is mistaken for another person, accepted in a role, or overlooked as ordinary. A capable practitioner coordinates clothing, grooming, posture, voice, manner, and plausible conduct. Good disguise is as much about avoiding inconsistent details as changing outward appearance.",
+    shortDescription:
+      "Alter appearance, voice, posture, and conduct to support a plausible identity or avoid recognition.",
+    typicalUses: [
+      "Avoid recognition by people who know the subject.",
+      "Pass briefly as a worker, traveller, or other ordinary figure.",
+      "Support an assumed identity in public.",
+      "Alter appearance before leaving a watched area.",
+    ],
+  },
+  "skill:administration": {
+    boundaries: [
+      "Does not replace legal judgment, accounting, or specialist expertise.",
+      "Does not grant authority that the practitioner does not possess.",
+      "Court Administration concerns a particular institutional setting.",
+    ],
+    description:
+      "Administration is the practical management of an institution’s routine affairs. A capable administrator maintains records and correspondence, follows procedures, coordinates people and resources, processes requests and decisions, and understands how duties and authority are distributed. Administrative competence developed alongside courts, taxation, military establishments, religious institutions, commercial houses, and governments. It keeps an organisation functioning from day to day.",
+    shortDescription:
+      "Organise and carry out the records, procedures, and routine business of an institution or organised group.",
+    typicalUses: [
+      "Maintain records, files, schedules, and correspondence.",
+      "Route a request to the proper person or office.",
+      "Organise supplies, personnel, or routine work.",
+      "Trace responsibility for a decision or task.",
+    ],
+  },
+  "skill:customs": {
+    boundaries: [
+      "Does not establish legal rights or obligations.",
+      "One community’s customs may not apply elsewhere.",
+      "Does not guarantee approval from everyone present.",
+    ],
+    description:
+      "Customs is knowledge of unwritten conventions that shape ordinary social conduct. A capable practitioner recognises expectations around greeting, hospitality, status, exchange, mourning, gift-giving, dress, and offence, while distinguishing local practice from formal law. Customs often matter most when no one states the rule aloud.",
+    shortDescription:
+      "Know and follow expected social conduct in a particular society, community, or occasion.",
+    typicalUses: [
+      "Greet a host or dignitary appropriately.",
+      "Avoid giving offence in a formal gathering.",
+      "Understand expectations around gifts, meals, or hospitality.",
+      "Recognise when a social breach is deliberate.",
+    ],
+  },
+  "skill:oratory": {
+    boundaries: [
+      "Does not guarantee agreement.",
+      "Does not replace evidence, authority, or private negotiation.",
+      "Leadership concerns sustained direction of people.",
+    ],
+    description:
+      "Oratory is purposeful public speaking. A capable speaker structures an argument, selects language suited to the audience, reads the room, uses voice and pace deliberately, and makes essential points understandable and memorable. Good delivery strengthens an argument, but cannot turn weak evidence into proof.",
+    shortDescription:
+      "Inform or persuade an audience through clear structure, suitable language, memorable points, and deliberate delivery.",
+    typicalUses: [
+      "Address a crowd, assembly, jury, crew, or gathering.",
+      "Explain a difficult proposal clearly.",
+      "Argue for a course of action.",
+      "Rally or reassure a group under pressure.",
+    ],
+  },
+  "skill:bookkeeping": {
+    boundaries: [
+      "Does not by itself explain why a discrepancy occurred.",
+      "Does not establish market value.",
+      "Trade concerns exchange; Bookkeeping records it.",
+    ],
+    description:
+      "Bookkeeping is the systematic recording of transactions and obligations. A capable bookkeeper classifies entries, keeps ledgers in order, compares totals with receipts or inventories, and notices omissions, inconsistencies, or unexplained discrepancies. It provides reliable records from which decisions and investigations can proceed.",
+    shortDescription:
+      "Maintain and check records of money, goods, debts, payments, and supporting evidence.",
+    typicalUses: [
+      "Record sales, purchases, debts, wages, and payments.",
+      "Reconcile a ledger with cash, goods, or receipts.",
+      "Find a missing or duplicated entry.",
+      "Prepare clear records for another person to inspect.",
+    ],
+  },
+  "skill:trade": {
+    boundaries: [
+      "Bargaining concerns negotiating particular terms.",
+      "Appraisal concerns judging a specific object.",
+      "Does not guarantee profit or fair dealing.",
+    ],
+    description:
+      "Trade is the practical conduct of buying, selling, moving, and settling exchanges across a market. A capable trader judges quality, supply, demand, transport, storage, risk, credit, and terms, and understands whether a proposed transaction is workable. It is broader than a single negotiation: it includes the conditions that make an exchange possible and worthwhile.",
+    shortDescription:
+      "Conduct exchanges of goods or services by judging markets, quality, costs, transport, terms, and settlement.",
+    typicalUses: [
+      "Source goods in one place for sale in another.",
+      "Judge transport, storage, and settlement costs.",
+      "Assess whether demand justifies a journey or purchase.",
+      "Organise a routine exchange of goods or services.",
+    ],
+  },
+  "skill:bargaining": {
+    boundaries: [
+      "Does not create goods, authority, credit, or alternatives that do not exist.",
+      "Does not establish a thing’s actual value.",
+      "Does not replace broad market knowledge.",
+    ],
+    description:
+      "Bargaining is the focused negotiation of an exchange. A capable bargainer listens for what each side values, makes deliberate offers, manages concessions, recognises leverage, and knows when pressure is likely to end the discussion rather than improve the result. It is useful wherever terms are open to discussion, whether the exchange involves money, goods, service, time, or access.",
+    shortDescription:
+      "Improve the terms of an exchange by negotiating priorities, offers, concessions, and alternatives.",
+    typicalUses: [
+      "Negotiate price, delivery, payment, or service.",
+      "Trade one concession for another.",
+      "Test whether the other side has alternatives.",
+      "Reach workable terms without needlessly damaging a relationship.",
+    ],
+  },
+  "skill:appraisal": {
+    boundaries: [
+      "Does not guarantee authenticity or expose every hidden defect.",
+      "Does not negotiate the eventual sale.",
+      "An unfamiliar market can limit confidence.",
+    ],
+    description:
+      "Appraisal is the informed estimation of what an object is, what condition it is in, and what it is likely to be worth in a relevant market. A capable appraiser examines materials, workmanship, marks, condition, provenance, and comparable objects, then explains the uncertainty of the valuation. A useful appraisal is not merely a price; it states what supports that judgment.",
+    shortDescription:
+      "Judge an object’s identity, condition, quality, and likely value through inspection, provenance, and comparison.",
+    typicalUses: [
+      "Judge the quality and likely value of an item for sale.",
+      "Notice signs of repair, damage, imitation, or alteration.",
+      "Compare similar objects in different conditions.",
+      "Assess whether claimed provenance deserves further inquiry.",
+    ],
+  },
+  "skill:smithing": {
+    boundaries: [
+      "Does not grant skill in using every object made.",
+      "Weaponsmithing is a more specific application.",
+      "Does not replace work in unrelated materials.",
+    ],
+    description:
+      "Smithing is the shaping and joining of metal by controlled heat, force, cutting, and finishing. A capable smith selects suitable stock, manages temperature and strain, forms an object accurately, joins or repairs it securely, and inspects the result for weakness or poor fit. It is a practical craft grounded in the changing properties of heated and worked metal.",
+    shortDescription:
+      "Make and repair metal objects through controlled heating, shaping, joining, finishing, and inspection.",
+    typicalUses: [
+      "Make or repair tools, fittings, fastenings, and metal household goods.",
+      "Shape a replacement part to fit an existing object.",
+      "Repair bent, cracked, or worn metalwork.",
+      "Inspect a metal object for obvious structural weakness.",
+    ],
+  },
+  "skill:seamanship": {
+    boundaries: [
+      "Navigation and Pilotage concern choosing and following routes.",
+      "Does not provide local knowledge of a coast or harbour.",
+      "Does not eliminate the dangers of weather or a damaged vessel.",
+    ],
+    description:
+      "Seamanship is the practical operation and care of a vessel and its equipment. A capable sailor handles lines, sails or other controls, secures people and cargo, follows orders, manages routine work on a moving deck, and responds safely to immediate conditions. It is the craft of keeping a vessel and its people functioning, not simply knowing where to go.",
+    shortDescription:
+      "Work safely aboard a vessel by handling equipment, cargo, routine operations, and changing conditions.",
+    typicalUses: [
+      "Handle lines, sails, anchors, and deck equipment.",
+      "Secure cargo before rough conditions.",
+      "Work safely during docking, departure, or heavy weather.",
+      "Carry out routine watch and maintenance duties.",
+    ],
+  },
+  "skill:pilotage": {
+    boundaries: [
+      "Does not grant universal knowledge of every coast or harbour.",
+      "Seamanship concerns working the vessel itself.",
+      "A chart alone does not replace present observation.",
+    ],
+    description:
+      "Pilotage is close navigation where shoals, channels, tides, currents, markers, traffic, and changing depth matter. A capable pilot combines charts with immediate observation, soundings, local knowledge, and continual checks that the vessel is where it is believed to be. It is especially important near coasts, harbours, rivers, and narrow waterways.",
+    shortDescription:
+      "Guide a vessel through confined or coastal waters using observation, charts, local conditions, and continual position checks.",
+    typicalUses: [
+      "Enter or leave a harbour safely.",
+      "Follow a narrow channel or river.",
+      "Account for tide and current near shore.",
+      "Verify a route through waters with local hazards.",
+    ],
+  },
+  "skill:swimming": {
+    boundaries: [
+      "Does not make severe conditions safe.",
+      "Does not replace seamanship or water rescue expertise.",
+      "Carried weight and injury may sharply limit ability.",
+    ],
+    description:
+      "Swimming is controlled movement and survival in water. A capable swimmer manages breathing, buoyancy, direction, propulsion, clothing or load, fatigue, and the choice of a safe exit. Water conditions matter greatly: current, cold, waves, injury, exhaustion, and heavy clothing can overwhelm ordinary ability.",
+    shortDescription:
+      "Travel or remain safe in water by managing breathing, buoyancy, propulsion, direction, load, and fatigue.",
+    typicalUses: [
+      "Cross still or moving water.",
+      "Remain afloat until help or a safe exit is available.",
+      "Recover after falling from a vessel or bank.",
+      "Assist another person without immediately creating a second casualty.",
+    ],
+  },
+  "skill:weather-lore": {
+    boundaries: [
+      "Supports a forecast rather than certainty.",
+      "Does not control weather.",
+      "One sign alone may be misleading.",
+    ],
+    description:
+      "Weather lore is practical forecasting from observable atmospheric signs. A capable observer compares clouds, wind direction and force, temperature, moisture, pressure where available, and familiar local patterns; then revises the forecast as conditions change. It is grounded in real recurring relationships in the atmosphere, but weather remains variable and local.",
+    shortDescription:
+      "Forecast near-term weather from clouds, wind, pressure, temperature, moisture, and recurring local patterns.",
+    typicalUses: [
+      "Judge whether rain, wind, frost, fog, or a storm is likely soon.",
+      "Decide when to travel, sail, harvest, or seek shelter.",
+      "Recognise signs of changing conditions.",
+      "Compare a familiar local pattern with current observations.",
+    ],
+  },
+  "skill:wayfinding": {
+    boundaries: [
+      "Does not replace chart use where charts are available.",
+      "Desert Wayfinding concerns a particular environment.",
+      "Does not provide food, shelter, or medical care.",
+    ],
+    description:
+      "Wayfinding is practical orientation and route choice in terrain. A capable traveller uses landmarks, direction, distance, terrain shape, memory, repeated checks, and sensible fallback points to maintain a route when no prepared chart is available or sufficient. It is the ordinary human craft of not becoming lost and of recovering when uncertainty arises.",
+    shortDescription:
+      "Find and follow a route without a prepared chart by using landmarks, direction, distance, terrain, and memory.",
+    typicalUses: [
+      "Travel across unfamiliar countryside.",
+      "Return to a camp, road, river, or landmark.",
+      "Choose a passable route through broken terrain.",
+      "Recover direction after fog, darkness, or a detour.",
+    ],
+  },
+  "skill:animal-handling": {
+    boundaries: [
+      "Does not replace Riding.",
+      "Does not diagnose or treat animal illness.",
+      "A method suitable for one species may be unsafe for another.",
+    ],
+    description:
+      "Animal handling is the practical care and direction of animals accustomed to human management. A capable handler reads stress, fear, fatigue, and attention; uses appropriate restraint and consistent cues; and adapts methods to the species and individual. Effective handling depends more on timing and understanding than force alone.",
+    shortDescription:
+      "Care for and direct domesticated or trained animals by reading behaviour and using safe, consistent cues.",
+    typicalUses: [
+      "Lead, restrain, calm, load, or move an animal safely.",
+      "Recognise signs of fear, distress, or exhaustion.",
+      "Establish routine cues for a working animal.",
+      "Manage animals around unfamiliar people, noise, or transport.",
+    ],
+  },
+  "skill:tracking": {
+    boundaries: [
+      "Does not prove the quarry’s identity or intention.",
+      "Does not replace Hunting or Wayfinding.",
+      "Weather and traffic can destroy or distort signs.",
+    ],
+    description:
+      "Tracking is the reading of physical traces left by movement. A capable tracker compares prints, disturbed ground, vegetation, scent, weather, timing, and direction to infer a likely route, then revises that judgment when the signs do not fit. It is a disciplined interpretation of traces, not certain knowledge of the unseen traveller.",
+    shortDescription:
+      "Infer and follow a person’s or animal’s route from physical signs of passage.",
+    typicalUses: [
+      "Follow a person or animal through terrain.",
+      "Estimate how recently a trail was made.",
+      "Distinguish one route from another.",
+      "Notice whether a trail has been concealed, interrupted, or confused.",
+    ],
+  },
+  "skill:hunting": {
+    boundaries: [
+      "Does not replace general Survival.",
+      "Does not provide animal training or care.",
+      "Does not guarantee game will be found.",
+    ],
+    description:
+      "Hunting is the practical pursuit and taking of wild game. A capable hunter reads habitat and sign, controls noise and scent, judges distance and opportunity, uses suitable tools, recovers the quarry, and handles it without avoidable waste. It combines patience, fieldcraft, and sound judgment about whether a shot, trap, or pursuit is appropriate.",
+    shortDescription:
+      "Locate, approach, take, and recover wild game by reading habitat and sign while limiting noise and waste.",
+    typicalUses: [
+      "Locate game in suitable habitat.",
+      "Approach without alarming it.",
+      "Select a practical opportunity to take game.",
+      "Recover and prepare a quarry for food or transport.",
+    ],
+  },
+  "skill:riding": {
+    boundaries: [
+      "Does not replace Animal Handling or veterinary care.",
+      "Does not automatically train a mount.",
+      "Does not make an unsuitable or exhausted animal safe to ride.",
+    ],
+    description:
+      "Riding is directing a mount while maintaining an effective seat. A capable rider controls pace and direction, uses tack correctly, adapts to terrain and the animal’s condition, and avoids exhausting or injuring the mount through poor balance or excessive demands. It is a partnership between rider and animal, especially at speed or over difficult ground.",
+    shortDescription:
+      "Control a mount’s direction and pace while maintaining balance and adapting to terrain and fatigue.",
+    typicalUses: [
+      "Travel efficiently on a trained mount.",
+      "Maintain control over uneven ground.",
+      "Manage pace on a long journey.",
+      "Ride safely through crowds, obstacles, or changing terrain.",
+    ],
+  },
+  "spoken:common": {
+    boundaries: [
+      "Does not imply literacy.",
+      "Does not guarantee specialist vocabulary.",
+      "Does not provide knowledge of local customs or law.",
+    ],
+    description:
+      "Spoken Common is the ability to understand and express meaning in a widely shared language. A capable speaker handles ordinary conversation, follows instructions and accounts, pronounces words intelligibly, understands common idiom, and asks for clarification when needed. Fluency develops through vocabulary, listening, social use, and the ability to adjust speech to a listener.",
+    shortDescription: "Communicate by speaking and listening in a widely shared language.",
+    typicalUses: [
+      "Ask for directions, lodging, food, or assistance.",
+      "Take part in ordinary conversation.",
+      "Explain events or instructions clearly.",
+      "Understand warnings, requests, and routine agreements.",
+    ],
+  },
+  "spec:diagnostic-medicine": {
+    boundaries: [
+      "Identifying a likely cause is not the same as treating it.",
+      "Does not replace Surgery or Pharmacy.",
+      "Does not guarantee certainty.",
+    ],
+    description:
+      "Diagnostic medicine focuses on determining what condition most likely explains a patient’s symptoms. A capable diagnostician takes a careful history, examines the patient, compares plausible alternatives, uses available tests or observations, and revises conclusions when new evidence appears. It is especially valuable where several conditions resemble one another or where treatment carries risk.",
+    shortDescription:
+      "Determine the likely cause of illness by comparing symptoms, history, examination, and other evidence.",
+    typicalUses: [
+      "Distinguish between likely causes of fever or pain.",
+      "Assess whether symptoms point to injury, infection, poisoning, or another condition.",
+      "Decide what further examination or observation is needed.",
+      "Recognise when the available evidence remains inconclusive.",
+    ],
+  },
+  "spec:warded-lock-entry": {
+    boundaries: [
+      "Does not apply to every lock design.",
+      "Does not bypass bars, seals, traps, or guards.",
+      "Does not guarantee undetectable entry.",
+    ],
+    description:
+      "Warded-lock entry is the opening of locks whose internal wards obstruct an incorrect key or tool. A capable practitioner identifies the likely ward pattern, chooses a suitably shaped tool, manipulates it with care, and avoids damage that could jam the mechanism or reveal the attempt. It is a specialised form of mechanical lock work rather than a universal solution to secured entry.",
+    shortDescription:
+      "Open warded locks by identifying internal obstructions and manipulating suitable tools.",
+    typicalUses: [
+      "Examine whether a lock is warded.",
+      "Select or shape a suitable entry tool.",
+      "Open a warded lock while limiting damage.",
+      "Recognise when a mechanism is not of the expected type.",
+    ],
+  },
+  "spec:court-administration": {
+    boundaries: [
+      "Does not decide law or facts.",
+      "Does not argue a case for a party.",
+      "Does not confer judicial authority.",
+    ],
+    description:
+      "Court administration is the practical handling of a court’s records and procedures. A capable administrator receives and files documents, maintains schedules and notices, keeps matters traceable, and makes sure that routine procedural steps occur in the right order. It serves the orderly operation of a legal institution without deciding the merits of a case.",
+    shortDescription:
+      "Manage court filings, schedules, notices, records, and procedural steps accurately.",
+    typicalUses: [
+      "File a petition, record, notice, or response.",
+      "Track a matter’s deadlines and scheduled appearances.",
+      "Locate the correct court record or procedural form.",
+      "Ensure that parties receive appropriate notices.",
+    ],
+  },
+  "spec:weaponsmithing": {
+    boundaries: [
+      "Does not grant fighting competence.",
+      "Does not make every metal object a weapon.",
+      "General Smithing covers wider metalworking.",
+    ],
+    description:
+      "Weaponsmithing applies metalworking to objects that must hold an effective form while surviving repeated impact, strain, and wear. A capable weaponsmith selects suitable material, controls heat and shaping, balances the finished weapon, forms working surfaces correctly, and inspects for dangerous flaws. It combines craft skill with an understanding of how a weapon will be stressed in use.",
+    shortDescription:
+      "Forge, finish, balance, and inspect metal weapons for safe and reliable use.",
+    typicalUses: [
+      "Forge or repair a blade, spearhead, or other metal weapon part.",
+      "Balance and finish a weapon for reliable handling.",
+      "Inspect a weapon for cracks, poor fit, or weakness.",
+      "Replace worn or damaged metal fittings.",
+    ],
+  },
+  "spec:home-coast-pilotage": {
+    boundaries: [
+      "Does not automatically apply to unfamiliar waters.",
+      "Does not replace present observation.",
+      "Does not replace the vessel-handling of Seamanship.",
+    ],
+    description:
+      "Home-coast pilotage is close navigation in coastal waters known through repeated experience. A capable pilot recognises channels, landmarks, tides, currents, local traffic patterns, and recurring hazards, while checking that remembered conditions still agree with what is observed. Familiarity can greatly improve judgment, but coastlines and water conditions are never entirely static.",
+    shortDescription:
+      "Navigate familiar coastal waters through detailed knowledge of channels, landmarks, tides, currents, and hazards.",
+    typicalUses: [
+      "Use a familiar channel safely in changing tide or light.",
+      "Recognise a local landmark sequence or hazard.",
+      "Choose a sheltered route in expected conditions.",
+      "Notice when a familiar passage no longer appears safe.",
+    ],
+  },
+  "spec:desert-wayfinding": {
+    boundaries: [
+      "Does not replace Survival’s wider emergency priorities.",
+      "Does not guarantee water or a safe route.",
+      "Applies to arid terrain, not all environments.",
+    ],
+    description:
+      "Desert wayfinding is orientation and route selection in arid terrain, where reliable landmarks, water, shade, and easy bearings may be scarce. A capable traveller estimates direction and distance, recognises terrain patterns, plans travel around heat and visibility, and keeps safe fallback points in mind. It reflects the particular difficulties of open, dry country rather than all wilderness travel.",
+    shortDescription:
+      "Find and follow routes across arid terrain while managing sparse landmarks, heat, water, and visibility.",
+    typicalUses: [
+      "Maintain direction across sparse or shifting terrain.",
+      "Choose travel times that limit heat exposure.",
+      "Find likely routes between water, shade, or known landmarks.",
+      "Recover orientation after wind, dust, darkness, or a detour.",
+    ],
+  },
+};
+
 const candidate3ShortDescriptionByCompetencyId: Record<string, string> = {
   "skill:first-aid":
     "Stabilize an injured or suddenly ill person and keep them safe until further help is available.",
@@ -724,6 +1621,11 @@ export const pilotSkillContentReleaseCandidate3ReviewGaps = {
   ],
 } as const;
 
+export const pilotSkillContentReleaseCandidate4ReviewGaps = {
+  ...pilotSkillContentReleaseCandidate3ReviewGaps,
+  exceptions: pilotSkillContentReleaseCandidate4ExceptionNotes,
+} as const;
+
 const authoredCompetencyDocumentationIds = Object.keys(authoredCompetencyDocumentation);
 for (const id of authoredCompetencyDocumentationIds) {
   if (!Object.hasOwn(candidate3ShortDescriptionByCompetencyId, id)) {
@@ -831,26 +1733,40 @@ function documentationForRecord(
   const authored = authoredCompetencyDocumentation[record.id];
   const baseDescription = authored?.description ?? record.description;
   const boundary = candidate3FullDescriptionBoundaryByCompetencyId[record.id];
-  const normalizedDescription = normalizeWhitespace(
+  const candidate3Description = normalizeWhitespace(
     candidate3FullDescriptionOverrideByCompetencyId[record.id] ??
       (boundary ? `${baseDescription} ${boundary}` : baseDescription),
   );
-  const normalizedShortDescription = normalizeWhitespace(
+  const candidate3ShortDescription = normalizeWhitespace(
     candidate3ShortDescriptionByCompetencyId[record.id] ??
       authored?.shortDescription ??
       record.description,
   );
-  const taskEnvelope = candidate3TaskEnvelope(
+  const candidate3Envelope = candidate3TaskEnvelope(
     record,
-    normalizedDescription,
-    normalizedShortDescription,
+    candidate3Description,
+    candidate3ShortDescription,
   );
+  const candidate4Authored = pilotSkillContentReleaseCandidate4AuthoredDocumentation[record.id];
+
+  if (candidate4Authored) {
+    return {
+      description: normalizeWhitespace(candidate4Authored.description),
+      shortLabel: shortLabel(authored?.shortLabel ?? record.name),
+      shortDescription: normalizeWhitespace(candidate4Authored.shortDescription),
+      taskEnvelope: {
+        ...candidate3Envelope,
+        coreTasks: candidate4Authored.typicalUses.map(normalizeWhitespace),
+        limits: candidate4Authored.boundaries.map(normalizeWhitespace),
+      },
+    };
+  }
 
   return {
-    description: normalizedDescription,
+    description: candidate3Description,
     shortLabel: shortLabel(authored?.shortLabel ?? record.name),
-    shortDescription: normalizedShortDescription,
-    taskEnvelope,
+    shortDescription: candidate3ShortDescription,
+    taskEnvelope: candidate3Envelope,
   };
 }
 
@@ -1098,19 +2014,19 @@ const histories: readonly SkillContentLearningHistoryRecord[] =
     } satisfies SkillContentLearningHistoryRecord;
   });
 
-export const pilotSkillContentReleaseCandidate3Input = {
+export const pilotSkillContentReleaseCandidate4Input = {
   accessExceptions,
   compatibility: {
     characterMigrationReviewRequired: false,
     classification: "presentation-only",
     rationale:
-      "Candidate 3 rewrites reader-facing descriptions and task guidance while preserving accepted mechanics, identities, mappings, and access semantics.",
+      "Candidate 4 transcribes Product Owner-supplied descriptions, Typical uses, and Boundaries while preserving accepted mechanics, identities, mappings, access semantics, and compatibility classification.",
   },
   competencies,
-  contentVersion: "pilot-skills-content/2.0.0-candidate.3",
+  contentVersion: "pilot-skills-content/2.0.0-candidate.4",
   domains,
   histories,
-  id: "content-release:pilot-skills:2-candidate-3",
+  id: "content-release:pilot-skills:2-candidate-4",
   profiles,
   provenance: [...proposalMetadataReference],
   relationships,
@@ -1118,7 +2034,7 @@ export const pilotSkillContentReleaseCandidate3Input = {
   schemaVersion: SKILL_CONTENT_RELEASE_SCHEMA_VERSION,
   scripts,
   status: "proposal",
-  title: "Player-facing Pilot Skill v2 candidate 3",
+  title: "Player-facing Pilot Skill v2 candidate 4",
 } satisfies Omit<SkillContentRelease, "manifest">;
 
-export const pilotSkillContentReleaseProposalInput = pilotSkillContentReleaseCandidate3Input;
+export const pilotSkillContentReleaseProposalInput = pilotSkillContentReleaseCandidate4Input;
