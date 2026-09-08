@@ -23,7 +23,7 @@ const proposalMetadata = {
       "0000000000000000000000000000000000000000" +
       "/packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts#L1",
   },
-  recordVersion: "2",
+  recordVersion: "3",
   status: "proposal" as const,
 };
 
@@ -40,7 +40,7 @@ type ProposalMetadataRecordKind =
   | "specialization";
 
 const proposalMetadataReference = [
-  "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/75",
+  "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/79",
   "docs/process/task-contract.md",
   "docs/decisions/rules/0002-skill-catalogue-qualitative-architecture.md",
   "docs/decisions/rules/0003-skill-documentation-and-release-integrity.md",
@@ -428,845 +428,303 @@ const authoredCompetencyDocumentation: Record<string, AuthoredCompetencyDocument
   },
 };
 
-const authoredTaskEnvelopeByCompetencyId: Record<string, SkillTaskEnvelope> = {
-  "skill:first-aid": {
-    coreTasks: [
-      "Run immediate-life support in order: airway, hemorrhage control, and safe movement handoff.",
-    ],
-    limits: [
-      "Confine this record to stabilization, transport prep, and urgent handoff planning only.",
-      "Do not convert triage actions into long-form treatment decisions.",
-    ],
-    methods: [
-      "Perform scene isolation, immediate vital check, and short-cycle reassessment before any handoff step.",
-      "Failure mode: skipping reassessment or transport constraints creates preventable deterioration; recover with a fresh stabilization loop.",
-    ],
-    useGuidance:
-      "Use this envelope when the target is unstable and no specialist context is yet available.",
-  },
-  "skill:dodge": {
-    coreTasks: [
-      "Track incoming force, pivot weight, and distance with incremental timing adjustments.",
-    ],
-    limits: [
-      "Do not pair dodge sequencing with commitments requiring aggressive follow-through.",
-      "Avoid forcing body repositioning beyond the current balance margin and terrain friction.",
-    ],
-    methods: [
-      "Stabilize stance first, then execute micro-adjustments and reset momentum before counters.",
-      "Failure mode: over-correcting foot placement amplifies exposure; reset through breath, spine, and guard alignment.",
-    ],
-    useGuidance:
-      "Treat dodge as a preservation tactic, not a replacement for movement-intensive attack planning.",
-  },
-  "skill:battle-tactics": {
-    coreTasks: ["Define battle state, risk band, and fallback posture before issuing commands."],
-    limits: [
-      "Keep tactics within visible team competencies and active formation knowledge.",
-      "Do not invent command authority outside profile-supported routes.",
-    ],
-    methods: [
-      "Sequence observation, timing, fallback, and communications with explicit contingency triggers.",
-      "Failure mode: issuing command without shared state can cascade conflicting maneuvers; recover with a synchronized check-in.",
-    ],
-    useGuidance:
-      "Preserve command clarity by anchoring every plan to shared profile and route assumptions.",
-  },
-  "skill:medicine": {
-    coreTasks: [
-      "Apply assessment, differential framing, and treatment ranking in controlled order.",
-    ],
-    limits: [
-      "Keep this record within non-operative intervention and referral obligations.",
-      "Do not begin invasive procedures without the explicit surgical competency context.",
-    ],
-    methods: [
-      "Collect symptom evidence, separate certainty tiers, and document treatment rationale.",
-      "Failure mode: treating uncertain signs as confirmed cases creates avoidable compounding; revert to observation and reassessment first.",
-    ],
-    useGuidance:
-      "Use medicine tasks to stabilize and plan progression before specialist handoff when available.",
-  },
-  "skill:surgery": {
-    coreTasks: [
-      "Run sterilized pre-op checklist, controlled incision timing, and post-op observation protocol.",
-    ],
-    limits: [
-      "Do not perform when environment risk exceeds sterilization and monitoring requirements.",
-      "Do not carry this into broad nonoperative response without explicit permission.",
-    ],
-    methods: [
-      "Verify preparation gates, then execute only within defined procedural milestones.",
-      "Failure mode: violating sequencing can create irreversible harm; reset by halting and reversing to clean-room controls.",
-    ],
-    useGuidance:
-      "Treat surgical actions as constrained procedures with strict completion criteria.",
-  },
-  "skill:research": {
-    coreTasks: [
-      "Gather corroborating sources, map claim dependencies, and compare contradictory testimonies.",
-    ],
-    limits: [
-      "Do not treat a single source as sufficient authority.",
-      "Do not present unsupported inference as settled doctrine.",
-    ],
-    methods: [
-      "Triangulate evidence, classify confidence, and archive rationale for each conclusion.",
-      "Failure mode: confirmation bias from one source produces false certainty; recover by adding one independent corroborant.",
-    ],
-    useGuidance:
-      "Apply this envelope whenever claims affect long-lived profile or history attribution.",
-  },
-  "skill:law:olog-princely": {
-    coreTasks: [
-      "Resolve legal posture by applying court precedent chain and enforcement precedence.",
-    ],
-    limits: [
-      "Confine recommendations to explicit court-channel authority and procedural scope.",
-      "Do not extrapolate legal authority into unrelated social customs.",
-    ],
-    methods: [
-      "Check authority, document evidentiary basis, and route exceptions through recorded channels.",
-      "Failure mode: conflating custom and decree produces invalid rulings; recover by separating jurisdictional anchors.",
-    ],
-    useGuidance:
-      "Keep this skill active only where Olog legal channels and compatible histories are present.",
-  },
-  "skill:dead-reckoning": {
-    coreTasks: [
-      "Update movement estimate from speed, time, and bearing anchors each decision turn.",
-    ],
-    limits: [
-      "Do not trust long-range estimates without cross-check points.",
-      "Do not extend a route estimate across abrupt hazard shifts.",
-    ],
-    methods: [
-      "Set a baseline vector, apply uncertainty buffers, and revise after each observed check.",
-      "Failure mode: stale vector assumptions drift rapidly; recover by resetting baseline reference points.",
-    ],
-    useGuidance:
-      "Use dead-reckoning as backup or primary travel estimation when landmarks are sparse.",
-  },
-  "skill:chart-navigation": {
-    coreTasks: [
-      "Interpret chart symbols, lanes, hazards, and route annotations before committing the turn.",
-    ],
-    limits: [
-      "Do not infer safety from incomplete symbol interpretation.",
-      "Do not bypass written channel notes in favor of memory only.",
-    ],
-    methods: [
-      "Parse hazard flags, cross-reference waypoint sequence, and confirm depth of approach windows.",
-      "Failure mode: skipping chart annotations risks hidden hazards; recover with a chart+terrain re-parse.",
-    ],
-    useGuidance:
-      "Use this envelope for route planning, not ad hoc improvisation at approach points.",
-  },
-  "spoken:common": {
-    coreTasks: ["Align phrasing with civic and field registers before making requests or updates."],
-    limits: [
-      "Do not assume fluent nuance in emergency jargon.",
-      "Avoid replacing shared civic norms with private idiom.",
-    ],
-    methods: [
-      "Open with role and intent, then confirm comprehension via short checkpoints.",
-      "Failure mode: unsupported jargon misroutes instructions; recover with a plain-language restatement.",
-    ],
-    useGuidance:
-      "Use Common speech for coordination loops where broad audience comprehension is mandatory.",
-  },
-  "spoken:mogrebi": {
-    coreTasks: [
-      "Use institutional Mogrebi terms when acting across clinics, temple records, and civic filing.",
-    ],
-    limits: [
-      "Restrict usage to contexts with recognized institutional conventions.",
-      "Do not use ritual phrasing in purely commercial channels.",
-    ],
-    methods: [
-      "Set register by location first, then map each phrase to the required institutional purpose.",
-      "Failure mode: mixed register causes procedural rejection; recover with explicit register correction.",
-    ],
-    useGuidance: "Prefer this when documentation boundaries require Mogrebi technical vocabulary.",
-  },
-  "spoken:ologian": {
-    coreTasks: [
-      "Render testimony and testimony-adjacent language for court-facing and clerical recipients.",
-    ],
-    limits: [
-      "Do not collapse legal formality into casual narration.",
-      "Avoid asserting authority without procedural basis.",
-    ],
-    methods: [
-      "Separate observed fact from interpretation and avoid overstatement.",
-      "Failure mode: wording drift creates evidentiary damage; recover by re-alignment to formal format.",
-    ],
-    useGuidance:
-      "Use Ologian speech when the audience is constrained by court or record expectations.",
-  },
-  "spoken:phoenician": {
-    coreTasks: [
-      "Convey trade intent using historically aligned commercial conventions and signal timing.",
-    ],
-    limits: [
-      "Avoid mixing casual shorthand with maritime negotiation channels.",
-      "Do not omit route or payment obligations.",
-    ],
-    methods: [
-      "Translate terms into stable commercial units and confirm terms before closure.",
-      "Failure mode: omitted terms creates claim disputes; recover through explicit term revalidation.",
-    ],
-    useGuidance:
-      "Use this envelope for trade and harbor correspondence where historical commercial language is expected.",
-  },
-  "spoken:nkolian": {
-    coreTasks: [
-      "Transmit settlement movement instructions through frontier-appropriate cadence and honor forms.",
-    ],
-    limits: [
-      "Avoid introducing urban legal wording into caravan administration.",
-      "Keep sentence length and reference scope compact.",
-    ],
-    methods: [
-      "Match speaker role and caravan context before issuing movement or delivery instructions.",
-      "Failure mode: context mismatch creates travel delays; recover by restating role and destination clearly.",
-    ],
-    useGuidance: "Use N'kolian for caravan and frontier mobility coordination routines.",
-  },
-  "spoken:scythian": {
-    coreTasks: [
-      "Use oral convention for clan and home-region negotiation with explicit audience alignment.",
-    ],
-    limits: [
-      "Do not extend scythian assumptions outside local oral-law scopes.",
-      "Avoid replacing required written traces with only verbal commitments.",
-    ],
-    methods: [
-      "Establish social footing, then state expectation and consequence in one pass.",
-      "Failure mode: oral ambiguity causes attribution disputes; recover by restating obligations.",
-    ],
-    useGuidance:
-      "Use Scythian language where social-clan oral channels are the explicit authority surface.",
-  },
-  "written:mogrebi:sacred-mogrebi": {
-    coreTasks: [
-      "Decode sacred-format entries into actionable references for clinical or devotional records.",
-    ],
-    limits: [
-      "Do not infer spoken nuance from script forms.",
-      "Do not bypass line-specific reading for summary claims.",
-    ],
-    methods: [
-      "Anchor each interpretation to line context and preserve symbol/translation boundaries.",
-      "Failure mode: transcription drift causes mis-citation; recover through source-line verification.",
-    ],
-    useGuidance: "Use this envelope for written sacred material where exact citation is required.",
-  },
-  "written:ologian:church-ologian": {
-    coreTasks: ["Decode clerical notation into procedural, legal, and instructional intent."],
-    limits: [
-      "Do not blend legal conclusions with undocumented assumptions.",
-      "Separate copy-level transcription from adjudicated meaning.",
-    ],
-    methods: [
-      "Cross-check phrase intent against nearby records before applying operationally.",
-      "Failure mode: over-reading a copied phrase causes legal mismatch; recover through conservative interpretation.",
-    ],
-    useGuidance: "Use in court and clerical contexts requiring traceable written authority.",
-  },
-  "written:phoenician:phoenician": {
-    coreTasks: [
-      "Interpret trade-oriented notation for obligations, routes, and commercial memory.",
-    ],
-    limits: [
-      "Do not apply maritime shorthand out of route context.",
-      "Avoid substituting reconstructed values for explicit symbols.",
-    ],
-    methods: [
-      "Parse columns/annotations, then map terms to contract intent and route expectations.",
-      "Failure mode: misread symbols alter value and payment outcome; recover by re-parsing annotation keys.",
-    ],
-    useGuidance:
-      "Use this envelope before making historical trade assertions from Phoenician records.",
-  },
-  "spec:household-guard-sword-shield-drill": {
-    coreTasks: [
-      "Escalate from shared weapon baseline into paired drill procedures with explicit thresholds.",
-    ],
-    limits: [
-      "Keep this specialization tied to paired household-guard practice only.",
-      "Do not blend with unrelated weapon specialization without parent transfer checks.",
-    ],
-    methods: [
-      "Run synchronized guard transitions, spacing controls, and recovery commands.",
-      "Failure mode: ignoring threshold gates dilutes practice quality; recover by retraining from parent sword/shield records.",
-    ],
-    useGuidance:
-      "Use only after household guard competency context exists and prerequisites are met.",
-  },
-  "spec:diagnostic-medicine": {
-    coreTasks: [
-      "Apply differential case comparison using medicine and pharmacy context before specialist escalation.",
-    ],
-    limits: [
-      "Do not replace diagnostic review with treatment-only assumptions.",
-      "Avoid widening scope beyond medicine-derived facts.",
-    ],
-    methods: [
-      "Build symptom pattern maps, then challenge each hypothesis against objective signs.",
-      "Failure mode: early closure on one diagnosis hides differential risks; recover by reopening compare-and-contrast loop.",
-    ],
-    useGuidance:
-      "This specialization is an authored extension for high-certainty clinical reasoning.",
-  },
-  "spec:warded-lock-entry": {
-    coreTasks: ["Use warded-entry sequencing without introducing irreversible lock modifications."],
-    limits: [
-      "Do not apply warded methods to non-warded mechanisms.",
-      "Do not claim ownership changes outside explicit transfer support.",
-    ],
-    methods: [
-      "Verify mechanism family, test pressure points, and apply controlled tactile mapping.",
-      "Failure mode: over-pressing a warded device causes lock-state collapse; recover with recovery timing and exit.",
-    ],
-    useGuidance:
-      "Apply this specialization only when the base lockpicking route and profile context are active.",
-  },
-  "spec:court-administration": {
-    coreTasks: ["Coordinate petitions, precedence, and reporting obligations in court workflows."],
-    limits: [
-      "Do not infer court authority from household or trade experience alone.",
-      "Keep ceremonial obligations explicit in every transition.",
-    ],
-    methods: [
-      "Track dossier requirements, then route each decision through documented channels.",
-      "Failure mode: missing a filing step invalidates the action; recover by replaying sequence against the procedure checklist.",
-    ],
-    useGuidance: "Use this specialization only within explicit court-administration pathways.",
-  },
-  "spec:weaponsmithing": {
-    coreTasks: [
-      "Forge and inspect weapon components using explicit craft thresholds and quality checkpoints.",
-    ],
-    limits: [
-      "Keep inspection and safety controls separate from operational weapon use.",
-      "Do not bypass heat-treatment and fit checks.",
-    ],
-    methods: [
-      "Apply cycle-by-cycle forging control, then document balance and edge consistency.",
-      "Failure mode: skipping inspections causes cumulative defect drift; recover through full reforge validation.",
-    ],
-    useGuidance:
-      "Use this specialization when smithing context directly feeds weapon quality outcomes.",
-  },
-  "spec:home-coast-pilotage": {
-    coreTasks: [
-      "Apply local-water navigation through tide-aware micro-routes and familiar channel behavior.",
-    ],
-    limits: [
-      "Do not project home-coast assumptions onto open-water operations.",
-      "Do not ignore local exceptions and seasonal route notes.",
-    ],
-    methods: [
-      "Validate route set against coastal references and weather overlays each transit segment.",
-      "Failure mode: stale coastal memory causes grounding; recover by returning to pilotage baseline checks.",
-    ],
-    useGuidance: "Specialized for named Lankhmar coastal waters and related transfer requirements.",
-  },
-  "spec:desert-wayfinding": {
-    coreTasks: [
-      "Blend terrain memory, water-risk, and signs into long-distance arid-route planning.",
-    ],
-    limits: [
-      "Do not ignore heat stress and exposure constraints.",
-      "Avoid open-route commitment without water margin confirmation.",
-    ],
-    methods: [
-      "Mark waypoints by scarcity logic, then verify each segment before continuing.",
-      "Failure mode: route confidence without resource audit causes stranded movement; recover by halting and recalibrating.",
-    ],
-    useGuidance: "Use this specialization only when desert-route context is explicitly available.",
-  },
-  "spec:steppe-remount-training": {
-    coreTasks: ["Cycle remount readiness, recovery windows, and rapid redeployment habits."],
-    limits: [
-      "Do not generalize Steppe cadence to unrelated mounted doctrine.",
-      "Do not overload remount rotation without recovery checks.",
-    ],
-    methods: [
-      "Assign animal load, rest spacing, and handler response per leg in fixed rotation.",
-      "Failure mode: ignoring recovery leads to remount fatigue; recover by rebalancing rotation.",
-    ],
-    useGuidance: "Apply for clan horse movement where remount availability is central.",
-  },
-  "skill:sword": {
-    coreTasks: ["Execute controlled guards, cut angles, and parry timing in close combat loops."],
-    limits: [
-      "Do not overcommit when distance collapses unexpectedly.",
-      "Avoid fixed timing without visual recalibration.",
-    ],
-    methods: [
-      "Set entry distance, choose angle, and finish with secure reset posture.",
-      "Failure mode: predictable cadence exposes counters; recover with distance reset and angle pivot.",
-    ],
-    useGuidance: "This envelope applies to direct sword-and-shield or paired routines when active.",
-  },
-  "skill:shield": {
-    coreTasks: ["Align shield plane, angle, and stepping to absorb and redirect pressure."],
-    limits: [
-      "Do not treat shield hold as static posture under all threats.",
-      "Avoid long-duration blocks without mobility resets.",
-    ],
-    methods: [
-      "Pair coverage with short pivots and pressure redirection checks.",
-      "Failure mode: locked frame locks body into follow-on harm; recover through guarded footwork.",
-    ],
-    useGuidance: "Use shield control as a sustained protective framework within close distance.",
-  },
-  "skill:knife-dagger": {
-    coreTasks: [
-      "Keep compact arcs, retention paths, and fast transitions within protected spacing.",
-    ],
-    limits: [
-      "Do not operate in broad-range assumptions for short-weapon work.",
-      "Do not trade reach for tempo without compensating body position.",
-    ],
-    methods: [
-      "Anchor grip, choose target micro-zones, and sequence retention exits.",
-      "Failure mode: poor retention produces accidental loss; recover through reset-to-grip drill.",
-    ],
-    useGuidance:
-      "This envelope supports close-range manipulative movement under constrained angles.",
-  },
-  "skill:spear": {
-    coreTasks: ["Maintain distance, drive thrust vectors, and recover at safe extension points."],
-    limits: [
-      "Do not overstep into unsupported lunging sequences.",
-      "Avoid overextending beyond recoverable foot geometry.",
-    ],
-    methods: [
-      "Alternate extension, binding, and foot recovery while reading opponent pressure.",
-      "Failure mode: overreach breaks distance control; recover with retraction and guard reset.",
-    ],
-    useGuidance: "Use spear posture where distance and engagement rhythm are primary.",
-  },
-  "skill:perception": {
-    coreTasks: [
-      "Scan social, tactical, and environmental cues before committing any immediate action.",
-    ],
-    limits: [
-      "Do not treat one cue as complete certainty.",
-      "Separate suspicious signal from confirmed evidence.",
-    ],
-    methods: [
-      "Record observations, rank confidence, and test for repeatability.",
-      "Failure mode: cue fixation causes premature conclusions; recover by widening the cue set.",
-    ],
-    useGuidance: "Use perception when risk is present and assumptions need early validation.",
-  },
-  "skill:athletics": {
-    coreTasks: [
-      "Build movement sequences around load, acceleration, and sustainable exertion envelopes.",
-    ],
-    limits: [
-      "Do not force sprint profiles without readiness checks.",
-      "Avoid repeating maximal loads with no recovery.",
-    ],
-    methods: [
-      "Warm, execute, and cool down with explicit condition checkpoints.",
-      "Failure mode: fatigue masking leads to avoidable collapse; recover with pacing reset and technique review.",
-    ],
-    useGuidance: "Use this for controlled locomotion and sustained physical demand routines.",
-  },
-  "skill:survival": {
-    coreTasks: ["Prioritize shelter, hydration, and decision control in adverse field states."],
-    limits: [
-      "Do not expose group to prolonged exposure to avoidable hazards.",
-      "Do not substitute optimism for risk mitigation.",
-    ],
-    methods: [
-      "Establish hazard map, conserve resources, and enforce route patience.",
-      "Failure mode: unscheduled exertion collapses readiness; recover through immediate risk triage.",
-    ],
-    useGuidance: "Apply when environmental pressure dominates tactical or social options.",
-  },
-  "skill:leadership": {
-    coreTasks: ["Set intent, monitor morale pressure, and assign role-aligned responsibilities."],
-    limits: [
-      "Do not over-centralize without relay channels.",
-      "Avoid silent assumption of consensus.",
-    ],
-    methods: [
-      "Brief clearly, assign timing windows, and request confirmation checkpoints.",
-      "Failure mode: ambiguity degrades alignment; recover by narrowing priorities and re-issuing orders.",
-    ],
-    useGuidance: "Use this envelope for mixed-unit coordination under moderate to high pressure.",
-  },
-  "skill:pharmacy": {
-    coreTasks: [
-      "Compose remedies by dose windows, ingredient interactions, and monitoring obligations.",
-    ],
-    limits: [
-      "Do not mix compounds without compatibility checks.",
-      "Avoid blind scaling of dosage by gut feeling.",
-    ],
-    methods: [
-      "Prepare compounds, verify potency bands, and track response intervals.",
-      "Failure mode: dosing assumptions cause adverse effects; recover with immediate intake pause and reassessment.",
-    ],
-    useGuidance: "Use pharmacy when treatment planning needs measurable preparation and follow-up.",
-  },
-  "skill:plant-lore": {
-    coreTasks: ["Identify plant state, season, and utility before recommending extraction or use."],
-    limits: [
-      "Do not apply static use rules across seasonal cycles.",
-      "Avoid assuming availability from memory alone.",
-    ],
-    methods: [
-      "Verify morphology cues, then cross-check usage patterns.",
-      "Failure mode: misidentification causes failed outcomes; recover by isolating specimen and rechecking markers.",
-    ],
-    useGuidance:
-      "Use this envelope for practical botany under healing, ritual, and logistical contexts.",
-  },
-  "skill:streetwise": {
-    coreTasks: [
-      "Map rumor flows, sentiment signals, and likely social pressure before approaching actors.",
-    ],
-    limits: [
-      "Do not treat rumor as fact.",
-      "Avoid exposing objectives before trust checks complete.",
-    ],
-    methods: [
-      "Trace influence lines, confirm source reliability, and preserve exit options.",
-      "Failure mode: unverified chatter triggers preventable exposure; recover through channel narrowing.",
-    ],
-    useGuidance:
-      "Use for monitoring civic pressure, rumor vectors, and social exposure before any sensitive approach or information contact.",
-  },
-  "skill:underworld": {
-    coreTasks: ["Track illicit intermediaries and incentive chains across hidden exchanges."],
-    limits: [
-      "Do not commit to inferred motives without corroboration.",
-      "Avoid escalating covert assumptions into open action.",
-    ],
-    methods: [
-      "Follow transaction echoes, record trust markers, and test contradictions.",
-      "Failure mode: trusting false intermediaries compounds risk; recover by dropping chain and re-verifying links.",
-    ],
-    useGuidance:
-      "Use underworld skill only for structured network analysis under proper profile constraints.",
-  },
-  "skill:deception": {
-    coreTasks: [
-      "Construct credible narratives with bounded scope, timing, and plausible deniability.",
-    ],
-    limits: [
-      "Do not sustain deception beyond planned exit criteria.",
-      "Do not replace social reading with scripted certainty.",
-    ],
-    methods: [
-      "Control body language, reveal cadence, and rehearse fallback explanations.",
-      "Failure mode: narrative drift collapses the cover; recover with immediate controlled disclosure strategy.",
-    ],
-    useGuidance: "Use only in scenarios that explicitly permit staged social influence.",
-  },
-  "skill:stealth": {
-    coreTasks: ["Reduce signature through movement cadence, timing, and environmental masking."],
-    limits: [
-      "Do not ignore light and sound signatures when conditions shift.",
-      "Avoid prolonged stillness in high-reactivity zones.",
-    ],
-    methods: [
-      "Plan ingress window, anchor route noise profile, and monitor watch cycles.",
-      "Failure mode: predictable movement creates visual lock; recover with route and tempo pivot.",
-    ],
-    useGuidance: "Use stealth for threat minimization, not for bypassing explicit prohibitions.",
-  },
-  "skill:lockpicking": {
-    coreTasks: ["Map ward geometry, tension behavior, and tactile feedback in controlled order."],
-    limits: [
-      "Do not force mechanisms beyond material tolerance.",
-      "Do not claim completion until full closure is confirmed.",
-    ],
-    methods: [
-      "Set tactile baseline, probe incremental movement, and stop on abnormal resistance.",
-      "Failure mode: excessive force damages trust context; recover by withdrawing and reset inspection.",
-    ],
-    useGuidance:
-      "Use this only when lawful entry authority and profile route constraints are already satisfied before attempting any warded-entry operation.",
-  },
-  "skill:sleight-of-hand": {
-    coreTasks: ["Coordinate hand choreography with composure control and misdirection rhythm."],
-    limits: [
-      "Do not attempt concealment beyond practiced body pathways.",
-      "Avoid repeated gesture patterns that become detectable.",
-    ],
-    methods: [
-      "Segment action into preload, swap, and post-motion confirmation.",
-      "Failure mode: timing drift causes obvious tells; recover by reducing complexity and replaying choreography.",
-    ],
-    useGuidance: "Apply for subtle transfer operations where social scrutiny is sustained.",
-  },
-  "skill:insight": {
-    coreTasks: ["Infer intent through verbal, behavioral, and contradiction signals in sequence."],
-    limits: [
-      "Do not over-index on a single signal type.",
-      "Do not ignore contextual contradiction after a consistent read.",
-    ],
-    methods: [
-      "Score cue clusters, compare with prior patterns, and mark confidence bands.",
-      "Failure mode: one false signal flips conclusion; recover by requesting another independent cue set.",
-    ],
-    useGuidance: "Use insight to gate high-stakes social commitments and negotiations.",
-  },
-  "skill:disguise": {
-    coreTasks: [
-      "Build and preserve a sustained role profile through speech, posture, and routine behavior.",
-    ],
-    limits: [
-      "Do not stretch role consistency across repeated high-frequency checkpoints.",
-      "Do not change appearance without intent alignment.",
-    ],
-    methods: [
-      "Maintain behavioral loop, manage contact windows, and pre-plan exit statements.",
-      "Failure mode: inconsistent details expose the disguise; recover through controlled reset and role correction.",
-    ],
-    useGuidance:
-      "Use this envelope for recurrent social entry when repeated recognition risk exists.",
-  },
-  "skill:administration": {
-    coreTasks: [
-      "Sequence routing, intake, and approvals through institutional expectation chains.",
-    ],
-    limits: [
-      "Do not bypass documented routing requirements.",
-      "Do not compress deadlines without authority scope.",
-    ],
-    methods: [
-      "Create request ledger, confirm routing owner, and execute handoff only on explicit completion points.",
-      "Failure mode: skipping routing nodes returns requests to dead-ends; recover with route recovery checklist.",
-    ],
-    useGuidance: "Use administration for process-heavy obligations where traceability is required.",
-  },
-  "skill:customs": {
-    coreTasks: [
-      "Interpret local custom law and expected conduct before action in sensitive institutions.",
-    ],
-    limits: [
-      "Do not project one household norm into another legal environment.",
-      "Avoid dismissing inherited obligations in negotiation contexts.",
-    ],
-    methods: [
-      "Check etiquette, hierarchy, and consequence matrix before engagement.",
-      "Failure mode: norm mismatch creates social penalties; recover by re-aligning to host custom.",
-    ],
-    useGuidance: "Use this for cultural interfaces where expectations carry real consequences.",
-  },
-  "skill:oratory": {
-    coreTasks: [
-      "Structure message for audience authority, urgency, and acceptable persuasive channel.",
-    ],
-    limits: [
-      "Do not over-amplify when procedural authority is stronger than rhetoric.",
-      "Avoid overpromising under incomplete facts.",
-    ],
-    methods: [
-      "Frame premise, evidence, and requested outcome with clear escalation order.",
-      "Failure mode: emotional overreach erodes credibility; recover with concise evidence-first revision.",
-    ],
-    useGuidance: "Use oratory where influence outcomes depend on controlled audience framing.",
-  },
-  "skill:bookkeeping": {
-    coreTasks: [
-      "Reconcile obligations, ledgers, and recurring account obligations with audit points.",
-    ],
-    limits: [
-      "Do not leave transactions unbalanced beyond check windows.",
-      "Do not omit source references for reconciliations.",
-    ],
-    methods: [
-      "Validate balances, trace source documents, and document adjustment rationale.",
-      "Failure mode: skipped verification compounds later disputes; recover with full ledger rewind and correction.",
-    ],
-    useGuidance: "Apply bookkeeping when financial continuity and accountability are binding.",
-  },
-  "skill:trade": {
-    coreTasks: [
-      "Negotiate commodity value, payment terms, and settlement structure before agreement.",
-    ],
-    limits: [
-      "Do not ignore margin, duty, or collateral obligations.",
-      "Do not treat one bid as final without mutual commitment.",
-    ],
-    methods: [
-      "Model valuation options, confirm constraints, and stage closing language.",
-      "Failure mode: rushed settlement triggers unfavorable reversals; recover by re-opening valuation steps.",
-    ],
-    useGuidance: "Use trade envelopes where negotiation and settlement obligations intersect.",
-  },
-  "skill:bargaining": {
-    coreTasks: ["Sequence concession windows while preserving long-form leverage."],
-    limits: [
-      "Do not concede key terms before fallback terms are secured.",
-      "Avoid escalating pressure when leverage is already below baseline.",
-    ],
-    methods: [
-      "Set non-negotiables, release concessions incrementally, and monitor countersignals.",
-      "Failure mode: premature concessions erase leverage; recover by reasserting priorities and stepping back.",
-    ],
-    useGuidance: "Use bargaining as the constrained exchange envelope for negotiation.",
-  },
-  "skill:appraisal": {
-    coreTasks: ["Evaluate provenance, condition, and hidden defects before assigning value."],
-    limits: [
-      "Do not conflate appearance with craftsmanship.",
-      "Avoid transferring uncertain valuation into binding commitments.",
-    ],
-    methods: [
-      "Inspect structure, verify provenance, and note defect risk alongside context.",
-      "Failure mode: undiscovered defects cause avoidable transfer losses; recover through deeper inspection pass.",
-    ],
-    useGuidance: "Use appraisal when material decisions carry medium-to-high exchange risk.",
-  },
-  "skill:smithing": {
-    coreTasks: ["Run forge cycles with heat control, shaping, and structural quality checks."],
-    limits: [
-      "Do not skip cooldown and stress-relief checkpoints.",
-      "Do not ignore microfracture cues in inspection.",
-    ],
-    methods: [
-      "Apply repeatable shaping passes and inspect each load-bearing edge.",
-      "Failure mode: rushed forge cycles produce brittle outcomes; recover with rework and structural retest.",
-    ],
-    useGuidance: "Use smithing for stable production and quality assurance routines.",
-  },
-  "skill:seamanship": {
-    coreTasks: ["Coordinate deck movement, cargo balance, and safety under tide and load demands."],
-    limits: [
-      "Do not ignore weather and load interactions.",
-      "Do not proceed with channel changes without command confirmation.",
-    ],
-    methods: [
-      "Set operational rhythm, secure routes, and execute with load-aware commands.",
-      "Failure mode: poor timing with tides creates avoidable hazard; recover with immediate stand-down and drift check.",
-    ],
-    useGuidance:
-      "Apply seamanship to vessel command where timing and environmental coupling are critical.",
-  },
-  "skill:pilotage": {
-    coreTasks: ["Run local-water movement through obstacle memory and approach sequencing."],
-    limits: [
-      "Do not assume open-water rules in narrow ports.",
-      "Avoid channel entry without verified markers.",
-    ],
-    methods: [
-      "Track approach vectors, local notes, and tide windows before committing route.",
-      "Failure mode: anchor mismatch causes missed approaches; recover by resetting to known waypoints.",
-    ],
-    useGuidance:
-      "Use pilotage for near-shore movement where channel restrictions, local notes, and tide windows remain explicit gate conditions.",
-  },
-  "skill:swimming": {
-    coreTasks: ["Maintain buoyancy, propulsion, and controlled return under load and fatigue."],
-    limits: [
-      "Do not push distance planning over recovery and visibility.",
-      "Do not enter surf zones without contingency route.",
-    ],
-    methods: [
-      "Monitor breath cadence, stroke economy, and exhaustion margin.",
-      "Failure mode: fatigue-induced loss of orientation; recover through immediate safe return and recalibration.",
-    ],
-    useGuidance: "Use this envelope for water movement requiring controlled exertion and recovery.",
-  },
-  "skill:weather-lore": {
-    coreTasks: ["Identify short-range weather transitions from pressure, wind, and cue arrays."],
-    limits: [
-      "Do not rely on one cue family alone.",
-      "Avoid route commitments before hazard confirmation.",
-    ],
-    methods: [
-      "Cross-check atmospheric signals and assign confidence to each weather window.",
-      "Failure mode: stale forecasting creates route entrapment; recover via local cue re-sampling.",
-    ],
-    useGuidance:
-      "Use weather-lore as the primary pre-route envelope whenever wind, pressure, and cloud shifts can change hazard windows or safe scheduling.",
-  },
-  "skill:wayfinding": {
-    coreTasks: ["Select route with terrain memory, sightline control, and uncertainty budgets."],
-    limits: [
-      "Do not commit to memory-only routing without landmark confirmation.",
-      "Do not skip fallback route planning.",
-    ],
-    methods: [
-      "Verify next node, preserve fallback options, and monitor drift from planned corridor.",
-      "Failure mode: orientation loop from weak landmarks; recover by forcing reorientation check.",
-    ],
-    useGuidance: "Use wayfinding whenever local travel requires repeatable route justification.",
-  },
-  "skill:animal-handling": {
-    coreTasks: ["Condition mounts through cues, pace control, and responsive rein management."],
-    limits: [
-      "Do not ignore stress indicators from animals.",
-      "Avoid forcing pace changes without adaptation windows.",
-    ],
-    methods: [
-      "Assess readiness, then execute transitions with incremental control shifts.",
-      "Failure mode: rushed handling destabilizes mount and rider; recover with grounding and calm reset.",
-    ],
-    useGuidance: "Use this envelope for sustained mounted reliability in operational travel.",
-  },
-  "skill:tracking": {
-    coreTasks: ["Translate signs into probable paths and repeatable movement hypotheses."],
-    limits: [
-      "Do not overfit one set of signs to many outcomes.",
-      "Do not assume continuity without confirmation signatures.",
-    ],
-    methods: [
-      "Collect footprint, disturbance, and environmental context before declaring direction.",
-      "Failure mode: sign misattribution misdirects pursuit; recover by adding temporal spacing and terrain sampling.",
-    ],
-    useGuidance: "Use tracking when route inference affects pursuit, escort, or search outcomes.",
-  },
-  "skill:hunting": {
-    coreTasks: [
-      "Conceal approach, read prey movement, and select acquisition timing with low noise.",
-    ],
-    limits: [
-      "Do not increase noise at high-value edges.",
-      "Avoid pursuit extension once risk exceeds threshold.",
-    ],
-    methods: [
-      "Map scent and trail, set approach geometry, and execute low-signature engagement.",
-      "Failure mode: overpursuit wastes effort and increases risk; recover by break-contact and reassessment.",
-    ],
-    useGuidance:
-      "Apply hunting as controlled acquisition when sign quality and concealment matter.",
-  },
-  "skill:riding": {
-    coreTasks: ["Transition gaits and terrain posture to keep mounted endurance and control."],
-    limits: [
-      "Do not force mounts past recovery pacing windows.",
-      "Do not rely on short gains for long-route completion.",
-    ],
-    methods: [
-      "Stabilize seat position, map distance pacing, and confirm horse feedback at each leg.",
-      "Failure mode: sustained imbalance damages rider and mount; recover through gait reset.",
-    ],
-    useGuidance:
-      "Use riding for mounted movement requiring route endurance and command consistency.",
-  },
+const candidate3ShortDescriptionByCompetencyId: Record<string, string> = {
+  "skill:first-aid":
+    "Stabilize an injured or suddenly ill person and keep them safe until further help is available.",
+  "skill:dodge": "Avoid attacks through movement, timing, and body positioning.",
+  "skill:battle-tactics":
+    "Direct people during a battle by reading the situation and coordinating positions, timing, and responses.",
+  "skill:medicine":
+    "Diagnose illness and injury, choose non-operative treatment, and follow the patient's recovery.",
+  "skill:surgery":
+    "Treat injury or disease through planned operations and careful care before and after the procedure.",
+  "skill:research":
+    "Find, compare, and evaluate evidence to answer a question with a supportable conclusion.",
+  "skill:law:olog-princely":
+    "Interpret and apply a particular body of law through its proper procedures.",
+  "skill:dead-reckoning":
+    "Estimate present position from a known start, direction, speed, and time travelled.",
+  "skill:chart-navigation":
+    "Use maps or charts to plan and follow a route while avoiding known hazards.",
+  "spoken:common": "Communicate by speaking and listening in a widely shared language.",
+  "spoken:mogrebi": "Communicate by speaking and listening in the named language.",
+  "spoken:ologian": "Communicate by speaking and listening in the named language.",
+  "spoken:phoenician": "Communicate by speaking and listening in the named language.",
+  "spoken:nkolian": "Communicate by speaking and listening in the named language.",
+  "spoken:scythian": "Communicate by speaking and listening in the named language.",
+  "written:mogrebi:sacred-mogrebi":
+    "Read and compose the named language using its linked script and writing conventions.",
+  "written:ologian:church-ologian":
+    "Read and compose the named language using its linked script and writing conventions.",
+  "written:phoenician:phoenician":
+    "Read and compose the named language using its linked script and writing conventions.",
+  "spec:household-guard-sword-shield-drill":
+    "Fight with sword and shield as one coordinated method of attack and defence.",
+  "spec:diagnostic-medicine":
+    "Determine the likely cause of illness by comparing symptoms, history, examination, and other evidence.",
+  "spec:warded-lock-entry":
+    "Open warded locks by identifying their internal obstructions and manipulating suitable tools.",
+  "spec:court-administration":
+    "Manage court filings, schedules, notices, records, and procedural steps accurately.",
+  "spec:weaponsmithing":
+    "Forge, finish, balance, and inspect metal weapons for safe and reliable use.",
+  "spec:home-coast-pilotage":
+    "Guide a vessel through familiar coastal waters using detailed local knowledge.",
+  "spec:desert-wayfinding":
+    "Find and follow routes across arid terrain while managing heat, water, and sparse landmarks.",
+  "spec:steppe-remount-training": "Train and rotate spare riding animals to sustain long journeys.",
+  "skill:sword":
+    "Attack and defend with a sword using effective distance, guard, timing, and footwork.",
+  "skill:shield": "Use a shield to intercept attacks, control openings, and move under protection.",
+  "skill:knife-dagger":
+    "Fight at close range with knives or daggers while controlling distance and retaining the weapon.",
+  "skill:spear": "Use a spear's reach and point control to attack, defend, and manage distance.",
+  "skill:perception":
+    "Notice and interpret relevant sensory details before drawing conclusions from them.",
+  "skill:athletics": "Run, jump, climb, lift, and sustain demanding movement with trained control.",
+  "skill:survival":
+    "Find water, shelter, warmth, food, and a safe route when ordinary support is unavailable.",
+  "skill:leadership":
+    "Direct and coordinate people toward a shared objective, maintaining order, morale, and cooperation.",
+  "skill:pharmacy":
+    "Prepare, store, measure, and dispense medicinal substances safely and accurately.",
+  "skill:plant-lore":
+    "Identify plants, understand their practical uses, and avoid harmful lookalikes.",
+  "skill:streetwise":
+    "Find information, services, and safe ways through urban life by reading local behaviour.",
+  "skill:underworld":
+    "Recognize and navigate illicit networks, hidden markets, intermediaries, and their risks.",
+  "skill:deception":
+    "Create and maintain a plausible false impression through words, behaviour, omission, or staged evidence.",
+  "skill:stealth":
+    "Move or remain present without notice by controlling sound, visibility, timing, and signs of passage.",
+  "skill:lockpicking":
+    "Open a mechanical lock without its key by sensing and manipulating its internal parts.",
+  "skill:sleight-of-hand":
+    "Manipulate or conceal small objects through dexterity, timing, and control of attention.",
+  "skill:insight":
+    "Judge another person's likely emotions, motives, and intentions from what they say and do.",
+  "skill:disguise":
+    "Alter appearance and behaviour to support a plausible identity or pass without notice.",
+  "skill:administration":
+    "Organize and carry out the procedures, records, and routine business of an institution or organization.",
+  "skill:customs": "Know and follow expected social conduct in a particular society or community.",
+  "skill:oratory":
+    "Address an audience persuasively through clear structure, suitable language, and deliberate delivery.",
+  "skill:bookkeeping":
+    "Record and reconcile money, goods, debts, and payments in accurate ledgers.",
+  "skill:trade":
+    "Buy, sell, and exchange goods or services with sound knowledge of markets, costs, and terms.",
+  "skill:bargaining":
+    "Negotiate an exchange by testing priorities, offers, concessions, and alternatives.",
+  "skill:appraisal":
+    "Estimate an object's identity, condition, quality, and value from evidence and comparison.",
+  "skill:smithing": "Shape, join, finish, and inspect metal using controlled heat and tools.",
+  "skill:seamanship":
+    "Operate and care for a vessel, its equipment, people, and cargo in changing conditions.",
+  "skill:pilotage":
+    "Guide a vessel through confined or coastal waters by tracking local hazards and conditions.",
+  "skill:swimming":
+    "Move and remain safe in water by controlling breathing, buoyancy, direction, and fatigue.",
+  "skill:weather-lore":
+    "Forecast near-term weather by comparing atmospheric signs and recurring local patterns.",
+  "skill:wayfinding":
+    "Choose and follow a route through terrain using landmarks, direction, distance, and memory.",
+  "skill:animal-handling":
+    "Direct and care for trained animals by reading behaviour and using safe, consistent cues.",
+  "skill:tracking":
+    "Follow a person or animal by interpreting physical signs of passage and their age.",
+  "skill:hunting":
+    "Locate, approach, take, and recover wild game with suitable tools and minimal waste.",
+  "skill:riding":
+    "Ride and direct a mount with balanced control across changing pace, terrain, and fatigue.",
 };
+
+const candidate3FullDescriptionBoundaryByCompetencyId: Record<string, string> = {
+  "skill:first-aid": "It is immediate care, not diagnosis, prolonged treatment, or surgery.",
+  "skill:battle-tactics":
+    "It concerns the conduct of a particular engagement rather than personal weapon use or long-term strategy.",
+  "skill:medicine":
+    "Operative treatment belongs to Surgery, while preparing medicines belongs to Pharmacy.",
+  "skill:surgery":
+    "The operation does not replace diagnosis, general treatment, or later medical care.",
+  "skill:research":
+    "Research can support a conclusion, but incomplete or conflicting evidence may leave the answer uncertain.",
+  "skill:law:olog-princely":
+    "The Skill concerns legal rules and procedure, not unwritten custom or personal influence.",
+  "skill:dead-reckoning":
+    "Because small errors accumulate, a navigator should correct the estimate when a reliable observation becomes available.",
+  "skill:chart-navigation":
+    "A chart can show recorded hazards and routes, but it does not replace observation of present conditions.",
+  "spoken:common": "Spoken fluency does not imply literacy or command of specialist vocabulary.",
+  "spoken:mogrebi": "Spoken fluency does not imply literacy or command of specialist vocabulary.",
+  "spoken:ologian": "Spoken fluency does not imply literacy or command of specialist vocabulary.",
+  "spoken:phoenician":
+    "Spoken fluency does not imply literacy or command of specialist vocabulary.",
+  "spoken:nkolian": "Spoken fluency does not imply literacy or command of specialist vocabulary.",
+  "spoken:scythian": "Spoken fluency does not imply literacy or command of specialist vocabulary.",
+  "written:mogrebi:sacred-mogrebi":
+    "Written competence is distinct from speaking and applies only to the linked language and script tradition.",
+  "written:ologian:church-ologian":
+    "Written competence is distinct from speaking and applies only to the linked language and script tradition.",
+  "written:phoenician:phoenician":
+    "Written competence is distinct from speaking and applies only to the linked language and script tradition.",
+  "spec:household-guard-sword-shield-drill":
+    "It does not replace the separate competence needed to use either weapon outside the coordinated drill.",
+  "spec:diagnostic-medicine":
+    "It identifies a likely cause; treatment still requires the appropriate medical or surgical competence.",
+  "spec:warded-lock-entry": "It applies to warded mechanisms and does not cover every lock design.",
+  "spec:court-administration":
+    "It handles court procedure and records rather than deciding law or arguing a case.",
+  "spec:weaponsmithing":
+    "It concerns making weapons and does not grant skill in fighting with them.",
+  "spec:home-coast-pilotage":
+    "Detailed knowledge of one coast does not automatically apply to unfamiliar waters.",
+  "spec:desert-wayfinding":
+    "It concerns route finding in arid terrain, not every task involved in surviving there.",
+  "spec:steppe-remount-training":
+    "It concerns preparing and rotating remounts rather than general riding or the care of every animal.",
+  "skill:sword":
+    "The Skill applies to swords and does not make other weapon types interchangeable.",
+  "skill:shield":
+    "A shield can intercept and control attacks, but it is not a substitute for moving clear of them.",
+  "skill:knife-dagger":
+    "Short blades demand close distance and do not offer the reach or handling of longer weapons.",
+  "skill:spear":
+    "A spear loses many of its advantages when the wielder cannot preserve room to use its reach.",
+  "skill:perception":
+    "It reveals what can be sensed, not hidden facts or certain explanations for what was noticed.",
+  "skill:athletics":
+    "It covers general physical movement, while specialized techniques may require a more specific Skill.",
+  "skill:survival":
+    "It keeps people alive and moving in difficult conditions, but it does not replace specialist navigation, hunting, or medicine.",
+  "skill:pharmacy":
+    "It covers medicinal substances, not diagnosis, surgery, or the independent practice of medicine.",
+  "skill:plant-lore":
+    "An uncertain identification should not be treated as proof that a plant is safe or useful.",
+  "skill:streetwise": "Local rumour and reputation can guide inquiry, but they are not proof.",
+  "skill:underworld":
+    "Knowledge of illicit networks does not guarantee access, loyalty, or safety.",
+  "skill:deception":
+    "A plausible story can still fail when evidence is checked, and the Skill does not alter facts.",
+  "skill:stealth":
+    "It reduces the chance of notice but cannot make concealment possible in every place or against every observer.",
+  "skill:lockpicking":
+    "It covers mechanical locks and does not by itself overcome traps, bars, seals, or unrelated barriers.",
+  "skill:sleight-of-hand":
+    "It conceals the manipulation itself rather than making an implausible action or missing object impossible to notice later.",
+  "skill:disguise":
+    "A disguise supports a false appearance or role, but close scrutiny and inconsistent knowledge can expose it.",
+  "skill:customs":
+    "Customs describes social expectations, not substantive legal knowledge, and one society's customs do not automatically apply to another.",
+  "skill:oratory":
+    "It addresses an audience and does not guarantee agreement or replace evidence, authority, or private negotiation.",
+  "skill:bookkeeping":
+    "Accurate records can reveal a discrepancy, but they do not by themselves prove why it occurred.",
+  "skill:trade":
+    "Trade covers the wider conduct of exchange, while Bargaining focuses on negotiating particular terms.",
+  "skill:bargaining":
+    "It negotiates terms but does not create goods, credit, authority, or alternatives that do not exist.",
+  "skill:appraisal":
+    "Hidden damage, false provenance, or an unfamiliar market may limit the certainty of any valuation.",
+  "skill:smithing":
+    "It covers metalworking rather than the separate use of every object a smith can make.",
+  "skill:seamanship":
+    "It covers working and keeping safe aboard a vessel, while choosing a route belongs to navigation or pilotage.",
+  "skill:pilotage":
+    "It relies on local waters and present observations rather than granting universal knowledge of every coast or harbour.",
+  "skill:swimming":
+    "Difficult water, injury, clothing, carried weight, and fatigue can place a crossing beyond a swimmer's safe ability.",
+  "skill:weather-lore":
+    "It supports a forecast rather than certainty, especially when signs conflict or conditions change rapidly.",
+  "skill:wayfinding":
+    "It concerns choosing and maintaining a route, not every survival task encountered along it.",
+  "skill:animal-handling":
+    "Methods suitable for one species or individual may be unsafe or ineffective for another.",
+  "skill:tracking":
+    "Tracks support a likely route and estimate, not certain knowledge of the quarry's identity or intention.",
+  "skill:hunting":
+    "It concerns finding and taking game rather than general wilderness survival or animal care.",
+  "skill:riding":
+    "Riding competence does not replace the separate care, training, or treatment of the mount.",
+};
+
+const candidate3FullDescriptionOverrideByCompetencyId: Record<string, string> = {
+  "skill:dodge":
+    "Dodge is the ability to avoid being struck, caught, or intercepted by moving out of the path of an attack or opponent. It relies on awareness, reaction, timing, positioning, and freedom to move. Dodge avoids an attack rather than blocking it; defending with a weapon or shield belongs to the appropriate parry or weapon Skill.",
+  "skill:insight":
+    "Insight is the interpretation of another person's emotions, motives, and likely intentions from their words, behaviour, and surrounding context. A skilled observer notices inconsistencies and changes in behaviour and can form informed judgments about states such as fear, hostility, uncertainty, sincerity, or deception. Insight does not read thoughts or reveal hidden facts; its conclusions remain interpretations rather than proof.",
+  "skill:leadership":
+    "Leadership is the ability to direct, coordinate, and motivate other people toward a shared objective. It includes giving clear instructions, assigning responsibilities, maintaining discipline and morale, resolving uncertainty, and keeping a group acting together. Leadership may rest on formal authority, reputation, persuasion, example, or hierarchy and applies to military units, ships, expeditions, households, work crews, offices, and other organized groups. It does not replace the technical skills required for the work being led.",
+  "skill:administration":
+    "Administration is the organization and management of the routine affairs of an institution, office, government body, military organization, household, or other structured organization. It includes maintaining records and correspondence, following and applying procedures, coordinating people and resources, processing requests and decisions, and understanding how responsibilities and authority are distributed. Historically, administrative skills developed alongside formal bureaucracies, taxation, legal systems, military establishments, and large commercial or religious institutions. Administration concerns practical operation; specialist law, accounting, or institutional customs may require other Skills.",
+};
+
+const customsTypicalUses = [
+  "Know expected greetings, hospitality, status behaviour, exchange, and etiquette in a particular society.",
+  "Recognize behaviour likely to cause offence or signal disrespect.",
+  "Distinguish local custom from formal law.",
+] as const;
+
+function sentences(value: string): string[] {
+  return value.match(/[^.!?]+[.!?]/g)?.map((sentence) => sentence.trim()) ?? [value];
+}
+
+function candidate3TaskEnvelope(
+  record: PilotSkillContentCompetencyRecord | PilotSkillContentSpecializationRecord,
+  description: string,
+  shortDescription: string,
+): SkillTaskEnvelope {
+  const descriptionSentences = sentences(description);
+  const lastSentence = descriptionSentences.at(-1) ?? description;
+  const skilledPractice = descriptionSentences[1] ?? descriptionSentences[0] ?? description;
+
+  if (record.id === "skill:customs") {
+    return {
+      coreTasks: [customsTypicalUses[0]],
+      limits: [
+        "Customs describes social expectations, not substantive legal knowledge.",
+        "Customs specific to one society does not automatically apply to another.",
+      ],
+      methods: customsTypicalUses.slice(1),
+      useGuidance:
+        "Roll Customs when a character must recall or follow a society's expectations and a mistake could cause offence or misunderstanding.",
+    };
+  }
+
+  return {
+    coreTasks: [shortDescription],
+    limits: [lastSentence],
+    methods: [skilledPractice],
+    useGuidance: `Roll ${record.name} when the outcome is uncertain and this competence is the main factor in whether the attempted task succeeds.`,
+  };
+}
+
+export const pilotSkillContentReleaseCandidate3ReviewGaps = {
+  opposedChecks: [
+    "Review whether Insight and Deception should form an authoritative opposed check; Candidate 3 does not encode that pairing.",
+  ],
+  relationships: [
+    "Review Culture as a possible relationship hub for social, professional, and institutional Skills.",
+    "Decide which incoming Culture relationships, if any, are mechanically justified before assigning any edge or percentage.",
+  ],
+} as const;
 
 const authoredCompetencyDocumentationIds = Object.keys(authoredCompetencyDocumentation);
 for (const id of authoredCompetencyDocumentationIds) {
-  if (!Object.hasOwn(authoredTaskEnvelopeByCompetencyId, id)) {
-    throw new Error(`Missing task envelope entry for authored competency ${id}`);
+  if (!Object.hasOwn(candidate3ShortDescriptionByCompetencyId, id)) {
+    throw new Error(`Missing Candidate 3 short description for authored competency ${id}`);
+  }
+  if (
+    !Object.hasOwn(candidate3FullDescriptionBoundaryByCompetencyId, id) &&
+    !Object.hasOwn(candidate3FullDescriptionOverrideByCompetencyId, id)
+  ) {
+    throw new Error(`Missing Candidate 3 full-description boundary for authored competency ${id}`);
   }
 }
-for (const id of Object.keys(authoredTaskEnvelopeByCompetencyId)) {
+for (const id of Object.keys(candidate3ShortDescriptionByCompetencyId)) {
   if (!Object.hasOwn(authoredCompetencyDocumentation, id)) {
-    throw new Error(`Task envelope has no matching authored competency entry for ${id}`);
+    throw new Error(`Candidate 3 short description has no authored competency for ${id}`);
   }
 }
 
@@ -1357,15 +815,22 @@ function documentationForRecord(
   record: PilotSkillContentCompetencyRecord | PilotSkillContentSpecializationRecord,
 ) {
   const authored = authoredCompetencyDocumentation[record.id];
-  const normalizedDescription = normalizeWhitespace(authored?.description ?? record.description);
-  const normalizedShortDescription = normalizeWhitespace(
-    authored?.shortDescription ?? record.description,
+  const baseDescription = authored?.description ?? record.description;
+  const boundary = candidate3FullDescriptionBoundaryByCompetencyId[record.id];
+  const normalizedDescription = normalizeWhitespace(
+    candidate3FullDescriptionOverrideByCompetencyId[record.id] ??
+      (boundary ? `${baseDescription} ${boundary}` : baseDescription),
   );
-  const taskEnvelope =
-    authoredTaskEnvelopeByCompetencyId[record.id] ??
-    (() => {
-      throw new Error(`Missing explicit task envelope for ${record.id}`);
-    })();
+  const normalizedShortDescription = normalizeWhitespace(
+    candidate3ShortDescriptionByCompetencyId[record.id] ??
+      authored?.shortDescription ??
+      record.description,
+  );
+  const taskEnvelope = candidate3TaskEnvelope(
+    record,
+    normalizedDescription,
+    normalizedShortDescription,
+  );
 
   return {
     description: normalizedDescription,
@@ -1619,19 +1084,19 @@ const histories: readonly SkillContentLearningHistoryRecord[] =
     } satisfies SkillContentLearningHistoryRecord;
   });
 
-export const pilotSkillContentReleaseCandidate2Input = {
+export const pilotSkillContentReleaseCandidate3Input = {
   accessExceptions,
   compatibility: {
     characterMigrationReviewRequired: false,
     classification: "presentation-only",
     rationale:
-      "Candidate 2 rewrites reader-facing descriptions while preserving the accepted structured mechanics and task scopes.",
+      "Candidate 3 rewrites reader-facing descriptions and task guidance while preserving accepted mechanics, identities, mappings, and access semantics.",
   },
   competencies,
-  contentVersion: "pilot-skills-content/2.0.0-candidate.2",
+  contentVersion: "pilot-skills-content/2.0.0-candidate.3",
   domains,
   histories,
-  id: "content-release:pilot-skills:2-candidate-2",
+  id: "content-release:pilot-skills:2-candidate-3",
   profiles,
   provenance: [...proposalMetadataReference],
   relationships,
@@ -1639,7 +1104,7 @@ export const pilotSkillContentReleaseCandidate2Input = {
   schemaVersion: SKILL_CONTENT_RELEASE_SCHEMA_VERSION,
   scripts,
   status: "proposal",
-  title: "Reader-facing Pilot Skill v2 candidate 2",
+  title: "Player-facing Pilot Skill v2 candidate 3",
 } satisfies Omit<SkillContentRelease, "manifest">;
 
-export const pilotSkillContentReleaseProposalInput = pilotSkillContentReleaseCandidate2Input;
+export const pilotSkillContentReleaseProposalInput = pilotSkillContentReleaseCandidate3Input;
