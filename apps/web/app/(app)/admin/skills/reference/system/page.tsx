@@ -15,7 +15,7 @@ export default function SkillSystemReferencePage() {
       <section className={styles.page}>
         <AdminPageIntro
           eyebrow="Admin / Skills / Reference"
-          summary="The shared rules behind costs, prerequisites, relationships, Specializations, and access in the bounded Pilot Skill system."
+          summary="The shared rules behind costs, prerequisites, relationships, Specializations, and availability in the bounded Pilot Skill system."
           title="How the Skill System Works"
         />
         <SkillsWorkspaceTabs />
@@ -36,36 +36,38 @@ export default function SkillSystemReferencePage() {
               stack.
             </p>
           </AdminPanel>
-          <AdminPanel title="Relationships">
+          <AdminPanel title="How related Skills help">
             <p>
               A relationship transfers 25%, 50%, 75%, or 100% of the source's acquired base
               competence, rounded down. Only the strongest incoming result counts.
             </p>
             <p>
-              Relationships are directional, never inferred in reverse, and do not chain in Pilot
-              v1. Domains and categories are for finding Skills and imply no transfer.
+              A relationship works in its stated direction only and does not pass through a chain of
+              Skills. Domains and categories help readers find Skills; they do not make Skills help
+              one another.
             </p>
           </AdminPanel>
           <AdminPanel title="Specializations">
             <p>
               A Specialization has its own ranks and requires its named parent Skill threshold.
-              Meeting the prerequisite makes acquisition possible; it does not grant ownership.
+              Meeting the prerequisite makes the Specialization available to learn; it does not
+              provide a rank by itself.
             </p>
             <p>
-              The first rank adds a 2-point initiation cost. A Specialization transfers competence
-              only through an explicit relationship; a genuine zero-transfer declaration is valid.
+              The first rank adds a 2-point starting cost. A Specialization benefits from another
+              Skill only when its own reference lists that relationship.
             </p>
           </AdminPanel>
-          <AdminPanel title="Availability and access">
+          <AdminPanel title="Where Skills are available">
             <p>
-              A society profile resolves each Skill as available, restricted, or unavailable.
-              Specific overrides take priority over normal routes; missing or ambiguous authoring
-              resolves safely to restricted.
+              A society profile resolves each Skill as available, restricted, or unavailable. A
+              specific exception takes priority over the usual availability. If the answer is
+              unclear, treat the Skill as restricted until it is clarified.
             </p>
             <p>
               An accepted biography, contact, institution, teacher, text, tradition, or other
-              authored exception may open a route. Access and exceptions always grant zero ranks and
-              zero competence.
+              exception may make a Skill available to learn. It does not teach the Skill
+              automatically.
             </p>
           </AdminPanel>
           <AdminPanel title="Languages and writing">

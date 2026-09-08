@@ -50,6 +50,10 @@ export function SkillReferenceAuditContent() {
     );
   if (!snapshot) return <div className={styles.loading}>Loading reference audit…</div>;
 
+  const competencyNames = new Map(
+    snapshot.records.competencies.map((competency) => [competency.id, competency.name]),
+  );
+
   const historyColumns: AdminTableColumn<History>[] = [
     { header: "History", render: (row) => row.name },
     { header: "Context", render: (row) => row.context },
@@ -136,6 +140,104 @@ export function SkillReferenceAuditContent() {
               <div>
                 <strong>Provenance:</strong> {join(competency.provenance)}
               </div>
+              <div>
+                <strong>Kind / domain:</strong> {competency.kind} / {competency.domainId}
+              </div>
+              <div>
+                <strong>Weight:</strong> {competency.weight}; acquisition weight:{" "}
+                {competency.acquisitionWeight ?? "default"}
+              </div>
+              <div>
+                <strong>Prerequisites:</strong>{" "}
+                {join(
+                  competency.prerequisites.map(
+                    (entry) =>
+                      `${entry.competencyId} ${entry.threshold}+${entry.justification ? ` (${entry.justification})` : ""}`,
+                  ),
+                )}
+              </div>
+              <div>
+                <strong>Use guidance:</strong> {competency.taskEnvelope.useGuidance}
+              </div>
+              <div>
+                <strong>Typical uses:</strong> {join(competency.taskEnvelope.coreTasks)}
+              </div>
+              <div>
+                <strong>Methods / failure modes:</strong> {join(competency.taskEnvelope.methods)}
+              </div>
+              <div>
+                <strong>Boundaries:</strong> {join(competency.taskEnvelope.limits)}
+              </div>
+              <div>
+                <strong>Transfer declaration:</strong>{" "}
+                {competency.transfer?.kind === "zero-transfer"
+                  ? `${competency.transfer.kind} — ${competency.transfer.rationale}`
+                  : competency.transfer?.kind === "explicit-relationships"
+                    ? `${competency.transfer.kind} — ${join(competency.transfer.relationshipIds)}`
+                    : "None"}
+              </div>
+              <div>
+                <strong>Written-language binding:</strong>{" "}
+                {competency.writtenLanguageBinding
+                  ? `${competency.writtenLanguageBinding.spokenLanguageId} / ${competency.writtenLanguageBinding.scriptId}`
+                  : "None"}
+              </div>
+            </details>
+          ))}
+        </div>
+      </AdminPanel>
+      <AdminPanel
+        title="Relationship register"
+        subtitle="Directional, Skill-specific transfer authoring for audit and comparison."
+      >
+        {snapshot.records.relationships.length === 0 ? (
+          <p>None.</p>
+        ) : (
+          <ul className={styles.relationshipList}>
+            {snapshot.records.relationships.map((relationship) => (
+              <li key={relationship.id}>
+                <strong>{relationship.id}:</strong>{" "}
+                {competencyNames.get(relationship.sourceCompetencyId) ??
+                  relationship.sourceCompetencyId}{" "}
+                →{" "}
+                {competencyNames.get(relationship.targetCompetencyId) ??
+                  relationship.targetCompetencyId}{" "}
+                ({relationship.strength}%). {relationship.rationale}
+              </li>
+            ))}
+          </ul>
+        )}
+      </AdminPanel>
+      <AdminPanel
+        title="Availability authoring"
+        subtitle="Profile codes, routes, overrides, and attributions retained for technical audit."
+      >
+        <div className={styles.auditCards}>
+          {snapshot.records.profiles.map((profile) => (
+            <details key={profile.id}>
+              <summary>{profile.name}</summary>
+              <div>
+                <strong>ID / bands:</strong> {profile.id} / {profile.developmentStage} /{" "}
+                {profile.accessBand}
+              </div>
+              <div>
+                <strong>Normal routes:</strong>{" "}
+                {join(
+                  profile.normalRoutes.map(
+                    (route) =>
+                      `${route.id} (${route.accessBand}): ${route.description} [${join(route.competencyIds)}]`,
+                  ),
+                )}
+              </div>
+              <div>
+                <strong>Overrides:</strong>{" "}
+                {join(
+                  profile.overrides.map(
+                    (override) =>
+                      `${override.attributionId}: ${override.availability} — ${override.explanation} [${join(override.competencyIds)}]`,
+                  ),
+                )}
+              </div>
             </details>
           ))}
         </div>
@@ -164,7 +266,7 @@ export function SkillReferenceAuditContent() {
         <AdminPanel title="Domains">
           <ul>
             {snapshot.records.domains.map((domain) => (
-              <li key={domain.id}>
+              <li className={styles.auditAnchor} id={`domain-${domain.id}`} key={domain.id}>
                 <strong>{domain.name}:</strong> {domain.description}
               </li>
             ))}
