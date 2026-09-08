@@ -1,45 +1,36 @@
 "use client";
 
-import { type ChangeEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { loadAdminSkillReferenceFromServer } from "@/lib/api/adminContentClient";
 import type { AdminSkillReferenceResponse, AdminSkillReferenceSnapshot } from "@glantri/shared";
 import {
-  AdminDataTable,
-  AdminMetric,
   AdminPageIntro,
   AdminPanel,
   AdminReadOnlyNotice,
   AdminSelect,
   AdminStatusBadge,
-  type AdminTableColumn,
 } from "../../admin-ui";
 import SkillsWorkspaceTabs from "../SkillsWorkspaceTabs";
+import styles from "./skillReference.module.css";
 
 type SnapshotMode = "candidate" | "canonical";
-type CompetencyRow = AdminSkillReferenceSnapshot["records"]["competencies"][number];
-type RelationshipRow = AdminSkillReferenceSnapshot["records"]["relationships"][number];
-type DomainRow = AdminSkillReferenceSnapshot["records"]["domains"][number];
-type ScriptRow = AdminSkillReferenceSnapshot["records"]["scripts"][number];
-type ProfileRow = AdminSkillReferenceSnapshot["records"]["profiles"][number];
-type HistoryRow = AdminSkillReferenceSnapshot["records"]["histories"][number];
-type AccessExceptionRow = AdminSkillReferenceSnapshot["records"]["accessExceptions"][number];
+type Competency = AdminSkillReferenceSnapshot["records"]["competencies"][number];
+type Profile = AdminSkillReferenceSnapshot["records"]["profiles"][number];
+type AccessException = AdminSkillReferenceSnapshot["records"]["accessExceptions"][number];
 type Availability = "available" | "restricted" | "unavailable";
 
 interface AccessResolution {
   attribution?: string;
   availability: Availability;
-  exceptionCount: number;
   explanation: string;
   resolvedBy: "competency override" | "normal route" | "safe restricted fallback";
 }
 
-function sortById<T extends { id: string }>(values: readonly T[]): T[] {
-  return [...values].sort((left, right) => left.id.localeCompare(right.id));
-}
-
-function joinValues(values: readonly string[]): string {
-  return values.length === 0 ? "—" : values.join(", ");
+function sortByName<T extends { id: string; name: string }>(values: readonly T[]): T[] {
+  return [...values].sort(
+    (left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
+  );
 }
 
 function toLabel(id: string): string {
@@ -58,36 +49,7 @@ function competencyIdFromHash(): string | undefined {
   return decodeURIComponent(window.location.hash.slice("#competency-".length));
 }
 
-function formatPrerequisites(row: CompetencyRow, names: ReadonlyMap<string, string>): string {
-  if (row.prerequisites.length === 0) {
-    return "No prerequisites";
-  }
-
-  return row.prerequisites
-    .map((requirement) => {
-      const label = names.get(requirement.competencyId) ?? requirement.competencyId;
-      const justification = requirement.justification ? ` — ${requirement.justification}` : "";
-      return `${label} ${requirement.threshold}+${justification}`;
-    })
-    .join("; ");
-}
-
-function exceptionsForCompetency(
-  exceptions: readonly AccessExceptionRow[],
-  profileId: string,
-  competencyId: string,
-): AccessExceptionRow[] {
-  return exceptions.filter(
-    (entry) => entry.profileId === profileId && entry.competencyIds.includes(competencyId),
-  );
-}
-
-function resolveProfileAccess(
-  profile: ProfileRow,
-  competency: CompetencyRow,
-  exceptions: readonly AccessExceptionRow[],
-): AccessResolution {
-  const applicableExceptions = exceptionsForCompetency(exceptions, profile.id, competency.id);
+function resolveProfileAccess(profile: Profile, competency: Competency): AccessResolution {
   const override = profile.overrides
     .filter((entry) => entry.competencyIds.includes(competency.id))
     .sort((left, right) => left.attributionId.localeCompare(right.attributionId))[0];
@@ -96,7 +58,6 @@ function resolveProfileAccess(
     return {
       attribution: override.attributionId,
       availability: override.availability as Availability,
-      exceptionCount: applicableExceptions.length,
       explanation: override.explanation,
       resolvedBy: "competency override",
     };
@@ -110,7 +71,6 @@ function resolveProfileAccess(
     return {
       attribution: route.id,
       availability: "available",
-      exceptionCount: applicableExceptions.length,
       explanation: route.description,
       resolvedBy: "normal route",
     };
@@ -118,33 +78,29 @@ function resolveProfileAccess(
 
   return {
     availability: "restricted",
-    exceptionCount: applicableExceptions.length,
     explanation: "No authored route or override applies, so access resolves restricted.",
     resolvedBy: "safe restricted fallback",
   };
 }
 
-function relationshipSentence(
-  relationship: RelationshipRow,
-  direction: "incoming" | "outgoing",
-  names: ReadonlyMap<string, string>,
-): string {
-  if (direction === "incoming") {
-    return `Receives ${relationship.strength}% from ${names.get(relationship.sourceCompetencyId) ?? relationship.sourceCompetencyId}`;
+function costSummary(competency: Competency): string {
+  const weight = competency.acquisitionWeight ?? competency.weight;
+
+  if (competency.kind === "specialization") {
+    return `First rank costs ${2 + weight} points (2 initiation + ${weight} for the rank); later ranks cost ${weight} ${weight === 1 ? "point" : "points"} each.`;
   }
 
-  return `Contributes ${relationship.strength}% to ${names.get(relationship.targetCompetencyId) ?? relationship.targetCompetencyId}`;
+  return `${competency.weight} ${competency.weight === 1 ? "point" : "points"} per directly acquired rank.`;
 }
 
-function hasSearchMatch(row: CompetencyRow, query: string): boolean {
+function matchesSearch(competency: Competency, query: string, domainName: string): boolean {
   return [
-    row.id,
-    row.name,
-    row.shortLabel,
-    row.shortDescription,
-    row.description,
-    row.domainId,
-    row.kind,
+    competency.name,
+    competency.shortLabel,
+    competency.shortDescription,
+    competency.description,
+    toLabel(competency.kind),
+    domainName,
   ]
     .join(" ")
     .toLowerCase()
@@ -155,21 +111,14 @@ export function SkillReferenceContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>();
   const [mode, setMode] = useState<SnapshotMode>("candidate");
-  const [snapshot, setSnapshot] = useState<AdminSkillReferenceResponse>();
+  const [response, setResponse] = useState<AdminSkillReferenceResponse>();
   const [selectedCompetencyId, setSelectedCompetencyId] = useState<string | undefined>(
     competencyIdFromHash,
   );
   const [searchText, setSearchText] = useState("");
-  const [selectedKind, setSelectedKind] = useState<"all" | CompetencyRow["kind"]>("all");
-  const [selectedDomain, setSelectedDomain] = useState("all");
-  const [selectedWeight, setSelectedWeight] = useState("all");
-  const [selectedPrerequisite, setSelectedPrerequisite] = useState("all");
-  const [selectedRelationship, setSelectedRelationship] = useState("all");
-  const [selectedAccessException, setSelectedAccessException] = useState("all");
-  const [selectedAvailability, setSelectedAvailability] = useState("all");
-  const [selectedStatus, setSelectedStatus] = useState("all");
-  const [zeroTransferOnly, setZeroTransferOnly] = useState(false);
-  const [selectedProfileId, setSelectedProfileId] = useState("all");
+  const [selectedKind, setSelectedKind] = useState<"all" | Competency["kind"]>("all");
+  const [selectedDomainId, setSelectedDomainId] = useState("all");
+  const [selectedProfileId, setSelectedProfileId] = useState("none");
   const detailHeadingRef = useRef<HTMLHeadingElement>(null);
   const focusDetailAfterSelection = useRef(false);
 
@@ -177,10 +126,11 @@ export function SkillReferenceContent() {
     async function load() {
       try {
         const loaded = await loadAdminSkillReferenceFromServer();
-        setSnapshot(loaded);
+        setResponse(loaded);
         setMode(loaded.candidate ? "candidate" : "canonical");
         setLoadError(undefined);
       } catch (error) {
+        setResponse(undefined);
         setLoadError(error instanceof Error ? error.message : "Unable to load Skill Reference.");
       } finally {
         setIsLoading(false);
@@ -196,93 +146,43 @@ export function SkillReferenceContent() {
     return () => window.removeEventListener("hashchange", restoreDirectLink);
   }, []);
 
-  const activeSnapshot = snapshot?.[mode] ?? null;
+  const snapshot = response?.[mode] ?? null;
   const competencies = useMemo(
-    () => sortById(activeSnapshot?.records.competencies ?? []),
-    [activeSnapshot?.records.competencies],
+    () => sortByName(snapshot?.records.competencies ?? []),
+    [snapshot?.records.competencies],
   );
   const domains = useMemo(
-    () => sortById(activeSnapshot?.records.domains ?? []),
-    [activeSnapshot?.records.domains],
-  );
-  const scripts = useMemo(
-    () => sortById(activeSnapshot?.records.scripts ?? []),
-    [activeSnapshot?.records.scripts],
+    () => sortByName(snapshot?.records.domains ?? []),
+    [snapshot?.records.domains],
   );
   const profiles = useMemo(
-    () => sortById(activeSnapshot?.records.profiles ?? []),
-    [activeSnapshot?.records.profiles],
-  );
-  const histories = useMemo(
-    () => sortById(activeSnapshot?.records.histories ?? []),
-    [activeSnapshot?.records.histories],
-  );
-  const accessExceptions = useMemo(
-    () => sortById(activeSnapshot?.records.accessExceptions ?? []),
-    [activeSnapshot?.records.accessExceptions],
-  );
-  const relationships = useMemo(
-    () => sortById(activeSnapshot?.records.relationships ?? []),
-    [activeSnapshot?.records.relationships],
+    () => sortByName(snapshot?.records.profiles ?? []),
+    [snapshot?.records.profiles],
   );
   const names = useMemo(
     () => new Map(competencies.map((competency) => [competency.id, competency.name])),
     [competencies],
   );
+  const domainById = useMemo(
+    () => new Map(domains.map((domain) => [domain.id, domain])),
+    [domains],
+  );
   const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId);
-
   const filteredCompetencies = useMemo(() => {
     const query = searchText.trim().toLowerCase();
 
-    return competencies.filter((competency) => {
-      const incoming = relationships.some(
-        (relationship) => relationship.targetCompetencyId === competency.id,
-      );
-      const outgoing = relationships.some(
-        (relationship) => relationship.sourceCompetencyId === competency.id,
-      );
-      const hasException = accessExceptions.some((entry) =>
-        entry.competencyIds.includes(competency.id),
-      );
-      const access = selectedProfile
-        ? resolveProfileAccess(selectedProfile, competency, accessExceptions)
-        : undefined;
-
-      return (
-        (query === "" || hasSearchMatch(competency, query)) &&
+    return competencies.filter(
+      (competency) =>
+        (query === "" ||
+          matchesSearch(
+            competency,
+            query,
+            domainById.get(competency.domainId)?.name ?? toLabel(competency.domainId),
+          )) &&
         (selectedKind === "all" || competency.kind === selectedKind) &&
-        (selectedDomain === "all" || competency.domainId === selectedDomain) &&
-        (selectedWeight === "all" || competency.weight === Number(selectedWeight)) &&
-        (selectedPrerequisite === "all" ||
-          (selectedPrerequisite === "has") === competency.prerequisites.length > 0) &&
-        (selectedRelationship === "all" ||
-          (selectedRelationship === "incoming" && incoming) ||
-          (selectedRelationship === "outgoing" && outgoing) ||
-          (selectedRelationship === "any" && (incoming || outgoing)) ||
-          (selectedRelationship === "none" && !incoming && !outgoing)) &&
-        (selectedAccessException === "all" ||
-          (selectedAccessException === "has") === hasException) &&
-        (selectedAvailability === "all" || access?.availability === selectedAvailability) &&
-        (selectedStatus === "all" || competency.status === selectedStatus) &&
-        (!zeroTransferOnly || competency.transfer?.kind === "zero-transfer")
-      );
-    });
-  }, [
-    accessExceptions,
-    competencies,
-    relationships,
-    searchText,
-    selectedAccessException,
-    selectedAvailability,
-    selectedDomain,
-    selectedKind,
-    selectedPrerequisite,
-    selectedProfile,
-    selectedRelationship,
-    selectedStatus,
-    selectedWeight,
-    zeroTransferOnly,
-  ]);
+        (selectedDomainId === "all" || competency.domainId === selectedDomainId),
+    );
+  }, [competencies, domainById, searchText, selectedDomainId, selectedKind]);
 
   useEffect(() => {
     if (
@@ -300,154 +200,111 @@ export function SkillReferenceContent() {
     }
   }, [selectedCompetencyId]);
 
-  useEffect(() => {
-    if (!selectedProfile && selectedAvailability !== "all") {
-      setSelectedAvailability("all");
-    }
-  }, [selectedAvailability, selectedProfile]);
-
-  const selectedCompetency = filteredCompetencies.find(
-    (competency) => competency.id === selectedCompetencyId,
-  );
-  const incomingRelationships = selectedCompetency
-    ? relationships.filter(
-        (relationship) => relationship.targetCompetencyId === selectedCompetency.id,
-      )
-    : [];
-  const outgoingRelationships = selectedCompetency
-    ? relationships.filter(
-        (relationship) => relationship.sourceCompetencyId === selectedCompetency.id,
-      )
-    : [];
-  const relatedHistories = selectedCompetency
-    ? histories.filter(
-        (history) =>
-          history.fixedCompetencyIds.includes(selectedCompetency.id) ||
-          history.selectionSlots.some((slot) =>
-            slot.candidateCompetencyIds.includes(selectedCompetency.id),
-          ),
-      )
-    : [];
-  const applicableExceptions =
-    selectedCompetency && selectedProfile
-      ? exceptionsForCompetency(accessExceptions, selectedProfile.id, selectedCompetency.id)
-      : [];
-  const accessResolution =
-    selectedCompetency && selectedProfile
-      ? resolveProfileAccess(selectedProfile, selectedCompetency, accessExceptions)
-      : undefined;
-
   function selectCompetency(id: string, focusDetail = false) {
+    if (!filteredCompetencies.some((competency) => competency.id === id)) {
+      setSearchText("");
+      setSelectedKind("all");
+      setSelectedDomainId("all");
+    }
     focusDetailAfterSelection.current = focusDetail;
     setSelectedCompetencyId(id);
-    window.history.replaceState(null, "", `#competency-${id}`);
+    window.history.replaceState(null, "", `#competency-${encodeURIComponent(id)}`);
   }
 
-  function handleRowKeyDown(row: CompetencyRow, event: KeyboardEvent<HTMLTableRowElement>) {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      selectCompetency(row.id, true);
-    }
-  }
+  if (isLoading) return <div className={styles.loading}>Loading Admin Skill Reference…</div>;
 
-  if (isLoading) {
-    return <div style={{ color: "#3f3422" }}>Loading Admin Skill Reference…</div>;
-  }
-
-  if (!snapshot || !activeSnapshot) {
+  if (!response || !snapshot) {
     return (
-      <AdminPanel title="Skill Reference" subtitle="Unable to render the read-only release.">
+      <AdminPanel title="Skill Reference" subtitle="Unable to render the read-only reference.">
         <AdminReadOnlyNotice message={loadError ?? "Reference data is currently unavailable."} />
       </AdminPanel>
     );
   }
 
-  const competencyColumns: AdminTableColumn<CompetencyRow>[] = [
-    {
-      header: "Name",
-      render: (row) => (
-        <a
-          href={`#competency-${row.id}`}
-          onClick={() => selectCompetency(row.id)}
-          style={{ color: "#3d5b8f", fontWeight: 700 }}
-        >
-          {row.name}
-        </a>
-      ),
-    },
-    { header: "Kind", render: (row) => toLabel(row.kind) },
-    { header: "Domain", render: (row) => toLabel(row.domainId) },
-    { header: "Weight", render: (row) => String(row.weight) },
-    { header: "Prerequisites", render: (row) => formatPrerequisites(row, names) },
-    {
-      header: "Status",
-      render: (row) => <AdminStatusBadge>{row.status}</AdminStatusBadge>,
-    },
-    { header: "Summary", render: (row) => row.shortDescription },
-  ];
-  const relationshipColumns: AdminTableColumn<RelationshipRow>[] = [
-    {
-      header: "Relationship",
-      render: (row) =>
-        row.targetCompetencyId === selectedCompetency?.id
-          ? relationshipSentence(row, "incoming", names)
-          : relationshipSentence(row, "outgoing", names),
-    },
-    { header: "Rationale", render: (row) => row.rationale },
-  ];
-  const historyColumns: AdminTableColumn<HistoryRow>[] = [
-    { header: "History", render: (row) => row.name },
-    { header: "Context", render: (row) => row.context },
-    {
-      header: "Membership",
-      render: (row) =>
-        joinValues([
-          ...row.fixedCompetencyIds.map((id) => names.get(id) ?? id),
-          ...row.selectionSlots.flatMap((slot) =>
-            slot.candidateCompetencyIds.map(
-              (id) => `${names.get(id) ?? id} (${slot.label}, choose ${slot.chooseCount})`,
-            ),
-          ),
-        ]),
-    },
-  ];
-  const exceptionColumns: AdminTableColumn<AccessExceptionRow>[] = [
-    { header: "Exception", render: (row) => toLabel(row.id) },
-    { header: "Basis", render: (row) => toLabel(row.basis) },
-    { header: "Explanation", render: (row) => row.explanation },
-    { header: "Competence granted", render: (row) => String(row.grantsCompetence) },
-  ];
-  const domainColumns: AdminTableColumn<DomainRow>[] = [
-    { header: "Domain", render: (row) => row.name },
-    { header: "Description", render: (row) => row.description },
-  ];
-  const scriptColumns: AdminTableColumn<ScriptRow>[] = [
-    { header: "Script", render: (row) => row.name },
-    { header: "Families", render: (row) => joinValues(row.familyIds.map(toLabel)) },
-    { header: "Description", render: (row) => row.description },
-  ];
+  const selectedCompetency = filteredCompetencies.find(
+    (competency) => competency.id === selectedCompetencyId,
+  );
+  const selectedDomain = selectedCompetency
+    ? domainById.get(selectedCompetency.domainId)
+    : undefined;
+  const incomingRelationships = selectedCompetency
+    ? snapshot.records.relationships.filter(
+        (relationship) => relationship.targetCompetencyId === selectedCompetency.id,
+      )
+    : [];
+  const outgoingRelationships = selectedCompetency
+    ? snapshot.records.relationships.filter(
+        (relationship) => relationship.sourceCompetencyId === selectedCompetency.id,
+      )
+    : [];
+  const specializations = selectedCompetency
+    ? competencies.filter((competency) => competency.parentCompetencyId === selectedCompetency.id)
+    : [];
+  const accessResolution =
+    selectedCompetency && selectedProfile
+      ? resolveProfileAccess(selectedProfile, selectedCompetency)
+      : undefined;
+  const applicableExceptions =
+    selectedCompetency && selectedProfile
+      ? snapshot.records.accessExceptions.filter(
+          (entry) =>
+            entry.profileId === selectedProfile.id &&
+            entry.competencyIds.includes(selectedCompetency.id),
+        )
+      : [];
 
   return (
-    <section style={{ display: "grid", gap: "1.25rem", maxWidth: "100%", minWidth: 0 }}>
+    <section className={styles.page}>
       <AdminPageIntro
-        eyebrow="Admin / Skills"
-        summary="Review the integrated Pilot proposal, its authored scope, mechanics, relationships, access, histories, bindings, and provenance. This proposal is not a canonical release."
-        title="Admin Skill Reference"
+        eyebrow="Admin / Skills / Reference"
+        summary="Read the bounded Pilot Skill candidate in game terms. Nothing on this page publishes the proposal or makes it canonical."
+        title="Skill Reference"
       />
       <SkillsWorkspaceTabs />
-      <AdminReadOnlyNotice message="Read-only review surface. Publishing and editing are not available here." />
-
-      <div
-        style={{
-          display: "grid",
-          gap: "0.75rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 10rem), 1fr))",
-          minWidth: 0,
-        }}
+      <div className={styles.candidateBanner}>
+        <div>
+          <strong>Candidate for review</strong>
+          <p>
+            This proposal awaits Product Owner calibration in #26. It is read-only and is not the
+            live Skill catalogue.
+          </p>
+        </div>
+        <AdminStatusBadge tone="warning">proposal</AdminStatusBadge>
+      </div>
+      <nav aria-label="Skill Reference guides" className={styles.guideLinks}>
+        <a href="/admin/skills/reference/system">How the Skill system works</a>
+        <a href="/admin/skills/reference/audit">Technical and audit details</a>
+        <a href="/admin/skills/matrix">Open Matrix Audit</a>
+      </nav>
+      <AdminPanel
+        title="Find a Skill"
+        subtitle="Search by name or purpose, then narrow the bounded candidate by type or domain."
       >
-        <AdminMetric
-          label="Release view"
-          value={
+        <div className={styles.filters}>
+          <label>
+            <span>Search</span>
+            <input
+              aria-label="Search Skills"
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Name, purpose, or domain"
+              value={searchText}
+            />
+          </label>
+          <Filter
+            label="Type"
+            onChange={setSelectedKind}
+            options={["all", "skill", "spoken-language", "written-tradition", "specialization"]}
+            value={selectedKind}
+          />
+          <Filter
+            label="Domain"
+            labels={new Map(domains.map((domain) => [domain.id, domain.name]))}
+            onChange={setSelectedDomainId}
+            options={["all", ...domains.map((domain) => domain.id)]}
+            value={selectedDomainId}
+          />
+          <label>
+            <span>Release view</span>
             <AdminSelect
               aria-label="Release view"
               onChange={(event: ChangeEvent<HTMLSelectElement>) =>
@@ -455,372 +312,225 @@ export function SkillReferenceContent() {
               }
               value={mode}
             >
-              <option disabled={!snapshot.candidate} value="candidate">
+              <option disabled={!response.candidate} value="candidate">
                 Candidate / proposal
               </option>
-              <option disabled={!snapshot.canonical} value="canonical">
+              <option disabled={!response.canonical} value="canonical">
                 Canonical
               </option>
             </AdminSelect>
-          }
-        />
-        <AdminMetric
-          label="Current status"
-          value={<AdminStatusBadge tone="warning">{activeSnapshot.status}</AdminStatusBadge>}
-          hint="Proposal content awaits #26 Product Owner calibration."
-        />
-        <AdminMetric
-          label="Canonical release"
-          value={snapshot.canonical ? snapshot.canonical.contentVersion : "Absent"}
-          hint={
-            snapshot.canonical
-              ? "An actual canonical v2 release is available."
-              : "No canonical v2 release exists; #26 is the sole release gate."
-          }
-        />
-        <AdminMetric
-          label="Records"
-          value={String(activeSnapshot.records.competencies.length)}
-          hint="Competencies and Specializations in this bounded Pilot proposal."
-        />
-      </div>
-
-      <AdminPanel
-        title="Release identity and provenance"
-        subtitle="The package digest covers the whole proposal; the semantic digest covers structured interpretation facts."
-      >
-        <div style={{ display: "grid", gap: "0.45rem", lineHeight: 1.5, minWidth: 0 }}>
-          <div>
-            <strong>Title:</strong> {activeSnapshot.title}
-          </div>
-          <div>
-            <strong>Content version:</strong> {activeSnapshot.contentVersion}
-          </div>
-          <div>
-            <strong>Release ID:</strong> {activeSnapshot.id}
-          </div>
-          <div>
-            <strong>Schema:</strong> {activeSnapshot.schemaVersion}
-          </div>
-          <div>
-            <strong>Rules version:</strong> {activeSnapshot.rulesVersion}
-          </div>
-          <div>
-            <strong>Package digest:</strong> {activeSnapshot.manifest.packageDigest}
-          </div>
-          <div>
-            <strong>Semantic digest:</strong> {activeSnapshot.manifest.semanticDigest}
-          </div>
-          <div>
-            <strong>Compatibility:</strong> {activeSnapshot.compatibility.classification} —{" "}
-            {activeSnapshot.compatibility.rationale}
-          </div>
-          <div>
-            <strong>Provenance:</strong> {joinValues(activeSnapshot.provenance)}
-          </div>
-          <div>
-            <strong>System rules:</strong> <a href="/admin/rules-docs">Open Rules Docs</a>
-          </div>
-        </div>
-      </AdminPanel>
-
-      <AdminPanel
-        title="Search and filter"
-        subtitle="Availability has meaning only after selecting a profile."
-      >
-        <div
-          style={{
-            display: "grid",
-            gap: "0.65rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 10rem), 1fr))",
-            minWidth: 0,
-          }}
-        >
-          <label style={{ display: "grid", gap: "0.25rem", minWidth: 0 }}>
-            <span>Search</span>
-            <input
-              aria-label="Search competencies"
-              onChange={(event) => setSearchText(event.target.value)}
-              style={{ boxSizing: "border-box", minWidth: 0, padding: "0.65rem", width: "100%" }}
-              value={searchText}
-            />
-          </label>
-          <Filter
-            label="Kind"
-            onChange={setSelectedKind}
-            options={["all", "skill", "spoken-language", "written-tradition", "specialization"]}
-            value={selectedKind}
-          />
-          <Filter
-            label="Domain"
-            onChange={setSelectedDomain}
-            options={["all", ...domains.map((domain) => domain.id)]}
-            value={selectedDomain}
-          />
-          <Filter
-            label="Weight"
-            onChange={setSelectedWeight}
-            options={["all", "1", "2", "3"]}
-            value={selectedWeight}
-          />
-          <Filter
-            label="Prerequisites"
-            onChange={setSelectedPrerequisite}
-            options={["all", "has", "none"]}
-            value={selectedPrerequisite}
-          />
-          <Filter
-            label="Relationships"
-            onChange={setSelectedRelationship}
-            options={["all", "incoming", "outgoing", "any", "none"]}
-            value={selectedRelationship}
-          />
-          <Filter
-            label="Access exceptions"
-            onChange={setSelectedAccessException}
-            options={["all", "has", "none"]}
-            value={selectedAccessException}
-          />
-          <Filter
-            label="Status"
-            onChange={setSelectedStatus}
-            options={["all", "proposal", "canonical"]}
-            value={selectedStatus}
-          />
-          <Filter
-            label="Profile"
-            labels={new Map(profiles.map((profile) => [profile.id, profile.name]))}
-            onChange={setSelectedProfileId}
-            options={["all", ...profiles.map((profile) => profile.id)]}
-            value={selectedProfileId}
-          />
-          <Filter
-            disabled={!selectedProfile}
-            label="Availability"
-            onChange={setSelectedAvailability}
-            options={["all", "available", "restricted", "unavailable"]}
-            value={selectedAvailability}
-          />
-          <label style={{ alignItems: "center", display: "flex", gap: "0.45rem", minWidth: 0 }}>
-            <input
-              checked={zeroTransferOnly}
-              onChange={(event) => setZeroTransferOnly(event.target.checked)}
-              type="checkbox"
-            />
-            <span>Zero-transfer only</span>
           </label>
         </div>
       </AdminPanel>
-
-      <AdminPanel
-        title="Competencies"
-        subtitle="The Legacy Catalogue remains a separate compatibility surface under its explicit label."
-      >
-        <AdminDataTable
-          columns={competencyColumns}
-          emptyState="No competencies match the current search and filters. Clear or change a filter to continue."
-          onRowKeyDown={handleRowKeyDown}
-          onSelect={selectCompetency}
-          rows={filteredCompetencies}
-          selectedId={selectedCompetency?.id}
-        />
-      </AdminPanel>
-
-      {selectedCompetency ? (
-        <div id={`competency-${selectedCompetency.id}`} style={{ minWidth: 0 }}>
-          <AdminPanel subtitle={selectedCompetency.id} title="Competency detail">
-            <h2 ref={detailHeadingRef} style={{ marginTop: 0 }} tabIndex={-1}>
-              {selectedCompetency.name}
-            </h2>
-            <div style={{ display: "grid", gap: "0.75rem", lineHeight: 1.5, minWidth: 0 }}>
-              <div>
-                <strong>Short label:</strong> {selectedCompetency.shortLabel}
-              </div>
-              <div>
-                <strong>Kind / domain / weight:</strong> {toLabel(selectedCompetency.kind)} ·{" "}
-                {toLabel(selectedCompetency.domainId)} · {selectedCompetency.weight}
-              </div>
-              <div>
-                <strong>Status:</strong> {selectedCompetency.status};{" "}
-                <strong>record version:</strong> {selectedCompetency.recordVersion}
-              </div>
-              <div>
-                <strong>Concise description:</strong> {selectedCompetency.shortDescription}
-              </div>
-              <div>
-                <strong>Full description:</strong> {selectedCompetency.description}
-              </div>
-              <div>
-                <strong>Prerequisites:</strong> {formatPrerequisites(selectedCompetency, names)}
-              </div>
-              <EnvelopeList label="Core tasks" values={selectedCompetency.taskEnvelope.coreTasks} />
-              <EnvelopeList label="Methods" values={selectedCompetency.taskEnvelope.methods} />
-              <EnvelopeList label="Limits" values={selectedCompetency.taskEnvelope.limits} />
-              <div>
-                <strong>Use guidance:</strong> {selectedCompetency.taskEnvelope.useGuidance}
-              </div>
-              {selectedCompetency.parentCompetencyId ? (
-                <div>
-                  <strong>Specialization parent:</strong>{" "}
-                  {names.get(selectedCompetency.parentCompetencyId) ??
-                    selectedCompetency.parentCompetencyId}
-                </div>
-              ) : null}
-              <div>
-                <strong>Transfer:</strong>{" "}
-                {selectedCompetency.transfer?.kind === "zero-transfer"
-                  ? `Explicit zero transfer — ${selectedCompetency.transfer.rationale}`
-                  : selectedCompetency.transfer?.kind === "explicit-relationships"
-                    ? `Only the authored relationships ${selectedCompetency.transfer.relationshipIds.join(", ")}`
-                    : "No separate Specialization transfer declaration applies."}
-              </div>
-              <div>
-                <strong>Language and script binding:</strong>{" "}
-                {selectedCompetency.writtenLanguageBinding
-                  ? `${names.get(selectedCompetency.writtenLanguageBinding.spokenLanguageId) ?? toLabel(selectedCompetency.writtenLanguageBinding.spokenLanguageId)} in ${toLabel(selectedCompetency.writtenLanguageBinding.scriptId)}`
-                  : "Not applicable."}
-              </div>
-              <div>
-                <strong>Record provenance:</strong> {joinValues(selectedCompetency.provenance)}
-              </div>
-            </div>
-          </AdminPanel>
-        </div>
-      ) : null}
-
-      <div
-        style={{
-          display: "grid",
-          gap: "1rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 20rem), 1fr))",
-          minWidth: 0,
-        }}
-      >
+      <div className={styles.referenceLayout}>
         <AdminPanel
-          title="Directional relationships"
-          subtitle="Only authored source-to-target edges are shown; reverse edges are never inferred."
+          title={`Skills (${filteredCompetencies.length})`}
+          subtitle="Each entry leads directly to its reader-focused reference."
         >
-          <h3>Incoming</h3>
-          <AdminDataTable
-            columns={relationshipColumns}
-            emptyState="No incoming relationship."
-            rows={incomingRelationships}
-          />
-          <h3>Outgoing</h3>
-          <AdminDataTable
-            columns={relationshipColumns}
-            emptyState="No outgoing relationship."
-            rows={outgoingRelationships}
-          />
-        </AdminPanel>
-        <AdminPanel
-          title="Resolved profile access"
-          subtitle="Access opens an acquisition route and always grants zero competence."
-        >
-          {selectedProfile && selectedCompetency && accessResolution ? (
-            <div style={{ display: "grid", gap: "0.7rem" }}>
-              <div>
-                <strong>Profile:</strong> {selectedProfile.name} ({selectedProfile.developmentStage}{" "}
-                / {selectedProfile.accessBand})
-              </div>
-              <div>
-                <strong>Availability:</strong>{" "}
-                <AdminStatusBadge
-                  tone={
-                    accessResolution.availability === "available"
-                      ? "success"
-                      : accessResolution.availability === "unavailable"
-                        ? "danger"
-                        : "warning"
-                  }
-                >
-                  {accessResolution.availability}
-                </AdminStatusBadge>
-              </div>
-              <div>
-                <strong>Resolved by:</strong> {accessResolution.resolvedBy}
-                {accessResolution.attribution ? ` — ${toLabel(accessResolution.attribution)}` : ""}
-              </div>
-              <div>
-                <strong>Explanation:</strong> {accessResolution.explanation}
-              </div>
-              <div>
-                <strong>Applicable exceptions:</strong> {accessResolution.exceptionCount}.
-                Exceptions are possible authored routes; this reference does not assume one has been
-                accepted.
-              </div>
-              <AdminDataTable
-                columns={exceptionColumns}
-                emptyState="No access exception applies to this competency and profile."
-                rows={applicableExceptions}
-              />
-            </div>
+          {filteredCompetencies.length === 0 ? (
+            <p>No Skills match the current search and filters. Clear or change a filter.</p>
           ) : (
-            <AdminReadOnlyNotice message="Select a profile to resolve this competency's availability and explanation." />
+            <ul aria-label="Skills" className={styles.skillList}>
+              {filteredCompetencies.map((competency) => {
+                const domain = domainById.get(competency.domainId);
+                const selected = competency.id === selectedCompetency?.id;
+                return (
+                  <li className={selected ? styles.selectedSkill : undefined} key={competency.id}>
+                    <a
+                      aria-current={selected ? "location" : undefined}
+                      href={`#competency-${encodeURIComponent(competency.id)}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        selectCompetency(competency.id, true);
+                      }}
+                    >
+                      <span className={styles.skillName}>{competency.name}</span>
+                      <span className={styles.skillSummary}>{competency.shortDescription}</span>
+                      <span className={styles.skillMeta}>
+                        {toLabel(competency.kind)} · {domain?.name ?? toLabel(competency.domainId)}{" "}
+                        · Weight {competency.acquisitionWeight ?? competency.weight}
+                      </span>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </AdminPanel>
+        {selectedCompetency ? (
+          <article className={styles.detail} id={`competency-${selectedCompetency.id}`}>
+            <AdminPanel>
+              <header className={styles.detailHeader}>
+                <div>
+                  <div className={styles.detailEyebrow}>
+                    {toLabel(selectedCompetency.kind)} · {selectedDomain?.name}
+                  </div>
+                  <h2 ref={detailHeadingRef} tabIndex={-1}>
+                    {selectedCompetency.name}
+                  </h2>
+                  <p className={styles.lede}>{selectedCompetency.shortDescription}</p>
+                </div>
+                <AdminStatusBadge
+                  tone={selectedCompetency.status === "canonical" ? "success" : "warning"}
+                >
+                  {selectedCompetency.status}
+                </AdminStatusBadge>
+              </header>
+              <p className={styles.description}>{selectedCompetency.description}</p>
+              <section aria-labelledby="rules-at-a-glance" className={styles.rulesSection}>
+                <h3 id="rules-at-a-glance">Rules at a glance</h3>
+                <dl className={styles.ruleGrid}>
+                  <RuleFact label="Cost" value={costSummary(selectedCompetency)} />
+                  <RuleFact
+                    label="Prerequisites"
+                    value={
+                      selectedCompetency.prerequisites.length === 0
+                        ? "None."
+                        : selectedCompetency.prerequisites.map((prerequisite) => (
+                            <span className={styles.stackedValue} key={prerequisite.competencyId}>
+                              <SkillLink
+                                id={prerequisite.competencyId}
+                                names={names}
+                                onSelect={selectCompetency}
+                              />{" "}
+                              {prerequisite.threshold}+
+                              {prerequisite.justification ? ` — ${prerequisite.justification}` : ""}
+                            </span>
+                          ))
+                    }
+                  />
+                  <RuleFact
+                    label="Domain"
+                    value={
+                      selectedDomain
+                        ? `${selectedDomain.name} — ${selectedDomain.description}`
+                        : toLabel(selectedCompetency.domainId)
+                    }
+                  />
+                  <RuleFact
+                    label="Specializations"
+                    value={
+                      selectedCompetency.kind === "specialization" ? (
+                        <>
+                          A Specialization of{" "}
+                          <SkillLink
+                            id={selectedCompetency.parentCompetencyId ?? ""}
+                            names={names}
+                            onSelect={selectCompetency}
+                          />
+                          . Meeting prerequisites makes acquisition available; ownership begins only
+                          with the first acquired rank.
+                        </>
+                      ) : specializations.length > 0 ? (
+                        specializations.map((specialization) => (
+                          <span className={styles.stackedValue} key={specialization.id}>
+                            <SkillLink
+                              id={specialization.id}
+                              names={names}
+                              onSelect={selectCompetency}
+                            />
+                          </span>
+                        ))
+                      ) : (
+                        "No Specializations are authored for this Skill in the candidate."
+                      )
+                    }
+                  />
+                  <RuleFact
+                    label="Transfer"
+                    value={
+                      selectedCompetency.transfer?.kind === "zero-transfer"
+                        ? `No transfer — ${selectedCompetency.transfer.rationale}`
+                        : selectedCompetency.transfer?.kind === "explicit-relationships"
+                          ? "Only the explicit relationships listed below transfer competence."
+                          : "Only explicit directional relationships transfer competence; no reverse or domain-wide transfer is implied."
+                    }
+                  />
+                  <RuleFact
+                    label="Availability"
+                    value={
+                      <AccessSummary
+                        accessExceptions={applicableExceptions}
+                        accessResolution={accessResolution}
+                        profiles={profiles}
+                        selectedProfileId={selectedProfileId}
+                        setSelectedProfileId={setSelectedProfileId}
+                      />
+                    }
+                  />
+                </dl>
+              </section>
+              <section aria-labelledby="what-it-covers" className={styles.rulesSection}>
+                <h3 id="what-it-covers">What it covers</h3>
+                <p>{selectedCompetency.taskEnvelope.useGuidance}</p>
+                <div className={styles.envelopeGrid}>
+                  <EnvelopeList
+                    label="Typical uses"
+                    values={selectedCompetency.taskEnvelope.coreTasks}
+                  />
+                  <EnvelopeList label="Methods" values={selectedCompetency.taskEnvelope.methods} />
+                  <EnvelopeList label="Limits" values={selectedCompetency.taskEnvelope.limits} />
+                </div>
+              </section>
+              <section aria-labelledby="relationships" className={styles.rulesSection}>
+                <h3 id="relationships">Relationships</h3>
+                {incomingRelationships.length === 0 && outgoingRelationships.length === 0 ? (
+                  <p>No Skill relationships are authored for this entry.</p>
+                ) : (
+                  <ul className={styles.relationshipList}>
+                    {incomingRelationships.map((relationship) => (
+                      <li key={relationship.id}>
+                        Receives {relationship.strength}% from{" "}
+                        <SkillLink
+                          id={relationship.sourceCompetencyId}
+                          names={names}
+                          onSelect={selectCompetency}
+                        />
+                        . {relationship.rationale}
+                      </li>
+                    ))}
+                    {outgoingRelationships.map((relationship) => (
+                      <li key={relationship.id}>
+                        Contributes {relationship.strength}% to{" "}
+                        <SkillLink
+                          id={relationship.targetCompetencyId}
+                          names={names}
+                          onSelect={selectCompetency}
+                        />
+                        . {relationship.rationale}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className={styles.ruleNote}>
+                  Relationships use acquired base competence, keep only the strongest incoming
+                  result, round down, and do not chain in Pilot v1.
+                </p>
+              </section>
+              {selectedCompetency.writtenLanguageBinding ? (
+                <section aria-labelledby="language-binding" className={styles.rulesSection}>
+                  <h3 id="language-binding">Language and writing</h3>
+                  <p>
+                    This written tradition is bound to{" "}
+                    <SkillLink
+                      id={selectedCompetency.writtenLanguageBinding.spokenLanguageId}
+                      names={names}
+                      onSelect={selectCompetency}
+                    />{" "}
+                    in {toLabel(selectedCompetency.writtenLanguageBinding.scriptId)}. Spoken and
+                    written competence remain separate.
+                  </p>
+                </section>
+              ) : null}
+            </AdminPanel>
+          </article>
+        ) : null}
       </div>
-
-      <AdminPanel
-        title="Learning histories"
-        subtitle="Fixed and selectable memberships related to the selected competency."
-      >
-        <AdminDataTable
-          columns={historyColumns}
-          emptyState="No learning history contains this competency."
-          rows={relatedHistories}
-        />
-      </AdminPanel>
-      <AdminPanel
-        title="Access exceptions"
-        subtitle="Authored narrow routes; every exception grants zero competence."
-      >
-        <AdminDataTable
-          columns={exceptionColumns}
-          emptyState="No access exceptions are authored for this view."
-          rows={
-            selectedProfile
-              ? accessExceptions.filter((entry) => entry.profileId === selectedProfile.id)
-              : accessExceptions
-          }
-        />
-      </AdminPanel>
-      <div
-        style={{
-          display: "grid",
-          gap: "1rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))",
-          minWidth: 0,
-        }}
-      >
-        <AdminPanel
-          title="Domains"
-          subtitle="Navigation context only; domains imply no transfer or access."
-        >
-          <AdminDataTable
-            columns={domainColumns}
-            emptyState="No domains are present."
-            rows={domains}
-          />
-        </AdminPanel>
-        <AdminPanel
-          title="Scripts"
-          subtitle="Authored script families used by written-tradition bindings."
-        >
-          <AdminDataTable
-            columns={scriptColumns}
-            emptyState="No scripts are present."
-            rows={scripts}
-          />
-        </AdminPanel>
-      </div>
-      {loadError ? <AdminReadOnlyNotice message={loadError} /> : null}
     </section>
   );
 }
 
 function Filter<T extends string>(props: {
-  disabled?: boolean;
   label: string;
   labels?: ReadonlyMap<string, string>;
   onChange: (value: T) => void;
@@ -828,18 +538,17 @@ function Filter<T extends string>(props: {
   value: T;
 }) {
   return (
-    <label style={{ display: "grid", gap: "0.25rem", minWidth: 0 }}>
+    <label>
       <span>{props.label}</span>
       <AdminSelect
         aria-label={props.label}
-        disabled={props.disabled}
         onChange={(event) => props.onChange(event.target.value as T)}
         value={props.value}
       >
         {props.options.map((option) => (
           <option key={option} value={option}>
             {props.labels?.get(option) ??
-              (option === "all" ? `All ${props.label.toLowerCase()}` : toLabel(option))}
+              (option === "all" ? `All ${props.label.toLowerCase()}s` : toLabel(option))}
           </option>
         ))}
       </AdminSelect>
@@ -847,11 +556,109 @@ function Filter<T extends string>(props: {
   );
 }
 
+function RuleFact(props: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <dt>{props.label}</dt>
+      <dd>{props.value}</dd>
+    </div>
+  );
+}
+
+function SkillLink(props: {
+  id: string;
+  names: ReadonlyMap<string, string>;
+  onSelect: (id: string, focusDetail?: boolean) => void;
+}) {
+  return (
+    <a
+      href={`#competency-${encodeURIComponent(props.id)}`}
+      onClick={(event) => {
+        event.preventDefault();
+        props.onSelect(props.id, true);
+      }}
+    >
+      {props.names.get(props.id) ?? toLabel(props.id)}
+    </a>
+  );
+}
+
+function AccessSummary(props: {
+  accessExceptions: readonly AccessException[];
+  accessResolution?: AccessResolution;
+  profiles: readonly Profile[];
+  selectedProfileId: string;
+  setSelectedProfileId: (id: string) => void;
+}) {
+  const selectedProfile = props.profiles.find((profile) => profile.id === props.selectedProfileId);
+
+  return (
+    <div className={styles.accessSummary}>
+      <label>
+        <span>Society profile</span>
+        <AdminSelect
+          aria-label="Availability profile"
+          onChange={(event) => props.setSelectedProfileId(event.target.value)}
+          value={props.selectedProfileId}
+        >
+          <option value="none">Choose a profile</option>
+          {props.profiles.map((profile) => (
+            <option key={profile.id} value={profile.id}>
+              {profile.name}
+            </option>
+          ))}
+        </AdminSelect>
+      </label>
+      {props.accessResolution ? (
+        <>
+          {selectedProfile ? (
+            <div className={styles.ruleNote}>
+              {selectedProfile.name}: development stage {selectedProfile.developmentStage}, access
+              band {selectedProfile.accessBand}.
+            </div>
+          ) : null}
+          <div>
+            <AdminStatusBadge
+              tone={
+                props.accessResolution.availability === "available"
+                  ? "success"
+                  : props.accessResolution.availability === "unavailable"
+                    ? "danger"
+                    : "warning"
+              }
+            >
+              {props.accessResolution.availability}
+            </AdminStatusBadge>{" "}
+            {props.accessResolution.explanation}
+          </div>
+          <div className={styles.ruleNote}>
+            Resolved by {props.accessResolution.resolvedBy}
+            {props.accessResolution.attribution
+              ? ` (${toLabel(props.accessResolution.attribution)})`
+              : ""}
+            . Access opens a learning route and grants no ranks or competence.
+          </div>
+          {props.accessExceptions.map((exception) => (
+            <div className={styles.exception} key={exception.id}>
+              <strong>Possible {toLabel(exception.basis)} exception:</strong>{" "}
+              {exception.explanation} It applies only if accepted and grants no competence.
+            </div>
+          ))}
+        </>
+      ) : (
+        <span className={styles.ruleNote}>
+          Choose a profile to see whether this Skill is available, restricted, or unavailable.
+        </span>
+      )}
+    </div>
+  );
+}
+
 function EnvelopeList(props: { label: string; values: readonly string[] }) {
   return (
     <div>
-      <strong>{props.label}:</strong>
-      <ul style={{ marginBottom: 0 }}>
+      <h4>{props.label}</h4>
+      <ul>
         {props.values.map((value) => (
           <li key={value}>{value}</li>
         ))}

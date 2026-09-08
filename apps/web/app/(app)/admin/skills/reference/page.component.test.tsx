@@ -5,7 +5,10 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SkillReferenceContent } from "./SkillReferenceContent";
+import { SkillReferenceAuditContent } from "./audit/SkillReferenceAuditContent";
+import SkillReferenceAuditPage from "./audit/page";
 import SkillReferencePage from "./page";
+import SkillSystemReferencePage from "./system/page";
 
 const mocks = vi.hoisted(() => ({
   loadAdminSkillReferenceFromServer: vi.fn(),
@@ -49,7 +52,7 @@ const candidate = {
   manifest: {
     counts: {
       accessExceptions: 1,
-      competencies: 3,
+      competencies: 4,
       domains: 2,
       histories: 1,
       profiles: 1,
@@ -132,6 +135,30 @@ const candidate = {
           spokenLanguageId: "spoken:mogrebi",
         },
       },
+      {
+        ...metadata,
+        acquisitionWeight: 1 as const,
+        description: "Diagnostic Medicine applies learned medical practice to difficult diagnoses.",
+        domainId: "domain:healing",
+        id: "specialization:diagnostic-medicine",
+        kind: "specialization" as const,
+        name: "Diagnostic Medicine",
+        parentCompetencyId: "skill:medicine",
+        prerequisites: [{ competencyId: "skill:medicine", threshold: 6 }],
+        shortDescription: "Diagnose unusually difficult illnesses.",
+        shortLabel: "Diagnostic Medicine",
+        taskEnvelope: {
+          coreTasks: ["Resolve an unusually difficult diagnosis."],
+          limits: ["Requires explicit acquisition after meeting the prerequisite."],
+          methods: ["Structured comparison of symptoms and learned cases."],
+          useGuidance: "Use for difficult diagnoses beyond ordinary practice.",
+        },
+        transfer: {
+          kind: "zero-transfer" as const,
+          rationale: "No transfer relationship is authored for this candidate example.",
+        },
+        weight: 1 as const,
+      },
     ],
     domains: [
       { description: "Healing practices.", id: "domain:healing", name: "Healing" },
@@ -207,8 +234,13 @@ const candidate = {
 
 const referencePayload = { candidate, canonical: null };
 
-function competencyTable() {
-  return screen.getByRole("heading", { name: "Competencies" }).closest("section")!;
+function skillList() {
+  return screen.getByRole("list", { name: "Skills" });
+}
+
+async function openMedicine(user: ReturnType<typeof userEvent.setup>) {
+  await screen.findByRole("list", { name: "Skills" });
+  await user.click(within(skillList()).getByText("Medicine").closest("a")!);
 }
 
 beforeEach(() => {
@@ -219,16 +251,30 @@ beforeEach(() => {
 });
 
 describe("Admin Skill Reference page", () => {
-  it("renders the integrated proposal identity and honest canonical absence", async () => {
+  it("leads with reader-facing identity, descriptions, and compact rules", async () => {
+    const user = userEvent.setup();
     render(<SkillReferenceContent />);
+    await openMedicine(user);
 
-    expect(await screen.findByText("pilot-skills-content/2.0.0-candidate.1")).toBeVisible();
-    expect(screen.getByText(`sha256:${"a".repeat(64)}`)).toBeVisible();
-    expect(screen.getByText(`sha256:${"b".repeat(64)}`)).toBeVisible();
-    expect(screen.getByText("Absent")).toBeVisible();
-    expect(screen.getByText(/#26 is the sole release gate/i)).toBeVisible();
-    expect(await screen.findByText("Take a history and form a diagnosis.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Medicine" })).toBeVisible();
+    expect(screen.getAllByText("Diagnose and treat without surgery.").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText("Medicine covers structured diagnosis and non-operative treatment."),
+    ).toBeVisible();
+    expect(screen.getByText("3 points per directly acquired rank.")).toBeVisible();
+    expect(screen.getByText(/Healing — Healing practices/)).toBeVisible();
+    expect(screen.getByText("Take a history and form a diagnosis.")).toBeVisible();
     expect(screen.getByText("Does not include invasive procedures.")).toBeVisible();
+    expect(screen.getByText(/Candidate for review/)).toBeVisible();
+    expect(screen.getByText(/awaits Product Owner calibration in #26/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "Technical and audit details" })).toHaveAttribute(
+      "href",
+      "/admin/skills/reference/audit",
+    );
+    expect(screen.queryByText(`sha256:${"a".repeat(64)}`)).toBeNull();
+    expect(screen.queryByText("pilot-skills-content/2.0.0-candidate.1")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Record provenance" })).toBeNull();
+    expect(screen.queryByText("skill-content-release/v2")).toBeNull();
   });
 
   it("restores a stable direct link before choosing a fallback record", async () => {
@@ -236,63 +282,78 @@ describe("Admin Skill Reference page", () => {
     render(<SkillReferenceContent />);
 
     expect(await screen.findByRole("heading", { name: "Surgery" })).toBeVisible();
-    expect(screen.getAllByText(/Medicine 6\+/).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText((_, element) => element?.textContent?.trim() === "Medicine 6+").length,
+    ).toBeGreaterThan(0);
     expect(window.location.hash).toBe("#competency-skill:surgery");
   });
 
-  it("applies weight, prerequisite, relationship, exception, profile availability, and status filters", async () => {
+  it("filters the bounded catalogue and resolves genuine profile access", async () => {
     const user = userEvent.setup();
     render(<SkillReferenceContent />);
-    expect(await screen.findByRole("heading", { name: "Medicine" })).toBeVisible();
+    await openMedicine(user);
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Weight" }), "2");
-    expect(within(competencyTable()).getByText("Written Mogrebi in Sacred Mogrebi")).toBeVisible();
-    expect(within(competencyTable()).queryByText("Medicine")).toBeNull();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Type" }), "written-tradition");
+    expect(within(skillList()).getByText("Written Mogrebi in Sacred Mogrebi")).toBeVisible();
+    expect(within(skillList()).queryByText("Medicine")).toBeNull();
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Weight" }), "all");
-    await user.selectOptions(screen.getByRole("combobox", { name: "Prerequisites" }), "has");
-    expect(within(competencyTable()).getByText("Surgery")).toBeVisible();
-    expect(within(competencyTable()).queryByText("Medicine")).toBeNull();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Type" }), "all");
+    await user.type(screen.getByRole("textbox", { name: "Search Skills" }), "invasive");
+    expect(within(skillList()).getByText("Surgery")).toBeVisible();
+    expect(within(skillList()).queryByText("Medicine")).toBeNull();
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Prerequisites" }), "all");
-    await user.selectOptions(screen.getByRole("combobox", { name: "Relationships" }), "outgoing");
-    expect(within(competencyTable()).getByText("Medicine")).toBeVisible();
-    expect(within(competencyTable()).queryByText("Surgery")).toBeNull();
-
-    await user.selectOptions(screen.getByRole("combobox", { name: "Relationships" }), "all");
-    await user.selectOptions(screen.getByRole("combobox", { name: "Access exceptions" }), "has");
-    expect(within(competencyTable()).getByText("Surgery")).toBeVisible();
-
-    await user.selectOptions(screen.getByRole("combobox", { name: "Access exceptions" }), "all");
-    await user.selectOptions(screen.getByRole("combobox", { name: "Profile" }), "profile:mogreb");
-    await user.selectOptions(screen.getByRole("combobox", { name: "Availability" }), "unavailable");
-    expect(within(competencyTable()).getByText("Surgery")).toBeVisible();
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Availability profile" }),
+      "profile:mogreb",
+    );
     expect(screen.getByText("Ordinary training does not include Surgery.")).toBeVisible();
-
-    await user.selectOptions(screen.getByRole("combobox", { name: "Availability" }), "all");
-    await user.selectOptions(screen.getByRole("combobox", { name: "Status" }), "canonical");
-    expect(screen.getByText(/No competencies match the current search and filters/i)).toBeVisible();
+    expect(screen.getByText(/Mogreb: development stage DS3, access band AB3/)).toBeVisible();
+    expect(
+      screen.getByText(/Access opens a learning route and grants no ranks or competence/),
+    ).toBeVisible();
+    expect(screen.getByText(/Possible Teacher exception/)).toBeVisible();
   });
 
-  it("uses readable directional relationships, histories, bindings, and keyboard focus", async () => {
+  it("uses direct relationship links with native keyboard behavior and detail focus", async () => {
     const user = userEvent.setup();
     render(<SkillReferenceContent />);
-    expect(await screen.findByRole("heading", { name: "Medicine" })).toBeVisible();
-    expect(screen.getByText("Contributes 25% to Surgery")).toBeVisible();
-    expect(screen.getByText("Temple Infirmary")).toBeVisible();
+    await openMedicine(user);
+    expect(screen.getByText(/Contributes 25% to/).closest("li")).toHaveTextContent(
+      "Contributes 25% to Surgery",
+    );
 
-    const surgeryRow = within(competencyTable()).getByText("Surgery").closest("tr")!;
-    surgeryRow.focus();
+    const surgeryLink = within(skillList()).getByText("Surgery").closest("a")!;
+    surgeryLink.focus();
     await user.keyboard("{Enter}");
     expect(screen.getByRole("heading", { name: "Surgery" })).toHaveFocus();
-    expect(screen.getByText("Receives 25% from Medicine")).toBeVisible();
-
-    await user.clear(screen.getByRole("textbox", { name: "Search competencies" }));
-    await user.type(screen.getByRole("textbox", { name: "Search competencies" }), "Sacred Mogrebi");
-    expect(await screen.findByRole("heading", { name: /Written Mogrebi/i })).toBeVisible();
-    expect(screen.getByText("Language and script binding:").closest("div")).toHaveTextContent(
-      "Mogrebi in Sacred Mogrebi",
+    expect(screen.getByText(/Receives 25% from/).closest("li")).toHaveTextContent(
+      "Receives 25% from Medicine",
     );
+
+    await user.clear(screen.getByRole("textbox", { name: "Search Skills" }));
+    await user.type(screen.getByRole("textbox", { name: "Search Skills" }), "Sacred Mogrebi");
+    expect(await screen.findByRole("heading", { name: /Written Mogrebi/i })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Language and writing" }).closest("section"),
+    ).toHaveTextContent("Spoken and written competence remain separate");
+  });
+
+  it("presents Specialization cost, ownership, parent, and zero-transfer rules", async () => {
+    const user = userEvent.setup();
+    render(<SkillReferenceContent />);
+    await screen.findByRole("list", { name: "Skills" });
+
+    await user.type(screen.getByRole("textbox", { name: "Search Skills" }), "Diagnostic Medicine");
+
+    expect(await screen.findByRole("heading", { name: "Diagnostic Medicine" })).toBeVisible();
+    expect(screen.getByText(/First rank costs 3 points/)).toBeVisible();
+    expect(screen.getByText(/ownership begins only with the first acquired rank/)).toBeVisible();
+    expect(screen.getByText(/No transfer — No transfer relationship is authored/)).toBeVisible();
+    expect(
+      screen
+        .getAllByRole("link", { name: "Medicine" })
+        .every((link) => link.getAttribute("href") === "#competency-skill%3Amedicine"),
+    ).toBe(true);
   });
 
   it("denies an authenticated non-admin before the reference request mounts", async () => {
@@ -311,5 +372,40 @@ describe("Admin Skill Reference page", () => {
 
     expect(await screen.findByText("Reference unavailable")).toBeVisible();
     expect(screen.queryByText("Medicine")).toBeNull();
+  });
+});
+
+describe("separate Skill reference pages", () => {
+  it("keeps shared Skill-system explanation on its own Admin-only page", () => {
+    render(<SkillSystemReferencePage />);
+
+    expect(screen.getByRole("heading", { name: "How the Skill System Works" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Ranks and cost" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Relationships" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Availability and access" })).toBeVisible();
+    expect(screen.getByText(/does not expand the full catalogue/)).toBeVisible();
+  });
+
+  it("keeps digests, provenance, histories, and exceptions on the audit page", async () => {
+    render(<SkillReferenceAuditContent />);
+
+    expect(await screen.findByRole("heading", { name: "Skill Reference Audit" })).toBeVisible();
+    expect(screen.getByText(`sha256:${"a".repeat(64)}`)).toBeVisible();
+    expect(screen.getByText(`sha256:${"b".repeat(64)}`)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Record provenance" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Learning-history index" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Access-exception register" })).toBeVisible();
+  });
+
+  it("guards the separate system and audit routes before loading reference data", () => {
+    mocks.sessionUser.currentUser.roles = ["player"];
+
+    const { unmount } = render(<SkillSystemReferencePage />);
+    expect(screen.getByRole("heading", { name: "Admin access required" })).toBeVisible();
+    unmount();
+
+    render(<SkillReferenceAuditPage />);
+    expect(screen.getByRole("heading", { name: "Admin access required" })).toBeVisible();
+    expect(mocks.loadAdminSkillReferenceFromServer).not.toHaveBeenCalled();
   });
 });
