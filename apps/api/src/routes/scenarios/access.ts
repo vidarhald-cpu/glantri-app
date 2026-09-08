@@ -26,10 +26,9 @@ export async function resolveScenarioWorkspaceAccess(
     return null;
   }
 
-  const isAdmin = input.userRoles.includes("admin");
   const isGameMaster = input.userRoles.includes("game_master");
 
-  if (isAdmin || (isGameMaster && campaign.gmUserId === input.userId)) {
+  if (isGameMaster && campaign.gmUserId === input.userId) {
     return {
       campaignId: campaign.id,
       mode: "gm",

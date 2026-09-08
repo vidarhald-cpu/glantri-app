@@ -54,6 +54,7 @@ vi.mock("@glantri/database", () => ({
     }
   },
   CharacterService: vi.fn(() => mocks.characterService),
+  LegacyCharacterEquipmentWriteError: class LegacyCharacterEquipmentWriteError extends Error {},
   CharacterValidationError: class CharacterValidationError extends Error {
     issues: string[];
     constructor(issues: string[]) {

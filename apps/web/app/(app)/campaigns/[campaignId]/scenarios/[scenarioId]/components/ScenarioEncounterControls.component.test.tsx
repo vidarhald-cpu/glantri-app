@@ -206,7 +206,7 @@ describe("scenario encounter controls", () => {
     await user.click(
       screen.getByRole("button", { name: "Toggle The Gladiator assignment details" }),
     );
-    const refreshButton = screen.getByRole("button", { name: "Reconcile equipment" });
+    const refreshButton = screen.getByRole("button", { name: "Update Scenario equipment" });
     expect(refreshButton).toHaveAttribute(
       "title",
       expect.stringContaining(
@@ -223,7 +223,7 @@ describe("scenario encounter controls", () => {
     renderAssignmentSection({
       equipmentRefreshResult: {
         kind: "success",
-        message: "The Gladiator’s Scenario equipment was reconciled.",
+        message: "The Gladiator’s Scenario equipment was updated.",
         participantId: participant.id,
       },
       refreshingEquipmentParticipantId: participant.id,
@@ -232,9 +232,9 @@ describe("scenario encounter controls", () => {
       screen.getByRole("button", { name: "Toggle The Gladiator assignment details" }),
     );
 
-    expect(screen.getByRole("button", { name: "Reconciling…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Updating…" })).toBeDisabled();
     expect(screen.getByRole("status")).toHaveTextContent(
-      "The Gladiator’s Scenario equipment was reconciled.",
+      "The Gladiator’s Scenario equipment was updated.",
     );
   });
 
@@ -265,6 +265,8 @@ describe("scenario encounter controls", () => {
     await user.click(
       screen.getByRole("button", { name: "Toggle The Gladiator assignment details" }),
     );
-    expect(screen.queryByRole("button", { name: "Reconcile equipment" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Update Scenario equipment" }),
+    ).not.toBeInTheDocument();
   });
 });

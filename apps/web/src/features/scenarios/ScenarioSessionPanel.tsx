@@ -47,10 +47,11 @@ export function ScenarioSessionPanel({
                   : "Scenario"}
                 {participant.equipment ? (
                   <div style={{ marginTop: "0.25rem" }}>
+                    <strong>Equipment prepared for this Scenario: </strong>
                     <span>{participant.equipment.message}</span>{" "}
                     {participant.equipment.canReconcile && onReconcileEquipment ? (
                       <button onClick={() => onReconcileEquipment(participant.id)} type="button">
-                        Reconcile equipment
+                        Update Scenario equipment
                       </button>
                     ) : null}
                   </div>

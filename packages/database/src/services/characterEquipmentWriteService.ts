@@ -31,6 +31,7 @@ import {
   createPrismaCharacterEquipmentRepository,
   StaleEquipmentTransferError,
   type CharacterEquipmentRepository,
+  type EquipmentTransitionEvidence,
 } from "../repositories/characterEquipmentRepository";
 
 export { StaleEquipmentTransferError } from "../repositories/characterEquipmentRepository";
@@ -118,6 +119,7 @@ function buildCampaignEquipmentItemId(campaignId: string): string {
 export interface CreateCampaignEquipmentItemInput {
   campaignId: string;
   displayName?: string | null;
+  evidence?: EquipmentTransitionEvidence;
   holderCharacterId?: string | null;
   itemFacts: EquipmentItemFactsV1;
   notes?: string | null;
@@ -134,12 +136,29 @@ export interface UpdateCampaignEquipmentItemAuthoringInput {
 
 export interface TransferCampaignEquipmentItemInput {
   campaignId: string;
+  evidence?: EquipmentTransitionEvidence;
   itemId: string;
   sourceCharacterId: string;
   sourceExpectedRevision?: number;
   targetCharacterId: string;
   targetExpectedRevision?: number;
   targetStorageLocationId?: string;
+}
+
+export interface AssignCampaignEquipmentItemInput {
+  campaignId: string;
+  evidence: EquipmentTransitionEvidence;
+  itemId: string;
+  targetCharacterId: string;
+  targetExpectedRevision: number;
+}
+
+export interface UnassignCampaignEquipmentItemInput {
+  campaignId: string;
+  evidence: EquipmentTransitionEvidence;
+  itemId: string;
+  sourceCharacterId: string;
+  sourceExpectedRevision: number;
 }
 
 function assertItemBelongsToCharacter(
@@ -285,9 +304,26 @@ export class CharacterEquipmentWriteService {
       const aggregate = await this.repository.getCharacterEquipmentAggregateState(
         item.holderCharacterId,
       );
-      return this.mutateAggregate(item.holderCharacterId, aggregate.revision, (service) =>
-        service.repository.createCampaignEquipmentItem(item),
-      );
+      return this.mutateAggregate(item.holderCharacterId, aggregate.revision, async (service) => {
+        const created = await service.repository.createCampaignEquipmentItem(item);
+        if (input.evidence) {
+          await service.repository.recordEquipmentTransition?.({
+            ...input.evidence,
+            after: {
+              aggregateRevision: aggregate.revision + 1,
+              holderCharacterId: item.holderCharacterId,
+              quantity: item.quantity,
+            },
+            before: { aggregateRevision: aggregate.revision, holderCharacterId: null },
+            campaignId: input.campaignId,
+            characterId: item.holderCharacterId ?? undefined,
+            eventType: "assignment",
+            itemId: item.id,
+            targetCharacterId: item.holderCharacterId ?? undefined,
+          });
+        }
+        return created;
+      });
     }
     return this.repository.createCampaignEquipmentItem(item);
   }
@@ -351,12 +387,58 @@ export class CharacterEquipmentWriteService {
 
     return this.repository.transferCampaignEquipmentItem({
       campaignId: input.campaignId,
+      evidence: input.evidence,
       itemId: input.itemId,
       sourceCharacterId: input.sourceCharacterId,
       sourceExpectedRevision: input.sourceExpectedRevision,
       targetCharacterId: input.targetCharacterId,
       targetExpectedRevision: input.targetExpectedRevision,
       targetStorageAssignment,
+    });
+  }
+
+  async assignCampaignEquipmentItem(
+    input: AssignCampaignEquipmentItemInput,
+  ): Promise<CanonicalEquipmentItem> {
+    const existing = await this.repository.getCanonicalEquipmentItemById(input.itemId);
+    if (!existing || existing.campaignContextId !== input.campaignId) {
+      throw new Error("Campaign item not found.");
+    }
+    if (existing.holderCharacterId) throw new StaleEquipmentTransferError();
+    const targetLocations = createDefaultEquipmentLocations(input.targetCharacterId);
+    const targetLocation = targetLocations.find((location) => location.type === "person_system");
+    if (!targetLocation || !this.repository.acquireUnheldCampaignEquipmentItem) {
+      throw new Error("The receiving Character has no valid storage for this assignment.");
+    }
+    return this.repository.acquireUnheldCampaignEquipmentItem({
+      campaignId: input.campaignId,
+      evidence: input.evidence,
+      expectedTargetRevision: input.targetExpectedRevision,
+      itemId: input.itemId,
+      targetCharacterId: input.targetCharacterId,
+      targetStorageAssignment: getStorageAssignmentForLocation(targetLocation),
+    });
+  }
+
+  async unassignCampaignEquipmentItem(
+    input: UnassignCampaignEquipmentItemInput,
+  ): Promise<CanonicalEquipmentItem> {
+    const existing = await this.repository.getCanonicalEquipmentItemById(input.itemId);
+    if (!existing || existing.campaignContextId !== input.campaignId) {
+      throw new Error("Campaign item not found.");
+    }
+    if (existing.holderCharacterId !== input.sourceCharacterId) {
+      throw new StaleEquipmentTransferError();
+    }
+    if (!this.repository.releaseHeldCampaignEquipmentItem) {
+      throw new Error("Campaign Item unassignment is not available.");
+    }
+    return this.repository.releaseHeldCampaignEquipmentItem({
+      campaignId: input.campaignId,
+      evidence: input.evidence,
+      expectedSourceRevision: input.sourceExpectedRevision,
+      itemId: input.itemId,
+      sourceCharacterId: input.sourceCharacterId,
     });
   }
 
@@ -725,10 +807,19 @@ export class CharacterEquipmentWriteService {
     itemId: string,
     quantity: number,
     expectedRevision?: number,
+    evidence?: EquipmentTransitionEvidence,
+    revisionBefore?: number,
   ): Promise<AssignedEquipmentItem> {
     if (expectedRevision !== undefined) {
       return this.mutateAggregate(characterId, expectedRevision, (service) =>
-        service.updateCharacterEquipmentQuantity(characterId, itemId, quantity),
+        service.updateCharacterEquipmentQuantity(
+          characterId,
+          itemId,
+          quantity,
+          undefined,
+          evidence,
+          expectedRevision,
+        ),
       );
     }
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
@@ -772,7 +863,22 @@ export class CharacterEquipmentWriteService {
       }
     }
 
-    return this.repository.updateCharacterEquipmentItem(updatedItem);
+    const updated = await this.repository.updateCharacterEquipmentItem(updatedItem);
+    if (evidence && item.quantity !== updated.quantity) {
+      await this.repository.recordEquipmentTransition?.({
+        ...evidence,
+        after: {
+          aggregateRevision: revisionBefore === undefined ? undefined : revisionBefore + 1,
+          quantity: updated.quantity,
+        },
+        before: { aggregateRevision: revisionBefore, quantity: item.quantity },
+        campaignId: item.campaignContextId ?? undefined,
+        characterId,
+        eventType: "quantity_changed",
+        itemId,
+      });
+    }
+    return updated;
   }
 
   async updateCharacterEquipmentMetadata(
@@ -853,10 +959,18 @@ export class CharacterEquipmentWriteService {
     characterId: string,
     itemIds: string[],
     expectedRevision?: number,
+    evidence?: EquipmentTransitionEvidence,
+    revisionBefore?: number,
   ): Promise<CharacterLoadout> {
     if (expectedRevision !== undefined) {
       return this.mutateAggregate(characterId, expectedRevision, (service) =>
-        service.setCharacterActiveAmmunition(characterId, itemIds),
+        service.setCharacterActiveAmmunition(
+          characterId,
+          itemIds,
+          undefined,
+          evidence,
+          expectedRevision,
+        ),
       );
     }
     if (new Set(itemIds).size !== itemIds.length) {
@@ -896,7 +1010,33 @@ export class CharacterEquipmentWriteService {
     const nextLoadout = CharacterLoadoutSchema.parse({ ...loadout, activeAmmoItemIds: itemIds });
     const errors = validateLoadout(nextLoadout, { itemsById: indexById(snapshot.items) });
     if (errors.length > 0) throw new Error(errors.join("; "));
-    return this.repository.upsertCharacterLoadout(nextLoadout);
+    const updated = await this.repository.upsertCharacterLoadout(nextLoadout);
+    if (evidence) {
+      for (const changedItemId of new Set([...loadout.activeAmmoItemIds, ...itemIds])) {
+        const wasActive = loadout.activeAmmoItemIds.includes(changedItemId);
+        const isActive = itemIds.includes(changedItemId);
+        if (wasActive === isActive) continue;
+        const item = snapshot.items.find((candidate) => candidate.id === changedItemId);
+        await this.repository.recordEquipmentTransition?.({
+          ...evidence,
+          after: {
+            activeAmmunition: isActive,
+            aggregateRevision: revisionBefore === undefined ? undefined : revisionBefore + 1,
+            quantity: item?.quantity,
+          },
+          before: {
+            activeAmmunition: wasActive,
+            aggregateRevision: revisionBefore,
+            quantity: item?.quantity,
+          },
+          campaignId: item?.campaignContextId ?? undefined,
+          characterId,
+          eventType: "active_ammunition_changed",
+          itemId: changedItemId,
+        });
+      }
+    }
+    return updated;
   }
 
   async bootstrapSampleCharacterEquipment(

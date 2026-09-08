@@ -189,6 +189,35 @@ model CharacterEquipmentAggregate {
   character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
 }
 
+// Bounded, queryable evidence for accepted Field Equipment transitions. This
+// is deliberately not an Item event-sourcing ledger: current Item authority
+// remains in CharacterEquipmentItem and the Character equipment aggregate.
+model EquipmentTransitionEvent {
+  id                String   @id @default(cuid())
+  sequence          Int      @unique @default(autoincrement())
+  itemId            String
+  eventType         String
+  actorUserId       String?
+  actorAuthority    String
+  campaignId        String?
+  characterId       String?
+  sourceCharacterId String?
+  targetCharacterId String?
+  scenarioId        String?
+  encounterId       String?
+  commandId         String?
+  beforeJson        Json?
+  afterJson         Json?
+  createdAt         DateTime @default(now())
+
+  @@index([itemId, sequence])
+  @@index([campaignId, sequence])
+  @@index([characterId, sequence])
+  @@index([scenarioId, sequence])
+  @@index([encounterId, sequence])
+  @@index([actorUserId, sequence])
+}
+
 model CharacterRevision {
   id                    String   @id
   characterId           String

@@ -16,10 +16,7 @@ function accessibleCharacterService(input: { managed?: boolean; owned?: boolean 
 }
 
 describe("equipment viewer authorization", () => {
-  it("projects admin and actual campaign GM access as full GM visibility", () => {
-    expect(equipmentViewerForAccessibleCharacter({ roles: ["admin"] }, characterId, false)).toEqual(
-      { kind: "gm" },
-    );
+  it("projects only actual campaign GM access as full GM visibility", () => {
     expect(
       equipmentViewerForAccessibleCharacter({ roles: ["game_master"] }, characterId, true),
     ).toEqual({ kind: "gm" });
@@ -81,6 +78,25 @@ describe("equipment viewer authorization", () => {
         service,
       ),
     ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("denies an unrelated Admin instead of treating the technical role as gameplay authority", async () => {
+    const service = accessibleCharacterService({});
+
+    await expect(
+      requireAccessibleCharacter({ id: "unrelated-admin", roles: ["admin"] }, characterId, service),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    expect(service.getCharacterById).not.toHaveBeenCalled();
+    expect(service.getCharacterByIdInGmCampaigns).not.toHaveBeenCalled();
+    expect(service.getOwnedCharacter).toHaveBeenCalledWith("unrelated-admin", characterId);
+  });
+
+  it("keeps an Admin who owns the Character at holder-only visibility", async () => {
+    const service = accessibleCharacterService({ owned: true });
+
+    await expect(
+      requireAccessibleCharacter({ id: "admin-owner", roles: ["admin"] }, characterId, service),
+    ).resolves.toEqual({ characterId, kind: "holder" });
   });
 
   it("denies an ordinary Campaign player who does not own the Character", async () => {
