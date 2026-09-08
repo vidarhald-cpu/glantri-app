@@ -261,10 +261,14 @@ describe("Admin Skill Reference page", () => {
     expect(
       screen.getByText("Medicine covers structured diagnosis and non-operative treatment."),
     ).toBeVisible();
-    expect(screen.getByText("3 points per directly acquired rank.")).toBeVisible();
-    expect(screen.getByText(/Healing — Healing practices/)).toBeVisible();
+    expect(screen.getByText("Each rank costs 3 points.")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Healing" })).toHaveAttribute(
+      "href",
+      "/admin/skills/reference/audit#domain-domain%3Ahealing",
+    );
     expect(screen.getByText("Take a history and form a diagnosis.")).toBeVisible();
     expect(screen.getByText("Does not include invasive procedures.")).toBeVisible();
+    expect(screen.queryByText("Observation, learned texts, and remedies.")).toBeNull();
     expect(screen.getByText(/Candidate for review/)).toBeVisible();
     expect(screen.getByText(/awaits Product Owner calibration in #26/)).toBeVisible();
     expect(screen.getByRole("link", { name: "Technical and audit details" })).toHaveAttribute(
@@ -275,6 +279,38 @@ describe("Admin Skill Reference page", () => {
     expect(screen.queryByText("pilot-skills-content/2.0.0-candidate.1")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Record provenance" })).toBeNull();
     expect(screen.queryByText("skill-content-release/v2")).toBeNull();
+
+    const detail = screen.getByRole("heading", { name: "Medicine" }).closest("article")!;
+    const orderedContent = [
+      within(detail).getByRole("heading", { name: "Medicine" }),
+      within(detail).getByText("Diagnose and treat without surgery."),
+      within(detail).getByText("Medicine covers structured diagnosis and non-operative treatment."),
+      within(detail).getByRole("heading", { name: "Rules at a glance" }),
+      within(detail).getByRole("heading", { name: "Typical uses and boundaries" }),
+      within(detail).getByRole("heading", { name: "Relationships" }),
+    ];
+    for (let index = 1; index < orderedContent.length; index += 1) {
+      expect(
+        orderedContent[index - 1]!.compareDocumentPosition(orderedContent[index]!) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).not.toBe(0);
+    }
+  });
+
+  it("describes normal availability without exposing its technical route", async () => {
+    const user = userEvent.setup();
+    render(<SkillReferenceContent />);
+    await openMedicine(user);
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Availability society" }),
+      "profile:mogreb",
+    );
+
+    const detail = screen.getByRole("heading", { name: "Medicine" }).closest("article")!;
+    expect(within(detail).getByText("available")).toBeVisible();
+    expect(within(detail).getByText("for Mogreb.")).toBeVisible();
+    expect(within(detail).queryByText(/route|DS3|AB3|zero competence|no ranks/i)).toBeNull();
   });
 
   it("restores a stable direct link before choosing a fallback record", async () => {
@@ -303,39 +339,40 @@ describe("Admin Skill Reference page", () => {
     expect(within(skillList()).queryByText("Medicine")).toBeNull();
 
     await user.selectOptions(
-      screen.getByRole("combobox", { name: "Availability profile" }),
+      screen.getByRole("combobox", { name: "Availability society" }),
       "profile:mogreb",
     );
     expect(screen.getByText("Ordinary training does not include Surgery.")).toBeVisible();
-    expect(screen.getByText(/Mogreb: development stage DS3, access band AB3/)).toBeVisible();
-    expect(
-      screen.getByText(/Access opens a learning route and grants no ranks or competence/),
-    ).toBeVisible();
-    expect(screen.getByText(/Possible Teacher exception/)).toBeVisible();
+    expect(screen.getByText("unavailable")).toBeVisible();
+    expect(screen.getByText("for Mogreb.")).toBeVisible();
+    expect(screen.getByText(/Teacher exception/)).toBeVisible();
+    expect(screen.getByText(/otherwise restricted path to learning/)).toBeVisible();
+    expect(screen.queryByText(/DS3|AB3|route|zero competence|no ranks/i)).toBeNull();
   });
 
   it("uses direct relationship links with native keyboard behavior and detail focus", async () => {
     const user = userEvent.setup();
     render(<SkillReferenceContent />);
     await openMedicine(user);
-    expect(screen.getByText(/Contributes 25% to/).closest("li")).toHaveTextContent(
-      "Contributes 25% to Surgery",
+    expect(screen.getByText(/Contributes 25% of/).closest("li")).toHaveTextContent(
+      "Contributes 25% of acquired base competence to Surgery",
     );
 
     const surgeryLink = within(skillList()).getByText("Surgery").closest("a")!;
     surgeryLink.focus();
     await user.keyboard("{Enter}");
     expect(screen.getByRole("heading", { name: "Surgery" })).toHaveFocus();
-    expect(screen.getByText(/Receives 25% from/).closest("li")).toHaveTextContent(
-      "Receives 25% from Medicine",
+    expect(screen.getByText(/Receives 25% of/).closest("li")).toHaveTextContent(
+      "Receives 25% of acquired base competence from Medicine",
     );
 
     await user.clear(screen.getByRole("textbox", { name: "Search Skills" }));
     await user.type(screen.getByRole("textbox", { name: "Search Skills" }), "Sacred Mogrebi");
     expect(await screen.findByRole("heading", { name: /Written Mogrebi/i })).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "Language and writing" }).closest("section"),
+      screen.getByRole("heading", { name: "Relationships" }).closest("section"),
     ).toHaveTextContent("Spoken and written competence remain separate");
+    expect(screen.getByText(/Mogrebi \(not included\)/)).toBeVisible();
   });
 
   it("presents Specialization cost, ownership, parent, and zero-transfer rules", async () => {
@@ -346,9 +383,10 @@ describe("Admin Skill Reference page", () => {
     await user.type(screen.getByRole("textbox", { name: "Search Skills" }), "Diagnostic Medicine");
 
     expect(await screen.findByRole("heading", { name: "Diagnostic Medicine" })).toBeVisible();
-    expect(screen.getByText(/First rank costs 3 points/)).toBeVisible();
-    expect(screen.getByText(/ownership begins only with the first acquired rank/)).toBeVisible();
-    expect(screen.getByText(/No transfer — No transfer relationship is authored/)).toBeVisible();
+    expect(screen.getByText(/first rank costs 3 points/i)).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Relationships" }).closest("section"),
+    ).toHaveTextContent("RelationshipsNone.");
     expect(
       screen
         .getAllByRole("link", { name: "Medicine" })
@@ -381,8 +419,8 @@ describe("separate Skill reference pages", () => {
 
     expect(screen.getByRole("heading", { name: "How the Skill System Works" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Ranks and cost" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Relationships" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Availability and access" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "How related Skills help" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Where Skills are available" })).toBeVisible();
     expect(screen.getByText(/does not expand the full catalogue/)).toBeVisible();
   });
 
@@ -395,6 +433,14 @@ describe("separate Skill reference pages", () => {
     expect(screen.getByRole("heading", { name: "Record provenance" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Learning-history index" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Access-exception register" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Relationship register" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Availability authoring" })).toBeVisible();
+    expect(screen.getAllByText(/Methods \/ failure modes:/)).toHaveLength(4);
+    expect(screen.getByText(/DS3/)).toBeInTheDocument();
+    expect(screen.getByText(/^Healing:/).closest("li")).toHaveAttribute(
+      "id",
+      "domain-domain:healing",
+    );
   });
 
   it("guards the separate system and audit routes before loading reference data", () => {

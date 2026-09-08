@@ -21,10 +21,8 @@ type AccessException = AdminSkillReferenceSnapshot["records"]["accessExceptions"
 type Availability = "available" | "restricted" | "unavailable";
 
 interface AccessResolution {
-  attribution?: string;
   availability: Availability;
   explanation: string;
-  resolvedBy: "competency override" | "normal route" | "safe restricted fallback";
 }
 
 function sortByName<T extends { id: string; name: string }>(values: readonly T[]): T[] {
@@ -56,10 +54,8 @@ function resolveProfileAccess(profile: Profile, competency: Competency): AccessR
 
   if (override) {
     return {
-      attribution: override.attributionId,
       availability: override.availability as Availability,
       explanation: override.explanation,
-      resolvedBy: "competency override",
     };
   }
 
@@ -69,17 +65,14 @@ function resolveProfileAccess(profile: Profile, competency: Competency): AccessR
 
   if (route) {
     return {
-      attribution: route.id,
       availability: "available",
       explanation: route.description,
-      resolvedBy: "normal route",
     };
   }
 
   return {
     availability: "restricted",
-    explanation: "No authored route or override applies, so access resolves restricted.",
-    resolvedBy: "safe restricted fallback",
+    explanation: "No availability information is recorded for this Skill in this society.",
   };
 }
 
@@ -87,10 +80,25 @@ function costSummary(competency: Competency): string {
   const weight = competency.acquisitionWeight ?? competency.weight;
 
   if (competency.kind === "specialization") {
-    return `First rank costs ${2 + weight} points (2 initiation + ${weight} for the rank); later ranks cost ${weight} ${weight === 1 ? "point" : "points"} each.`;
+    return `The first rank costs ${2 + weight} points (2 to begin, plus ${weight} for the rank). Each later rank costs ${weight} ${weight === 1 ? "point" : "points"}.`;
   }
 
-  return `${competency.weight} ${competency.weight === 1 ? "point" : "points"} per directly acquired rank.`;
+  return `Each rank costs ${competency.weight} ${competency.weight === 1 ? "point" : "points"}.`;
+}
+
+function compactCostSummary(competency: Competency): string {
+  const weight = competency.acquisitionWeight ?? competency.weight;
+  return competency.kind === "specialization"
+    ? `${2 + weight} points for the first rank`
+    : `${weight} ${weight === 1 ? "point" : "points"} per rank`;
+}
+
+function readerFacingText(value: string): string {
+  return value.replace(/\bauthored\b/gi, "established");
+}
+
+function readerFacingAvailabilityText(value: string): string {
+  return readerFacingText(value).replace(/\broute\b/gi, "path to learning");
 }
 
 function matchesSearch(competency: Competency, query: string, domainName: string): boolean {
@@ -345,10 +353,12 @@ export function SkillReferenceContent() {
                       }}
                     >
                       <span className={styles.skillName}>{competency.name}</span>
-                      <span className={styles.skillSummary}>{competency.shortDescription}</span>
+                      <span className={styles.skillSummary}>
+                        {readerFacingText(competency.shortDescription)}
+                      </span>
                       <span className={styles.skillMeta}>
                         {toLabel(competency.kind)} · {domain?.name ?? toLabel(competency.domainId)}{" "}
-                        · Weight {competency.acquisitionWeight ?? competency.weight}
+                        · {compactCostSummary(competency)}
                       </span>
                     </a>
                   </li>
@@ -362,25 +372,35 @@ export function SkillReferenceContent() {
             <AdminPanel>
               <header className={styles.detailHeader}>
                 <div>
-                  <div className={styles.detailEyebrow}>
-                    {toLabel(selectedCompetency.kind)} · {selectedDomain?.name}
-                  </div>
                   <h2 ref={detailHeadingRef} tabIndex={-1}>
                     {selectedCompetency.name}
                   </h2>
-                  <p className={styles.lede}>{selectedCompetency.shortDescription}</p>
+                  <p className={styles.lede}>
+                    {readerFacingText(selectedCompetency.shortDescription)}
+                  </p>
                 </div>
-                <AdminStatusBadge
-                  tone={selectedCompetency.status === "canonical" ? "success" : "warning"}
-                >
-                  {selectedCompetency.status}
-                </AdminStatusBadge>
               </header>
-              <p className={styles.description}>{selectedCompetency.description}</p>
+              <p className={styles.description}>
+                {readerFacingText(selectedCompetency.description)}
+              </p>
               <section aria-labelledby="rules-at-a-glance" className={styles.rulesSection}>
                 <h3 id="rules-at-a-glance">Rules at a glance</h3>
                 <dl className={styles.ruleGrid}>
                   <RuleFact label="Cost" value={costSummary(selectedCompetency)} />
+                  <RuleFact
+                    label="Domain"
+                    value={
+                      selectedDomain ? (
+                        <a
+                          href={`/admin/skills/reference/audit#domain-${encodeURIComponent(selectedDomain.id)}`}
+                        >
+                          {selectedDomain.name}
+                        </a>
+                      ) : (
+                        "Not recorded."
+                      )
+                    }
+                  />
                   <RuleFact
                     label="Prerequisites"
                     value={
@@ -394,17 +414,8 @@ export function SkillReferenceContent() {
                                 onSelect={selectCompetency}
                               />{" "}
                               {prerequisite.threshold}+
-                              {prerequisite.justification ? ` — ${prerequisite.justification}` : ""}
                             </span>
                           ))
-                    }
-                  />
-                  <RuleFact
-                    label="Domain"
-                    value={
-                      selectedDomain
-                        ? `${selectedDomain.name} — ${selectedDomain.description}`
-                        : toLabel(selectedCompetency.domainId)
                     }
                   />
                   <RuleFact
@@ -412,14 +423,13 @@ export function SkillReferenceContent() {
                     value={
                       selectedCompetency.kind === "specialization" ? (
                         <>
-                          A Specialization of{" "}
+                          Parent:{" "}
                           <SkillLink
                             id={selectedCompetency.parentCompetencyId ?? ""}
                             names={names}
                             onSelect={selectCompetency}
                           />
-                          . Meeting prerequisites makes acquisition available; ownership begins only
-                          with the first acquired rank.
+                          .
                         </>
                       ) : specializations.length > 0 ? (
                         specializations.map((specialization) => (
@@ -432,18 +442,8 @@ export function SkillReferenceContent() {
                           </span>
                         ))
                       ) : (
-                        "No Specializations are authored for this Skill in the candidate."
+                        "None."
                       )
-                    }
-                  />
-                  <RuleFact
-                    label="Transfer"
-                    value={
-                      selectedCompetency.transfer?.kind === "zero-transfer"
-                        ? `No transfer — ${selectedCompetency.transfer.rationale}`
-                        : selectedCompetency.transfer?.kind === "explicit-relationships"
-                          ? "Only the explicit relationships listed below transfer competence."
-                          : "Only explicit directional relationships transfer competence; no reverse or domain-wide transfer is implied."
                     }
                   />
                   <RuleFact
@@ -460,68 +460,64 @@ export function SkillReferenceContent() {
                   />
                 </dl>
               </section>
-              <section aria-labelledby="what-it-covers" className={styles.rulesSection}>
-                <h3 id="what-it-covers">What it covers</h3>
-                <p>{selectedCompetency.taskEnvelope.useGuidance}</p>
-                <div className={styles.envelopeGrid}>
+              <section aria-labelledby="typical-uses" className={styles.rulesSection}>
+                <h3 id="typical-uses">Typical uses and boundaries</h3>
+                <div className={styles.readerGrid}>
                   <EnvelopeList
                     label="Typical uses"
                     values={selectedCompetency.taskEnvelope.coreTasks}
                   />
-                  <EnvelopeList label="Methods" values={selectedCompetency.taskEnvelope.methods} />
-                  <EnvelopeList label="Limits" values={selectedCompetency.taskEnvelope.limits} />
+                  <EnvelopeList
+                    label="Boundaries"
+                    values={selectedCompetency.taskEnvelope.limits}
+                  />
                 </div>
               </section>
               <section aria-labelledby="relationships" className={styles.rulesSection}>
                 <h3 id="relationships">Relationships</h3>
-                {incomingRelationships.length === 0 && outgoingRelationships.length === 0 ? (
-                  <p>No Skill relationships are authored for this entry.</p>
+                {incomingRelationships.length === 0 &&
+                outgoingRelationships.length === 0 &&
+                !selectedCompetency.writtenLanguageBinding ? (
+                  <p>None.</p>
                 ) : (
                   <ul className={styles.relationshipList}>
                     {incomingRelationships.map((relationship) => (
                       <li key={relationship.id}>
-                        Receives {relationship.strength}% from{" "}
+                        Receives {relationship.strength}% of acquired base competence from{" "}
                         <SkillLink
                           id={relationship.sourceCompetencyId}
                           names={names}
                           onSelect={selectCompetency}
                         />
-                        . {relationship.rationale}
+                        .
                       </li>
                     ))}
                     {outgoingRelationships.map((relationship) => (
                       <li key={relationship.id}>
-                        Contributes {relationship.strength}% to{" "}
+                        Contributes {relationship.strength}% of acquired base competence to{" "}
                         <SkillLink
                           id={relationship.targetCompetencyId}
                           names={names}
                           onSelect={selectCompetency}
                         />
-                        . {relationship.rationale}
+                        .
                       </li>
                     ))}
+                    {selectedCompetency.writtenLanguageBinding ? (
+                      <li>
+                        Written form of{" "}
+                        <SkillReference
+                          id={selectedCompetency.writtenLanguageBinding.spokenLanguageId}
+                          names={names}
+                          onSelect={selectCompetency}
+                        />
+                        , using {toLabel(selectedCompetency.writtenLanguageBinding.scriptId)}.
+                        Spoken and written competence remain separate.
+                      </li>
+                    ) : null}
                   </ul>
                 )}
-                <p className={styles.ruleNote}>
-                  Relationships use acquired base competence, keep only the strongest incoming
-                  result, round down, and do not chain in Pilot v1.
-                </p>
               </section>
-              {selectedCompetency.writtenLanguageBinding ? (
-                <section aria-labelledby="language-binding" className={styles.rulesSection}>
-                  <h3 id="language-binding">Language and writing</h3>
-                  <p>
-                    This written tradition is bound to{" "}
-                    <SkillLink
-                      id={selectedCompetency.writtenLanguageBinding.spokenLanguageId}
-                      names={names}
-                      onSelect={selectCompetency}
-                    />{" "}
-                    in {toLabel(selectedCompetency.writtenLanguageBinding.scriptId)}. Spoken and
-                    written competence remain separate.
-                  </p>
-                </section>
-              ) : null}
             </AdminPanel>
           </article>
         ) : null}
@@ -583,6 +579,18 @@ function SkillLink(props: {
   );
 }
 
+function SkillReference(props: {
+  id: string;
+  names: ReadonlyMap<string, string>;
+  onSelect: (id: string, focusDetail?: boolean) => void;
+}) {
+  return props.names.has(props.id) ? (
+    <SkillLink {...props} />
+  ) : (
+    <>{toLabel(props.id)} (not included)</>
+  );
+}
+
 function AccessSummary(props: {
   accessExceptions: readonly AccessException[];
   accessResolution?: AccessResolution;
@@ -595,13 +603,13 @@ function AccessSummary(props: {
   return (
     <div className={styles.accessSummary}>
       <label>
-        <span>Society profile</span>
+        <span>Society</span>
         <AdminSelect
-          aria-label="Availability profile"
+          aria-label="Availability society"
           onChange={(event) => props.setSelectedProfileId(event.target.value)}
           value={props.selectedProfileId}
         >
-          <option value="none">Choose a profile</option>
+          <option value="none">Choose a society</option>
           {props.profiles.map((profile) => (
             <option key={profile.id} value={profile.id}>
               {profile.name}
@@ -611,12 +619,6 @@ function AccessSummary(props: {
       </label>
       {props.accessResolution ? (
         <>
-          {selectedProfile ? (
-            <div className={styles.ruleNote}>
-              {selectedProfile.name}: development stage {selectedProfile.developmentStage}, access
-              band {selectedProfile.accessBand}.
-            </div>
-          ) : null}
           <div>
             <AdminStatusBadge
               tone={
@@ -629,25 +631,21 @@ function AccessSummary(props: {
             >
               {props.accessResolution.availability}
             </AdminStatusBadge>{" "}
-            {props.accessResolution.explanation}
-          </div>
-          <div className={styles.ruleNote}>
-            Resolved by {props.accessResolution.resolvedBy}
-            {props.accessResolution.attribution
-              ? ` (${toLabel(props.accessResolution.attribution)})`
-              : ""}
-            . Access opens a learning route and grants no ranks or competence.
+            {selectedProfile ? <span>for {selectedProfile.name}.</span> : null}{" "}
+            {props.accessResolution.availability === "available" ? null : (
+              <span>{readerFacingAvailabilityText(props.accessResolution.explanation)}</span>
+            )}
           </div>
           {props.accessExceptions.map((exception) => (
             <div className={styles.exception} key={exception.id}>
-              <strong>Possible {toLabel(exception.basis)} exception:</strong>{" "}
-              {exception.explanation} It applies only if accepted and grants no competence.
+              <strong>{toLabel(exception.basis)} exception:</strong>{" "}
+              {readerFacingAvailabilityText(exception.explanation)} Subject to approval.
             </div>
           ))}
         </>
       ) : (
         <span className={styles.ruleNote}>
-          Choose a profile to see whether this Skill is available, restricted, or unavailable.
+          Choose a society to see whether this Skill is available, restricted, or unavailable.
         </span>
       )}
     </div>
@@ -660,7 +658,7 @@ function EnvelopeList(props: { label: string; values: readonly string[] }) {
       <h4>{props.label}</h4>
       <ul>
         {props.values.map((value) => (
-          <li key={value}>{value}</li>
+          <li key={value}>{readerFacingText(value)}</li>
         ))}
       </ul>
     </div>
