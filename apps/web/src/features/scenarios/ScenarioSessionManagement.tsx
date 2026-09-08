@@ -15,12 +15,14 @@ export interface ScenarioAvailableSourceOption {
 export function ScenarioSessionManagement({
   campaignId,
   initialReferences,
+  onReconcileEquipment,
   onSave,
   session,
   sourceOptions,
 }: {
   campaignId: string;
   initialReferences: ScenarioAvailableObjectReference[];
+  onReconcileEquipment?: (participantId: string) => void;
   onSave: (input: {
     gmPrivateNotes: string;
     references: ScenarioAvailableObjectReference[];
@@ -135,7 +137,11 @@ export function ScenarioSessionManagement({
           Save session preparation
         </button>
       </section>
-      <ScenarioSessionPanel campaignId={campaignId} session={session} />
+      <ScenarioSessionPanel
+        campaignId={campaignId}
+        onReconcileEquipment={onReconcileEquipment}
+        session={session}
+      />
     </section>
   );
 }

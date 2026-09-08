@@ -142,11 +142,17 @@ function realItemService() {
     storageAssignment: { carryMode: "on_person", locationId: "character-1:loc-person" },
     templateId: "weapon-template-dagger",
   });
-  return new CombatItemInteractionService({
-    getCombatItemInteractionRecords: vi.fn(async () => [
-      { availableInEncounter: true, hidden: false, item },
-    ]),
-  } as never);
+  return new CombatItemInteractionService(
+    {
+      getCombatItemInteractionRecords: vi.fn(async () => [
+        { availableInEncounter: true, hidden: false, item },
+      ]),
+    } as never,
+    {
+      encounter: { findUnique: vi.fn(async () => ({ scenarioId: "scenario-1" })) },
+      scenarioParticipant: { findMany: vi.fn(async () => []) },
+    } as never,
+  );
 }
 
 function services(currentEncounter = encounterWithActions()): CombatItemInteractionRouteServices {

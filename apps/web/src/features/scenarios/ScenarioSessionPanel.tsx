@@ -18,10 +18,12 @@ const cardStyle = {
 export function ScenarioSessionPanel({
   campaignId,
   onPickUp,
+  onReconcileEquipment,
   session,
 }: {
   campaignId?: string;
   onPickUp?: (availabilityId: string, targetParticipantId: string) => void;
+  onReconcileEquipment?: (participantId: string) => void;
   session: ScenarioSessionView;
 }) {
   const controlledParticipants = session.participants.filter(
@@ -43,6 +45,16 @@ export function ScenarioSessionPanel({
                 {participant.presence.kind === "encounter"
                   ? `Encounter: ${participant.presence.encounterName}`
                   : "Scenario"}
+                {participant.equipment ? (
+                  <div style={{ marginTop: "0.25rem" }}>
+                    <span>{participant.equipment.message}</span>{" "}
+                    {participant.equipment.canReconcile && onReconcileEquipment ? (
+                      <button onClick={() => onReconcileEquipment(participant.id)} type="button">
+                        Reconcile equipment
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>

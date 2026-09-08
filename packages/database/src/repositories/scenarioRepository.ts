@@ -35,6 +35,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 
 import { prisma as defaultPrisma } from "../client";
 import { createPrismaCharacterEquipmentRepository } from "./characterEquipmentRepository";
+import { reconcileScenarioEquipmentForCharacters } from "../services/scenarioEquipmentReconciliation";
 
 function asJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
@@ -1124,8 +1125,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
             if (
               !reference ||
               reference.sourceKind !== "campaign_item" ||
-              reference.visibility !== "players" ||
-              !reference.expectedHolderCharacterId
+              reference.visibility !== "players"
             ) {
               throw new Error("Available Item not found.");
             }
@@ -1143,12 +1143,19 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
               (location) => location.type === "person_system",
             );
             if (!targetLocation) throw new Error("The receiving Character has no valid storage.");
-            const item = await equipmentRepository.transferCampaignEquipmentItem({
+            if (!equipmentRepository.acquireUnheldCampaignEquipmentItem) {
+              throw new Error("Campaign Item pickup is not available.");
+            }
+            const item = await equipmentRepository.acquireUnheldCampaignEquipmentItem({
               campaignId: existing.campaignId,
               itemId: reference.sourceId,
-              sourceCharacterId: reference.expectedHolderCharacterId,
               targetCharacterId: input.targetCharacterId,
               targetStorageAssignment: getStorageAssignmentForLocation(targetLocation),
+            });
+            await reconcileScenarioEquipmentForCharacters({
+              characterIds: [input.targetCharacterId],
+              client: transaction,
+              scenarioId: input.scenarioId,
             });
             const session = scenarioSessionStateSchema.parse({
               ...liveState.session,

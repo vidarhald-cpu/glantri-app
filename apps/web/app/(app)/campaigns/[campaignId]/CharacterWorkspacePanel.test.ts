@@ -52,6 +52,6 @@ describe("CharacterWorkspacePanel", () => {
       "onEquipmentStateChange={isGameMaster ? refreshSelectedScenarioEquipment : undefined}",
     );
     expect(source).toContain("onScenarioParticipantUpdated?.(participant)");
-    expect(source).toContain("scenario equipment was refreshed");
+    expect(source).toContain("Scenario equipment was reconciled");
   });
 });

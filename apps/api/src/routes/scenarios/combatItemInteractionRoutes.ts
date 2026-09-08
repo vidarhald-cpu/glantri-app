@@ -23,6 +23,7 @@ import {
   EncounterCombatWriteError,
   EncounterService,
   ScenarioService,
+  ScenarioEquipmentStaleError,
 } from "@glantri/database";
 
 import { requireAuthenticatedUser } from "../../lib/sessionAuth";
@@ -241,20 +242,27 @@ export function createCombatItemInteractionRoutes(
       async (request, reply) => {
         const currentContext = await context(request, reply);
         if (!currentContext) return reply.code(404).send({ error: "Combat encounter not found." });
-        const options = await services().itemService.getOptions({
-          campaignId: currentContext.access.campaignId,
-          encounterId: currentContext.encounterId,
-          participants: currentContext.participants,
-          viewer:
-            currentContext.access.mode === "gm"
-              ? { kind: "gm" }
-              : {
-                  controlledParticipantIds: currentContext.controlledParticipantIds,
-                  kind: "player",
-                  visibleParticipantIds: currentContext.visibleParticipantIds,
-                },
-        });
-        return { options };
+        try {
+          const options = await services().itemService.getOptions({
+            campaignId: currentContext.access.campaignId,
+            encounterId: currentContext.encounterId,
+            participants: currentContext.participants,
+            viewer:
+              currentContext.access.mode === "gm"
+                ? { kind: "gm" }
+                : {
+                    controlledParticipantIds: currentContext.controlledParticipantIds,
+                    kind: "player",
+                    visibleParticipantIds: currentContext.visibleParticipantIds,
+                  },
+          });
+          return { options };
+        } catch (error) {
+          if (error instanceof ScenarioEquipmentStaleError) {
+            return reply.code(409).send({ error: error.message });
+          }
+          throw error;
+        }
       },
     );
 
@@ -484,6 +492,9 @@ export function createCombatItemInteractionRoutes(
               }),
         };
       } catch (error) {
+        if (error instanceof ScenarioEquipmentStaleError) {
+          return reply.code(409).send({ error: error.message });
+        }
         if (error instanceof CombatItemUnavailableError) {
           return reply.code(404).send({ error: "The selected Item is no longer available." });
         }

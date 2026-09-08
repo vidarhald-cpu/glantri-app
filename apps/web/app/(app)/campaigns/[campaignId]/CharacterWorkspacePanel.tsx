@@ -83,13 +83,13 @@ export default function CharacterWorkspacePanel({
       });
       onScenarioParticipantUpdated?.(participant);
       setSaveError(undefined);
-      setSaveFeedback(`${participant.snapshot.displayName}’s scenario equipment was refreshed.`);
+      setSaveFeedback(`${participant.snapshot.displayName}’s Scenario equipment was reconciled.`);
     } catch (caughtError) {
       setSaveFeedback(undefined);
       setSaveError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Unable to refresh scenario equipment for Combat.",
+          : "Unable to reconcile Scenario equipment for Combat.",
       );
       throw caughtError;
     }

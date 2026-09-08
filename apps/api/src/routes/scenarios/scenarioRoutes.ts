@@ -133,11 +133,17 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
         scenario,
         viewerMode: access.mode,
       });
+      const equipmentByParticipantId = await scenarioService.resolveEquipmentStatuses({
+        participants,
+        userId: user.id,
+        viewerMode: access.mode,
+      });
 
       return {
         session: buildScenarioSessionView({
           availableObjects,
           encounters,
+          equipmentByParticipantId,
           eventLogs,
           participants,
           scenario,
@@ -244,11 +250,17 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
             viewerMode: access.mode,
           }),
         ]);
+        const equipmentByParticipantId = await scenarioService.resolveEquipmentStatuses({
+          participants,
+          userId: user.id,
+          viewerMode: access.mode,
+        });
         return {
           idempotent: result.idempotent,
           session: buildScenarioSessionView({
             availableObjects,
             encounters,
+            equipmentByParticipantId,
             eventLogs,
             participants,
             scenario: result.scenario,

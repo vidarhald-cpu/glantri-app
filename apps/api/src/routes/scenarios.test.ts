@@ -158,6 +158,7 @@ const mocks = vi.hoisted(() => {
     listScenarioParticipants: vi.fn(),
     pickUpScenarioAvailableItem: vi.fn(),
     recordScenarioEvent: vi.fn(),
+    resolveEquipmentStatuses: vi.fn().mockResolvedValue({}),
     resolveScenarioAvailableObjects: vi.fn(),
     refreshCharacterParticipantEquipmentSnapshot: vi.fn(),
     updateScenario: vi.fn(),
@@ -218,6 +219,7 @@ vi.mock("@glantri/database", () => ({
       this.name = "ScenarioSessionWriteError";
     }
   },
+  ScenarioEquipmentStaleError: class ScenarioEquipmentStaleError extends Error {},
   ScenarioService: vi.fn(() => mocks.scenarioService),
 }));
 
@@ -5727,7 +5729,7 @@ describe("scenarios route contract", () => {
     },
   );
 
-  it("lets the scenario GM explicitly refresh a character participant equipment snapshot", async () => {
+  it("lets the scenario GM explicitly reconcile a character participant equipment projection", async () => {
     const participant = { characterId: "character-1", id: "participant-1" };
     mocks.requireAuthenticatedUser.mockResolvedValue(mocks.adminUser);
     mocks.scenarioService.getScenarioById.mockResolvedValue({
@@ -5745,7 +5747,7 @@ describe("scenarios route contract", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: "/scenarios/scenario-1/participants/participant-1/refresh-character-equipment",
+      url: "/scenarios/scenario-1/participants/participant-1/reconcile-character-equipment",
     });
     await app.close();
 
@@ -6209,6 +6211,14 @@ describe("scenarios route contract", () => {
         visibilityOverrides: { visibility: "hidden" },
       },
     ]);
+    mocks.scenarioService.resolveEquipmentStatuses.mockResolvedValue({
+      "participant-a": {
+        canReconcile: false,
+        message:
+          "Equipment changed outside this Scenario. Reconcile it before dependent play continues.",
+        status: "stale",
+      },
+    });
     mocks.encounterService.listEncountersByScenario.mockResolvedValue([encounterA, encounterB]);
     const initialEventLogs = [
       {
@@ -6292,6 +6302,14 @@ describe("scenarios route contract", () => {
     expect(responseBeforeClose.json().session.history).toEqual([
       expect.objectContaining({ id: "event-a", summary: "Player A found a clue." }),
     ]);
+    expect(responseBeforeClose.json().session.participants).toContainEqual(
+      expect.objectContaining({
+        equipment: expect.objectContaining({ canReconcile: false, status: "stale" }),
+        id: "participant-a",
+      }),
+    );
+    expect(responseBeforeClose.body).not.toContain("fingerprint");
+    expect(responseBeforeClose.body).not.toContain("aggregateRevision");
     for (const response of [responseBeforeClose, responseAfterClose, responseAfterReconnect]) {
       expect(response.statusCode, response.body).toBe(200);
       const payload = response.json().session;

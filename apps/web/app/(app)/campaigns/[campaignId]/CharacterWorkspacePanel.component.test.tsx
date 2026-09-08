@@ -97,7 +97,7 @@ describe("CharacterWorkspacePanel scenario equipment ownership", () => {
     );
     expect(onScenarioParticipantUpdated).toHaveBeenCalledWith(refreshedParticipant);
     expect(
-      await screen.findByText("Scyrian cavalry guy’s scenario equipment was refreshed."),
+      await screen.findByText("Scyrian cavalry guy’s Scenario equipment was reconciled."),
     ).toBeInTheDocument();
   });
 });

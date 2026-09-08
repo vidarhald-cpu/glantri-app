@@ -214,6 +214,12 @@ export interface CharacterEquipmentRepository {
   transferCampaignEquipmentItem(
     input: TransferCampaignEquipmentItemInput,
   ): Promise<CanonicalEquipmentItem>;
+  acquireUnheldCampaignEquipmentItem?(input: {
+    campaignId: string;
+    itemId: string;
+    targetCharacterId: string;
+    targetStorageAssignment: ItemStorageAssignment;
+  }): Promise<CanonicalEquipmentItem>;
   applyCombatItemInteraction(
     input: ApplyCombatItemInteractionInput,
   ): Promise<ApplyCombatItemInteractionResult>;
@@ -323,6 +329,33 @@ export class StaleEquipmentTransferError extends Error {
   constructor() {
     super("This item is no longer held by the expected Character.");
     this.name = "StaleEquipmentTransferError";
+  }
+}
+
+export async function advanceCharacterEquipmentAggregates(input: {
+  characterIds: readonly (string | null | undefined)[];
+  client: Prisma.TransactionClient;
+}): Promise<void> {
+  const characterIds = [
+    ...new Set(input.characterIds.filter((id): id is string => Boolean(id))),
+  ].sort();
+  for (const characterId of characterIds) {
+    await input.client.characterEquipmentAggregate.upsert({
+      create: { characterId },
+      update: {},
+      where: { characterId },
+    });
+  }
+  if (characterIds.length === 0) return;
+  await input.client.$queryRaw(
+    Prisma.sql`SELECT "characterId" FROM "CharacterEquipmentAggregate" WHERE "characterId" IN (${Prisma.join(characterIds)}) ORDER BY "characterId" FOR UPDATE`,
+  );
+  const advanced = await input.client.characterEquipmentAggregate.updateMany({
+    data: { revision: { increment: 1 } },
+    where: { characterId: { in: characterIds } },
+  });
+  if (advanced.count !== characterIds.length) {
+    throw new StaleCharacterEquipmentAggregateError();
   }
 }
 
@@ -745,6 +778,86 @@ export function createPrismaCharacterEquipmentRepository(
         throw error;
       }
     },
+    async acquireUnheldCampaignEquipmentItem(input) {
+      const acquire = async (transaction: Prisma.TransactionClient) => {
+        await transaction.characterEquipmentAggregate.upsert({
+          create: { characterId: input.targetCharacterId },
+          update: {},
+          where: { characterId: input.targetCharacterId },
+        });
+        await transaction.$queryRaw(
+          Prisma.sql`SELECT "characterId" FROM "CharacterEquipmentAggregate" WHERE "characterId" = ${input.targetCharacterId} FOR UPDATE`,
+        );
+        await transaction.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "CharacterEquipmentItem" WHERE "id" = ${input.itemId} FOR UPDATE`,
+        );
+        const current = await transaction.characterEquipmentItem.findUnique({
+          where: { id: input.itemId },
+        });
+        if (
+          !current ||
+          current.campaignContextId !== input.campaignId ||
+          current.holderCharacterId !== null
+        ) {
+          throw new StaleEquipmentTransferError();
+        }
+        const rostered = await transaction.campaignRosterEntry.count({
+          where: {
+            campaignId: input.campaignId,
+            sourceId: input.targetCharacterId,
+            sourceType: "character",
+          },
+        });
+        if (rostered !== 1) throw new Error("Choose a Character from this campaign roster.");
+        for (const location of createDefaultEquipmentLocations(input.targetCharacterId)) {
+          await transaction.characterStorageLocation.upsert({
+            create: {
+              availabilityClass: location.availabilityClass,
+              characterId: location.characterId,
+              id: location.id,
+              isAccessibleInEncounter: location.isAccessibleInEncounter,
+              isMobile: location.isMobile,
+              name: location.name,
+              notes: location.notes ?? null,
+              parentLocationId: location.parentLocationId ?? null,
+              type: location.type,
+            } as Prisma.CharacterStorageLocationUncheckedCreateInput,
+            update: {},
+            where: { id: location.id },
+          });
+        }
+        const targetLocation = await transaction.characterStorageLocation.findFirst({
+          where: {
+            characterId: input.targetCharacterId,
+            id: input.targetStorageAssignment.locationId,
+          },
+        });
+        if (!targetLocation || input.targetStorageAssignment.carryMode === "equipped") {
+          throw new Error("The receiving Character has no valid storage for this pickup.");
+        }
+        const updated = await transaction.characterEquipmentItem.update({
+          data: {
+            carryMode: input.targetStorageAssignment.carryMode,
+            holderCharacterId: input.targetCharacterId,
+            isEquipped: false,
+            locationId: input.targetStorageAssignment.locationId,
+            previousCarryMode: null,
+            previousLocationId: null,
+          },
+          where: { id: input.itemId },
+        });
+        await transaction.characterEquipmentAggregate.update({
+          data: { revision: { increment: 1 } },
+          where: { characterId: input.targetCharacterId },
+        });
+        return mapCanonicalEquipmentItem(updated);
+      };
+      return transactionClient
+        ? acquire(transactionClient)
+        : prisma.$transaction(acquire, {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          });
+    },
     async getCombatItemInteractionRecords(campaignId) {
       const items = await prisma.characterEquipmentItem.findMany({
         include: {
@@ -1037,6 +1150,10 @@ export function createPrismaCharacterEquipmentRepository(
           },
           where: { id: current.id },
         });
+        await advanceCharacterEquipmentAggregates({
+          characterIds: [current.holderCharacterId, holderCharacterId],
+          client: transaction,
+        });
         return { alreadyApplied: false, item: mapCanonicalEquipmentItem(updated) };
       };
       return transactionClient ? apply(transactionClient) : prisma.$transaction(apply);
@@ -1132,6 +1249,10 @@ export function createPrismaCharacterEquipmentRepository(
             updatedAt: new Date(Math.max(Date.now(), current.updatedAt.getTime() + 1)),
           },
           where: { id: before.id },
+        });
+        await advanceCharacterEquipmentAggregates({
+          characterIds: [undo.ownerCharacterId],
+          client: transaction,
         });
         return mapCanonicalEquipmentItem(updated);
       };

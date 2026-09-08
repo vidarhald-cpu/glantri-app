@@ -21,6 +21,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "../client";
 import {
   CombatItemUnavailableError,
+  advanceCharacterEquipmentAggregates,
   createPrismaCharacterEquipmentRepository,
   type ApplyCombatItemInteractionResult,
   type CharacterEquipmentRepository,
@@ -33,8 +34,13 @@ import {
   isRetryableCombatTransactionError,
 } from "../repositories/combatStatePersistenceRepository";
 import { createPrismaCombatStateReadRepository } from "../repositories/combatStateReadRepository";
+import {
+  assertScenarioEquipmentCurrent,
+  reconcileScenarioEquipmentForCharacters,
+} from "./scenarioEquipmentReconciliation";
 
 export { CombatPersistenceError } from "../repositories/combatStatePersistenceRepository";
+export { ScenarioEquipmentStaleError } from "./scenarioEquipmentReconciliation";
 export type { CombatThrownWeaponAttackUndo } from "../repositories/characterEquipmentRepository";
 
 export {
@@ -469,6 +475,7 @@ export class CombatItemInteractionService {
     participants: readonly CombatItemParticipantContext[];
     viewer: CombatItemInteractionViewer;
   }): Promise<CombatItemInteractionOptions> {
+    await this.assertEncounterScenarioEquipmentCurrent(input.encounterId);
     const records = await this.repository.getCombatItemInteractionRecords(input.campaignId);
     const visibleActors = input.participants.filter(
       (participant) =>
@@ -628,6 +635,7 @@ export class CombatItemInteractionService {
   async resolveDisarmDeclaration(
     input: ResolveCombatDisarmDeclarationInput,
   ): Promise<CombatDisarmDeclaration> {
+    await this.assertEncounterScenarioEquipmentCurrent(input.encounterId);
     const actor = input.participants.find(
       (participant) => participant.participantId === input.actingParticipantId,
     );
@@ -799,6 +807,11 @@ export class CombatItemInteractionService {
               operation: "drop",
               ownerCharacterId: input.ownerCharacterId,
             });
+            await reconcileScenarioEquipmentForCharacters({
+              characterIds: [input.ownerCharacterId],
+              client: transaction,
+              scenarioId: input.scenarioId,
+            });
             await this.transactionBoundaryHook?.("item");
             if (!item.item.revision) {
               throw new CombatItemUnavailableError();
@@ -948,6 +961,15 @@ export class CombatItemInteractionService {
                 updatedAt: new Date(Math.max(Date.now(), ammo.updatedAt.getTime() + 1)),
               },
               where: { id: ammo.id },
+            });
+            await advanceCharacterEquipmentAggregates({
+              characterIds: [input.ownerCharacterId],
+              client: transaction,
+            });
+            await reconcileScenarioEquipmentForCharacters({
+              characterIds: [input.ownerCharacterId],
+              client: transaction,
+              scenarioId: input.scenarioId,
             });
             await this.transactionBoundaryHook?.("item");
             const undo: CombatMissileAmmoUndo = {
@@ -1111,6 +1133,11 @@ export class CombatItemInteractionService {
               operation: "drop",
               ownerCharacterId: input.ownerCharacterId,
             });
+            await reconcileScenarioEquipmentForCharacters({
+              characterIds: [input.ownerCharacterId],
+              client: transaction,
+              scenarioId: input.scenarioId,
+            });
             await this.transactionBoundaryHook?.("item");
             if (!item.item.revision) throw new CombatItemUnavailableError();
             const undo: CombatThrownWeaponAttackUndo = {
@@ -1229,6 +1256,11 @@ export class CombatItemInteractionService {
           scenarioId: input.scenarioId,
           session: input.session,
         });
+        await reconcileScenarioEquipmentForCharacters({
+          characterIds: input.undos.map(({ undo }) => undo.ownerCharacterId),
+          client: transaction,
+          scenarioId: input.scenarioId,
+        });
         await this.transactionBoundaryHook?.("encounter");
         await transaction.scenarioEventLog.create({
           data: {
@@ -1312,6 +1344,11 @@ export class CombatItemInteractionService {
           scenarioId: input.scenarioId,
           session: input.session,
         });
+        await reconcileScenarioEquipmentForCharacters({
+          characterIds: input.undos.map(({ undo }) => undo.ownerCharacterId),
+          client: transaction,
+          scenarioId: input.scenarioId,
+        });
         await this.transactionBoundaryHook?.("encounter");
         await transaction.scenarioEventLog.create({
           data: {
@@ -1392,6 +1429,12 @@ export class CombatItemInteractionService {
           },
           where: { id: ammo.id },
         });
+        const ammoHolderCharacterId = ammo.holderCharacterId;
+        if (!ammoHolderCharacterId) throw new CombatItemUnavailableError();
+        await advanceCharacterEquipmentAggregates({
+          characterIds: [ammoHolderCharacterId],
+          client: transaction,
+        });
         await this.transactionBoundaryHook?.("item");
         const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
           maxTransactionAttempts: 1,
@@ -1402,6 +1445,11 @@ export class CombatItemInteractionService {
           participantStateUpdates: input.participantStateUpdates,
           scenarioId: input.scenarioId,
           session: input.session,
+        });
+        await reconcileScenarioEquipmentForCharacters({
+          characterIds: [ammoHolderCharacterId],
+          client: transaction,
+          scenarioId: input.scenarioId,
         });
         await this.transactionBoundaryHook?.("encounter");
         await transaction.scenarioEventLog.create({
@@ -1536,6 +1584,13 @@ export class CombatItemInteractionService {
               ownerCharacterId: input.ownerCharacterId,
               recipientCharacterId: input.recipientCharacterId,
             });
+            await reconcileScenarioEquipmentForCharacters({
+              characterIds: [input.ownerCharacterId, input.recipientCharacterId].filter(
+                (characterId): characterId is string => Boolean(characterId),
+              ),
+              client: transaction,
+              scenarioId: input.scenarioId,
+            });
             await this.transactionBoundaryHook?.("item");
 
             const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
@@ -1581,9 +1636,21 @@ export class CombatItemInteractionService {
     );
   }
 
+  private async assertEncounterScenarioEquipmentCurrent(encounterId: string): Promise<void> {
+    const encounter = await this.client.encounter.findUnique({
+      select: { scenarioId: true },
+      where: { id: encounterId },
+    });
+    if (!encounter?.scenarioId) throw new CombatItemUnavailableError();
+    await assertScenarioEquipmentCurrent({
+      client: this.client,
+      scenarioId: encounter.scenarioId,
+    });
+  }
+
   private async assertScenarioAllowsCombatMutation(
     scenarioId: string,
-    transaction: Pick<Prisma.TransactionClient, "scenario">,
+    transaction: Prisma.TransactionClient,
   ): Promise<void> {
     const scenario = await transaction.scenario.findUnique({
       where: { id: scenarioId },
@@ -1597,5 +1664,6 @@ export class CombatItemInteractionService {
     if (!isScenarioLiveInteractive(scenario.status)) {
       throw new CombatItemUnavailableError();
     }
+    await assertScenarioEquipmentCurrent({ client: transaction, scenarioId });
   }
 }

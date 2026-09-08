@@ -939,7 +939,7 @@ export default function ScenarioDetailPageContent({
       await refreshScenario();
       setEquipmentRefreshResult({
         kind: "success",
-        message: `${refreshedParticipant.snapshot.displayName}’s scenario equipment was refreshed.`,
+        message: `${refreshedParticipant.snapshot.displayName}’s Scenario equipment was reconciled.`,
         participantId: refreshedParticipant.id,
       });
     } catch (caughtError) {
@@ -948,7 +948,7 @@ export default function ScenarioDetailPageContent({
         message:
           caughtError instanceof Error
             ? caughtError.message
-            : "Unable to refresh scenario participant equipment.",
+            : "Unable to reconcile Scenario participant equipment.",
         participantId: participant.id,
       });
     } finally {
@@ -1028,11 +1028,15 @@ export default function ScenarioDetailPageContent({
           campaignId={campaignId}
           initialReferences={scenario.liveState?.session.availableObjects ?? []}
           key={scenarioSession.revision}
+          onReconcileEquipment={(participantId) => {
+            const participant = participants.find((candidate) => candidate.id === participantId);
+            if (participant) void handleRefreshParticipantEquipment(participant);
+          }}
           onSave={(input) => void handleSaveScenarioSession(input)}
           session={scenarioSession}
           sourceOptions={[
             ...Object.values(campaignEquipment.itemsById)
-              .filter((item) => Boolean(item.holderCharacterId))
+              .filter((item) => !item.holderCharacterId)
               .map((item) => ({
                 label: `Item: ${
                   item.displayName ||
