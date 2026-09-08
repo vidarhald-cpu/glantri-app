@@ -469,31 +469,34 @@ const candidate3ShortDescriptionByCompetencyId: Record<string, string> = {
   "spec:weaponsmithing":
     "Forge, finish, balance, and inspect metal weapons for safe and reliable use.",
   "spec:home-coast-pilotage":
-    "Guide a vessel through familiar coastal waters using detailed local knowledge.",
+    "Navigate familiar coastal waters by using detailed knowledge of channels, landmarks, tides, currents, and hazards.",
   "spec:desert-wayfinding":
     "Find and follow routes across arid terrain while managing heat, water, and sparse landmarks.",
   "spec:steppe-remount-training": "Train and rotate spare riding animals to sustain long journeys.",
   "skill:sword":
-    "Attack and defend with a sword using effective distance, guard, timing, and footwork.",
-  "skill:shield": "Use a shield to intercept attacks, control openings, and move under protection.",
+    "Fight with a sword by controlling distance, guard, timing, attacks, and defensive movements.",
+  "skill:shield":
+    "Intercept attacks and control openings with a shield while retaining balance, sight, and freedom to act.",
   "skill:knife-dagger":
-    "Fight at close range with knives or daggers while controlling distance and retaining the weapon.",
-  "skill:spear": "Use a spear's reach and point control to attack, defend, and manage distance.",
+    "Attack, defend, and retain a knife or dagger while fighting at close range.",
+  "skill:spear":
+    "Attack and defend with a spear by controlling its reach, point, leverage, footwork, and recovery.",
   "skill:perception":
-    "Notice and interpret relevant sensory details before drawing conclusions from them.",
-  "skill:athletics": "Run, jump, climb, lift, and sustain demanding movement with trained control.",
+    "Notice relevant sights, sounds, and other sensory details, then interpret what they may mean.",
+  "skill:athletics":
+    "Perform demanding physical movement such as running, jumping, climbing, and lifting with trained control.",
   "skill:survival":
     "Find water, shelter, warmth, food, and a safe route when ordinary support is unavailable.",
   "skill:leadership":
     "Direct and coordinate people toward a shared objective, maintaining order, morale, and cooperation.",
   "skill:pharmacy":
-    "Prepare, store, measure, and dispense medicinal substances safely and accurately.",
+    "Identify, prepare, preserve, measure, and dispense medicines while avoiding contamination and unsafe doses.",
   "skill:plant-lore":
-    "Identify plants, understand their practical uses, and avoid harmful lookalikes.",
+    "Recognize plants and their habitats, seasons, useful properties, dangers, and misleading lookalikes.",
   "skill:streetwise":
     "Find information, services, and safe ways through urban life by reading local behaviour.",
   "skill:underworld":
-    "Recognize and navigate illicit networks, hidden markets, intermediaries, and their risks.",
+    "Understand illicit networks, hidden markets, intermediaries, customs, reputations, and warning signs.",
   "skill:deception":
     "Create and maintain a plausible false impression through words, behaviour, omission, or staged evidence.",
   "skill:stealth":
@@ -505,39 +508,40 @@ const candidate3ShortDescriptionByCompetencyId: Record<string, string> = {
   "skill:insight":
     "Judge another person's likely emotions, motives, and intentions from what they say and do.",
   "skill:disguise":
-    "Alter appearance and behaviour to support a plausible identity or pass without notice.",
+    "Change appearance, voice, posture, and conduct to support a plausible identity or escape notice.",
   "skill:administration":
     "Organize and carry out the procedures, records, and routine business of an institution or organization.",
   "skill:customs": "Know and follow expected social conduct in a particular society or community.",
   "skill:oratory":
-    "Address an audience persuasively through clear structure, suitable language, and deliberate delivery.",
+    "Persuade or inform an audience through a clear argument, suitable language, memorable points, and deliberate delivery.",
   "skill:bookkeeping":
-    "Record and reconcile money, goods, debts, and payments in accurate ledgers.",
+    "Maintain and check ledgers that record money, goods, debts, payments, and supporting evidence.",
   "skill:trade":
-    "Buy, sell, and exchange goods or services with sound knowledge of markets, costs, and terms.",
+    "Conduct exchanges of goods or services by judging markets, quality, costs, transport, terms, and settlement.",
   "skill:bargaining":
-    "Negotiate an exchange by testing priorities, offers, concessions, and alternatives.",
+    "Improve the terms of an exchange by negotiating priorities, offers, concessions, and alternatives.",
   "skill:appraisal":
-    "Estimate an object's identity, condition, quality, and value from evidence and comparison.",
-  "skill:smithing": "Shape, join, finish, and inspect metal using controlled heat and tools.",
+    "Judge an object's identity, condition, quality, and likely value from inspection, provenance, and comparison.",
+  "skill:smithing":
+    "Make and repair metal objects by controlling heat, shaping, joining, finishing, and inspection.",
   "skill:seamanship":
-    "Operate and care for a vessel, its equipment, people, and cargo in changing conditions.",
+    "Work safely aboard a vessel by handling its equipment, cargo, routine operations, and changing conditions.",
   "skill:pilotage":
-    "Guide a vessel through confined or coastal waters by tracking local hazards and conditions.",
+    "Navigate confined or coastal waters by combining observations, charts, local knowledge, tides, currents, and soundings.",
   "skill:swimming":
-    "Move and remain safe in water by controlling breathing, buoyancy, direction, and fatigue.",
+    "Travel or survive in water by managing breathing, buoyancy, propulsion, direction, carried load, and fatigue.",
   "skill:weather-lore":
-    "Forecast near-term weather by comparing atmospheric signs and recurring local patterns.",
+    "Predict near-term weather from clouds, wind, pressure, temperature, moisture, and recurring patterns.",
   "skill:wayfinding":
-    "Choose and follow a route through terrain using landmarks, direction, distance, and memory.",
+    "Find and follow a route without a prepared chart by using landmarks, direction, distance, terrain, and memory.",
   "skill:animal-handling":
-    "Direct and care for trained animals by reading behaviour and using safe, consistent cues.",
+    "Care for and direct trained animals by reading their behaviour and using safe, consistent cues.",
   "skill:tracking":
-    "Follow a person or animal by interpreting physical signs of passage and their age.",
+    "Infer and follow a person or animal's route from prints and other physical signs of passage.",
   "skill:hunting":
-    "Locate, approach, take, and recover wild game with suitable tools and minimal waste.",
+    "Find, approach, take, and recover wild game by reading habitat and sign while limiting noise and waste.",
   "skill:riding":
-    "Ride and direct a mount with balanced control across changing pace, terrain, and fatigue.",
+    "Control a mount's direction and pace while keeping a balanced seat and adapting to terrain and fatigue.",
 };
 
 const candidate3FullDescriptionBoundaryByCompetencyId: Record<string, string> = {
