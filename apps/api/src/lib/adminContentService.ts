@@ -95,7 +95,7 @@ function formatPilotDomainLabel(domainId: string): string {
     .join(" ");
 }
 
-function mapCompetencyDomain(domainId: string, fallback: string): string {
+function mapPilotDomain(domainId: string, fallback = "domain:skills"): string {
   if (domainId.startsWith("domain:")) {
     return domainId;
   }
@@ -103,8 +103,8 @@ function mapCompetencyDomain(domainId: string, fallback: string): string {
   return fallback;
 }
 
-function buildSkillReferenceSnapshot(label: "candidate" | "canonical"): AdminSkillReferenceSnapshot {
-  const status: AdminSkillReferenceSnapshot["status"] = label === "canonical" ? "canonical" : "proposal";
+function buildCanonicalSkillReferenceSnapshot(): AdminSkillReferenceSnapshot {
+  const status: AdminSkillReferenceSnapshot["status"] = "canonical";
   const compatibility = {
     characterMigrationReviewRequired: false,
     classification: "presentation-only" as const,
@@ -118,7 +118,7 @@ function buildSkillReferenceSnapshot(label: "candidate" | "canonical"): AdminSki
   const domainsById = new Map<string, string>();
 
   const trackDomain = (domainId: string): string => {
-    const normalizedDomainId = mapCompetencyDomain(domainId, "domain:skills");
+    const normalizedDomainId = mapPilotDomain(domainId);
     const name = formatPilotDomainLabel(normalizedDomainId);
     if (!domainsById.has(normalizedDomainId)) {
       domainsById.set(normalizedDomainId, name);
@@ -155,7 +155,7 @@ function buildSkillReferenceSnapshot(label: "candidate" | "canonical"): AdminSki
       const parentCompetencyId = specialization.prerequisites[0]?.competencyId;
       const parentDomainId =
         parentCompetencyId
-          ? mapCompetencyDomain(
+          ? mapPilotDomain(
               competencyMap.get(parentCompetencyId)?.domainId ?? "",
               "domain:skills"
             )
@@ -324,8 +324,8 @@ export class CanonicalContentService {
 
   async getSkillReference(): Promise<AdminSkillReferenceResponse> {
     return {
-      canonical: buildSkillReferenceSnapshot("canonical"),
-      candidate: buildSkillReferenceSnapshot("candidate")
+      canonical: buildCanonicalSkillReferenceSnapshot(),
+      candidate: null
     };
   }
 

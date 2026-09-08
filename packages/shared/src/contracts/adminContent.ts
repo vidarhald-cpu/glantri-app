@@ -160,6 +160,6 @@ export interface AdminSkillReferenceSnapshot {
 }
 
 export interface AdminSkillReferenceResponse {
-  candidate: AdminSkillReferenceSnapshot;
+  candidate: AdminSkillReferenceSnapshot | null;
   canonical: AdminSkillReferenceSnapshot;
 }

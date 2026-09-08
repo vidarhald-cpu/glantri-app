@@ -438,6 +438,7 @@ export function AdminDataTable<TRow extends { id: string }>(props: {
   columns: AdminTableColumn<TRow>[];
   emptyState: string;
   onSelect?: (rowId: string) => void;
+  onRowKeyDown?: (row: TRow, event: React.KeyboardEvent<HTMLTableRowElement>) => void;
   rows: TRow[];
   selectedId?: string;
 }) {
@@ -493,6 +494,8 @@ export function AdminDataTable<TRow extends { id: string }>(props: {
                     background: selected ? "rgba(215, 226, 216, 0.72)" : "transparent",
                     cursor: props.onSelect ? "pointer" : "default"
                   }}
+                  tabIndex={props.onSelect ? 0 : -1}
+                  onKeyDown={(event) => props.onRowKeyDown?.(row, event)}
                 >
                   {props.columns.map((column) => (
                     <td
