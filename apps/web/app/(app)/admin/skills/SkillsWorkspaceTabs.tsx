@@ -2,11 +2,12 @@
 
 import { AdminWorkspaceTabs } from "../admin-ui";
 
-const tabs = [
-  { href: "/admin/skills", label: "Catalog Editor" },
+export const skillsWorkspaceTabs = [
+  { href: "/admin/skills", label: "Legacy Catalogue" },
+  { href: "/admin/skills/reference", label: "Skill Reference" },
   { href: "/admin/skills/matrix", label: "Matrix Audit" },
 ];
 
 export default function SkillsWorkspaceTabs() {
-  return <AdminWorkspaceTabs tabs={tabs} />;
+  return <AdminWorkspaceTabs tabs={skillsWorkspaceTabs} />;
 }
