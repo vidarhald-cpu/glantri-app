@@ -3,27 +3,39 @@ import { describe, expect, it } from "vitest";
 import { CanonicalContentService } from "./adminContentService";
 
 describe("admin content service", () => {
-  it("projects reference data as canonical-only for admin Skill Reference", async () => {
+  it("projects the integrated authored proposal without fabricating a canonical release", async () => {
     const service = new CanonicalContentService();
     const snapshot = await service.getSkillReference();
 
-    expect(snapshot.candidate).toBeNull();
-    expect(snapshot.canonical.status).toBe("canonical");
-    expect(snapshot.canonical.records.competencies.length).toBeGreaterThan(0);
-    expect(snapshot.canonical.records.scripts.length).toBeGreaterThan(0);
-    expect(snapshot.canonical.records.relationships.length).toBeGreaterThan(0);
-    expect(snapshot.canonical.records.domains.length).toBeGreaterThan(0);
+    expect(snapshot.canonical).toBeNull();
+    expect(snapshot.candidate).toMatchObject({
+      contentVersion: "pilot-skills-content/2.0.0-candidate.1",
+      id: "content-release:pilot-skills:2-candidate-1",
+      schemaVersion: "skill-content-release/v2",
+      status: "proposal",
+    });
+    expect(snapshot.candidate?.records.competencies.length).toBeGreaterThan(0);
+    expect(snapshot.candidate?.records.scripts.length).toBeGreaterThan(0);
+    expect(snapshot.candidate?.records.relationships.length).toBeGreaterThan(0);
+    expect(snapshot.candidate?.records.domains.length).toBeGreaterThan(0);
   });
 
-  it("emits immutable canonical projection metadata for provenance and digest review", async () => {
+  it("retains authored envelopes, provenance, and both deterministic proposal digests", async () => {
     const service = new CanonicalContentService();
     const snapshot = await service.getSkillReference();
+    const medicine = snapshot.candidate?.records.competencies.find(
+      ({ id }) => id === "skill:medicine",
+    );
 
-    expect(snapshot.canonical.title.toLowerCase()).toContain("pilot");
-    expect(snapshot.canonical.compatibility.characterMigrationReviewRequired).toBe(false);
-    expect(snapshot.canonical.compatibility.classification).toBe("presentation-only");
-    expect(snapshot.canonical.manifest.packageDigest).toContain("sha256:");
-    expect(snapshot.canonical.provenance.length).toBeGreaterThan(0);
-    expect(snapshot.canonical.provenance[0]).toContain("http");
+    expect(snapshot.candidate?.compatibility.classification).toBe("mechanically-compatible");
+    expect(snapshot.candidate?.manifest.packageDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(snapshot.candidate?.manifest.semanticDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(snapshot.candidate?.manifest.packageDigest).not.toBe(
+      snapshot.candidate?.manifest.semanticDigest,
+    );
+    expect(snapshot.candidate?.provenance.length).toBeGreaterThan(0);
+    expect(medicine?.taskEnvelope.coreTasks.length).toBeGreaterThan(0);
+    expect(medicine?.taskEnvelope.limits.length).toBeGreaterThan(0);
+    expect(medicine?.provenance[0]).toContain("pilotSkillContentReleaseProposal.ts");
   });
 });

@@ -2,14 +2,14 @@ import type { FastifyPluginAsync } from "fastify";
 
 import {
   CanonicalContentRevisionConflictError,
-  CanonicalContentValidationError
+  CanonicalContentValidationError,
 } from "../lib/adminContentService";
 import type {
   AdminContentConflictResponse,
   AdminContentGetResponse,
   AdminSkillReferenceResponse,
   AdminContentPutRequest,
-  AdminContentPutResponse
+  AdminContentPutResponse,
 } from "@glantri/shared";
 import type { CanonicalContent } from "@glantri/content";
 
@@ -38,7 +38,7 @@ function parseSaveAdminContentInput(body: unknown): AdminContentPutRequest {
 
   return {
     content: candidate.content,
-    expectedRevision: candidate.expectedRevision
+    expectedRevision: candidate.expectedRevision,
   };
 }
 
@@ -53,7 +53,7 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
     const snapshot = await canonicalContentService.getCanonicalContent();
 
     return {
-      ...snapshot
+      ...snapshot,
     } satisfies AdminContentGetResponse<CanonicalContent>;
   });
 
@@ -70,7 +70,7 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
       input = parseSaveAdminContentInput(request.body);
     } catch (error) {
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Invalid admin content payload."
+        error: error instanceof Error ? error.message : "Invalid admin content payload.",
       });
     }
 
@@ -78,19 +78,19 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
       const snapshot = await canonicalContentService.saveCanonicalContent(input);
 
       return {
-        ...snapshot
+        ...snapshot,
       } satisfies AdminContentPutResponse<CanonicalContent>;
     } catch (error: unknown) {
       if (error instanceof CanonicalContentRevisionConflictError) {
         return reply.code(409).send({
           current: error.current,
-          error: "Canonical content has changed on the server. Reload before saving again."
+          error: "Canonical content has changed on the server. Reload before saving again.",
         } satisfies AdminContentConflictResponse<CanonicalContent>);
       }
 
       if (error instanceof CanonicalContentValidationError) {
         return reply.code(400).send({
-          error: error.message
+          error: error.message,
         });
       }
 
@@ -108,7 +108,7 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
     const snapshot = await canonicalContentService.getSkillReference();
 
     return {
-      ...snapshot
+      ...snapshot,
     } satisfies AdminSkillReferenceResponse;
   });
 };

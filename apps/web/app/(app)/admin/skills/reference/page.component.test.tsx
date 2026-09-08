@@ -1,242 +1,315 @@
 // @vitest-environment happy-dom
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { SkillReferenceContent } from "./SkillReferenceContent";
 import SkillReferencePage from "./page";
 
 const mocks = vi.hoisted(() => ({
   loadAdminSkillReferenceFromServer: vi.fn(),
+  sessionUser: {
+    currentUser: {
+      displayName: "Admin",
+      email: "admin@glantri.test",
+      id: "admin-1",
+      roles: ["admin"],
+    },
+    loading: false,
+  },
 }));
 
 vi.mock("@/lib/api/adminContentClient", () => ({
   loadAdminSkillReferenceFromServer: mocks.loadAdminSkillReferenceFromServer,
 }));
 
+vi.mock("@/lib/auth/SessionUserContext", () => ({
+  useSessionUser: () => mocks.sessionUser,
+}));
+
 vi.mock("next/navigation", () => ({
   usePathname: () => "/admin/skills/reference",
 }));
 
-const referencePayload = {
-  canonical: {
-    compatibility: {
-      characterMigrationReviewRequired: false,
-      classification: "presentation-only",
-      rationale: "Read-only release slice for Admin reference."
-    },
-    contentVersion: "pilot-skills-content/1.0.1",
-    id: "content-release:pilot-skills:1",
-    manifest: {
-      counts: {
-        accessExceptions: 1,
-        competencies: 2,
-        domains: 2,
-        histories: 1,
-        profiles: 1,
-        relationships: 1,
-        scripts: 1,
-      },
-      packageDigest: "sha256:abc",
-      serialization: "canonical-json-lexicographic-keys/v1"
-    },
-    provenance: ["pilot-skill-content-release/v1", "pilot-skill-rules/v1"],
-    records: {
-      accessExceptions: [
-        {
-          basis: "tradition",
-          competencyIds: ["competency:pilotage"],
-          explanation: "Only granted through tradition route for pilots.",
-          grantsCompetence: 0,
-          historyIds: ["history:voyages"],
-          id: "access:exception:pilotage",
-          profileId: "profile:ocean",
-        },
-      ],
-      competencies: [
-        {
-          acquisitionWeight: 1,
-          description: "Read vessel status and handling.",
-          domainId: "domain:navigation",
-          id: "competency:pilotage",
-          kind: "skill",
-          name: "Pilotage",
-          prerequisites: [],
-          shortDescription: "Vessel handling in constrained waters.",
-          shortLabel: "Pilotage",
-          status: "canonical",
-          transfer: {
-            kind: "zero-transfer",
-            rationale: "Pilotage never grants transfered skills."
-          },
-          weight: 2,
-          provenance: ["pilot-skill-content-release/v1"],
-          recordVersion: "sha256:abc",
-          taskEnvelope: {
-            coreTasks: ["Apply pilotage in confined waters."],
-            limits: ["Read-only reference."],
-            methods: ["Apply bounded pilot rules."],
-            useGuidance: "Do not mutate this surface."
-          },
-        },
-        {
-          description: "Written records of seamanship terms.",
-          domainId: "domain:linguistics",
-          id: "written:pilot",
-          kind: "written-tradition",
-          name: "Pilot Logs",
-          prerequisites: [],
-          shortDescription: "Seafaring manuscripts for reference.",
-          shortLabel: "Pilot Logs",
-          status: "canonical",
-          weight: 1,
-          provenance: ["pilot-skill-content-release/v1"],
-          recordVersion: "sha256:def",
-          writtenLanguageBinding: {
-            scriptId: "script:sea-script",
-            spokenLanguageId: "spoken:common"
-          },
-          taskEnvelope: {
-            coreTasks: ["Interpret pilot ledgers and navigation notes."],
-            limits: ["Reference only."],
-            methods: ["Keep records isolated."],
-            useGuidance: "Do not mutate this surface."
-          },
-        },
-      ],
-      domains: [
-        {
-          description: "Pilotage and navigation planning.",
-          id: "domain:navigation",
-          name: "Navigation"
-        },
-        {
-          description: "Navigation writing and symbols.",
-          id: "domain:linguistics",
-          name: "Linguistics"
-        },
-      ],
-      histories: [
-        {
-          context: "Sea voyages and docking",
-          fixedCompetencyIds: ["competency:pilotage"],
-          id: "history:voyages",
-          selectionSlots: [
-            {
-              candidateCompetencyIds: ["competency:pilotage", "competency:seamanship"],
-              chooseCount: 1,
-              id: "slot:voyage",
-              label: "Pilot voyage bonus"
-            }
-          ],
-          name: "Sailor Voyages",
-        },
-      ],
-      profiles: [
-        {
-          accessBand: "apprentice",
-          developmentStage: "stable",
-          id: "profile:ocean",
-          name: "Ocean Captain",
-          normalRoutes: [
-            {
-              accessBand: "apprentice",
-              competencyIds: ["competency:pilotage"],
-              description: "Pilotage with apprenticeship routes only.",
-              id: "route:ocean"
-            },
-          ],
-          overrides: [
-            {
-              attributionId: "ocean-origin",
-              availability: "restricted",
-              competencyIds: ["competency:pilotage"],
-              explanation: "Captain-only override for long voyages.",
-            },
-          ],
-        },
-      ],
-      relationships: [
-        {
-          id: "relationship:pilotage-to-seamanship",
-          rationale: "Pilotage supports seamanship practice.",
-          sourceCompetencyId: "competency:pilotage",
-          strength: 50,
-          targetCompetencyId: "competency:seamanship",
-        },
-      ],
-      scripts: [
-        {
-          description: "Sea-route symbol binding for pilot logs.",
-          domainId: "domain:linguistics",
-          familyIds: ["language-family:common", "script:sea-script"],
-          id: "script:sea-script",
-          name: "Script Sea"
-        },
-      ],
-    },
-    rulesVersion: "pilot-skill-rules/v1",
-    schemaVersion: "skill-content-release/v2",
-    status: "canonical",
-    title: "Pilot Skill Content Release v1",
-  },
-  candidate: null,
+const metadata = {
+  provenance: ["packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts"],
+  recordVersion: "2.0.0-candidate.1",
+  status: "proposal" as const,
 };
 
+const candidate = {
+  compatibility: {
+    characterMigrationReviewRequired: false,
+    classification: "mechanically-compatible" as const,
+    rationale: "Authored documentation repaired without activating runtime content.",
+  },
+  contentVersion: "pilot-skills-content/2.0.0-candidate.1",
+  id: "content-release:pilot-skills:2-candidate-1",
+  manifest: {
+    counts: {
+      accessExceptions: 1,
+      competencies: 3,
+      domains: 2,
+      histories: 1,
+      profiles: 1,
+      relationships: 1,
+      scripts: 1,
+    },
+    packageDigest: `sha256:${"a".repeat(64)}` as const,
+    semanticDigest: `sha256:${"b".repeat(64)}` as const,
+    serialization: "canonical-json-lexicographic-keys/v1",
+  },
+  provenance: ["Forgejo #25 authored proposal"],
+  records: {
+    accessExceptions: [
+      {
+        basis: "teacher",
+        competencyIds: ["skill:surgery"],
+        explanation: "A named surgeon can open this otherwise restricted route.",
+        grantsCompetence: 0 as const,
+        historyIds: [],
+        id: "access:surgeon",
+        profileId: "profile:mogreb",
+      },
+    ],
+    competencies: [
+      {
+        ...metadata,
+        description: "Medicine covers structured diagnosis and non-operative treatment.",
+        domainId: "domain:healing",
+        id: "skill:medicine",
+        kind: "skill" as const,
+        name: "Medicine",
+        prerequisites: [],
+        shortDescription: "Diagnose and treat without surgery.",
+        shortLabel: "Medicine",
+        taskEnvelope: {
+          coreTasks: ["Take a history and form a diagnosis."],
+          limits: ["Does not include invasive procedures."],
+          methods: ["Observation, learned texts, and remedies."],
+          useGuidance: "Use for authored learned medical practice.",
+        },
+        weight: 3 as const,
+      },
+      {
+        ...metadata,
+        description: "Surgery covers authored invasive procedures and their immediate risks.",
+        domainId: "domain:healing",
+        id: "skill:surgery",
+        kind: "skill" as const,
+        name: "Surgery",
+        prerequisites: [{ competencyId: "skill:medicine", threshold: 6 }],
+        shortDescription: "Perform invasive procedures in an authored tradition.",
+        shortLabel: "Surgery",
+        taskEnvelope: {
+          coreTasks: ["Perform authored invasive procedures."],
+          limits: ["Requires the named tradition and tools."],
+          methods: ["Incision, extraction, suturing, and cautery."],
+          useGuidance: "Use only inside the available operative tradition.",
+        },
+        weight: 3 as const,
+      },
+      {
+        ...metadata,
+        description: "Written Mogrebi is a distinct language and script competence.",
+        domainId: "domain:language-and-text",
+        id: "written:mogrebi:sacred-mogrebi",
+        kind: "written-tradition" as const,
+        name: "Written Mogrebi in Sacred Mogrebi",
+        prerequisites: [],
+        shortDescription: "Read and write Mogrebi in the Sacred Mogrebi script.",
+        shortLabel: "Written Mogrebi",
+        taskEnvelope: {
+          coreTasks: ["Read and compose authored Mogrebi texts."],
+          limits: ["Does not imply other scripts or spoken competence."],
+          methods: ["Reading and writing in Sacred Mogrebi."],
+          useGuidance: "Use for the bound written tradition only.",
+        },
+        weight: 2 as const,
+        writtenLanguageBinding: {
+          scriptId: "script:sacred-mogrebi",
+          spokenLanguageId: "spoken:mogrebi",
+        },
+      },
+    ],
+    domains: [
+      { description: "Healing practices.", id: "domain:healing", name: "Healing" },
+      {
+        description: "Spoken and written traditions.",
+        id: "domain:language-and-text",
+        name: "Language and Text",
+      },
+    ],
+    histories: [
+      {
+        context: "Temple medical practice.",
+        fixedCompetencyIds: ["skill:medicine"],
+        id: "history:temple-infirmary",
+        name: "Temple Infirmary",
+        selectionSlots: [
+          {
+            candidateCompetencyIds: ["skill:surgery"],
+            chooseCount: 1,
+            id: "slot:operative",
+            label: "Operative practice",
+          },
+        ],
+      },
+    ],
+    profiles: [
+      {
+        accessBand: "AB3",
+        developmentStage: "DS3",
+        id: "profile:mogreb",
+        name: "Mogreb",
+        normalRoutes: [
+          {
+            accessBand: "AB3",
+            competencyIds: ["skill:medicine"],
+            description: "Temple and medical-text route.",
+            id: "route:mogreb-medicine",
+          },
+        ],
+        overrides: [
+          {
+            attributionId: "route:mogreb-surgery",
+            availability: "unavailable",
+            competencyIds: ["skill:surgery"],
+            explanation: "Ordinary training does not include Surgery.",
+          },
+        ],
+      },
+    ],
+    relationships: [
+      {
+        id: "relationship:medicine-surgery",
+        rationale: "Medicine supplies a bounded foundation for Surgery.",
+        sourceCompetencyId: "skill:medicine",
+        strength: 25 as const,
+        targetCompetencyId: "skill:surgery",
+      },
+    ],
+    scripts: [
+      {
+        description: "The sacred script used for this written tradition.",
+        familyIds: ["script-family:mogrebi"],
+        id: "script:sacred-mogrebi",
+        name: "Sacred Mogrebi",
+      },
+    ],
+  },
+  rulesVersion: "pilot-skill-rules/v1",
+  schemaVersion: "skill-content-release/v2",
+  status: "proposal" as const,
+  title: "Documentation-complete Pilot Skill v2 candidate",
+};
+
+const referencePayload = { candidate, canonical: null };
+
+function competencyTable() {
+  return screen.getByRole("heading", { name: "Competencies" }).closest("section")!;
+}
+
 beforeEach(() => {
+  window.history.replaceState(null, "", "/admin/skills/reference");
   mocks.loadAdminSkillReferenceFromServer.mockReset();
   mocks.loadAdminSkillReferenceFromServer.mockResolvedValue(referencePayload);
+  mocks.sessionUser.currentUser.roles = ["admin"];
 });
 
 describe("Admin Skill Reference page", () => {
-  it("renders canonical slice and candidate-absent notice", async () => {
-    const user = userEvent.setup();
-    render(<SkillReferencePage />);
+  it("renders the integrated proposal identity and honest canonical absence", async () => {
+    render(<SkillReferenceContent />);
 
-    expect(await screen.findByText("Admin Skill Reference")).toBeVisible();
-
-    await user.selectOptions(screen.getAllByRole("combobox")[0], "candidate");
-    expect(
-      screen.getByText(
-        "Candidate contract is not available yet. Integrated pilot proposal data must be explicitly onboarded before this mode can render."
-      )
-    ).toBeVisible();
+    expect(await screen.findByText("pilot-skills-content/2.0.0-candidate.1")).toBeVisible();
+    expect(screen.getByText(`sha256:${"a".repeat(64)}`)).toBeVisible();
+    expect(screen.getByText(`sha256:${"b".repeat(64)}`)).toBeVisible();
+    expect(screen.getByText("Absent")).toBeVisible();
+    expect(screen.getByText(/#26 is the sole release gate/i)).toBeVisible();
+    expect(await screen.findByText("Take a history and form a diagnosis.")).toBeVisible();
+    expect(screen.getByText("Does not include invasive procedures.")).toBeVisible();
   });
 
-  it("filters competencies by search text and supports row focus selection", async () => {
+  it("restores a stable direct link before choosing a fallback record", async () => {
+    window.history.replaceState(null, "", "/admin/skills/reference#competency-skill:surgery");
+    render(<SkillReferenceContent />);
+
+    expect(await screen.findByRole("heading", { name: "Surgery" })).toBeVisible();
+    expect(screen.getAllByText(/Medicine 6\+/).length).toBeGreaterThan(0);
+    expect(window.location.hash).toBe("#competency-skill:surgery");
+  });
+
+  it("applies weight, prerequisite, relationship, exception, profile availability, and status filters", async () => {
     const user = userEvent.setup();
-    render(<SkillReferencePage />);
+    render(<SkillReferenceContent />);
+    expect(await screen.findByRole("heading", { name: "Medicine" })).toBeVisible();
 
-    expect(await screen.findByText("Pilotage")).toBeVisible();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Weight" }), "2");
+    expect(within(competencyTable()).getByText("Written Mogrebi in Sacred Mogrebi")).toBeVisible();
+    expect(within(competencyTable()).queryByText("Medicine")).toBeNull();
 
-    const search = screen.getByRole("textbox", { name: /search/i });
-    await user.type(search, "Pilotage");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Weight" }), "all");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Prerequisites" }), "has");
+    expect(within(competencyTable()).getByText("Surgery")).toBeVisible();
+    expect(within(competencyTable()).queryByText("Medicine")).toBeNull();
 
-    expect(screen.getByText("Pilotage")).toBeVisible();
-    expect(screen.queryByText("Pilot Logs")).toBeNull();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Prerequisites" }), "all");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Relationships" }), "outgoing");
+    expect(within(competencyTable()).getByText("Medicine")).toBeVisible();
+    expect(within(competencyTable()).queryByText("Surgery")).toBeNull();
 
-    const row = screen.getByText("Pilotage").closest("tr");
-    expect(row).not.toBeNull();
-    row!.focus();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Relationships" }), "all");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Access exceptions" }), "has");
+    expect(within(competencyTable()).getByText("Surgery")).toBeVisible();
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Access exceptions" }), "all");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Profile" }), "profile:mogreb");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Availability" }), "unavailable");
+    expect(within(competencyTable()).getByText("Surgery")).toBeVisible();
+    expect(screen.getByText("Ordinary training does not include Surgery.")).toBeVisible();
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Availability" }), "all");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Status" }), "canonical");
+    expect(screen.getByText(/No competencies match the current search and filters/i)).toBeVisible();
+  });
+
+  it("uses readable directional relationships, histories, bindings, and keyboard focus", async () => {
+    const user = userEvent.setup();
+    render(<SkillReferenceContent />);
+    expect(await screen.findByRole("heading", { name: "Medicine" })).toBeVisible();
+    expect(screen.getByText("Contributes 25% to Surgery")).toBeVisible();
+    expect(screen.getByText("Temple Infirmary")).toBeVisible();
+
+    const surgeryRow = within(competencyTable()).getByText("Surgery").closest("tr")!;
+    surgeryRow.focus();
     await user.keyboard("{Enter}");
+    expect(screen.getByRole("heading", { name: "Surgery" })).toHaveFocus();
+    expect(screen.getByText("Receives 25% from Medicine")).toBeVisible();
 
-    expect(screen.getByText("Competency detail: Pilotage")).toBeVisible();
-    expect(screen.getByText(/Outbound relationships:/i)).toBeVisible();
+    await user.clear(screen.getByRole("textbox", { name: "Search competencies" }));
+    await user.type(screen.getByRole("textbox", { name: "Search competencies" }), "Sacred Mogrebi");
+    expect(await screen.findByRole("heading", { name: /Written Mogrebi/i })).toBeVisible();
+    expect(screen.getByText("Language and script binding:").closest("div")).toHaveTextContent(
+      "Mogrebi in Sacred Mogrebi",
+    );
   });
 
-  it("links profile context to selected competency", async () => {
+  it("denies an authenticated non-admin before the reference request mounts", async () => {
+    mocks.sessionUser.currentUser.roles = ["player"];
     render(<SkillReferencePage />);
 
-    expect(await screen.findByText("Competency detail: Pilotage")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Admin access required" })).toBeVisible();
+    expect(mocks.loadAdminSkillReferenceFromServer).not.toHaveBeenCalled();
+  });
 
-    await userEvent.setup().selectOptions(
-      screen.getByRole("combobox", { name: /profile/i }),
-      "profile:ocean"
+  it("shows a recoverable error state without stale reference content", async () => {
+    mocks.loadAdminSkillReferenceFromServer.mockRejectedValueOnce(
+      new Error("Reference unavailable"),
     );
+    render(<SkillReferenceContent />);
 
-    const selectedProfileRow = screen.getByText("Selected profile:").closest("div");
-    expect(selectedProfileRow).not.toBeNull();
-    expect(selectedProfileRow).toHaveTextContent(/Ocean Captain/i);
-    expect(screen.getByText("route:ocean")).toBeVisible();
+    expect(await screen.findByText("Reference unavailable")).toBeVisible();
+    expect(screen.queryByText("Medicine")).toBeNull();
   });
 });

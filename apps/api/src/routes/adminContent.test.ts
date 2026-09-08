@@ -1,10 +1,4 @@
-import {
-  afterEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { FastifyInstance } from "fastify";
 
@@ -24,7 +18,7 @@ describe("admin content reference route", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/admin/content/reference"
+      url: "/api/admin/content/reference",
     });
 
     expect(response.statusCode).toBe(401);
@@ -33,7 +27,28 @@ describe("admin content reference route", () => {
     await app.close();
   });
 
-  it("returns canonical-only projection for authorized admins", async () => {
+  it("denies an authenticated non-admin before projection load", async () => {
+    const app = buildApiServer() as FastifyInstance;
+    await app.ready();
+    const getSkillReference = vi.spyOn(CanonicalContentService.prototype, "getSkillReference");
+
+    vi.spyOn(sessionAuth, "requireStrictAdminUser").mockImplementation(async (_request, reply) => {
+      await reply.code(403).send({ error: "Admin role required." });
+      return null;
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/admin/content/reference",
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: "Admin role required." });
+    expect(getSkillReference).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("returns the integrated proposal and honest canonical absence for authorized admins", async () => {
     const app = buildApiServer() as FastifyInstance;
     await app.ready();
     const getSkillReference = vi.spyOn(CanonicalContentService.prototype, "getSkillReference");
@@ -49,18 +64,18 @@ describe("admin content reference route", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/admin/content/reference"
+      url: "/api/admin/content/reference",
     });
 
     expect(response.statusCode).toBe(200);
     expect(getSkillReference).toHaveBeenCalledTimes(1);
     expect(response.json()).toMatchObject({
-      candidate: null,
-      canonical: {
-        title: expect.stringMatching(/pilot/i),
-        status: "canonical"
-      }
+      candidate: {
+        contentVersion: "pilot-skills-content/2.0.0-candidate.1",
+        status: "proposal",
+      },
     });
+    expect(response.json().canonical).toBeNull();
     await app.close();
   });
 });

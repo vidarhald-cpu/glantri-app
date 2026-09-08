@@ -4,7 +4,7 @@ import type {
   AdminContentGetResponse,
   AdminSkillReferenceResponse,
   AdminContentPutRequest,
-  AdminContentPutResponse
+  AdminContentPutResponse,
 } from "@glantri/shared";
 
 import { sendJson } from "./apiClient";
@@ -13,27 +13,27 @@ export async function loadAdminCanonicalContentFromServer(): Promise<
   AdminContentGetResponse<CanonicalContent>
 > {
   return sendJson<AdminContentGetResponse<CanonicalContent>>("/api/admin/content", {
-    method: "GET"
+    method: "GET",
   });
 }
 
 export async function saveAdminCanonicalContentToServer(
-  input: AdminContentPutRequest<CanonicalContent>
+  input: AdminContentPutRequest<CanonicalContent>,
 ): Promise<AdminContentPutResponse<CanonicalContent>> {
   return sendJson<AdminContentPutResponse<CanonicalContent>>("/api/admin/content", {
     body: JSON.stringify(input),
-    method: "PUT"
+    method: "PUT",
   });
 }
 
 export async function loadAdminSkillReferenceFromServer(): Promise<AdminSkillReferenceResponse> {
   return sendJson<AdminSkillReferenceResponse>("/api/admin/content/reference", {
-    method: "GET"
+    method: "GET",
   });
 }
 
 export function isAdminContentConflictPayload(
-  payload: unknown
+  payload: unknown,
 ): payload is AdminContentConflictResponse<CanonicalContent> {
   if (!payload || typeof payload !== "object") {
     return false;

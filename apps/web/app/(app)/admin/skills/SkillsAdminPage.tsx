@@ -12,7 +12,7 @@ import {
   AdminPageIntro,
   AdminPanel,
   AdminSelect,
-  AdminTagList
+  AdminTagList,
 } from "../admin-ui";
 import SkillsWorkspaceTabs from "./SkillsWorkspaceTabs";
 
@@ -28,10 +28,7 @@ function summarizeList(values: string[], maxItems = 3): string {
   return `${values.slice(0, maxItems).join(", ")} +${values.length - maxItems} more`;
 }
 
-function formatRelationshipList(
-  values: string[],
-  maxItems = 2
-): string {
+function formatRelationshipList(values: string[], maxItems = 2): string {
   if (values.length === 0) {
     return "None";
   }
@@ -52,7 +49,7 @@ function renderClampedCell(text: string, lines = 2) {
         lineHeight: 1.45,
         overflow: "hidden",
         WebkitBoxOrient: "vertical",
-        WebkitLineClamp: lines
+        WebkitLineClamp: lines,
       }}
       title={text}
     >
@@ -80,7 +77,7 @@ function SkillsReviewTable(props: {
         borderRadius: 18,
         maxHeight: "70vh",
         overflow: "auto",
-        position: "relative"
+        position: "relative",
       }}
     >
       <div style={{ minWidth: 1080 }}>
@@ -92,27 +89,36 @@ function SkillsReviewTable(props: {
             gridTemplateColumns: skillsReviewGridTemplate,
             position: "sticky",
             top: 0,
-            zIndex: 2
+            zIndex: 2,
           }}
         >
-          {["Skill", "Description", "Type", "Skill category", "Primary Group", "Cross-listed", "Relations", "Professions", "Dependencies", "Inspect"].map(
-            (header) => (
-              <div
-                key={header}
-                style={{
-                  color: "#594320",
-                  fontSize: "0.8rem",
-                  fontWeight: 700,
-                  letterSpacing: "0.08em",
-                  padding: "0.8rem",
-                  textTransform: "uppercase",
-                  whiteSpace: "nowrap"
-                }}
-              >
-                {header}
-              </div>
-            )
-          )}
+          {[
+            "Skill",
+            "Description",
+            "Type",
+            "Skill category",
+            "Primary Group",
+            "Cross-listed",
+            "Relations",
+            "Professions",
+            "Dependencies",
+            "Inspect",
+          ].map((header) => (
+            <div
+              key={header}
+              style={{
+                color: "#594320",
+                fontSize: "0.8rem",
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                padding: "0.8rem",
+                textTransform: "uppercase",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {header}
+            </div>
+          ))}
         </div>
 
         {props.rows.map((row) => {
@@ -127,7 +133,7 @@ function SkillsReviewTable(props: {
                 borderTop: "1px solid rgba(85, 73, 48, 0.1)",
                 cursor: "pointer",
                 display: "grid",
-                gridTemplateColumns: skillsReviewGridTemplate
+                gridTemplateColumns: skillsReviewGridTemplate,
               }}
             >
               <div style={{ padding: "0.9rem 0.8rem" }}>
@@ -139,26 +145,35 @@ function SkillsReviewTable(props: {
                 ) : null}
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
-                {row.shortDescription ? renderClampedCell(row.shortDescription, 2) : <span style={{ color: "#8a7e63" }}>None</span>}
+                {row.shortDescription ? (
+                  renderClampedCell(row.shortDescription, 2)
+                ) : (
+                  <span style={{ color: "#8a7e63" }}>None</span>
+                )}
               </div>
-              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem", textTransform: "capitalize" }}>{row.skillType}</div>
-              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem", textTransform: "capitalize" }}>
+              <div
+                style={{ color: "#2e2619", padding: "0.9rem 0.8rem", textTransform: "capitalize" }}
+              >
+                {row.skillType}
+              </div>
+              <div
+                style={{ color: "#2e2619", padding: "0.9rem 0.8rem", textTransform: "capitalize" }}
+              >
                 {row.skillCategory.replaceAll("-", " ")}
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
                 {row.primaryGroup || <span style={{ color: "#8a7e63" }}>None</span>}
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
-                {row.optionalGroupCount > 0
-                  ? renderClampedCell(summarizeList(row.optionalGroupNames, 2), 2)
-                  : <span style={{ color: "#8a7e63" }}>None</span>}
+                {row.optionalGroupCount > 0 ? (
+                  renderClampedCell(summarizeList(row.optionalGroupNames, 2), 2)
+                ) : (
+                  <span style={{ color: "#8a7e63" }}>None</span>
+                )}
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
                 {row.relationshipSummaryBadges.length > 0 ? (
-                  renderClampedCell(
-                    formatRelationshipList(row.relationshipSummaryBadges, 2),
-                    2
-                  )
+                  renderClampedCell(formatRelationshipList(row.relationshipSummaryBadges, 2), 2)
                 ) : (
                   <span style={{ color: "#8a7e63" }}>None</span>
                 )}
@@ -192,14 +207,14 @@ export default function SkillsAdminPage() {
   const [selectedSkillId, setSelectedSkillId] = useState<string>();
   const skillCategoryOptions = useMemo(
     () => ["all", ...new Set(allRows.map((row) => row.skillCategory))],
-    [allRows]
+    [allRows],
   );
   const rows = useMemo(
     () =>
       allRows.filter((row) =>
-        skillCategoryFilter === "all" ? true : row.skillCategory === skillCategoryFilter
+        skillCategoryFilter === "all" ? true : row.skillCategory === skillCategoryFilter,
       ),
-    [allRows, skillCategoryFilter]
+    [allRows, skillCategoryFilter],
   );
   const selectedVisibleRow = rows.find((row) => row.id === selectedSkillId) ?? rows[0];
   const selectedRow =
@@ -240,10 +255,10 @@ export default function SkillsAdminPage() {
                   { header: "Dependencies", value: (row) => row.dependencies.join(" | ") },
                   { header: "Secondary Of", value: (row) => row.secondaryOf },
                   { header: "Specialization Of", value: (row) => row.specializationOf },
-                  { header: "Sort Order", value: (row) => row.sortOrder }
+                  { header: "Sort Order", value: (row) => row.sortOrder },
                 ],
                 filename: "glantri-skills.csv",
-                rows
+                rows,
               })
             }
             variant="secondary"
@@ -262,7 +277,9 @@ export default function SkillsAdminPage() {
         subtitle="Skill category comes from the canonical explicit category field used by chargen and other player-facing views. Type remains the mechanical ordinary / secondary field."
         title="Review filters"
       >
-        <div style={{ display: "grid", gap: "0.9rem", gridTemplateColumns: "minmax(220px, 280px)" }}>
+        <div
+          style={{ display: "grid", gap: "0.9rem", gridTemplateColumns: "minmax(220px, 280px)" }}
+        >
           <AdminField label="Skill category">
             <AdminSelect
               onChange={(event) => setSkillCategoryFilter(event.target.value)}
@@ -282,14 +299,18 @@ export default function SkillsAdminPage() {
         style={{
           display: "grid",
           gap: "1rem",
-          gridTemplateColumns: "minmax(0, 2.35fr) minmax(340px, 1fr)"
+          gridTemplateColumns: "minmax(0, 2.35fr) minmax(340px, 1fr)",
         }}
       >
         <AdminPanel
           subtitle="The table centers the canonical skill model rather than derived profession or society reach. Select a skill to inspect its structure, category, and rule-facing relationships."
           title="Skill Catalog"
         >
-          <SkillsReviewTable onInspect={setSelectedSkillId} rows={rows} selectedId={selectedRow.id} />
+          <SkillsReviewTable
+            onInspect={setSelectedSkillId}
+            rows={rows}
+            selectedId={selectedRow.id}
+          />
         </AdminPanel>
 
         <div style={{ display: "grid", gap: "1rem" }}>
@@ -302,11 +323,23 @@ export default function SkillsAdminPage() {
             title={selectedRow.name}
           >
             <div style={{ display: "grid", gap: "0.85rem" }}>
-              <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gap: "0.75rem",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                }}
+              >
                 <AdminMetric label="Society level" value={`L${selectedRow.societyLevel}`} />
-                <AdminMetric label="Cross-listed groups" value={selectedRow?.optionalGroupCount ?? 0} />
+                <AdminMetric
+                  label="Cross-listed groups"
+                  value={selectedRow?.optionalGroupCount ?? 0}
+                />
                 <AdminMetric label="Professions" value={selectedRow?.professionNames.length ?? 0} />
-                <AdminMetric label="Foundational access" value={selectedRow?.foundationalAccessBandsSummary ?? "—"} />
+                <AdminMetric
+                  label="Foundational access"
+                  value={selectedRow?.foundationalAccessBandsSummary ?? "—"}
+                />
               </div>
 
               <div
@@ -316,41 +349,86 @@ export default function SkillsAdminPage() {
                   borderRadius: 16,
                   display: "grid",
                   gap: "0.25rem",
-                  padding: "0.85rem 1rem"
+                  padding: "0.85rem 1rem",
                 }}
               >
-                <div><strong>Primary group:</strong> {selectedRow?.primaryGroup || "None"}</div>
-                <div><strong>Skill category:</strong> {selectedRow?.skillCategory.replaceAll("-", " ")}</div>
-                <div><strong>Cross-listed groups:</strong> {selectedRow?.optionalGroupNames.join(", ") || "None"}</div>
-                <div><strong>Characteristics:</strong> {selectedRow?.characteristics || "None"}</div>
-                <div><strong>Type:</strong> {selectedRow?.skillType}</div>
-                <div><strong>Relationship metadata:</strong> {selectedRow?.hasSkillRelationships ? "Present" : "None"}</div>
+                <div>
+                  <strong>Primary group:</strong> {selectedRow?.primaryGroup || "None"}
+                </div>
+                <div>
+                  <strong>Skill category:</strong> {selectedRow?.skillCategory.replaceAll("-", " ")}
+                </div>
+                <div>
+                  <strong>Cross-listed groups:</strong>{" "}
+                  {selectedRow?.optionalGroupNames.join(", ") || "None"}
+                </div>
+                <div>
+                  <strong>Characteristics:</strong> {selectedRow?.characteristics || "None"}
+                </div>
+                <div>
+                  <strong>Type:</strong> {selectedRow?.skillType}
+                </div>
+                <div>
+                  <strong>Relationship metadata:</strong>{" "}
+                  {selectedRow?.hasSkillRelationships ? "Present" : "None"}
+                </div>
               </div>
 
               <div>
-                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                <div
+                  style={{
+                    color: "#5f543a",
+                    fontSize: "0.85rem",
+                    fontWeight: 700,
+                    marginBottom: "0.35rem",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                  }}
+                >
                   Cross-listed groups
                 </div>
                 {(selectedRow?.optionalGroupNames.length ?? 0) > 0 ? (
                   <AdminTagList values={selectedRow?.optionalGroupNames ?? []} />
                 ) : (
-                  <div style={{ color: "#8a7e63" }}>No optional or cross-listed group memberships.</div>
+                  <div style={{ color: "#8a7e63" }}>
+                    No optional or cross-listed group memberships.
+                  </div>
                 )}
               </div>
 
               <div>
-                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                <div
+                  style={{
+                    color: "#5f543a",
+                    fontSize: "0.85rem",
+                    fontWeight: 700,
+                    marginBottom: "0.35rem",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                  }}
+                >
                   Profession reach
                 </div>
                 {(selectedRow?.professionNames.length ?? 0) > 0 ? (
                   <AdminTagList values={selectedRow?.professionNames ?? []} />
                 ) : (
-                  <div style={{ color: "#8a7e63" }}>No profession package currently reaches this skill.</div>
+                  <div style={{ color: "#8a7e63" }}>
+                    No profession package currently reaches this skill.
+                  </div>
                 )}
               </div>
 
               <div>
-                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.45rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                <div
+                  style={{
+                    color: "#5f543a",
+                    fontSize: "0.85rem",
+                    fontWeight: 700,
+                    marginBottom: "0.45rem",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                  }}
+                >
                   Access overview
                 </div>
                 {(selectedRow?.foundationalAccessSlots.length ?? 0) > 0 ? (
@@ -358,14 +436,14 @@ export default function SkillsAdminPage() {
                     style={{
                       border: "1px solid rgba(85, 73, 48, 0.12)",
                       borderRadius: 16,
-                      overflow: "hidden"
+                      overflow: "hidden",
                     }}
                   >
                     <div
                       style={{
                         background: "rgba(126, 93, 42, 0.08)",
                         display: "grid",
-                        gridTemplateColumns: "minmax(11rem, 1.15fr) repeat(4, minmax(0, 1fr))"
+                        gridTemplateColumns: "minmax(11rem, 1.15fr) repeat(4, minmax(0, 1fr))",
                       }}
                     >
                       {["Society", "L1", "L2", "L3", "L4"].map((header) => (
@@ -377,7 +455,7 @@ export default function SkillsAdminPage() {
                             fontWeight: 700,
                             letterSpacing: "0.08em",
                             padding: "0.7rem 0.65rem",
-                            textTransform: "uppercase"
+                            textTransform: "uppercase",
                           }}
                         >
                           {header}
@@ -385,30 +463,33 @@ export default function SkillsAdminPage() {
                       ))}
                     </div>
                     {(selectedRow?.foundationalAccessMatrixRows ?? []).map((societyRow) => {
-                        return (
+                      return (
+                        <div
+                          key={societyRow.societyName}
+                          style={{
+                            borderTop: "1px solid rgba(85, 73, 48, 0.08)",
+                            display: "grid",
+                            gridTemplateColumns: "minmax(11rem, 1.15fr) repeat(4, minmax(0, 1fr))",
+                          }}
+                        >
                           <div
-                            key={societyRow.societyName}
                             style={{
-                              borderTop: "1px solid rgba(85, 73, 48, 0.08)",
-                              display: "grid",
-                              gridTemplateColumns: "minmax(11rem, 1.15fr) repeat(4, minmax(0, 1fr))"
+                              color: "#4d412d",
+                              fontSize: "0.85rem",
+                              fontWeight: 700,
+                              lineHeight: 1.4,
+                              padding: "0.7rem 0.65rem",
                             }}
                           >
-                            <div
-                              style={{
-                                color: "#4d412d",
-                                fontSize: "0.85rem",
-                                fontWeight: 700,
-                                lineHeight: 1.4,
-                                padding: "0.7rem 0.65rem"
-                              }}
-                            >
-                              {societyRow.societyName}
-                              <div style={{ color: "#8a7e63", fontSize: "0.78rem", fontWeight: 600 }}>
-                                {societyRow.canonicalSocietyLevel ? `S${societyRow.canonicalSocietyLevel}` : "Society"}
-                              </div>
+                            {societyRow.societyName}
+                            <div style={{ color: "#8a7e63", fontSize: "0.78rem", fontWeight: 600 }}>
+                              {societyRow.canonicalSocietyLevel
+                                ? `S${societyRow.canonicalSocietyLevel}`
+                                : "Society"}
                             </div>
-                            {Array.from({ length: 4 }, (_, bandIndex) => bandIndex + 1).map((accessBand) => {
+                          </div>
+                          {Array.from({ length: 4 }, (_, bandIndex) => bandIndex + 1).map(
+                            (accessBand) => {
                               const isAccessible = societyRow.socialBands.includes(accessBand);
 
                               return (
@@ -424,7 +505,7 @@ export default function SkillsAdminPage() {
                                     justifyContent: "center",
                                     minHeight: "2.7rem",
                                     padding: "0.45rem",
-                                    textAlign: "center"
+                                    textAlign: "center",
                                   }}
                                   title={
                                     isAccessible
@@ -437,10 +518,11 @@ export default function SkillsAdminPage() {
                                   </span>
                                 </div>
                               );
-                            })}
-                          </div>
-                        );
-                      })}
+                            },
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div style={{ color: "#8a7e63" }}>
@@ -448,14 +530,30 @@ export default function SkillsAdminPage() {
                   </div>
                 )}
                 {(selectedRow?.foundationalAccessSlots.length ?? 0) > 0 ? (
-                  <div style={{ color: "#7a6f5a", fontSize: "0.88rem", lineHeight: 1.45, marginTop: "0.45rem" }}>
+                  <div
+                    style={{
+                      color: "#7a6f5a",
+                      fontSize: "0.88rem",
+                      lineHeight: 1.45,
+                      marginTop: "0.45rem",
+                    }}
+                  >
                     This marks access for main skill-point spending, not a free grant.
                   </div>
                 ) : null}
               </div>
 
               <div>
-                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                <div
+                  style={{
+                    color: "#5f543a",
+                    fontSize: "0.85rem",
+                    fontWeight: 700,
+                    marginBottom: "0.35rem",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                  }}
+                >
                   Relationship metadata
                 </div>
                 <div style={{ display: "grid", gap: "0.65rem" }}>
@@ -464,7 +562,7 @@ export default function SkillsAdminPage() {
                     {(selectedRow?.outgoingDerivedGrants.length ?? 0) > 0 ? (
                       <AdminTagList
                         values={(selectedRow?.outgoingDerivedGrants ?? []).map(
-                          (grant) => `${grant.targetSkillName} (${grant.factorPercent}%)`
+                          (grant) => `${grant.targetSkillName} (${grant.factorPercent}%)`,
                         )}
                       />
                     ) : (
@@ -478,7 +576,7 @@ export default function SkillsAdminPage() {
                     {(selectedRow?.incomingDerivedGrants.length ?? 0) > 0 ? (
                       <AdminTagList
                         values={(selectedRow?.incomingDerivedGrants ?? []).map(
-                          (grant) => `${grant.sourceSkillName} (${grant.factorPercent}%)`
+                          (grant) => `${grant.sourceSkillName} (${grant.factorPercent}%)`,
                         )}
                       />
                     ) : (
@@ -498,7 +596,7 @@ export default function SkillsAdminPage() {
                     {(selectedRow?.outgoingMeleeCrossTraining.length ?? 0) > 0 ? (
                       <AdminTagList
                         values={(selectedRow?.outgoingMeleeCrossTraining ?? []).map(
-                          (grant) => `${grant.targetSkillName} (${grant.factorPercent}%)`
+                          (grant) => `${grant.targetSkillName} (${grant.factorPercent}%)`,
                         )}
                       />
                     ) : (
@@ -512,7 +610,7 @@ export default function SkillsAdminPage() {
                     {(selectedRow?.incomingMeleeCrossTraining.length ?? 0) > 0 ? (
                       <AdminTagList
                         values={(selectedRow?.incomingMeleeCrossTraining ?? []).map(
-                          (grant) => `${grant.sourceSkillName} (${grant.factorPercent}%)`
+                          (grant) => `${grant.sourceSkillName} (${grant.factorPercent}%)`,
                         )}
                       />
                     ) : (
@@ -522,7 +620,8 @@ export default function SkillsAdminPage() {
                     )}
                   </div>
                   <div>
-                    <strong>Parent specialization:</strong> {selectedRow?.specializationOf || "None"}
+                    <strong>Parent specialization:</strong>{" "}
+                    {selectedRow?.specializationOf || "None"}
                   </div>
                   <div>
                     <strong>Specialization bridge targets:</strong>
@@ -530,7 +629,7 @@ export default function SkillsAdminPage() {
                       <AdminTagList
                         values={(selectedRow?.outgoingSpecializationBridges ?? []).map(
                           (bridge) =>
-                            `${bridge.targetName} (${bridge.targetType === "specialization" ? "specialization" : "skill"}: 100% above ${bridge.parentExcessOffset}, starts at ${bridge.threshold}, reverse ${bridge.reverseFactorPercent}%)`
+                            `${bridge.targetName} (${bridge.targetType === "specialization" ? "specialization" : "skill"}: 100% above ${bridge.parentExcessOffset}, starts at ${bridge.threshold}, reverse ${bridge.reverseFactorPercent}%)`,
                         )}
                       />
                     ) : (
@@ -545,7 +644,7 @@ export default function SkillsAdminPage() {
                       <AdminTagList
                         values={(selectedRow?.incomingSpecializationBridges ?? []).map(
                           (bridge) =>
-                            `${bridge.sourceName} (${bridge.sourceType === "specialization" ? "specialization" : "skill"}: ${bridge.factorPercent}%)`
+                            `${bridge.sourceName} (${bridge.sourceType === "specialization" ? "specialization" : "skill"}: ${bridge.factorPercent}%)`,
                         )}
                       />
                     ) : (
@@ -558,18 +657,33 @@ export default function SkillsAdminPage() {
               </div>
 
               <div>
-                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                <div
+                  style={{
+                    color: "#5f543a",
+                    fontSize: "0.85rem",
+                    fontWeight: 700,
+                    marginBottom: "0.35rem",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                  }}
+                >
                   Structural links
                 </div>
                 <div style={{ display: "grid", gap: "0.45rem" }}>
-                  <div><strong>Dependencies:</strong> {summarizeList(selectedRow?.dependencies ?? [], 4)}</div>
-                  <div><strong>Secondary of:</strong> {selectedRow?.secondaryOf || "None"}</div>
-                  <div><strong>Specialization of:</strong> {selectedRow?.specializationOf || "None"}</div>
+                  <div>
+                    <strong>Dependencies:</strong>{" "}
+                    {summarizeList(selectedRow?.dependencies ?? [], 4)}
+                  </div>
+                  <div>
+                    <strong>Secondary of:</strong> {selectedRow?.secondaryOf || "None"}
+                  </div>
+                  <div>
+                    <strong>Specialization of:</strong> {selectedRow?.specializationOf || "None"}
+                  </div>
                 </div>
               </div>
             </div>
           </AdminPanel>
-
         </div>
       </div>
     </section>

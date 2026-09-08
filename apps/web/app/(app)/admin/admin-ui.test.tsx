@@ -4,7 +4,7 @@ import { adminNavItems } from "./admin-ui";
 import { skillsWorkspaceTabs } from "./skills/SkillsWorkspaceTabs";
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/admin/skills"
+  usePathname: () => "/admin/skills",
 }));
 
 describe("admin navigation", () => {
@@ -13,17 +13,17 @@ describe("admin navigation", () => {
       expect.arrayContaining([
         expect.objectContaining({
           href: "/admin/rules-docs",
-          label: "Rules Docs"
-        })
-      ])
+          label: "Rules Docs",
+        }),
+      ]),
     );
     expect(adminNavItems).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           href: "/admin/documents",
-          label: "Documents"
-        })
-      ])
+          label: "Documents",
+        }),
+      ]),
     );
   });
 
@@ -32,17 +32,17 @@ describe("admin navigation", () => {
       expect.arrayContaining([
         expect.objectContaining({
           href: "/admin/skills",
-          label: "Legacy Catalogue"
-        })
-      ])
+          label: "Legacy Catalogue",
+        }),
+      ]),
     );
     expect(adminNavItems).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           href: "/admin/skills",
-          label: "Skills"
-        })
-      ])
+          label: "Skills",
+        }),
+      ]),
     );
   });
 
@@ -51,9 +51,9 @@ describe("admin navigation", () => {
       expect.arrayContaining([
         expect.objectContaining({
           href: "/admin/skills/reference",
-          label: "Skill Reference"
-        })
-      ])
+          label: "Skill Reference",
+        }),
+      ]),
     );
   });
 });

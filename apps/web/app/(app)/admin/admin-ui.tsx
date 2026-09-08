@@ -7,7 +7,7 @@ import React, {
   type InputHTMLAttributes,
   type ReactNode,
   type SelectHTMLAttributes,
-  type TextareaHTMLAttributes
+  type TextareaHTMLAttributes,
 } from "react";
 
 export interface AdminNavItem {
@@ -34,9 +34,9 @@ export const adminNavGroups: AdminNavGroup[] = [
       {
         description: "Summary, draft status, publishing controls, and grouped route map.",
         href: "/admin",
-        label: "Overview"
-      }
-    ]
+        label: "Overview",
+      },
+    ],
   },
   {
     label: "Skills & Societies",
@@ -44,29 +44,29 @@ export const adminNavGroups: AdminNavGroup[] = [
       {
         description: "Inspect and edit the legacy skill definitions and access model.",
         href: "/admin/skills",
-        label: "Legacy Catalogue"
+        label: "Legacy Catalogue",
       },
       {
         description: "Inspect and edit skill group structure.",
         href: "/admin/skill-groups",
-        label: "Skill Groups"
+        label: "Skill Groups",
       },
       {
         description: "Inspect and edit professions and grants.",
         href: "/admin/professions",
-        label: "Professions"
+        label: "Professions",
       },
       {
         description: "Inspect and edit society/social-class rows.",
         href: "/admin/societies",
-        label: "Societies"
+        label: "Societies",
       },
       {
         description: "Read relationship views across professions and society rows.",
         href: "/admin/access",
-        label: "Access"
-      }
-    ]
+        label: "Access",
+      },
+    ],
   },
   {
     label: "Weapons & Equipment",
@@ -74,34 +74,38 @@ export const adminNavGroups: AdminNavGroup[] = [
       {
         description: "Inspect the system melee weapon catalog with split mode columns.",
         href: "/admin/melee-weapons",
-        label: "Melee weapons"
+        label: "Melee weapons",
       },
       {
-        description: "Inspect the system missile weapon catalog with missile-appropriate attack columns.",
+        description:
+          "Inspect the system missile weapon catalog with missile-appropriate attack columns.",
         href: "/admin/missile-weapons",
-        label: "Missile weapons"
+        label: "Missile weapons",
       },
       {
-        description: "Inspect the system shield catalog with merged offensive and defensive workbook data.",
+        description:
+          "Inspect the system shield catalog with merged offensive and defensive workbook data.",
         href: "/admin/shields",
-        label: "Shields"
+        label: "Shields",
       },
       {
         description: "Inspect the system armor catalog imported from the workbook Armor sheet.",
         href: "/admin/armor",
-        label: "Armor"
+        label: "Armor",
       },
       {
-        description: "Inspect the system gear catalog with shared encumbrance, value, and notes columns.",
+        description:
+          "Inspect the system gear catalog with shared encumbrance, value, and notes columns.",
         href: "/admin/gear",
-        label: "Gear"
+        label: "Gear",
       },
       {
-        description: "Inspect the system valuables catalog with shared encumbrance, value, and notes columns.",
+        description:
+          "Inspect the system valuables catalog with shared encumbrance, value, and notes columns.",
         href: "/admin/valuables",
-        label: "Valuables"
-      }
-    ]
+        label: "Valuables",
+      },
+    ],
   },
   {
     label: "Accounts & Setup",
@@ -109,40 +113,43 @@ export const adminNavGroups: AdminNavGroup[] = [
       {
         description: "Manage named chargen rule sets for current and future characters.",
         href: "/admin/chargen-setup",
-        label: "Chargen Setup"
+        label: "Chargen Setup",
       },
       {
         description: "Manage local users and assign Player, GM, or Admin roles.",
         href: "/admin/players",
-        label: "Players"
-      }
-    ]
+        label: "Players",
+      },
+    ],
   },
   {
     label: "Rules & Documentation",
     items: [
       {
-        description: "Read repo-local markdown references for rules, formulas, and displayed calculations.",
+        description:
+          "Read repo-local markdown references for rules, formulas, and displayed calculations.",
         href: "/admin/rules-docs",
-        label: "Rules Docs"
+        label: "Rules Docs",
       },
       {
-        description: "Inspect the canonical civilization layer that links named cultures to society models and language names.",
+        description:
+          "Inspect the canonical civilization layer that links named cultures to society models and language names.",
         href: "/admin/civilizations",
-        label: "Civilizations"
+        label: "Civilizations",
       },
       {
         description: "Read the canonical Glantri app terminology definitions and usage guidance.",
         href: "/admin/glantri-terms",
-        label: "Glantri App Terms"
+        label: "Glantri App Terms",
       },
       {
-        description: "Inspect workbook-backed reference tables used by current combat and movement calculations.",
+        description:
+          "Inspect workbook-backed reference tables used by current combat and movement calculations.",
         href: "/admin/tables",
-        label: "Tables"
-      }
-    ]
-  }
+        label: "Tables",
+      },
+    ],
+  },
 ];
 
 export const adminNavItems: AdminNavItem[] = adminNavGroups.flatMap((group) => group.items);
@@ -152,7 +159,11 @@ const panelStyle: CSSProperties = {
   border: "1px solid rgba(85, 73, 48, 0.14)",
   borderRadius: 24,
   boxShadow: "0 16px 40px rgba(73, 56, 29, 0.08)",
-  padding: "1.25rem"
+  boxSizing: "border-box",
+  minWidth: 0,
+  overflowWrap: "anywhere",
+  padding: "1.25rem",
+  width: "100%",
 };
 
 const labelStyle: CSSProperties = {
@@ -160,7 +171,7 @@ const labelStyle: CSSProperties = {
   display: "grid",
   fontSize: "0.9rem",
   fontWeight: 600,
-  gap: "0.35rem"
+  gap: "0.35rem",
 };
 
 const inputStyle: CSSProperties = {
@@ -170,7 +181,7 @@ const inputStyle: CSSProperties = {
   color: "#2e2619",
   font: "inherit",
   padding: "0.65rem 0.8rem",
-  width: "100%"
+  width: "100%",
 };
 
 export function AdminPageIntro(props: {
@@ -185,7 +196,7 @@ export function AdminPageIntro(props: {
         display: "grid",
         gap: "1rem",
         gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-        alignItems: "end"
+        alignItems: "end",
       }}
     >
       <div style={{ display: "grid", gap: "0.55rem" }}>
@@ -195,7 +206,7 @@ export function AdminPageIntro(props: {
             fontSize: "0.8rem",
             fontWeight: 700,
             letterSpacing: "0.18em",
-            textTransform: "uppercase"
+            textTransform: "uppercase",
           }}
         >
           {props.eyebrow}
@@ -206,17 +217,21 @@ export function AdminPageIntro(props: {
             fontFamily: '"Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif',
             fontSize: "clamp(2rem, 4vw, 3.1rem)",
             lineHeight: 1.05,
-            margin: 0
+            margin: 0,
           }}
         >
           {props.title}
         </h1>
-        <p style={{ color: "#4f4635", fontSize: "1rem", lineHeight: 1.6, margin: 0, maxWidth: 760 }}>
+        <p
+          style={{ color: "#4f4635", fontSize: "1rem", lineHeight: 1.6, margin: 0, maxWidth: 760 }}
+        >
           {props.summary}
         </p>
       </div>
       {props.actions ? (
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <div
+          style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", justifyContent: "flex-end" }}
+        >
           {props.actions}
         </div>
       ) : null}
@@ -249,7 +264,7 @@ export function AdminReadOnlyNotice(props: { message?: string }) {
         borderRadius: 18,
         color: "#5f543a",
         lineHeight: 1.5,
-        padding: "0.95rem 1rem"
+        padding: "0.95rem 1rem",
       }}
     >
       {props.message ?? "This page is view-only for your current role."}
@@ -266,13 +281,24 @@ export function AdminMetric(props: { label: string; value: ReactNode; hint?: str
         borderRadius: 18,
         display: "grid",
         gap: "0.3rem",
-        padding: "0.95rem 1rem"
+        minWidth: 0,
+        overflowWrap: "anywhere",
+        padding: "0.95rem 1rem",
       }}
     >
-      <div style={{ color: "#776b52", fontSize: "0.82rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+      <div
+        style={{
+          color: "#776b52",
+          fontSize: "0.82rem",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+        }}
+      >
         {props.label}
       </div>
-      <div style={{ color: "#241d12", fontSize: "1.5rem", fontWeight: 700 }}>{props.value}</div>
+      <div style={{ color: "#241d12", fontSize: "1.5rem", fontWeight: 700, minWidth: 0 }}>
+        {props.value}
+      </div>
       {props.hint ? <div style={{ color: "#5f543a", fontSize: "0.9rem" }}>{props.hint}</div> : null}
     </div>
   );
@@ -315,7 +341,7 @@ export function AdminButton(props: {
         font: "inherit",
         fontWeight: 700,
         opacity: props.disabled ? 0.55 : 1,
-        padding: "0.7rem 1rem"
+        padding: "0.7rem 1rem",
       }}
       disabled={props.disabled}
       type={props.type ?? "button"}
@@ -334,24 +360,24 @@ export function AdminStatusBadge(props: {
       ? {
           background: "rgba(164, 69, 38, 0.12)",
           border: "1px solid rgba(164, 69, 38, 0.22)",
-          color: "#7f2f17"
+          color: "#7f2f17",
         }
       : props.tone === "success"
         ? {
             background: "rgba(62, 122, 82, 0.12)",
             border: "1px solid rgba(62, 122, 82, 0.18)",
-            color: "#2f6a44"
+            color: "#2f6a44",
           }
         : props.tone === "warning"
           ? {
               background: "rgba(163, 108, 23, 0.12)",
               border: "1px solid rgba(163, 108, 23, 0.18)",
-              color: "#7b5713"
+              color: "#7b5713",
             }
           : {
               background: "rgba(126, 93, 42, 0.08)",
               border: "1px solid rgba(126, 93, 42, 0.15)",
-              color: "#594320"
+              color: "#594320",
             };
 
   return (
@@ -362,7 +388,7 @@ export function AdminStatusBadge(props: {
         display: "inline-flex",
         fontSize: "0.82rem",
         fontWeight: 700,
-        padding: "0.3rem 0.65rem"
+        padding: "0.3rem 0.65rem",
       }}
     >
       {props.children}
@@ -371,7 +397,7 @@ export function AdminStatusBadge(props: {
 }
 
 export function getAuditSeverityTone(
-  severity: "blocking" | "info" | "warning"
+  severity: "blocking" | "info" | "warning",
 ): "danger" | "neutral" | "warning" {
   if (severity === "blocking") {
     return "danger";
@@ -393,9 +419,18 @@ export function AdminAuditLegend() {
         <AdminStatusBadge tone="neutral">info</AdminStatusBadge>
       </div>
       <div style={{ color: "#5f543a", display: "grid", gap: "0.35rem", lineHeight: 1.5 }}>
-        <span>`blocking` means the content model contradicts the intended layer semantics and should be fixed before deeper content-building.</span>
-        <span>`warning` means the data is probably usable but likely deserves review before it spreads into more professions or society rows.</span>
-        <span>`info` highlights context, balance outliers, or metadata polish that improves trust without implying broken content.</span>
+        <span>
+          `blocking` means the content model contradicts the intended layer semantics and should be
+          fixed before deeper content-building.
+        </span>
+        <span>
+          `warning` means the data is probably usable but likely deserves review before it spreads
+          into more professions or society rows.
+        </span>
+        <span>
+          `info` highlights context, balance outliers, or metadata polish that improves trust
+          without implying broken content.
+        </span>
       </div>
     </div>
   );
@@ -412,7 +447,7 @@ export function AdminTag({ children }: { children: ReactNode }) {
         display: "inline-flex",
         fontSize: "0.82rem",
         fontWeight: 600,
-        padding: "0.2rem 0.55rem"
+        padding: "0.2rem 0.55rem",
       }}
     >
       {children}
@@ -445,9 +480,11 @@ export function AdminDataTable<TRow extends { id: string }>(props: {
   return (
     <div
       style={{
-        overflowX: "auto",
         border: "1px solid rgba(85, 73, 48, 0.12)",
-        borderRadius: 18
+        borderRadius: 18,
+        maxWidth: "100%",
+        minWidth: 0,
+        overflowX: "auto",
       }}
     >
       <table style={{ borderCollapse: "collapse", minWidth: 760, width: "100%" }}>
@@ -464,7 +501,7 @@ export function AdminDataTable<TRow extends { id: string }>(props: {
                   textAlign: "left",
                   textTransform: "uppercase",
                   whiteSpace: "nowrap",
-                  width: column.width
+                  width: column.width,
                 }}
               >
                 {column.header}
@@ -475,10 +512,7 @@ export function AdminDataTable<TRow extends { id: string }>(props: {
         <tbody>
           {props.rows.length === 0 ? (
             <tr>
-              <td
-                colSpan={props.columns.length}
-                style={{ color: "#6d624d", padding: "1rem" }}
-              >
+              <td colSpan={props.columns.length} style={{ color: "#6d624d", padding: "1rem" }}>
                 {props.emptyState}
               </td>
             </tr>
@@ -492,7 +526,7 @@ export function AdminDataTable<TRow extends { id: string }>(props: {
                   onClick={() => props.onSelect?.(row.id)}
                   style={{
                     background: selected ? "rgba(215, 226, 216, 0.72)" : "transparent",
-                    cursor: props.onSelect ? "pointer" : "default"
+                    cursor: props.onSelect ? "pointer" : "default",
                   }}
                   tabIndex={props.onSelect ? 0 : -1}
                   onKeyDown={(event) => props.onRowKeyDown?.(row, event)}
@@ -504,7 +538,7 @@ export function AdminDataTable<TRow extends { id: string }>(props: {
                         borderTop: "1px solid rgba(85, 73, 48, 0.1)",
                         color: "#2e2619",
                         padding: "0.9rem 0.8rem",
-                        verticalAlign: "top"
+                        verticalAlign: "top",
                       }}
                     >
                       {column.render(row)}
@@ -520,15 +554,15 @@ export function AdminDataTable<TRow extends { id: string }>(props: {
   );
 }
 
-export function AdminField(props: {
-  children: ReactNode;
-  hint?: string;
-  label: string;
-}) {
+export function AdminField(props: { children: ReactNode; hint?: string; label: string }) {
   return (
     <label style={labelStyle}>
       <span>{props.label}</span>
-      {props.hint ? <span style={{ color: "#776b52", fontSize: "0.82rem", lineHeight: 1.45 }}>{props.hint}</span> : null}
+      {props.hint ? (
+        <span style={{ color: "#776b52", fontSize: "0.82rem", lineHeight: 1.45 }}>
+          {props.hint}
+        </span>
+      ) : null}
       {props.children}
     </label>
   );
@@ -573,7 +607,7 @@ export function AdminCatalogTable(props: {
                   position: props.stickyHeader ? "sticky" : undefined,
                   top: props.stickyHeader ? 0 : undefined,
                   verticalAlign: "bottom",
-                  zIndex: props.stickyHeader ? 1 : undefined
+                  zIndex: props.stickyHeader ? 1 : undefined,
                 }}
               >
                 {column}
@@ -583,7 +617,10 @@ export function AdminCatalogTable(props: {
         </thead>
         <tbody>
           {props.rows.map((row, rowIndex) => (
-            <tr key={`catalog-row-${rowIndex}`} style={{ borderBottom: "1px solid rgba(85, 73, 48, 0.08)" }}>
+            <tr
+              key={`catalog-row-${rowIndex}`}
+              style={{ borderBottom: "1px solid rgba(85, 73, 48, 0.08)" }}
+            >
               {row.map((value, cellIndex) => (
                 <td
                   key={`catalog-row-${rowIndex}-${cellIndex}`}
@@ -603,11 +640,7 @@ export function AdminCatalogTable(props: {
 }
 
 export function AdminFilterBar(props: { children: ReactNode }) {
-  return (
-    <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-      {props.children}
-    </div>
-  );
+  return <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>{props.children}</div>;
 }
 
 export function AdminFilterSelect<T extends string>(props: {
@@ -648,7 +681,7 @@ export function AdminCheckboxList(props: {
         gap: "0.5rem",
         maxHeight: 240,
         overflowY: "auto",
-        padding: "0.8rem"
+        padding: "0.8rem",
       }}
     >
       {props.options.map((option) => (
@@ -669,9 +702,7 @@ export function AdminCheckboxList(props: {
   );
 }
 
-export function AdminWorkspaceTabs(props: {
-  tabs: Array<{ href: string; label: string }>;
-}) {
+export function AdminWorkspaceTabs(props: { tabs: Array<{ href: string; label: string }> }) {
   const pathname = usePathname();
 
   return (
@@ -690,7 +721,7 @@ export function AdminWorkspaceTabs(props: {
               color: active ? "#fffaf0" : "#594320",
               fontWeight: 700,
               padding: "0.65rem 0.95rem",
-              textDecoration: "none"
+              textDecoration: "none",
             }}
           >
             {tab.label}
@@ -708,7 +739,7 @@ export function AdminActionRow(props: { children: ReactNode; marginTop?: string 
         display: "flex",
         flexWrap: "wrap",
         gap: "0.75rem",
-        marginTop: props.marginTop ?? "0"
+        marginTop: props.marginTop ?? "0",
       }}
     >
       {props.children}
@@ -731,11 +762,7 @@ export function AdminMatrixGroup<TRow extends { id: string }>(props: {
       subtitle={`${props.rowCount} ${unit}${props.rowCount === 1 ? "" : "s"} in this slice.`}
       title={props.label}
     >
-      <AdminDataTable
-        columns={props.columns}
-        emptyState={props.emptyState}
-        rows={props.rows}
-      />
+      <AdminDataTable columns={props.columns} emptyState={props.emptyState} rows={props.rows} />
     </AdminPanel>
   );
 }

@@ -7,16 +7,18 @@ export interface RevisionedContentSnapshot<TContent = unknown> {
   updatedAt?: string;
 }
 
-export interface AdminContentGetResponse<TContent = unknown>
-  extends RevisionedContentSnapshot<TContent> {}
+export interface AdminContentGetResponse<
+  TContent = unknown,
+> extends RevisionedContentSnapshot<TContent> {}
 
 export interface AdminContentPutRequest<TContent = unknown> {
   content: TContent;
   expectedRevision: number;
 }
 
-export interface AdminContentPutResponse<TContent = unknown>
-  extends RevisionedContentSnapshot<TContent> {}
+export interface AdminContentPutResponse<
+  TContent = unknown,
+> extends RevisionedContentSnapshot<TContent> {}
 
 export interface AdminContentConflictResponse<TContent = unknown> {
   current: RevisionedContentSnapshot<TContent>;
@@ -125,7 +127,7 @@ export interface AdminSkillReferenceRecordContainer {
     name: string;
     description: string;
     familyIds: readonly string[];
-    domainId: string;
+    domainId?: string;
   }[];
 }
 
@@ -161,5 +163,5 @@ export interface AdminSkillReferenceSnapshot {
 
 export interface AdminSkillReferenceResponse {
   candidate: AdminSkillReferenceSnapshot | null;
-  canonical: AdminSkillReferenceSnapshot;
+  canonical: AdminSkillReferenceSnapshot | null;
 }
