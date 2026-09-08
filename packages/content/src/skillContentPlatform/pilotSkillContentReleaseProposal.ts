@@ -131,46 +131,51 @@ const authoredCompetencyDocumentation: Record<string, AuthoredCompetencyDocument
   },
   "spoken:mogrebi": {
     description:
-      "This spoken-language skill is the ability to understand and express meaning through speech in the named language. Competence covers conversation, attentive listening, clear pronunciation, idiom, and an expanding vocabulary across varied topics.",
-    shortDescription: "Speak and understand the named language in ordinary conversation.",
+      "This spoken-language skill covers understanding everyday speech, taking part in conversation, and making questions or explanations clear to a listener. Competence includes attentive listening, intelligible pronunciation, suitable word choice, and recognizing when unfamiliar expressions require clarification.",
+    shortDescription:
+      "Follow everyday speech and take part in conversation with clear questions, answers, and explanations.",
   },
   "spoken:ologian": {
     description:
-      "This spoken-language skill is the ability to understand and express meaning through speech in the named language. Competence covers conversation, attentive listening, clear pronunciation, idiom, and an expanding vocabulary across varied topics.",
-    shortDescription: "Speak and understand the named language in ordinary conversation.",
+      "This spoken-language skill covers sustaining dialogue and conveying precise meaning when a subject becomes detailed or unfamiliar. Competence includes clear pronunciation, growing vocabulary, recognition of idiom and tone, and asking for or giving clarification when meaning is uncertain.",
+    shortDescription:
+      "Sustain spoken dialogue, convey precise meaning, and clarify unfamiliar words or expressions.",
   },
   "spoken:phoenician": {
     description:
-      "This spoken-language skill is the ability to understand and express meaning through speech in the named language. Competence covers conversation, attentive listening, clear pronunciation, idiom, and an expanding vocabulary across varied topics.",
-    shortDescription: "Speak and understand the named language in ordinary conversation.",
+      "This spoken-language skill covers following spoken instructions and accounts, responding appropriately, and explaining a sequence of events or ideas. Competence includes careful listening, coherent phrasing, accurate word choice, and adapting an explanation when the listener has misunderstood.",
+    shortDescription:
+      "Understand spoken instructions and accounts, then respond or explain ideas in a coherent sequence.",
   },
   "spoken:nkolian": {
     description:
-      "This spoken-language skill is the ability to understand and express meaning through speech in the named language. Competence covers conversation, attentive listening, clear pronunciation, idiom, and an expanding vocabulary across varied topics.",
-    shortDescription: "Speak and understand the named language in ordinary conversation.",
+      "This spoken-language skill covers joining discussion, expressing intent and nuance, and adjusting speech to the listener and situation. Competence includes listening for implication, selecting suitable vocabulary and pace, pronouncing words clearly, and checking that an important point was understood.",
+    shortDescription:
+      "Join discussions, express intent and nuance, and adapt speech to the listener and situation.",
   },
   "spoken:scythian": {
     description:
-      "This spoken-language skill is the ability to understand and express meaning through speech in the named language. Competence covers conversation, attentive listening, clear pronunciation, idiom, and an expanding vocabulary across varied topics.",
-    shortDescription: "Speak and understand the named language in ordinary conversation.",
+      "This spoken-language skill covers understanding questions and descriptions, giving a coherent account, and resolving misunderstandings during conversation. Competence includes attentive listening, clear pronunciation, flexible vocabulary, and restating or checking meaning when an exchange becomes unclear.",
+    shortDescription:
+      "Understand questions and descriptions, give coherent spoken accounts, and resolve misunderstandings in conversation.",
   },
   "written:mogrebi:sacred-mogrebi": {
     description:
-      "This written tradition is the ability to read and compose the named language in its linked script and textual conventions. A competent writer recognizes the script, applies spelling and grammar, and chooses forms suited to the purpose and reader.",
+      "This written tradition covers reading extended passages and composing accurate text in its associated language and script. Competence includes recognizing letter forms, applying spelling and grammar, organizing material for its purpose, and checking a finished passage for omissions or ambiguity.",
     shortDescription:
-      "Read and write the named language using its linked script and textual conventions.",
+      "Read extended passages and compose accurate text in the associated language and script tradition.",
   },
   "written:ologian:church-ologian": {
     description:
-      "This written tradition is the ability to read and compose the named language in its linked script and textual conventions. A competent writer recognizes the script, applies spelling and grammar, and chooses forms suited to the purpose and reader.",
+      "This written tradition covers interpreting written statements and composing clear material for a particular purpose and reader. Competence includes fluent recognition of its script, control of spelling and grammar, orderly structure, and selecting an appropriate level of formality.",
     shortDescription:
-      "Read and write the named language using its linked script and textual conventions.",
+      "Interpret written statements and compose clear, orderly text for a particular purpose and reader.",
   },
   "written:phoenician:phoenician": {
     description:
-      "This written tradition is the ability to read and compose the named language in its linked script and textual conventions. A competent writer recognizes the script, applies spelling and grammar, and chooses forms suited to the purpose and reader.",
+      "This written tradition covers reading, transcribing, and composing text with consistent use of its language, script, and layout conventions. Competence includes accurate character recognition, spelling and grammar, faithful copying, and arranging information so another reader can follow it.",
     shortDescription:
-      "Read and write the named language using its linked script and textual conventions.",
+      "Read, transcribe, and compose text using consistent script, spelling, grammar, and layout.",
   },
   "spec:household-guard-sword-shield-drill": {
     description:
@@ -447,17 +452,22 @@ const candidate3ShortDescriptionByCompetencyId: Record<string, string> = {
   "skill:chart-navigation":
     "Use maps or charts to plan and follow a route while avoiding known hazards.",
   "spoken:common": "Communicate by speaking and listening in a widely shared language.",
-  "spoken:mogrebi": "Communicate by speaking and listening in the named language.",
-  "spoken:ologian": "Communicate by speaking and listening in the named language.",
-  "spoken:phoenician": "Communicate by speaking and listening in the named language.",
-  "spoken:nkolian": "Communicate by speaking and listening in the named language.",
-  "spoken:scythian": "Communicate by speaking and listening in the named language.",
+  "spoken:mogrebi":
+    "Follow everyday speech and take part in conversation with clear questions, answers, and explanations.",
+  "spoken:ologian":
+    "Sustain spoken dialogue, convey precise meaning, and clarify unfamiliar words or expressions.",
+  "spoken:phoenician":
+    "Understand spoken instructions and accounts, then respond or explain ideas in a coherent sequence.",
+  "spoken:nkolian":
+    "Join discussions, express intent and nuance, and adapt speech to the listener and situation.",
+  "spoken:scythian":
+    "Understand questions and descriptions, give coherent spoken accounts, and resolve misunderstandings in conversation.",
   "written:mogrebi:sacred-mogrebi":
-    "Read and compose the named language using its linked script and writing conventions.",
+    "Read extended passages and compose accurate text in the associated language and script tradition.",
   "written:ologian:church-ologian":
-    "Read and compose the named language using its linked script and writing conventions.",
+    "Interpret written statements and compose clear, orderly text for a particular purpose and reader.",
   "written:phoenician:phoenician":
-    "Read and compose the named language using its linked script and writing conventions.",
+    "Read, transcribe, and compose text using consistent script, spelling, grammar, and layout.",
   "spec:household-guard-sword-shield-drill":
     "Fight with sword and shield as one coordinated method of attack and defence.",
   "spec:diagnostic-medicine":

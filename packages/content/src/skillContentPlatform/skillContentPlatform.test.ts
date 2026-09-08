@@ -494,6 +494,51 @@ describe("documentation-complete Skill content platform", () => {
     });
   });
 
+  it("gives every non-Common language record specific copy without generic placeholders", () => {
+    const release = candidate();
+    const repairedLanguageIds = [
+      "spoken:mogrebi",
+      "spoken:ologian",
+      "spoken:phoenician",
+      "spoken:nkolian",
+      "spoken:scythian",
+      "written:mogrebi:sacred-mogrebi",
+      "written:ologian:church-ologian",
+      "written:phoenician:phoenician",
+    ];
+    const repairedLanguageRecords = repairedLanguageIds.map((id) => competencyById(release, id));
+
+    expect(repairedLanguageRecords).not.toContain(undefined);
+    expect(repairedLanguageRecords.map((record) => record?.shortDescription)).toEqual([
+      "Follow everyday speech and take part in conversation with clear questions, answers, and explanations.",
+      "Sustain spoken dialogue, convey precise meaning, and clarify unfamiliar words or expressions.",
+      "Understand spoken instructions and accounts, then respond or explain ideas in a coherent sequence.",
+      "Join discussions, express intent and nuance, and adapt speech to the listener and situation.",
+      "Understand questions and descriptions, give coherent spoken accounts, and resolve misunderstandings in conversation.",
+      "Read extended passages and compose accurate text in the associated language and script tradition.",
+      "Interpret written statements and compose clear, orderly text for a particular purpose and reader.",
+      "Read, transcribe, and compose text using consistent script, spelling, grammar, and layout.",
+    ]);
+
+    const shortDescriptions = repairedLanguageRecords.map(
+      (record) => record?.shortDescription ?? "",
+    );
+    const fullDescriptionOpenings = repairedLanguageRecords.map(
+      (record) => record?.description.split(".")[0] ?? "",
+    );
+    expect(new Set(shortDescriptions).size).toBe(repairedLanguageIds.length);
+    expect(new Set(fullDescriptionOpenings).size).toBe(repairedLanguageIds.length);
+    expect(
+      repairedLanguageRecords.every(
+        (record) =>
+          record !== undefined &&
+          !/\b(?:the\s+)?named language\b/i.test(
+            `${record.shortDescription} ${record.description}`,
+          ),
+      ),
+    ).toBe(true);
+  });
+
   it("preserves all frozen mechanics while changing only authorized task-guidance prose", () => {
     const release = candidate();
     expect(release.competencies).toHaveLength(61);
