@@ -40,6 +40,30 @@ involved in the same Campaign, Scenario, Encounter, or contest does not
 automatically entitle a viewer to another participant's executable or private
 state.
 
+## Role, scope, and relationship authority
+
+A role describes a kind of capability; a scope describes where that capability
+applies. Roles are additive and do not subsume each other. A global
+`game_master` role does not grant access to another GM's Campaign, and
+application-global Admin authority does not automatically confer Campaign GM
+authority.
+
+Concrete authority continues to derive from the relevant relationship:
+Campaign management or membership, Character ownership or control, Scenario or
+Encounter participation, Artifact entitlement, or another explicitly accepted
+viewer relationship. Do not use a global role as a shortcut around those
+relationships.
+
+Reusable templates and concrete Campaign objects also have separate
+projections. Template-library authority may expose a reusable source without
+exposing an NPC, Item, Artifact, Blackboard entry, Scenario, Encounter, note,
+or other concrete state created in another Campaign. A Campaign is the
+ownership and information-security boundary for its concrete game state.
+
+The complete approved boundary, including player-initiated Character joining,
+is recorded in
+[Architecture decision 0005](../decisions/architecture/0005-role-scope-and-campaign-ownership.md).
+
 ## Projection rules
 
 1. Player payloads are minimal by default. Add a fact only for a named permitted

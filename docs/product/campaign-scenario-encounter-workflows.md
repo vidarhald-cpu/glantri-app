@@ -25,19 +25,41 @@ The Campaign workspace answers: "Who and what is available to this campaign?"
 GM responsibilities:
 
 - Maintain the campaign title, description, and campaign-level context.
-- Manage the campaign roster of available characters, NPCs, and templates.
+- Remove Characters from the campaign roster when Campaign management requires
+  it; another user's player-owned Character joins only through that player's
+  authorized action.
+- Manage Campaign-owned NPCs and reusable template use.
 - Create and organize scenarios.
 - Decide which player characters and GM-controlled actors are available for future scenario use.
 
 Player responsibilities:
 
 - Review campaign information that is safe to show to players.
+- Join an eligible Campaign with a Character the player is authorized to
+  control, using the accepted player-initiated workflow.
 - See accessible scenarios when the GM has made them available.
 - Navigate to player-safe scenario or encounter views when available.
 
 Important rule: campaign roster means available to the campaign, not currently present in a scene. A roster member is not automatically in a scenario or encounter.
 
-Campaigns are not self-join spaces. The GM controls campaign roster membership. A character may join or open a live scenario only when that character is already in the campaign roster and the scenario is currently live.
+A Campaign is an ownership and information-security boundary for its concrete
+game state. A global `game_master` role does not expose another GM's Campaign,
+and application-global Admin authority does not automatically imply Campaign GM
+authority. Concrete access derives from the viewer's actual Campaign, Character,
+participant, or content relationship.
+
+Player-owned Characters join through a player-initiated workflow: the player
+chooses an eligible Campaign and a Character they are authorized to control. A
+Campaign GM may remove a Character from that Campaign, but may not pull another
+user's player-owned Character into it. This rule adds no new invitation or
+approval mechanic. A Character may open an Active Scenario only when already
+rostered and otherwise entitled under the Scenario access rules.
+
+Global templates may be visible and reusable under template-library authority.
+Instantiating or using one creates or uses concrete Campaign-scoped state. A GM
+who can use a global NPC or Item template gains no visibility into a concrete
+NPC, Item, Artifact, Blackboard entry, Scenario, Encounter, note, or other
+private object belonging to another Campaign.
 
 Player Campaign pages should not show:
 
