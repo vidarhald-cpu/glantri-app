@@ -51,7 +51,7 @@ const candidate = {
   id: "content-release:pilot-skills:2-candidate-1",
   manifest: {
     counts: {
-      accessExceptions: 1,
+      accessExceptions: 2,
       competencies: 4,
       domains: 2,
       histories: 1,
@@ -69,10 +69,21 @@ const candidate = {
       {
         basis: "teacher",
         competencyIds: ["skill:surgery"],
-        explanation: "A named surgeon can open this otherwise restricted route.",
+        explanation:
+          "Named temple surgeon Neseret opens only Surgery training and grants zero ranks.",
         grantsCompetence: 0 as const,
         historyIds: [],
         id: "access:surgeon",
+        profileId: "profile:mogreb",
+      },
+      {
+        basis: "biography",
+        competencyIds: ["skill:surgery"],
+        explanation:
+          "This fallback route implementation provides Surgery access while granting no competence.",
+        grantsCompetence: 0 as const,
+        historyIds: [],
+        id: "access:surgery-biography",
         profileId: "profile:mogreb",
       },
     ],
@@ -346,8 +357,36 @@ describe("Admin Skill Reference page", () => {
     expect(screen.getByText("unavailable")).toBeVisible();
     expect(screen.getByText("for Mogreb.")).toBeVisible();
     expect(screen.getByText(/Teacher exception/)).toBeVisible();
-    expect(screen.getByText(/otherwise restricted path to learning/)).toBeVisible();
-    expect(screen.queryByText(/DS3|AB3|route|zero competence|no ranks/i)).toBeNull();
+    expect(
+      screen.getByText(/Named temple surgeon Neseret opens only Surgery training/),
+    ).toBeVisible();
+    expect(screen.getByText(/This alternative way to learn provides Surgery access/)).toBeVisible();
+    expect(screen.getAllByText(/Access still requires learning the Skill/)).toHaveLength(2);
+    expect(
+      screen.queryByText(
+        /DS3|AB3|fallback|route|implementation|zero[- ]ranks?|zero competence|no competence|no ranks/i,
+      ),
+    ).toBeNull();
+  });
+
+  it("keeps actual and equivalent availability exceptions authoritative but reader-safe", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/admin/skills/reference#competency-skill:surgery");
+    render(<SkillReferenceContent />);
+
+    expect(await screen.findByRole("heading", { name: "Surgery" })).toBeVisible();
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Availability society" }),
+      "profile:mogreb",
+    );
+
+    const detail = screen.getByRole("heading", { name: "Surgery" }).closest("article")!;
+    expect(within(detail).getByText(/Named temple surgeon Neseret/)).toBeVisible();
+    expect(within(detail).getByText(/This alternative way to learn/)).toBeVisible();
+    expect(within(detail).getAllByText(/Access still requires learning the Skill/)).toHaveLength(2);
+    expect(
+      within(detail).queryByText(/zero[- ]?ranks?|fallback|route|implementation|no competence/i),
+    ).toBeNull();
   });
 
   it("uses direct relationship links with native keyboard behavior and detail focus", async () => {

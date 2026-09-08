@@ -98,7 +98,20 @@ function readerFacingText(value: string): string {
 }
 
 function readerFacingAvailabilityText(value: string): string {
-  return readerFacingText(value).replace(/\broute\b/gi, "path to learning");
+  return readerFacingText(value)
+    .replace(
+      /;\s*it grants zero[- ]ranks? and excludes\b/gi,
+      ". Access still requires learning the Skill. This exception excludes",
+    )
+    .replace(/\s+and grants zero[- ]ranks?\b/gi, ". Access still requires learning the Skill")
+    .replace(/\s+while granting no competence\b/gi, ". Access still requires learning the Skill")
+    .replace(/\bgrants? (?:zero[- ]ranks?|no competence)\b/gi, "does not itself teach the Skill")
+    .replace(/\bno competence is granted\b/gi, "access still requires learning the Skill")
+    .replace(/\broute implementations\b/gi, "ways to learn")
+    .replace(/\broute implementation\b/gi, "way to learn")
+    .replace(/\bfallback\b/gi, "alternative")
+    .replace(/\broutes\b/gi, "paths to learning")
+    .replace(/\broute\b/gi, "path to learning");
 }
 
 function matchesSearch(competency: Competency, query: string, domainName: string): boolean {
