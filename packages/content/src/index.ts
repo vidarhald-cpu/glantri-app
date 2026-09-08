@@ -1,7 +1,10 @@
 export * from "./equipment";
 export * from "./loaders";
 export * from "./pilotSkillContentRelease";
-export * from "./skillContentPlatform/pilotSkillContentReleaseProposal";
+export {
+  pilotSkillContentReleaseCandidate2Input,
+  pilotSkillContentReleaseProposalInput,
+} from "./skillContentPlatform/pilotSkillContentReleaseProposal";
 export * from "./seeds/defaultContent";
 export * from "./skillCatalogueAuthoring";
 export * from "./skillContentPlatform";

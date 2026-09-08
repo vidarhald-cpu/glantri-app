@@ -10,11 +10,23 @@ import {
   buildSkillContentRelease,
   computeSkillContentReleaseIntegrity,
   projectSkillContentReleaseForReference,
+  serializeSkillContentSemantics,
   validateSkillContentRelease,
 } from ".";
-import { pilotSkillContentReleaseProposalInput } from "./pilotSkillContentReleaseProposal";
+import {
+  pilotSkillContentReleaseCandidate2Input,
+  pilotSkillContentReleaseProposalInput,
+} from "./pilotSkillContentReleaseProposal";
 
 const repositoryRoot = path.resolve(__dirname, "..", "..", "..", "..");
+const acceptedCandidate1SemanticDigest =
+  "sha256:ce76c0def915b7d227614977ff36f5a3b743e338bdbbe1d1744c3b7a36d3e8f7";
+
+function candidate1ComparableSemanticDigest(release: SkillContentRelease): `sha256:${string}` {
+  const comparable = structuredClone(release);
+  comparable.id = "content-release:pilot-skills:2-candidate-1";
+  return `sha256:${sha256(serializeSkillContentSemantics(comparable))}`;
+}
 
 function candidate(): SkillContentRelease {
   return buildSkillContentRelease(
@@ -412,6 +424,17 @@ describe("documentation-complete Skill content platform", () => {
   it("builds a deterministic candidate with package and semantic integrity", () => {
     const first = candidate();
     const second = candidate();
+    expect(pilotSkillContentReleaseProposalInput).toBe(pilotSkillContentReleaseCandidate2Input);
+    expect(first).toMatchObject({
+      contentVersion: "pilot-skills-content/2.0.0-candidate.2",
+      id: "content-release:pilot-skills:2-candidate-2",
+      status: "proposal",
+      title: "Reader-facing Pilot Skill v2 candidate 2",
+    });
+    expect(first.compatibility).toMatchObject({
+      characterMigrationReviewRequired: false,
+      classification: "presentation-only",
+    });
     expect(first.manifest).toEqual(second.manifest);
     expect(first.manifest.packageDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(first.manifest.semanticDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
@@ -430,8 +453,7 @@ describe("documentation-complete Skill content platform", () => {
     const release = candidate();
     expect(release.provenance).toEqual(
       expect.arrayContaining([
-        "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/25",
-        "http://127.0.0.1:3001/recovery-admin/glantri-app/pulls/64",
+        "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/75",
         "docs/decisions/rules/0002-skill-catalogue-qualitative-architecture.md",
         "docs/decisions/rules/0003-skill-documentation-and-release-integrity.md",
         "docs/rules/pilot-skill-rules-v1.md",
@@ -444,10 +466,60 @@ describe("documentation-complete Skill content platform", () => {
         "docs/rules/pilot-skill-rules-v1.md",
       ]),
     );
-    expect(release.compatibility.classification).toBe("mechanically-compatible");
+    expect(release.compatibility.classification).toBe("presentation-only");
     expect(
       release.provenance.some((entry) => entry.startsWith("docs/process/recovery-legacy/")),
     ).toBe(false);
+  });
+
+  it("keeps candidate 2 reader copy concrete, compact, and campaign-agnostic", () => {
+    const release = candidate();
+    const settingLeakage =
+      /\b(?:Glantri(?:an)?|Mogreb(?:i)?|Olog(?:ian)?|Phoenician|N['’]?kol(?:o|ian)?|Scythian|Iest|Lankhmar|Neseret|Hanno|Vorodin|temple|chancery|fosterage|clan|campaign|teacher|institution|background)\b|Copper Latch|household retainer|named contact/i;
+    const proseOnlyMechanics =
+      /\b(?:AB[1-4]|DS[1-6]|weight|ranks?|threshold|prerequisites?|relationships?|transfer|availability|access band|development stage|XP)\b|%/i;
+
+    const invalidShortDescriptions = release.competencies
+      .filter((record) => {
+        const sentenceEndings = record.shortDescription.match(/[.!?](?=\s|$)/g) ?? [];
+        return (
+          sentenceEndings.length !== 1 ||
+          !/[.!?]$/.test(record.shortDescription) ||
+          record.shortDescription.split(/\s+/).length > 22
+        );
+      })
+      .map(({ id }) => id);
+    expect(invalidShortDescriptions).toEqual([]);
+
+    const invalidFullDescriptions = release.competencies
+      .filter((record) => {
+        const wordCount = record.description.split(/\s+/).length;
+        return wordCount < 20 || wordCount > 55;
+      })
+      .map(({ id }) => id);
+    expect(invalidFullDescriptions).toEqual([]);
+
+    const settingLeaks = release.competencies
+      .filter(
+        ({ description, shortDescription }) =>
+          settingLeakage.test(description) || settingLeakage.test(shortDescription),
+      )
+      .map(({ id }) => id);
+    expect(settingLeaks).toEqual([]);
+
+    const hiddenMechanics = release.competencies
+      .filter(
+        ({ description, shortDescription }) =>
+          proseOnlyMechanics.test(description) || proseOnlyMechanics.test(shortDescription),
+      )
+      .map(({ id }) => id);
+    expect(hiddenMechanics).toEqual([]);
+  });
+
+  it("preserves the complete accepted candidate 1 mechanical semantics", () => {
+    const release = candidate();
+    expect(release.competencies).toHaveLength(61);
+    expect(candidate1ComparableSemanticDigest(release)).toBe(acceptedCandidate1SemanticDigest);
   });
 
   it("changes only package integrity for presentation-only edits", () => {
