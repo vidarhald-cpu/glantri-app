@@ -127,6 +127,7 @@ describe("EncounterService participant effect modifier refresh", () => {
       updatedAt: "2026-08-01T10:00:00.000Z",
     });
     const encounterRepository = {
+      getEncounterById: vi.fn().mockResolvedValue(session),
       updateCombatEncounter: vi.fn().mockResolvedValue(session),
     };
     const service = new EncounterService(encounterRepository as never, repository);
@@ -162,6 +163,7 @@ describe("EncounterService combat persistence errors", () => {
     "exposes %s through the service boundary without repository details",
     async (code) => {
       const repository = {
+        getEncounterById: vi.fn(),
         updateCombatEncounter: vi
           .fn()
           .mockRejectedValue(
@@ -185,6 +187,7 @@ describe("EncounterService combat persistence errors", () => {
         title: "Courtyard",
         updatedAt: "2026-07-26T10:00:00.000Z",
       });
+      repository.getEncounterById.mockResolvedValue(session);
 
       const error = await service
         .updateCombatEncounter({
@@ -205,6 +208,7 @@ describe("EncounterService roleplay persistence errors", () => {
     "maps %s to the safe general Encounter write boundary",
     async (code) => {
       const repository = {
+        getEncounterById: vi.fn(),
         updateEncounter: vi
           .fn()
           .mockRejectedValue(
@@ -223,6 +227,7 @@ describe("EncounterService roleplay persistence errors", () => {
         title: "Courtyard",
         updatedAt: "2026-08-13T10:00:00.000Z",
       });
+      repository.getEncounterById.mockResolvedValue(session);
 
       const error = await service
         .updateEncounter({

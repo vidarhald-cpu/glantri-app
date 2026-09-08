@@ -79,13 +79,11 @@ function getEncounterStatusRank(status: EncounterSessionSummary["status"]): numb
   switch (status) {
     case "active":
       return 0;
-    case "planned":
+    case "draft":
       return 1;
     case "paused":
       return 2;
-    case "setup":
-      return 3;
-    case "complete":
+    case "completed":
       return 4;
     case "archived":
       return 99;

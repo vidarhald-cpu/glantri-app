@@ -10,14 +10,18 @@ const encounterCombatRoundStateSchema = combatRoundStateSchema as z.ZodType<Comb
 
 export const encounterKindSchema = z.enum(["combat", "roleplay"]);
 export const encounterParticipantMembershipModeSchema = z.enum(["defaultAllActive", "explicit"]);
-export const encounterStatusSchema = z.enum([
-  "setup",
-  "planned",
+export const encounterCanonicalStatusSchema = z.enum([
+  "draft",
   "active",
   "paused",
-  "complete",
+  "completed",
   "archived",
 ]);
+export const encounterStatusSchema = z.preprocess((input) => {
+  if (input === "setup" || input === "planned") return "draft";
+  if (input === "complete") return "completed";
+  return input;
+}, encounterCanonicalStatusSchema);
 export const encounterTurnOrderModeSchema = z.enum(["manual"]);
 export const encounterFacingSchema = z.enum(["north", "east", "south", "west"]);
 export const encounterOrientationSchema = z.enum(["neutral", "front", "side", "behind"]);
@@ -343,7 +347,7 @@ export const encounterSessionSchema = z.object({
   playerOutcome: z.string().optional(),
   roleplayState: roleplayStateSchema.optional(),
   scenarioId: idSchema.optional(),
-  status: encounterStatusSchema.default("setup"),
+  status: encounterStatusSchema.default("draft"),
   timelineLabel: z.string().optional(),
   title: z.string().min(1),
   turnOrderMode: encounterTurnOrderModeSchema.default("manual"),
@@ -409,6 +413,33 @@ export type RoleplayActionLogEntry = z.infer<typeof roleplayActionLogEntrySchema
 export type RoleplayState = z.infer<typeof roleplayStateSchema>;
 export type EncounterAttackResolution = z.infer<typeof encounterAttackResolutionSchema>;
 export type EncounterParticipant = z.infer<typeof encounterParticipantSchema>;
+
+export const encounterLifecycleTransitions: Readonly<
+  Record<EncounterStatus, readonly EncounterStatus[]>
+> = {
+  active: ["paused"],
+  archived: [],
+  completed: ["archived"],
+  draft: ["active", "archived"],
+  paused: ["active", "completed"],
+};
+
+export function canTransitionEncounterStatus(
+  current: EncounterStatus,
+  next: EncounterStatus,
+): boolean {
+  return (
+    current === next || encounterLifecycleTransitions[current].some((status) => status === next)
+  );
+}
+
+export function isEncounterMutable(status: EncounterStatus): boolean {
+  return status === "draft" || status === "active" || status === "paused";
+}
+
+export function isEncounterActivityAllowed(status: EncounterStatus): boolean {
+  return status === "active";
+}
 
 export interface EffectiveEncounterParticipants {
   explicitMode: boolean;

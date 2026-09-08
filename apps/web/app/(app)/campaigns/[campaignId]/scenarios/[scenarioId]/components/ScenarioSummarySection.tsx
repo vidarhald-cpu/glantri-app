@@ -21,8 +21,24 @@ export function ScenarioSummarySection({
   scenarioName,
   scenarioStatus,
 }: ScenarioSummarySectionProps) {
-  const isTerminal = scenarioStatus === "completed" || scenarioStatus === "archived";
-  const scenarioStatusLabel = scenarioStatus === "completed" ? "Closed" : "Archived";
+  const isArchived = scenarioStatus === "archived";
+  const isMetadataReadOnly = scenarioStatus === "completed" || isArchived;
+  const allowedStatuses: Scenario["status"][] =
+    scenarioStatus === "draft"
+      ? ["draft", "live", "archived"]
+      : scenarioStatus === "live"
+        ? ["live", "paused"]
+        : scenarioStatus === "paused"
+          ? ["paused", "live", "completed"]
+          : scenarioStatus === "completed"
+            ? ["completed", "archived"]
+            : ["archived"];
+  const statusLabel = (status: Scenario["status"]) =>
+    status === "live"
+      ? "Active"
+      : status === "completed"
+        ? "Closed"
+        : status.charAt(0).toUpperCase() + status.slice(1);
 
   return (
     <section
@@ -40,7 +56,7 @@ export function ScenarioSummarySection({
       <label style={{ display: "grid", gap: "0.25rem" }}>
         <span>Name</span>
         <input
-          disabled={isTerminal}
+          disabled={isMetadataReadOnly}
           onChange={(event) => onNameChange(event.target.value)}
           value={scenarioName}
         />
@@ -48,7 +64,7 @@ export function ScenarioSummarySection({
       <label style={{ display: "grid", gap: "0.25rem" }}>
         <span>Description</span>
         <input
-          disabled={isTerminal}
+          disabled={isMetadataReadOnly}
           onChange={(event) => onDescriptionChange(event.target.value)}
           placeholder="No description yet."
           type="text"
@@ -57,22 +73,22 @@ export function ScenarioSummarySection({
       </label>
       <label style={{ display: "grid", gap: "0.25rem" }}>
         <span>Status</span>
-        {isTerminal ? (
-          <output aria-label="Scenario status">{scenarioStatusLabel}</output>
+        {isArchived ? (
+          <output aria-label="Scenario status">Archived</output>
         ) : (
           <select
             onChange={(event) => onStatusChange(event.target.value as Scenario["status"])}
             value={scenarioStatus}
           >
-            <option value="draft">Draft</option>
-            <option value="live">Active</option>
-            <option value="paused">Paused</option>
-            <option value="completed">Closed</option>
-            <option value="archived">Archived</option>
+            {allowedStatuses.map((status) => (
+              <option key={status} value={status}>
+                {statusLabel(status)}
+              </option>
+            ))}
           </select>
         )}
       </label>
-      <button disabled={isTerminal} onClick={onUpdate} type="button">
+      <button disabled={isArchived} onClick={onUpdate} type="button">
         Update scenario
       </button>
     </section>

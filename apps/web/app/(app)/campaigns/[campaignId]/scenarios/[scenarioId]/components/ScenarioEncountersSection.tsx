@@ -59,8 +59,8 @@ export function ScenarioEncountersSection({
     >
       <h2 style={{ margin: 0 }}>Encounters</h2>
       <p style={{ margin: 0 }}>
-        Create combat or roleplaying encounters on one scenario timeline. More than one encounter
-        can be active at the same time.
+        Create bounded situations on this Scenario timeline. Combat and skill rolls are activities
+        you can run inside any active Encounter, and disjoint Encounters can be active together.
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
         <input
@@ -71,11 +71,12 @@ export function ScenarioEncountersSection({
           value={encounterTitle}
         />
         <select
+          aria-label="Initial activity emphasis"
           onChange={(event) => onKindChange(event.target.value as EncounterKind)}
           value={encounterKind}
         >
-          <option value="combat">Combat</option>
-          <option value="roleplay">Roleplaying</option>
+          <option value="combat">Combat emphasis</option>
+          <option value="roleplay">Roleplaying emphasis</option>
         </select>
         <input
           onChange={(event) => onTimelineLabelChange(event.target.value)}
@@ -128,9 +129,13 @@ export function ScenarioEncountersSection({
                     ) : null}
                   </td>
                   <td style={{ padding: "0.6rem 0.75rem" }}>
-                    {encounter.kind === "roleplay" ? "Roleplaying" : "Combat"}
+                    {encounter.kind === "roleplay" ? "Roleplaying emphasis" : "Combat emphasis"}
                   </td>
-                  <td style={{ padding: "0.6rem 0.75rem" }}>{encounter.status}</td>
+                  <td style={{ padding: "0.6rem 0.75rem" }}>
+                    {encounter.status === "completed"
+                      ? "Closed"
+                      : encounter.status.charAt(0).toUpperCase() + encounter.status.slice(1)}
+                  </td>
                   <td style={{ padding: "0.6rem 0.75rem" }}>
                     {encounter.timelineLabel ?? encounter.createdAt}
                   </td>
@@ -159,6 +164,18 @@ export function ScenarioEncountersSection({
                       >
                         Skill rolls
                       </Link>
+                      {encounter.status === "active" ? (
+                        <Link
+                          href={buildCampaignWorkspaceHref({
+                            campaignId,
+                            encounterId: encounter.id,
+                            scenarioId,
+                            tab: "combat",
+                          })}
+                        >
+                          Combat
+                        </Link>
+                      ) : null}
                     </div>
                   </td>
                   <td style={{ padding: "0.6rem 0" }}>
@@ -171,7 +188,7 @@ export function ScenarioEncountersSection({
                           >
                             Pause
                           </button>
-                        ) : encounter.status !== "archived" && encounter.status !== "complete" ? (
+                        ) : encounter.status === "draft" || encounter.status === "paused" ? (
                           <button
                             onClick={() => onUpdateEncounterStatus(encounter, "active")}
                             type="button"
@@ -179,7 +196,7 @@ export function ScenarioEncountersSection({
                             {encounter.status === "paused" ? "Resume" : "Start"}
                           </button>
                         ) : null}
-                        {encounter.status !== "archived" ? (
+                        {encounter.status === "draft" || encounter.status === "completed" ? (
                           <button
                             onClick={() => onUpdateEncounterStatus(encounter, "archived")}
                             type="button"
@@ -188,7 +205,7 @@ export function ScenarioEncountersSection({
                           </button>
                         ) : null}
                       </div>
-                      {encounter.status === "active" || encounter.status === "paused" ? (
+                      {encounter.status === "paused" ? (
                         <div style={{ display: "grid", gap: "0.35rem", minWidth: 230 }}>
                           <label htmlFor={`encounter-outcome-${encounter.id}`}>
                             Player-visible outcome
@@ -226,7 +243,7 @@ export function ScenarioEncountersSection({
                                 .length === 0
                             }
                             onClick={() =>
-                              onUpdateEncounterStatus(encounter, "complete", {
+                              onUpdateEncounterStatus(encounter, "completed", {
                                 gmPrivateClosingNote:
                                   closingNotes[encounter.id] ?? encounter.gmPrivateClosingNote,
                                 playerOutcome: outcomes[encounter.id] ?? encounter.playerOutcome,

@@ -172,7 +172,7 @@ describe("scenario lifecycle gates", () => {
     ["live", "draft", false],
     ["live", "live", false],
     ["live", "paused", true],
-    ["live", "completed", true],
+    ["live", "completed", false],
     ["live", "archived", false],
     ["paused", "draft", false],
     ["paused", "live", true],

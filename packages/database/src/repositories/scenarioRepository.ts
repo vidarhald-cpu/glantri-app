@@ -244,6 +244,7 @@ function mapScenarioEventLog(record: {
   phase: number | null;
   roundNumber: number | null;
   scenarioId: string;
+  sequence: number;
   summary: string;
 }): ScenarioEventLog {
   return scenarioEventLogSchema.parse({
@@ -256,6 +257,7 @@ function mapScenarioEventLog(record: {
     phase: record.phase === 1 || record.phase === 2 ? record.phase : undefined,
     roundNumber: record.roundNumber ?? undefined,
     scenarioId: record.scenarioId,
+    sequence: record.sequence,
     summary: record.summary,
   });
 }
@@ -675,7 +677,11 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
       return records.map(mapScenario);
     },
     async updateScenario(input) {
-      if (input.expectedRevision === undefined && input.expectedStatus === undefined) {
+      if (
+        input.expectedRevision === undefined &&
+        input.expectedStatus === undefined &&
+        input.status === undefined
+      ) {
         const record = await prisma.scenario.update({
           data: {
             description: input.description,
@@ -719,6 +725,129 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
                 "stale_revision",
                 "The Scenario changed before this update could be saved.",
               );
+            }
+
+            if (
+              input.status === "paused" ||
+              input.status === "completed" ||
+              input.status === "archived"
+            ) {
+              await transaction.$queryRaw(
+                Prisma.sql`SELECT "id" FROM "Encounter" WHERE "scenarioId" = ${input.scenarioId} ORDER BY "id" FOR UPDATE`,
+              );
+            }
+
+            if (input.status === "completed") {
+              const openEncounterCount = await transaction.encounter.count({
+                where: {
+                  scenarioId: input.scenarioId,
+                  status: { in: ["active", "paused"] },
+                },
+              });
+              if (openEncounterCount > 0) {
+                throw new Error(
+                  "Close every active or paused Encounter before closing the Scenario.",
+                );
+              }
+            }
+
+            if (input.status === "paused") {
+              const activeEncounters = await transaction.encounter.findMany({
+                select: {
+                  combatStorageMode: true,
+                  id: true,
+                  name: true,
+                  sessionJson: true,
+                },
+                where: { scenarioId: input.scenarioId, status: "active" },
+              });
+              for (const encounter of activeEncounters) {
+                const rawSession =
+                  encounter.sessionJson && typeof encounter.sessionJson === "object"
+                    ? (encounter.sessionJson as Record<string, unknown>)
+                    : {};
+                const participants = Array.isArray(rawSession.participants)
+                  ? rawSession.participants
+                  : [];
+                const audienceParticipantIds = participants.flatMap((participant) => {
+                  if (!participant || typeof participant !== "object") return [];
+                  const id = (participant as Record<string, unknown>).scenarioParticipantId;
+                  return typeof id === "string" ? [id] : [];
+                });
+                const updatedEncounter = await transaction.encounter.update({
+                  data: {
+                    sessionJson: asJson({ ...rawSession, status: "paused" }),
+                    status: "paused",
+                  },
+                  select: { updatedAt: true },
+                  where: { id: encounter.id },
+                });
+                if (encounter.combatStorageMode === "split_v1") {
+                  await transaction.encounterActiveCombatState.update({
+                    data: { revision: updatedEncounter.updatedAt },
+                    where: { encounterId: encounter.id },
+                  });
+                }
+                await transaction.scenarioEventLog.create({
+                  data: {
+                    eventType: "encounter_paused",
+                    payloadJson: asJson({ audienceParticipantIds, encounterId: encounter.id }),
+                    scenarioId: input.scenarioId,
+                    summary: `Paused encounter ${encounter.name} because the Scenario paused.`,
+                  },
+                });
+              }
+            }
+
+            if (input.status === "archived") {
+              const archivableEncounters = await transaction.encounter.findMany({
+                select: {
+                  combatStorageMode: true,
+                  id: true,
+                  name: true,
+                  sessionJson: true,
+                },
+                where: {
+                  scenarioId: input.scenarioId,
+                  status: { in: ["draft", "completed"] },
+                },
+              });
+              for (const encounter of archivableEncounters) {
+                const rawSession =
+                  encounter.sessionJson && typeof encounter.sessionJson === "object"
+                    ? (encounter.sessionJson as Record<string, unknown>)
+                    : {};
+                const participants = Array.isArray(rawSession.participants)
+                  ? rawSession.participants
+                  : [];
+                const audienceParticipantIds = participants.flatMap((participant) => {
+                  if (!participant || typeof participant !== "object") return [];
+                  const id = (participant as Record<string, unknown>).scenarioParticipantId;
+                  return typeof id === "string" ? [id] : [];
+                });
+                const updatedEncounter = await transaction.encounter.update({
+                  data: {
+                    sessionJson: asJson({ ...rawSession, status: "archived" }),
+                    status: "archived",
+                  },
+                  select: { updatedAt: true },
+                  where: { id: encounter.id },
+                });
+                if (encounter.combatStorageMode === "split_v1") {
+                  await transaction.encounterActiveCombatState.update({
+                    data: { revision: updatedEncounter.updatedAt },
+                    where: { encounterId: encounter.id },
+                  });
+                }
+                await transaction.scenarioEventLog.create({
+                  data: {
+                    eventType: "encounter_archived",
+                    payloadJson: asJson({ audienceParticipantIds, encounterId: encounter.id }),
+                    scenarioId: input.scenarioId,
+                    summary: `Archived encounter ${encounter.name} with the Scenario.`,
+                  },
+                });
+              }
             }
 
             const record = await transaction.scenario.update({
@@ -1274,7 +1403,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
     },
     async listScenarioEventLogs(scenarioId) {
       const records = await prisma.scenarioEventLog.findMany({
-        orderBy: { createdAt: "desc" },
+        orderBy: { sequence: "asc" },
         where: { scenarioId },
       });
 

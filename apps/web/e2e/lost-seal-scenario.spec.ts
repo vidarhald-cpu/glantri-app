@@ -232,7 +232,7 @@ test.describe("Lost Seal Scenario happy path", () => {
                 },
               ],
               scenarioId: scenario.scenario.id,
-              status: "planned",
+              status: "draft",
               title: input.title,
               updatedAt: new Date().toISOString(),
             },
@@ -390,7 +390,7 @@ test.describe("Lost Seal Scenario happy path", () => {
           expectedRevision: resumed.encounter.updatedAt,
           gmPrivateClosingNote: privateNote,
           playerOutcome: outcome,
-          status: "complete",
+          status: "completed",
         },
       });
     };
@@ -439,7 +439,7 @@ test.describe("Lost Seal Scenario happy path", () => {
               },
             ],
             scenarioId: scenario.scenario.id,
-            status: "planned",
+            status: "draft",
             title: "Seal Vault Confrontation",
             updatedAt: new Date().toISOString(),
           },

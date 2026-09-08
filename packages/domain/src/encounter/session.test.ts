@@ -5,6 +5,8 @@ import type { ScenarioParticipant } from "../campaign/scenario";
 import {
   buildEncounterSessionRevision,
   buildEncounterSessionSummary,
+  canTransitionEncounterStatus,
+  encounterStatusSchema,
   encounterSessionSchema,
   encounterSessionSummarySchema,
   roleplayStateSchema,
@@ -80,7 +82,7 @@ function encounter(input: Partial<EncounterSession> = {}): EncounterSession {
     kind: "roleplay",
     participants: [],
     scenarioId: "scenario-1",
-    status: "planned",
+    status: "draft",
     title: "Market shadows",
     turnOrderMode: "manual",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -89,6 +91,20 @@ function encounter(input: Partial<EncounterSession> = {}): EncounterSession {
 }
 
 describe("encounter session normalization invariants", () => {
+  it("normalizes legacy statuses and enforces the common lifecycle", () => {
+    expect(encounterStatusSchema.parse("setup")).toBe("draft");
+    expect(encounterStatusSchema.parse("planned")).toBe("draft");
+    expect(encounterStatusSchema.parse("complete")).toBe("completed");
+    expect(canTransitionEncounterStatus("draft", "active")).toBe(true);
+    expect(canTransitionEncounterStatus("draft", "archived")).toBe(true);
+    expect(canTransitionEncounterStatus("active", "paused")).toBe(true);
+    expect(canTransitionEncounterStatus("paused", "active")).toBe(true);
+    expect(canTransitionEncounterStatus("paused", "completed")).toBe(true);
+    expect(canTransitionEncounterStatus("completed", "archived")).toBe(true);
+    expect(canTransitionEncounterStatus("active", "completed")).toBe(false);
+    expect(canTransitionEncounterStatus("archived", "active")).toBe(false);
+  });
+
   it("projects strict compact summary and revision contracts without session history", () => {
     const fullEncounter = encounter({
       campaignId: "campaign-1",
@@ -174,7 +190,7 @@ describe("encounter session normalization invariants", () => {
           },
         ],
       },
-      status: "planned",
+      status: "draft",
       title: "Market shadows",
       turnOrderMode: "manual",
       updatedAt: "2026-01-01T00:00:00.000Z",
@@ -262,7 +278,7 @@ describe("encounter session normalization invariants", () => {
           },
         },
       },
-      status: "planned",
+      status: "draft",
       title: "Market shadows",
       turnOrderMode: "manual",
       updatedAt: "2026-01-01T00:00:00.000Z",

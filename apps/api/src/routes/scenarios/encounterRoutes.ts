@@ -6979,7 +6979,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     try {
       const encounterId = parseId(request.params, "encounterId", "Encounter id");
       const encounter = await encounterService.getEncounterById(encounterId);
-      if (!encounter?.scenarioId || encounter.kind !== "combat") {
+      if (!encounter?.scenarioId || encounter.status !== "active") {
         return reply.code(404).send({ error: "Combat encounter not found." });
       }
       const access = await resolveScenarioWorkspaceAccess(
@@ -7447,10 +7447,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           ...encounterSession,
           combatRoundState: undefined,
           currentRound: 1,
-          status:
-            encounterSession.status === "setup" || encounterSession.status === "planned"
-              ? encounterSession.status
-              : "planned",
+          status: "draft",
         }),
       });
       const scenarioParticipants =
@@ -7531,7 +7528,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         scenarioParticipants,
       });
       const shouldNormalizeCombatRoundState =
-        (encounter.kind === "combat" || Boolean(encounter.combatRoundState)) &&
+        (encounter.status === "active" || Boolean(encounter.combatRoundState)) &&
         (!encounter.combatRoundState ||
           combatRoundStatesDiffer(roundState, encounter.combatRoundState));
       const normalizedEncounter = shouldNormalizeCombatRoundState
@@ -7869,9 +7866,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             : "encounter_started"
           : encounterSession.status === "paused"
             ? "encounter_paused"
-            : encounterSession.status === "complete"
+            : encounterSession.status === "completed"
               ? "encounter_closed"
-              : undefined
+              : encounterSession.status === "archived"
+                ? "encounter_archived"
+                : undefined
         : participantsChanged
           ? "encounter_participants_updated"
           : undefined;
@@ -7945,16 +7944,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       if (!expectedRevision) throw new Error("Refresh the Encounter before changing its status.");
       const playerOutcome = parseOptionalString(body, "playerOutcome")?.trim();
       const gmPrivateClosingNote = parseOptionalString(body, "gmPrivateClosingNote")?.trim();
-      if (status === "complete" && !playerOutcome) {
+      if (status === "completed" && !playerOutcome) {
         throw new Error("Record the player-visible outcome before closing the Encounter.");
       }
       const encounterSession = encounterSessionSchema.parse({
         ...existingEncounter,
         gmPrivateClosingNote:
-          status === "complete"
+          status === "completed"
             ? gmPrivateClosingNote || undefined
             : existingEncounter.gmPrivateClosingNote,
-        playerOutcome: status === "complete" ? playerOutcome : existingEncounter.playerOutcome,
+        playerOutcome: status === "completed" ? playerOutcome : existingEncounter.playerOutcome,
         status,
       });
       const eventType =
@@ -7964,9 +7963,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             : "encounter_started"
           : status === "paused"
             ? "encounter_paused"
-            : status === "complete"
+            : status === "completed"
               ? "encounter_closed"
-              : undefined;
+              : status === "archived"
+                ? "encounter_archived"
+                : undefined;
       const encounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
         encounterId,
@@ -7978,7 +7979,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               summary:
                 eventType === "encounter_closed"
                   ? `Closed encounter ${existingEncounter.title}: ${playerOutcome}.`
-                  : `${eventType === "encounter_paused" ? "Paused" : eventType === "encounter_resumed" ? "Resumed" : "Started"} encounter ${existingEncounter.title}.`,
+                  : `${eventType === "encounter_paused" ? "Paused" : eventType === "encounter_resumed" ? "Resumed" : eventType === "encounter_archived" ? "Archived" : "Started"} encounter ${existingEncounter.title}.`,
             }
           : undefined,
         scenarioId: existingEncounter.scenarioId,
@@ -19250,7 +19251,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const encounterId = parseId(request.params, "encounterId", "Encounter id");
       const encounter = await encounterService.getEncounterById(encounterId);
 
-      if (!encounter?.scenarioId || encounter.kind !== "roleplay") {
+      if (!encounter?.scenarioId || encounter.status !== "active") {
         return reply.code(404).send({ error: "Roleplaying encounter not found." });
       }
 

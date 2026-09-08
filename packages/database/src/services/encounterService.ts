@@ -1,8 +1,11 @@
 import {
+  canTransitionEncounterStatus,
+  isEncounterMutable,
   isScenarioLiveInteractive,
   refreshScenarioParticipantPersistentCombatModifiers,
   type EncounterSession,
   type EncounterSessionSummary,
+  type CombatStepEvent,
   type Scenario,
   type ScenarioParticipant,
   type ScenarioParticipantState,
@@ -24,6 +27,12 @@ import {
   setScenarioPhase,
   startScenario,
 } from "@glantri/domain";
+
+function collectCombatStepEvents(session: EncounterSession): CombatStepEvent[] {
+  const state = session.combatRoundState;
+  if (!state) return [];
+  return [...state.rounds.flatMap((round) => round.events), ...state.events];
+}
 
 export class EncounterCombatWriteError extends Error {
   constructor(
@@ -49,7 +58,11 @@ export class EncounterWriteError extends Error {
     readonly code:
       | "inactive_participant"
       | "invalid_active_membership"
+      | "invalid_transition"
+      | "encounter_not_active"
+      | "parent_scenario_not_active"
       | "participant_already_active"
+      | "read_only"
       | "stale_revision"
       | "transaction_conflict",
     message: string,
@@ -80,7 +93,16 @@ export class EncounterService {
     scenarioId: string;
     session: EncounterSession;
   }): Promise<EncounterSession> {
-    await this.assertScenarioAllowsLiveMutation(input.scenarioId);
+    const scenario = await this.assertScenarioExists(input.scenarioId);
+    if (scenario.status === "completed" || scenario.status === "archived") {
+      throw new EncounterWriteError(
+        "read_only",
+        "Closed or archived Scenarios cannot contain new Encounters.",
+      );
+    }
+    if (input.session.status !== "draft") {
+      throw new EncounterWriteError("invalid_transition", "A new Encounter must begin as Draft.");
+    }
     return this.encounterRepository.createEncounter(input);
   }
 
@@ -112,8 +134,38 @@ export class EncounterService {
     scenarioId?: string | null;
     session: EncounterSession;
   }): Promise<EncounterSession> {
-    if (input.scenarioId) {
-      await this.assertScenarioAllowsLiveMutation(input.scenarioId);
+    const existing = await this.encounterRepository.getEncounterById(input.encounterId);
+    if (!existing) throw new Error("Encounter not found.");
+    if (!canTransitionEncounterStatus(existing.status, input.session.status)) {
+      throw new EncounterWriteError(
+        "invalid_transition",
+        `Encounter cannot move from ${existing.status} to ${input.session.status}.`,
+      );
+    }
+    if (existing.status === input.session.status && !isEncounterMutable(existing.status)) {
+      throw new EncounterWriteError("read_only", "Closed and archived Encounters are read-only.");
+    }
+    if (existing.status === "paused" && input.session.status === "paused") {
+      throw new EncounterWriteError(
+        "read_only",
+        "A paused Encounter must be resumed or closed before it can change.",
+      );
+    }
+    const scenarioId = input.scenarioId ?? existing.scenarioId;
+    if (scenarioId) {
+      const scenario = await this.assertScenarioExists(scenarioId);
+      if (input.session.status === "active" && !isScenarioLiveInteractive(scenario.status)) {
+        throw new EncounterWriteError(
+          "parent_scenario_not_active",
+          "The parent Scenario must be active before this Encounter can be active.",
+        );
+      }
+      if (
+        scenario.status === "archived" ||
+        (scenario.status === "completed" && input.session.status !== "archived")
+      ) {
+        throw new EncounterWriteError("read_only", "The parent Scenario is read-only.");
+      }
     }
     try {
       return await this.encounterRepository.updateEncounter(input);
@@ -144,17 +196,41 @@ export class EncounterService {
       state: ScenarioParticipantState;
     }>;
   }): Promise<EncounterSession> {
-    if (input.scenarioId) {
-      await this.assertScenarioAllowsLiveMutation(input.scenarioId);
+    const existing = await this.encounterRepository.getEncounterById(input.encounterId);
+    if (!existing) throw new Error("Encounter not found.");
+    if (existing.status !== "active" || input.session.status !== "active") {
+      throw new EncounterWriteError(
+        "encounter_not_active",
+        "Combat activity requires an active Encounter.",
+      );
+    }
+    const scenarioId = input.scenarioId ?? existing.scenarioId;
+    if (scenarioId) {
+      const scenario = await this.assertScenarioExists(scenarioId);
+      if (!isScenarioLiveInteractive(scenario.status)) {
+        throw new EncounterWriteError(
+          "parent_scenario_not_active",
+          "Combat activity requires an active parent Scenario.",
+        );
+      }
     }
     try {
-      return await this.encounterRepository.updateCombatEncounter(input);
+      const existingEventIds = new Set(collectCombatStepEvents(existing).map((event) => event.id));
+      return await this.encounterRepository.updateCombatEncounter({
+        ...input,
+        objectiveEvents: collectCombatStepEvents(input.session).filter(
+          (event) => !existingEventIds.has(event.id),
+        ),
+      });
     } catch (error) {
       if (
         error instanceof CombatPersistenceError &&
         (error.code === "stale_revision" || error.code === "transaction_conflict")
       ) {
         throw new EncounterCombatWriteError(error.code, error.message, error);
+      }
+      if (error instanceof EncounterPresenceError) {
+        throw new EncounterWriteError(error.code, error.message, error);
       }
       throw error;
     }

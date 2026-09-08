@@ -242,6 +242,8 @@ async function updateMetadataWithExpectedRevision(input: {
 
 export interface CombatStatePersistenceRepository {
   updateCombatEncounter(input: {
+    afterPersist?: (transaction: TransactionClient, encounter: EncounterSession) => Promise<void>;
+    beforePersist?: (transaction: TransactionClient, encounter: EncounterSession) => Promise<void>;
     campaignId?: string | null;
     encounterId: string;
     expectedRevision: string;
@@ -319,6 +321,8 @@ export function createPrismaCombatStatePersistenceRepository(
               storageMode === COMBAT_STORAGE_MODE_LEGACY ? 0 : existing.combatArchiveCount;
             const nextArchiveCount = parts.archivedRounds.length;
             const archiveDelta = nextArchiveCount - priorArchiveCount;
+
+            await input.beforePersist?.(transaction, input.session);
 
             if (
               (storageMode === COMBAT_STORAGE_MODE_SPLIT_V1 &&
@@ -428,7 +432,7 @@ export function createPrismaCombatStatePersistenceRepository(
               }
             }
 
-            return {
+            const saved = {
               ...parts.sessionWithoutCombatState,
               combatRoundState: {
                 ...parts.activeCombatState,
@@ -436,6 +440,8 @@ export function createPrismaCombatStatePersistenceRepository(
               },
               updatedAt: updatedAt.toISOString(),
             } as EncounterSession;
+            await input.afterPersist?.(transaction, saved);
+            return saved;
           };
           return await (!transactionClient
             ? rootClient.$transaction(persist, {

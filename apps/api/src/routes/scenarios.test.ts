@@ -5988,7 +5988,7 @@ describe("scenarios route contract", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       id: `encounter-${index}`,
       scenarioId: "scenario-1",
-      status: index === 0 ? "active" : "planned",
+      status: index === 0 ? "active" : "draft",
       title: `Encounter ${index}`,
       updatedAt: `2026-01-01T00:${String(index).padStart(2, "0")}:00.000Z`,
     }));
@@ -6251,7 +6251,7 @@ describe("scenarios route contract", () => {
 
     mocks.encounterService.listEncountersByScenario.mockResolvedValue([
       encounterA,
-      { ...encounterB, status: "complete", updatedAt: "2026-08-22T10:03:00.000Z" },
+      { ...encounterB, status: "completed", updatedAt: "2026-08-22T10:03:00.000Z" },
     ]);
     mocks.scenarioService.listScenarioEventLogs.mockResolvedValue([
       ...initialEventLogs,
@@ -7742,7 +7742,7 @@ describe("scenarios route contract", () => {
       campaignId: "campaign-1",
       participants: [],
       scenarioId: "scenario-1",
-      status: "setup",
+      status: "draft",
     });
     mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
     mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
@@ -7770,7 +7770,7 @@ describe("scenarios route contract", () => {
         currentRound: 1,
         id: "encounter-1",
         scenarioId: "scenario-evil",
-        status: "setup",
+        status: "draft",
       }),
     });
   });
@@ -7942,7 +7942,11 @@ describe("scenarios route contract", () => {
       campaignId: "campaign-1",
       encounterId: "encounter-1",
       expectedRevision: existingEncounter.updatedAt,
-      objectiveEvent: undefined,
+      objectiveEvent: {
+        actorUserId: "gm-1",
+        eventType: "encounter_archived",
+        summary: "Archived encounter Courtyard.",
+      },
       scenarioId: "scenario-1",
       session: expect.objectContaining({
         combatRoundState: existingEncounter.combatRoundState,

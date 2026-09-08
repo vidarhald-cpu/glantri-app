@@ -1485,9 +1485,7 @@ export default function ScenarioPlayerCombatPageContent({
       !encounterId ||
       !acceptedEncounter ||
       acceptedEncounter.id !== encounterId ||
-      acceptedEncounter.kind !== "combat" ||
-      acceptedEncounter.status === "complete" ||
-      acceptedEncounter.status === "archived"
+      acceptedEncounter.status !== "active"
     ) {
       return;
     }

@@ -20,17 +20,23 @@ function renderSummary(status: "archived" | "completed" | "live") {
 }
 
 describe("ScenarioSummarySection", () => {
-  it.each([
-    ["completed", "Closed"],
-    ["archived", "Archived"],
-  ] as const)("renders %s summaries as read-only", (status, label) => {
-    renderSummary(status);
+  it("renders archived summaries as read-only", () => {
+    renderSummary("archived");
 
     expect(screen.getByRole("textbox", { name: "Name" })).toBeDisabled();
     expect(screen.getByRole("textbox", { name: "Description" })).toBeDisabled();
     expect(screen.queryByRole("combobox", { name: "Status" })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Scenario status")).toHaveTextContent(label);
+    expect(screen.getByLabelText("Scenario status")).toHaveTextContent("Archived");
     expect(screen.getByRole("button", { name: "Update scenario" })).toBeDisabled();
+  });
+
+  it("keeps only the Closed to Archived lifecycle control available", () => {
+    renderSummary("completed");
+
+    expect(screen.getByRole("textbox", { name: "Name" })).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: "Description" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Status" })).toHaveTextContent("ClosedArchived");
+    expect(screen.getByRole("button", { name: "Update scenario" })).toBeEnabled();
   });
 
   it("retains scenario editing controls for an Active summary", () => {

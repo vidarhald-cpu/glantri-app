@@ -53,7 +53,7 @@ function encounter(input: {
         ]
       : [],
     scenarioId: input.scenarioId,
-    status: input.status ?? "planned",
+    status: input.status ?? "draft",
     title: input.title ?? "Market shadows",
     turnOrderMode: "manual",
     updatedAt: "2026-04-23T00:00:00.000Z",
@@ -318,7 +318,7 @@ describe("campaign workspace", () => {
           id: "combat-encounter",
           kind: "combat",
           scenarioId: "scn-1",
-          status: "planned",
+          status: "active",
         }),
       ],
       requestedEncounterId: null,
@@ -347,7 +347,7 @@ describe("campaign workspace", () => {
           id: "combat-two",
           kind: "combat",
           scenarioId: "scn-1",
-          status: "planned",
+          status: "active",
         }),
       ],
       requestedEncounterId: null,
@@ -361,7 +361,7 @@ describe("campaign workspace", () => {
     expect(state.activeTab).toBe("combat");
   });
 
-  it("keeps an explicitly selected roleplaying encounter visible for GM Combat tab messaging", () => {
+  it("runs Combat in the same active Encounter regardless of its legacy kind", () => {
     const state = resolveCampaignWorkspaceState({
       activeCampaignId: "camp-1",
       canAccessGmEncounter: true,
@@ -376,7 +376,7 @@ describe("campaign workspace", () => {
           id: "combat-encounter",
           kind: "combat",
           scenarioId: "scn-1",
-          status: "planned",
+          status: "draft",
         }),
       ],
       requestedEncounterId: "roleplay-encounter",
@@ -423,7 +423,7 @@ describe("campaign workspace", () => {
           id: "enc-1",
           scenarioId: "scn-1",
           scenarioParticipantId: "participant-1",
-          status: "setup",
+          status: "draft",
           title: "Gate skirmish",
         }),
       ],
@@ -491,7 +491,7 @@ describe("campaign workspace", () => {
           kind: "combat",
           participants: [],
           scenarioId: "scn-1",
-          status: "setup",
+          status: "draft",
           title: "Gate skirmish",
           turnOrderMode: "manual",
           updatedAt: "2026-04-23T00:00:00.000Z",
@@ -539,7 +539,7 @@ describe("campaign workspace", () => {
           id: "enc-1",
           scenarioId: "scn-1",
           scenarioParticipantId: "participant-1",
-          status: "setup",
+          status: "draft",
           title: "Gate skirmish",
         }),
       ],

@@ -75,12 +75,12 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).not.toContain("handleUpdateLiveState");
   });
 
-  it("supports combat and roleplaying encounters with timeline/status controls", () => {
+  it("supports situational Encounters with activity emphasis and lifecycle controls", () => {
     const source = readScenarioDetailSources();
     const encountersSource = readComponentSource("ScenarioEncountersSection.tsx");
 
-    expect(source).toContain('<option value="combat">Combat</option>');
-    expect(source).toContain('<option value="roleplay">Roleplaying</option>');
+    expect(source).toContain('<option value="combat">Combat emphasis</option>');
+    expect(source).toContain('<option value="roleplay">Roleplaying emphasis</option>');
     expect(source).toContain("Timeline</th>");
     expect(source).toContain("Participants</th>");
     expect(source).toContain("handleUpdateEncounterStatus");
@@ -90,6 +90,7 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).toContain('"active"');
     expect(source).toContain('"paused"');
     expect(source).toContain('"archived"');
+    expect(source).toContain('"completed"');
     expect(source).not.toContain("participants.map((participant) => (");
     expect(encountersSource).toMatch(
       /onUpdateEncounterStatus\(encounter, "paused"\)[\s\S]*?type="button"/,

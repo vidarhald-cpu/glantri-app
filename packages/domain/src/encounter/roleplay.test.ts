@@ -25,7 +25,7 @@ function createSession(overrides: Partial<EncounterSession> = {}): EncounterSess
     id: "encounter-1",
     kind: "roleplay",
     participants: [],
-    status: "planned",
+    status: "draft",
     title: "Market shadows",
     turnOrderMode: "manual",
     updatedAt: "2026-01-01T00:00:00.000Z",
