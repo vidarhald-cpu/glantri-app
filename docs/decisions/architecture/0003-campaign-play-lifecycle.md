@@ -74,8 +74,11 @@ draft -> active
   authority where existing administrator authority permits.
 - A player may not activate a Campaign.
 - There is no ordinary `active -> draft` transition.
-- Activation does not change Campaign roster authority or make the Campaign a
-  self-join space.
+- Activation does not itself change Campaign roster membership. Player-owned
+  Characters join an eligible Campaign only through the controlling player's
+  accepted action; a Campaign GM may remove one but may not pull another
+  user's Character into the Campaign. See
+  [Architecture decision 0005](0005-role-scope-and-campaign-ownership.md).
 
 ### Common Scenario and Encounter lifecycle
 

@@ -39,6 +39,19 @@ Rolled/Base -> Original -> Developed -> Current
 
 Unauthorized Character reads and mutations return `404` so they do not disclose another owner's record or revision.
 
+Campaign membership does not transfer Character ownership or control. A player
+initiates joining an eligible Campaign with a Character they are authorized to
+control. A managing Campaign GM may remove that Character from the Campaign but
+may not pull another user's player-owned Character into it. No additional
+invitation or approval workflow is implied.
+
+Global roles do not replace these relationships. The `game_master` role alone
+does not grant access to another GM's Campaign or Characters, and Admin
+capability does not automatically make the user a Campaign GM. Any separately
+accepted Admin Character operation remains an Admin-scoped action rather than
+Campaign-management authority. See
+[Architecture decision 0005](../decisions/architecture/0005-role-scope-and-campaign-ownership.md).
+
 Browser-local records follow the same presentation boundary. An owner may recover their own retained record, an owning GM may see one only when the scoped server Character remains accessible, and an admin may see retained records. A GM role by itself never grants access to another account's browser-local Character. Account switching therefore cannot expose retained records that are outside the active actor's scope.
 
 ## Server mutation contract
@@ -78,7 +91,10 @@ A stale delete returns `409 stale_character` and changes nothing.
 4. **Offline edit -> synchronized:** the browser retains the base server revision while saving local changes. Synchronization succeeds only if that base is still current.
 5. **Concurrent edit conflict:** another actor saves first; the later stale draft receives `409`, remains recoverable locally, and cannot overwrite the newer Character.
 6. **Conflict recovery:** the canonical server Character is shown as current while the retained draft can be reviewed, left for later, or discarded. No recovery choice automatically merges or overwrites either record.
-7. **Rostered:** Campaign membership refers to the canonical Character; it does not create another Character authority.
+7. **Rostered:** the controlling player initiates eligible Campaign joining;
+   Campaign membership refers to the canonical Character and does not create
+   another Character authority. The managing GM may remove the membership but
+   may not pull in another user's player-owned Character.
 8. **Snapshotted:** Scenario admission copies the Character into Scenario-owned snapshot/live state. Later Character edits have no effect unless the owning GM invokes the existing explicit equipment refresh.
 9. **Deleted:** the canonical Character and roster references are removed at the expected revision. Existing Scenario snapshots remain usable historical state with no live Character link.
 10. **Retired:** the current schema has no Character retirement state. Retirement is unsupported rather than silently represented as deletion, roster removal, or a browser-local flag; adding it requires a future explicit server lifecycle decision.
