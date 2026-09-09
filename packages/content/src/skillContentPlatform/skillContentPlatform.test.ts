@@ -14,14 +14,22 @@ import {
   validateSkillContentRelease,
 } from ".";
 import {
-  pilotSkillContentReleaseCandidate3Input,
-  pilotSkillContentReleaseCandidate3ReviewGaps,
+  pilotSkillContentReleaseCandidate4AuthoritativeSourceSha256,
+  pilotSkillContentReleaseCandidate4AuthoredDocumentation,
+  pilotSkillContentReleaseCandidate4ExceptionCompetencyIds,
+  pilotSkillContentReleaseCandidate4ExceptionNotes,
+  pilotSkillContentReleaseCandidate4Input,
+  pilotSkillContentReleaseCandidate4ReviewGaps,
   pilotSkillContentReleaseProposalInput,
 } from "./pilotSkillContentReleaseProposal";
 
 const repositoryRoot = path.resolve(__dirname, "..", "..", "..", "..");
 const acceptedCandidate2FrozenMechanicsDigest =
   "sha256:6b496fe950e56cce217e10f0b450fa607586f9bb0fdb2ceee386cdbe44d1cea8";
+const authoritativeCandidate4SourceSha256 =
+  "e9d5e6800dde213bfd3f8cb42e626791863b0144f90ec52bcd76557758f3a10c";
+const authoritativeCandidate4ProseDigest =
+  "sha256:210d06eef713f1d590eadca8e3c973947b1b9ef87c25725fcc0e96725eb1b334";
 
 function frozenMechanicsDigest(release: SkillContentRelease): `sha256:${string}` {
   const comparable = structuredClone(release);
@@ -70,6 +78,11 @@ const proposalMetadataSourceByKind: Record<ProposalMetadataRecordKind, readonly 
     },
   ],
   competency: [
+    {
+      endMarker: "const candidate3ShortDescriptionByCompetencyId",
+      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+      startMarker: "pilotSkillContentReleaseCandidate4AuthoredDocumentation",
+    },
     {
       endMarker: "const candidate3FullDescriptionBoundaryByCompetencyId",
       path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
@@ -128,6 +141,11 @@ const proposalMetadataSourceByKind: Record<ProposalMetadataRecordKind, readonly 
     },
   ],
   specialization: [
+    {
+      endMarker: "const candidate3ShortDescriptionByCompetencyId",
+      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+      startMarker: "pilotSkillContentReleaseCandidate4AuthoredDocumentation",
+    },
     {
       endMarker: "const candidate3FullDescriptionBoundaryByCompetencyId",
       path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
@@ -263,10 +281,13 @@ function resolveProvenancePath(reference: string): { path: string; line: number;
   }
   const [, sourceRevision, rawPath, rawLine] = match;
   const absolutePath = path.resolve(repositoryRoot, rawPath);
-  const source = execFileSync("git", ["show", `${sourceRevision}:${rawPath}`], {
-    cwd: repositoryRoot,
-    encoding: "utf8",
-  });
+  const source =
+    sourceRevision === forgejoSourceRevision
+      ? readFileSync(absolutePath, "utf8")
+      : execFileSync("git", ["show", `${sourceRevision}:${rawPath}`], {
+          cwd: repositoryRoot,
+          encoding: "utf8",
+        });
   const lines = source.split(/\r?\n/);
   const line = Number(rawLine);
   if (!Number.isFinite(line) || line <= 0 || line > lines.length) {
@@ -377,12 +398,12 @@ describe("documentation-complete Skill content platform", () => {
   it("builds a deterministic candidate with package and semantic integrity", () => {
     const first = candidate();
     const second = candidate();
-    expect(pilotSkillContentReleaseProposalInput).toBe(pilotSkillContentReleaseCandidate3Input);
+    expect(pilotSkillContentReleaseProposalInput).toBe(pilotSkillContentReleaseCandidate4Input);
     expect(first).toMatchObject({
-      contentVersion: "pilot-skills-content/2.0.0-candidate.3",
-      id: "content-release:pilot-skills:2-candidate-3",
+      contentVersion: "pilot-skills-content/2.0.0-candidate.4",
+      id: "content-release:pilot-skills:2-candidate-4",
       status: "proposal",
-      title: "Player-facing Pilot Skill v2 candidate 3",
+      title: "Player-facing Pilot Skill v2 candidate 4",
     });
     expect(first.compatibility).toMatchObject({
       characterMigrationReviewRequired: false,
@@ -406,7 +427,7 @@ describe("documentation-complete Skill content platform", () => {
     const release = candidate();
     expect(release.provenance).toEqual(
       expect.arrayContaining([
-        "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/79",
+        "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/83",
         "docs/decisions/rules/0002-skill-catalogue-qualitative-architecture.md",
         "docs/decisions/rules/0003-skill-documentation-and-release-integrity.md",
         "docs/rules/pilot-skill-rules-v1.md",
@@ -425,12 +446,44 @@ describe("documentation-complete Skill content platform", () => {
     ).toBe(false);
   });
 
-  it("keeps Candidate 3 player copy concrete, concise, and campaign-agnostic", () => {
+  it("transcribes all 50 Candidate 4 authored entries exactly from the verified source", () => {
+    const release = candidate();
+    const authoredEntries = Object.entries(pilotSkillContentReleaseCandidate4AuthoredDocumentation);
+    const authoredProjection = authoredEntries.map(
+      ([id, { boundaries, description, shortDescription, typicalUses }]) => ({
+        id,
+        shortDescription,
+        description,
+        typicalUses,
+        boundaries,
+      }),
+    );
+
+    expect(pilotSkillContentReleaseCandidate4AuthoritativeSourceSha256).toBe(
+      authoritativeCandidate4SourceSha256,
+    );
+    expect(authoredEntries).toHaveLength(50);
+    expect(`sha256:${sha256(JSON.stringify(authoredProjection))}`).toBe(
+      authoritativeCandidate4ProseDigest,
+    );
+    for (const [id, authored] of authoredEntries) {
+      expect(competencyById(release, id), id).toMatchObject({
+        description: authored.description,
+        shortDescription: authored.shortDescription,
+        taskEnvelope: {
+          coreTasks: authored.typicalUses,
+          limits: authored.boundaries,
+        },
+      });
+    }
+  });
+
+  it("keeps Candidate 4 authored copy concrete, concise, and campaign-agnostic", () => {
     const release = candidate();
     const settingLeakage =
       /\b(?:Glantri(?:an)?|Mogreb(?:i)?|Olog(?:ian)?|Phoenician|N['’]?kol(?:o|ian)?|Scythian|Iest|Lankhmar|Neseret|Hanno|Vorodin|temple|chancery|fosterage|clan|campaign|teacher|background)\b|Copper Latch|household retainer|named contact/i;
     const proseOnlyMechanics =
-      /\b(?:AB[1-4]|DS[1-6]|skill weights?|ranks?|threshold|prerequisites?|relationships?|transfer|availability|access band|development stage|XP)\b|%/i;
+      /\b(?:AB[1-4]|DS[1-6]|skill weights?|ranks?|threshold|prerequisites?|transfer|availability|access band|development stage|XP)\b|%/i;
 
     const invalidShortDescriptions = release.competencies
       .filter((record) => {
@@ -467,31 +520,6 @@ describe("documentation-complete Skill content platform", () => {
       )
       .map(({ id }) => id);
     expect(hiddenMechanics).toEqual([]);
-
-    expect(competencyById(release, "skill:administration")).toMatchObject({
-      shortDescription:
-        "Organize and carry out the procedures, records, and routine business of an institution or organization.",
-    });
-    expect(competencyById(release, "skill:dodge")).toMatchObject({
-      shortDescription: "Avoid attacks through movement, timing, and body positioning.",
-    });
-    expect(competencyById(release, "skill:insight")).toMatchObject({
-      shortDescription:
-        "Judge another person's likely emotions, motives, and intentions from what they say and do.",
-    });
-    expect(competencyById(release, "skill:leadership")).toMatchObject({
-      shortDescription:
-        "Direct and coordinate people toward a shared objective, maintaining order, morale, and cooperation.",
-    });
-    expect(competencyById(release, "skill:customs")?.taskEnvelope).toMatchObject({
-      coreTasks: [
-        "Know expected greetings, hospitality, status behaviour, exchange, and etiquette in a particular society.",
-      ],
-      limits: [
-        "Customs describes social expectations, not substantive legal knowledge.",
-        "Customs specific to one society does not automatically apply to another.",
-      ],
-    });
   });
 
   it("gives every non-Common language record specific copy without generic placeholders", () => {
@@ -597,15 +625,67 @@ describe("documentation-complete Skill content platform", () => {
     );
   });
 
+  it("retains the 11 Candidate 3 exceptions explicitly for #26", () => {
+    const release = candidate();
+    const authoredIds = Object.keys(pilotSkillContentReleaseCandidate4AuthoredDocumentation);
+    const rosterIds = [...authoredIds, ...pilotSkillContentReleaseCandidate4ExceptionCompetencyIds];
+
+    expect(pilotSkillContentReleaseCandidate4ExceptionCompetencyIds).toHaveLength(11);
+    expect(new Set(rosterIds).size).toBe(61);
+    expect(release.competencies.map(({ id }) => id).sort()).toEqual([...rosterIds].sort());
+    expect(pilotSkillContentReleaseCandidate4ReviewGaps.exceptions).toBe(
+      pilotSkillContentReleaseCandidate4ExceptionNotes,
+    );
+    expect(Object.keys(pilotSkillContentReleaseCandidate4ExceptionNotes)).toEqual([
+      ...pilotSkillContentReleaseCandidate4ExceptionCompetencyIds,
+    ]);
+    expect(pilotSkillContentReleaseCandidate4ExceptionNotes["skill:law:olog-princely"]).toMatch(
+      /removal.*movement/i,
+    );
+    expect(
+      pilotSkillContentReleaseCandidate4ExceptionNotes["spec:household-guard-sword-shield-drill"],
+    ).toMatch(/move to setting-specific material unless/i);
+    expect(
+      pilotSkillContentReleaseCandidate4ExceptionNotes["spec:steppe-remount-training"],
+    ).toMatch(/move to setting-specific material unless/i);
+    const exceptionDocumentationProjection =
+      pilotSkillContentReleaseCandidate4ExceptionCompetencyIds.map((id) => {
+        const record = competencyById(release, id);
+        expect(record, id).toBeDefined();
+        return record
+          ? {
+              id: record.id,
+              name: record.name,
+              shortLabel: record.shortLabel,
+              shortDescription: record.shortDescription,
+              description: record.description,
+              taskEnvelope: record.taskEnvelope,
+            }
+          : undefined;
+      });
+    expect(`sha256:${sha256(JSON.stringify(exceptionDocumentationProjection))}`).toBe(
+      "sha256:070ffd3156b29422c5b238160946004e06a02d5fecf2a615f12677edaaba9de2",
+    );
+    expect(pilotSkillContentReleaseCandidate4ExceptionCompetencyIds).toContain(
+      "spec:household-guard-sword-shield-drill",
+    );
+    expect(pilotSkillContentReleaseCandidate4ExceptionCompetencyIds).toContain(
+      "spec:steppe-remount-training",
+    );
+    for (const id of pilotSkillContentReleaseCandidate4ExceptionCompetencyIds) {
+      expect(competencyById(release, id), id).toBeDefined();
+    }
+  });
+
   it("records Culture and opposed-check questions for #26 without encoding mechanics", () => {
     const release = candidate();
-    expect(pilotSkillContentReleaseCandidate3ReviewGaps.relationships.join(" ")).toMatch(
+    expect(pilotSkillContentReleaseCandidate4ReviewGaps.relationships.join(" ")).toMatch(
       /Culture.*relationship hub/i,
     );
-    expect(pilotSkillContentReleaseCandidate3ReviewGaps.opposedChecks.join(" ")).toMatch(
+    expect(pilotSkillContentReleaseCandidate4ReviewGaps.opposedChecks.join(" ")).toMatch(
       /Insight and Deception/i,
     );
-    expect(pilotSkillContentReleaseCandidate3ReviewGaps.relationships.join(" ")).not.toMatch(
+    expect(pilotSkillContentReleaseCandidate4ReviewGaps.relationships.join(" ")).not.toMatch(
       /\d+%/,
     );
     expect(
@@ -753,7 +833,11 @@ describe("documentation-complete Skill content platform", () => {
           !/This competency is fully documented/i.test(record.shortDescription),
       ),
     ).toBe(true);
-    expect(release.competencies[0]!.taskEnvelope.coreTasks).toHaveLength(1);
+    expect(
+      Object.keys(pilotSkillContentReleaseCandidate4AuthoredDocumentation).every(
+        (id) => competencyById(release, id)?.taskEnvelope.coreTasks.length === 4,
+      ),
+    ).toBe(true);
     expect(release.competencies[0]!.taskEnvelope.methods).toHaveLength(1);
     expect(
       release.competencies.every(({ taskEnvelope }) =>
@@ -816,7 +900,7 @@ describe("documentation-complete Skill content platform", () => {
     expect(references.every((reference) => !reference.includes("/pulls/"))).toBe(true);
   });
 
-  it("keeps the Candidate 3 proposal source free of internal authoring leakage", () => {
+  it("keeps the Candidate 4 proposal source free of internal authoring leakage", () => {
     const proposalSource = readFileSync(
       path.resolve(
         repositoryRoot,
