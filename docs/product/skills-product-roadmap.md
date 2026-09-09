@@ -64,6 +64,26 @@ transitional presentation and will be replaced when the contextual Skill and
 Chargen stages are authorized. This section records dependencies only; it does
 not authorize any implementation or canonical Skill release.
 
+## Approved historical-reference structure
+
+Architecture decision
+[0007](../decisions/architecture/0007-skill-historical-context-model.md)
+separates the reference structures used to explain Skills historically:
+
+- Arch Skills are non-purchasable informational problem structures and have no
+  mechanical effect;
+- Arch Societies are campaign-independent historical lenses that future Setting
+  societies may map to;
+- Learning Groups are authored shared ordinary training or practice contexts,
+  distinct from Domains, Arch Skills, Learning Histories, and Professions; and
+- historical attestation, normal acquisition, Arch-Society applicability, and
+  Social-Band access remain separate facts.
+
+The structure implies no Candidate-to-legacy 66-group crosswalk. Numeric Skill
+floors, Social-Band values, final Arch-Society and full-catalogue rosters, and
+new availability mechanics remain unresolved until separately decided. This is
+reference architecture only and does not activate Chargen or runtime access.
+
 ## Operational portfolio
 
 | Order | Forgejo case                                                      | Purpose                                                      | Current authority                                                             |
