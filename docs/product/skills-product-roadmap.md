@@ -41,6 +41,29 @@ Normative content and integrity authority:
    ready, extend the existing mature Chargen and Character flows to consume it
    and resume long-lived test-Character creation.
 
+## Approved post-#26 Setting sequence
+
+Architecture decision
+[0006](../decisions/architecture/0006-setting-foundation.md) introduces a
+reusable Setting layer between generic rules content and Campaigns. Generic
+Skills remain campaign- and setting-agnostic; contextual Skills declare a
+context type and later bind to Setting-defined instances.
+
+After #26, implementation must be decomposed and authorized separately in this
+order:
+
+1. Setting foundation;
+2. contextual Skill binding;
+3. Setting-first Chargen; and
+4. Campaign Setting and content selection.
+
+The built-in Glantri Setting remains repository-defined canonical content.
+Runtime databases may reference or instantiate it but are not its sole content
+authority. The current Skill Reference Society/Availability selector is a
+transitional presentation and will be replaced when the contextual Skill and
+Chargen stages are authorized. This section records dependencies only; it does
+not authorize any implementation or canonical Skill release.
+
 ## Operational portfolio
 
 | Order | Forgejo case                                                      | Purpose                                                      | Current authority                                                             |
@@ -65,8 +88,11 @@ Case 1: documentation/release contract
   │     └─> Case 4: Pilot authorship ──────┼─> Case 5: Pilot review/freeze
   └─> Case 6: legacy mapping plan          └─> later full catalogue work
 
-Case 5 accepted release -> full catalogue population/review
-                         -> preserved Chargen/Character integration
+Case 5 accepted release -> Setting foundation
+                         -> contextual Skill binding
+                         -> Setting-first Chargen
+                         -> Campaign Setting/content selection
+                         -> full catalogue population/review as separately planned
 ```
 
 ## Preserved authority and boundaries
