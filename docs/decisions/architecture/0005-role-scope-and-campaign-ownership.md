@@ -56,9 +56,10 @@ other joining mechanic beyond existing accepted Campaign rules.
 
 ### Templates and concrete Campaign objects
 
-Global or reusable templates may be visible and reusable across Campaigns under
-their template-library authority. Using a template in a Campaign creates or
-uses concrete Campaign-scoped state.
+Global or Setting-owned reusable templates may be visible and reusable across
+Campaigns under their library authority. Using a template in a Campaign creates
+or uses concrete Campaign-scoped state. The reusable Setting boundary is
+defined by [Architecture decision 0006](./0006-setting-foundation.md).
 
 Visibility of a Bandit template does not expose a Bandit-derived NPC belonging
 to another Campaign. Visibility of an Item definition does not expose another

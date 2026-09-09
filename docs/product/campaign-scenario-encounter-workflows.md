@@ -10,6 +10,14 @@ Character development is where a character is created, advanced, equipped, and r
 
 Campaign is the broad container for play. It manages the campaign roster, campaign-level context, and which characters or templates are available for use in that campaign.
 
+Under the approved future Setting architecture, a Campaign chooses one Setting
+and may select or filter its reusable world content. Characters are created in
+a Setting and may join compatible Campaigns in that same Setting. Reusable
+Setting definitions never make concrete mutable objects visible across
+Campaigns; Campaign remains the ownership and information-security boundary.
+This is an architectural direction, not current runtime behavior or
+implementation authority.
+
 Scenario is a concrete story situation inside a campaign. It manages the actors who are currently part of that scenario and the scenario-level setup used by encounters.
 
 Encounter is a specific moment of play inside a scenario. It manages the actors who are present in that encounter, the current player-facing situation, access, membership, visibility, and participant descriptions. Skill rolls, Character, and Combat are tools used inside that shared encounter context rather than separate encounter universes.
