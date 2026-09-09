@@ -46,6 +46,7 @@ function buildCandidateSkillReferenceSnapshot(): AdminSkillReferenceSnapshot {
       relationships: projection.records.relationships,
       scripts: projection.records.scripts,
     },
+    referenceMetadata: projection.referenceMetadata,
   };
 }
 

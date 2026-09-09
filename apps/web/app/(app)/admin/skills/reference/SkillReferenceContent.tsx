@@ -3,7 +3,11 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { loadAdminSkillReferenceFromServer } from "@/lib/api/adminContentClient";
-import type { AdminSkillReferenceResponse, AdminSkillReferenceSnapshot } from "@glantri/shared";
+import type {
+  AdminSkillReferenceMetadata,
+  AdminSkillReferenceResponse,
+  AdminSkillReferenceSnapshot,
+} from "@glantri/shared";
 import {
   AdminPageIntro,
   AdminPanel,
@@ -292,6 +296,13 @@ export function SkillReferenceContent() {
         </div>
         <AdminStatusBadge tone="warning">proposal</AdminStatusBadge>
       </div>
+      {snapshot.referenceMetadata ? (
+        <ReferenceMetadataPanel
+          metadata={snapshot.referenceMetadata}
+          names={names}
+          selectedSkillId={selectedCompetency?.id}
+        />
+      ) : null}
       <nav aria-label="Skill Reference guides" className={styles.guideLinks}>
         <a href="/admin/skills/reference/system">How the Skill system works</a>
         <a href="/admin/skills/reference/audit">Technical and audit details</a>
@@ -536,6 +547,231 @@ export function SkillReferenceContent() {
         ) : null}
       </div>
     </section>
+  );
+}
+
+function ReferenceMetadataPanel(props: {
+  metadata: AdminSkillReferenceMetadata;
+  names: ReadonlyMap<string, string>;
+  selectedSkillId?: string;
+}) {
+  const memberships = props.metadata.archSkills.filter(({ skillMemberships }) =>
+    skillMemberships.some(({ skillId }) => skillId === props.selectedSkillId),
+  );
+  const groupMemberships = props.metadata.learningGroups.flatMap((group) =>
+    group.skillMemberships.some(({ skillId }) => skillId === props.selectedSkillId) ? [group] : [],
+  );
+  const manifestations = props.metadata.manifestations.filter(
+    ({ skillId }) => skillId === props.selectedSkillId,
+  );
+  const historicalAvailability = props.metadata.historicalAvailability.filter(
+    ({ skillId }) => skillId === props.selectedSkillId,
+  );
+  const skillSocietyFloors = props.metadata.skillSocietyFloors.filter(
+    ({ skillId }) => skillId === props.selectedSkillId,
+  );
+  const societyApplicability = props.metadata.societyApplicability.filter(
+    ({ skillId }) => skillId === props.selectedSkillId,
+  );
+  const matrix = props.metadata.societyLevelBandMatrix;
+  const cellFor = (societyLevel: number, socialBand: string) =>
+    matrix.cells.find(
+      (cell) => cell.societyLevel === societyLevel && cell.socialBand === socialBand,
+    );
+
+  return (
+    <div className={styles.metadataPanels}>
+      <AdminPanel
+        title="Reference context"
+        subtitle="These records explain how a proposal is organized. They do not grant competence or decide Character access."
+      >
+        <div className={styles.referenceSummary}>
+          <ReferenceCount label="Arch Skills" count={props.metadata.archSkills.length} />
+          <ReferenceCount label="Learning Groups" count={props.metadata.learningGroups.length} />
+          <ReferenceCount label="Arch Societies" count={props.metadata.archSocieties.length} />
+          <ReferenceCount
+            label="Skill / Society manifestations"
+            count={props.metadata.manifestations.length}
+          />
+          <ReferenceCount
+            label="Historical availability notes"
+            count={props.metadata.historicalAvailability.length}
+          />
+          <ReferenceCount
+            label="Skill Society-Level floors"
+            count={props.metadata.skillSocietyFloors.length}
+          />
+          <ReferenceCount
+            label="Society applicability records"
+            count={props.metadata.societyApplicability.length}
+          />
+          <ReferenceCount
+            label="Learning histories"
+            count={props.metadata.learningHistories.length}
+          />
+          <ReferenceCount
+            label="Profession references"
+            count={props.metadata.professionReferences.length}
+          />
+        </div>
+        {props.selectedSkillId ? (
+          <div className={styles.selectedReferenceFacts}>
+            <h3>Selected Skill context</h3>
+            <p>{props.names.get(props.selectedSkillId) ?? "The selected Skill"}</p>
+            <ReferenceFactList
+              empty="No Arch Skill placement is recorded for this Skill."
+              label="Arch Skills"
+              values={memberships.map(({ name }) => name)}
+            />
+            <ReferenceFactList
+              empty="No Learning Group placement is recorded for this Skill."
+              label="Learning Groups"
+              values={groupMemberships.map(({ name }) => name)}
+            />
+            <ReferenceFactList
+              empty="No exact Skill and Arch Society manifestation is recorded for this Skill."
+              label="Skill and Arch Society manifestations"
+              values={manifestations.map(
+                ({ archSocietyId, status }) => `${toLabel(archSocietyId)} (${status})`,
+              )}
+            />
+            <ReferenceFactList
+              empty="No historical availability note is recorded for this Skill."
+              label="Historical availability"
+              values={historicalAvailability.map(
+                ({ archSocietyId, socialBand, societyLevel, status }) =>
+                  `${toLabel(archSocietyId)} · Society Level ${societyLevel} · ${socialBand} (${status})`,
+              )}
+            />
+            <ReferenceFactList
+              empty="No structural Society-Level floor is recorded for this Skill."
+              label="Structural Society-Level floor"
+              values={skillSocietyFloors.map(
+                ({ societyLevel, status }) =>
+                  `${societyLevel ? `Society Level ${societyLevel}` : "Society Level unresolved"} (${status})`,
+              )}
+            />
+            <ReferenceFactList
+              empty="No Skill and Arch Society applicability record is supplied for this Skill."
+              label="Skill and Arch Society applicability"
+              values={societyApplicability.map(
+                ({ archSocietyId, status, supportingLearningGroupIds }) =>
+                  `${toLabel(archSocietyId)} (${status}; ${supportingLearningGroupIds.length} supporting Learning Groups)`,
+              )}
+            />
+          </div>
+        ) : null}
+      </AdminPanel>
+      <AdminPanel
+        title="Society Level × Social Band"
+        subtitle="Every reference cell is shown. Mixed facts remain context-dependent, while missing or unresolved history remains unresolved."
+      >
+        <div className={styles.matrixScroller}>
+          <table aria-label="Society Level and Social Band historical availability reference">
+            <thead>
+              <tr>
+                <th scope="col">Society Level</th>
+                {matrix.socialBands.map((band) => (
+                  <th key={band.id} scope="col">
+                    {band.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {matrix.societyLevels.map((level) => (
+                <tr key={level.level}>
+                  <th scope="row">{level.label}</th>
+                  {matrix.socialBands.map((band) => {
+                    const cell = cellFor(level.level, band.id);
+                    return (
+                      <td key={band.id}>
+                        <span
+                          className={
+                            cell?.status === "recorded"
+                              ? styles.matrixRecorded
+                              : cell?.status === "context-dependent"
+                                ? styles.matrixContextDependent
+                                : styles.matrixUnresolved
+                          }
+                        >
+                          {cell?.status === "recorded"
+                            ? "Recorded"
+                            : cell?.status === "context-dependent"
+                              ? "Context-dependent"
+                              : "Unresolved"}
+                        </span>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </AdminPanel>
+      <div className={styles.referenceColumns}>
+        <AdminPanel
+          title="Learning History"
+          subtitle="Training histories remain separate from group membership."
+        >
+          {props.metadata.learningHistories.length === 0 ? (
+            <p>No Learning History records are supplied for this proposal.</p>
+          ) : (
+            <ul>
+              {props.metadata.learningHistories.map((history) => (
+                <li key={history.historyId}>
+                  <strong>{history.name}</strong> — {history.context}
+                </li>
+              ))}
+            </ul>
+          )}
+        </AdminPanel>
+        <AdminPanel
+          title="Profession reference"
+          subtitle="Suggestions are reference facts, not access rules."
+        >
+          {props.metadata.professionReferences.length === 0 ? (
+            <p>No separate profession references are supplied for this proposal.</p>
+          ) : (
+            <ul>
+              {props.metadata.professionReferences.map((profession) => (
+                <li key={profession.id}>
+                  <strong>{profession.name}</strong> — {profession.suggestedSkillIds.length}{" "}
+                  suggested Skills and {profession.learningHistoryIds.length} suggested histories.
+                </li>
+              ))}
+            </ul>
+          )}
+        </AdminPanel>
+      </div>
+    </div>
+  );
+}
+
+function ReferenceCount(props: { count: number; label: string }) {
+  return (
+    <div className={styles.referenceCount}>
+      <strong>{props.count}</strong>
+      <span>{props.label}</span>
+    </div>
+  );
+}
+
+function ReferenceFactList(props: { empty: string; label: string; values: readonly string[] }) {
+  return (
+    <div className={styles.referenceFactList}>
+      <h4>{props.label}</h4>
+      {props.values.length === 0 ? (
+        <p>{props.empty}</p>
+      ) : (
+        <ul>
+          {props.values.map((value) => (
+            <li key={value}>{value}</li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

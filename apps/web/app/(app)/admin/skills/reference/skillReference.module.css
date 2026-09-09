@@ -27,6 +27,107 @@
   flex-wrap: wrap;
   gap: 0.6rem;
 }
+
+.metadataPanels {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.referenceSummary {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+}
+
+.referenceCount {
+  background: var(--color-surface-muted, #f4f5f7);
+  border-radius: 0.5rem;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.75rem;
+}
+
+.referenceCount strong {
+  font-size: 1.35rem;
+}
+
+.referenceCount span {
+  color: var(--color-text-muted, #5d6675);
+  font-size: 0.85rem;
+}
+
+.selectedReferenceFacts {
+  border-top: 1px solid var(--color-border, #d9dde5);
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.referenceFactList + .referenceFactList {
+  margin-top: 0.75rem;
+}
+
+.referenceFactList h4 {
+  margin-bottom: 0.25rem;
+}
+
+.referenceFactList p,
+.referenceFactList ul {
+  margin: 0;
+}
+
+.referenceFactList ul,
+.referenceColumns ul {
+  padding-left: 1.25rem;
+}
+
+.matrixScroller {
+  overflow-x: auto;
+}
+
+.matrixScroller table {
+  border-collapse: collapse;
+  min-width: 42rem;
+  width: 100%;
+}
+
+.matrixScroller th,
+.matrixScroller td {
+  border: 1px solid var(--color-border, #d9dde5);
+  padding: 0.65rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.matrixRecorded,
+.matrixContextDependent,
+.matrixUnresolved {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.matrixRecorded {
+  background: #e8f6ee;
+  color: #145c35;
+}
+
+.matrixUnresolved {
+  background: #fff3d6;
+  color: #744d00;
+}
+
+.matrixContextDependent {
+  background: #e9efff;
+  color: #294a8a;
+}
+
+.referenceColumns {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
 .guideLinks a {
   background: rgba(255, 252, 245, 0.88);
   border: 1px solid rgba(85, 73, 48, 0.14);

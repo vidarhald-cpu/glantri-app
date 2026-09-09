@@ -75,6 +75,113 @@ export interface AdminSkillReferenceAccessException {
   profileId: string;
 }
 
+export interface AdminSkillReferenceRecordMetadata {
+  recordVersion: string;
+  status: "canonical" | "proposal" | "evidence" | "legacy";
+  provenance: {
+    kind: "decision" | "evidence" | "legacy" | "proposal";
+    note?: string;
+    reference: string;
+  };
+}
+
+export interface AdminSkillReferenceMetadata {
+  archSkills: readonly {
+    description: string;
+    id: string;
+    mechanics: "none";
+    metadata: AdminSkillReferenceRecordMetadata;
+    membershipMeaning: "navigation-only";
+    name: string;
+    skillMemberships: readonly {
+      placement: "primary" | "secondary" | "contextual";
+      skillId: string;
+    }[];
+  }[];
+  archSocieties: readonly {
+    description: string;
+    id: string;
+    metadata: AdminSkillReferenceRecordMetadata;
+    name: string;
+    societyLevel: 1 | 2 | 3 | 4 | 5 | 6;
+  }[];
+  historicalAvailability: readonly {
+    archSocietyId: string;
+    explanation: string;
+    id: string;
+    metadata: AdminSkillReferenceRecordMetadata;
+    skillId: string;
+    socialBand: "L1" | "L2" | "L3" | "L4";
+    societyLevel: 1 | 2 | 3 | 4 | 5 | 6;
+    status: "available" | "restricted" | "unavailable" | "unresolved" | "review-required";
+  }[];
+  skillSocietyFloors: readonly {
+    explanation: string;
+    id: string;
+    metadata: AdminSkillReferenceRecordMetadata;
+    skillId: string;
+    societyLevel?: 1 | 2 | 3 | 4 | 5 | 6;
+    status: "recorded" | "unresolved" | "held";
+  }[];
+  societyApplicability: readonly {
+    archSocietyId: string;
+    explanation: string;
+    id: string;
+    manifestationId?: string;
+    metadata: AdminSkillReferenceRecordMetadata;
+    skillId: string;
+    standaloneRouteIds: readonly string[];
+    status: "applicable" | "not-applicable" | "unresolved" | "held";
+    supportingLearningGroupIds: readonly string[];
+  }[];
+  learningGroups: readonly {
+    description: string;
+    id: string;
+    metadata: AdminSkillReferenceRecordMetadata;
+    name: string;
+    skillMemberships: readonly {
+      kind: "core" | "optional";
+      skillId: string;
+    }[];
+  }[];
+  learningHistories: readonly {
+    context: string;
+    historyId: string;
+    metadata: AdminSkillReferenceRecordMetadata;
+    name: string;
+    skillIds: readonly string[];
+  }[];
+  manifestations: readonly {
+    archSocietyId: string;
+    explanation?: string;
+    id: string;
+    metadata: AdminSkillReferenceRecordMetadata;
+    skillId: string;
+    status: "recorded" | "unresolved" | "review-required";
+  }[];
+  professionReferences: readonly {
+    id: string;
+    learningHistoryIds: readonly string[];
+    metadata: AdminSkillReferenceRecordMetadata;
+    name: string;
+    suggestedSkillIds: readonly string[];
+  }[];
+  schemaVersion: string;
+  societyLevelBandMatrix: {
+    cells: readonly {
+      historicalAvailabilityIds: readonly string[];
+      socialBand: "L1" | "L2" | "L3" | "L4";
+      societyLevel: 1 | 2 | 3 | 4 | 5 | 6;
+      status: "recorded" | "context-dependent" | "unresolved";
+    }[];
+    socialBands: readonly { id: "L1" | "L2" | "L3" | "L4"; label: string }[];
+    societyLevels: readonly {
+      label: string;
+      level: 1 | 2 | 3 | 4 | 5 | 6;
+    }[];
+  };
+}
+
 export interface AdminSkillReferenceProfile {
   accessBand: string;
   developmentStage: string;
@@ -154,6 +261,7 @@ export interface AdminSkillReferenceSnapshot {
     serialization?: string;
   };
   provenance: readonly string[];
+  referenceMetadata: AdminSkillReferenceMetadata;
   records: AdminSkillReferenceRecordContainer;
   rulesVersion: string;
   schemaVersion: string;
