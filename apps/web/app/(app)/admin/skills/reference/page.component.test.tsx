@@ -41,6 +41,54 @@ const metadata = {
   status: "proposal" as const,
 };
 
+const referenceMetadata = {
+  archSkills: [
+    {
+      description: "Healing navigation context.",
+      id: "arch-skill:healing",
+      mechanics: "none" as const,
+      metadata: {
+        recordVersion: "1",
+        status: "proposal" as const,
+        provenance: { kind: "proposal" as const, reference: "test" },
+      },
+      membershipMeaning: "navigation-only" as const,
+      name: "Healing",
+      skillMemberships: [{ placement: "primary" as const, skillId: "skill:medicine" }],
+    },
+  ],
+  archSocieties: [],
+  historicalAvailability: [],
+  skillSocietyFloors: [],
+  societyApplicability: [],
+  learningGroups: [],
+  learningHistories: [],
+  manifestations: [],
+  professionReferences: [],
+  schemaVersion: "skill-reference-metadata/v1",
+  societyLevelBandMatrix: {
+    cells: [
+      {
+        historicalAvailabilityIds: [],
+        socialBand: "L1" as const,
+        societyLevel: 1 as const,
+        status: "unresolved" as const,
+      },
+      {
+        historicalAvailabilityIds: [],
+        socialBand: "L2" as const,
+        societyLevel: 1 as const,
+        status: "context-dependent" as const,
+      },
+    ],
+    socialBands: [
+      { id: "L1" as const, label: "Social Band L1" },
+      { id: "L2" as const, label: "Social Band L2" },
+    ],
+    societyLevels: [{ label: "Society Level 1", level: 1 as const }],
+  },
+};
+
 const candidate = {
   compatibility: {
     characterMigrationReviewRequired: false,
@@ -64,6 +112,7 @@ const candidate = {
     serialization: "canonical-json-lexicographic-keys/v1",
   },
   provenance: ["Forgejo #25 authored proposal"],
+  referenceMetadata,
   records: {
     accessExceptions: [
       {
@@ -262,6 +311,25 @@ beforeEach(() => {
 });
 
 describe("Admin Skill Reference page", () => {
+  it("renders proposal context, separate history/profession facts, and unresolved availability", async () => {
+    const user = userEvent.setup();
+    render(<SkillReferenceContent />);
+    await openMedicine(user);
+
+    expect(screen.getByRole("heading", { name: "Reference context" })).toBeVisible();
+    expect(screen.getAllByText("Arch Skills").length).toBeGreaterThan(0);
+    expect(screen.getByText("Healing", { selector: "li" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Society Level × Social Band" })).toBeVisible();
+    expect(screen.getByText("Unresolved")).toBeVisible();
+    expect(screen.getByText("Context-dependent")).toBeVisible();
+    expect(
+      screen.getByText("No Learning Group placement is recorded for this Skill."),
+    ).toBeVisible();
+    expect(
+      screen.getByText("No separate profession references are supplied for this proposal."),
+    ).toBeVisible();
+  });
+
   it("leads with reader-facing identity, descriptions, and compact rules", async () => {
     const user = userEvent.setup();
     render(<SkillReferenceContent />);

@@ -13,5 +13,6 @@ export {
 export * from "./seeds/defaultContent";
 export * from "./skillCatalogueAuthoring";
 export * from "./skillContentPlatform";
+export * from "./skillContentPlatform/skillReferenceMetadata";
 export * from "./types";
 export * from "./validators";

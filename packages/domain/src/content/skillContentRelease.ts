@@ -11,6 +11,7 @@ import type {
   SkillTaskEnvelope,
 } from "./skillCatalogueAuthoring";
 import type { AccessBand, DevelopmentStage } from "./skillSemanticFixtures";
+import type { SkillReferenceMetadata } from "./skillReferenceMetadata";
 
 export const SKILL_CONTENT_RELEASE_SCHEMA_VERSION = "skill-content-release/v2" as const;
 export const SKILL_CONTENT_RELEASE_SERIALIZATION = "canonical-json-lexicographic-keys/v1" as const;
@@ -201,6 +202,7 @@ export interface SkillContentReferenceProjection {
     readonly relationships: readonly SkillContentRelationshipRecord[];
     readonly scripts: readonly SkillContentScriptRecord[];
   };
+  readonly referenceMetadata: SkillReferenceMetadata;
   readonly rulesVersion: string;
   readonly schemaVersion: typeof SKILL_CONTENT_RELEASE_SCHEMA_VERSION;
   readonly status: SkillContentRelease["status"];

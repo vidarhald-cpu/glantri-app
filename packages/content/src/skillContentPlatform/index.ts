@@ -10,6 +10,7 @@ import {
 } from "@glantri/domain";
 
 import { canonicalize, sha256 } from "../integrity/canonicalSha256";
+import { buildSkillReferenceMetadata } from "./skillReferenceMetadata";
 
 const stableId = z.string().regex(/^[a-z][a-z0-9-]*(?::[a-z0-9][a-z0-9-]*)+$/);
 const nonBlank = z.string().trim().min(1);
@@ -924,6 +925,7 @@ export function projectSkillContentReleaseForReference(
       relationships: release.relationships,
       scripts: release.scripts,
     },
+    referenceMetadata: buildSkillReferenceMetadata(release),
     rulesVersion: release.rulesVersion,
     schemaVersion: release.schemaVersion,
     status: release.status,
