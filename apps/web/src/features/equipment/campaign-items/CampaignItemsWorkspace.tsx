@@ -8,10 +8,12 @@ import type {
 } from "@glantri/domain/equipment";
 
 import {
+  assignCampaignItemOnServer,
   createCampaignItemOnServer,
   loadCharacterEquipmentState,
   loadCampaignItems,
   transferCampaignItemOnServer,
+  unassignCampaignItemOnServer,
   updateCampaignItemOnServer,
   type CampaignEquipmentState,
   type CampaignItemCharacterOption,
@@ -540,6 +542,158 @@ function CampaignItemEditor({
   );
 }
 
+function CampaignItemAssignmentDialog({
+  characters,
+  item,
+  itemName,
+  onCancel,
+  onSaved,
+  sourceName,
+}: {
+  characters: CampaignItemCharacterOption[];
+  item: CanonicalEquipmentItem;
+  itemName: string;
+  onCancel: () => void;
+  onSaved: (
+    response: {
+      characters: CampaignItemCharacterOption[];
+      state: CampaignEquipmentState;
+    },
+    message: string,
+  ) => void;
+  sourceName?: string;
+}) {
+  const isUnassigning = Boolean(item.holderCharacterId);
+  const [targetCharacterId, setTargetCharacterId] = useState(characters[0]?.id ?? "");
+  const [error, setError] = useState<string>();
+  const [saving, setSaving] = useState(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const targetName = characters.find((character) => character.id === targetCharacterId)?.name;
+
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+
+  async function save() {
+    if (!item.campaignContextId) return;
+    const characterId = isUnassigning ? item.holderCharacterId : targetCharacterId;
+    if (!characterId) {
+      setError("Choose a Character to receive this item.");
+      return;
+    }
+    setSaving(true);
+    setError(undefined);
+    try {
+      const equipment = await loadCharacterEquipmentState(characterId);
+      const response = isUnassigning
+        ? await unassignCampaignItemOnServer({
+            campaignId: item.campaignContextId,
+            itemId: item.id,
+            sourceCharacterId: characterId,
+            sourceExpectedRevision: equipment.revision ?? -1,
+          })
+        : await assignCampaignItemOnServer({
+            campaignId: item.campaignContextId,
+            itemId: item.id,
+            targetCharacterId: characterId,
+            targetExpectedRevision: equipment.revision ?? -1,
+          });
+      onSaved(
+        response,
+        isUnassigning
+          ? `${itemName} returned from ${sourceName ?? "the Character"} to the campaign.`
+          : `${itemName} assigned to ${targetName ?? "the Character"}. It is On person and not equipped.`,
+      );
+    } catch (caught) {
+      setError(
+        `Nothing changed. ${caught instanceof Error ? caught.message : "Unable to change this assignment."}`,
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape" && !saving) {
+      onCancel();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first && last) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last && first) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  return (
+    <section aria-modal="true" onKeyDown={handleDialogKeyDown} role="dialog" style={panelStyle}>
+      <h2 ref={headingRef} style={{ margin: 0 }} tabIndex={-1}>
+        {isUnassigning ? `Return ${itemName} to campaign` : `Assign ${itemName}`}
+      </h2>
+      {isUnassigning ? (
+        <p style={{ margin: 0 }}>
+          Remove this same item from {sourceName ?? "the Character"}’s equipment and keep it
+          unassigned in the campaign. Any loadout selection for it will be cleared.
+        </p>
+      ) : (
+        <>
+          <p style={{ margin: 0 }}>
+            Give this same campaign item to a Character. It will be On person and not equipped.
+          </p>
+          <label style={{ display: "grid", gap: "0.25rem" }}>
+            <span>Receiving Character</span>
+            <select
+              disabled={saving || characters.length === 0}
+              onChange={(event) => setTargetCharacterId(event.target.value)}
+              value={targetCharacterId}
+            >
+              {characters.length === 0 ? <option value="">No Character available</option> : null}
+              {characters.map((character) => (
+                <option key={character.id} value={character.id}>
+                  {character.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </>
+      )}
+      {error ? (
+        <div role="alert" style={{ color: "#8b3a1a" }}>
+          {error}
+        </div>
+      ) : null}
+      <div style={{ display: "flex", gap: "0.75rem" }}>
+        <button
+          disabled={saving || (!isUnassigning && !targetName)}
+          onClick={() => void save()}
+          type="button"
+        >
+          {saving
+            ? isUnassigning
+              ? "Returning..."
+              : "Assigning..."
+            : isUnassigning
+              ? "Return to campaign"
+              : "Assign item"}
+        </button>
+        <button disabled={saving} onClick={onCancel} type="button">
+          Cancel
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function TransferItemDialog({
   characters,
   item,
@@ -683,6 +837,7 @@ export default function CampaignItemsWorkspace({ campaignId }: { campaignId: str
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
+  const [assignmentItemId, setAssignmentItemId] = useState<string>();
   const [editingItemId, setEditingItemId] = useState<string | null>();
   const [transferringItemId, setTransferringItemId] = useState<string>();
   const transferButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -775,6 +930,31 @@ export default function CampaignItemsWorkspace({ campaignId }: { campaignId: str
     );
   }
 
+  const assignmentItem = assignmentItemId ? state.itemsById[assignmentItemId] : undefined;
+  if (assignmentItem) {
+    const template = state.templatesById[assignmentItem.templateId];
+    const itemName = assignmentItem.displayName || template?.name || "item";
+    return (
+      <CampaignItemAssignmentDialog
+        characters={characters}
+        item={assignmentItem}
+        itemName={itemName}
+        onCancel={() => setAssignmentItemId(undefined)}
+        onSaved={(response, message) => {
+          setState(response.state);
+          setCharacters(response.characters);
+          setFeedback(message);
+          setAssignmentItemId(undefined);
+        }}
+        sourceName={
+          assignmentItem.holderCharacterId
+            ? (holders.get(assignmentItem.holderCharacterId) ?? "Character")
+            : undefined
+        }
+      />
+    );
+  }
+
   const items = Object.values(state.itemsById);
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
@@ -813,6 +993,7 @@ export default function CampaignItemsWorkspace({ campaignId }: { campaignId: str
                 style={{
                   alignItems: "start",
                   display: "flex",
+                  flexWrap: "wrap",
                   gap: "1rem",
                   justifyContent: "space-between",
                 }}
@@ -826,25 +1007,46 @@ export default function CampaignItemsWorkspace({ campaignId }: { campaignId: str
                       : "Unassigned / in campaign"}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: "0.5rem" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                   {item.holderCharacterId ? (
+                    <>
+                      <button
+                        onClick={(event) => {
+                          transferTriggerItemIdRef.current = item.id;
+                          transferButtonRef.current = event.currentTarget;
+                          setFeedback(undefined);
+                          setTransferringItemId(item.id);
+                        }}
+                        ref={(button) => {
+                          if (button && transferTriggerItemIdRef.current === item.id) {
+                            transferButtonRef.current = button;
+                          }
+                        }}
+                        type="button"
+                      >
+                        Transfer item
+                      </button>
+                      <button
+                        onClick={() => {
+                          setFeedback(undefined);
+                          setAssignmentItemId(item.id);
+                        }}
+                        type="button"
+                      >
+                        Return to campaign
+                      </button>
+                    </>
+                  ) : (
                     <button
-                      onClick={(event) => {
-                        transferTriggerItemIdRef.current = item.id;
-                        transferButtonRef.current = event.currentTarget;
+                      onClick={() => {
                         setFeedback(undefined);
-                        setTransferringItemId(item.id);
-                      }}
-                      ref={(button) => {
-                        if (button && transferTriggerItemIdRef.current === item.id) {
-                          transferButtonRef.current = button;
-                        }
+                        setAssignmentItemId(item.id);
                       }}
                       type="button"
                     >
-                      Transfer item
+                      Assign item
                     </button>
-                  ) : null}
+                  )}
                   <button
                     onClick={() => {
                       setFeedback(undefined);

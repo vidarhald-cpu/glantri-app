@@ -136,6 +136,42 @@ export async function transferCampaignItemOnServer(input: {
   );
 }
 
+export async function assignCampaignItemOnServer(input: {
+  campaignId: string;
+  itemId: string;
+  targetCharacterId: string;
+  targetExpectedRevision: number;
+}): Promise<CampaignItemsResponse> {
+  return sendJson<CampaignItemsResponse>(
+    `/campaigns/${input.campaignId}/items/${input.itemId}/assign`,
+    {
+      body: JSON.stringify({
+        expectedRevision: input.targetExpectedRevision,
+        targetCharacterId: input.targetCharacterId,
+      }),
+      method: "POST",
+    },
+  );
+}
+
+export async function unassignCampaignItemOnServer(input: {
+  campaignId: string;
+  itemId: string;
+  sourceCharacterId: string;
+  sourceExpectedRevision: number;
+}): Promise<CampaignItemsResponse> {
+  return sendJson<CampaignItemsResponse>(
+    `/campaigns/${input.campaignId}/items/${input.itemId}/unassign`,
+    {
+      body: JSON.stringify({
+        expectedRevision: input.sourceExpectedRevision,
+        sourceCharacterId: input.sourceCharacterId,
+      }),
+      method: "POST",
+    },
+  );
+}
+
 export async function moveCharacterEquipmentItemOnServer(input: {
   carryMode: CarryMode;
   characterId: string;

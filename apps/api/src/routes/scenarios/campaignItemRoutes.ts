@@ -6,6 +6,8 @@ import {
   CharacterEquipmentWriteService,
   CampaignService,
   CharacterService,
+  StaleCharacterEquipmentAggregateError,
+  StaleEquipmentTransferError,
 } from "@glantri/database";
 import {
   DescriptiveItemTraitCategorySchema,
@@ -15,7 +17,7 @@ import {
   type EquipmentItemFactsV1,
 } from "@glantri/domain/equipment";
 
-import { handleRouteError, NotFoundError } from "../../lib/errors";
+import { ConflictError, handleRouteError, NotFoundError } from "../../lib/errors";
 import { requireAdminUser } from "../../lib/sessionAuth";
 import { parseId } from "./parsing";
 
@@ -49,6 +51,14 @@ function integerValue(body: Body, key: string): number {
   const value = body[key];
   if (typeof value !== "number" || !Number.isInteger(value)) {
     throw new Error(`${key} must be a whole number.`);
+  }
+  return value;
+}
+
+function expectedRevision(body: Body): number {
+  const value = body.expectedRevision;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new Error("A valid equipment revision is required. Refresh before trying again.");
   }
   return value;
 }
@@ -152,9 +162,9 @@ export function createCampaignItemRoutes(
     let resolvedServices = configuredServices;
     const services = () => (resolvedServices ??= defaultServices());
 
-    async function requireCampaignAuthor(userId: string, roles: string[], campaignId: string) {
+    async function requireCampaignAuthor(userId: string, campaignId: string) {
       const campaign = await services().campaignService.getCampaignById(campaignId);
-      if (!campaign || (campaign.gmUserId !== userId && !roles.includes("admin"))) {
+      if (!campaign || campaign.gmUserId !== userId) {
         throw new NotFoundError("Campaign not found.");
       }
       return campaign;
@@ -178,7 +188,7 @@ export function createCampaignItemRoutes(
 
       try {
         const campaignId = parseId(request.params, "campaignId", "Campaign id");
-        await requireCampaignAuthor(user.id, user.roles, campaignId);
+        await requireCampaignAuthor(user.id, campaignId);
         const current = services();
         const [state, characters] = await Promise.all([
           current.readService.getCampaignEquipmentState(campaignId),
@@ -196,7 +206,7 @@ export function createCampaignItemRoutes(
 
       try {
         const campaignId = parseId(request.params, "campaignId", "Campaign id");
-        await requireCampaignAuthor(user.id, user.roles, campaignId);
+        await requireCampaignAuthor(user.id, campaignId);
         const current = services();
         const body = bodyObject(request.body);
         const holderCharacterId = optionalText(body, "holderCharacterId");
@@ -211,6 +221,7 @@ export function createCampaignItemRoutes(
         await current.writeService.createCampaignEquipmentItem({
           campaignId,
           displayName: optionalText(body, "displayName"),
+          evidence: { actorAuthority: "campaign_gm", actorUserId: user.id },
           holderCharacterId,
           itemFacts: parseCampaignItemFacts(body.facts ?? {}),
           notes: optionalText(body, "description"),
@@ -226,6 +237,88 @@ export function createCampaignItemRoutes(
       }
     });
 
+    app.post("/campaigns/:campaignId/items/:itemId/assign", async (request, reply) => {
+      const user = await requireAdminUser(request, reply);
+      if (!user) return;
+      try {
+        const campaignId = parseId(request.params, "campaignId", "Campaign id");
+        const itemId = parseId(request.params, "itemId", "Item id");
+        await requireCampaignAuthor(user.id, campaignId);
+        const body = bodyObject(request.body);
+        const targetCharacterId = requiredText(body, "targetCharacterId");
+        const characters = await campaignCharacters(campaignId);
+        if (!characters.some((character) => character.id === targetCharacterId)) {
+          throw new Error("Choose a Character from this campaign.");
+        }
+        const current = services();
+        await current.writeService.assignCampaignEquipmentItem({
+          campaignId,
+          evidence: { actorAuthority: "campaign_gm", actorUserId: user.id },
+          itemId,
+          targetCharacterId,
+          targetExpectedRevision: expectedRevision(body),
+        });
+        return {
+          characters,
+          state: await current.readService.getCampaignEquipmentState(campaignId),
+        };
+      } catch (error) {
+        return handleRouteError(
+          error instanceof StaleEquipmentTransferError
+            ? new ConflictError(
+                "This item has already moved. Refresh Campaign Items before trying again.",
+              )
+            : error instanceof StaleCharacterEquipmentAggregateError
+              ? new ConflictError(
+                  "Character equipment changed. Refresh Campaign Items before trying again.",
+                )
+              : error,
+          reply,
+        );
+      }
+    });
+
+    app.post("/campaigns/:campaignId/items/:itemId/unassign", async (request, reply) => {
+      const user = await requireAdminUser(request, reply);
+      if (!user) return;
+      try {
+        const campaignId = parseId(request.params, "campaignId", "Campaign id");
+        const itemId = parseId(request.params, "itemId", "Item id");
+        await requireCampaignAuthor(user.id, campaignId);
+        const body = bodyObject(request.body);
+        const sourceCharacterId = requiredText(body, "sourceCharacterId");
+        const characters = await campaignCharacters(campaignId);
+        if (!characters.some((character) => character.id === sourceCharacterId)) {
+          throw new Error("Choose a Character from this campaign.");
+        }
+        const current = services();
+        await current.writeService.unassignCampaignEquipmentItem({
+          campaignId,
+          evidence: { actorAuthority: "campaign_gm", actorUserId: user.id },
+          itemId,
+          sourceCharacterId,
+          sourceExpectedRevision: expectedRevision(body),
+        });
+        return {
+          characters,
+          state: await current.readService.getCampaignEquipmentState(campaignId),
+        };
+      } catch (error) {
+        return handleRouteError(
+          error instanceof StaleEquipmentTransferError
+            ? new ConflictError(
+                "This item has already moved. Refresh Campaign Items before trying again.",
+              )
+            : error instanceof StaleCharacterEquipmentAggregateError
+              ? new ConflictError(
+                  "Character equipment changed. Refresh Campaign Items before trying again.",
+                )
+              : error,
+          reply,
+        );
+      }
+    });
+
     app.patch("/campaigns/:campaignId/items/:itemId", async (request, reply) => {
       const user = await requireAdminUser(request, reply);
       if (!user) return;
@@ -233,7 +326,7 @@ export function createCampaignItemRoutes(
       try {
         const campaignId = parseId(request.params, "campaignId", "Campaign id");
         const itemId = parseId(request.params, "itemId", "Item id");
-        await requireCampaignAuthor(user.id, user.roles, campaignId);
+        await requireCampaignAuthor(user.id, campaignId);
         const current = services();
         const body = bodyObject(request.body);
 

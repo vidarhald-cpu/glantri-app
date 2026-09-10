@@ -3,18 +3,22 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  assign: vi.fn(),
   create: vi.fn(),
   equipment: vi.fn(),
   load: vi.fn(),
   transfer: vi.fn(),
+  unassign: vi.fn(),
   update: vi.fn(),
 }));
 
 vi.mock("@/lib/api/equipmentClient", () => ({
+  assignCampaignItemOnServer: mocks.assign,
   createCampaignItemOnServer: mocks.create,
   loadCharacterEquipmentState: mocks.equipment,
   loadCampaignItems: mocks.load,
   transferCampaignItemOnServer: mocks.transfer,
+  unassignCampaignItemOnServer: mocks.unassign,
   updateCampaignItemOnServer: mocks.update,
 }));
 
@@ -78,9 +82,11 @@ describe("CampaignItemsWorkspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.load.mockResolvedValue(emptyResponse);
+    mocks.assign.mockResolvedValue(assignedResponse);
     mocks.create.mockResolvedValue(emptyResponse);
     mocks.equipment.mockResolvedValue({ revision: 4 });
     mocks.transfer.mockResolvedValue(assignedResponse);
+    mocks.unassign.mockResolvedValue(emptyResponse);
     mocks.update.mockResolvedValue(assignedResponse);
   });
 
@@ -215,6 +221,50 @@ describe("CampaignItemsWorkspace", () => {
     );
     expect(screen.getByRole("status")).toHaveTextContent(
       "Silverston transferred from Alaric to Beatrice. It is On person and not equipped.",
+    );
+  });
+
+  it("assigns an existing unheld Item and can return a held Item to the campaign", async () => {
+    const user = userEvent.setup();
+    const unassignedItem = {
+      ...assignedItem,
+      characterId: null,
+      holderCharacterId: null,
+      storageAssignment: null,
+    };
+    mocks.load.mockResolvedValue({
+      ...assignedResponse,
+      state: {
+        ...assignedResponse.state,
+        itemsById: { [unassignedItem.id]: unassignedItem },
+      },
+    });
+    mocks.assign.mockResolvedValue(assignedResponse);
+    render(<CampaignItemsWorkspace campaignId="campaign-1" />);
+
+    await user.click(await screen.findByRole("button", { name: "Assign item" }));
+    expect(screen.getByRole("heading", { name: "Assign Silverston" })).toHaveFocus();
+    await user.selectOptions(screen.getByLabelText("Receiving Character"), "character-2");
+    await user.click(screen.getByRole("button", { name: "Assign item" }));
+    await waitFor(() =>
+      expect(mocks.assign).toHaveBeenCalledWith({
+        campaignId: "campaign-1",
+        itemId: "item-silverston",
+        targetCharacterId: "character-2",
+        targetExpectedRevision: 4,
+      }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Return to campaign" }));
+    expect(screen.getByRole("heading", { name: "Return Silverston to campaign" })).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Return to campaign" }));
+    await waitFor(() =>
+      expect(mocks.unassign).toHaveBeenCalledWith({
+        campaignId: "campaign-1",
+        itemId: "item-silverston",
+        sourceCharacterId: "character-1",
+        sourceExpectedRevision: 4,
+      }),
     );
   });
 

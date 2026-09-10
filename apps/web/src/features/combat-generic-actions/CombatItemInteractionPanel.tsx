@@ -67,7 +67,9 @@ export function CombatItemInteractionPanel({
       })
       .catch((error) => {
         if (active) {
-          setFeedback(error instanceof Error ? error.message : "Unable to load canonical Items.");
+          setFeedback(
+            error instanceof Error ? error.message : "Unable to load Items for this Combat.",
+          );
         }
       });
     return () => {
@@ -111,7 +113,7 @@ export function CombatItemInteractionPanel({
 
   return (
     <section
-      aria-labelledby="canonical-combat-item-heading"
+      aria-labelledby="combat-item-heading"
       style={{
         border: "1px solid #cdd8d0",
         borderRadius: 10,
@@ -121,11 +123,12 @@ export function CombatItemInteractionPanel({
         padding: "0.75rem",
       }}
     >
-      <h3 id="canonical-combat-item-heading" style={{ margin: 0 }}>
+      <h3 id="combat-item-heading" style={{ margin: 0 }}>
         Items in this Combat
       </h3>
       <div>
-        Choose an Item in context. The GM reviews the timing and accepts the canonical change.
+        Choose an Item in context. The GM reviews the timing, and an accepted change is saved to
+        this Combat and the Character’s current equipment.
       </div>
       {actor?.unsupportedReason ? <div role="status">{actor.unsupportedReason}</div> : null}
       {itemRows.length > 0 ? (

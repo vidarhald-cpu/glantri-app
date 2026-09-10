@@ -46,9 +46,9 @@ export function createEquipmentTransferRoutes(
     let resolvedServices = configuredServices;
     const services = () => (resolvedServices ??= defaultServices());
 
-    async function requireCampaignAuthor(userId: string, roles: string[], campaignId: string) {
+    async function requireCampaignAuthor(userId: string, campaignId: string) {
       const campaign = await services().campaignService.getCampaignById(campaignId);
-      if (!campaign || (campaign.gmUserId !== userId && !roles.includes("admin"))) {
+      if (!campaign || campaign.gmUserId !== userId) {
         throw new NotFoundError("Campaign not found.");
       }
     }
@@ -78,7 +78,7 @@ export function createEquipmentTransferRoutes(
         );
         const itemId = parsePathId(request.params, "itemId", "Item");
         const body = parseTransferItemBody(request.body);
-        await requireCampaignAuthor(user.id, user.roles, body.campaignId);
+        await requireCampaignAuthor(user.id, body.campaignId);
         const characters = await campaignCharacters(body.campaignId);
         if (
           !characters.some((character) => character.id === sourceCharacterId) ||
@@ -89,6 +89,7 @@ export function createEquipmentTransferRoutes(
 
         const current = services();
         await current.writeService.transferCampaignEquipmentItem({
+          evidence: { actorAuthority: "campaign_gm", actorUserId: user.id },
           itemId,
           sourceCharacterId,
           ...body,

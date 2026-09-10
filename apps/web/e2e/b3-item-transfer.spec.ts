@@ -104,15 +104,19 @@ test.describe("B3 canonical item transfer", () => {
     await expect(sourcePage.getByText(revealedTrait)).toBeVisible();
     await expect(sourcePage.getByText(hiddenTrait)).toHaveCount(0);
 
+    const sourceEquipmentBefore = (await (
+      await sourceContext.request.get(`${API_URL}/characters/${characterId}/equipment`)
+    ).json()) as { state: { revision: number } };
     const equipResponse = await sourceContext.request.post(
       `${API_URL}/characters/${characterId}/equipment/loadout/active-primary-weapon`,
-      { data: { itemId } },
+      { data: { expectedRevision: sourceEquipmentBefore.state.revision, itemId } },
     );
     expect(equipResponse.ok()).toBe(true);
     const equippedState = (await equipResponse.json()) as {
       state: {
         activeLoadoutByCharacterId: Record<string, { activePrimaryWeaponItemId: string | null }>;
         itemsById: Record<string, { isEquipped: boolean }>;
+        revision: number;
       };
     };
     expect(equippedState.state.activeLoadoutByCharacterId[characterId]).toMatchObject({
@@ -127,7 +131,9 @@ test.describe("B3 canonical item transfer", () => {
       `${API_URL}/characters/${nonHolderCharacterId}/equipment`,
     );
     expect(targetBefore.ok()).toBe(true);
-    expect(await targetBefore.text()).not.toContain(itemId);
+    const targetBeforeText = await targetBefore.text();
+    expect(targetBeforeText).not.toContain(itemId);
+    const targetBeforeState = JSON.parse(targetBeforeText) as { state: { revision: number } };
 
     const unrelatedContext = await browser.newContext({
       storageState: "e2e/.auth/unrelated.json",
@@ -222,7 +228,14 @@ test.describe("B3 canonical item transfer", () => {
 
     const stale = await page.request.post(
       `${API_URL}/characters/${characterId}/equipment/items/${itemId}/transfer`,
-      { data: { campaignId: b2CampaignId, targetCharacterId: nonHolderCharacterId } },
+      {
+        data: {
+          campaignId: b2CampaignId,
+          expectedRevision: equippedState.state.revision,
+          targetCharacterId: nonHolderCharacterId,
+          targetExpectedRevision: targetBeforeState.state.revision,
+        },
+      },
     );
     expect(stale.status()).toBe(409);
     expect(await stale.text()).toContain("already moved");

@@ -27,7 +27,9 @@ function services(): CampaignItemRouteServices {
       getCampaignEquipmentState: vi.fn(async () => ({ itemsById: {}, templatesById: {} })),
     } as unknown as CampaignItemRouteServices["readService"],
     writeService: {
+      assignCampaignEquipmentItem: vi.fn(async (input) => input),
       createCampaignEquipmentItem: vi.fn(async (input) => input),
+      unassignCampaignEquipmentItem: vi.fn(async (input) => input),
       updateCampaignEquipmentItemAuthoring: vi.fn(async (input) => input),
     } as unknown as CampaignItemRouteServices["writeService"],
   };
@@ -134,6 +136,30 @@ describe("campaign item routes", () => {
     await app.close();
   });
 
+  it("does not let an unrelated Admin inspect or assign another Campaign's Items", async () => {
+    auth.requireAdminUser.mockResolvedValue({
+      email: "admin@example.test",
+      id: "admin-1",
+      roles: ["admin"],
+    });
+    const routeServices = services();
+    const app = await appWith(routeServices);
+    const read = await app.inject({ method: "GET", url: "/campaigns/campaign-1/items" });
+    const assign = await app.inject({
+      method: "POST",
+      payload: { expectedRevision: 0, targetCharacterId: "character-1" },
+      url: "/campaigns/campaign-1/items/private-item/assign",
+    });
+
+    expect(read.statusCode).toBe(404);
+    expect(assign.statusCode).toBe(404);
+    expect(read.body).not.toContain("itemsById");
+    expect(assign.body).not.toContain("private-item");
+    expect(routeServices.readService.getCampaignEquipmentState).not.toHaveBeenCalled();
+    expect(routeServices.writeService.assignCampaignEquipmentItem).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it("creates one typed canonical item and rejects a Character from another campaign", async () => {
     const routeServices = services();
     const app = await appWith(routeServices);
@@ -169,9 +195,43 @@ describe("campaign item routes", () => {
       expect.objectContaining({
         campaignId: "campaign-1",
         displayName: "Silverston",
+        evidence: { actorAuthority: "campaign_gm", actorUserId: "gm-1" },
         holderCharacterId: "character-1",
       }),
     );
+    await app.close();
+  });
+
+  it("assigns and unassigns the same existing Item with revision checks", async () => {
+    const routeServices = services();
+    const app = await appWith(routeServices);
+    const assigned = await app.inject({
+      method: "POST",
+      payload: { expectedRevision: 3, targetCharacterId: "character-1" },
+      url: "/campaigns/campaign-1/items/item-1/assign",
+    });
+    expect(assigned.statusCode).toBe(200);
+    expect(routeServices.writeService.assignCampaignEquipmentItem).toHaveBeenCalledWith({
+      campaignId: "campaign-1",
+      evidence: { actorAuthority: "campaign_gm", actorUserId: "gm-1" },
+      itemId: "item-1",
+      targetCharacterId: "character-1",
+      targetExpectedRevision: 3,
+    });
+
+    const unassigned = await app.inject({
+      method: "POST",
+      payload: { expectedRevision: 4, sourceCharacterId: "character-1" },
+      url: "/campaigns/campaign-1/items/item-1/unassign",
+    });
+    expect(unassigned.statusCode).toBe(200);
+    expect(routeServices.writeService.unassignCampaignEquipmentItem).toHaveBeenCalledWith({
+      campaignId: "campaign-1",
+      evidence: { actorAuthority: "campaign_gm", actorUserId: "gm-1" },
+      itemId: "item-1",
+      sourceCharacterId: "character-1",
+      sourceExpectedRevision: 4,
+    });
     await app.close();
   });
 

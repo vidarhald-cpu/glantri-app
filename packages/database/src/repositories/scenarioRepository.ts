@@ -402,11 +402,13 @@ export interface ScenarioRepository {
   listScenarioParticipants(scenarioId: string): Promise<ScenarioParticipant[]>;
   updateScenarioLiveState(scenarioId: string, liveState: ScenarioLiveState): Promise<Scenario>;
   updateScenarioSessionState(input: {
+    actorUserId?: string;
     expectedRevision: string;
     scenarioId: string;
     session: ScenarioSessionState;
   }): Promise<Scenario>;
   pickUpScenarioAvailableItem(input: {
+    actorAuthority: "campaign_gm" | "character_controller";
     actorUserId: string;
     audienceParticipantIds: string[];
     availabilityId: string;
@@ -1032,15 +1034,58 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
             const liveState = scenarioLiveStateSchema.parse(
               existing.liveStateJson ?? createScenarioLiveState(),
             );
+            const priorItemAvailability = new Map(
+              liveState.session.availableObjects
+                .filter((reference) => reference.sourceKind === "campaign_item")
+                .map((reference) => [reference.sourceId, reference]),
+            );
+            const nextSession = scenarioSessionStateSchema.parse(input.session);
+            const nextItemAvailability = new Map(
+              nextSession.availableObjects
+                .filter((reference) => reference.sourceKind === "campaign_item")
+                .map((reference) => [reference.sourceId, reference]),
+            );
             const record = await transaction.scenario.update({
               data: {
                 liveStateJson: asJson({
                   ...liveState,
-                  session: scenarioSessionStateSchema.parse(input.session),
+                  session: nextSession,
                 }),
               },
               where: { id: input.scenarioId },
             });
+            if (input.actorUserId) {
+              const changedItemIds = new Set([
+                ...priorItemAvailability.keys(),
+                ...nextItemAvailability.keys(),
+              ]);
+              for (const itemId of changedItemIds) {
+                const before = priorItemAvailability.get(itemId);
+                const after = nextItemAvailability.get(itemId);
+                if (before?.id === after?.id && before?.visibility === after?.visibility) {
+                  continue;
+                }
+                await transaction.scenarioEventLog.create({
+                  data: {
+                    actorUserId: input.actorUserId,
+                    eventType: "item_availability_changed",
+                    payloadJson: asJson({
+                      availabilityAfter: Boolean(after),
+                      availabilityBefore: Boolean(before),
+                      availabilityId: after?.id ?? before?.id,
+                      campaignId: existing.campaignId,
+                      itemId,
+                      visibilityAfter: after?.visibility ?? null,
+                      visibilityBefore: before?.visibility ?? null,
+                    }),
+                    scenarioId: input.scenarioId,
+                    summary: after
+                      ? "An Item was made available in the Scenario."
+                      : "An Item was removed from Scenario availability.",
+                  },
+                });
+              }
+            }
             return mapScenario(record);
           },
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -1148,6 +1193,12 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
             }
             const item = await equipmentRepository.acquireUnheldCampaignEquipmentItem({
               campaignId: existing.campaignId,
+              evidence: {
+                actorAuthority: input.actorAuthority,
+                actorUserId: input.actorUserId,
+                commandId: input.requestId,
+                scenarioId: input.scenarioId,
+              },
               itemId: reference.sourceId,
               targetCharacterId: input.targetCharacterId,
               targetStorageAssignment: getStorageAssignmentForLocation(targetLocation),
@@ -1179,6 +1230,8 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
                 payloadJson: asJson({
                   audienceParticipantIds: input.audienceParticipantIds,
                   availabilityId: input.availabilityId,
+                  holderAfter: input.targetCharacterId,
+                  holderBefore: null,
                   itemId: item.id,
                   requestId: input.requestId,
                 }),

@@ -22,8 +22,8 @@ export const equipmentLoadoutRoutes: FastifyPluginAsync = async (app) => {
     const id = parseCharacterId(request.params);
 
     try {
-      const body = parseNullableItemIdBody(request.body);
       const viewer = await requireAccessibleCharacter(user, id);
+      const body = parseNullableItemIdBody(request.body);
       await equipmentWriteService.setCharacterWornArmor(id, body.itemId, body.expectedRevision);
 
       return {
@@ -48,8 +48,8 @@ export const equipmentLoadoutRoutes: FastifyPluginAsync = async (app) => {
     const id = parseCharacterId(request.params);
 
     try {
-      const body = parseNullableItemIdBody(request.body);
       const viewer = await requireAccessibleCharacter(user, id);
+      const body = parseNullableItemIdBody(request.body);
       await equipmentWriteService.setCharacterReadyShield(id, body.itemId, body.expectedRevision);
 
       return {
@@ -75,8 +75,8 @@ export const equipmentLoadoutRoutes: FastifyPluginAsync = async (app) => {
       const id = parseCharacterId(request.params);
 
       try {
-        const body = parseNullableItemIdBody(request.body);
         const viewer = await requireAccessibleCharacter(user, id);
+        const body = parseNullableItemIdBody(request.body);
         await equipmentWriteService.setCharacterActiveWeapon(
           id,
           slot,
@@ -109,12 +109,16 @@ export const equipmentLoadoutRoutes: FastifyPluginAsync = async (app) => {
     if (!user) return;
     const id = parseCharacterId(request.params);
     try {
-      const body = parseActiveAmmoBody(request.body);
       const viewer = await requireAccessibleCharacter(user, id);
+      const body = parseActiveAmmoBody(request.body);
       await equipmentWriteService.setCharacterActiveAmmunition(
         id,
         body.itemIds,
         body.expectedRevision,
+        {
+          actorAuthority: viewer.kind === "gm" ? "campaign_gm" : "character_controller",
+          actorUserId: user.id,
+        },
       );
       return {
         state: toEquipmentFeatureState(
