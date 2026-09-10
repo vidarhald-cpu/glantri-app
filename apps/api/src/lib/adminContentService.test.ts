@@ -18,6 +18,16 @@ describe("admin content service", () => {
     expect(snapshot.candidate?.records.scripts.length).toBeGreaterThan(0);
     expect(snapshot.candidate?.records.relationships.length).toBeGreaterThan(0);
     expect(snapshot.candidate?.records.domains.length).toBeGreaterThan(0);
+    expect(snapshot.fullCatalogue).toMatchObject({
+      manifest: {
+        baseSkills: 131,
+        competencies: 172,
+        specializations: 26,
+        spokenLanguages: 12,
+        writtenTraditions: 3,
+      },
+      status: "proposal",
+    });
   });
 
   it("retains authored envelopes, provenance, and both deterministic proposal digests", async () => {

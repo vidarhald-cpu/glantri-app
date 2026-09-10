@@ -38,6 +38,7 @@ describe("Skill Reference strict Admin payload boundary", () => {
           expect(response.json().candidate.referenceMetadata.schemaVersion).toBe(
             "skill-reference-metadata/v1",
           );
+          expect(response.json().fullCatalogue.manifest.competencies).toBe(172);
           expect(response.json().canonical).toBeNull();
         } else {
           expect(response.statusCode).toBe(roles ? 403 : 401);
@@ -46,7 +47,7 @@ describe("Skill Reference strict Admin payload boundary", () => {
           });
           expect(projection).not.toHaveBeenCalled();
           expect(response.body).not.toMatch(
-            /referenceMetadata|archSkills|learningHistories|professionReferences|competencies|packageDigest/,
+            /referenceMetadata|fullCatalogue|archSkills|learningHistories|professionReferences|competencies|packageDigest/,
           );
         }
         expect(session).toHaveBeenCalledTimes(roles ? 1 : 0);

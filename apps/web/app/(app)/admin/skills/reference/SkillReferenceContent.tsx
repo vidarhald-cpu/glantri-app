@@ -4,6 +4,8 @@ import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { loadAdminSkillReferenceFromServer } from "@/lib/api/adminContentClient";
 import type {
+  AdminFullSkillCatalogueEntry,
+  AdminFullSkillCatalogueProposal,
   AdminSkillReferenceMetadata,
   AdminSkillReferenceResponse,
   AdminSkillReferenceSnapshot,
@@ -23,6 +25,7 @@ type Competency = AdminSkillReferenceSnapshot["records"]["competencies"][number]
 type Profile = AdminSkillReferenceSnapshot["records"]["profiles"][number];
 type AccessException = AdminSkillReferenceSnapshot["records"]["accessExceptions"][number];
 type Availability = "available" | "restricted" | "unavailable";
+type FullCatalogueKind = AdminFullSkillCatalogueEntry["competencyType"];
 
 interface AccessResolution {
   availability: Availability;
@@ -241,10 +244,22 @@ export function SkillReferenceContent() {
 
   if (isLoading) return <div className={styles.loading}>Loading Admin Skill Reference…</div>;
 
-  if (!response || !snapshot) {
+  if (!response) {
     return (
       <AdminPanel title="Skill Reference" subtitle="Unable to render the read-only reference.">
         <AdminReadOnlyNotice message={loadError ?? "Reference data is currently unavailable."} />
+      </AdminPanel>
+    );
+  }
+
+  if (response.fullCatalogue) {
+    return <FullCatalogueReference proposal={response.fullCatalogue} />;
+  }
+
+  if (!snapshot) {
+    return (
+      <AdminPanel title="Skill Reference" subtitle="Unable to render the read-only reference.">
+        <AdminReadOnlyNotice message="Reference data is currently unavailable." />
       </AdminPanel>
     );
   }
@@ -547,6 +562,293 @@ export function SkillReferenceContent() {
                 selectedSkillName={selectedCompetency.name}
               />
             ) : null}
+          </article>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function FullCatalogueReference({ proposal }: { proposal: AdminFullSkillCatalogueProposal }) {
+  const [searchText, setSearchText] = useState("");
+  const [selectedKind, setSelectedKind] = useState<"all" | FullCatalogueKind>("all");
+  const [selectedDomain, setSelectedDomain] = useState("all");
+  const [selectedId, setSelectedId] = useState<string | undefined>(competencyIdFromHash);
+  const detailHeadingRef = useRef<HTMLHeadingElement>(null);
+  const focusDetailAfterSelection = useRef(false);
+  const entries = useMemo(() => sortByName(proposal.entries), [proposal.entries]);
+  const domains = useMemo(
+    () =>
+      [...new Set(entries.map(({ domain }) => domain))].sort((left, right) =>
+        left.localeCompare(right),
+      ),
+    [entries],
+  );
+  const names = useMemo(() => new Map(entries.map((entry) => [entry.id, entry.name])), [entries]);
+  const filteredEntries = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+    return entries.filter(
+      (entry) =>
+        (query === "" ||
+          [
+            entry.id,
+            entry.name,
+            entry.shortDescription,
+            entry.description,
+            entry.domain,
+            entry.competencyType,
+            entry.context,
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(query)) &&
+        (selectedKind === "all" || entry.competencyType === selectedKind) &&
+        (selectedDomain === "all" || entry.domain === selectedDomain),
+    );
+  }, [entries, searchText, selectedDomain, selectedKind]);
+
+  useEffect(() => {
+    const restoreDirectLink = () => setSelectedId(competencyIdFromHash());
+    window.addEventListener("hashchange", restoreDirectLink);
+    return () => window.removeEventListener("hashchange", restoreDirectLink);
+  }, []);
+
+  useEffect(() => {
+    if (filteredEntries.length > 0 && !filteredEntries.some(({ id }) => id === selectedId)) {
+      setSelectedId(filteredEntries[0]?.id);
+    }
+  }, [filteredEntries, selectedId]);
+
+  useEffect(() => {
+    if (focusDetailAfterSelection.current && selectedId) {
+      focusDetailAfterSelection.current = false;
+      detailHeadingRef.current?.focus();
+    }
+  }, [selectedId]);
+
+  function selectEntry(id: string, focusDetail = false) {
+    if (!filteredEntries.some((entry) => entry.id === id)) {
+      setSearchText("");
+      setSelectedKind("all");
+      setSelectedDomain("all");
+    }
+    if (focusDetail && id === selectedId) detailHeadingRef.current?.focus();
+    focusDetailAfterSelection.current = focusDetail && id !== selectedId;
+    setSelectedId(id);
+    window.history.replaceState(null, "", `#competency-${encodeURIComponent(id)}`);
+  }
+
+  const selected = filteredEntries.find(({ id }) => id === selectedId);
+  const typeLabels = new Map<string, string>([
+    ["base-skill", "Base Skill"],
+    ["specialization", "Specialization"],
+    ["spoken-language", "Spoken language"],
+    ["written-tradition", "Written tradition"],
+  ]);
+
+  return (
+    <section className={styles.page}>
+      <AdminPageIntro
+        eyebrow="Admin / Skills / Reference"
+        summary="Read the complete competency catalogue proposal in game terms. Nothing on this page publishes the proposal, changes live mechanics, or makes it canonical."
+        title="Skill Reference"
+      />
+      <SkillsWorkspaceTabs />
+      <div className={styles.candidateBanner}>
+        <div>
+          <strong>Full catalogue candidate for review</strong>
+          <p>
+            {proposal.manifest.competencies} acquirable entries await Product Owner calibration in
+            #26. Support scripts and unresolved source cases remain outside the acquisition roster.
+          </p>
+        </div>
+        <AdminStatusBadge tone="warning">proposal</AdminStatusBadge>
+      </div>
+      <nav aria-label="Skill Reference guides" className={styles.guideLinks}>
+        <a href="/admin/skills/reference/system">How the Skill system works</a>
+        <a href="/admin/skills/reference/audit">Technical and audit details</a>
+        <a href="/admin/skills/matrix">Open Matrix Audit</a>
+      </nav>
+      <AdminPanel
+        title="Find a competency"
+        subtitle="Search by name, purpose, identity, or context, then narrow the proposal by type or domain."
+      >
+        <div className={styles.filters}>
+          <label>
+            <span>Search</span>
+            <input
+              aria-label="Search competencies"
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Name, purpose, identity, or context"
+              value={searchText}
+            />
+          </label>
+          <Filter
+            label="Type"
+            labels={typeLabels}
+            onChange={setSelectedKind}
+            options={[
+              "all",
+              "base-skill",
+              "specialization",
+              "spoken-language",
+              "written-tradition",
+            ]}
+            value={selectedKind}
+          />
+          <Filter
+            label="Domain"
+            labels={new Map(domains.map((domain) => [domain, domain]))}
+            onChange={setSelectedDomain}
+            options={["all", ...domains]}
+            value={selectedDomain}
+          />
+        </div>
+      </AdminPanel>
+      <details className={styles.catalogueDisclosure}>
+        <summary>
+          Held, unresolved, and support records ({proposal.manifest.unresolvedBindings} unresolved
+          bindings; {proposal.manifest.supportScripts} support scripts)
+        </summary>
+        <div className={styles.catalogueDisclosureBody}>
+          <p>
+            Heart Surgery is excluded from future target acquisitions. Support-only scripts are
+            reference records, not acquirable competencies.
+          </p>
+          <h3>Unresolved language and written bindings</h3>
+          <ul>
+            {proposal.unresolvedBindings.map((binding) => (
+              <li key={binding.sourceIdentity}>
+                <strong>{binding.name}:</strong> {binding.unresolvedItem}
+              </li>
+            ))}
+          </ul>
+          <h3>Support-only scripts</h3>
+          <ul>
+            {proposal.supportScripts.map((script) => (
+              <li key={script.id}>
+                <strong>{script.name}:</strong> {script.status}
+              </li>
+            ))}
+          </ul>
+          <h3>Other held and deferred cases</h3>
+          <ul>
+            {proposal.exceptions.map((exception) => (
+              <li key={exception.item}>
+                <strong>{exception.item}:</strong> {exception.unresolved} {exception.effect}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </details>
+      <div className={styles.referenceLayout}>
+        <AdminPanel
+          title={`Competencies (${filteredEntries.length})`}
+          subtitle="Each acquirable entry leads directly to its authored reader prose."
+        >
+          {filteredEntries.length === 0 ? (
+            <p>No competencies match the current search and filters. Clear or change a filter.</p>
+          ) : (
+            <ul aria-label="Competencies" className={styles.skillList}>
+              {filteredEntries.map((entry) => {
+                const isSelected = entry.id === selected?.id;
+                return (
+                  <li className={isSelected ? styles.selectedSkill : undefined} key={entry.id}>
+                    <a
+                      aria-current={isSelected ? "location" : undefined}
+                      href={`#competency-${encodeURIComponent(entry.id)}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        selectEntry(entry.id, true);
+                      }}
+                    >
+                      <span className={styles.skillName}>{entry.name}</span>
+                      <span className={styles.skillSummary}>{entry.shortDescription}</span>
+                      <span className={styles.skillMeta}>
+                        {typeLabels.get(entry.competencyType)} · {entry.domain}
+                      </span>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </AdminPanel>
+        {selected ? (
+          <article className={styles.detail} id={`competency-${selected.id}`}>
+            <AdminPanel>
+              <header className={styles.detailHeader}>
+                <div>
+                  <h2 ref={detailHeadingRef} tabIndex={-1}>
+                    {selected.name}
+                  </h2>
+                  <p className={styles.lede}>{selected.shortDescription}</p>
+                </div>
+              </header>
+              <div className={styles.description}>
+                {selected.description.split("\n\n").map((paragraph) => (
+                  <p key={paragraph}>{paragraph}</p>
+                ))}
+              </div>
+              <section aria-labelledby="typical-uses" className={styles.rulesSection}>
+                <h3 id="typical-uses">Typical uses and boundaries</h3>
+                <div className={styles.readerGrid}>
+                  <EnvelopeList label="Typical uses" values={selected.typicalUses} />
+                  <EnvelopeList label="Boundaries" values={selected.boundaries} />
+                </div>
+              </section>
+              <section aria-labelledby="reference-context" className={styles.metadataPanels}>
+                <header>
+                  <h3 id="reference-context">Reference context</h3>
+                  <p>
+                    Proposal annotations are secondary reference facts. They grant no competence,
+                    access, transfer, or runtime behavior.
+                  </p>
+                </header>
+                <dl className={styles.ruleGrid}>
+                  <RuleFact label="Type" value={typeLabels.get(selected.competencyType)} />
+                  <RuleFact label="Domain" value={selected.domain} />
+                  {selected.parent ? (
+                    <RuleFact
+                      label="Specialization parent"
+                      value={
+                        <>
+                          <SkillLink id={selected.parent.id} names={names} onSelect={selectEntry} />
+                          {selected.parent.note ? ` — ${selected.parent.note}` : null}
+                        </>
+                      }
+                    />
+                  ) : null}
+                  <RuleFact label="Context" value={selected.context} />
+                </dl>
+                <ReferenceFactList
+                  label="Learning Groups"
+                  empty="None authored."
+                  values={[selected.learningGroupAnnotation]}
+                />
+                <ReferenceFactList
+                  label="Arch Skills"
+                  empty="None authored."
+                  values={[selected.archSkillAnnotation]}
+                />
+                <ReferenceFactList
+                  label="Identity status"
+                  empty="Not recorded."
+                  values={[selected.idStatus]}
+                />
+                {selected.compatibilityNote ? (
+                  <ReferenceFactList
+                    label="Compatibility note"
+                    empty="None recorded."
+                    values={[selected.compatibilityNote]}
+                  />
+                ) : null}
+                <details className={styles.provenanceDisclosure}>
+                  <summary>Source provenance</summary>
+                  <p>{selected.provenance}</p>
+                </details>
+              </section>
+            </AdminPanel>
           </article>
         ) : null}
       </div>

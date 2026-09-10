@@ -6,6 +6,7 @@ import {
   projectSkillContentReleaseForReference,
   validateCanonicalContent,
 } from "@glantri/content";
+import { fullSkillCatalogueProposal } from "@glantri/content/full-skill-catalogue-proposal";
 import { ContentService } from "@glantri/database";
 import type {
   AdminSkillReferenceResponse,
@@ -87,6 +88,7 @@ export class CanonicalContentService {
     return {
       candidate: buildCandidateSkillReferenceSnapshot(),
       canonical: null,
+      fullCatalogue: fullSkillCatalogueProposal,
     };
   }
 

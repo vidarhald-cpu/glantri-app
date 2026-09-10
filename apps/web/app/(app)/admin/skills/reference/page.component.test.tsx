@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import type { AdminSkillReferenceMetadata } from "@glantri/shared";
+import { fullSkillCatalogueProposal } from "@glantri/content/full-skill-catalogue-proposal";
 
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -303,6 +304,48 @@ beforeEach(() => {
 });
 
 describe("Admin Skill Reference page", () => {
+  it("browses the complete proposal with prose primary and unresolved records outside acquisitions", async () => {
+    const user = userEvent.setup();
+    mocks.loadAdminSkillReferenceFromServer.mockResolvedValue({
+      ...referencePayload,
+      fullCatalogue: fullSkillCatalogueProposal,
+    });
+    render(<SkillReferenceContent />);
+
+    expect(await screen.findByText(/172 acquirable entries/)).toBeVisible();
+    expect(screen.getByRole("list", { name: "Competencies" })).toBeVisible();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Type" }), "spoken-language");
+    expect(screen.getByRole("heading", { name: "Competencies (12)" })).toBeVisible();
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Type" }), "all");
+    await user.type(screen.getByRole("textbox", { name: "Search competencies" }), "Falconry");
+    expect(await screen.findByRole("heading", { name: "Falconry" })).toBeVisible();
+    const detail = screen.getByRole("heading", { name: "Falconry" }).closest("article")!;
+    expect(
+      within(detail).getByText(
+        fullSkillCatalogueProposal.entries
+          .find(({ id }) => id === "spec:falconry")!
+          .description.split("\n\n")[0]!,
+      ),
+    ).toBeVisible();
+    expect(
+      within(detail).getByRole("heading", { name: "Typical uses and boundaries" }),
+    ).toBeVisible();
+    expect(within(detail).getByRole("heading", { name: "Reference context" })).toBeVisible();
+    expect(within(detail).getByRole("link", { name: "Animal Training" })).toHaveAttribute(
+      "href",
+      "#competency-spec%3Aanimal-training",
+    );
+    expect(within(detail).getByText(/A18 — Finding and securing wild food/)).toBeVisible();
+    expect(within(detail).queryByText(/rank costs|points per rank/i)).toBeNull();
+
+    const heldSummary = screen.getByText(/9 unresolved bindings; 3 support scripts/);
+    await user.click(heldSummary);
+    expect(screen.getByText(/Heart Surgery is excluded/)).toBeVisible();
+    expect(screen.getByText(/Common written tradition: define script/)).toBeVisible();
+    expect(screen.getAllByText(/Support only; no acquisition count/)).toHaveLength(3);
+  });
+
   it("keeps unresolved context secondary, omits Domain placeholders, and exposes the full matrix on demand", async () => {
     const user = userEvent.setup();
     render(<SkillReferenceContent />);
