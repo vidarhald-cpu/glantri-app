@@ -70,8 +70,10 @@ explain how a competence appears in that historical context. A manifestation is
 descriptive unless an existing approved rule explicitly gives it a mechanical
 effect.
 
-The final Arch-Society roster and count remain unresolved pending provenance
-recovery. No missing society may be invented or inferred by similarity.
+The current recovered Arch-Society roster contains 11 records and is the
+approved target for a later reader-facing rewrite after viable Chargen. That
+does not make its current prose, mappings, or levels final, and no additional
+society may be invented or inferred by similarity.
 
 ### Learning Groups describe shared ordinary practice
 
@@ -127,7 +129,8 @@ Any future crosswalk requires explicit provenance and Product Owner approval.
 This decision does not approve or determine:
 
 - numeric Skill floors or Social-Band values;
-- a final Arch-Society roster or count;
+- expansion beyond or silent reinterpretation of the current 11-record
+  Arch-Society roster;
 - a final full-catalogue competency roster or identity crosswalk;
 - new Skill relationships, transfer values, opposed checks, prerequisites, or
   access rules;
@@ -141,7 +144,7 @@ Product Owner calibration and canonical-release gate.
 
 ## Sequencing
 
-The later implementation sequence remains:
+The complete Setting implementation sequence remains:
 
 1. Setting foundation;
 2. contextual Skill binding;
@@ -149,7 +152,12 @@ The later implementation sequence remains:
 4. Campaign Setting and content selection.
 
 Each stage requires its own complete contract and explicit authorization. The
-sequence itself is not implementation authority.
+sequence itself is not implementation authority. Architecture decision
+[0008](./0008-skills-chargen-delivery-priority.md) controls the nearer product
+priority: finish the full Skill, Learning Group, and Profession content chain
+and adapt Chargen before full Arch-Society and Setting-content polish, except
+for a minimal separately authorized contextual scaffold when technically
+necessary.
 
 ## Verification
 

@@ -41,7 +41,27 @@ Normative content and integrity authority:
    ready, extend the existing mature Chargen and Character flows to consume it
    and resume long-lived test-Character creation.
 
-## Approved post-#26 Setting sequence
+## Current near-term priority: full content into Chargen
+
+Architecture decision
+[0008](../decisions/architecture/0008-skills-chargen-delivery-priority.md)
+sets the current product sequence:
+
+1. approve the full target Skill and competency roster;
+2. author the full reader-facing Skill content;
+3. finalize Learning Groups against the full roster;
+4. finalize Professions and their relationships to Learning Groups and Skills;
+5. integrate those content layers into the Skill reference and metadata
+   structure; and
+6. adapt Chargen to consume the approved Skill, Learning Group, and Profession
+   model.
+
+Do not delay this path for complete Arch-Society, Civilization, or Setting-
+content polish. If contextual competencies make a Setting boundary technically
+necessary, authorize only the minimal scaffold needed for honest context
+binding before viable Chargen.
+
+## Setting sequence and later parallel work
 
 Architecture decision
 [0006](../decisions/architecture/0006-setting-foundation.md) introduces a
@@ -49,13 +69,26 @@ reusable Setting layer between generic rules content and Campaigns. Generic
 Skills remain campaign- and setting-agnostic; contextual Skills declare a
 context type and later bind to Setting-defined instances.
 
-After #26, implementation must be decomposed and authorized separately in this
-order:
+The complete Setting implementation remains decomposed and authorized
+separately in this order:
 
 1. Setting foundation;
 2. contextual Skill binding;
 3. Setting-first Chargen; and
 4. Campaign Setting and content selection.
+
+Once the new Chargen flow is operational, product work may split into three
+parallel, separately authorized streams:
+
+- rewrite the 11 recovered Arch Societies to the reader-facing content standard;
+- review the nine explicitly Glantri-facing Civilization candidates for the
+  repository-defined Glantri Setting while keeping the seven historical or
+  reference Civilizations outside it unless separately approved; and
+- write complete Skill-system documentation covering Domains, concrete Skills,
+  Specializations, Learning Groups, Learning Histories, Professions, Arch
+  Skills, Arch Societies, Society Level, Social Band, contextual/Setting
+  binding, historical availability, Arch-Society applicability, and the
+  relationships among them.
 
 The built-in Glantri Setting remains repository-defined canonical content.
 Runtime databases may reference or instantiate it but are not its sole content
@@ -63,6 +96,23 @@ authority. The current Skill Reference Society/Availability selector is a
 transitional presentation and will be replaced when the contextual Skill and
 Chargen stages are authorized. This section records dependencies only; it does
 not authorize any implementation or canonical Skill release.
+
+The current Civilizations page is transitional recovered/reference content,
+not finished reader-facing Setting content. The repository contains 16
+Civilization records: nine are explicitly Glantri-facing and are the evidence-
+backed initial candidates for the built-in Glantri Setting; seven are historical
+or reference Civilizations and remain outside the Setting unless separately
+approved. All 16 currently link to one of the 11 recovered Arch Societies and
+carry Society-Level and language context, but their prose, mappings, Setting
+membership, and levels remain subject to Product Owner review. In particular,
+Olog's current link to the level-5 court-bureaucratic archetype is not an
+accepted statement that Ologs are generally more developed than Glantrians;
+review it during the later Glantri Setting/Civilization pass.
+
+Learning Groups, Professions, Arch Societies, and Civilizations should
+eventually use ordinary, reader-facing prose comparable to Candidate 4 Skills:
+what the concept represents, what it is used for, its boundaries, adjacent
+relationships, and useful historical or Setting context.
 
 ## Approved historical-reference structure
 
@@ -108,11 +158,17 @@ Case 1: documentation/release contract
   │     └─> Case 4: Pilot authorship ──────┼─> Case 5: Pilot review/freeze
   └─> Case 6: legacy mapping plan          └─> later full catalogue work
 
-Case 5 accepted release -> Setting foundation
-                         -> contextual Skill binding
-                         -> Setting-first Chargen
-                         -> Campaign Setting/content selection
-                         -> full catalogue population/review as separately planned
+Case 5 and full-roster review -> full Skill content
+                              -> Learning Groups
+                              -> Professions
+                              -> reference/meta-structure integration
+                              -> viable Chargen
+                              -> later Arch-Society, Glantri Setting,
+                                 and Skill-system documentation streams
+
+Minimal Setting/context scaffold may enter before viable Chargen only when
+contextual competencies demonstrate that dependency in a separately authorized
+case. Campaign Setting/content selection remains later work.
 ```
 
 ## Preserved authority and boundaries
