@@ -125,13 +125,22 @@ they do not yet demonstrate a separate multi-Setting Universe authority.
 
 ## Integration and verification
 
-Implementation after the #26 Product Owner calibration gate is decomposed and
-authorized separately in this order:
+The complete Setting implementation remains decomposed and authorized
+separately in this order:
 
 1. Setting foundation;
 2. contextual Skill binding;
 3. Setting-first Chargen; and
 4. Campaign Setting and content selection.
+
+Architecture decision
+[0008](./0008-skills-chargen-delivery-priority.md) refines product ordering:
+the near-term priority is to complete the full Skill, Learning Group, and
+Profession content chain and make Chargen consume it. Full Arch-Society,
+Civilization, and Setting-content polish must not delay that path. A minimal
+Setting/context scaffold may precede viable Chargen only when a separately
+authorized contract demonstrates that contextual competencies technically
+require it.
 
 Forgejo #85 owns the Design-state follow-up and open contract questions. Each
 stage must define its exact baseline, authority, versioning and compatibility,
