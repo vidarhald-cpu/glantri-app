@@ -34,6 +34,7 @@ export async function resetTestDatabase(prisma: PrismaClient): Promise<void> {
   // Delete in dependency order: leaf tables first, then parent tables.
   // Each group uses deleteMany({}) which bypasses FK checks within a group
   // as long as the group ordering respects referencing → referenced direction.
+  await prisma.equipmentTransitionEvent.deleteMany({});
   await prisma.scenarioEventLog.deleteMany({});
   await prisma.artifactAuditEvent.deleteMany({});
   await prisma.scenarioArtifactReference.deleteMany({});

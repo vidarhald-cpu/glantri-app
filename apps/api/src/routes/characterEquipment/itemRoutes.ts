@@ -53,8 +53,8 @@ export const equipmentItemRoutes: FastifyPluginAsync = async (app) => {
     const id = parseCharacterId(request.params);
 
     try {
-      const body = parseMoveItemBody(request.body);
       const viewer = await requireAccessibleCharacter(user, id);
+      const body = parseMoveItemBody(request.body);
       await equipmentWriteService.moveCharacterEquipmentItem(
         id,
         body.itemId,
@@ -85,8 +85,8 @@ export const equipmentItemRoutes: FastifyPluginAsync = async (app) => {
     const id = parseCharacterId(request.params);
 
     try {
-      const body = parseAddItemBody(request.body);
       const viewer = await requireAccessibleCharacter(user, id);
+      const body = parseAddItemBody(request.body);
       await equipmentWriteService.addCharacterEquipmentItem(id, body, body.expectedRevision);
 
       return {
@@ -111,8 +111,8 @@ export const equipmentItemRoutes: FastifyPluginAsync = async (app) => {
     const id = parseCharacterId(request.params);
 
     try {
-      const body = parseRemoveItemBody(request.body);
       const viewer = await requireAccessibleCharacter(user, id);
+      const body = parseRemoveItemBody(request.body);
       await equipmentWriteService.removeCharacterEquipmentItem(
         id,
         body.itemId,
@@ -141,13 +141,17 @@ export const equipmentItemRoutes: FastifyPluginAsync = async (app) => {
     const id = parseCharacterId(request.params);
 
     try {
-      const body = parseUpdateQuantityBody(request.body);
       const viewer = await requireAccessibleCharacter(user, id);
+      const body = parseUpdateQuantityBody(request.body);
       await equipmentWriteService.updateCharacterEquipmentQuantity(
         id,
         body.itemId,
         body.quantity,
         body.expectedRevision,
+        {
+          actorAuthority: viewer.kind === "gm" ? "campaign_gm" : "character_controller",
+          actorUserId: user.id,
+        },
       );
 
       return {
@@ -172,8 +176,8 @@ export const equipmentItemRoutes: FastifyPluginAsync = async (app) => {
     const id = parseCharacterId(request.params);
 
     try {
-      const body = parseUpdateMetadataBody(request.body);
       const viewer = await requireAccessibleCharacter(user, id);
+      const body = parseUpdateMetadataBody(request.body);
       await equipmentWriteService.updateCharacterEquipmentMetadata(
         id,
         body.itemId,

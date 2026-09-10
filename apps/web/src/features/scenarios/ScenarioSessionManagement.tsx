@@ -76,8 +76,8 @@ export function ScenarioSessionManagement({
           Session preparation
         </h2>
         <p style={{ margin: 0 }}>
-          Make existing Campaign objects available. Items remain under canonical Item ownership and
-          can be picked up once.
+          Make existing Campaign objects available. Picking up an Item moves that same item into the
+          Character’s current equipment, so it can only be picked up once.
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
           <label htmlFor="scenario-available-source">Campaign object</label>

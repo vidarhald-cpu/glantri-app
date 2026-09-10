@@ -939,7 +939,7 @@ export default function ScenarioDetailPageContent({
       await refreshScenario();
       setEquipmentRefreshResult({
         kind: "success",
-        message: `${refreshedParticipant.snapshot.displayName}’s Scenario equipment was reconciled.`,
+        message: `${refreshedParticipant.snapshot.displayName}’s Scenario equipment was updated.`,
         participantId: refreshedParticipant.id,
       });
     } catch (caughtError) {
@@ -948,7 +948,7 @@ export default function ScenarioDetailPageContent({
         message:
           caughtError instanceof Error
             ? caughtError.message
-            : "Unable to reconcile Scenario participant equipment.",
+            : "Unable to update Scenario participant equipment.",
         participantId: participant.id,
       });
     } finally {

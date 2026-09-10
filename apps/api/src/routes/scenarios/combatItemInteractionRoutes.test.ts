@@ -265,6 +265,43 @@ describe("canonical Combat Item interaction routes", () => {
     await app.close();
   });
 
+  it.each([
+    ["unrelated Admin", { email: "admin@example.test", id: "admin-1", roles: ["admin"] }],
+    ["GM of another Campaign", { email: "gm-b@example.test", id: "gm-2", roles: ["game_master"] }],
+  ])("does not let an %s inspect or mutate Campaign Combat Items", async (_label, user) => {
+    auth.requireAuthenticatedUser.mockResolvedValue(user);
+    const routeServices = services();
+    vi.mocked(routeServices.scenarioService.userHasPlayerScenarioAccess).mockResolvedValue(false);
+    vi.mocked(routeServices.campaignService.listCampaignsByUserAccess).mockResolvedValue([]);
+    const app = await appWith(routeServices);
+    const read = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1/combat-round/item-interactions/options",
+    });
+    const mutate = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "forged-action",
+        expectedItemRevision: "forged-revision",
+        expectedRevision: revision,
+        itemId: "private-item",
+        itemOperation: "drop",
+        operation: "declare",
+        participantId: "participant-1",
+        visibleToParticipantIds: [],
+      },
+      url: "/encounters/encounter-1/combat-round/item-interactions",
+    });
+
+    expect(read.statusCode).toBe(404);
+    expect(mutate.statusCode).toBe(404);
+    expect(read.body).not.toContain("private-item");
+    expect(mutate.body).not.toContain("private-item");
+    expect(routeServices.itemService.getOptions).not.toHaveBeenCalled();
+    expect(routeServices.itemService.resolveDeclaration).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it("omits hidden pass recipients and rejects hidden/nonexistent recipient forgeries identically", async () => {
     const routeServices = services(encounterWithHiddenRecipient());
     routeServices.itemService = realItemService();
