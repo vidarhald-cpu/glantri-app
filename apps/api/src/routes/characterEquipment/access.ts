@@ -1,6 +1,5 @@
 import type { AuthUser } from "@glantri/auth";
 import { CharacterService, type CharacterEquipmentViewer } from "@glantri/database";
-import { loadAccessibleCharacterInApi } from "../../lib/characterEditAccess";
 import { NotFoundError } from "../../lib/errors";
 
 const characterService = new CharacterService();
@@ -10,8 +9,7 @@ export function equipmentViewerForAccessibleCharacter(
   characterId: string,
   hasCampaignGmAuthority: boolean,
 ): CharacterEquipmentViewer {
-  return user.roles.includes("admin") ||
-    (user.roles.includes("game_master") && hasCampaignGmAuthority)
+  return user.roles.includes("game_master") && hasCampaignGmAuthority
     ? { kind: "gm" }
     : { characterId, kind: "holder" };
 }
@@ -24,18 +22,14 @@ export async function requireAccessibleCharacter(
     "getCharacterById" | "getCharacterByIdInGmCampaigns" | "getOwnedCharacter"
   > = characterService,
 ): Promise<CharacterEquipmentViewer> {
-  const [character, campaignManagedCharacter] = await Promise.all([
-    loadAccessibleCharacterInApi({
-      characterId,
-      characterService: service,
-      user,
-    }),
-    user.roles.includes("game_master") && !user.roles.includes("admin")
+  const [ownedCharacter, campaignManagedCharacter] = await Promise.all([
+    service.getOwnedCharacter(user.id, characterId),
+    user.roles.includes("game_master")
       ? service.getCharacterByIdInGmCampaigns(user.id, characterId)
       : null,
   ]);
 
-  if (!character) {
+  if (!ownedCharacter && !campaignManagedCharacter) {
     throw new NotFoundError("Character not found.");
   }
 

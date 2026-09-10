@@ -185,6 +185,7 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
       const expectedRevision = parseOptionalString(body, "expectedRevision");
       if (!expectedRevision) throw new Error("Refresh the Scenario before saving.");
       const updated = await scenarioService.updateScenarioSessionState({
+        actorUserId: user.id,
         availableObjects: body.availableObjects.map((reference) =>
           scenarioAvailableObjectReferenceSchema.parse(reference),
         ),

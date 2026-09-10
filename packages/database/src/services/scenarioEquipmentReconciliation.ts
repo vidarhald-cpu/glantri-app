@@ -87,10 +87,10 @@ export async function resolveScenarioEquipmentStatus(input: {
     canReconcile: input.viewerMode === "gm" && status !== "current",
     message:
       status === "current"
-        ? "Scenario equipment is current."
+        ? "Ready for play and matches the Character’s current equipment."
         : status === "stale"
-          ? "Equipment changed outside this Scenario. Reconcile it before dependent play continues."
-          : "This participant needs an equipment reconciliation before dependent play continues.",
+          ? "The Character’s current equipment changed since this Scenario was prepared. Update it before play continues."
+          : "Prepare this participant’s equipment before play continues.",
     status,
   };
 }

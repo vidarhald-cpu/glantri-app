@@ -231,9 +231,20 @@ function hasExactParticipantSemantics(input: {
 
 function resolutionEventPayload(input: CommitCombatItemInteractionResolutionInput) {
   const context = findResolutionActionContext(input.encounterSession, input.actionId);
+  const holderBefore = input.interaction.operation === "pickup" ? null : input.ownerCharacterId;
+  const holderAfter =
+    input.interaction.operation === "drop"
+      ? null
+      : input.interaction.operation === "pass"
+        ? (input.recipientCharacterId ?? null)
+        : input.ownerCharacterId;
   return {
     actionId: input.actionId,
+    actorAuthority: "combat_controller",
+    campaignId: input.campaignId,
     encounterId: input.encounterId,
+    holderAfter,
+    holderBefore,
     itemId: input.interaction.itemId,
     itemRevision: input.interaction.itemRevision,
     operation: input.interaction.operation,
@@ -242,6 +253,7 @@ function resolutionEventPayload(input: CommitCombatItemInteractionResolutionInpu
     recipientCharacterId: input.recipientCharacterId ?? null,
     recipientParticipantId: input.interaction.recipientParticipantId ?? null,
     resolutionKind: "canonical_combat_item",
+    scenarioId: input.scenarioId,
   };
 }
 
@@ -841,10 +853,15 @@ export class CombatItemInteractionService {
                 actorUserId: input.actorUserId,
                 eventType: "encounter_updated",
                 payloadJson: {
+                  actorAuthority: "combat_controller",
+                  campaignId: input.campaignId,
                   commandId: input.commandId,
                   encounterId: input.encounterId,
+                  holderAfter: null,
+                  holderBefore: input.ownerCharacterId,
                   itemId: input.itemId,
                   resolutionKind: "canonical_thrown_weapon",
+                  scenarioId: input.scenarioId,
                 },
                 roundNumber: input.roundNumber,
                 scenarioId: input.scenarioId,
@@ -998,11 +1015,15 @@ export class CombatItemInteractionService {
                 actorUserId: input.actorUserId,
                 eventType: "encounter_updated",
                 payloadJson: {
+                  actorAuthority: "combat_controller",
                   ammoItemId: ammo.id,
+                  campaignId: input.campaignId,
                   commandId: input.commandId,
                   encounterId: input.encounterId,
                   quantityAfter,
+                  quantityBefore: ammo.quantity,
                   resolutionKind: "canonical_missile_ammunition",
+                  scenarioId: input.scenarioId,
                 },
                 roundNumber: input.roundNumber,
                 scenarioId: input.scenarioId,
@@ -1165,10 +1186,15 @@ export class CombatItemInteractionService {
                 actorUserId: input.actorUserId,
                 eventType: "encounter_updated",
                 payloadJson: {
+                  actorAuthority: "combat_controller",
+                  campaignId: input.campaignId,
                   commandId: input.commandId,
                   encounterId: input.encounterId,
+                  holderAfter: null,
+                  holderBefore: input.ownerCharacterId,
                   itemId: itemBefore.id,
                   resolutionKind: "canonical_disarm",
+                  scenarioId: input.scenarioId,
                 },
                 roundNumber: input.roundNumber,
                 scenarioId: input.scenarioId,
@@ -1267,10 +1293,21 @@ export class CombatItemInteractionService {
             actorUserId: input.actorUserId,
             eventType: "encounter_updated",
             payloadJson: {
+              actorAuthority: "combat_controller",
+              campaignId: input.campaignId,
               commandIds: input.undos.map(({ commandId }) => commandId),
               encounterId: input.encounterId,
+              originalTransitionReferences: input.undos.map(({ commandId }) => commandId),
               itemIds: input.undos.map(({ undo }) => undo.itemBefore.id),
+              restoredItems: input.undos.map(({ undo }) => ({
+                holderCharacterId: undo.itemBefore.holderCharacterId,
+                itemId: undo.itemBefore.id,
+                quantity: undo.itemBefore.quantity,
+                storageCarryMode: undo.itemBefore.storageAssignment?.carryMode ?? null,
+                storageLocationId: undo.itemBefore.storageAssignment?.locationId ?? null,
+              })),
               resolutionKind: "canonical_disarm_undo",
+              scenarioId: input.scenarioId,
             },
             scenarioId: input.scenarioId,
             summary: "Canonical Disarm undone.",
@@ -1355,10 +1392,21 @@ export class CombatItemInteractionService {
             actorUserId: input.actorUserId,
             eventType: "encounter_updated",
             payloadJson: {
+              actorAuthority: "combat_controller",
+              campaignId: input.campaignId,
               commandIds: input.undos.map(({ commandId }) => commandId),
               encounterId: input.encounterId,
+              originalTransitionReferences: input.undos.map(({ commandId }) => commandId),
               itemIds: input.undos.map(({ undo }) => undo.itemBefore.id),
+              restoredItems: input.undos.map(({ undo }) => ({
+                holderCharacterId: undo.itemBefore.holderCharacterId,
+                itemId: undo.itemBefore.id,
+                quantity: undo.itemBefore.quantity,
+                storageCarryMode: undo.itemBefore.storageAssignment?.carryMode ?? null,
+                storageLocationId: undo.itemBefore.storageAssignment?.locationId ?? null,
+              })),
               resolutionKind: "canonical_thrown_weapon_undo",
+              scenarioId: input.scenarioId,
             },
             scenarioId: input.scenarioId,
             summary: "Canonical thrown weapon attack undone.",
@@ -1457,11 +1505,16 @@ export class CombatItemInteractionService {
             actorUserId: input.actorUserId,
             eventType: "encounter_updated",
             payloadJson: {
+              actorAuthority: "combat_controller",
               ammoItemId: ammo.id,
+              campaignId: input.campaignId,
               commandId: input.commandId,
               encounterId: input.encounterId,
-              quantity: input.undo.quantityBefore,
+              originalTransitionReference: input.commandId,
+              quantityAfter: input.undo.quantityBefore,
+              quantityBefore: input.undo.quantityAfter,
               resolutionKind: "canonical_missile_ammunition_undo",
+              scenarioId: input.scenarioId,
             },
             scenarioId: input.scenarioId,
             summary: "Canonical missile ammunition restored.",
