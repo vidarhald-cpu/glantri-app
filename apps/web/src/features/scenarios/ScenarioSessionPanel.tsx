@@ -47,10 +47,11 @@ export function ScenarioSessionPanel({
                   : "Scenario"}
                 {participant.equipment ? (
                   <div style={{ marginTop: "0.25rem" }}>
+                    <strong>Equipment prepared for this Scenario: </strong>
                     <span>{participant.equipment.message}</span>{" "}
                     {participant.equipment.canReconcile && onReconcileEquipment ? (
                       <button onClick={() => onReconcileEquipment(participant.id)} type="button">
-                        Reconcile equipment
+                        Update Scenario equipment
                       </button>
                     ) : null}
                   </div>
@@ -73,7 +74,10 @@ export function ScenarioSessionPanel({
               <div key={encounter.id} style={cardStyle}>
                 <strong>{encounter.title}</strong>
                 <span>
-                  {encounter.kind === "roleplay" ? "Roleplaying" : "Combat"} · {encounter.status}
+                  {encounter.kind === "roleplay" ? "Roleplaying" : "Combat"} ·{" "}
+                  {encounter.status === "completed"
+                    ? "Closed"
+                    : encounter.status.charAt(0).toUpperCase() + encounter.status.slice(1)}
                 </span>
                 {encounter.outcome ? <span>Outcome: {encounter.outcome}</span> : null}
                 {campaignId ? (

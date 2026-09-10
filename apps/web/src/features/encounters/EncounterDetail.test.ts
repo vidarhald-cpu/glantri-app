@@ -30,4 +30,16 @@ describe("EncounterDetail table rendering", () => {
     expect(source).toContain("key={column.id}");
     expect(source).not.toContain("key={label}");
   });
+
+  it("routes terminal Encounters to history before any GM activity surface", () => {
+    const source = readEncounterDetailSource();
+    const historyIndex = source.indexOf("<CompletedEncounterHistory");
+    const roleplayIndex = source.indexOf("<GmRoleplayingEncounterScreen");
+
+    expect(source).toContain('encounter.status === "completed"');
+    expect(source).toContain('encounter.status === "archived"');
+    expect(historyIndex).toBeGreaterThan(-1);
+    expect(roleplayIndex).toBeGreaterThan(historyIndex);
+    expect(source.slice(historyIndex, roleplayIndex)).toContain('viewerMode="gm"');
+  });
 });

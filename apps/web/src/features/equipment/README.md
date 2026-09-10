@@ -24,31 +24,26 @@ EquipmentFeatureState
   activeLoadoutByCharacterId
 ```
 
-The current database model stores concrete Items, Character storage locations,
-and persistent loadouts separately. Campaign Items use the same concrete Item
-record with `campaignContextId` and an optional holder. A Scenario can retain
-available-object references and Character participant equipment snapshots.
-Combat Item services already use concrete Item IDs and revisions for bounded
-draw, stow, drop, pass, pickup, thrown-weapon, Disarm, and ammunition operations.
+The database stores concrete Items, Character storage locations, and persistent
+loadouts as normalized records under one Character equipment aggregate revision.
+Campaign Items use that same concrete Item record with `campaignContextId` and an
+optional holder. Assignment, unassignment, Character transfer, Scenario pickup,
+and Combat operations move or update the same ID. Accepted transitions retain
+bounded queryable actor/context and before/after evidence without turning Item
+state into a generalized event-sourcing system.
 
-These are implementation facts, not completion of the Field Equipment v1
-contract. In particular:
-
-- Character equipment does not yet expose one aggregate revision covering Item
-  membership, storage/carry, loadout, and active ammunition;
-- `CharacterBuild.equipment` remains a legacy build field and is not yet bounded
-  to compatibility/history by every write path;
-- Scenario equipment snapshots can be explicitly refreshed but do not yet
-  implement the accepted visible external-`STALE` and explicit reconciliation
-  contract; and
-- authored final-OB and initiative Item facts exist in structured code paths,
-  but Field Equipment v1 does not authorize them as operative play mechanics.
+`CharacterBuild.equipment` is compatibility/history-only and rejects current
+writes. Scenario participant snapshots retain frozen supported facts,
+provenance, and fingerprints; external changes become visibly stale and block
+dependent play until an explicit GM update. Accepted in-play mutations update
+current Character equipment and the Scenario/Combat state together. Authored
+final-OB and initiative Item facts remain recorded but non-operative.
 
 ## Authority boundary
 
-One concrete Item identity must survive assignment, carry/equip, Scenario
+One concrete Item identity survives assignment, carry/equip, Scenario
 availability, pickup, Character transfer, and Combat use. Character current
-equipment will become one revision-controlled aggregate. Scenario equipment is
+equipment is one revision-controlled aggregate. Scenario equipment is
 an operational projection with frozen supported mechanical facts and
 provenance/fingerprint, not a second Item or Character authority.
 
@@ -63,10 +58,10 @@ relationship. Global `game_master` role alone is insufficient.
 
 ## API boundary
 
-The route currently calls equipment operations through `localServiceClient`.
+The route calls equipment operations through the web API clients.
 The relevant client functions cover full equipment reads, Item add/move/remove,
 storage-location create/remove, quantity and metadata updates, loadout selection,
-Campaign Item management, and transfer.
+Campaign Item creation/editing, assignment/unassignment, and transfer.
 
 `page.tsx` remains a known feature-boundary exception because it owns substantial
 state and handlers directly. A future internal refactor may move that work into

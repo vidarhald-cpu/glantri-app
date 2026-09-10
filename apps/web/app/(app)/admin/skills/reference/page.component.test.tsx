@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 
+import type { AdminSkillReferenceMetadata } from "@glantri/shared";
+
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -41,7 +43,7 @@ const metadata = {
   status: "proposal" as const,
 };
 
-const referenceMetadata = {
+const referenceMetadata: AdminSkillReferenceMetadata = {
   archSkills: [
     {
       description: "Healing navigation context.",
@@ -67,25 +69,15 @@ const referenceMetadata = {
   professionReferences: [],
   schemaVersion: "skill-reference-metadata/v1",
   societyLevelBandMatrix: {
-    cells: [
-      {
-        historicalAvailabilityIds: [],
-        socialBand: "L1" as const,
-        societyLevel: 1 as const,
-        status: "unresolved" as const,
-      },
-      {
-        historicalAvailabilityIds: [],
-        socialBand: "L2" as const,
-        societyLevel: 1 as const,
-        status: "context-dependent" as const,
-      },
-    ],
-    socialBands: [
-      { id: "L1" as const, label: "Social Band L1" },
-      { id: "L2" as const, label: "Social Band L2" },
-    ],
-    societyLevels: [{ label: "Society Level 1", level: 1 as const }],
+    cells: [],
+    socialBands: ["L1", "L2", "L3", "L4"].map((id) => ({
+      id: id as "L1" | "L2" | "L3" | "L4",
+      label: `Social Band ${id}`,
+    })),
+    societyLevels: [1, 2, 3, 4, 5, 6].map((level) => ({
+      level: level as 1 | 2 | 3 | 4 | 5 | 6,
+      label: `Society Level ${level}`,
+    })),
   },
 };
 
@@ -311,23 +303,219 @@ beforeEach(() => {
 });
 
 describe("Admin Skill Reference page", () => {
-  it("renders proposal context, separate history/profession facts, and unresolved availability", async () => {
+  it("keeps unresolved context secondary, omits Domain placeholders, and exposes the full matrix on demand", async () => {
     const user = userEvent.setup();
     render(<SkillReferenceContent />);
     await openMedicine(user);
+    const context = screen.getByRole("region", { name: "Learning & historical context" });
+    expect(within(context).getByText("Not yet authored.")).toBeVisible();
+    expect(within(context).queryByText("Healing")).toBeNull();
+    expect(within(context).getByText("All 24 cells are unresolved for Medicine.")).toBeVisible();
+    const disclosure = within(context).getByText(
+      "Inspect full historical matrix for Medicine (6 × 4)",
+    );
+    expect(disclosure.closest("details")).not.toHaveAttribute("open");
+    await user.click(disclosure);
+    expect(disclosure.closest("details")).toHaveAttribute("open");
+    expect(within(context).getAllByRole("cell")).toHaveLength(24);
+    expect(within(context).getAllByText("Unresolved")).toHaveLength(24);
+    expect(
+      within(context).getByRole("region", { name: "Historical matrix for Medicine" }),
+    ).toHaveAttribute("tabindex", "0");
+    expect(
+      within(context).getByText(/Scroll horizontally to inspect all Social Bands/),
+    ).toBeVisible();
+    expect(
+      within(context).getByText("No Learning History is recorded for this Skill."),
+    ).toBeVisible();
+    expect(
+      within(context).getByText("No profession reference is recorded for this Skill."),
+    ).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Reference context" })).toBeNull();
+  });
 
-    expect(screen.getByRole("heading", { name: "Reference context" })).toBeVisible();
-    expect(screen.getAllByText("Arch Skills").length).toBeGreaterThan(0);
-    expect(screen.getByText("Healing", { selector: "li" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Society Level × Social Band" })).toBeVisible();
-    expect(screen.getByText("Unresolved")).toBeVisible();
-    expect(screen.getByText("Context-dependent")).toBeVisible();
+  it("filters histories and professions to the selected Skill and distinguishes both association types", async () => {
+    const user = userEvent.setup();
+    const factMetadata = referenceMetadata.archSkills[0]!.metadata;
+    mocks.loadAdminSkillReferenceFromServer.mockResolvedValue({
+      candidate: {
+        ...candidate,
+        referenceMetadata: {
+          ...referenceMetadata,
+          learningHistories: [
+            {
+              historyId: "history:medical",
+              name: "Medical apprenticeship",
+              context: "Practice with a physician.",
+              skillIds: ["skill:medicine"],
+              metadata: factMetadata,
+            },
+            {
+              historyId: "history:operative",
+              name: "Operative apprenticeship",
+              context: "Practice with a surgeon.",
+              skillIds: ["skill:surgery"],
+              metadata: factMetadata,
+            },
+          ],
+          professionReferences: [
+            {
+              id: "profession:direct",
+              name: "Direct physician",
+              suggestedSkillIds: ["skill:medicine"],
+              learningHistoryIds: [],
+              metadata: factMetadata,
+            },
+            {
+              id: "profession:indirect",
+              name: "History physician",
+              suggestedSkillIds: [],
+              learningHistoryIds: ["history:medical", "history:operative"],
+              metadata: factMetadata,
+            },
+            {
+              id: "profession:both",
+              name: "Both physician",
+              suggestedSkillIds: ["skill:medicine"],
+              learningHistoryIds: ["history:medical"],
+              metadata: factMetadata,
+            },
+            {
+              id: "profession:surgeon",
+              name: "Surgeon only",
+              suggestedSkillIds: ["skill:surgery"],
+              learningHistoryIds: ["history:operative"],
+              metadata: factMetadata,
+            },
+          ],
+        },
+      },
+      canonical: null,
+    });
+    render(<SkillReferenceContent />);
+    await openMedicine(user);
+    const context = screen.getByRole("region", { name: "Learning & historical context" });
+    expect(within(context).getByText(/Medical apprenticeship — Practice/)).toBeVisible();
+    expect(within(context).queryByText(/Operative apprenticeship/)).toBeNull();
+    expect(within(context).queryByText("Surgeon only")).toBeNull();
+    expect(within(context).getByText("Direct physician").closest("li")).toHaveTextContent(
+      "Direct Skill suggestion.",
+    );
+    expect(within(context).getByText("History physician").closest("li")).not.toHaveTextContent(
+      "Direct Skill suggestion.",
+    );
+    expect(within(context).getByText("History physician").closest("li")).toHaveTextContent(
+      "Associated through Learning History: Medical apprenticeship.",
+    );
+    expect(within(context).getByText("Both physician").closest("li")).toHaveTextContent(
+      "Direct Skill suggestion.Associated through Learning History: Medical apprenticeship.",
+    );
+    await user.click(within(skillList()).getByText("Surgery").closest("a")!);
+    expect(screen.queryByText("Direct physician")).toBeNull();
+    expect(screen.getByText("Surgeon only")).toBeVisible();
+    expect(screen.queryByText(/Medical apprenticeship/)).toBeNull();
+    await user.type(screen.getByRole("textbox", { name: "Search Skills" }), "no matches");
+    expect(screen.queryByRole("region", { name: "Learning & historical context" })).toBeNull();
+  });
+
+  it("uses human society names and selected-Skill historical facts without losing held or mixed states", async () => {
+    const user = userEvent.setup();
+    const factMetadata = referenceMetadata.archSkills[0]!.metadata;
+    const fact = {
+      archSocietyId: "arch-society:forager_ritual_tribal",
+      explanation: "Test evidence.",
+      metadata: factMetadata,
+      skillId: "skill:medicine",
+      societyLevel: 1 as const,
+      socialBand: "L1" as const,
+    };
+    const scopedMetadata: AdminSkillReferenceMetadata = {
+      ...referenceMetadata,
+      archSocieties: [
+        {
+          id: fact.archSocietyId,
+          name: "Forager Ritual Society",
+          description: "Historical lens.",
+          societyLevel: 1,
+          metadata: factMetadata,
+        },
+      ],
+      archSkills: [
+        ...referenceMetadata.archSkills,
+        {
+          ...referenceMetadata.archSkills[0]!,
+          id: "arch-skill:approved",
+          name: "Approved capability",
+          metadata: {
+            ...factMetadata,
+            provenance: { kind: "decision", reference: "test approval" },
+          },
+        },
+      ],
+      historicalAvailability: [
+        { ...fact, id: "history:available", status: "available" },
+        { ...fact, id: "history:restricted", status: "restricted" },
+        { ...fact, id: "history:review", socialBand: "L2", status: "review-required" },
+        { ...fact, id: "history:recorded", socialBand: "L3", status: "available" },
+        {
+          ...fact,
+          id: "history:other-skill",
+          skillId: "skill:surgery",
+          socialBand: "L4",
+          status: "available",
+        },
+      ],
+      manifestations: [{ ...fact, id: "manifestation:test", status: "unresolved" }],
+      skillSocietyFloors: [
+        {
+          skillId: fact.skillId,
+          id: "floor:test",
+          status: "held",
+          explanation: "Floor held for review.",
+          metadata: factMetadata,
+        },
+      ],
+      societyApplicability: [
+        {
+          ...fact,
+          id: "applicability:test",
+          status: "held",
+          supportingLearningGroupIds: [],
+          standaloneRouteIds: [],
+        },
+      ],
+    };
+    mocks.loadAdminSkillReferenceFromServer.mockResolvedValue({
+      candidate: { ...candidate, referenceMetadata: scopedMetadata },
+      canonical: null,
+    });
+    render(<SkillReferenceContent />);
+    await openMedicine(user);
+    const context = screen.getByRole("region", { name: "Learning & historical context" });
+    expect(within(context).getByText("Approved capability")).toBeVisible();
+    expect(within(context).queryByText("Healing")).toBeNull();
+    expect(context).not.toHaveTextContent("forager_ritual_tribal");
+    expect(context).toHaveTextContent("Forager Ritual Society (Held)");
+    expect(context).toHaveTextContent("Society Level unresolved (Held) — Floor held for review.");
+    const table = within(context).getByRole("table");
+    const firstRow = within(table).getAllByRole("row")[1]!;
     expect(
-      screen.getByText("No Learning Group placement is recorded for this Skill."),
-    ).toBeVisible();
+      within(firstRow)
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Context Dependent", "Unresolved", "Recorded", "Unresolved"]);
+    expect(within(context).queryByText(/All 24 cells/)).toBeNull();
+    await user.click(within(skillList()).getByText("Surgery").closest("a")!);
     expect(
-      screen.getByText("No separate profession references are supplied for this proposal."),
+      screen.getByRole("heading", { name: "Historical availability for Surgery" }),
     ).toBeVisible();
+    expect(screen.queryByText(/Floor held for review/)).toBeNull();
+    const surgeryRow = within(screen.getByRole("table")).getAllByRole("row")[1]!;
+    expect(
+      within(surgeryRow)
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Unresolved", "Unresolved", "Unresolved", "Recorded"]);
   });
 
   it("leads with reader-facing identity, descriptions, and compact rules", async () => {
@@ -361,12 +549,15 @@ describe("Admin Skill Reference page", () => {
 
     const detail = screen.getByRole("heading", { name: "Medicine" }).closest("article")!;
     const orderedContent = [
+      screen.getByRole("heading", { name: "Find a Skill" }),
+      skillList(),
       within(detail).getByRole("heading", { name: "Medicine" }),
       within(detail).getByText("Diagnose and treat without surgery."),
       within(detail).getByText("Medicine covers structured diagnosis and non-operative treatment."),
       within(detail).getByRole("heading", { name: "Rules at a glance" }),
       within(detail).getByRole("heading", { name: "Typical uses and boundaries" }),
       within(detail).getByRole("heading", { name: "Relationships" }),
+      within(detail).getByRole("heading", { name: "Learning & historical context" }),
     ];
     for (let index = 1; index < orderedContent.length; index += 1) {
       expect(
@@ -475,11 +666,24 @@ describe("Admin Skill Reference page", () => {
 
     await user.clear(screen.getByRole("textbox", { name: "Search Skills" }));
     await user.type(screen.getByRole("textbox", { name: "Search Skills" }), "Sacred Mogrebi");
-    expect(await screen.findByRole("heading", { name: /Written Mogrebi/i })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: /Written Mogrebi/i, level: 2 }),
+    ).toBeVisible();
     expect(
       screen.getByRole("heading", { name: "Relationships" }).closest("section"),
     ).toHaveTextContent("Spoken and written competence remain separate");
     expect(screen.getByText(/Mogrebi \(not included\)/)).toBeVisible();
+  });
+
+  it("focuses the selected detail when keyboard activation follows search auto-selection", async () => {
+    const user = userEvent.setup();
+    render(<SkillReferenceContent />);
+    await openMedicine(user);
+    await user.type(screen.getByRole("textbox", { name: "Search Skills" }), "Surgery");
+    const link = within(skillList()).getByText("Surgery").closest("a")!;
+    link.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("heading", { name: "Surgery" })).toHaveFocus();
   });
 
   it("presents Specialization cost, ownership, parent, and zero-transfer rules", async () => {

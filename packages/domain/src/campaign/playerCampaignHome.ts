@@ -21,6 +21,7 @@ export function buildPlayerAccessibleScenario(scenario: Scenario): PlayerAccessi
     description: scenario.description,
     id: scenario.id,
     name: scenario.name,
+    status: scenario.status,
   };
 }
 

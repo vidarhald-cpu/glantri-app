@@ -121,14 +121,17 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
       { characterId: recipientCharacterId, controlledByUserId: recipientMe.user.id },
     );
     const now = new Date().toISOString();
-    const encounterId = `acov4-item-encounter-${suffix}`;
-    await postJson(gmPage.request, `/scenarios/${scenarioId}/encounters`, {
+    const requestedEncounterId = `acov4-item-encounter-${suffix}`;
+    const createdEncounter = await postJson<{
+      encounter: { id: string; updatedAt: string };
+    }>(gmPage.request, `/scenarios/${scenarioId}/encounters`, {
       session: {
         campaignId,
         createdAt: now,
         currentRound: 1,
-        id: encounterId,
+        id: requestedEncounterId,
         kind: "combat",
+        participantMembershipMode: "explicit",
         participants: [
           {
             characterId,
@@ -151,6 +154,20 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
         updatedAt: now,
       },
     });
+    const encounterId = createdEncounter.encounter.id;
+    const refreshedEncounter = (await (
+      await gmPage.request.get(`${API_URL}/encounters/${encounterId}`)
+    ).json()) as { encounter: { updatedAt: string } };
+    const startEncounterResponse = await gmPage.request.patch(
+      `${API_URL}/encounters/${encounterId}/status`,
+      {
+        data: {
+          expectedRevision: refreshedEncounter.encounter.updatedAt,
+          status: "active",
+        },
+      },
+    );
+    expect(startEncounterResponse.ok(), await startEncounterResponse.text()).toBe(true);
 
     const itemName = `ACoV4 Silver Dagger ${suffix}`;
     const itemState = await postJson<{
@@ -165,12 +182,18 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
       (candidate) => candidate.displayName === itemName,
     );
     expect(item).toBeTruthy();
+    await postJson(
+      gmPage.request,
+      `/scenarios/${scenarioId}/participants/${sourceParticipant.participant.id}/reconcile-character-equipment`,
+      {},
+    );
 
     const initialOptionsResponse = await playerContext.request.get(
       `${API_URL}/encounters/${encounterId}/combat-round/item-interactions/options`,
     );
-    expect(initialOptionsResponse.ok()).toBe(true);
-    const initialOptions = (await initialOptionsResponse.json()) as {
+    const initialOptionsText = await initialOptionsResponse.text();
+    expect(initialOptionsResponse.ok(), initialOptionsText).toBe(true);
+    const initialOptions = JSON.parse(initialOptionsText) as {
       options: {
         actors: Array<{ label: string; participantId: string }>;
         recipients: Array<{ label: string; participantId: string }>;

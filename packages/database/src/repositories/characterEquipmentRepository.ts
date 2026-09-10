@@ -216,10 +216,20 @@ export interface CharacterEquipmentRepository {
   ): Promise<CanonicalEquipmentItem>;
   acquireUnheldCampaignEquipmentItem?(input: {
     campaignId: string;
+    evidence?: EquipmentTransitionEvidence;
+    expectedTargetRevision?: number;
     itemId: string;
     targetCharacterId: string;
     targetStorageAssignment: ItemStorageAssignment;
   }): Promise<CanonicalEquipmentItem>;
+  releaseHeldCampaignEquipmentItem?(input: {
+    campaignId: string;
+    evidence?: EquipmentTransitionEvidence;
+    expectedSourceRevision?: number;
+    itemId: string;
+    sourceCharacterId: string;
+  }): Promise<CanonicalEquipmentItem>;
+  recordEquipmentTransition?(input: EquipmentTransitionEventInput): Promise<void>;
   applyCombatItemInteraction(
     input: ApplyCombatItemInteractionInput,
   ): Promise<ApplyCombatItemInteractionResult>;
@@ -317,12 +327,32 @@ export class CombatItemRevisionError extends Error {
 
 export interface TransferCampaignEquipmentItemInput {
   campaignId: string;
+  evidence?: EquipmentTransitionEvidence;
   itemId: string;
   sourceCharacterId: string;
   sourceExpectedRevision?: number;
   targetCharacterId: string;
   targetExpectedRevision?: number;
   targetStorageAssignment: ItemStorageAssignment;
+}
+
+export interface EquipmentTransitionEvidence {
+  actorAuthority: "campaign_gm" | "character_controller" | "combat_controller";
+  actorUserId: string;
+  commandId?: string;
+  encounterId?: string;
+  scenarioId?: string;
+}
+
+export interface EquipmentTransitionEventInput extends EquipmentTransitionEvidence {
+  after?: Record<string, unknown>;
+  before?: Record<string, unknown>;
+  campaignId?: string;
+  characterId?: string;
+  eventType: string;
+  itemId: string;
+  sourceCharacterId?: string;
+  targetCharacterId?: string;
 }
 
 export class StaleEquipmentTransferError extends Error {
@@ -451,6 +481,25 @@ export function createPrismaCharacterEquipmentRepository(
         }
         throw error;
       }
+    },
+    async recordEquipmentTransition(input) {
+      await prisma.equipmentTransitionEvent.create({
+        data: {
+          actorAuthority: input.actorAuthority,
+          actorUserId: input.actorUserId,
+          afterJson: input.after ? (input.after as Prisma.InputJsonValue) : Prisma.JsonNull,
+          beforeJson: input.before ? (input.before as Prisma.InputJsonValue) : Prisma.JsonNull,
+          campaignId: input.campaignId ?? null,
+          characterId: input.characterId ?? null,
+          commandId: input.commandId ?? null,
+          encounterId: input.encounterId ?? null,
+          eventType: input.eventType,
+          itemId: input.itemId,
+          scenarioId: input.scenarioId ?? null,
+          sourceCharacterId: input.sourceCharacterId ?? null,
+          targetCharacterId: input.targetCharacterId ?? null,
+        },
+      });
     },
     async createCharacterStorageLocation(location) {
       const created = await prisma.characterStorageLocation.create({
@@ -763,6 +812,35 @@ export function createPrismaCharacterEquipmentRepository(
           throw new StaleCharacterEquipmentAggregateError();
         }
 
+        if (input.evidence) {
+          await transaction.equipmentTransitionEvent.create({
+            data: {
+              actorAuthority: input.evidence.actorAuthority,
+              actorUserId: input.evidence.actorUserId,
+              afterJson: {
+                holderCharacterId: input.targetCharacterId,
+                sourceAggregateRevision:
+                  (revisionByCharacterId.get(input.sourceCharacterId) ?? 0) + 1,
+                targetAggregateRevision:
+                  (revisionByCharacterId.get(input.targetCharacterId) ?? 0) + 1,
+              },
+              beforeJson: {
+                holderCharacterId: input.sourceCharacterId,
+                sourceAggregateRevision: revisionByCharacterId.get(input.sourceCharacterId),
+                targetAggregateRevision: revisionByCharacterId.get(input.targetCharacterId),
+              },
+              campaignId: input.campaignId,
+              commandId: input.evidence.commandId ?? null,
+              encounterId: input.evidence.encounterId ?? null,
+              eventType: "character_transfer",
+              itemId: input.itemId,
+              scenarioId: input.evidence.scenarioId ?? null,
+              sourceCharacterId: input.sourceCharacterId,
+              targetCharacterId: input.targetCharacterId,
+            },
+          });
+        }
+
         return mapCanonicalEquipmentItem(updated);
       };
       try {
@@ -785,9 +863,17 @@ export function createPrismaCharacterEquipmentRepository(
           update: {},
           where: { characterId: input.targetCharacterId },
         });
-        await transaction.$queryRaw(
-          Prisma.sql`SELECT "characterId" FROM "CharacterEquipmentAggregate" WHERE "characterId" = ${input.targetCharacterId} FOR UPDATE`,
+        const aggregates = await transaction.$queryRaw<Array<{ revision: number }>>(
+          Prisma.sql`SELECT "revision" FROM "CharacterEquipmentAggregate" WHERE "characterId" = ${input.targetCharacterId} FOR UPDATE`,
         );
+        const aggregateRevision = aggregates[0]?.revision;
+        if (
+          aggregateRevision === undefined ||
+          (input.expectedTargetRevision !== undefined &&
+            aggregateRevision !== input.expectedTargetRevision)
+        ) {
+          throw new StaleCharacterEquipmentAggregateError();
+        }
         await transaction.$queryRaw(
           Prisma.sql`SELECT "id" FROM "CharacterEquipmentItem" WHERE "id" = ${input.itemId} FOR UPDATE`,
         );
@@ -850,13 +936,164 @@ export function createPrismaCharacterEquipmentRepository(
           data: { revision: { increment: 1 } },
           where: { characterId: input.targetCharacterId },
         });
+        if (input.evidence) {
+          await transaction.equipmentTransitionEvent.create({
+            data: {
+              actorAuthority: input.evidence.actorAuthority,
+              actorUserId: input.evidence.actorUserId,
+              afterJson: {
+                aggregateRevision: aggregateRevision + 1,
+                holderCharacterId: input.targetCharacterId,
+                quantity: updated.quantity,
+              },
+              beforeJson: {
+                aggregateRevision,
+                holderCharacterId: null,
+                quantity: current.quantity,
+              },
+              campaignId: input.campaignId,
+              characterId: input.targetCharacterId,
+              commandId: input.evidence.commandId ?? null,
+              encounterId: input.evidence.encounterId ?? null,
+              eventType: input.evidence.scenarioId ? "scenario_pickup" : "assignment",
+              itemId: input.itemId,
+              scenarioId: input.evidence.scenarioId ?? null,
+              targetCharacterId: input.targetCharacterId,
+            },
+          });
+        }
         return mapCanonicalEquipmentItem(updated);
       };
-      return transactionClient
-        ? acquire(transactionClient)
-        : prisma.$transaction(acquire, {
-            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      try {
+        return transactionClient
+          ? await acquire(transactionClient)
+          : await prisma.$transaction(acquire, {
+              isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+          throw new StaleCharacterEquipmentAggregateError();
+        }
+        throw error;
+      }
+    },
+    async releaseHeldCampaignEquipmentItem(input) {
+      const release = async (transaction: Prisma.TransactionClient) => {
+        await transaction.characterEquipmentAggregate.upsert({
+          create: { characterId: input.sourceCharacterId },
+          update: {},
+          where: { characterId: input.sourceCharacterId },
+        });
+        const aggregates = await transaction.$queryRaw<Array<{ revision: number }>>(
+          Prisma.sql`SELECT "revision" FROM "CharacterEquipmentAggregate" WHERE "characterId" = ${input.sourceCharacterId} FOR UPDATE`,
+        );
+        const aggregateRevision = aggregates[0]?.revision;
+        if (
+          aggregateRevision === undefined ||
+          (input.expectedSourceRevision !== undefined &&
+            aggregateRevision !== input.expectedSourceRevision)
+        ) {
+          throw new StaleCharacterEquipmentAggregateError();
+        }
+        await transaction.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "CharacterEquipmentItem" WHERE "id" = ${input.itemId} FOR UPDATE`,
+        );
+        const current = await transaction.characterEquipmentItem.findUnique({
+          where: { id: input.itemId },
+        });
+        if (
+          !current ||
+          current.campaignContextId !== input.campaignId ||
+          current.holderCharacterId !== input.sourceCharacterId
+        ) {
+          throw new StaleEquipmentTransferError();
+        }
+
+        const sourceLoadouts = await transaction.characterLoadout.findMany({
+          where: { characterId: input.sourceCharacterId },
+        });
+        for (const loadout of sourceLoadouts) {
+          const quickAccessItemIds = parseStringArrayOrNull(loadout.quickAccessItemIdsJson) ?? [];
+          await transaction.characterLoadout.update({
+            data: {
+              activeAmmoItemIds: loadout.activeAmmoItemIds.filter((id) => id !== input.itemId),
+              activeMissileWeaponItemId:
+                loadout.activeMissileWeaponItemId === input.itemId
+                  ? null
+                  : loadout.activeMissileWeaponItemId,
+              activePrimaryWeaponItemId:
+                loadout.activePrimaryWeaponItemId === input.itemId
+                  ? null
+                  : loadout.activePrimaryWeaponItemId,
+              activeSecondaryWeaponItemId:
+                loadout.activeSecondaryWeaponItemId === input.itemId
+                  ? null
+                  : loadout.activeSecondaryWeaponItemId,
+              quickAccessItemIdsJson: quickAccessItemIds.filter((id) => id !== input.itemId),
+              readyShieldItemId:
+                loadout.readyShieldItemId === input.itemId ? null : loadout.readyShieldItemId,
+              wornArmorItemId:
+                loadout.wornArmorItemId === input.itemId ? null : loadout.wornArmorItemId,
+            },
+            where: { id: loadout.id },
           });
+        }
+
+        const updated = await transaction.characterEquipmentItem.update({
+          data: {
+            carryMode: null,
+            holderCharacterId: null,
+            isEquipped: false,
+            locationId: null,
+            previousCarryMode: null,
+            previousLocationId: null,
+          },
+          where: { id: input.itemId },
+        });
+        await transaction.characterEquipmentAggregate.update({
+          data: { revision: { increment: 1 } },
+          where: { characterId: input.sourceCharacterId },
+        });
+        if (input.evidence) {
+          await transaction.equipmentTransitionEvent.create({
+            data: {
+              actorAuthority: input.evidence.actorAuthority,
+              actorUserId: input.evidence.actorUserId,
+              afterJson: {
+                aggregateRevision: aggregateRevision + 1,
+                holderCharacterId: null,
+                quantity: updated.quantity,
+              },
+              beforeJson: {
+                aggregateRevision,
+                holderCharacterId: input.sourceCharacterId,
+                quantity: current.quantity,
+              },
+              campaignId: input.campaignId,
+              characterId: input.sourceCharacterId,
+              commandId: input.evidence.commandId ?? null,
+              encounterId: input.evidence.encounterId ?? null,
+              eventType: "unassignment",
+              itemId: input.itemId,
+              scenarioId: input.evidence.scenarioId ?? null,
+              sourceCharacterId: input.sourceCharacterId,
+            },
+          });
+        }
+        return mapCanonicalEquipmentItem(updated);
+      };
+      try {
+        return transactionClient
+          ? await release(transactionClient)
+          : await prisma.$transaction(release, {
+              isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+          throw new StaleCharacterEquipmentAggregateError();
+        }
+        throw error;
+      }
     },
     async getCombatItemInteractionRecords(campaignId) {
       const items = await prisma.characterEquipmentItem.findMany({

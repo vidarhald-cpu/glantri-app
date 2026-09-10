@@ -29,12 +29,19 @@ import {
   type BlackboardSafeHistory,
 } from "@/lib/api/blackboardClient";
 
+import { ArtifactInspectionViewport } from "./ArtifactInspectionViewport";
 import styles from "./BlackboardWorkspace.module.css";
+import { buildFocusedBlackboardHref } from "./blackboardInspectionRoute";
 
 interface BlackboardWorkspaceProps {
+  artifactInspection?: boolean;
   campaignId: string;
   isGameMaster: boolean;
+  onExitArtifact?: () => void;
+  onExitFocused?: () => void;
+  onInspectArtifact?: (entryId: string) => void;
   onRouteChange?: (route: BlackboardRouteState) => void;
+  presentation?: "embedded" | "focused";
   routeCategory?: string | null;
   routeEntryId?: string | null;
   routePinned?: string | null;
@@ -186,9 +193,14 @@ function buildCreateContent(draft: EntryDraft) {
 }
 
 export function BlackboardWorkspace({
+  artifactInspection = false,
   campaignId,
   isGameMaster,
+  onExitArtifact,
+  onExitFocused,
+  onInspectArtifact,
   onRouteChange,
+  presentation = "embedded",
   routeCategory: routeCategoryValue,
   routeEntryId,
   routePinned: routePinnedValue,
@@ -413,7 +425,19 @@ export function BlackboardWorkspace({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [artifactRetry, campaignId, selectedEntry]);
+  }, [artifactInspection, artifactRetry, campaignId, selectedEntry]);
+
+  useEffect(() => {
+    if (presentation !== "focused") return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      if (artifactInspection) onExitArtifact?.();
+      else onExitFocused?.();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [artifactInspection, onExitArtifact, onExitFocused, presentation]);
 
   function selectEntry(entryId: string, returnFocus?: HTMLElement | null) {
     detailReturnFocusRef.current = returnFocus ?? null;
@@ -737,16 +761,75 @@ export function BlackboardWorkspace({
     );
   }
 
+  if (presentation === "focused" && artifactInspection) {
+    const inspectableEntry =
+      selectedEntry?.category === "image_map" && selectedEntry.content ? selectedEntry : undefined;
+    return (
+      <section className={styles.artifactInspectionShell}>
+        <header className={styles.inspectionHeader}>
+          <button onClick={onExitArtifact} type="button">
+            Back to Blackboard
+          </button>
+          <div>
+            <span className={styles.category}>Artifact</span>
+            <h1>{inspectableEntry?.title ?? "Artifact unavailable"}</h1>
+          </div>
+        </header>
+        {inspectableEntry && artifactView.status === "ready" ? (
+          <ArtifactInspectionViewport
+            alt={inspectableEntry.artifact.altText}
+            src={artifactView.objectUrl}
+          />
+        ) : inspectableEntry && artifactView.status === "loading" ? (
+          <div className={styles.notice} role="status">
+            Loading the Artifact…
+          </div>
+        ) : inspectableEntry && artifactView.status === "operational_unavailable" ? (
+          <div className={styles.error} role="status">
+            <strong>The Artifact could not be loaded right now.</strong>
+            <p>The Blackboard reference remains available. Try loading the Artifact again.</p>
+            <button onClick={() => setArtifactRetry((current) => current + 1)} type="button">
+              Retry Artifact
+            </button>
+          </div>
+        ) : (
+          <div className={styles.notice} role="status">
+            This Artifact was removed or is not available in this Campaign.
+          </div>
+        )}
+      </section>
+    );
+  }
+
   return (
-    <section className={styles.workspace}>
+    <section className={styles.workspace} data-presentation={presentation}>
       <header className={styles.intro}>
         <div>
           <h2>Blackboard</h2>
           <p>Shared clues, documents, maps, images, and approved recaps for this Campaign.</p>
         </div>
-        <button onClick={beginCreate} ref={createTriggerRef} type="button">
-          Share a reference
-        </button>
+        <div className={styles.actionRow}>
+          {presentation === "focused" ? (
+            <button onClick={onExitFocused} type="button">
+              Back to Campaign
+            </button>
+          ) : (
+            <>
+              <a
+                className={styles.linkButton}
+                href={buildFocusedBlackboardHref(campaignId, {
+                  ...appliedSearch,
+                  entryId: selectedId,
+                })}
+              >
+                Open focused Blackboard
+              </a>
+              <button onClick={beginCreate} ref={createTriggerRef} type="button">
+                Share a reference
+              </button>
+            </>
+          )}
+        </div>
       </header>
 
       {error ? (
@@ -803,43 +886,45 @@ export function BlackboardWorkspace({
                   {entry ? entrySummary(entry).slice(0, 120) : "The shared content was removed."}
                 </span>
               </button>
-              <div aria-label="Arrange pinned reference" className={styles.moveRow}>
-                <button
-                  aria-label="Move left"
-                  disabled={busy}
-                  onClick={() => move(placement, placement.x - 40, placement.y)}
-                  type="button"
-                >
-                  ←
-                </button>
-                <button
-                  aria-label="Move up"
-                  disabled={busy}
-                  onClick={() => move(placement, placement.x, placement.y - 40)}
-                  type="button"
-                >
-                  ↑
-                </button>
-                <button
-                  aria-label="Move down"
-                  disabled={busy}
-                  onClick={() => move(placement, placement.x, placement.y + 40)}
-                  type="button"
-                >
-                  ↓
-                </button>
-                <button
-                  aria-label="Move right"
-                  disabled={busy}
-                  onClick={() => move(placement, placement.x + 40, placement.y)}
-                  type="button"
-                >
-                  →
-                </button>
-                <button disabled={busy} onClick={() => unpin(placement)} type="button">
-                  Unpin
-                </button>
-              </div>
+              {presentation === "embedded" ? (
+                <div aria-label="Arrange pinned reference" className={styles.moveRow}>
+                  <button
+                    aria-label="Move left"
+                    disabled={busy}
+                    onClick={() => move(placement, placement.x - 40, placement.y)}
+                    type="button"
+                  >
+                    ←
+                  </button>
+                  <button
+                    aria-label="Move up"
+                    disabled={busy}
+                    onClick={() => move(placement, placement.x, placement.y - 40)}
+                    type="button"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    aria-label="Move down"
+                    disabled={busy}
+                    onClick={() => move(placement, placement.x, placement.y + 40)}
+                    type="button"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    aria-label="Move right"
+                    disabled={busy}
+                    onClick={() => move(placement, placement.x + 40, placement.y)}
+                    type="button"
+                  >
+                    →
+                  </button>
+                  <button disabled={busy} onClick={() => unpin(placement)} type="button">
+                    Unpin
+                  </button>
+                </div>
+              ) : null}
             </article>
           ))
         )}
@@ -1236,30 +1321,39 @@ export function BlackboardWorkspace({
                 {selectedEntry.updatedByLabel} on {displayDate(selectedEntry.updatedAt)}
               </div>
               <div className={styles.actionRow}>
-                {selectedPlacement ? (
-                  <button disabled={busy} onClick={() => unpin(selectedPlacement)} type="button">
-                    Unpin from board
+                {presentation === "focused" &&
+                selectedEntry.category === "image_map" &&
+                selectedEntry.content ? (
+                  <button onClick={() => onInspectArtifact?.(selectedEntry.id)} type="button">
+                    Inspect Artifact
                   </button>
-                ) : (
-                  <button disabled={busy} onClick={pinSelected} type="button">
-                    Pin to board
-                  </button>
-                )}
+                ) : null}
+                {presentation === "embedded" ? (
+                  selectedPlacement ? (
+                    <button disabled={busy} onClick={() => unpin(selectedPlacement)} type="button">
+                      Unpin from board
+                    </button>
+                  ) : (
+                    <button disabled={busy} onClick={pinSelected} type="button">
+                      Pin to board
+                    </button>
+                  )
+                ) : null}
                 <button disabled={historyLoading} onClick={() => void showHistory()} type="button">
                   {historyLoading ? "Loading history…" : "History"}
                 </button>
-                {selectedCapability?.canCorrect ? (
+                {presentation === "embedded" && selectedCapability?.canCorrect ? (
                   <button onClick={beginCorrection} ref={correctTriggerRef} type="button">
                     Correct this entry
                   </button>
                 ) : null}
-                {selectedCapability?.canRemove ? (
+                {presentation === "embedded" && selectedCapability?.canRemove ? (
                   <button onClick={() => setConfirmRetract(true)} type="button">
                     Remove this entry
                   </button>
                 ) : null}
               </div>
-              {!isGameMaster && selectedCapability?.canCorrect ? (
+              {presentation === "embedded" && !isGameMaster && selectedCapability?.canCorrect ? (
                 <p className={styles.muted}>
                   You can correct or remove this entry because you posted it.
                 </p>

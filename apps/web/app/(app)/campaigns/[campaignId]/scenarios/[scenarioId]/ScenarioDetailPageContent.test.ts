@@ -38,11 +38,11 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
 
     expect(source).toContain("refreshScenarioParticipantEquipmentOnServer");
     expect(source).toContain("handleRefreshParticipantEquipment");
-    expect(source).toContain("Reconcile equipment");
-    expect(source).toContain("Reconciling…");
+    expect(source).toContain("Update Scenario equipment");
+    expect(source).toContain("Updating…");
     expect(source).toContain('participant.sourceType === "character"');
     expect(source).toContain("await refreshScenario()");
-    expect(source).toContain("Scenario equipment was reconciled");
+    expect(source).toContain("Scenario equipment was updated");
   });
 
   it("uses compact roster sources instead of a separate concrete participant section", () => {
@@ -209,5 +209,19 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(eventLogIndex).toBeGreaterThan(templatesIndex);
     expect(readComponentSource("ScenarioEventLogSection.tsx")).not.toContain(">Select</th>");
     expect(readComponentSource("ScenarioEventLogSection.tsx")).not.toContain(">Status</th>");
+  });
+
+  it("returns terminal Scenarios as read-only history before rendering live management", () => {
+    const source = readScenarioDetailSource();
+    const terminalStart = source.indexOf('scenario.status === "completed"');
+    const liveStart = source.indexOf("const selectedTemplateSource", terminalStart);
+    const terminalSource = source.slice(terminalStart, liveStart);
+
+    expect(terminalSource).toContain("Read-only Scenario history");
+    expect(terminalSource).toContain("<ScenarioSessionPanel");
+    expect(terminalSource).not.toContain("<ScenarioSessionManagement");
+    expect(terminalSource).not.toContain("<ScenarioEncountersSection");
+    expect(terminalSource).not.toContain("<ScenarioEncounterAssignmentSection");
+    expect(terminalSource).not.toContain("<button");
   });
 });

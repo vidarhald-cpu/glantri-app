@@ -215,6 +215,7 @@ export class ScenarioService {
   }
 
   async updateScenarioSessionState(input: {
+    actorUserId?: string;
     availableObjects: ScenarioAvailableObjectReference[];
     expectedRevision: string;
     gmPrivateNotes: string;
@@ -276,6 +277,7 @@ export class ScenarioService {
     });
     try {
       return await this.repository.updateScenarioSessionState({
+        actorUserId: input.actorUserId,
         expectedRevision: input.expectedRevision,
         scenarioId: input.scenarioId,
         session,
@@ -402,6 +404,7 @@ export class ScenarioService {
 
     try {
       return await this.repository.pickUpScenarioAvailableItem({
+        actorAuthority: input.viewerMode === "gm" ? "campaign_gm" : "character_controller",
         actorUserId: input.actorUserId,
         audienceParticipantIds: [participant.id],
         availabilityId: input.availabilityId,

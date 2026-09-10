@@ -227,6 +227,97 @@ if (!process.env.DATABASE_URL_TEST) {
       ).resolves.toBe(true);
     });
 
+    it("discovers entitled closed and archived Scenario history without exposing drafts", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const player = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, player.id, { name: "Ari" });
+      const repository = createPrismaScenarioRepository(prisma!);
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const equipmentService = new CharacterEquipmentReadModelService(
+        createPrismaCharacterEquipmentRepository(prisma!),
+      );
+      const campaignService = new CampaignService(repository, characterService);
+      const service = new ScenarioService(repository, characterService, equipmentService);
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "History Campaign",
+        status: "active",
+      });
+      await campaignService.addCampaignRosterEntry({
+        campaignId: campaign.id,
+        category: "pc",
+        sourceId: character.id,
+        sourceType: "character",
+      });
+
+      async function createControlledScenario(name: string) {
+        const created = await service.createScenario({
+          campaignId: campaign.id,
+          name,
+          status: "live",
+        });
+        await service.addCharacterParticipant({
+          characterId: character.id,
+          controlledByUserId: player.id,
+          joinSource: "gm_added",
+          scenarioId: created.id,
+        });
+        return created;
+      }
+
+      const draft = await service.createScenario({
+        campaignId: campaign.id,
+        name: "Draft",
+        status: "draft",
+      });
+      const live = await createControlledScenario("Live");
+      const pausedSource = await createControlledScenario("Paused");
+      const paused = await service.updateScenario({
+        expectedRevision: pausedSource.updatedAt,
+        scenarioId: pausedSource.id,
+        status: "paused",
+      });
+      const completedSource = await createControlledScenario("Closed");
+      const completedPaused = await service.updateScenario({
+        expectedRevision: completedSource.updatedAt,
+        scenarioId: completedSource.id,
+        status: "paused",
+      });
+      const completed = await service.updateScenario({
+        expectedRevision: completedPaused.updatedAt,
+        scenarioId: completedPaused.id,
+        status: "completed",
+      });
+      const archivedSource = await createControlledScenario("Archived");
+      const archivedPaused = await service.updateScenario({
+        expectedRevision: archivedSource.updatedAt,
+        scenarioId: archivedSource.id,
+        status: "paused",
+      });
+      const archivedCompleted = await service.updateScenario({
+        expectedRevision: archivedPaused.updatedAt,
+        scenarioId: archivedPaused.id,
+        status: "completed",
+      });
+      const archived = await service.updateScenario({
+        expectedRevision: archivedCompleted.updatedAt,
+        scenarioId: archivedCompleted.id,
+        status: "archived",
+      });
+
+      const accessibleScenarios = await service.listScenariosByCampaignPlayerControl(
+        campaign.id,
+        player.id,
+      );
+      expect(new Set(accessibleScenarios.map((scenario) => scenario.id))).toEqual(
+        new Set([live.id, paused.id, completed.id, archived.id]),
+      );
+      expect(accessibleScenarios.map((scenario) => scenario.id)).not.toContain(draft.id);
+      await expect(campaignService.listCampaignsByPlayerAccess(player.id)).resolves.toEqual([
+        expect.objectContaining({ id: campaign.id }),
+      ]);
+    });
+
     it("atomically picks up a canonical Item once and preserves availability on stale failure", async () => {
       const gm = await createTestUser(prisma!, { roles: ["game_master"] });
       const sourceOwner = await createTestUser(prisma!);
@@ -286,6 +377,7 @@ if (!process.env.DATABASE_URL_TEST) {
         });
       const seal = await createSeal("Lost Seal");
       const prepared = await service.updateScenarioSessionState({
+        actorUserId: gm.id,
         availableObjects: [
           {
             addedAt: "2026-08-22T10:00:00.000Z",
@@ -298,6 +390,19 @@ if (!process.env.DATABASE_URL_TEST) {
         expectedRevision: scenario.updatedAt,
         gmPrivateNotes: "The steward is nervous.",
         scenarioId: scenario.id,
+      });
+      expect(
+        (await service.listScenarioEventLogs(scenario.id)).find(
+          (event) => event.eventType === "item_availability_changed",
+        ),
+      ).toMatchObject({
+        actorUserId: gm.id,
+        payload: expect.objectContaining({
+          availabilityAfter: true,
+          availabilityBefore: false,
+          campaignId: campaign.id,
+          itemId: seal.id,
+        }),
       });
       const pickedUp = await service.pickUpScenarioAvailableItem({
         actorUserId: targetOwner.id,

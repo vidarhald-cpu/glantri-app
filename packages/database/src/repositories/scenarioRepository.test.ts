@@ -24,7 +24,7 @@ vi.mock("../client", () => ({
 import { createPrismaScenarioRepository } from "./scenarioRepository";
 
 describe("scenarioRepository player scenario access queries", () => {
-  it("only treats campaigns with live controlled scenarios as player-accessible", async () => {
+  it("treats non-draft controlled Scenario history as player-accessible", async () => {
     mocks.prisma.campaign.findMany.mockResolvedValue([]);
     const repository = createPrismaScenarioRepository();
 
@@ -35,14 +35,14 @@ describe("scenarioRepository player scenario access queries", () => {
       where: {
         scenarios: {
           some: expect.objectContaining({
-            status: "live",
+            status: { in: ["live", "paused", "completed", "archived"] },
           }),
         },
       },
     });
   });
 
-  it("only lists live scenarios for player campaign workspace access", async () => {
+  it("lists non-draft scenarios for player Campaign workspace access", async () => {
     mocks.prisma.scenario.findMany.mockResolvedValue([]);
     const repository = createPrismaScenarioRepository();
 
@@ -52,7 +52,7 @@ describe("scenarioRepository player scenario access queries", () => {
       orderBy: { createdAt: "desc" },
       where: expect.objectContaining({
         campaignId: "campaign-1",
-        status: "live",
+        status: { in: ["live", "paused", "completed", "archived"] },
       }),
     });
   });
@@ -80,7 +80,7 @@ describe("scenarioRepository player scenario access queries", () => {
             role: "player_character",
           },
         },
-        status: "live",
+        status: { in: ["live", "paused", "completed", "archived"] },
       },
     });
   });

@@ -61,17 +61,61 @@ test.describe("B2 campaign item authoring and reveal", () => {
   }) => {
     const { b2CampaignId, characterId } = loadTestState();
     const itemName = `B2 Silverston sword ${b2CampaignId}`;
+    const assignmentItemName = `B2 assignment dagger ${b2CampaignId}`;
     const hiddenTrait = `B2 hidden Silverston engraving ${b2CampaignId}`;
     await page.goto(`/campaigns/${b2CampaignId}?tab=items`);
     await expect(page.getByRole("heading", { name: "Campaign items" })).toBeVisible();
 
     await page.getByRole("button", { name: "Create item" }).click();
     await page.getByLabel("Template").selectOption("weapon-template-dagger");
+    await page.getByLabel("Item name (optional)").fill(assignmentItemName);
     await page.getByRole("button", { name: "Create item" }).click();
     await expect(page.getByRole("status")).toHaveText("Item created.");
     await expect(page.getByText("Unassigned / in campaign", { exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByText("Unassigned / in campaign", { exact: true })).toBeVisible();
+
+    const beforeAssignmentPayload = await (
+      await page.request.get(`${API_URL}/campaigns/${b2CampaignId}/items`)
+    ).json();
+    const assignmentItem = Object.values(beforeAssignmentPayload.state.itemsById).find(
+      (item) => (item as { displayName?: string }).displayName === assignmentItemName,
+    ) as { id: string } | undefined;
+    expect(assignmentItem?.id).toBeTruthy();
+
+    await page.setViewportSize({ height: 844, width: 390 });
+    let assignmentCard = page.locator("article").filter({ hasText: assignmentItemName });
+    await assignmentCard.getByRole("button", { name: "Assign item" }).click();
+    await expect(page.getByRole("heading", { name: `Assign ${assignmentItemName}` })).toBeVisible();
+    await page.getByLabel("Receiving Character").selectOption(characterId);
+    await page.getByRole("button", { name: "Assign item" }).click();
+    await expect(page.getByRole("status")).toContainText(`${assignmentItemName} assigned`);
+    assignmentCard = page.locator("article").filter({ hasText: assignmentItemName });
+    await expect(assignmentCard.getByText("Held by Smoke Character")).toBeVisible();
+    const assignedPayload = await (
+      await page.request.get(`${API_URL}/campaigns/${b2CampaignId}/items`)
+    ).json();
+    expect(assignedPayload.state.itemsById[assignmentItem!.id]).toMatchObject({
+      holderCharacterId: characterId,
+      id: assignmentItem!.id,
+    });
+
+    await assignmentCard.getByRole("button", { name: "Return to campaign" }).click();
+    await page.getByRole("button", { name: "Return to campaign" }).click();
+    await expect(page.getByRole("status")).toContainText(`${assignmentItemName} returned`);
+    await page.reload();
+    assignmentCard = page.locator("article").filter({ hasText: assignmentItemName });
+    await expect(
+      assignmentCard.getByText("Unassigned / in campaign", { exact: true }),
+    ).toBeVisible();
+    const unassignedPayload = await (
+      await page.request.get(`${API_URL}/campaigns/${b2CampaignId}/items`)
+    ).json();
+    expect(unassignedPayload.state.itemsById[assignmentItem!.id]).toMatchObject({
+      holderCharacterId: null,
+      id: assignmentItem!.id,
+    });
+    await page.setViewportSize({ height: 900, width: 1280 });
 
     await page.getByRole("button", { name: "Create item" }).click();
     await page.getByLabel("Template").selectOption("weapon-template-rapier");

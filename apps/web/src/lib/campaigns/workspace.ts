@@ -1,9 +1,10 @@
-import type {
-  EncounterSession,
-  EncounterSessionSummary,
-  PlayerAccessibleScenario,
-  Scenario,
-  ScenarioParticipant,
+import {
+  isUserEntitledToTerminalEncounterHistory,
+  type EncounterSession,
+  type EncounterSessionSummary,
+  type PlayerAccessibleScenario,
+  type Scenario,
+  type ScenarioParticipant,
 } from "@glantri/domain";
 
 import { isUserAssignedToEffectiveEncounter } from "./encounterParticipantFallback";
@@ -204,6 +205,14 @@ function isSelectableWorkspaceEncounter(encounter: WorkspaceEncounterSummary): b
   return encounter.status !== "archived" && encounter.status !== "completed";
 }
 
+function isTerminalScenario(scenario: Scenario | PlayerAccessibleScenario): boolean {
+  return scenario.status === "completed" || scenario.status === "archived";
+}
+
+function isHistoricalWorkspaceTab(tab?: string | null): boolean {
+  return tab === "scenario" || tab === "encounter" || tab === "player-encounter";
+}
+
 function isPlayerAssignedToEncounter(input: {
   encounter: WorkspaceEncounterSummary;
   scenarioParticipants: ScenarioParticipant[];
@@ -215,6 +224,19 @@ function isPlayerAssignedToEncounter(input: {
 
   if (!("participants" in input.encounter)) {
     return false;
+  }
+
+  if (input.encounter.status === "completed" || input.encounter.status === "archived") {
+    return isUserEntitledToTerminalEncounterHistory({
+      encounter: {
+        participantMembershipMode: input.encounter.participantMembershipMode,
+        participants: input.encounter.participants,
+        scenarioId: input.encounter.scenarioId,
+        status: input.encounter.status,
+      },
+      scenarioParticipants: input.scenarioParticipants,
+      userId: input.userId,
+    });
   }
 
   return isUserAssignedToEffectiveEncounter({
@@ -230,14 +252,13 @@ function resolvePlayerEncounterSelection(input: {
   requestedEncounterId?: string | null;
   scenarioParticipants: ScenarioParticipant[];
   userId?: string | null;
+  allowTerminalRequested?: boolean;
   requireActive?: boolean;
 }): WorkspaceEncounterSummary | undefined {
-  const candidateEncounters = input.encounters
+  const assignedEncounters = input.encounters
     .filter(
       (encounter) => !input.activeScenarioId || encounter.scenarioId === input.activeScenarioId,
     )
-    .filter(isSelectableWorkspaceEncounter)
-    .filter((encounter) => !input.requireActive || encounter.status === "active")
     .filter((encounter) =>
       isPlayerAssignedToEncounter({
         encounter,
@@ -247,14 +268,21 @@ function resolvePlayerEncounterSelection(input: {
     );
 
   if (input.requestedEncounterId) {
-    const requestedEncounter = candidateEncounters.find(
-      (encounter) => encounter.id === input.requestedEncounterId,
+    const requestedEncounter = assignedEncounters.find(
+      (encounter) =>
+        encounter.id === input.requestedEncounterId &&
+        (isSelectableWorkspaceEncounter(encounter) || input.allowTerminalRequested) &&
+        (!input.requireActive || encounter.status === "active"),
     );
 
     if (requestedEncounter) {
       return requestedEncounter;
     }
   }
+
+  const candidateEncounters = assignedEncounters
+    .filter(isSelectableWorkspaceEncounter)
+    .filter((encounter) => !input.requireActive || encounter.status === "active");
 
   return [...candidateEncounters].sort(
     (left, right) =>
@@ -302,15 +330,27 @@ export function resolveCampaignWorkspaceState(input: {
   const requestedScenarioId = input.requestedScenarioId ?? input.rememberedScenarioId;
   const requestedEncounterId = input.requestedEncounterId ?? input.rememberedEncounterId;
   const requestedTab = input.requestedTab ?? input.rememberedTab;
-  let activeScenarioId = input.scenarios.some((scenario) => scenario.id === requestedScenarioId)
-    ? (requestedScenarioId ?? undefined)
-    : undefined;
+  const selectableScenarios = input.scenarios.filter((scenario) => !isTerminalScenario(scenario));
+  const requestedScenario = input.scenarios.find((scenario) => scenario.id === requestedScenarioId);
+  const terminalScenarioExplicitlyRequested = Boolean(
+    input.requestedScenarioId &&
+    requestedScenario?.id === input.requestedScenarioId &&
+    isHistoricalWorkspaceTab(input.requestedTab),
+  );
+  const terminalEncounterExplicitlyRequested = Boolean(
+    input.requestedEncounterId && isHistoricalWorkspaceTab(input.requestedTab),
+  );
+  let activeScenarioId =
+    requestedScenario &&
+    (!isTerminalScenario(requestedScenario) || terminalScenarioExplicitlyRequested)
+      ? requestedScenario.id
+      : undefined;
   let activeEncounterId = input.encounters.some(
     (encounter) =>
       Boolean(activeScenarioId) &&
       encounter.id === requestedEncounterId &&
       encounter.scenarioId === activeScenarioId &&
-      isSelectableWorkspaceEncounter(encounter),
+      (isSelectableWorkspaceEncounter(encounter) || terminalEncounterExplicitlyRequested),
   )
     ? (requestedEncounterId ?? undefined)
     : undefined;
@@ -325,9 +365,9 @@ export function resolveCampaignWorkspaceState(input: {
         requestedTab === "encounter" ||
         requestedTab === "skill-rolls" ||
         requestedTab === "player-skill-rolls") &&
-      input.scenarios.length === 1
+      selectableScenarios.length === 1
     ) {
-      activeScenarioId = input.scenarios[0]?.id;
+      activeScenarioId = selectableScenarios[0]?.id;
     }
 
     if (
@@ -337,9 +377,9 @@ export function resolveCampaignWorkspaceState(input: {
         requestedTab === "skill-rolls" ||
         requestedTab === "player-skill-rolls" ||
         requestedTab === "player-combat") &&
-      input.scenarios.length === 1
+      selectableScenarios.length === 1
     ) {
-      activeScenarioId = input.scenarios[0]?.id;
+      activeScenarioId = selectableScenarios[0]?.id;
     }
 
     if (
@@ -356,6 +396,7 @@ export function resolveCampaignWorkspaceState(input: {
         requestedEncounterId,
         scenarioParticipants: input.scenarioParticipants ?? [],
         userId: input.currentUserId,
+        allowTerminalRequested: terminalEncounterExplicitlyRequested,
         requireActive: requestedTab === "combat" || requestedTab === "player-combat",
       });
 
@@ -367,8 +408,8 @@ export function resolveCampaignWorkspaceState(input: {
       }
     }
   } else if (requestedTab === "combat" || requestedTab === "player-combat") {
-    if (!activeScenarioId && input.scenarios.length === 1) {
-      activeScenarioId = input.scenarios[0]?.id;
+    if (!activeScenarioId && selectableScenarios.length === 1) {
+      activeScenarioId = selectableScenarios[0]?.id;
     }
 
     const explicitlyRequestedEncounter = input.requestedEncounterId

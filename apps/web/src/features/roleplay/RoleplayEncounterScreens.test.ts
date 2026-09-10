@@ -145,6 +145,18 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("resolveEncounterParticipantByRollParticipantId");
   });
 
+  it("renders terminal player Encounters as history before assignment and roll controls", () => {
+    const playerSource = readPlayerScreenSource();
+    const historyIndex = playerSource.indexOf("<CompletedEncounterHistory");
+    const assignmentGateIndex = playerSource.indexOf(
+      "playerView.controlledParticipantIds.length === 0",
+    );
+
+    expect(historyIndex).toBeGreaterThan(-1);
+    expect(assignmentGateIndex).toBeGreaterThan(historyIndex);
+    expect(playerSource.slice(historyIndex, assignmentGateIndex)).toContain('viewerMode="player"');
+  });
+
   it("supports GM operation of the player-facing Skill rolls screen for selected participants", () => {
     const playerSource = readPlayerScreenSource();
 

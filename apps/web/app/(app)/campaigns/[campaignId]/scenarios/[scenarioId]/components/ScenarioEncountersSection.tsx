@@ -127,6 +127,11 @@ export function ScenarioEncountersSection({
                         {encounter.description}
                       </div>
                     ) : null}
+                    {encounter.status === "completed" && encounter.playerOutcome ? (
+                      <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                        Outcome: {encounter.playerOutcome}
+                      </div>
+                    ) : null}
                   </td>
                   <td style={{ padding: "0.6rem 0.75rem" }}>
                     {encounter.kind === "roleplay" ? "Roleplaying emphasis" : "Combat emphasis"}
@@ -154,16 +159,18 @@ export function ScenarioEncountersSection({
                       >
                         Encounter
                       </Link>
-                      <Link
-                        href={buildCampaignWorkspaceHref({
-                          campaignId,
-                          encounterId: encounter.id,
-                          scenarioId,
-                          tab: "skill-rolls",
-                        })}
-                      >
-                        Skill rolls
-                      </Link>
+                      {encounter.status !== "completed" && encounter.status !== "archived" ? (
+                        <Link
+                          href={buildCampaignWorkspaceHref({
+                            campaignId,
+                            encounterId: encounter.id,
+                            scenarioId,
+                            tab: "skill-rolls",
+                          })}
+                        >
+                          Skill rolls
+                        </Link>
+                      ) : null}
                       {encounter.status === "active" ? (
                         <Link
                           href={buildCampaignWorkspaceHref({

@@ -4422,6 +4422,7 @@ describe("scenarios route contract", () => {
               description: "Hold the bridge.",
               id: "scenario-live",
               name: "Live Scene",
+              status: "live",
             },
           ],
         },
@@ -4513,6 +4514,7 @@ describe("scenarios route contract", () => {
                 description: "Hold the bridge.",
                 id: "scenario-1",
                 name: "The Bridge",
+                status: "live",
               },
             },
           ],
@@ -6122,6 +6124,115 @@ describe("scenarios route contract", () => {
     );
   });
 
+  it.each(["completed", "archived"] as const)(
+    "reopens an entitled %s Encounter through player-safe direct and summary reads",
+    async (status) => {
+      const encounter = encounterSessionSchema.parse(
+        makeCombatEncounter({
+          description: "The party secured the eastern gate.",
+          gmPrivateClosingNote: "The rival escaped unseen.",
+          playerOutcome: "The gate is safe for now.",
+          status,
+        }),
+      );
+      const participant = makeCombatScenarioParticipant({
+        controlledByUserId: "player-1",
+        id: "participant-1",
+      });
+      mocks.scenarioService.getScenarioById.mockResolvedValue({
+        campaignId: "campaign-1",
+        id: "scenario-1",
+        status,
+      });
+      mocks.campaignService.getCampaignById.mockResolvedValue({
+        gmUserId: "gm-1",
+        id: "campaign-1",
+      });
+      mocks.scenarioService.listScenarioParticipants.mockResolvedValue([participant]);
+      mocks.encounterService.getEncounterById.mockResolvedValue(encounter);
+      mocks.encounterService.listEncountersByScenario.mockResolvedValue([encounter]);
+      const app = await buildScenarioTestApp();
+
+      const directResponse = await app.inject({
+        method: "GET",
+        url: "/encounters/encounter-1",
+      });
+      const summaryResponse = await app.inject({
+        method: "GET",
+        url: "/scenarios/scenario-1/encounter-summaries",
+      });
+
+      await app.close();
+
+      expect(directResponse.statusCode, directResponse.body).toBe(200);
+      expect(directResponse.json().encounter).toEqual(
+        expect.objectContaining({
+          id: "encounter-1",
+          playerOutcome: "The gate is safe for now.",
+          status,
+        }),
+      );
+      expect(directResponse.body).not.toContain("The rival escaped unseen.");
+      expect(directResponse.body).not.toContain("gmPrivateClosingNote");
+      expect(summaryResponse.statusCode, summaryResponse.body).toBe(200);
+      expect(summaryResponse.json().encounters).toEqual([
+        expect.objectContaining({
+          id: "encounter-1",
+          status,
+          viewerAssigned: true,
+        }),
+      ]);
+      expect(summaryResponse.body).not.toContain("participants");
+    },
+  );
+
+  it("fails an archived Encounter direct link closed when the player is not assigned", async () => {
+    const encounter = encounterSessionSchema.parse(
+      makeCombatEncounter({
+        gmPrivateClosingNote: "Protected note.",
+        participants: [
+          {
+            id: "encounter-other-player",
+            label: "Other player",
+            participantType: "scenario",
+            scenarioParticipantId: "participant-other",
+          },
+        ],
+        playerOutcome: "Protected outcome.",
+        status: "archived",
+      }),
+    );
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      status: "archived",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      makeCombatScenarioParticipant({
+        controlledByUserId: "player-1",
+        id: "participant-1",
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "player-2",
+        id: "participant-other",
+      }),
+    ]);
+    mocks.encounterService.getEncounterById.mockResolvedValue(encounter);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({ method: "GET", url: "/encounters/encounter-1" });
+
+    await app.close();
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Encounter not found." });
+    expect(response.body).not.toContain("Protected note");
+    expect(response.body).not.toContain("Protected outcome");
+  });
+
   it("keeps hidden participants equivalent to nonexistent participants before and after close and reconnect", async () => {
     const encounterA = encounterSessionSchema.parse({
       createdAt: "2026-08-22T10:00:00.000Z",
@@ -6215,7 +6326,7 @@ describe("scenarios route contract", () => {
       "participant-a": {
         canReconcile: false,
         message:
-          "Equipment changed outside this Scenario. Reconcile it before dependent play continues.",
+          "The Character’s current equipment changed since this Scenario was prepared. Update it before play continues.",
         status: "stale",
       },
     });
