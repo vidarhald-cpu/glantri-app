@@ -277,6 +277,149 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(holderItems.find((item) => item.id === assigned.id)?.id).toBe(assigned.id);
     });
 
+    it("assigns and unassigns one existing Item with atomic revisions and bounded evidence", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const holder = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, holder.id);
+      const campaign = await createTestCampaign(prisma!, gm.id);
+      await prisma!.campaignRosterEntry.create({
+        data: {
+          campaignId: campaign.id,
+          category: "pc",
+          createdByUserId: gm.id,
+          sourceId: character.id,
+          sourceType: "character",
+        },
+      });
+      const repo = createPrismaCharacterEquipmentRepository(prisma!);
+      const service = new CharacterEquipmentWriteService(repo);
+      await service.ensureCharacterEquipmentInitialized(character.id);
+      const item = await service.createCampaignEquipmentItem({
+        campaignId: campaign.id,
+        holderCharacterId: null,
+        itemFacts: {
+          activeMechanics: [],
+          descriptiveTraits: [],
+          templateOverrides: [],
+          unsupportedCapabilities: [],
+          version: 1,
+        },
+        templateId: "weapon-template-dagger",
+      });
+      const beforeAssignment = await repo.getCharacterEquipmentAggregateState(character.id);
+
+      const assigned = await service.assignCampaignEquipmentItem({
+        campaignId: campaign.id,
+        evidence: { actorAuthority: "campaign_gm", actorUserId: gm.id },
+        itemId: item.id,
+        targetCharacterId: character.id,
+        targetExpectedRevision: beforeAssignment.revision,
+      });
+      expect(assigned).toMatchObject({ holderCharacterId: character.id, id: item.id });
+      const afterAssignment = await repo.getCharacterEquipmentAggregateState(character.id);
+      expect(afterAssignment.revision).toBe(beforeAssignment.revision + 1);
+
+      const unassigned = await service.unassignCampaignEquipmentItem({
+        campaignId: campaign.id,
+        evidence: { actorAuthority: "campaign_gm", actorUserId: gm.id },
+        itemId: item.id,
+        sourceCharacterId: character.id,
+        sourceExpectedRevision: afterAssignment.revision,
+      });
+      expect(unassigned).toMatchObject({ holderCharacterId: null, id: item.id });
+      expect((await repo.getCharacterEquipmentAggregateState(character.id)).revision).toBe(
+        afterAssignment.revision + 1,
+      );
+
+      const events = await prisma!.equipmentTransitionEvent.findMany({
+        orderBy: { sequence: "asc" },
+        where: { itemId: item.id },
+      });
+      expect(events).toEqual([
+        expect.objectContaining({
+          actorAuthority: "campaign_gm",
+          actorUserId: gm.id,
+          campaignId: campaign.id,
+          eventType: "assignment",
+          itemId: item.id,
+          targetCharacterId: character.id,
+        }),
+        expect.objectContaining({
+          actorAuthority: "campaign_gm",
+          actorUserId: gm.id,
+          campaignId: campaign.id,
+          eventType: "unassignment",
+          itemId: item.id,
+          sourceCharacterId: character.id,
+        }),
+      ]);
+      expect(events[0]?.beforeJson).toMatchObject({ holderCharacterId: null });
+      expect(events[0]?.afterJson).toMatchObject({ holderCharacterId: character.id });
+      expect(events[1]?.beforeJson).toMatchObject({ holderCharacterId: character.id });
+      expect(events[1]?.afterJson).toMatchObject({ holderCharacterId: null });
+    });
+
+    it("accepts only one concurrent assignment and never duplicates the Item", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const first = await createTestCharacter(prisma!, (await createTestUser(prisma!)).id);
+      const second = await createTestCharacter(prisma!, (await createTestUser(prisma!)).id);
+      const campaign = await createTestCampaign(prisma!, gm.id);
+      await prisma!.campaignRosterEntry.createMany({
+        data: [first, second].map((character) => ({
+          campaignId: campaign.id,
+          category: "pc" as const,
+          createdByUserId: gm.id,
+          sourceId: character.id,
+          sourceType: "character" as const,
+        })),
+      });
+      const repo = createPrismaCharacterEquipmentRepository(prisma!);
+      const service = new CharacterEquipmentWriteService(repo);
+      await service.ensureCharacterEquipmentInitialized(first.id);
+      await service.ensureCharacterEquipmentInitialized(second.id);
+      const item = await service.createCampaignEquipmentItem({
+        campaignId: campaign.id,
+        holderCharacterId: null,
+        itemFacts: {
+          activeMechanics: [],
+          descriptiveTraits: [],
+          templateOverrides: [],
+          unsupportedCapabilities: [],
+          version: 1,
+        },
+        templateId: "weapon-template-dagger",
+      });
+      const firstRevision = (await repo.getCharacterEquipmentAggregateState(first.id)).revision;
+      const secondRevision = (await repo.getCharacterEquipmentAggregateState(second.id)).revision;
+      const attempts = await Promise.allSettled([
+        service.assignCampaignEquipmentItem({
+          campaignId: campaign.id,
+          evidence: { actorAuthority: "campaign_gm", actorUserId: gm.id },
+          itemId: item.id,
+          targetCharacterId: first.id,
+          targetExpectedRevision: firstRevision,
+        }),
+        service.assignCampaignEquipmentItem({
+          campaignId: campaign.id,
+          evidence: { actorAuthority: "campaign_gm", actorUserId: gm.id },
+          itemId: item.id,
+          targetCharacterId: second.id,
+          targetExpectedRevision: secondRevision,
+        }),
+      ]);
+
+      expect(attempts.filter((attempt) => attempt.status === "fulfilled")).toHaveLength(1);
+      expect(attempts.filter((attempt) => attempt.status === "rejected")).toHaveLength(1);
+      const reloaded = await repo.getCanonicalEquipmentItemById(item.id);
+      expect([first.id, second.id]).toContain(reloaded?.holderCharacterId);
+      expect(await prisma!.characterEquipmentItem.count({ where: { id: item.id } })).toBe(1);
+      expect(
+        await prisma!.equipmentTransitionEvent.count({
+          where: { eventType: "assignment", itemId: item.id },
+        }),
+      ).toBe(1);
+    });
+
     it("keeps GM-authored campaign items canonical across rejected legacy writes", async () => {
       const gm = await createTestUser(prisma!, { roles: ["game_master"] });
       const holder = await createTestUser(prisma!);
@@ -415,6 +558,7 @@ if (!process.env.DATABASE_URL_TEST) {
 
       const transferred = await service.transferCampaignEquipmentItem({
         campaignId: campaign.id,
+        evidence: { actorAuthority: "campaign_gm", actorUserId: gm.id },
         itemId: item.id,
         sourceCharacterId: source.id,
         targetCharacterId: target.id,
@@ -453,6 +597,17 @@ if (!process.env.DATABASE_URL_TEST) {
         quickAccessItemIds: [],
         readyShieldItemId: null,
         wornArmorItemId: null,
+      });
+      expect(
+        await prisma!.equipmentTransitionEvent.findFirst({
+          where: { eventType: "character_transfer", itemId: item.id },
+        }),
+      ).toMatchObject({
+        actorAuthority: "campaign_gm",
+        actorUserId: gm.id,
+        campaignId: campaign.id,
+        sourceCharacterId: source.id,
+        targetCharacterId: target.id,
       });
       await expect(
         repo.upsertCharacterLoadout({
@@ -650,6 +805,46 @@ if (!process.env.DATABASE_URL_TEST) {
       );
     });
 
+    it("retains actor and before/after evidence for a revision-safe quantity change", async () => {
+      const user = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, user.id);
+      const repo = createPrismaCharacterEquipmentRepository(prisma!);
+      const service = new CharacterEquipmentWriteService(repo);
+      const initialized = await service.ensureCharacterEquipmentInitialized(character.id);
+      const initialState = await repo.getCharacterEquipmentAggregateState(character.id);
+      const location = initialized.locations.find(
+        (candidate) => candidate.type === "person_system",
+      )!;
+      const item = await service.addCharacterEquipmentItem(
+        character.id,
+        {
+          initialCarryMode: "on_person",
+          initialLocationId: location.id,
+          quantity: 1,
+          templateId: "valuable-template-gold-coins",
+        },
+        initialState.revision,
+      );
+      const before = await repo.getCharacterEquipmentAggregateState(character.id);
+      await service.updateCharacterEquipmentQuantity(character.id, item.id, 3, before.revision, {
+        actorAuthority: "character_controller",
+        actorUserId: user.id,
+      });
+
+      expect(await repo.getCanonicalEquipmentItemById(item.id)).toMatchObject({ quantity: 3 });
+      expect(
+        await prisma!.equipmentTransitionEvent.findFirst({
+          where: { eventType: "quantity_changed", itemId: item.id },
+        }),
+      ).toMatchObject({
+        actorAuthority: "character_controller",
+        actorUserId: user.id,
+        afterJson: { aggregateRevision: before.revision + 1, quantity: 3 },
+        beforeJson: { aggregateRevision: before.revision, quantity: 1 },
+        characterId: character.id,
+      });
+    });
+
     it("persists compatible active ammunition with its active missile loadout", async () => {
       const user = await createTestUser(prisma!);
       const character = await createTestCharacter(prisma!, user.id);
@@ -685,7 +880,10 @@ if (!process.env.DATABASE_URL_TEST) {
       aggregate = await repo.getCharacterEquipmentAggregateState(character.id);
       await service.setCharacterActiveWeapon(character.id, "missile", bow.id, aggregate.revision);
       aggregate = await repo.getCharacterEquipmentAggregateState(character.id);
-      await service.setCharacterActiveAmmunition(character.id, [arrows.id], aggregate.revision);
+      await service.setCharacterActiveAmmunition(character.id, [arrows.id], aggregate.revision, {
+        actorAuthority: "character_controller",
+        actorUserId: user.id,
+      });
 
       const reloaded = await repo.getCharacterEquipmentAggregateState(character.id);
       expect(reloaded.loadouts.find((loadout) => loadout.isActive)).toMatchObject({
@@ -693,6 +891,15 @@ if (!process.env.DATABASE_URL_TEST) {
         activeMissileWeaponItemId: bow.id,
       });
       expect(reloaded.revision).toBe(aggregate.revision + 1);
+      expect(
+        await prisma!.equipmentTransitionEvent.findFirst({
+          where: { eventType: "active_ammunition_changed", itemId: arrows.id },
+        }),
+      ).toMatchObject({
+        actorAuthority: "character_controller",
+        actorUserId: user.id,
+        characterId: character.id,
+      });
     });
 
     it("draws and stows one canonical Campaign Item with revision-safe repository writes", async () => {

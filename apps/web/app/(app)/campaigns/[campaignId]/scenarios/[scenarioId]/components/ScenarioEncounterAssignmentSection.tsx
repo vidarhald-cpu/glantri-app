@@ -374,8 +374,8 @@ export function ScenarioEncounterAssignmentSection({
                                     type="button"
                                   >
                                     {refreshingEquipmentParticipantId === participant.id
-                                      ? "Reconciling…"
-                                      : "Reconcile equipment"}
+                                      ? "Updating…"
+                                      : "Update Scenario equipment"}
                                   </button>
                                 ) : null}
                               </div>

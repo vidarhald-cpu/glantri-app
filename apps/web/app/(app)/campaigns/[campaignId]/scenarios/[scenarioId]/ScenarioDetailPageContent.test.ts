@@ -38,11 +38,11 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
 
     expect(source).toContain("refreshScenarioParticipantEquipmentOnServer");
     expect(source).toContain("handleRefreshParticipantEquipment");
-    expect(source).toContain("Reconcile equipment");
-    expect(source).toContain("Reconciling…");
+    expect(source).toContain("Update Scenario equipment");
+    expect(source).toContain("Updating…");
     expect(source).toContain('participant.sourceType === "character"');
     expect(source).toContain("await refreshScenario()");
-    expect(source).toContain("Scenario equipment was reconciled");
+    expect(source).toContain("Scenario equipment was updated");
   });
 
   it("uses compact roster sources instead of a separate concrete participant section", () => {

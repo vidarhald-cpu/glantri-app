@@ -377,6 +377,7 @@ if (!process.env.DATABASE_URL_TEST) {
         });
       const seal = await createSeal("Lost Seal");
       const prepared = await service.updateScenarioSessionState({
+        actorUserId: gm.id,
         availableObjects: [
           {
             addedAt: "2026-08-22T10:00:00.000Z",
@@ -389,6 +390,19 @@ if (!process.env.DATABASE_URL_TEST) {
         expectedRevision: scenario.updatedAt,
         gmPrivateNotes: "The steward is nervous.",
         scenarioId: scenario.id,
+      });
+      expect(
+        (await service.listScenarioEventLogs(scenario.id)).find(
+          (event) => event.eventType === "item_availability_changed",
+        ),
+      ).toMatchObject({
+        actorUserId: gm.id,
+        payload: expect.objectContaining({
+          availabilityAfter: true,
+          availabilityBefore: false,
+          campaignId: campaign.id,
+          itemId: seal.id,
+        }),
       });
       const pickedUp = await service.pickUpScenarioAvailableItem({
         actorUserId: targetOwner.id,

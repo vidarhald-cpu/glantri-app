@@ -69,6 +69,7 @@ describe("campaign item transfer route", () => {
     expect(response.statusCode).toBe(200);
     expect(routeServices.writeService.transferCampaignEquipmentItem).toHaveBeenCalledWith({
       campaignId: "campaign-1",
+      evidence: { actorAuthority: "campaign_gm", actorUserId: "gm-1" },
       itemId: "item-1",
       sourceExpectedRevision: 0,
       sourceCharacterId: "character-1",
@@ -102,6 +103,31 @@ describe("campaign item transfer route", () => {
 
     expect(response.statusCode).toBe(403);
     expect(response.body).not.toContain("hidden-item");
+    expect(routeServices.writeService.transferCampaignEquipmentItem).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("does not let an unrelated Admin transfer another Campaign's Item", async () => {
+    auth.requireAdminUser.mockResolvedValue({
+      email: "admin@example.test",
+      id: "admin-1",
+      roles: ["admin"],
+    });
+    const routeServices = services();
+    const app = await appWith(routeServices);
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        campaignId: "campaign-1",
+        expectedRevision: 0,
+        targetCharacterId: "character-2",
+        targetExpectedRevision: 0,
+      },
+      url: "/characters/character-1/equipment/items/private-item/transfer",
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.body).not.toContain("private-item");
     expect(routeServices.writeService.transferCampaignEquipmentItem).not.toHaveBeenCalled();
     await app.close();
   });

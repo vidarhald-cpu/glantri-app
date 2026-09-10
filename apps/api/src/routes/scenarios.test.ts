@@ -6326,7 +6326,7 @@ describe("scenarios route contract", () => {
       "participant-a": {
         canReconcile: false,
         message:
-          "Equipment changed outside this Scenario. Reconcile it before dependent play continues.",
+          "The Character’s current equipment changed since this Scenario was prepared. Update it before play continues.",
         status: "stale",
       },
     });
