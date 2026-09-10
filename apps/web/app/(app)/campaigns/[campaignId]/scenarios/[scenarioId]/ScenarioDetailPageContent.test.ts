@@ -210,4 +210,18 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(readComponentSource("ScenarioEventLogSection.tsx")).not.toContain(">Select</th>");
     expect(readComponentSource("ScenarioEventLogSection.tsx")).not.toContain(">Status</th>");
   });
+
+  it("returns terminal Scenarios as read-only history before rendering live management", () => {
+    const source = readScenarioDetailSource();
+    const terminalStart = source.indexOf('scenario.status === "completed"');
+    const liveStart = source.indexOf("const selectedTemplateSource", terminalStart);
+    const terminalSource = source.slice(terminalStart, liveStart);
+
+    expect(terminalSource).toContain("Read-only Scenario history");
+    expect(terminalSource).toContain("<ScenarioSessionPanel");
+    expect(terminalSource).not.toContain("<ScenarioSessionManagement");
+    expect(terminalSource).not.toContain("<ScenarioEncountersSection");
+    expect(terminalSource).not.toContain("<ScenarioEncounterAssignmentSection");
+    expect(terminalSource).not.toContain("<button");
+  });
 });

@@ -407,6 +407,10 @@ export default function CampaignDetailPageContent({
       ),
     [scenarios],
   );
+  const visibleScenarios = useMemo(
+    () => orderedScenarios.filter((scenario) => scenario.status !== "archived"),
+    [orderedScenarios],
+  );
 
   async function refreshPage() {
     const [nextCampaign, nextScenarios, nextEntities, nextTemplates, nextRoster, nextCharacters] =
@@ -837,7 +841,7 @@ export default function CampaignDetailPageContent({
           value={continuesFromScenarioId}
         >
           <option value="">No previous scenario</option>
-          {orderedScenarios.map((scenario) => (
+          {visibleScenarios.map((scenario) => (
             <option key={scenario.id} value={scenario.id}>
               Continues from {scenario.name}
             </option>
@@ -858,7 +862,7 @@ export default function CampaignDetailPageContent({
             encounters that belong to that session.
           </p>
         ) : null}
-        {scenarios.length > 0 ? (
+        {visibleScenarios.length > 0 ? (
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", minWidth: 680, width: "100%" }}>
               <thead>
@@ -870,7 +874,7 @@ export default function CampaignDetailPageContent({
                 </tr>
               </thead>
               <tbody>
-                {orderedScenarios.map((scenario) => (
+                {visibleScenarios.map((scenario) => (
                   <tr key={scenario.id} style={{ borderBottom: "1px solid #eee8dc" }}>
                     <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
                       <div>
@@ -880,7 +884,11 @@ export default function CampaignDetailPageContent({
                         {scenario.description || "No description yet."}
                       </div>
                     </td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>{scenario.status}</td>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>
+                      {scenario.status === "completed"
+                        ? "Closed · history"
+                        : scenario.status.charAt(0).toUpperCase() + scenario.status.slice(1)}
+                    </td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>
                       {getContinuationLabel(scenario.id)}
                     </td>

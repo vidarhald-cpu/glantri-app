@@ -124,6 +124,8 @@ export default function ScenarioPlayerPageContent({
       </section>
     );
   }
+  const isTerminalScenario =
+    session.scenario.status === "completed" || session.scenario.status === "archived";
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 960 }}>
@@ -133,12 +135,25 @@ export default function ScenarioPlayerPageContent({
           {session.scenario.description || "No Scenario briefing has been written yet."}
         </p>
       </div>
+      {isTerminalScenario ? (
+        <section style={{ ...panelStyle, background: "#fff8df", borderColor: "#d8c57b" }}>
+          <strong>Read-only Scenario history</strong>
+          <div>
+            This Scenario is {session.scenario.status === "archived" ? "archived" : "closed"}.
+            Outcomes and objective history remain available, but pickups, rolls, and live play are
+            unavailable.
+          </div>
+        </section>
+      ) : null}
       {error ? <div role="alert">{error}</div> : null}
       {feedback ? <div role="status">{feedback}</div> : null}
       <ScenarioSessionPanel
         campaignId={campaignId}
-        onPickUp={(availabilityId, targetParticipantId) =>
-          void handlePickUp(availabilityId, targetParticipantId)
+        onPickUp={
+          isTerminalScenario
+            ? undefined
+            : (availabilityId, targetParticipantId) =>
+                void handlePickUp(availabilityId, targetParticipantId)
         }
         session={session}
       />

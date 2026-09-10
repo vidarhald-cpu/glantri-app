@@ -575,7 +575,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
         where: {
           scenarios: {
             some: {
-              status: "live",
+              status: { in: ["live", "paused", "completed", "archived"] },
               participants: {
                 some: {
                   isActive: true,
@@ -631,7 +631,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
         orderBy: { createdAt: "desc" },
         where: {
           campaignId,
-          status: "live",
+          status: { in: ["live", "paused", "completed", "archived"] },
           participants: {
             some: {
               isActive: true,
@@ -656,7 +656,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
         orderBy: { createdAt: "desc" },
         where: {
           campaignId,
-          status: "live",
+          status: { in: ["live", "paused", "completed", "archived"] },
           participants: {
             some: {
               isActive: true,

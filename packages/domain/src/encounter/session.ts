@@ -687,6 +687,37 @@ export function isUserAssignedToEncounterMembership(input: {
       ),
   );
 }
+
+export function isUserEntitledToTerminalEncounterHistory(input: {
+  encounter: EncounterParticipantReadSource;
+  scenarioParticipants: ScenarioParticipant[];
+  userId?: string | null;
+}): boolean {
+  if (
+    !input.userId ||
+    (input.encounter.status !== "completed" && input.encounter.status !== "archived")
+  ) {
+    return false;
+  }
+
+  const relationshipSource =
+    input.encounter.status === "archived"
+      ? { ...input.encounter, status: "completed" as const }
+      : input.encounter;
+
+  return input.scenarioParticipants.some(
+    (participant) =>
+      participant.controlledByUserId === input.userId &&
+      Boolean(
+        resolveEncounterParticipantForViewer({
+          encounter: relationshipSource,
+          requestedParticipantId: participant.id,
+          scenarioParticipants: input.scenarioParticipants,
+          viewer: { kind: "player", userId: input.userId! },
+        }),
+      ),
+  );
+}
 export type EncounterSession = z.infer<typeof encounterSessionSchema>;
 
 export function buildEncounterSessionSummary(

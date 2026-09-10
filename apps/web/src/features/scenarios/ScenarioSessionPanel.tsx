@@ -73,7 +73,10 @@ export function ScenarioSessionPanel({
               <div key={encounter.id} style={cardStyle}>
                 <strong>{encounter.title}</strong>
                 <span>
-                  {encounter.kind === "roleplay" ? "Roleplaying" : "Combat"} · {encounter.status}
+                  {encounter.kind === "roleplay" ? "Roleplaying" : "Combat"} ·{" "}
+                  {encounter.status === "completed"
+                    ? "Closed"
+                    : encounter.status.charAt(0).toUpperCase() + encounter.status.slice(1)}
                 </span>
                 {encounter.outcome ? <span>Outcome: {encounter.outcome}</span> : null}
                 {campaignId ? (

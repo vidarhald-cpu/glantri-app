@@ -63,6 +63,16 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toMatch(/canAccessGmEncounter[\s\S]*?<ArtifactPanel campaignId=\{campaignId\}/);
   });
 
+  it("separates completed Scenario history and omits archives from ordinary selection", () => {
+    const source = readSource();
+
+    expect(source).toContain("const activeScenarios = scenarios.filter");
+    expect(source).toContain("const completedScenarios = scenarios.filter");
+    expect(source).toContain("Completed history");
+    expect(source).toContain('scenario.status !== "completed" && scenario.status !== "archived"');
+    expect(source).toContain('scenario.status === "completed"');
+  });
+
   it("routes the workspace Character tab through the encounter-context panel", () => {
     const source = readSource();
 

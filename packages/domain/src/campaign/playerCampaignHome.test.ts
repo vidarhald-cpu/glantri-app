@@ -155,6 +155,7 @@ describe("player Campaign Home projection", () => {
       description: "The Bridge briefing",
       id: "scenario-1",
       name: "The Bridge",
+      status: "live",
     });
   });
 

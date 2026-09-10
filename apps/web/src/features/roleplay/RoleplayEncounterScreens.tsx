@@ -62,6 +62,7 @@ import {
   getPlayerFacingSkillBucketDefinitions,
 } from "@/lib/chargen/chargenBrowse";
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
+import { CompletedEncounterHistory } from "@/features/encounters/CompletedEncounterHistory";
 
 import { RoleplayRollBlock } from "./components/RoleplayRollBlock";
 import {
@@ -1974,6 +1975,30 @@ export function PlayerRoleplayingEncounterScreen({
   const showEncounterContext = surface !== "skill-rolls";
   const showSkillRollTools = surface !== "encounter";
   const rememberedTab = workspaceTab ?? (surface === "skill-rolls" ? "skill-rolls" : "encounter");
+
+  if (encounter.status === "completed" || encounter.status === "archived") {
+    return (
+      <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
+        <RememberedCampaignWorkspaceEffect
+          campaignId={campaignId}
+          encounterId={encounterId}
+          scenarioId={scenarioId}
+          tab="encounter"
+        />
+        {!embedded ? (
+          <Link href={buildCampaignWorkspaceHref({ campaignId, scenarioId, tab: "scenario" })}>
+            Back to scenario
+          </Link>
+        ) : null}
+        <CompletedEncounterHistory
+          campaignName={campaign?.name}
+          encounter={encounter}
+          scenarioName={scenario?.name}
+          viewerMode="player"
+        />
+      </section>
+    );
+  }
 
   if (currentUser && playerView.controlledParticipantIds.length === 0) {
     return (
