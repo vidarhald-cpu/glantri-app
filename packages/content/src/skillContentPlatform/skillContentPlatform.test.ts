@@ -10,11 +10,40 @@ import {
   buildSkillContentRelease,
   computeSkillContentReleaseIntegrity,
   projectSkillContentReleaseForReference,
+  serializeSkillContentSemantics,
   validateSkillContentRelease,
 } from ".";
-import { pilotSkillContentReleaseProposalInput } from "./pilotSkillContentReleaseProposal";
+import {
+  pilotSkillContentReleaseCandidate4AuthoritativeSourceSha256,
+  pilotSkillContentReleaseCandidate4AuthoredDocumentation,
+  pilotSkillContentReleaseCandidate4ExceptionCompetencyIds,
+  pilotSkillContentReleaseCandidate4ExceptionNotes,
+  pilotSkillContentReleaseCandidate4Input,
+  pilotSkillContentReleaseCandidate4ReviewGaps,
+  pilotSkillContentReleaseProposalInput,
+} from "./pilotSkillContentReleaseProposal";
 
 const repositoryRoot = path.resolve(__dirname, "..", "..", "..", "..");
+const acceptedCandidate2FrozenMechanicsDigest =
+  "sha256:6b496fe950e56cce217e10f0b450fa607586f9bb0fdb2ceee386cdbe44d1cea8";
+const authoritativeCandidate4SourceSha256 =
+  "e9d5e6800dde213bfd3f8cb42e626791863b0144f90ec52bcd76557758f3a10c";
+const authoritativeCandidate4ProseDigest =
+  "sha256:210d06eef713f1d590eadca8e3c973947b1b9ef87c25725fcc0e96725eb1b334";
+
+function frozenMechanicsDigest(release: SkillContentRelease): `sha256:${string}` {
+  const comparable = structuredClone(release);
+  comparable.id = "content-release:pilot-skills:2-candidate-1";
+  for (const competency of comparable.competencies) {
+    competency.taskEnvelope = {
+      coreTasks: ["typical uses"],
+      limits: ["boundaries"],
+      methods: ["reader guidance"],
+      useGuidance: "reader guidance",
+    };
+  }
+  return `sha256:${sha256(serializeSkillContentSemantics(comparable))}`;
+}
 
 function candidate(): SkillContentRelease {
   return buildSkillContentRelease(
@@ -50,9 +79,14 @@ const proposalMetadataSourceByKind: Record<ProposalMetadataRecordKind, readonly 
   ],
   competency: [
     {
-      endMarker: "const authoredCompetencyDocumentationIds",
+      endMarker: "const candidate3ShortDescriptionByCompetencyId",
       path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
-      startMarker: "const authoredTaskEnvelopeByCompetencyId",
+      startMarker: "pilotSkillContentReleaseCandidate4AuthoredDocumentation",
+    },
+    {
+      endMarker: "const candidate3FullDescriptionBoundaryByCompetencyId",
+      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+      startMarker: "const candidate3ShortDescriptionByCompetencyId",
     },
   ],
   domain: [
@@ -108,9 +142,14 @@ const proposalMetadataSourceByKind: Record<ProposalMetadataRecordKind, readonly 
   ],
   specialization: [
     {
-      endMarker: "const authoredCompetencyDocumentationIds",
+      endMarker: "const candidate3ShortDescriptionByCompetencyId",
       path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
-      startMarker: "const authoredTaskEnvelopeByCompetencyId",
+      startMarker: "pilotSkillContentReleaseCandidate4AuthoredDocumentation",
+    },
+    {
+      endMarker: "const candidate3FullDescriptionBoundaryByCompetencyId",
+      path: "packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts",
+      startMarker: "const candidate3ShortDescriptionByCompetencyId",
     },
   ],
 };
@@ -232,62 +271,6 @@ function resolveProvenanceInProposalInput(
   return release;
 }
 
-function normalizeWhitespace(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function normalizeTaskText(
-  releaseRecord: (typeof pilotSkillContentReleaseProposalInput.competencies)[number],
-  text: string,
-): string {
-  return normalizeWhitespace(text)
-    .replace(new RegExp(escapeRegExp(releaseRecord.id), "gi"), "")
-    .replace(new RegExp(escapeRegExp(releaseRecord.description), "gi"), "")
-    .replace(new RegExp(escapeRegExp(releaseRecord.shortDescription), "gi"), "")
-    .replace(new RegExp(escapeRegExp(releaseRecord.shortLabel), "gi"), "")
-    .replace(new RegExp(escapeRegExp(releaseRecord.name), "gi"), "")
-    .replace(
-      /\b(?:skill|spec|written|spoken|hist|rel|access|route|profile|domain|script|language):[a-z0-9-']+/gi,
-      "",
-    )
-    .replace(
-      /\b(?:name|core|specialization|transfer|history|prerequisite|path|scope|limits|methods|guidance)\b/gi,
-      "",
-    )
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
-
-function normalizeAdversarialTaskText(
-  releaseRecord: (typeof pilotSkillContentReleaseProposalInput.competencies)[number],
-  text: string,
-): string {
-  const normalized = normalizeTaskText(releaseRecord, text).toLowerCase();
-  const commonTokens = new Set([
-    ...releaseRecord.description.toLowerCase().split(/\W+/),
-    ...releaseRecord.shortDescription.toLowerCase().split(/\W+/),
-  ]);
-  let scrubbed = normalized;
-  for (const token of commonTokens) {
-    if (token.length <= 4) continue;
-    if (/^[a-z-']+$/.test(token)) {
-      scrubbed = scrubbed.replace(new RegExp(`\\b${escapeRegExp(token)}\\b`, "g"), "");
-    }
-  }
-  const suffixTokens = releaseRecord.id
-    .split(":")
-    .flatMap((segment) => segment.split("-"))
-    .filter((token) => token.length > 3);
-  for (const token of suffixTokens) {
-    scrubbed = scrubbed.replace(new RegExp(`\\b${escapeRegExp(token)}\\b`, "g"), "");
-  }
-  return normalizeWhitespace(scrubbed);
-}
-
 function resolveProvenancePath(reference: string): { path: string; line: number; lines: string[] } {
   const match =
     /^http:\/\/127\.0\.0\.1:3001\/recovery-admin\/glantri-app\/src\/commit\/([0-9a-f]{40})\/(.+?)#L([0-9]+)$/.exec(
@@ -298,10 +281,13 @@ function resolveProvenancePath(reference: string): { path: string; line: number;
   }
   const [, sourceRevision, rawPath, rawLine] = match;
   const absolutePath = path.resolve(repositoryRoot, rawPath);
-  const source = execFileSync("git", ["show", `${sourceRevision}:${rawPath}`], {
-    cwd: repositoryRoot,
-    encoding: "utf8",
-  });
+  const source =
+    sourceRevision === forgejoSourceRevision
+      ? readFileSync(absolutePath, "utf8")
+      : execFileSync("git", ["show", `${sourceRevision}:${rawPath}`], {
+          cwd: repositoryRoot,
+          encoding: "utf8",
+        });
   const lines = source.split(/\r?\n/);
   const line = Number(rawLine);
   if (!Number.isFinite(line) || line <= 0 || line > lines.length) {
@@ -412,6 +398,17 @@ describe("documentation-complete Skill content platform", () => {
   it("builds a deterministic candidate with package and semantic integrity", () => {
     const first = candidate();
     const second = candidate();
+    expect(pilotSkillContentReleaseProposalInput).toBe(pilotSkillContentReleaseCandidate4Input);
+    expect(first).toMatchObject({
+      contentVersion: "pilot-skills-content/2.0.0-candidate.4",
+      id: "content-release:pilot-skills:2-candidate-4",
+      status: "proposal",
+      title: "Player-facing Pilot Skill v2 candidate 4",
+    });
+    expect(first.compatibility).toMatchObject({
+      characterMigrationReviewRequired: false,
+      classification: "presentation-only",
+    });
     expect(first.manifest).toEqual(second.manifest);
     expect(first.manifest.packageDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(first.manifest.semanticDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
@@ -430,8 +427,7 @@ describe("documentation-complete Skill content platform", () => {
     const release = candidate();
     expect(release.provenance).toEqual(
       expect.arrayContaining([
-        "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/25",
-        "http://127.0.0.1:3001/recovery-admin/glantri-app/pulls/64",
+        "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/83",
         "docs/decisions/rules/0002-skill-catalogue-qualitative-architecture.md",
         "docs/decisions/rules/0003-skill-documentation-and-release-integrity.md",
         "docs/rules/pilot-skill-rules-v1.md",
@@ -444,9 +440,259 @@ describe("documentation-complete Skill content platform", () => {
         "docs/rules/pilot-skill-rules-v1.md",
       ]),
     );
-    expect(release.compatibility.classification).toBe("mechanically-compatible");
+    expect(release.compatibility.classification).toBe("presentation-only");
     expect(
       release.provenance.some((entry) => entry.startsWith("docs/process/recovery-legacy/")),
+    ).toBe(false);
+  });
+
+  it("transcribes all 50 Candidate 4 authored entries exactly from the verified source", () => {
+    const release = candidate();
+    const authoredEntries = Object.entries(pilotSkillContentReleaseCandidate4AuthoredDocumentation);
+    const authoredProjection = authoredEntries.map(
+      ([id, { boundaries, description, shortDescription, typicalUses }]) => ({
+        id,
+        shortDescription,
+        description,
+        typicalUses,
+        boundaries,
+      }),
+    );
+
+    expect(pilotSkillContentReleaseCandidate4AuthoritativeSourceSha256).toBe(
+      authoritativeCandidate4SourceSha256,
+    );
+    expect(authoredEntries).toHaveLength(50);
+    expect(`sha256:${sha256(JSON.stringify(authoredProjection))}`).toBe(
+      authoritativeCandidate4ProseDigest,
+    );
+    for (const [id, authored] of authoredEntries) {
+      expect(competencyById(release, id), id).toMatchObject({
+        description: authored.description,
+        shortDescription: authored.shortDescription,
+        taskEnvelope: {
+          coreTasks: authored.typicalUses,
+          limits: authored.boundaries,
+        },
+      });
+    }
+  });
+
+  it("keeps Candidate 4 authored copy concrete, concise, and campaign-agnostic", () => {
+    const release = candidate();
+    const settingLeakage =
+      /\b(?:Glantri(?:an)?|Mogreb(?:i)?|Olog(?:ian)?|Phoenician|N['’]?kol(?:o|ian)?|Scythian|Iest|Lankhmar|Neseret|Hanno|Vorodin|temple|chancery|fosterage|clan|campaign|teacher|background)\b|Copper Latch|household retainer|named contact/i;
+    const proseOnlyMechanics =
+      /\b(?:AB[1-4]|DS[1-6]|skill weights?|ranks?|threshold|prerequisites?|transfer|availability|access band|development stage|XP)\b|%/i;
+
+    const invalidShortDescriptions = release.competencies
+      .filter((record) => {
+        const sentenceEndings = record.shortDescription.match(/[.!?](?=\s|$)/g) ?? [];
+        return (
+          sentenceEndings.length !== 1 ||
+          !/[.!?]$/.test(record.shortDescription) ||
+          record.shortDescription.split(/\s+/).length > 22
+        );
+      })
+      .map(({ id }) => id);
+    expect(invalidShortDescriptions).toEqual([]);
+
+    const invalidFullDescriptions = release.competencies
+      .filter((record) => {
+        const wordCount = record.description.split(/\s+/).length;
+        return wordCount < 25 || wordCount > 90;
+      })
+      .map(({ id }) => id);
+    expect(invalidFullDescriptions).toEqual([]);
+
+    const settingLeaks = release.competencies
+      .filter(
+        ({ description, shortDescription }) =>
+          settingLeakage.test(description) || settingLeakage.test(shortDescription),
+      )
+      .map(({ id }) => id);
+    expect(settingLeaks).toEqual([]);
+
+    const hiddenMechanics = release.competencies
+      .filter(
+        ({ description, shortDescription }) =>
+          proseOnlyMechanics.test(description) || proseOnlyMechanics.test(shortDescription),
+      )
+      .map(({ id }) => id);
+    expect(hiddenMechanics).toEqual([]);
+  });
+
+  it("gives every non-Common language record specific copy without generic placeholders", () => {
+    const release = candidate();
+    const repairedLanguageIds = [
+      "spoken:mogrebi",
+      "spoken:ologian",
+      "spoken:phoenician",
+      "spoken:nkolian",
+      "spoken:scythian",
+      "written:mogrebi:sacred-mogrebi",
+      "written:ologian:church-ologian",
+      "written:phoenician:phoenician",
+    ];
+    const repairedLanguageRecords = repairedLanguageIds.map((id) => competencyById(release, id));
+
+    expect(repairedLanguageRecords).not.toContain(undefined);
+    expect(repairedLanguageRecords.map((record) => record?.shortDescription)).toEqual([
+      "Follow everyday speech and take part in conversation with clear questions, answers, and explanations.",
+      "Sustain spoken dialogue, convey precise meaning, and clarify unfamiliar words or expressions.",
+      "Understand spoken instructions and accounts, then respond or explain ideas in a coherent sequence.",
+      "Join discussions, express intent and nuance, and adapt speech to the listener and situation.",
+      "Understand questions and descriptions, give coherent spoken accounts, and resolve misunderstandings in conversation.",
+      "Read extended passages and compose accurate text in the associated language and script tradition.",
+      "Interpret written statements and compose clear, orderly text for a particular purpose and reader.",
+      "Read, transcribe, and compose text using consistent script, spelling, grammar, and layout.",
+    ]);
+
+    const shortDescriptions = repairedLanguageRecords.map(
+      (record) => record?.shortDescription ?? "",
+    );
+    const fullDescriptionOpenings = repairedLanguageRecords.map(
+      (record) => record?.description.split(".")[0] ?? "",
+    );
+    expect(new Set(shortDescriptions).size).toBe(repairedLanguageIds.length);
+    expect(new Set(fullDescriptionOpenings).size).toBe(repairedLanguageIds.length);
+    expect(
+      repairedLanguageRecords.every(
+        (record) =>
+          record !== undefined &&
+          !/\b(?:the\s+)?named language\b/i.test(
+            `${record.shortDescription} ${record.description}`,
+          ),
+      ),
+    ).toBe(true);
+  });
+
+  it("preserves all frozen mechanics while changing only authorized task-guidance prose", () => {
+    const release = candidate();
+    expect(release.competencies).toHaveLength(61);
+    expect(frozenMechanicsDigest(release)).toBe(acceptedCandidate2FrozenMechanicsDigest);
+
+    const baselineCompetencies = [...pilotSkillContentReleaseV1.competencies]
+      .map(({ domainId, id, kind, name, weight }) => ({ domainId, id, kind, name, weight }))
+      .sort((left, right) => left.id.localeCompare(right.id));
+    const candidateCompetencies = release.competencies
+      .filter(({ kind }) => kind !== "specialization")
+      .map(({ domainId, id, kind, name, weight }) => ({ domainId, id, kind, name, weight }))
+      .sort((left, right) => left.id.localeCompare(right.id));
+    expect(candidateCompetencies).toEqual(baselineCompetencies);
+
+    const combatIds = pilotSkillContentReleaseV1.competencies
+      .filter(({ domainId }) => domainId === "domain:weapon-practice")
+      .map(({ id }) => id)
+      .sort();
+    expect(combatIds).toEqual([
+      "skill:dodge",
+      "skill:knife-dagger",
+      "skill:shield",
+      "skill:spear",
+      "skill:sword",
+    ]);
+    expect(
+      release.competencies
+        .filter(
+          ({ domainId, kind }) =>
+            domainId === "domain:weapon-practice" && kind !== "specialization",
+        )
+        .map(({ id }) => id)
+        .sort(),
+    ).toEqual(combatIds);
+
+    expect(
+      release.relationships.map(
+        ({ direction, id, sourceCompetencyId, strength, targetCompetencyId }) => ({
+          direction,
+          id,
+          sourceCompetencyId,
+          strength,
+          targetCompetencyId,
+        }),
+      ),
+    ).toEqual(
+      pilotSkillContentReleaseV1.relationships.map(
+        ({ direction, id, sourceCompetencyId, strength, targetCompetencyId }) => ({
+          direction,
+          id,
+          sourceCompetencyId,
+          strength,
+          targetCompetencyId,
+        }),
+      ),
+    );
+  });
+
+  it("retains the 11 Candidate 3 exceptions explicitly for #26", () => {
+    const release = candidate();
+    const authoredIds = Object.keys(pilotSkillContentReleaseCandidate4AuthoredDocumentation);
+    const rosterIds = [...authoredIds, ...pilotSkillContentReleaseCandidate4ExceptionCompetencyIds];
+
+    expect(pilotSkillContentReleaseCandidate4ExceptionCompetencyIds).toHaveLength(11);
+    expect(new Set(rosterIds).size).toBe(61);
+    expect(release.competencies.map(({ id }) => id).sort()).toEqual([...rosterIds].sort());
+    expect(pilotSkillContentReleaseCandidate4ReviewGaps.exceptions).toBe(
+      pilotSkillContentReleaseCandidate4ExceptionNotes,
+    );
+    expect(Object.keys(pilotSkillContentReleaseCandidate4ExceptionNotes)).toEqual([
+      ...pilotSkillContentReleaseCandidate4ExceptionCompetencyIds,
+    ]);
+    expect(pilotSkillContentReleaseCandidate4ExceptionNotes["skill:law:olog-princely"]).toMatch(
+      /removal.*movement/i,
+    );
+    expect(
+      pilotSkillContentReleaseCandidate4ExceptionNotes["spec:household-guard-sword-shield-drill"],
+    ).toMatch(/move to setting-specific material unless/i);
+    expect(
+      pilotSkillContentReleaseCandidate4ExceptionNotes["spec:steppe-remount-training"],
+    ).toMatch(/move to setting-specific material unless/i);
+    const exceptionDocumentationProjection =
+      pilotSkillContentReleaseCandidate4ExceptionCompetencyIds.map((id) => {
+        const record = competencyById(release, id);
+        expect(record, id).toBeDefined();
+        return record
+          ? {
+              id: record.id,
+              name: record.name,
+              shortLabel: record.shortLabel,
+              shortDescription: record.shortDescription,
+              description: record.description,
+              taskEnvelope: record.taskEnvelope,
+            }
+          : undefined;
+      });
+    expect(`sha256:${sha256(JSON.stringify(exceptionDocumentationProjection))}`).toBe(
+      "sha256:070ffd3156b29422c5b238160946004e06a02d5fecf2a615f12677edaaba9de2",
+    );
+    expect(pilotSkillContentReleaseCandidate4ExceptionCompetencyIds).toContain(
+      "spec:household-guard-sword-shield-drill",
+    );
+    expect(pilotSkillContentReleaseCandidate4ExceptionCompetencyIds).toContain(
+      "spec:steppe-remount-training",
+    );
+    for (const id of pilotSkillContentReleaseCandidate4ExceptionCompetencyIds) {
+      expect(competencyById(release, id), id).toBeDefined();
+    }
+  });
+
+  it("records Culture and opposed-check questions for #26 without encoding mechanics", () => {
+    const release = candidate();
+    expect(pilotSkillContentReleaseCandidate4ReviewGaps.relationships.join(" ")).toMatch(
+      /Culture.*relationship hub/i,
+    );
+    expect(pilotSkillContentReleaseCandidate4ReviewGaps.opposedChecks.join(" ")).toMatch(
+      /Insight and Deception/i,
+    );
+    expect(pilotSkillContentReleaseCandidate4ReviewGaps.relationships.join(" ")).not.toMatch(
+      /\d+%/,
+    );
+    expect(
+      release.relationships.some(
+        ({ sourceCompetencyId, targetCompetencyId }) =>
+          /culture/i.test(sourceCompetencyId) || /culture/i.test(targetCompetencyId),
+      ),
     ).toBe(false);
   });
 
@@ -539,7 +785,7 @@ describe("documentation-complete Skill content platform", () => {
     expect(report.valid).toBe(true);
   });
 
-  it("enforces authored task envelopes, anti-boilerplate content, and deep-clone boundaries", () => {
+  it("uses ordinary-language Typical uses and Boundaries while preserving deep-clone boundaries", () => {
     const release = candidate();
     expect(release.competencies).toHaveLength(61);
     expect(
@@ -548,33 +794,37 @@ describe("documentation-complete Skill content platform", () => {
           record.description.length >= 40 && !/Bounded pilot practice:/i.test(record.description),
       ),
     ).toBe(true);
-    const normalizedEnvelopeSignatures = release.competencies.map((record) =>
-      normalizeAdversarialTaskText(
-        record,
-        [
-          ...record.taskEnvelope.coreTasks,
-          ...record.taskEnvelope.limits,
-          ...record.taskEnvelope.methods,
-          record.taskEnvelope.useGuidance,
-        ].join(" "),
-      ),
-    );
-    expect(new Set(normalizedEnvelopeSignatures).size).toBe(release.competencies.length);
+    const internalAuthoringLanguage =
+      /\b(?:Failure mode|task envelope|cue clusters?|confidence bands?|pressure windows?|consequence matrices?|safe restricted fallback|authored route|grants zero competence|resolution internals?)\b/i;
+    const proseOnlyMechanics =
+      /\b(?:AB[1-4]|DS[1-6]|skill weights?|ranks?|threshold|prerequisites?|transfer|availability|access band|development stage|XP)\b|\d+%/i;
     expect(
       release.competencies
         .filter(
-          (record) =>
-            !record.taskEnvelope.coreTasks.every((entry) => entry.length >= 20) ||
-            !record.taskEnvelope.limits.every((entry) => entry.length >= 20) ||
-            !record.taskEnvelope.methods.every((entry) => entry.length >= 20) ||
-            record.taskEnvelope.useGuidance.length < 65 ||
-            !record.taskEnvelope.methods.some((entry) => /Failure mode/i.test(entry)),
+          ({ taskEnvelope }) =>
+            [...taskEnvelope.coreTasks, ...taskEnvelope.limits, ...taskEnvelope.methods].some(
+              (entry) => entry.length < 20,
+            ) ||
+            taskEnvelope.useGuidance.length < 65 ||
+            internalAuthoringLanguage.test(
+              [
+                ...taskEnvelope.coreTasks,
+                ...taskEnvelope.limits,
+                ...taskEnvelope.methods,
+                taskEnvelope.useGuidance,
+              ].join(" "),
+            ) ||
+            proseOnlyMechanics.test(
+              [
+                ...taskEnvelope.coreTasks,
+                ...taskEnvelope.limits,
+                ...taskEnvelope.methods,
+                taskEnvelope.useGuidance,
+              ].join(" "),
+            ),
         )
         .map((record) => record.id),
     ).toEqual([]);
-    expect(release.competencies.every((record) => record.taskEnvelope.methods.length > 0)).toBe(
-      true,
-    );
     expect(
       release.competencies.every(
         (record) =>
@@ -583,8 +833,17 @@ describe("documentation-complete Skill content platform", () => {
           !/This competency is fully documented/i.test(record.shortDescription),
       ),
     ).toBe(true);
-    expect(release.competencies[0]!.taskEnvelope.coreTasks).toHaveLength(1);
-    expect(release.competencies[0]!.taskEnvelope.methods).toHaveLength(2);
+    expect(
+      Object.keys(pilotSkillContentReleaseCandidate4AuthoredDocumentation).every(
+        (id) => competencyById(release, id)?.taskEnvelope.coreTasks.length === 4,
+      ),
+    ).toBe(true);
+    expect(release.competencies[0]!.taskEnvelope.methods).toHaveLength(1);
+    expect(
+      release.competencies.every(({ taskEnvelope }) =>
+        taskEnvelope.useGuidance.startsWith("Roll "),
+      ),
+    ).toBe(true);
 
     const baseHistorySlot = pilotSkillContentReleaseV1.histories[0]!.selectionSlots[0]!;
     const baseProfileRoute = pilotSkillContentReleaseV1.profiles[0]!.normalRoutes[0]!;
@@ -641,7 +900,7 @@ describe("documentation-complete Skill content platform", () => {
     expect(references.every((reference) => !reference.includes("/pulls/"))).toBe(true);
   });
 
-  it("rejects proposal-source fallback task-envelope generation", () => {
+  it("keeps the Candidate 4 proposal source free of internal authoring leakage", () => {
     const proposalSource = readFileSync(
       path.resolve(
         repositoryRoot,
@@ -649,9 +908,10 @@ describe("documentation-complete Skill content platform", () => {
       ),
       "utf8",
     );
-    expect(proposalSource).not.toMatch(/\bbuild(?:Shared|Record)?TaskEnvelope\b/);
-    expect(proposalSource).not.toMatch(/fallback\s+task\s+envelope/i);
-    expect(proposalSource.match(/generated common envelope/i)).toBeNull();
+    expect(proposalSource).not.toMatch(
+      /\b(?:Failure mode|task envelope|cue clusters?|confidence bands?|pressure windows?|consequence matrices?|safe restricted fallback|authored route|grants zero competence|resolution internals?)\b/i,
+    );
+    expect(proposalSource).not.toMatch(/\b(?:Lankhmar|Neseret|Hanno|Vorodin|Copper Latch)\b/i);
   });
 
   it("prevents proposal-input mutation from reusing immutable v1 nested arrays", () => {

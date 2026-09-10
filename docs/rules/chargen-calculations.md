@@ -133,6 +133,14 @@ Exchange count and build count are tracked separately.
 
 App section: Chargen steps `Choose civilization` and `Social class`.
 
+Approved future boundary: Characters will be created within a Setting, and
+contextual Skill choices will bind to Setting-defined contexts during
+Setting-first Chargen. The current civilization, Society, and Skill Reference
+Society/Availability selectors remain transitional until that separately
+authorized sequence is implemented. This note does not change the calculations
+or current runtime behavior below. See
+[Architecture decision 0006](../decisions/architecture/0006-setting-foundation.md).
+
 Civilization determines language/culture setup and links to a society model.
 
 Society determines social-band labels, available professions, baseline languages, skill access, and education setup.

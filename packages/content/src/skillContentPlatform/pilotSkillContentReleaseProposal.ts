@@ -23,7 +23,7 @@ const proposalMetadata = {
       "0000000000000000000000000000000000000000" +
       "/packages/content/src/skillContentPlatform/pilotSkillContentReleaseProposal.ts#L1",
   },
-  recordVersion: "1",
+  recordVersion: "4",
   status: "proposal" as const,
 };
 
@@ -40,8 +40,7 @@ type ProposalMetadataRecordKind =
   | "specialization";
 
 const proposalMetadataReference = [
-  "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/25",
-  "http://127.0.0.1:3001/recovery-admin/glantri-app/pulls/64",
+  "http://127.0.0.1:3001/recovery-admin/glantri-app/issues/83",
   "docs/process/task-contract.md",
   "docs/decisions/rules/0002-skill-catalogue-qualitative-architecture.md",
   "docs/decisions/rules/0003-skill-documentation-and-release-integrity.md",
@@ -75,1151 +74,1573 @@ interface AuthoredCompetencyDocumentation {
 const authoredCompetencyDocumentation: Record<string, AuthoredCompetencyDocumentation> = {
   "skill:first-aid": {
     description:
-      "Perform immediate stabilization, triage tagging, and safe transfer procedures without substituting long-form diagnosis.",
-    shortDescription: "Stabilize urgent wounds with safe immediate response sequencing.",
+      "First aid is the immediate care given after injury or sudden illness. A competent practitioner checks for danger, supports breathing, controls severe bleeding, prevents further harm, and arranges appropriate help without attempting prolonged treatment.",
+    shortDescription:
+      "Give immediate care that stabilizes an injured or suddenly ill person until further help is available.",
   },
   "skill:dodge": {
     description:
-      "Recover balance against unexpected force vectors and preserve spacing in close engagements without escalating commitment.",
-    shortDescription: "Preserve life and mobility under direct physical pressure.",
+      "Dodge is the practiced use of balance, timing, and footwork to move clear of an immediate physical threat. It helps a person avoid contact while staying upright and aware, but it does not replace cover, distance, or a sound defensive position.",
+    shortDescription:
+      "Move out of the path of an immediate physical threat while keeping your balance.",
   },
   "skill:battle-tactics": {
     description:
-      "Coordinate small-unit posture, command timing, and fallback options while preserving formation intent.",
-    shortDescription: "Coordinate engagements through timing, formation, and fallback posture.",
+      "Battle tactics is the practical direction of people during an armed engagement. A competent tactician reads terrain and opposing forces, assigns clear roles, coordinates movement and timing, and prepares workable responses when the situation changes.",
+    shortDescription:
+      "Direct a group in battle by reading the situation and coordinating positions, timing, and responses.",
   },
   "skill:medicine": {
     description:
-      "Assess symptoms, prognosis windows, and treatment priorities while keeping intervention risk explicit.",
-    shortDescription: "Run structured medical assessment and treatment pathway triage.",
+      "Medicine is the assessment and non-operative treatment of illness and injury. A competent practitioner gathers symptoms and history, examines the patient, weighs likely causes, chooses proportionate treatment, and monitors recovery while recognizing when specialist care is needed.",
+    shortDescription:
+      "Assess illness and injury, choose suitable non-operative treatment, and monitor recovery.",
   },
   "skill:surgery": {
     description:
-      "Operate with explicit pre-op checks, sterile sequencing, and post-op recovery obligations.",
-    shortDescription: "Run operative intervention with strict procedural controls.",
+      "Surgery treats injury or disease through deliberate operative intervention. A competent surgeon plans the procedure, controls contamination and bleeding, works precisely around vulnerable structures, and manages closure and recovery; diagnosis and general aftercare remain broader medical work.",
+    shortDescription:
+      "Treat injury or disease through planned operative procedures and careful recovery care.",
   },
   "skill:research": {
     description:
-      "Locate corroborating records and test claims before adopting conclusions across domains.",
-    shortDescription: "Validate source material through cross-checked research procedures.",
+      "Research is the systematic search for a reliable answer using records, testimony, observation, or experiment. A competent researcher frames a clear question, finds relevant evidence, checks provenance and bias, compares sources, and states conclusions with their remaining uncertainty.",
+    shortDescription:
+      "Find and evaluate evidence to answer a question with a supportable conclusion.",
   },
   "skill:law:olog-princely": {
     description:
-      "Apply princely Olog legal reasoning where court channels authorize scope and enforcement outcomes.",
-    shortDescription:
-      "Use olog-princely legal authority within explicit court-channel constraints.",
+      "This legal skill is the interpretation and application of a defined body of law. A competent practitioner identifies the governing rule, follows the proper forum and procedure, and distinguishes legal judgment from custom or personal influence.",
+    shortDescription: "Interpret and apply a defined body of law through its proper procedures.",
   },
   "skill:dead-reckoning": {
     description:
-      "Project travel position from distance, speed, and course assumptions under uncertainty.",
-    shortDescription: "Track movement state when external cues are missing.",
+      "Dead reckoning estimates present position from a known starting point, direction, speed, and elapsed time. A competent navigator records each leg, accounts for drift where possible, and updates the estimate when a trustworthy observation becomes available.",
+    shortDescription:
+      "Estimate your current position from a known start, course, speed, and travel time.",
   },
   "skill:chart-navigation": {
     description:
-      "Read map and chart systems for bearing, waypoint logic, and safe hazard interpretation.",
-    shortDescription: "Convert chart data into safe, reproducible navigation outcomes.",
+      "Chart navigation uses maps or charts to plan and follow a route. A competent navigator reads scale, symbols, bearings, depths or elevations, plots positions and waypoints, and checks the route against known hazards and changing conditions.",
+    shortDescription: "Read and plot maps or charts to follow a route and avoid known hazards.",
   },
   "spoken:common": {
     description:
-      "Use Common speech for civic and field coordination with conventions shared across multiple regional contexts.",
-    shortDescription: "Coordinate through Common-language communication and negotiation.",
+      "Spoken Common is the ability to understand and express meaning in a widely shared language. Competence covers ordinary conversation, attentive listening, clear pronunciation, idiom, and an expanding vocabulary across varied topics.",
+    shortDescription: "Speak and understand a widely shared language in ordinary conversation.",
   },
   "spoken:mogrebi": {
     description:
-      "Communicate in Mogrebi with institutional terminology suitable for clinics, temple environments, and civic records.",
-    shortDescription: "Use Mogrebi for context-specific medical and civic talk.",
+      "This spoken-language skill covers understanding everyday speech, taking part in conversation, and making questions or explanations clear to a listener. Competence includes attentive listening, intelligible pronunciation, suitable word choice, and recognizing when unfamiliar expressions require clarification.",
+    shortDescription:
+      "Follow everyday speech and take part in conversation with clear questions, answers, and explanations.",
   },
   "spoken:ologian": {
     description:
-      "Apply Ologian speech with court and clerical conventions, especially when handling legal testimony and records.",
-    shortDescription: "Use Ologian speech for court-facing and clerical discourse.",
+      "This spoken-language skill covers sustaining dialogue and conveying precise meaning when a subject becomes detailed or unfamiliar. Competence includes clear pronunciation, growing vocabulary, recognition of idiom and tone, and asking for or giving clarification when meaning is uncertain.",
+    shortDescription:
+      "Sustain spoken dialogue, convey precise meaning, and clarify unfamiliar words or expressions.",
   },
   "spoken:phoenician": {
     description:
-      "Use Phoenician for trade correspondence and maritime commercial signaling where historical convention defines meaning.",
-    shortDescription: "Handle Phoenician language in trade and seafaring communication.",
+      "This spoken-language skill covers following spoken instructions and accounts, responding appropriately, and explaining a sequence of events or ideas. Competence includes careful listening, coherent phrasing, accurate word choice, and adapting an explanation when the listener has misunderstood.",
+    shortDescription:
+      "Understand spoken instructions and accounts, then respond or explain ideas in a coherent sequence.",
   },
   "spoken:nkolian": {
     description:
-      "Use N'kolian language for frontier caravan and frontier-administrative movement channels.",
-    shortDescription: "Convey caravan and settlement coordination through N'kolian speech.",
+      "This spoken-language skill covers joining discussion, expressing intent and nuance, and adjusting speech to the listener and situation. Competence includes listening for implication, selecting suitable vocabulary and pace, pronouncing words clearly, and checking that an important point was understood.",
+    shortDescription:
+      "Join discussions, express intent and nuance, and adapt speech to the listener and situation.",
   },
   "spoken:scythian": {
     description:
-      "Use Scythian speech for home-region negotiation and oral tradition exchange where oral law applies.",
-    shortDescription: "Coordinate social and clan context with Scythian oral language.",
+      "This spoken-language skill covers understanding questions and descriptions, giving a coherent account, and resolving misunderstandings during conversation. Competence includes attentive listening, clear pronunciation, flexible vocabulary, and restating or checking meaning when an exchange becomes unclear.",
+    shortDescription:
+      "Understand questions and descriptions, give coherent spoken accounts, and resolve misunderstandings in conversation.",
   },
   "written:mogrebi:sacred-mogrebi": {
     description:
-      "Read and apply written Sacred Mogrebi conventions for medical and devotional records while avoiding spoken substitution.",
-    shortDescription: "Use Sacred Mogrebi text conventions for documented references.",
+      "This written tradition covers reading extended passages and composing accurate text in its associated language and script. Competence includes recognizing letter forms, applying spelling and grammar, organizing material for its purpose, and checking a finished passage for omissions or ambiguity.",
+    shortDescription:
+      "Read extended passages and compose accurate text in the associated language and script tradition.",
   },
   "written:ologian:church-ologian": {
     description:
-      "Interpret Church Ologian written conventions in legal, clerical, and instructional records.",
-    shortDescription: "Use Church Ologian writing for court and clerical documentation.",
+      "This written tradition covers interpreting written statements and composing clear material for a particular purpose and reader. Competence includes fluent recognition of its script, control of spelling and grammar, orderly structure, and selecting an appropriate level of formality.",
+    shortDescription:
+      "Interpret written statements and compose clear, orderly text for a particular purpose and reader.",
   },
   "written:phoenician:phoenician": {
     description:
-      "Handle Phoenician script text conventions for trade and maritime archival documentation.",
-    shortDescription: "Use Phoenician writing for trade-route archival interpretation.",
+      "This written tradition covers reading, transcribing, and composing text with consistent use of its language, script, and layout conventions. Competence includes accurate character recognition, spelling and grammar, faithful copying, and arranging information so another reader can follow it.",
+    shortDescription:
+      "Read, transcribe, and compose text using consistent script, spelling, grammar, and layout.",
   },
   "spec:household-guard-sword-shield-drill": {
     description:
-      "Advance from household retainer training into paired sword-shield doctrine with dual proficiency thresholds.",
-    shortDescription: "Progress weapon doctrine from household drill to paired progression.",
+      "Sword-and-shield drill is the coordinated use of both weapons as one fighting method. A competent practitioner links guard, footwork, attack, and defence so the shield protects without obstructing the sword and each movement prepares the next.",
+    shortDescription: "Fight with sword and shield as a coordinated method of attack and defence.",
   },
   "spec:diagnostic-medicine": {
     description:
-      "Apply advanced diagnostic practice once baseline medical and pharmacy competencies are established.",
-    shortDescription: "Advance medicine through explicit diagnostic specialization thresholds.",
+      "Diagnostic medicine focuses on determining the likely cause of a patient's condition. A competent diagnostician combines history, examination, comparison of alternatives, and available tests while avoiding false certainty and revising the diagnosis when evidence changes.",
+    shortDescription:
+      "Identify the likely cause of illness by comparing symptoms, history, examination, and evidence.",
   },
   "spec:warded-lock-entry": {
     description:
-      "Specialize lock-entry method under warded systems where baseline deception and covert-entry knowledge is already active.",
-    shortDescription: "Refine lock-entry through warded systems with explicit thresholds.",
+      "Warded-lock entry is the opening of locks whose internal wards obstruct an incorrect key or tool. A competent practitioner identifies the ward pattern, selects and manipulates suitable tools, and limits damage that could jam the mechanism or reveal the attempt.",
+    shortDescription:
+      "Open warded locks by reading their internal obstructions and manipulating suitable tools.",
   },
   "spec:court-administration": {
     description:
-      "Handle court-administration routines where legal, procedural, and reporting obligations converge.",
-    shortDescription: "Run court-level administrative progression after baseline legal training.",
+      "Court administration is the accurate handling of filings, schedules, notices, records, and procedural steps for a court. A competent administrator keeps matters traceable and timely while distinguishing administrative duties from legal judgment or advocacy.",
+    shortDescription:
+      "Manage court filings, schedules, notices, and records according to established procedure.",
   },
   "spec:weaponsmithing": {
     description:
-      "Develop specialist forging and inspection discipline building directly on smithing foundations.",
-    shortDescription: "Progress to weaponsmithing-specific crafting rules and inspections.",
+      "Weaponsmithing applies metalworking skill to weapons that must survive repeated impact while holding an effective form and edge. A competent weaponsmith selects material, controls heat and shape, balances the finished piece, and inspects it for dangerous flaws.",
+    shortDescription: "Forge, finish, balance, and inspect metal weapons for reliable use.",
   },
   "spec:home-coast-pilotage": {
     description:
-      "Apply home-coast pilotage patterns after seamanship, navigation, and route exposure foundations.",
-    shortDescription: "Specialize pilotage for coastal conditions and transfer routing.",
+      "Home-coast pilotage is navigation through familiar coastal waters using detailed local knowledge. A competent pilot recognizes channels, landmarks, tides, currents, and recurring hazards, while checking that remembered conditions still match what is observed.",
+    shortDescription:
+      "Guide a vessel through familiar coastal waters using detailed local knowledge.",
   },
   "spec:desert-wayfinding": {
     description:
-      "Extend wayfinding with arid-route heuristics and long-distance orientation constraints.",
-    shortDescription: "Specialize wayfinding for desert distances and route risk.",
+      "Desert wayfinding is route selection and orientation in arid terrain where landmarks, water, shade, and reliable bearings may be scarce. A competent traveller manages direction and distance while planning around heat, visibility, supplies, and safe fallback points.",
+    shortDescription:
+      "Find and follow routes across arid terrain while accounting for heat, water, and sparse landmarks.",
   },
   "spec:steppe-remount-training": {
     description:
-      "Advance mounted remount and recovery discipline for steppe travel and rapid redeployment.",
-    shortDescription: "Specialize remount handling and mounted sustainability.",
+      "Remount training prepares spare riding animals to replace a tired or injured mount during extended travel. A competent handler conditions several animals, transfers tack and riders safely, and rotates effort without exhausting the remounts.",
+    shortDescription:
+      "Train and rotate spare riding animals to sustain long-distance mounted travel.",
   },
   "skill:sword": {
     description:
-      "Practice directed weapon-motion control in close quarters, including guard transitions, timing, and controlled parries for sword and shield pairings.",
-    shortDescription: "Close-quarters defense and offense with guard transitions.",
+      "Sword skill covers controlled attack and defence with a sword. A competent fighter manages distance, guard, timing, footwork, cuts or thrusts, and recovery, adapting technique to the weapon and situation without treating another weapon as interchangeable.",
+    shortDescription:
+      "Attack and defend with a sword using effective distance, guard, timing, and footwork.",
   },
   "skill:shield": {
     description:
-      "Develop reliable parry structures and body alignment that reduce incoming pressure while preserving mobility and counter-readiness.",
-    shortDescription: "Maintain cover and pressure control through shield posture.",
+      "Shield skill is the active use of a shield to intercept attacks, control lines of approach, and create safer movement. A competent user positions and angles the shield without losing sight, balance, mobility, or the ability to act with the other hand.",
+    shortDescription:
+      "Use a shield to intercept attacks, control openings, and move under protection.",
   },
   "skill:knife-dagger": {
     description:
-      "Use precise short-weapon movement with narrow spacing discipline, including retention and rapid edge transition under tight contact.",
-    shortDescription: "Short-weapon handling with compact range and controlled transitions.",
+      "Knife and dagger skill covers close-range attack, defence, and weapon retention with short blades. A competent fighter uses compact movement, precise point or edge placement, and careful distance, recognizing the severe risk of fighting within an opponent's reach.",
+    shortDescription:
+      "Fight at close range with knives or daggers while controlling distance and retaining the weapon.",
   },
   "skill:spear": {
     description:
-      "Project distance management and binding pressure with thrust lines, footwork timing, and anti-overextension recovery.",
-    shortDescription: "Extended-distance thrust and distance management discipline.",
+      "Spear skill covers attack and defence with a hafted thrusting weapon. A competent fighter uses reach, point control, footwork, leverage, and recovery to threaten at distance while avoiding overextension or loss of control when the distance closes.",
+    shortDescription:
+      "Use a spear's reach and point control to attack, defend, and manage distance.",
   },
   "skill:perception": {
     description:
-      "Track anomalies and cues across social, tactical, and environmental layers before acting on any immediate assumption.",
-    shortDescription: "Detect and triage unusual sensory, social, and tactical signals.",
+      "Perception is the deliberate noticing and interpretation of sensory details. A competent observer scans methodically, separates observation from assumption, recognizes changes or inconsistencies, and directs attention without claiming certainty about facts that cannot yet be confirmed.",
+    shortDescription:
+      "Notice and interpret relevant sensory details before drawing conclusions from them.",
   },
   "skill:athletics": {
     description:
-      "Apply conditioned body movement for load carriage, acceleration changes, and sustained exertion under time pressure.",
-    shortDescription: "Conditioned movement, balance, and exertion control.",
+      "Athletics is trained whole-body movement for running, jumping, climbing, lifting, and similar exertion. A competent athlete coordinates strength, balance, speed, and endurance, chooses efficient technique, and recognizes when fatigue or load makes an action unsafe.",
+    shortDescription:
+      "Run, jump, climb, lift, and sustain demanding movement with trained control.",
   },
   "skill:survival": {
     description:
-      "Sustain movement and decision quality in adverse terrain with heat, weather, and deprivation-aware routines.",
-    shortDescription: "Terrain survival planning under adverse field conditions.",
+      "Survival is staying alive and functional when shelter, water, food, warmth, or rescue are uncertain. A competent practitioner sets priorities, conserves resources, makes or finds protection, and manages exposure and travel without confusing endurance with avoidable risk.",
+    shortDescription:
+      "Secure water, shelter, warmth, food, and safe movement when ordinary support is unavailable.",
   },
   "skill:leadership": {
     description:
-      "Coordinate role alignment and timing pressure in mixed units with clear command, morale, and response pacing.",
-    shortDescription: "Coordinate team response with authority and pacing control.",
+      "Leadership is guiding people toward a shared objective under uncertain or demanding conditions. A competent leader communicates intent, assigns understandable responsibilities, listens and adapts, sustains trust and morale, and takes responsibility without replacing the expertise of others.",
+    shortDescription:
+      "Guide people toward a shared objective through clear direction, trust, and responsible decisions.",
   },
   "skill:pharmacy": {
     description:
-      "Prepare and evaluate remedies, herb balances, and administration timing using controlled dosing and observability rules.",
-    shortDescription: "Prepare and sequence pharmaceutical support safely.",
+      "Pharmacy is the preparation, identification, storage, and safe use of medicinal substances. A competent practitioner measures ingredients and doses, recognizes interactions and contamination, records preparations, and gives clear instructions while leaving diagnosis and operative care to their own disciplines.",
+    shortDescription:
+      "Prepare, store, measure, and dispense medicinal substances safely and accurately.",
   },
   "skill:plant-lore": {
     description:
-      "Identify practical botanical sources and seasonal behaviors relevant to medicine, ritual use, and travel preparation.",
-    shortDescription: "Identify practical uses of plants by season and behavior.",
+      "Plant lore is practical knowledge of plants, their habitats, seasons, and uses. A competent practitioner identifies specimens from several features, distinguishes useful plants from harmful lookalikes, harvests responsibly, and treats uncertain identification as unsafe.",
+    shortDescription:
+      "Identify plants, understand their practical uses, and avoid harmful lookalikes.",
   },
   "skill:streetwise": {
     description:
-      "Assess crowd sentiment, civic risk, and rumor pathways before committing to social or investigative moves.",
-    shortDescription: "Navigate streets, rumor networks, and practical city behavior.",
+      "Streetwise is practical judgment about how unfamiliar urban places work at ground level. A competent practitioner reads local behaviour, finds ordinary services and information, recognizes common dangers or scams, and approaches people without assuming every rumour is true.",
+    shortDescription:
+      "Navigate urban life by reading local behaviour, finding information, and recognizing common risks.",
   },
   "skill:underworld": {
     description:
-      "Track illicit channels, hidden intermediaries, and illicit trust relationships without mistaking intent for certainty.",
-    shortDescription: "Map underground exchanges and risk-laden intermediaries.",
+      "Underworld is knowledge of concealed and illicit networks, their roles, customs, markets, and risks. A competent practitioner recognizes likely intermediaries and warning signs, seeks information cautiously, and understands that reputation or rumour is not proof of trust.",
+    shortDescription:
+      "Recognize and navigate illicit networks, hidden markets, intermediaries, and their risks.",
   },
   "skill:deception": {
     description:
-      "Construct and sustain deceptive presentations with timing, social cues, and fallback exits for plausible denial.",
-    shortDescription: "Build and sustain deliberate false presentations.",
+      "Deception is the deliberate creation of a false belief through words, behaviour, omission, or staged evidence. A competent deceiver keeps the claim plausible and consistent, reads the audience's reactions, and limits details that can be checked or contradicted.",
+    shortDescription:
+      "Create and maintain a plausible false impression through words, behaviour, or omission.",
   },
   "skill:stealth": {
     description:
-      "Move through social and physical threat zones by minimizing signature, timing movement with ambient distraction, and reducing detection pressure.",
-    shortDescription: "Reduce detection via controlled movement and timing.",
+      "Stealth is moving or remaining present without attracting notice. A competent practitioner uses cover, light, sound, timing, pace, and observation to reduce signs of passage, while recognizing that poor terrain or an alert observer can make concealment impossible.",
+    shortDescription:
+      "Move or remain present without notice by controlling sound, visibility, timing, and signs.",
   },
   "skill:lockpicking": {
     description:
-      "Work precision tactile manipulation of warded components and key geometries with controlled entry risk.",
-    shortDescription: "Manipulate locks via precise tactile and structural reading.",
+      "Lockpicking is opening a mechanical lock without its intended key by examining and manipulating its internal parts. A competent practitioner identifies the lock's feedback, applies delicate tool pressure, and avoids damage that could jam the mechanism.",
+    shortDescription:
+      "Open mechanical locks without their keys by sensing and manipulating internal parts.",
   },
   "skill:sleight-of-hand": {
     description:
-      "Transfer small objects and create controlled misdirection without collapsing composure or routine body pattern.",
-    shortDescription: "Execute subtle hand-based manipulation and concealment.",
+      "Sleight of hand is the concealed or misleading manipulation of small objects through dexterity, timing, and attention control. A competent practitioner makes movements appear natural, coordinates both hands and posture, and adapts when an observer's attention shifts unexpectedly.",
+    shortDescription:
+      "Manipulate or conceal small objects through dexterity, timing, and controlled attention.",
   },
   "skill:insight": {
     description:
-      "Read intent cues and trust signals from language, gesture, and routine contradiction patterns.",
-    shortDescription: "Infer motive by reading verbal and physical cues.",
+      "Insight is the reasoned interpretation of another person's motives, emotions, or intentions from behaviour and context. A competent observer notices changes and contradictions, considers alternative explanations, and treats impressions as uncertain rather than as proof.",
+    shortDescription:
+      "Interpret motives and emotions from behaviour and context without mistaking impressions for proof.",
   },
   "skill:disguise": {
     description:
-      "Create and sustain role-consistent personas that blend behavior, posture, and appearance across repeated contact windows.",
-    shortDescription: "Sustain role-consistent disguise across scrutiny loops.",
+      "Disguise is altering appearance and behaviour so a person is mistaken for someone else or overlooked as ordinary. A competent practitioner coordinates clothing, grooming, posture, voice, and plausible conduct, and avoids details that close scrutiny would expose.",
+    shortDescription:
+      "Alter appearance and behaviour to support a plausible identity or pass without notice.",
   },
   "skill:administration": {
     description:
-      "Run low-friction administrative sequencing across requests, routing, and institutional expectations under procedural pressure.",
-    shortDescription: "Coordinate institutional process and case routing under pressure.",
+      "Administration is the orderly handling of records, correspondence, schedules, requests, and routine procedures. A competent administrator keeps information accurate and retrievable, follows work through to completion, and recognizes decisions that require separate authority or expertise.",
+    shortDescription:
+      "Organize records, correspondence, schedules, and routine procedures so work remains accurate and traceable.",
   },
   "skill:customs": {
     description:
-      "Track local custom law, expectation hierarchies, and social consequences when acting across institutions and households.",
-    shortDescription: "Track local custom law and institutional expectations.",
+      "Customs is knowledge of the unwritten conventions that shape conduct in a particular community or situation. A competent practitioner recognizes expectations around greeting, hospitality, status, exchange, and offence, while distinguishing local practice from formal law.",
+    shortDescription:
+      "Recognize and follow local social conventions while distinguishing custom from formal law.",
   },
   "skill:oratory": {
     description:
-      "Deliver formal and informal rhetoric calibrated to audience authority, urgency, and procedural posture.",
-    shortDescription: "Use structured rhetoric aligned to audience and procedure.",
+      "Oratory is speaking to an audience with a clear purpose and deliberate structure. A competent speaker organizes an argument, uses language and delivery suited to the listeners, responds to their mood, and makes important points memorable without relying on volume alone.",
+    shortDescription:
+      "Address an audience persuasively through clear structure, suitable language, and deliberate delivery.",
   },
   "skill:bookkeeping": {
     description:
-      "Balance ledgers, verify records, and reconcile recurring obligations across accounts and obligations with traceable consistency.",
-    shortDescription: "Maintain and reconcile records with audit-friendly consistency.",
+      "Bookkeeping is the systematic recording of money, goods, debts, and payments. A competent bookkeeper classifies entries, maintains ledgers, reconciles totals against evidence, and identifies omissions or inconsistencies without making unsupported claims about their cause.",
+    shortDescription: "Record and reconcile money, goods, debts, and payments in accurate ledgers.",
   },
   "skill:trade": {
     description:
-      "Navigate commodity exchange, valuation, and settlement routines with explicit terms, obligations, and margin awareness.",
-    shortDescription: "Conduct commercial exchange with valuation and settlement rules.",
+      "Trade is the practical conduct of exchanging goods or services across a market. A competent trader understands supply, demand, quality, costs, terms, transport, and settlement, and can judge whether an exchange is workable without assuming every price is fair.",
+    shortDescription:
+      "Buy, sell, and exchange goods or services with sound knowledge of markets, costs, and terms.",
   },
   "skill:bargaining": {
     description:
-      "Negotiate terms under pressure with incremental tradeoffs while preserving routeable outcomes and future leverage.",
-    shortDescription: "Negotiate structured outcomes while preserving leverage.",
+      "Bargaining is negotiating an exchange by testing priorities, offers, concessions, and alternatives. A competent bargainer listens for what matters to each side, makes deliberate proposals, and knows when further pressure is more likely to end the negotiation than improve it.",
+    shortDescription:
+      "Negotiate an exchange by testing priorities, offers, concessions, and alternatives.",
   },
   "skill:appraisal": {
     description:
-      "Classify and compare material quality, provenance signals, and hidden defects before committing exchange value.",
-    shortDescription: "Evaluate item quality, provenance, and defects.",
+      "Appraisal is the informed estimation of an object's identity, condition, quality, and likely value. A competent appraiser examines materials and workmanship, checks provenance where possible, compares relevant examples, and states uncertainty about hidden defects or an unfamiliar market.",
+    shortDescription:
+      "Estimate an object's identity, condition, quality, and value from evidence and comparison.",
   },
   "skill:smithing": {
     description:
-      "Shape and reinforce materials through repeated forging process control, heat discipline, and structural review.",
-    shortDescription: "Forge and finish tools with heat and structural control.",
+      "Smithing is shaping and joining metal through controlled heating, hammering, cutting, and finishing. A competent smith selects suitable stock, manages temperature and strain, forms the work accurately, and checks the finished object for weakness or poor fit.",
+    shortDescription: "Shape, join, finish, and inspect metal using controlled heat and tools.",
   },
   "skill:seamanship": {
     description:
-      "Coordinate deck discipline, vessel movement, and tide-aware operation with practical load-and-risk management.",
-    shortDescription: "Control vessel movement with deck discipline and risk awareness.",
+      "Seamanship is the practical operation and care of a vessel and its equipment. A competent sailor handles lines and sails or other controls, secures people and cargo, follows commands, reads immediate conditions, and performs routine work safely on a moving deck.",
+    shortDescription:
+      "Operate and care for a vessel, its equipment, people, and cargo in changing conditions.",
   },
   "skill:pilotage": {
     description:
-      "Pilot local waters through tide windows, obstacle memory, and channel-safe approach discipline.",
-    shortDescription: "Run local-water movement with channel-safe sequencing.",
+      "Pilotage is guiding a vessel through confined or coastal waters where local hazards matter. A competent pilot uses charts, observations, tides, currents, markers, soundings, and local knowledge to choose and continually verify a safe track.",
+    shortDescription:
+      "Guide a vessel through confined or coastal waters by tracking local hazards and conditions.",
   },
   "skill:swimming": {
     description:
-      "Sustain buoyancy, propulsion, and controlled return options under surf, load, and fatigue constraints.",
-    shortDescription: "Maintain swim control under fatigue, load, and water dynamics.",
+      "Swimming is controlled movement and survival in water. A competent swimmer manages breathing, buoyancy, propulsion, direction, clothing or load, and fatigue, and chooses a safe exit rather than pressing on after control begins to fail.",
+    shortDescription:
+      "Move and remain safe in water by controlling breathing, buoyancy, direction, and fatigue.",
   },
   "skill:weather-lore": {
     description:
-      "Forecast short-horizon conditions with pressure, cloud, wind, and smell cues for route and hazard decisions.",
-    shortDescription: "Read short-horizon weather for route and hazard judgment.",
+      "Weather lore is practical forecasting from clouds, wind, pressure, temperature, moisture, and recurring local patterns. A competent observer compares several signs, estimates near-term change, and updates the forecast rather than treating one omen or old pattern as certain.",
+    shortDescription:
+      "Forecast near-term weather by comparing atmospheric signs and recurring local patterns.",
   },
   "skill:wayfinding": {
     description:
-      "Resolve local travel with terrain memory, sightlines, and route selection under uncertainty.",
-    shortDescription: "Resolve directional progress with terrain and uncertainty.",
+      "Wayfinding is choosing and following a route through terrain without depending on a prepared chart. A competent traveller uses landmarks, direction, distance, terrain shape, memory, and repeated position checks, and keeps a fallback when uncertain.",
+    shortDescription:
+      "Choose and follow a route through terrain using landmarks, direction, distance, and memory.",
   },
   "skill:animal-handling": {
     description:
-      "Condition and direct mount behavior through body-language cues, pace control, and stable handling under stress.",
-    shortDescription: "Control mounts with cue discipline and pace management.",
+      "Animal handling is safely directing and caring for domesticated or trained animals. A competent handler reads behaviour and stress, uses consistent cues and restraint, builds cooperation, and adapts to the species and individual rather than relying on force alone.",
+    shortDescription:
+      "Direct and care for trained animals by reading behaviour and using safe, consistent cues.",
   },
   "skill:tracking": {
     description:
-      "Interpret signs, disturbances, and repeatability patterns into likely movement pathways and likely intent.",
-    shortDescription: "Trace movement paths from physical signs and repeatability.",
+      "Tracking is following a person or animal from the physical signs of passage. A competent tracker compares prints, disturbed ground, broken vegetation, scent, weather, and timing to infer a likely route while revising conclusions when signs conflict.",
+    shortDescription:
+      "Follow a person or animal by interpreting physical signs of passage and their age.",
   },
   "skill:hunting": {
     description:
-      "Integrate scent, sign, and concealment discipline into acquisition decisions with minimal noise and waste.",
-    shortDescription: "Run pursuit routines with concealment and sign discipline.",
+      "Hunting is locating, approaching, and taking wild game with suitable tools and minimal waste. A competent hunter reads habitat and sign, controls scent and noise, chooses an ethical and effective opportunity, and can recover and handle the quarry.",
+    shortDescription:
+      "Locate, approach, take, and recover wild game with suitable tools and minimal waste.",
   },
   "skill:riding": {
     description:
-      "Train gait transitions, terrain adaptation, and endurance pacing for long route coverage with mounted stability.",
-    shortDescription: "Manage mounted movement, gaits, and endurance pacing.",
+      "Riding is directing a mount while maintaining a balanced, effective seat. A competent rider controls pace and direction, adapts to terrain and the animal's condition, uses tack correctly, and avoids exhausting or injuring the mount through poor balance or demands.",
+    shortDescription:
+      "Ride and direct a mount with balanced control across changing pace, terrain, and fatigue.",
   },
 };
 
-const authoredTaskEnvelopeByCompetencyId: Record<string, SkillTaskEnvelope> = {
+interface Candidate4AuthoredCompetencyDocumentation extends AuthoredCompetencyDocumentation {
+  boundaries: readonly string[];
+  typicalUses: readonly string[];
+}
+
+export const pilotSkillContentReleaseCandidate4AuthoritativeSourceSha256 =
+  "e9d5e6800dde213bfd3f8cb42e626791863b0144f90ec52bcd76557758f3a10c";
+
+export const pilotSkillContentReleaseCandidate4ExceptionCompetencyIds = [
+  "skill:law:olog-princely",
+  "spoken:mogrebi",
+  "spoken:ologian",
+  "spoken:phoenician",
+  "spoken:nkolian",
+  "spoken:scythian",
+  "written:mogrebi:sacred-mogrebi",
+  "written:ologian:church-ologian",
+  "written:phoenician:phoenician",
+  "spec:household-guard-sword-shield-drill",
+  "spec:steppe-remount-training",
+] as const;
+
+export const pilotSkillContentReleaseCandidate4ExceptionNotes = {
+  "skill:law:olog-princely":
+    "named legal body; recommend removal from the generic catalogue or movement to setting-specific material.",
+  "spoken:mogrebi": "named setting language; move to setting-specific language material.",
+  "spoken:ologian": "named setting language; move to setting-specific language material.",
+  "spoken:phoenician": "named setting language; move to setting-specific language material.",
+  "spoken:nkolian": "named setting language; move to setting-specific language material.",
+  "spoken:scythian": "named setting language; move to setting-specific language material.",
+  "written:mogrebi:sacred-mogrebi":
+    "named setting language and script tradition; move to setting-specific language material.",
+  "written:ologian:church-ologian":
+    "named setting language and script tradition; move to setting-specific language material.",
+  "written:phoenician:phoenician":
+    "named setting language and script; move to setting-specific language material.",
+  "spec:household-guard-sword-shield-drill":
+    "the “household guard” identity is setting- or institution-specific; move to setting-specific material unless that identity is intentionally generic in the wider catalogue.",
+  "spec:steppe-remount-training":
+    "the named regional-cultural identity is not cleanly campaign-agnostic; move to setting-specific material unless it is deliberately retained as a generic environmental specialism.",
+} as const satisfies Record<
+  (typeof pilotSkillContentReleaseCandidate4ExceptionCompetencyIds)[number],
+  string
+>;
+
+export const pilotSkillContentReleaseCandidate4AuthoredDocumentation: Record<
+  string,
+  Candidate4AuthoredCompetencyDocumentation
+> = {
   "skill:first-aid": {
-    coreTasks: [
-      "Run immediate-life support in order: airway, hemorrhage control, and safe movement handoff.",
+    boundaries: [
+      "Does not replace Medicine, Surgery, or Pharmacy.",
+      "Does not establish the full cause of an illness.",
+      "Does not make dangerous travel or treatment safe.",
     ],
-    limits: [
-      "Confine this record to stabilization, transport prep, and urgent handoff planning only.",
-      "Do not convert triage actions into long-form treatment decisions.",
+    description:
+      "First aid is the prompt assessment and care of someone who has been injured or has suddenly become ill. A capable practitioner first makes the scene safe, checks the person’s condition, supports breathing, controls serious bleeding, prevents further harm, and seeks appropriate assistance. It is immediate and limited care, guided by priorities and safety rather than prolonged treatment or diagnosis.",
+    shortDescription:
+      "Give immediate, practical care after injury or sudden illness until further help is available.",
+    typicalUses: [
+      "Control bleeding after an accident.",
+      "Keep an injured companion warm, still, and monitored.",
+      "Assess whether an unconscious person is breathing.",
+      "Make an injury safe enough for transport or further care.",
     ],
-    methods: [
-      "Perform scene isolation, immediate vital check, and short-cycle reassessment before any handoff step.",
-      "Failure mode: skipping reassessment or transport constraints creates preventable deterioration; recover with a fresh stabilization loop.",
-    ],
-    useGuidance:
-      "Use this envelope when the target is unstable and no specialist context is yet available.",
   },
   "skill:dodge": {
-    coreTasks: [
-      "Track incoming force, pivot weight, and distance with incremental timing adjustments.",
+    boundaries: [
+      "Avoids an attack rather than intercepting it.",
+      "Weapon and shield defence belong to their relevant competences.",
+      "Cannot create room to move where none exists.",
     ],
-    limits: [
-      "Do not pair dodge sequencing with commitments requiring aggressive follow-through.",
-      "Avoid forcing body repositioning beyond the current balance margin and terrain friction.",
+    description:
+      "Dodge is the ability to avoid being struck, caught, or intercepted by moving clear at the right moment. It depends on awareness, reaction, balance, timing, and enough room to move. A capable practitioner reads an opponent’s line of movement, keeps a stable stance, and recovers quickly after evasion rather than merely throwing themselves aside.",
+    shortDescription:
+      "Avoid an attack or interception through movement, timing, and body position.",
+    typicalUses: [
+      "Step clear of a blow or thrust.",
+      "Avoid a charging person or animal.",
+      "Escape a grasp in a crowded or confined space.",
+      "Move through immediate danger without losing balance.",
     ],
-    methods: [
-      "Stabilize stance first, then execute micro-adjustments and reset momentum before counters.",
-      "Failure mode: over-correcting foot placement amplifies exposure; reset through breath, spine, and guard alignment.",
-    ],
-    useGuidance:
-      "Treat dodge as a preservation tactic, not a replacement for movement-intensive attack planning.",
   },
   "skill:battle-tactics": {
-    coreTasks: ["Define battle state, risk band, and fallback posture before issuing commands."],
-    limits: [
-      "Keep tactics within visible team competencies and active formation knowledge.",
-      "Do not invent command authority outside profile-supported routes.",
+    boundaries: [
+      "Does not make someone personally skilled with a weapon.",
+      "Does not replace Leadership’s broader management of people.",
+      "Concerns an engagement, not long-term military strategy.",
     ],
-    methods: [
-      "Sequence observation, timing, fallback, and communications with explicit contingency triggers.",
-      "Failure mode: issuing command without shared state can cascade conflicting maneuvers; recover with a synchronized check-in.",
+    description:
+      "Battle tactics is the practical conduct of a particular armed engagement. A capable tactician reads terrain, visibility, formations, morale, movement, and the opponent’s likely intentions; then gives workable instructions that people can act on under pressure. It concerns immediate decisions during a fight: where to hold, when to move, whom to protect, and how to respond when a plan begins to fail.",
+    shortDescription:
+      "Direct people during an armed engagement by coordinating position, timing, and response.",
+    typicalUses: [
+      "Place defenders at a choke point or strong position.",
+      "Coordinate a withdrawal or counterattack.",
+      "Assign scouts, reserves, or rearguard duties.",
+      "Adapt a plan when visibility, terrain, or casualties change.",
     ],
-    useGuidance:
-      "Preserve command clarity by anchoring every plan to shared profile and route assumptions.",
   },
   "skill:medicine": {
-    coreTasks: [
-      "Apply assessment, differential framing, and treatment ranking in controlled order.",
+    boundaries: [
+      "Surgery concerns operative intervention.",
+      "Pharmacy concerns preparing and managing medicines.",
+      "Does not guarantee a certain diagnosis.",
     ],
-    limits: [
-      "Keep this record within non-operative intervention and referral obligations.",
-      "Do not begin invasive procedures without the explicit surgical competency context.",
+    description:
+      "Medicine is the assessment and non-operative treatment of illness and injury. A capable practitioner gathers a history, examines the patient, weighs possible causes, chooses proportionate treatment, and observes whether the patient improves or worsens. Good medicine includes recognizing uncertainty and knowing when a condition requires more specialised care.",
+    shortDescription:
+      "Assess illness and injury, provide non-operative treatment, and follow recovery.",
+    typicalUses: [
+      "Examine a fever, infection, wound, or persistent pain.",
+      "Decide how to rest, feed, protect, or monitor a patient.",
+      "Recognise signs that an injury needs surgery.",
+      "Follow recovery and alter treatment when it fails.",
     ],
-    methods: [
-      "Collect symptom evidence, separate certainty tiers, and document treatment rationale.",
-      "Failure mode: treating uncertain signs as confirmed cases creates avoidable compounding; revert to observation and reassessment first.",
-    ],
-    useGuidance:
-      "Use medicine tasks to stabilize and plan progression before specialist handoff when available.",
   },
   "skill:surgery": {
-    coreTasks: [
-      "Run sterilized pre-op checklist, controlled incision timing, and post-op observation protocol.",
+    boundaries: [
+      "Does not replace general diagnosis or long-term medical care.",
+      "Does not prepare medicines.",
+      "Does not make a hazardous operation certain to succeed.",
     ],
-    limits: [
-      "Do not perform when environment risk exceeds sterilization and monitoring requirements.",
-      "Do not carry this into broad nonoperative response without explicit permission.",
+    description:
+      "Surgery treats injury or disease by deliberate physical intervention. A capable surgeon plans the procedure, prepares instruments and the patient, controls bleeding and contamination, works accurately around vulnerable structures, and manages closure and immediate recovery. Surgery has always depended on anatomy, dexterity, cleanliness, and judgment about whether an operation is justified at all.",
+    shortDescription:
+      "Treat injury or disease through planned operative intervention and careful perioperative care.",
+    typicalUses: [
+      "Remove damaged or diseased tissue.",
+      "Repair a serious wound.",
+      "Set or treat an injury requiring operative work.",
+      "Manage bleeding and closure during an operation.",
     ],
-    methods: [
-      "Verify preparation gates, then execute only within defined procedural milestones.",
-      "Failure mode: violating sequencing can create irreversible harm; reset by halting and reversing to clean-room controls.",
-    ],
-    useGuidance:
-      "Treat surgical actions as constrained procedures with strict completion criteria.",
   },
   "skill:research": {
-    coreTasks: [
-      "Gather corroborating sources, map claim dependencies, and compare contradictory testimonies.",
+    boundaries: [
+      "Does not make incomplete evidence complete.",
+      "Does not guarantee access to records or witnesses.",
+      "Perception notices immediate details; Research develops an answer from evidence.",
     ],
-    limits: [
-      "Do not treat a single source as sufficient authority.",
-      "Do not present unsupported inference as settled doctrine.",
+    description:
+      "Research is the systematic search for a reliable answer through records, testimony, observation, experiment, or comparison. A capable researcher frames a clear question, finds relevant material, checks its origin and limitations, compares conflicting accounts, and distinguishes evidence from inference. Its result may be a firm conclusion, a useful lead, or an honest account of what remains uncertain.",
+    shortDescription:
+      "Find, compare, and evaluate evidence in order to reach a supportable conclusion.",
+    typicalUses: [
+      "Trace the history or ownership of an object.",
+      "Compare accounts of an event.",
+      "Identify relevant laws, records, or technical writings.",
+      "Test whether a rumour has credible support.",
     ],
-    methods: [
-      "Triangulate evidence, classify confidence, and archive rationale for each conclusion.",
-      "Failure mode: confirmation bias from one source produces false certainty; recover by adding one independent corroborant.",
-    ],
-    useGuidance:
-      "Apply this envelope whenever claims affect long-lived profile or history attribution.",
-  },
-  "skill:law:olog-princely": {
-    coreTasks: [
-      "Resolve legal posture by applying court precedent chain and enforcement precedence.",
-    ],
-    limits: [
-      "Confine recommendations to explicit court-channel authority and procedural scope.",
-      "Do not extrapolate legal authority into unrelated social customs.",
-    ],
-    methods: [
-      "Check authority, document evidentiary basis, and route exceptions through recorded channels.",
-      "Failure mode: conflating custom and decree produces invalid rulings; recover by separating jurisdictional anchors.",
-    ],
-    useGuidance:
-      "Keep this skill active only where Olog legal channels and compatible histories are present.",
   },
   "skill:dead-reckoning": {
-    coreTasks: [
-      "Update movement estimate from speed, time, and bearing anchors each decision turn.",
+    boundaries: [
+      "Chart Navigation uses prepared maps or charts.",
+      "It is an estimate, not a direct observation of position.",
+      "Does not supply local knowledge of hazards.",
     ],
-    limits: [
-      "Do not trust long-range estimates without cross-check points.",
-      "Do not extend a route estimate across abrupt hazard shifts.",
+    description:
+      "Dead reckoning estimates present position by carrying forward a route from a known point. A capable navigator records each leg, estimates course and distance, allows for drift or obstacles where possible, and corrects the estimate when a reliable observation becomes available. It is useful at sea, in open country, or whenever landmarks are poor, but small errors accumulate steadily.",
+    shortDescription:
+      "Estimate current position from a known start, direction, speed, and elapsed travel time.",
+    typicalUses: [
+      "Estimate a vessel’s position between sightings.",
+      "Keep track of distance travelled in fog or darkness.",
+      "Reconstruct a route after losing sight of landmarks.",
+      "Compare an estimated position with a later observation.",
     ],
-    methods: [
-      "Set a baseline vector, apply uncertainty buffers, and revise after each observed check.",
-      "Failure mode: stale vector assumptions drift rapidly; recover by resetting baseline reference points.",
-    ],
-    useGuidance:
-      "Use dead-reckoning as backup or primary travel estimation when landmarks are sparse.",
   },
   "skill:chart-navigation": {
-    coreTasks: [
-      "Interpret chart symbols, lanes, hazards, and route annotations before committing the turn.",
+    boundaries: [
+      "Does not guarantee that a chart is current or accurate.",
+      "Pilotage concerns close navigation where immediate local hazards dominate.",
+      "Does not replace observation of weather, water, or terrain.",
     ],
-    limits: [
-      "Do not infer safety from incomplete symbol interpretation.",
-      "Do not bypass written channel notes in favor of memory only.",
+    description:
+      "Chart navigation uses maps, charts, and their conventions to plan and follow a route. A capable navigator understands scale, symbols, bearings, elevations or depths, plots positions and waypoints, and compares the planned route with terrain and present conditions. It is a disciplined way to use recorded geographic information, not a substitute for looking outside.",
+    shortDescription:
+      "Use maps or charts to plan and follow routes while accounting for recorded hazards.",
+    typicalUses: [
+      "Plot a sea passage, road journey, or mountain route.",
+      "Identify recorded shoals, crossings, passes, and settlements.",
+      "Measure bearing and distance between known points.",
+      "Check a route against a current position.",
     ],
-    methods: [
-      "Parse hazard flags, cross-reference waypoint sequence, and confirm depth of approach windows.",
-      "Failure mode: skipping chart annotations risks hidden hazards; recover with a chart+terrain re-parse.",
-    ],
-    useGuidance:
-      "Use this envelope for route planning, not ad hoc improvisation at approach points.",
-  },
-  "spoken:common": {
-    coreTasks: ["Align phrasing with civic and field registers before making requests or updates."],
-    limits: [
-      "Do not assume fluent nuance in emergency jargon.",
-      "Avoid replacing shared civic norms with private idiom.",
-    ],
-    methods: [
-      "Open with role and intent, then confirm comprehension via short checkpoints.",
-      "Failure mode: unsupported jargon misroutes instructions; recover with a plain-language restatement.",
-    ],
-    useGuidance:
-      "Use Common speech for coordination loops where broad audience comprehension is mandatory.",
-  },
-  "spoken:mogrebi": {
-    coreTasks: [
-      "Use institutional Mogrebi terms when acting across clinics, temple records, and civic filing.",
-    ],
-    limits: [
-      "Restrict usage to contexts with recognized institutional conventions.",
-      "Do not use ritual phrasing in purely commercial channels.",
-    ],
-    methods: [
-      "Set register by location first, then map each phrase to the required institutional purpose.",
-      "Failure mode: mixed register causes procedural rejection; recover with explicit register correction.",
-    ],
-    useGuidance: "Prefer this when documentation boundaries require Mogrebi technical vocabulary.",
-  },
-  "spoken:ologian": {
-    coreTasks: [
-      "Render testimony and testimony-adjacent language for court-facing and clerical recipients.",
-    ],
-    limits: [
-      "Do not collapse legal formality into casual narration.",
-      "Avoid asserting authority without procedural basis.",
-    ],
-    methods: [
-      "Separate observed fact from interpretation and avoid overstatement.",
-      "Failure mode: wording drift creates evidentiary damage; recover by re-alignment to formal format.",
-    ],
-    useGuidance:
-      "Use Ologian speech when the audience is constrained by court or record expectations.",
-  },
-  "spoken:phoenician": {
-    coreTasks: [
-      "Convey trade intent using historically aligned commercial conventions and signal timing.",
-    ],
-    limits: [
-      "Avoid mixing casual shorthand with maritime negotiation channels.",
-      "Do not omit route or payment obligations.",
-    ],
-    methods: [
-      "Translate terms into stable commercial units and confirm terms before closure.",
-      "Failure mode: omitted terms creates claim disputes; recover through explicit term revalidation.",
-    ],
-    useGuidance:
-      "Use this envelope for trade and harbor correspondence where historical commercial language is expected.",
-  },
-  "spoken:nkolian": {
-    coreTasks: [
-      "Transmit settlement movement instructions through frontier-appropriate cadence and honor forms.",
-    ],
-    limits: [
-      "Avoid introducing urban legal wording into caravan administration.",
-      "Keep sentence length and reference scope compact.",
-    ],
-    methods: [
-      "Match speaker role and caravan context before issuing movement or delivery instructions.",
-      "Failure mode: context mismatch creates travel delays; recover by restating role and destination clearly.",
-    ],
-    useGuidance: "Use N'kolian for caravan and frontier mobility coordination routines.",
-  },
-  "spoken:scythian": {
-    coreTasks: [
-      "Use oral convention for clan and home-region negotiation with explicit audience alignment.",
-    ],
-    limits: [
-      "Do not extend scythian assumptions outside local oral-law scopes.",
-      "Avoid replacing required written traces with only verbal commitments.",
-    ],
-    methods: [
-      "Establish social footing, then state expectation and consequence in one pass.",
-      "Failure mode: oral ambiguity causes attribution disputes; recover by restating obligations.",
-    ],
-    useGuidance:
-      "Use Scythian language where social-clan oral channels are the explicit authority surface.",
-  },
-  "written:mogrebi:sacred-mogrebi": {
-    coreTasks: [
-      "Decode sacred-format entries into actionable references for clinical or devotional records.",
-    ],
-    limits: [
-      "Do not infer spoken nuance from script forms.",
-      "Do not bypass line-specific reading for summary claims.",
-    ],
-    methods: [
-      "Anchor each interpretation to line context and preserve symbol/translation boundaries.",
-      "Failure mode: transcription drift causes mis-citation; recover through source-line verification.",
-    ],
-    useGuidance: "Use this envelope for written sacred material where exact citation is required.",
-  },
-  "written:ologian:church-ologian": {
-    coreTasks: ["Decode clerical notation into procedural, legal, and instructional intent."],
-    limits: [
-      "Do not blend legal conclusions with undocumented assumptions.",
-      "Separate copy-level transcription from adjudicated meaning.",
-    ],
-    methods: [
-      "Cross-check phrase intent against nearby records before applying operationally.",
-      "Failure mode: over-reading a copied phrase causes legal mismatch; recover through conservative interpretation.",
-    ],
-    useGuidance: "Use in court and clerical contexts requiring traceable written authority.",
-  },
-  "written:phoenician:phoenician": {
-    coreTasks: [
-      "Interpret trade-oriented notation for obligations, routes, and commercial memory.",
-    ],
-    limits: [
-      "Do not apply maritime shorthand out of route context.",
-      "Avoid substituting reconstructed values for explicit symbols.",
-    ],
-    methods: [
-      "Parse columns/annotations, then map terms to contract intent and route expectations.",
-      "Failure mode: misread symbols alter value and payment outcome; recover by re-parsing annotation keys.",
-    ],
-    useGuidance:
-      "Use this envelope before making historical trade assertions from Phoenician records.",
-  },
-  "spec:household-guard-sword-shield-drill": {
-    coreTasks: [
-      "Escalate from shared weapon baseline into paired drill procedures with explicit thresholds.",
-    ],
-    limits: [
-      "Keep this specialization tied to paired household-guard practice only.",
-      "Do not blend with unrelated weapon specialization without parent transfer checks.",
-    ],
-    methods: [
-      "Run synchronized guard transitions, spacing controls, and recovery commands.",
-      "Failure mode: ignoring threshold gates dilutes practice quality; recover by retraining from parent sword/shield records.",
-    ],
-    useGuidance:
-      "Use only after household guard competency context exists and prerequisites are met.",
-  },
-  "spec:diagnostic-medicine": {
-    coreTasks: [
-      "Apply differential case comparison using medicine and pharmacy context before specialist escalation.",
-    ],
-    limits: [
-      "Do not replace diagnostic review with treatment-only assumptions.",
-      "Avoid widening scope beyond medicine-derived facts.",
-    ],
-    methods: [
-      "Build symptom pattern maps, then challenge each hypothesis against objective signs.",
-      "Failure mode: early closure on one diagnosis hides differential risks; recover by reopening compare-and-contrast loop.",
-    ],
-    useGuidance:
-      "This specialization is an authored extension for high-certainty clinical reasoning.",
-  },
-  "spec:warded-lock-entry": {
-    coreTasks: ["Use warded-entry sequencing without introducing irreversible lock modifications."],
-    limits: [
-      "Do not apply warded methods to non-warded mechanisms.",
-      "Do not claim ownership changes outside explicit transfer support.",
-    ],
-    methods: [
-      "Verify mechanism family, test pressure points, and apply controlled tactile mapping.",
-      "Failure mode: over-pressing a warded device causes lock-state collapse; recover with recovery timing and exit.",
-    ],
-    useGuidance:
-      "Apply this specialization only when the base lockpicking route and profile context are active.",
-  },
-  "spec:court-administration": {
-    coreTasks: ["Coordinate petitions, precedence, and reporting obligations in court workflows."],
-    limits: [
-      "Do not infer court authority from household or trade experience alone.",
-      "Keep ceremonial obligations explicit in every transition.",
-    ],
-    methods: [
-      "Track dossier requirements, then route each decision through documented channels.",
-      "Failure mode: missing a filing step invalidates the action; recover by replaying sequence against the procedure checklist.",
-    ],
-    useGuidance: "Use this specialization only within explicit court-administration pathways.",
-  },
-  "spec:weaponsmithing": {
-    coreTasks: [
-      "Forge and inspect weapon components using explicit craft thresholds and quality checkpoints.",
-    ],
-    limits: [
-      "Keep inspection and safety controls separate from operational weapon use.",
-      "Do not bypass heat-treatment and fit checks.",
-    ],
-    methods: [
-      "Apply cycle-by-cycle forging control, then document balance and edge consistency.",
-      "Failure mode: skipping inspections causes cumulative defect drift; recover through full reforge validation.",
-    ],
-    useGuidance:
-      "Use this specialization when smithing context directly feeds weapon quality outcomes.",
-  },
-  "spec:home-coast-pilotage": {
-    coreTasks: [
-      "Apply local-water navigation through tide-aware micro-routes and familiar channel behavior.",
-    ],
-    limits: [
-      "Do not project home-coast assumptions onto open-water operations.",
-      "Do not ignore local exceptions and seasonal route notes.",
-    ],
-    methods: [
-      "Validate route set against coastal references and weather overlays each transit segment.",
-      "Failure mode: stale coastal memory causes grounding; recover by returning to pilotage baseline checks.",
-    ],
-    useGuidance: "Specialized for named Lankhmar coastal waters and related transfer requirements.",
-  },
-  "spec:desert-wayfinding": {
-    coreTasks: [
-      "Blend terrain memory, water-risk, and signs into long-distance arid-route planning.",
-    ],
-    limits: [
-      "Do not ignore heat stress and exposure constraints.",
-      "Avoid open-route commitment without water margin confirmation.",
-    ],
-    methods: [
-      "Mark waypoints by scarcity logic, then verify each segment before continuing.",
-      "Failure mode: route confidence without resource audit causes stranded movement; recover by halting and recalibrating.",
-    ],
-    useGuidance: "Use this specialization only when desert-route context is explicitly available.",
-  },
-  "spec:steppe-remount-training": {
-    coreTasks: ["Cycle remount readiness, recovery windows, and rapid redeployment habits."],
-    limits: [
-      "Do not generalize Steppe cadence to unrelated mounted doctrine.",
-      "Do not overload remount rotation without recovery checks.",
-    ],
-    methods: [
-      "Assign animal load, rest spacing, and handler response per leg in fixed rotation.",
-      "Failure mode: ignoring recovery leads to remount fatigue; recover by rebalancing rotation.",
-    ],
-    useGuidance: "Apply for clan horse movement where remount availability is central.",
   },
   "skill:sword": {
-    coreTasks: ["Execute controlled guards, cut angles, and parry timing in close combat loops."],
-    limits: [
-      "Do not overcommit when distance collapses unexpectedly.",
-      "Avoid fixed timing without visual recalibration.",
+    boundaries: [
+      "Does not make other weapon types interchangeable.",
+      "Shield use is separate.",
+      "Does not provide tactical command.",
     ],
-    methods: [
-      "Set entry distance, choose angle, and finish with secure reset posture.",
-      "Failure mode: predictable cadence exposes counters; recover with distance reset and angle pivot.",
+    description:
+      "Sword skill is controlled use of a sword in combat. A capable fighter manages range and footwork, uses cuts or thrusts appropriately, maintains guard, and recovers after an action without leaving an easy opening. The details vary with the sword’s shape and balance, but the central competence is making its reach and edge serve deliberate movement.",
+    shortDescription:
+      "Fight with a sword by controlling distance, guard, timing, attack, defence, and recovery.",
+    typicalUses: [
+      "Deliver a controlled cut or thrust.",
+      "Maintain distance against another armed opponent.",
+      "Defend and recover from an exchange.",
+      "Fight effectively while moving over uneven ground.",
     ],
-    useGuidance: "This envelope applies to direct sword-and-shield or paired routines when active.",
   },
   "skill:shield": {
-    coreTasks: ["Align shield plane, angle, and stepping to absorb and redirect pressure."],
-    limits: [
-      "Do not treat shield hold as static posture under all threats.",
-      "Avoid long-duration blocks without mobility resets.",
+    boundaries: [
+      "Does not replace moving clear of danger.",
+      "Does not grant sword or other weapon skill.",
+      "Cannot protect every angle at once.",
     ],
-    methods: [
-      "Pair coverage with short pivots and pressure redirection checks.",
-      "Failure mode: locked frame locks body into follow-on harm; recover through guarded footwork.",
+    description:
+      "Shield skill is the active use of a shield to protect the body, close lines of attack, and create safer movement. A capable user positions, angles, and moves the shield without obscuring vision, losing balance, or preventing action with the other hand. A shield is not passive cover: it must be brought into the right place at the right time.",
+    shortDescription:
+      "Intercept attacks and control openings with a shield while preserving sight, balance, and movement.",
+    typicalUses: [
+      "Intercept a blow, missile, or thrust.",
+      "Advance while protecting an exposed side.",
+      "Cover a companion during withdrawal.",
+      "Control the space between two opponents.",
     ],
-    useGuidance: "Use shield control as a sustained protective framework within close distance.",
   },
   "skill:knife-dagger": {
-    coreTasks: [
-      "Keep compact arcs, retention paths, and fast transitions within protected spacing.",
+    boundaries: [
+      "Does not provide the reach of a sword or spear.",
+      "Does not cover general tool use with a knife.",
+      "Close range remains dangerous even for a skilled user.",
     ],
-    limits: [
-      "Do not operate in broad-range assumptions for short-weapon work.",
-      "Do not trade reach for tempo without compensating body position.",
+    description:
+      "Knife and dagger skill covers attack, defence, retention, and control with short blades. A capable fighter uses compact movement, accurate point or edge placement, and careful body position while recognising the danger of operating within an opponent’s reach. Short blades are portable and quick at close quarters, but lack the reach and leverage of longer weapons.",
+    shortDescription: "Use and retain a short blade in close-range fighting.",
+    typicalUses: [
+      "Fight in a cramped room or alley.",
+      "Retain a blade during a close struggle.",
+      "Use a short blade where a longer weapon cannot be moved freely.",
+      "Defend at very short range.",
     ],
-    methods: [
-      "Anchor grip, choose target micro-zones, and sequence retention exits.",
-      "Failure mode: poor retention produces accidental loss; recover through reset-to-grip drill.",
-    ],
-    useGuidance:
-      "This envelope supports close-range manipulative movement under constrained angles.",
   },
   "skill:spear": {
-    coreTasks: ["Maintain distance, drive thrust vectors, and recover at safe extension points."],
-    limits: [
-      "Do not overstep into unsupported lunging sequences.",
-      "Avoid overextending beyond recoverable foot geometry.",
+    boundaries: [
+      "Loses much of its advantage when distance closes.",
+      "Does not make other polearms or swords interchangeable.",
+      "Does not replace battle tactics.",
     ],
-    methods: [
-      "Alternate extension, binding, and foot recovery while reading opponent pressure.",
-      "Failure mode: overreach breaks distance control; recover with retraction and guard reset.",
+    description:
+      "Spear skill is the use of a hafted thrusting weapon for attack and defence. A capable fighter preserves useful distance, controls the point, uses leverage and footwork, and recovers before an overextended thrust becomes a liability. Its central advantage is reach; good practice is therefore as much about preserving space as striking.",
+    shortDescription:
+      "Fight with a spear by controlling reach, point, leverage, footwork, and recovery.",
+    typicalUses: [
+      "Hold an opponent beyond close striking distance.",
+      "Defend a narrow approach.",
+      "Threaten a mounted or charging opponent.",
+      "Fight in a line with others.",
     ],
-    useGuidance: "Use spear posture where distance and engagement rhythm are primary.",
   },
   "skill:perception": {
-    coreTasks: [
-      "Scan social, tactical, and environmental cues before committing any immediate action.",
+    boundaries: [
+      "Does not reveal hidden facts beyond the senses.",
+      "Does not prove why a detail is significant.",
+      "Insight concerns people’s likely motives and feelings.",
     ],
-    limits: [
-      "Do not treat one cue as complete certainty.",
-      "Separate suspicious signal from confirmed evidence.",
+    description:
+      "Perception is deliberate observation through sight, hearing, smell, touch, and other available senses. A capable observer scans methodically, notices changes and inconsistencies, separates what was observed from what was assumed, and directs attention to details worth checking. It produces information from what can be sensed; interpretation can still be mistaken.",
+    shortDescription: "Notice relevant sensory details and judge what they may indicate.",
+    typicalUses: [
+      "Notice movement, a faint sound, or a disturbed surface.",
+      "Spot a concealed object or unusual detail.",
+      "Detect changes in a room, route, or person’s surroundings.",
+      "Compare what is present with what should be present.",
     ],
-    methods: [
-      "Record observations, rank confidence, and test for repeatability.",
-      "Failure mode: cue fixation causes premature conclusions; recover by widening the cue set.",
-    ],
-    useGuidance: "Use perception when risk is present and assumptions need early validation.",
   },
   "skill:athletics": {
-    coreTasks: [
-      "Build movement sequences around load, acceleration, and sustainable exertion envelopes.",
+    boundaries: [
+      "Swimming and Riding are distinct competences.",
+      "Does not make impossible lifts or jumps safe.",
+      "Specialised acrobatics may require separate training.",
     ],
-    limits: [
-      "Do not force sprint profiles without readiness checks.",
-      "Avoid repeating maximal loads with no recovery.",
+    description:
+      "Athletics is trained whole-body movement: running, jumping, climbing, lifting, carrying, and similar exertion. A capable athlete uses efficient technique, manages momentum and balance, and understands how fatigue, load, injury, or poor footing changes what is possible. It is broad physical competence rather than mastery of every specialised movement.",
+    shortDescription:
+      "Perform demanding physical movement with trained strength, balance, speed, endurance, and control.",
+    typicalUses: [
+      "Climb a wall, rope, or steep surface.",
+      "Jump a gap or obstacle.",
+      "Carry a heavy load over distance.",
+      "Sprint, scramble, or keep balance on difficult ground.",
     ],
-    methods: [
-      "Warm, execute, and cool down with explicit condition checkpoints.",
-      "Failure mode: fatigue masking leads to avoidable collapse; recover with pacing reset and technique review.",
-    ],
-    useGuidance: "Use this for controlled locomotion and sustained physical demand routines.",
   },
   "skill:survival": {
-    coreTasks: ["Prioritize shelter, hydration, and decision control in adverse field states."],
-    limits: [
-      "Do not expose group to prolonged exposure to avoidable hazards.",
-      "Do not substitute optimism for risk mitigation.",
+    boundaries: [
+      "Does not replace Medicine, Hunting, Tracking, or Navigation.",
+      "Does not make unsafe food or water safe.",
+      "Does not guarantee survival in extreme conditions.",
     ],
-    methods: [
-      "Establish hazard map, conserve resources, and enforce route patience.",
-      "Failure mode: unscheduled exertion collapses readiness; recover through immediate risk triage.",
+    description:
+      "Survival is practical judgment in conditions where water, warmth, food, shelter, rescue, or safe travel cannot be assumed. A capable practitioner sets priorities, protects against exposure, conserves strength and supplies, finds or makes shelter, and avoids turning discomfort into a crisis. It concerns staying alive and capable, not proving toughness through avoidable danger.",
+    shortDescription:
+      "Keep people alive and functional when ordinary shelter, supplies, and help are unavailable.",
+    typicalUses: [
+      "Make shelter before dangerous weather arrives.",
+      "Locate or conserve safe water.",
+      "Manage cold, heat, fatigue, and limited supplies.",
+      "Keep a group functional while awaiting rescue.",
     ],
-    useGuidance: "Apply when environmental pressure dominates tactical or social options.",
   },
   "skill:leadership": {
-    coreTasks: ["Set intent, monitor morale pressure, and assign role-aligned responsibilities."],
-    limits: [
-      "Do not over-centralize without relay channels.",
-      "Avoid silent assumption of consensus.",
+    boundaries: [
+      "Does not supply the technical competence being directed.",
+      "Does not guarantee obedience or loyalty.",
+      "Battle Tactics concerns armed engagements specifically.",
     ],
-    methods: [
-      "Brief clearly, assign timing windows, and request confirmation checkpoints.",
-      "Failure mode: ambiguity degrades alignment; recover by narrowing priorities and re-issuing orders.",
+    description:
+      "Leadership is the ability to organise people around a purpose. A capable leader gives clear instructions, assigns responsibilities, resolves uncertainty, maintains discipline and morale, and adapts direction when conditions change. Leadership can rest on formal authority, reputation, persuasion, example, experience, or accepted hierarchy. It applies equally to crews, expeditions, households, work parties, offices, and military groups.",
+    shortDescription:
+      "Direct and coordinate people toward a shared objective while maintaining order, morale, and cooperation.",
+    typicalUses: [
+      "Organise a group during danger or confusion.",
+      "Assign roles for a journey or difficult task.",
+      "Maintain cooperation during a long effort.",
+      "Give practical direction when a plan changes.",
     ],
-    useGuidance: "Use this envelope for mixed-unit coordination under moderate to high pressure.",
   },
   "skill:pharmacy": {
-    coreTasks: [
-      "Compose remedies by dose windows, ingredient interactions, and monitoring obligations.",
+    boundaries: [
+      "Does not diagnose a patient’s condition.",
+      "Does not perform surgery.",
+      "Plant Lore identifies plants more broadly; Pharmacy concerns medicinal preparation.",
     ],
-    limits: [
-      "Do not mix compounds without compatibility checks.",
-      "Avoid blind scaling of dosage by gut feeling.",
+    description:
+      "Pharmacy concerns medicinal substances and their safe preparation and use. A capable practitioner identifies materials, measures ingredients and doses, prevents contamination, stores preparations correctly, recognises important incompatibilities, and gives clear instructions for use. Historically, pharmacy developed from practical knowledge of plants, minerals, preparations, preservation, and dose.",
+    shortDescription: "Identify, prepare, preserve, measure, and dispense medicines safely.",
+    typicalUses: [
+      "Prepare a measured medicinal remedy.",
+      "Store medicines without spoilage or contamination.",
+      "Identify an unsafe mixture or dose.",
+      "Label and dispense a preparation clearly.",
     ],
-    methods: [
-      "Prepare compounds, verify potency bands, and track response intervals.",
-      "Failure mode: dosing assumptions cause adverse effects; recover with immediate intake pause and reassessment.",
-    ],
-    useGuidance: "Use pharmacy when treatment planning needs measurable preparation and follow-up.",
   },
   "skill:plant-lore": {
-    coreTasks: ["Identify plant state, season, and utility before recommending extraction or use."],
-    limits: [
-      "Do not apply static use rules across seasonal cycles.",
-      "Avoid assuming availability from memory alone.",
+    boundaries: [
+      "Does not by itself prepare medicines safely.",
+      "Does not make an uncertain identification reliable.",
+      "Does not replace Agriculture or horticultural practice.",
     ],
-    methods: [
-      "Verify morphology cues, then cross-check usage patterns.",
-      "Failure mode: misidentification causes failed outcomes; recover by isolating specimen and rechecking markers.",
+    description:
+      "Plant lore is practical knowledge of plants in their natural settings. A capable practitioner identifies specimens from several features, understands season and habitat, distinguishes useful plants from harmful lookalikes, and treats uncertain identification as a real danger. It can support gathering food, fibre, dyes, medicines, or materials, but careful identification remains essential.",
+    shortDescription:
+      "Recognise plants, their habitats, seasons, useful properties, dangers, and lookalikes.",
+    typicalUses: [
+      "Identify edible, poisonous, medicinal, or useful plants.",
+      "Find plants in their likely habitat and season.",
+      "Avoid dangerous lookalikes.",
+      "Gather plant material without ruining the source.",
     ],
-    useGuidance:
-      "Use this envelope for practical botany under healing, ritual, and logistical contexts.",
   },
   "skill:streetwise": {
-    coreTasks: [
-      "Map rumor flows, sentiment signals, and likely social pressure before approaching actors.",
+    boundaries: [
+      "Does not guarantee criminal contacts or protection.",
+      "Customs concerns social expectations; Streetwise concerns practical urban judgment.",
+      "Rumour remains uncertain evidence.",
     ],
-    limits: [
-      "Do not treat rumor as fact.",
-      "Avoid exposing objectives before trust checks complete.",
+    description:
+      "Streetwise is practical judgment about how an unfamiliar town or city works at ground level. A capable practitioner reads local behaviour, finds services and information, notices likely scams or dangerous situations, and approaches people without treating rumour as fact. It is knowledge of everyday urban life: what is normal, what is risky, and where useful help may be found.",
+    shortDescription:
+      "Navigate urban life by reading local behaviour, finding ordinary resources, and recognising common risks.",
+    typicalUses: [
+      "Find lodging, food, transport, or ordinary services.",
+      "Learn which areas are unsafe after dark.",
+      "Recognise a common scam or pressure tactic.",
+      "Find a reliable local source of information.",
     ],
-    methods: [
-      "Trace influence lines, confirm source reliability, and preserve exit options.",
-      "Failure mode: unverified chatter triggers preventable exposure; recover through channel narrowing.",
-    ],
-    useGuidance:
-      "Use for monitoring civic pressure, rumor vectors, and social exposure before any sensitive approach or information contact.",
   },
   "skill:underworld": {
-    coreTasks: ["Track illicit intermediaries and incentive chains across hidden exchanges."],
-    limits: [
-      "Do not commit to inferred motives without corroboration.",
-      "Avoid escalating covert assumptions into open action.",
+    boundaries: [
+      "Does not guarantee access, trust, protection, or loyalty.",
+      "Does not replace Deception, Stealth, or Lockpicking.",
+      "Reputation and rumour are not proof.",
     ],
-    methods: [
-      "Follow transaction echoes, record trust markers, and test contradictions.",
-      "Failure mode: trusting false intermediaries compounds risk; recover by dropping chain and re-verifying links.",
+    description:
+      "Underworld is knowledge of concealed and illicit activity: its markets, roles, intermediaries, codes, risks, and reputations. A capable practitioner recognises likely points of contact and warning signs, seeks information cautiously, and understands that claims of influence or loyalty may be false. It is knowledge of such networks, not membership in them.",
+    shortDescription:
+      "Understand illicit networks, hidden markets, intermediaries, customs, reputations, and warning signs.",
+    typicalUses: [
+      "Identify a likely intermediary or fence.",
+      "Recognise the signs of an illicit market or arrangement.",
+      "Ask cautiously about a concealed service or person.",
+      "Judge whether a supposed contact is probably dangerous.",
     ],
-    useGuidance:
-      "Use underworld skill only for structured network analysis under proper profile constraints.",
   },
   "skill:deception": {
-    coreTasks: [
-      "Construct credible narratives with bounded scope, timing, and plausible deniability.",
+    boundaries: [
+      "Does not alter facts or erase evidence.",
+      "Disguise changes appearance; Deception manages belief.",
+      "Insight may form an informed suspicion but does not prove a lie.",
     ],
-    limits: [
-      "Do not sustain deception beyond planned exit criteria.",
-      "Do not replace social reading with scripted certainty.",
+    description:
+      "Deception is the deliberate shaping of another person’s belief through false statements, misleading conduct, omission, or arranged appearances. A capable deceiver keeps a claim plausible, limits details that can be checked, notices the audience’s reactions, and maintains consistency when questioned. It works on belief and interpretation, not on reality itself.",
+    shortDescription:
+      "Create and maintain a plausible false impression through words, behaviour, omission, or staged evidence.",
+    typicalUses: [
+      "Give a plausible false explanation.",
+      "Conceal a relevant fact by omission.",
+      "Support an assumed role with credible behaviour.",
+      "Mislead an observer about what has occurred.",
     ],
-    methods: [
-      "Control body language, reveal cadence, and rehearse fallback explanations.",
-      "Failure mode: narrative drift collapses the cover; recover with immediate controlled disclosure strategy.",
-    ],
-    useGuidance: "Use only in scenarios that explicitly permit staged social influence.",
   },
   "skill:stealth": {
-    coreTasks: ["Reduce signature through movement cadence, timing, and environmental masking."],
-    limits: [
-      "Do not ignore light and sound signatures when conditions shift.",
-      "Avoid prolonged stillness in high-reactivity zones.",
+    boundaries: [
+      "Does not make invisibility possible.",
+      "Disguise concerns a false appearance; Stealth concerns avoiding notice.",
+      "Does not overcome barriers or locks.",
     ],
-    methods: [
-      "Plan ingress window, anchor route noise profile, and monitor watch cycles.",
-      "Failure mode: predictable movement creates visual lock; recover with route and tempo pivot.",
+    description:
+      "Stealth is reducing the chance of being noticed. A capable practitioner uses cover, light, sound, pace, timing, and observation to avoid drawing attention or leaving obvious signs of passage. It is always conditional: bare ground, bright light, noise, confinement, or alert observers may make concealment impractical.",
+    shortDescription:
+      "Move or remain present without notice by controlling visibility, sound, timing, and signs of passage.",
+    typicalUses: [
+      "Cross a guarded or occupied area quietly.",
+      "Remain hidden while observing.",
+      "Avoid disturbing a sleeping person or animal.",
+      "Leave an area without attracting notice.",
     ],
-    useGuidance: "Use stealth for threat minimization, not for bypassing explicit prohibitions.",
   },
   "skill:lockpicking": {
-    coreTasks: ["Map ward geometry, tension behavior, and tactile feedback in controlled order."],
-    limits: [
-      "Do not force mechanisms beyond material tolerance.",
-      "Do not claim completion until full closure is confirmed.",
+    boundaries: [
+      "Does not overcome bars, seals, traps, or unrelated barriers.",
+      "Does not guarantee quiet or undetectable entry.",
+      "Warded-Lock Entry concerns a specific class of mechanism.",
     ],
-    methods: [
-      "Set tactile baseline, probe incremental movement, and stop on abnormal resistance.",
-      "Failure mode: excessive force damages trust context; recover by withdrawing and reset inspection.",
+    description:
+      "Lockpicking is the careful opening of a mechanical lock without its intended key. A capable practitioner understands feedback from the mechanism, applies delicate pressure with suitable tools, and avoids damage that could jam the lock or reveal the attempt. Different mechanisms demand different knowledge and techniques.",
+    shortDescription:
+      "Open a mechanical lock without its intended key by sensing and manipulating its internal parts.",
+    typicalUses: [
+      "Open a locked door, chest, or cabinet.",
+      "Assess whether a lock has been tampered with.",
+      "Open a lock while limiting visible damage.",
+      "Decide when a particular mechanism is beyond available tools or knowledge.",
     ],
-    useGuidance:
-      "Use this only when lawful entry authority and profile route constraints are already satisfied before attempting any warded-entry operation.",
   },
   "skill:sleight-of-hand": {
-    coreTasks: ["Coordinate hand choreography with composure control and misdirection rhythm."],
-    limits: [
-      "Do not attempt concealment beyond practiced body pathways.",
-      "Avoid repeated gesture patterns that become detectable.",
+    boundaries: [
+      "Does not make a large or implausible action unnoticeable.",
+      "Does not make a missing object impossible to discover later.",
+      "Does not replace Stealth or Lockpicking.",
     ],
-    methods: [
-      "Segment action into preload, swap, and post-motion confirmation.",
-      "Failure mode: timing drift causes obvious tells; recover by reducing complexity and replaying choreography.",
+    description:
+      "Sleight of hand is concealed or misleading manipulation of small objects. A capable practitioner coordinates hands, posture, timing, and an observer’s attention so movements appear ordinary and the object’s location is misunderstood. It is commonly associated with performance, cheating, concealment, and subtle exchanges.",
+    shortDescription:
+      "Conceal or manipulate small objects through dexterity, timing, and control of attention.",
+    typicalUses: [
+      "Conceal a small object on one’s person.",
+      "Exchange, palm, or produce a small item discreetly.",
+      "Perform a convincing close-hand demonstration.",
+      "Move an object while an observer is distracted.",
     ],
-    useGuidance: "Apply for subtle transfer operations where social scrutiny is sustained.",
   },
   "skill:insight": {
-    coreTasks: ["Infer intent through verbal, behavioral, and contradiction signals in sequence."],
-    limits: [
-      "Do not over-index on a single signal type.",
-      "Do not ignore contextual contradiction after a consistent read.",
+    boundaries: [
+      "Does not read minds.",
+      "Does not reveal concealed facts.",
+      "Does not prove deception.",
     ],
-    methods: [
-      "Score cue clusters, compare with prior patterns, and mark confidence bands.",
-      "Failure mode: one false signal flips conclusion; recover by requesting another independent cue set.",
+    description:
+      "Insight is the interpretation of another person’s emotions, motives, and likely intentions from speech, conduct, and context. A capable observer notices changes of manner, tensions between words and behaviour, and signs of fear, confidence, hostility, uncertainty, sincerity, or evasion. Its conclusions are informed judgments, not direct access to another person’s thoughts.",
+    shortDescription:
+      "Judge likely emotions, motives, and intentions from what a person says and does.",
+    typicalUses: [
+      "Judge whether someone is anxious, angry, guarded, or receptive.",
+      "Notice that an explanation does not fit a speaker’s behaviour.",
+      "Decide how to frame a difficult conversation.",
+      "Distinguish confidence from uncertainty or bluffing.",
     ],
-    useGuidance: "Use insight to gate high-stakes social commitments and negotiations.",
   },
   "skill:disguise": {
-    coreTasks: [
-      "Build and preserve a sustained role profile through speech, posture, and routine behavior.",
+    boundaries: [
+      "Does not supply knowledge needed to sustain a detailed false identity.",
+      "Deception concerns false claims; Disguise concerns presentation.",
+      "Close scrutiny can expose inconsistencies.",
     ],
-    limits: [
-      "Do not stretch role consistency across repeated high-frequency checkpoints.",
-      "Do not change appearance without intent alignment.",
+    description:
+      "Disguise is the deliberate alteration of appearance and behaviour so that someone is mistaken for another person, accepted in a role, or overlooked as ordinary. A capable practitioner coordinates clothing, grooming, posture, voice, manner, and plausible conduct. Good disguise is as much about avoiding inconsistent details as changing outward appearance.",
+    shortDescription:
+      "Alter appearance, voice, posture, and conduct to support a plausible identity or avoid recognition.",
+    typicalUses: [
+      "Avoid recognition by people who know the subject.",
+      "Pass briefly as a worker, traveller, or other ordinary figure.",
+      "Support an assumed identity in public.",
+      "Alter appearance before leaving a watched area.",
     ],
-    methods: [
-      "Maintain behavioral loop, manage contact windows, and pre-plan exit statements.",
-      "Failure mode: inconsistent details expose the disguise; recover through controlled reset and role correction.",
-    ],
-    useGuidance:
-      "Use this envelope for recurrent social entry when repeated recognition risk exists.",
   },
   "skill:administration": {
-    coreTasks: [
-      "Sequence routing, intake, and approvals through institutional expectation chains.",
+    boundaries: [
+      "Does not replace legal judgment, accounting, or specialist expertise.",
+      "Does not grant authority that the practitioner does not possess.",
+      "Court Administration concerns a particular institutional setting.",
     ],
-    limits: [
-      "Do not bypass documented routing requirements.",
-      "Do not compress deadlines without authority scope.",
+    description:
+      "Administration is the practical management of an institution’s routine affairs. A capable administrator maintains records and correspondence, follows procedures, coordinates people and resources, processes requests and decisions, and understands how duties and authority are distributed. Administrative competence developed alongside courts, taxation, military establishments, religious institutions, commercial houses, and governments. It keeps an organisation functioning from day to day.",
+    shortDescription:
+      "Organise and carry out the records, procedures, and routine business of an institution or organised group.",
+    typicalUses: [
+      "Maintain records, files, schedules, and correspondence.",
+      "Route a request to the proper person or office.",
+      "Organise supplies, personnel, or routine work.",
+      "Trace responsibility for a decision or task.",
     ],
-    methods: [
-      "Create request ledger, confirm routing owner, and execute handoff only on explicit completion points.",
-      "Failure mode: skipping routing nodes returns requests to dead-ends; recover with route recovery checklist.",
-    ],
-    useGuidance: "Use administration for process-heavy obligations where traceability is required.",
   },
   "skill:customs": {
-    coreTasks: [
-      "Interpret local custom law and expected conduct before action in sensitive institutions.",
+    boundaries: [
+      "Does not establish legal rights or obligations.",
+      "One community’s customs may not apply elsewhere.",
+      "Does not guarantee approval from everyone present.",
     ],
-    limits: [
-      "Do not project one household norm into another legal environment.",
-      "Avoid dismissing inherited obligations in negotiation contexts.",
+    description:
+      "Customs is knowledge of unwritten conventions that shape ordinary social conduct. A capable practitioner recognises expectations around greeting, hospitality, status, exchange, mourning, gift-giving, dress, and offence, while distinguishing local practice from formal law. Customs often matter most when no one states the rule aloud.",
+    shortDescription:
+      "Know and follow expected social conduct in a particular society, community, or occasion.",
+    typicalUses: [
+      "Greet a host or dignitary appropriately.",
+      "Avoid giving offence in a formal gathering.",
+      "Understand expectations around gifts, meals, or hospitality.",
+      "Recognise when a social breach is deliberate.",
     ],
-    methods: [
-      "Check etiquette, hierarchy, and consequence matrix before engagement.",
-      "Failure mode: norm mismatch creates social penalties; recover by re-aligning to host custom.",
-    ],
-    useGuidance: "Use this for cultural interfaces where expectations carry real consequences.",
   },
   "skill:oratory": {
-    coreTasks: [
-      "Structure message for audience authority, urgency, and acceptable persuasive channel.",
+    boundaries: [
+      "Does not guarantee agreement.",
+      "Does not replace evidence, authority, or private negotiation.",
+      "Leadership concerns sustained direction of people.",
     ],
-    limits: [
-      "Do not over-amplify when procedural authority is stronger than rhetoric.",
-      "Avoid overpromising under incomplete facts.",
+    description:
+      "Oratory is purposeful public speaking. A capable speaker structures an argument, selects language suited to the audience, reads the room, uses voice and pace deliberately, and makes essential points understandable and memorable. Good delivery strengthens an argument, but cannot turn weak evidence into proof.",
+    shortDescription:
+      "Inform or persuade an audience through clear structure, suitable language, memorable points, and deliberate delivery.",
+    typicalUses: [
+      "Address a crowd, assembly, jury, crew, or gathering.",
+      "Explain a difficult proposal clearly.",
+      "Argue for a course of action.",
+      "Rally or reassure a group under pressure.",
     ],
-    methods: [
-      "Frame premise, evidence, and requested outcome with clear escalation order.",
-      "Failure mode: emotional overreach erodes credibility; recover with concise evidence-first revision.",
-    ],
-    useGuidance: "Use oratory where influence outcomes depend on controlled audience framing.",
   },
   "skill:bookkeeping": {
-    coreTasks: [
-      "Reconcile obligations, ledgers, and recurring account obligations with audit points.",
+    boundaries: [
+      "Does not by itself explain why a discrepancy occurred.",
+      "Does not establish market value.",
+      "Trade concerns exchange; Bookkeeping records it.",
     ],
-    limits: [
-      "Do not leave transactions unbalanced beyond check windows.",
-      "Do not omit source references for reconciliations.",
+    description:
+      "Bookkeeping is the systematic recording of transactions and obligations. A capable bookkeeper classifies entries, keeps ledgers in order, compares totals with receipts or inventories, and notices omissions, inconsistencies, or unexplained discrepancies. It provides reliable records from which decisions and investigations can proceed.",
+    shortDescription:
+      "Maintain and check records of money, goods, debts, payments, and supporting evidence.",
+    typicalUses: [
+      "Record sales, purchases, debts, wages, and payments.",
+      "Reconcile a ledger with cash, goods, or receipts.",
+      "Find a missing or duplicated entry.",
+      "Prepare clear records for another person to inspect.",
     ],
-    methods: [
-      "Validate balances, trace source documents, and document adjustment rationale.",
-      "Failure mode: skipped verification compounds later disputes; recover with full ledger rewind and correction.",
-    ],
-    useGuidance: "Apply bookkeeping when financial continuity and accountability are binding.",
   },
   "skill:trade": {
-    coreTasks: [
-      "Negotiate commodity value, payment terms, and settlement structure before agreement.",
+    boundaries: [
+      "Bargaining concerns negotiating particular terms.",
+      "Appraisal concerns judging a specific object.",
+      "Does not guarantee profit or fair dealing.",
     ],
-    limits: [
-      "Do not ignore margin, duty, or collateral obligations.",
-      "Do not treat one bid as final without mutual commitment.",
+    description:
+      "Trade is the practical conduct of buying, selling, moving, and settling exchanges across a market. A capable trader judges quality, supply, demand, transport, storage, risk, credit, and terms, and understands whether a proposed transaction is workable. It is broader than a single negotiation: it includes the conditions that make an exchange possible and worthwhile.",
+    shortDescription:
+      "Conduct exchanges of goods or services by judging markets, quality, costs, transport, terms, and settlement.",
+    typicalUses: [
+      "Source goods in one place for sale in another.",
+      "Judge transport, storage, and settlement costs.",
+      "Assess whether demand justifies a journey or purchase.",
+      "Organise a routine exchange of goods or services.",
     ],
-    methods: [
-      "Model valuation options, confirm constraints, and stage closing language.",
-      "Failure mode: rushed settlement triggers unfavorable reversals; recover by re-opening valuation steps.",
-    ],
-    useGuidance: "Use trade envelopes where negotiation and settlement obligations intersect.",
   },
   "skill:bargaining": {
-    coreTasks: ["Sequence concession windows while preserving long-form leverage."],
-    limits: [
-      "Do not concede key terms before fallback terms are secured.",
-      "Avoid escalating pressure when leverage is already below baseline.",
+    boundaries: [
+      "Does not create goods, authority, credit, or alternatives that do not exist.",
+      "Does not establish a thing’s actual value.",
+      "Does not replace broad market knowledge.",
     ],
-    methods: [
-      "Set non-negotiables, release concessions incrementally, and monitor countersignals.",
-      "Failure mode: premature concessions erase leverage; recover by reasserting priorities and stepping back.",
+    description:
+      "Bargaining is the focused negotiation of an exchange. A capable bargainer listens for what each side values, makes deliberate offers, manages concessions, recognises leverage, and knows when pressure is likely to end the discussion rather than improve the result. It is useful wherever terms are open to discussion, whether the exchange involves money, goods, service, time, or access.",
+    shortDescription:
+      "Improve the terms of an exchange by negotiating priorities, offers, concessions, and alternatives.",
+    typicalUses: [
+      "Negotiate price, delivery, payment, or service.",
+      "Trade one concession for another.",
+      "Test whether the other side has alternatives.",
+      "Reach workable terms without needlessly damaging a relationship.",
     ],
-    useGuidance: "Use bargaining as the constrained exchange envelope for negotiation.",
   },
   "skill:appraisal": {
-    coreTasks: ["Evaluate provenance, condition, and hidden defects before assigning value."],
-    limits: [
-      "Do not conflate appearance with craftsmanship.",
-      "Avoid transferring uncertain valuation into binding commitments.",
+    boundaries: [
+      "Does not guarantee authenticity or expose every hidden defect.",
+      "Does not negotiate the eventual sale.",
+      "An unfamiliar market can limit confidence.",
     ],
-    methods: [
-      "Inspect structure, verify provenance, and note defect risk alongside context.",
-      "Failure mode: undiscovered defects cause avoidable transfer losses; recover through deeper inspection pass.",
+    description:
+      "Appraisal is the informed estimation of what an object is, what condition it is in, and what it is likely to be worth in a relevant market. A capable appraiser examines materials, workmanship, marks, condition, provenance, and comparable objects, then explains the uncertainty of the valuation. A useful appraisal is not merely a price; it states what supports that judgment.",
+    shortDescription:
+      "Judge an object’s identity, condition, quality, and likely value through inspection, provenance, and comparison.",
+    typicalUses: [
+      "Judge the quality and likely value of an item for sale.",
+      "Notice signs of repair, damage, imitation, or alteration.",
+      "Compare similar objects in different conditions.",
+      "Assess whether claimed provenance deserves further inquiry.",
     ],
-    useGuidance: "Use appraisal when material decisions carry medium-to-high exchange risk.",
   },
   "skill:smithing": {
-    coreTasks: ["Run forge cycles with heat control, shaping, and structural quality checks."],
-    limits: [
-      "Do not skip cooldown and stress-relief checkpoints.",
-      "Do not ignore microfracture cues in inspection.",
+    boundaries: [
+      "Does not grant skill in using every object made.",
+      "Weaponsmithing is a more specific application.",
+      "Does not replace work in unrelated materials.",
     ],
-    methods: [
-      "Apply repeatable shaping passes and inspect each load-bearing edge.",
-      "Failure mode: rushed forge cycles produce brittle outcomes; recover with rework and structural retest.",
+    description:
+      "Smithing is the shaping and joining of metal by controlled heat, force, cutting, and finishing. A capable smith selects suitable stock, manages temperature and strain, forms an object accurately, joins or repairs it securely, and inspects the result for weakness or poor fit. It is a practical craft grounded in the changing properties of heated and worked metal.",
+    shortDescription:
+      "Make and repair metal objects through controlled heating, shaping, joining, finishing, and inspection.",
+    typicalUses: [
+      "Make or repair tools, fittings, fastenings, and metal household goods.",
+      "Shape a replacement part to fit an existing object.",
+      "Repair bent, cracked, or worn metalwork.",
+      "Inspect a metal object for obvious structural weakness.",
     ],
-    useGuidance: "Use smithing for stable production and quality assurance routines.",
   },
   "skill:seamanship": {
-    coreTasks: ["Coordinate deck movement, cargo balance, and safety under tide and load demands."],
-    limits: [
-      "Do not ignore weather and load interactions.",
-      "Do not proceed with channel changes without command confirmation.",
+    boundaries: [
+      "Navigation and Pilotage concern choosing and following routes.",
+      "Does not provide local knowledge of a coast or harbour.",
+      "Does not eliminate the dangers of weather or a damaged vessel.",
     ],
-    methods: [
-      "Set operational rhythm, secure routes, and execute with load-aware commands.",
-      "Failure mode: poor timing with tides creates avoidable hazard; recover with immediate stand-down and drift check.",
+    description:
+      "Seamanship is the practical operation and care of a vessel and its equipment. A capable sailor handles lines, sails or other controls, secures people and cargo, follows orders, manages routine work on a moving deck, and responds safely to immediate conditions. It is the craft of keeping a vessel and its people functioning, not simply knowing where to go.",
+    shortDescription:
+      "Work safely aboard a vessel by handling equipment, cargo, routine operations, and changing conditions.",
+    typicalUses: [
+      "Handle lines, sails, anchors, and deck equipment.",
+      "Secure cargo before rough conditions.",
+      "Work safely during docking, departure, or heavy weather.",
+      "Carry out routine watch and maintenance duties.",
     ],
-    useGuidance:
-      "Apply seamanship to vessel command where timing and environmental coupling are critical.",
   },
   "skill:pilotage": {
-    coreTasks: ["Run local-water movement through obstacle memory and approach sequencing."],
-    limits: [
-      "Do not assume open-water rules in narrow ports.",
-      "Avoid channel entry without verified markers.",
+    boundaries: [
+      "Does not grant universal knowledge of every coast or harbour.",
+      "Seamanship concerns working the vessel itself.",
+      "A chart alone does not replace present observation.",
     ],
-    methods: [
-      "Track approach vectors, local notes, and tide windows before committing route.",
-      "Failure mode: anchor mismatch causes missed approaches; recover by resetting to known waypoints.",
+    description:
+      "Pilotage is close navigation where shoals, channels, tides, currents, markers, traffic, and changing depth matter. A capable pilot combines charts with immediate observation, soundings, local knowledge, and continual checks that the vessel is where it is believed to be. It is especially important near coasts, harbours, rivers, and narrow waterways.",
+    shortDescription:
+      "Guide a vessel through confined or coastal waters using observation, charts, local conditions, and continual position checks.",
+    typicalUses: [
+      "Enter or leave a harbour safely.",
+      "Follow a narrow channel or river.",
+      "Account for tide and current near shore.",
+      "Verify a route through waters with local hazards.",
     ],
-    useGuidance:
-      "Use pilotage for near-shore movement where channel restrictions, local notes, and tide windows remain explicit gate conditions.",
   },
   "skill:swimming": {
-    coreTasks: ["Maintain buoyancy, propulsion, and controlled return under load and fatigue."],
-    limits: [
-      "Do not push distance planning over recovery and visibility.",
-      "Do not enter surf zones without contingency route.",
+    boundaries: [
+      "Does not make severe conditions safe.",
+      "Does not replace seamanship or water rescue expertise.",
+      "Carried weight and injury may sharply limit ability.",
     ],
-    methods: [
-      "Monitor breath cadence, stroke economy, and exhaustion margin.",
-      "Failure mode: fatigue-induced loss of orientation; recover through immediate safe return and recalibration.",
+    description:
+      "Swimming is controlled movement and survival in water. A capable swimmer manages breathing, buoyancy, direction, propulsion, clothing or load, fatigue, and the choice of a safe exit. Water conditions matter greatly: current, cold, waves, injury, exhaustion, and heavy clothing can overwhelm ordinary ability.",
+    shortDescription:
+      "Travel or remain safe in water by managing breathing, buoyancy, propulsion, direction, load, and fatigue.",
+    typicalUses: [
+      "Cross still or moving water.",
+      "Remain afloat until help or a safe exit is available.",
+      "Recover after falling from a vessel or bank.",
+      "Assist another person without immediately creating a second casualty.",
     ],
-    useGuidance: "Use this envelope for water movement requiring controlled exertion and recovery.",
   },
   "skill:weather-lore": {
-    coreTasks: ["Identify short-range weather transitions from pressure, wind, and cue arrays."],
-    limits: [
-      "Do not rely on one cue family alone.",
-      "Avoid route commitments before hazard confirmation.",
+    boundaries: [
+      "Supports a forecast rather than certainty.",
+      "Does not control weather.",
+      "One sign alone may be misleading.",
     ],
-    methods: [
-      "Cross-check atmospheric signals and assign confidence to each weather window.",
-      "Failure mode: stale forecasting creates route entrapment; recover via local cue re-sampling.",
+    description:
+      "Weather lore is practical forecasting from observable atmospheric signs. A capable observer compares clouds, wind direction and force, temperature, moisture, pressure where available, and familiar local patterns; then revises the forecast as conditions change. It is grounded in real recurring relationships in the atmosphere, but weather remains variable and local.",
+    shortDescription:
+      "Forecast near-term weather from clouds, wind, pressure, temperature, moisture, and recurring local patterns.",
+    typicalUses: [
+      "Judge whether rain, wind, frost, fog, or a storm is likely soon.",
+      "Decide when to travel, sail, harvest, or seek shelter.",
+      "Recognise signs of changing conditions.",
+      "Compare a familiar local pattern with current observations.",
     ],
-    useGuidance:
-      "Use weather-lore as the primary pre-route envelope whenever wind, pressure, and cloud shifts can change hazard windows or safe scheduling.",
   },
   "skill:wayfinding": {
-    coreTasks: ["Select route with terrain memory, sightline control, and uncertainty budgets."],
-    limits: [
-      "Do not commit to memory-only routing without landmark confirmation.",
-      "Do not skip fallback route planning.",
+    boundaries: [
+      "Does not replace chart use where charts are available.",
+      "Desert Wayfinding concerns a particular environment.",
+      "Does not provide food, shelter, or medical care.",
     ],
-    methods: [
-      "Verify next node, preserve fallback options, and monitor drift from planned corridor.",
-      "Failure mode: orientation loop from weak landmarks; recover by forcing reorientation check.",
+    description:
+      "Wayfinding is practical orientation and route choice in terrain. A capable traveller uses landmarks, direction, distance, terrain shape, memory, repeated checks, and sensible fallback points to maintain a route when no prepared chart is available or sufficient. It is the ordinary human craft of not becoming lost and of recovering when uncertainty arises.",
+    shortDescription:
+      "Find and follow a route without a prepared chart by using landmarks, direction, distance, terrain, and memory.",
+    typicalUses: [
+      "Travel across unfamiliar countryside.",
+      "Return to a camp, road, river, or landmark.",
+      "Choose a passable route through broken terrain.",
+      "Recover direction after fog, darkness, or a detour.",
     ],
-    useGuidance: "Use wayfinding whenever local travel requires repeatable route justification.",
   },
   "skill:animal-handling": {
-    coreTasks: ["Condition mounts through cues, pace control, and responsive rein management."],
-    limits: [
-      "Do not ignore stress indicators from animals.",
-      "Avoid forcing pace changes without adaptation windows.",
+    boundaries: [
+      "Does not replace Riding.",
+      "Does not diagnose or treat animal illness.",
+      "A method suitable for one species may be unsafe for another.",
     ],
-    methods: [
-      "Assess readiness, then execute transitions with incremental control shifts.",
-      "Failure mode: rushed handling destabilizes mount and rider; recover with grounding and calm reset.",
+    description:
+      "Animal handling is the practical care and direction of animals accustomed to human management. A capable handler reads stress, fear, fatigue, and attention; uses appropriate restraint and consistent cues; and adapts methods to the species and individual. Effective handling depends more on timing and understanding than force alone.",
+    shortDescription:
+      "Care for and direct domesticated or trained animals by reading behaviour and using safe, consistent cues.",
+    typicalUses: [
+      "Lead, restrain, calm, load, or move an animal safely.",
+      "Recognise signs of fear, distress, or exhaustion.",
+      "Establish routine cues for a working animal.",
+      "Manage animals around unfamiliar people, noise, or transport.",
     ],
-    useGuidance: "Use this envelope for sustained mounted reliability in operational travel.",
   },
   "skill:tracking": {
-    coreTasks: ["Translate signs into probable paths and repeatable movement hypotheses."],
-    limits: [
-      "Do not overfit one set of signs to many outcomes.",
-      "Do not assume continuity without confirmation signatures.",
+    boundaries: [
+      "Does not prove the quarry’s identity or intention.",
+      "Does not replace Hunting or Wayfinding.",
+      "Weather and traffic can destroy or distort signs.",
     ],
-    methods: [
-      "Collect footprint, disturbance, and environmental context before declaring direction.",
-      "Failure mode: sign misattribution misdirects pursuit; recover by adding temporal spacing and terrain sampling.",
+    description:
+      "Tracking is the reading of physical traces left by movement. A capable tracker compares prints, disturbed ground, vegetation, scent, weather, timing, and direction to infer a likely route, then revises that judgment when the signs do not fit. It is a disciplined interpretation of traces, not certain knowledge of the unseen traveller.",
+    shortDescription:
+      "Infer and follow a person’s or animal’s route from physical signs of passage.",
+    typicalUses: [
+      "Follow a person or animal through terrain.",
+      "Estimate how recently a trail was made.",
+      "Distinguish one route from another.",
+      "Notice whether a trail has been concealed, interrupted, or confused.",
     ],
-    useGuidance: "Use tracking when route inference affects pursuit, escort, or search outcomes.",
   },
   "skill:hunting": {
-    coreTasks: [
-      "Conceal approach, read prey movement, and select acquisition timing with low noise.",
+    boundaries: [
+      "Does not replace general Survival.",
+      "Does not provide animal training or care.",
+      "Does not guarantee game will be found.",
     ],
-    limits: [
-      "Do not increase noise at high-value edges.",
-      "Avoid pursuit extension once risk exceeds threshold.",
+    description:
+      "Hunting is the practical pursuit and taking of wild game. A capable hunter reads habitat and sign, controls noise and scent, judges distance and opportunity, uses suitable tools, recovers the quarry, and handles it without avoidable waste. It combines patience, fieldcraft, and sound judgment about whether a shot, trap, or pursuit is appropriate.",
+    shortDescription:
+      "Locate, approach, take, and recover wild game by reading habitat and sign while limiting noise and waste.",
+    typicalUses: [
+      "Locate game in suitable habitat.",
+      "Approach without alarming it.",
+      "Select a practical opportunity to take game.",
+      "Recover and prepare a quarry for food or transport.",
     ],
-    methods: [
-      "Map scent and trail, set approach geometry, and execute low-signature engagement.",
-      "Failure mode: overpursuit wastes effort and increases risk; recover by break-contact and reassessment.",
-    ],
-    useGuidance:
-      "Apply hunting as controlled acquisition when sign quality and concealment matter.",
   },
   "skill:riding": {
-    coreTasks: ["Transition gaits and terrain posture to keep mounted endurance and control."],
-    limits: [
-      "Do not force mounts past recovery pacing windows.",
-      "Do not rely on short gains for long-route completion.",
+    boundaries: [
+      "Does not replace Animal Handling or veterinary care.",
+      "Does not automatically train a mount.",
+      "Does not make an unsuitable or exhausted animal safe to ride.",
     ],
-    methods: [
-      "Stabilize seat position, map distance pacing, and confirm horse feedback at each leg.",
-      "Failure mode: sustained imbalance damages rider and mount; recover through gait reset.",
+    description:
+      "Riding is directing a mount while maintaining an effective seat. A capable rider controls pace and direction, uses tack correctly, adapts to terrain and the animal’s condition, and avoids exhausting or injuring the mount through poor balance or excessive demands. It is a partnership between rider and animal, especially at speed or over difficult ground.",
+    shortDescription:
+      "Control a mount’s direction and pace while maintaining balance and adapting to terrain and fatigue.",
+    typicalUses: [
+      "Travel efficiently on a trained mount.",
+      "Maintain control over uneven ground.",
+      "Manage pace on a long journey.",
+      "Ride safely through crowds, obstacles, or changing terrain.",
     ],
-    useGuidance:
-      "Use riding for mounted movement requiring route endurance and command consistency.",
+  },
+  "spoken:common": {
+    boundaries: [
+      "Does not imply literacy.",
+      "Does not guarantee specialist vocabulary.",
+      "Does not provide knowledge of local customs or law.",
+    ],
+    description:
+      "Spoken Common is the ability to understand and express meaning in a widely shared language. A capable speaker handles ordinary conversation, follows instructions and accounts, pronounces words intelligibly, understands common idiom, and asks for clarification when needed. Fluency develops through vocabulary, listening, social use, and the ability to adjust speech to a listener.",
+    shortDescription: "Communicate by speaking and listening in a widely shared language.",
+    typicalUses: [
+      "Ask for directions, lodging, food, or assistance.",
+      "Take part in ordinary conversation.",
+      "Explain events or instructions clearly.",
+      "Understand warnings, requests, and routine agreements.",
+    ],
+  },
+  "spec:diagnostic-medicine": {
+    boundaries: [
+      "Identifying a likely cause is not the same as treating it.",
+      "Does not replace Surgery or Pharmacy.",
+      "Does not guarantee certainty.",
+    ],
+    description:
+      "Diagnostic medicine focuses on determining what condition most likely explains a patient’s symptoms. A capable diagnostician takes a careful history, examines the patient, compares plausible alternatives, uses available tests or observations, and revises conclusions when new evidence appears. It is especially valuable where several conditions resemble one another or where treatment carries risk.",
+    shortDescription:
+      "Determine the likely cause of illness by comparing symptoms, history, examination, and other evidence.",
+    typicalUses: [
+      "Distinguish between likely causes of fever or pain.",
+      "Assess whether symptoms point to injury, infection, poisoning, or another condition.",
+      "Decide what further examination or observation is needed.",
+      "Recognise when the available evidence remains inconclusive.",
+    ],
+  },
+  "spec:warded-lock-entry": {
+    boundaries: [
+      "Does not apply to every lock design.",
+      "Does not bypass bars, seals, traps, or guards.",
+      "Does not guarantee undetectable entry.",
+    ],
+    description:
+      "Warded-lock entry is the opening of locks whose internal wards obstruct an incorrect key or tool. A capable practitioner identifies the likely ward pattern, chooses a suitably shaped tool, manipulates it with care, and avoids damage that could jam the mechanism or reveal the attempt. It is a specialised form of mechanical lock work rather than a universal solution to secured entry.",
+    shortDescription:
+      "Open warded locks by identifying internal obstructions and manipulating suitable tools.",
+    typicalUses: [
+      "Examine whether a lock is warded.",
+      "Select or shape a suitable entry tool.",
+      "Open a warded lock while limiting damage.",
+      "Recognise when a mechanism is not of the expected type.",
+    ],
+  },
+  "spec:court-administration": {
+    boundaries: [
+      "Does not decide law or facts.",
+      "Does not argue a case for a party.",
+      "Does not confer judicial authority.",
+    ],
+    description:
+      "Court administration is the practical handling of a court’s records and procedures. A capable administrator receives and files documents, maintains schedules and notices, keeps matters traceable, and makes sure that routine procedural steps occur in the right order. It serves the orderly operation of a legal institution without deciding the merits of a case.",
+    shortDescription:
+      "Manage court filings, schedules, notices, records, and procedural steps accurately.",
+    typicalUses: [
+      "File a petition, record, notice, or response.",
+      "Track a matter’s deadlines and scheduled appearances.",
+      "Locate the correct court record or procedural form.",
+      "Ensure that parties receive appropriate notices.",
+    ],
+  },
+  "spec:weaponsmithing": {
+    boundaries: [
+      "Does not grant fighting competence.",
+      "Does not make every metal object a weapon.",
+      "General Smithing covers wider metalworking.",
+    ],
+    description:
+      "Weaponsmithing applies metalworking to objects that must hold an effective form while surviving repeated impact, strain, and wear. A capable weaponsmith selects suitable material, controls heat and shaping, balances the finished weapon, forms working surfaces correctly, and inspects for dangerous flaws. It combines craft skill with an understanding of how a weapon will be stressed in use.",
+    shortDescription:
+      "Forge, finish, balance, and inspect metal weapons for safe and reliable use.",
+    typicalUses: [
+      "Forge or repair a blade, spearhead, or other metal weapon part.",
+      "Balance and finish a weapon for reliable handling.",
+      "Inspect a weapon for cracks, poor fit, or weakness.",
+      "Replace worn or damaged metal fittings.",
+    ],
+  },
+  "spec:home-coast-pilotage": {
+    boundaries: [
+      "Does not automatically apply to unfamiliar waters.",
+      "Does not replace present observation.",
+      "Does not replace the vessel-handling of Seamanship.",
+    ],
+    description:
+      "Home-coast pilotage is close navigation in coastal waters known through repeated experience. A capable pilot recognises channels, landmarks, tides, currents, local traffic patterns, and recurring hazards, while checking that remembered conditions still agree with what is observed. Familiarity can greatly improve judgment, but coastlines and water conditions are never entirely static.",
+    shortDescription:
+      "Navigate familiar coastal waters through detailed knowledge of channels, landmarks, tides, currents, and hazards.",
+    typicalUses: [
+      "Use a familiar channel safely in changing tide or light.",
+      "Recognise a local landmark sequence or hazard.",
+      "Choose a sheltered route in expected conditions.",
+      "Notice when a familiar passage no longer appears safe.",
+    ],
+  },
+  "spec:desert-wayfinding": {
+    boundaries: [
+      "Does not replace Survival’s wider emergency priorities.",
+      "Does not guarantee water or a safe route.",
+      "Applies to arid terrain, not all environments.",
+    ],
+    description:
+      "Desert wayfinding is orientation and route selection in arid terrain, where reliable landmarks, water, shade, and easy bearings may be scarce. A capable traveller estimates direction and distance, recognises terrain patterns, plans travel around heat and visibility, and keeps safe fallback points in mind. It reflects the particular difficulties of open, dry country rather than all wilderness travel.",
+    shortDescription:
+      "Find and follow routes across arid terrain while managing sparse landmarks, heat, water, and visibility.",
+    typicalUses: [
+      "Maintain direction across sparse or shifting terrain.",
+      "Choose travel times that limit heat exposure.",
+      "Find likely routes between water, shade, or known landmarks.",
+      "Recover orientation after wind, dust, darkness, or a detour.",
+    ],
   },
 };
+
+const candidate3ShortDescriptionByCompetencyId: Record<string, string> = {
+  "skill:first-aid":
+    "Stabilize an injured or suddenly ill person and keep them safe until further help is available.",
+  "skill:dodge": "Avoid attacks through movement, timing, and body positioning.",
+  "skill:battle-tactics":
+    "Direct people during a battle by reading the situation and coordinating positions, timing, and responses.",
+  "skill:medicine":
+    "Diagnose illness and injury, choose non-operative treatment, and follow the patient's recovery.",
+  "skill:surgery":
+    "Treat injury or disease through planned operations and careful care before and after the procedure.",
+  "skill:research":
+    "Find, compare, and evaluate evidence to answer a question with a supportable conclusion.",
+  "skill:law:olog-princely":
+    "Interpret and apply a particular body of law through its proper procedures.",
+  "skill:dead-reckoning":
+    "Estimate present position from a known start, direction, speed, and time travelled.",
+  "skill:chart-navigation":
+    "Use maps or charts to plan and follow a route while avoiding known hazards.",
+  "spoken:common": "Communicate by speaking and listening in a widely shared language.",
+  "spoken:mogrebi":
+    "Follow everyday speech and take part in conversation with clear questions, answers, and explanations.",
+  "spoken:ologian":
+    "Sustain spoken dialogue, convey precise meaning, and clarify unfamiliar words or expressions.",
+  "spoken:phoenician":
+    "Understand spoken instructions and accounts, then respond or explain ideas in a coherent sequence.",
+  "spoken:nkolian":
+    "Join discussions, express intent and nuance, and adapt speech to the listener and situation.",
+  "spoken:scythian":
+    "Understand questions and descriptions, give coherent spoken accounts, and resolve misunderstandings in conversation.",
+  "written:mogrebi:sacred-mogrebi":
+    "Read extended passages and compose accurate text in the associated language and script tradition.",
+  "written:ologian:church-ologian":
+    "Interpret written statements and compose clear, orderly text for a particular purpose and reader.",
+  "written:phoenician:phoenician":
+    "Read, transcribe, and compose text using consistent script, spelling, grammar, and layout.",
+  "spec:household-guard-sword-shield-drill":
+    "Fight with sword and shield as one coordinated method of attack and defence.",
+  "spec:diagnostic-medicine":
+    "Determine the likely cause of illness by comparing symptoms, history, examination, and other evidence.",
+  "spec:warded-lock-entry":
+    "Open warded locks by identifying their internal obstructions and manipulating suitable tools.",
+  "spec:court-administration":
+    "Manage court filings, schedules, notices, records, and procedural steps accurately.",
+  "spec:weaponsmithing":
+    "Forge, finish, balance, and inspect metal weapons for safe and reliable use.",
+  "spec:home-coast-pilotage":
+    "Navigate familiar coastal waters by using detailed knowledge of channels, landmarks, tides, currents, and hazards.",
+  "spec:desert-wayfinding":
+    "Find and follow routes across arid terrain while managing heat, water, and sparse landmarks.",
+  "spec:steppe-remount-training": "Train and rotate spare riding animals to sustain long journeys.",
+  "skill:sword":
+    "Fight with a sword by controlling distance, guard, timing, attacks, and defensive movements.",
+  "skill:shield":
+    "Intercept attacks and control openings with a shield while retaining balance, sight, and freedom to act.",
+  "skill:knife-dagger":
+    "Attack, defend, and retain a knife or dagger while fighting at close range.",
+  "skill:spear":
+    "Attack and defend with a spear by controlling its reach, point, leverage, footwork, and recovery.",
+  "skill:perception":
+    "Notice relevant sights, sounds, and other sensory details, then interpret what they may mean.",
+  "skill:athletics":
+    "Perform demanding physical movement such as running, jumping, climbing, and lifting with trained control.",
+  "skill:survival":
+    "Find water, shelter, warmth, food, and a safe route when ordinary support is unavailable.",
+  "skill:leadership":
+    "Direct and coordinate people toward a shared objective, maintaining order, morale, and cooperation.",
+  "skill:pharmacy":
+    "Identify, prepare, preserve, measure, and dispense medicines while avoiding contamination and unsafe doses.",
+  "skill:plant-lore":
+    "Recognize plants and their habitats, seasons, useful properties, dangers, and misleading lookalikes.",
+  "skill:streetwise":
+    "Find information, services, and safe ways through urban life by reading local behaviour.",
+  "skill:underworld":
+    "Understand illicit networks, hidden markets, intermediaries, customs, reputations, and warning signs.",
+  "skill:deception":
+    "Create and maintain a plausible false impression through words, behaviour, omission, or staged evidence.",
+  "skill:stealth":
+    "Move or remain present without notice by controlling sound, visibility, timing, and signs of passage.",
+  "skill:lockpicking":
+    "Open a mechanical lock without its key by sensing and manipulating its internal parts.",
+  "skill:sleight-of-hand":
+    "Manipulate or conceal small objects through dexterity, timing, and control of attention.",
+  "skill:insight":
+    "Judge another person's likely emotions, motives, and intentions from what they say and do.",
+  "skill:disguise":
+    "Change appearance, voice, posture, and conduct to support a plausible identity or escape notice.",
+  "skill:administration":
+    "Organize and carry out the procedures, records, and routine business of an institution or organization.",
+  "skill:customs": "Know and follow expected social conduct in a particular society or community.",
+  "skill:oratory":
+    "Persuade or inform an audience through a clear argument, suitable language, memorable points, and deliberate delivery.",
+  "skill:bookkeeping":
+    "Maintain and check ledgers that record money, goods, debts, payments, and supporting evidence.",
+  "skill:trade":
+    "Conduct exchanges of goods or services by judging markets, quality, costs, transport, terms, and settlement.",
+  "skill:bargaining":
+    "Improve the terms of an exchange by negotiating priorities, offers, concessions, and alternatives.",
+  "skill:appraisal":
+    "Judge an object's identity, condition, quality, and likely value from inspection, provenance, and comparison.",
+  "skill:smithing":
+    "Make and repair metal objects by controlling heat, shaping, joining, finishing, and inspection.",
+  "skill:seamanship":
+    "Work safely aboard a vessel by handling its equipment, cargo, routine operations, and changing conditions.",
+  "skill:pilotage":
+    "Navigate confined or coastal waters by combining observations, charts, local knowledge, tides, currents, and soundings.",
+  "skill:swimming":
+    "Travel or survive in water by managing breathing, buoyancy, propulsion, direction, carried load, and fatigue.",
+  "skill:weather-lore":
+    "Predict near-term weather from clouds, wind, pressure, temperature, moisture, and recurring patterns.",
+  "skill:wayfinding":
+    "Find and follow a route without a prepared chart by using landmarks, direction, distance, terrain, and memory.",
+  "skill:animal-handling":
+    "Care for and direct trained animals by reading their behaviour and using safe, consistent cues.",
+  "skill:tracking":
+    "Infer and follow a person or animal's route from prints and other physical signs of passage.",
+  "skill:hunting":
+    "Find, approach, take, and recover wild game by reading habitat and sign while limiting noise and waste.",
+  "skill:riding":
+    "Control a mount's direction and pace while keeping a balanced seat and adapting to terrain and fatigue.",
+};
+
+const candidate3FullDescriptionBoundaryByCompetencyId: Record<string, string> = {
+  "skill:first-aid": "It is immediate care, not diagnosis, prolonged treatment, or surgery.",
+  "skill:battle-tactics":
+    "It concerns the conduct of a particular engagement rather than personal weapon use or long-term strategy.",
+  "skill:medicine":
+    "Operative treatment belongs to Surgery, while preparing medicines belongs to Pharmacy.",
+  "skill:surgery":
+    "The operation does not replace diagnosis, general treatment, or later medical care.",
+  "skill:research":
+    "Research can support a conclusion, but incomplete or conflicting evidence may leave the answer uncertain.",
+  "skill:law:olog-princely":
+    "The Skill concerns legal rules and procedure, not unwritten custom or personal influence.",
+  "skill:dead-reckoning":
+    "Because small errors accumulate, a navigator should correct the estimate when a reliable observation becomes available.",
+  "skill:chart-navigation":
+    "A chart can show recorded hazards and routes, but it does not replace observation of present conditions.",
+  "spoken:common": "Spoken fluency does not imply literacy or command of specialist vocabulary.",
+  "spoken:mogrebi": "Spoken fluency does not imply literacy or command of specialist vocabulary.",
+  "spoken:ologian": "Spoken fluency does not imply literacy or command of specialist vocabulary.",
+  "spoken:phoenician":
+    "Spoken fluency does not imply literacy or command of specialist vocabulary.",
+  "spoken:nkolian": "Spoken fluency does not imply literacy or command of specialist vocabulary.",
+  "spoken:scythian": "Spoken fluency does not imply literacy or command of specialist vocabulary.",
+  "written:mogrebi:sacred-mogrebi":
+    "Written competence is distinct from speaking and applies only to the linked language and script tradition.",
+  "written:ologian:church-ologian":
+    "Written competence is distinct from speaking and applies only to the linked language and script tradition.",
+  "written:phoenician:phoenician":
+    "Written competence is distinct from speaking and applies only to the linked language and script tradition.",
+  "spec:household-guard-sword-shield-drill":
+    "It does not replace the separate competence needed to use either weapon outside the coordinated drill.",
+  "spec:diagnostic-medicine":
+    "It identifies a likely cause; treatment still requires the appropriate medical or surgical competence.",
+  "spec:warded-lock-entry": "It applies to warded mechanisms and does not cover every lock design.",
+  "spec:court-administration":
+    "It handles court procedure and records rather than deciding law or arguing a case.",
+  "spec:weaponsmithing":
+    "It concerns making weapons and does not grant skill in fighting with them.",
+  "spec:home-coast-pilotage":
+    "Detailed knowledge of one coast does not automatically apply to unfamiliar waters.",
+  "spec:desert-wayfinding":
+    "It concerns route finding in arid terrain, not every task involved in surviving there.",
+  "spec:steppe-remount-training":
+    "It concerns preparing and rotating remounts rather than general riding or the care of every animal.",
+  "skill:sword":
+    "The Skill applies to swords and does not make other weapon types interchangeable.",
+  "skill:shield":
+    "A shield can intercept and control attacks, but it is not a substitute for moving clear of them.",
+  "skill:knife-dagger":
+    "Short blades demand close distance and do not offer the reach or handling of longer weapons.",
+  "skill:spear":
+    "A spear loses many of its advantages when the wielder cannot preserve room to use its reach.",
+  "skill:perception":
+    "It reveals what can be sensed, not hidden facts or certain explanations for what was noticed.",
+  "skill:athletics":
+    "It covers general physical movement, while specialized techniques may require a more specific Skill.",
+  "skill:survival":
+    "It keeps people alive and moving in difficult conditions, but it does not replace specialist navigation, hunting, or medicine.",
+  "skill:pharmacy":
+    "It covers medicinal substances, not diagnosis, surgery, or the independent practice of medicine.",
+  "skill:plant-lore":
+    "An uncertain identification should not be treated as proof that a plant is safe or useful.",
+  "skill:streetwise": "Local rumour and reputation can guide inquiry, but they are not proof.",
+  "skill:underworld":
+    "Knowledge of illicit networks does not guarantee access, loyalty, or safety.",
+  "skill:deception":
+    "A plausible story can still fail when evidence is checked, and the Skill does not alter facts.",
+  "skill:stealth":
+    "It reduces the chance of notice but cannot make concealment possible in every place or against every observer.",
+  "skill:lockpicking":
+    "It covers mechanical locks and does not by itself overcome traps, bars, seals, or unrelated barriers.",
+  "skill:sleight-of-hand":
+    "It conceals the manipulation itself rather than making an implausible action or missing object impossible to notice later.",
+  "skill:disguise":
+    "A disguise supports a false appearance or role, but close scrutiny and inconsistent knowledge can expose it.",
+  "skill:customs":
+    "Customs describes social expectations, not substantive legal knowledge, and one society's customs do not automatically apply to another.",
+  "skill:oratory":
+    "It addresses an audience and does not guarantee agreement or replace evidence, authority, or private negotiation.",
+  "skill:bookkeeping":
+    "Accurate records can reveal a discrepancy, but they do not by themselves prove why it occurred.",
+  "skill:trade":
+    "Trade covers the wider conduct of exchange, while Bargaining focuses on negotiating particular terms.",
+  "skill:bargaining":
+    "It negotiates terms but does not create goods, credit, authority, or alternatives that do not exist.",
+  "skill:appraisal":
+    "Hidden damage, false provenance, or an unfamiliar market may limit the certainty of any valuation.",
+  "skill:smithing":
+    "It covers metalworking rather than the separate use of every object a smith can make.",
+  "skill:seamanship":
+    "It covers working and keeping safe aboard a vessel, while choosing a route belongs to navigation or pilotage.",
+  "skill:pilotage":
+    "It relies on local waters and present observations rather than granting universal knowledge of every coast or harbour.",
+  "skill:swimming":
+    "Difficult water, injury, clothing, carried weight, and fatigue can place a crossing beyond a swimmer's safe ability.",
+  "skill:weather-lore":
+    "It supports a forecast rather than certainty, especially when signs conflict or conditions change rapidly.",
+  "skill:wayfinding":
+    "It concerns choosing and maintaining a route, not every survival task encountered along it.",
+  "skill:animal-handling":
+    "Methods suitable for one species or individual may be unsafe or ineffective for another.",
+  "skill:tracking":
+    "Tracks support a likely route and estimate, not certain knowledge of the quarry's identity or intention.",
+  "skill:hunting":
+    "It concerns finding and taking game rather than general wilderness survival or animal care.",
+  "skill:riding":
+    "Riding competence does not replace the separate care, training, or treatment of the mount.",
+};
+
+const candidate3FullDescriptionOverrideByCompetencyId: Record<string, string> = {
+  "skill:dodge":
+    "Dodge is the ability to avoid being struck, caught, or intercepted by moving out of the path of an attack or opponent. It relies on awareness, reaction, timing, positioning, and freedom to move. Dodge avoids an attack rather than blocking it; defending with a weapon or shield belongs to the appropriate parry or weapon Skill.",
+  "skill:insight":
+    "Insight is the interpretation of another person's emotions, motives, and likely intentions from their words, behaviour, and surrounding context. A skilled observer notices inconsistencies and changes in behaviour and can form informed judgments about states such as fear, hostility, uncertainty, sincerity, or deception. Insight does not read thoughts or reveal hidden facts; its conclusions remain interpretations rather than proof.",
+  "skill:leadership":
+    "Leadership is the ability to direct, coordinate, and motivate other people toward a shared objective. It includes giving clear instructions, assigning responsibilities, maintaining discipline and morale, resolving uncertainty, and keeping a group acting together. Leadership may rest on formal authority, reputation, persuasion, example, or hierarchy and applies to military units, ships, expeditions, households, work crews, offices, and other organized groups. It does not replace the technical skills required for the work being led.",
+  "skill:administration":
+    "Administration is the organization and management of the routine affairs of an institution, office, government body, military organization, household, or other structured organization. It includes maintaining records and correspondence, following and applying procedures, coordinating people and resources, processing requests and decisions, and understanding how responsibilities and authority are distributed. Historically, administrative skills developed alongside formal bureaucracies, taxation, legal systems, military establishments, and large commercial or religious institutions. Administration concerns practical operation; specialist law, accounting, or institutional customs may require other Skills.",
+};
+
+const customsTypicalUses = [
+  "Know expected greetings, hospitality, status behaviour, exchange, and etiquette in a particular society.",
+  "Recognize behaviour likely to cause offence or signal disrespect.",
+  "Distinguish local custom from formal law.",
+] as const;
+
+function sentences(value: string): string[] {
+  return value.match(/[^.!?]+[.!?]/g)?.map((sentence) => sentence.trim()) ?? [value];
+}
+
+function candidate3TaskEnvelope(
+  record: PilotSkillContentCompetencyRecord | PilotSkillContentSpecializationRecord,
+  description: string,
+  shortDescription: string,
+): SkillTaskEnvelope {
+  const descriptionSentences = sentences(description);
+  const lastSentence = descriptionSentences.at(-1) ?? description;
+  const skilledPractice = descriptionSentences[1] ?? descriptionSentences[0] ?? description;
+
+  if (record.id === "skill:customs") {
+    return {
+      coreTasks: [customsTypicalUses[0]],
+      limits: [
+        "Customs describes social expectations, not substantive legal knowledge.",
+        "Customs specific to one society does not automatically apply to another.",
+      ],
+      methods: customsTypicalUses.slice(1),
+      useGuidance:
+        "Roll Customs when a character must recall or follow a society's expectations and a mistake could cause offence or misunderstanding.",
+    };
+  }
+
+  return {
+    coreTasks: [shortDescription],
+    limits: [lastSentence],
+    methods: [skilledPractice],
+    useGuidance: `Roll ${record.name} when the outcome is uncertain and this competence is the main factor in whether the attempted task succeeds.`,
+  };
+}
+
+export const pilotSkillContentReleaseCandidate3ReviewGaps = {
+  opposedChecks: [
+    "Review whether Insight and Deception should form an authoritative opposed check; Candidate 3 does not encode that pairing.",
+  ],
+  relationships: [
+    "Review Culture as a possible relationship hub for social, professional, and institutional Skills.",
+    "Decide which incoming Culture relationships, if any, are mechanically justified before assigning any edge or percentage.",
+  ],
+} as const;
+
+export const pilotSkillContentReleaseCandidate4ReviewGaps = {
+  ...pilotSkillContentReleaseCandidate3ReviewGaps,
+  exceptions: pilotSkillContentReleaseCandidate4ExceptionNotes,
+} as const;
 
 const authoredCompetencyDocumentationIds = Object.keys(authoredCompetencyDocumentation);
 for (const id of authoredCompetencyDocumentationIds) {
-  if (!Object.hasOwn(authoredTaskEnvelopeByCompetencyId, id)) {
-    throw new Error(`Missing task envelope entry for authored competency ${id}`);
+  if (!Object.hasOwn(candidate3ShortDescriptionByCompetencyId, id)) {
+    throw new Error(`Missing Candidate 3 short description for authored competency ${id}`);
+  }
+  if (
+    !Object.hasOwn(candidate3FullDescriptionBoundaryByCompetencyId, id) &&
+    !Object.hasOwn(candidate3FullDescriptionOverrideByCompetencyId, id)
+  ) {
+    throw new Error(`Missing Candidate 3 full-description boundary for authored competency ${id}`);
   }
 }
-for (const id of Object.keys(authoredTaskEnvelopeByCompetencyId)) {
+for (const id of Object.keys(candidate3ShortDescriptionByCompetencyId)) {
   if (!Object.hasOwn(authoredCompetencyDocumentation, id)) {
-    throw new Error(`Task envelope has no matching authored competency entry for ${id}`);
+    throw new Error(`Candidate 3 short description has no authored competency for ${id}`);
   }
 }
 
@@ -1306,23 +1727,46 @@ const domainDefinitions: Record<string, { description: string; name: string }> =
   },
 };
 
-function documentationForRecord(record: PilotSkillContentCompetencyRecord) {
+function documentationForRecord(
+  record: PilotSkillContentCompetencyRecord | PilotSkillContentSpecializationRecord,
+) {
   const authored = authoredCompetencyDocumentation[record.id];
-  const normalizedDescription = normalizeWhitespace(authored?.description ?? record.description);
-  const normalizedShortDescription = normalizeWhitespace(
-    authored?.shortDescription ?? record.description,
+  const baseDescription = authored?.description ?? record.description;
+  const boundary = candidate3FullDescriptionBoundaryByCompetencyId[record.id];
+  const candidate3Description = normalizeWhitespace(
+    candidate3FullDescriptionOverrideByCompetencyId[record.id] ??
+      (boundary ? `${baseDescription} ${boundary}` : baseDescription),
   );
-  const taskEnvelope =
-    authoredTaskEnvelopeByCompetencyId[record.id] ??
-    (() => {
-      throw new Error(`Missing explicit task envelope for ${record.id}`);
-    })();
+  const candidate3ShortDescription = normalizeWhitespace(
+    candidate3ShortDescriptionByCompetencyId[record.id] ??
+      authored?.shortDescription ??
+      record.description,
+  );
+  const candidate3Envelope = candidate3TaskEnvelope(
+    record,
+    candidate3Description,
+    candidate3ShortDescription,
+  );
+  const candidate4Authored = pilotSkillContentReleaseCandidate4AuthoredDocumentation[record.id];
+
+  if (candidate4Authored) {
+    return {
+      description: normalizeWhitespace(candidate4Authored.description),
+      shortLabel: shortLabel(authored?.shortLabel ?? record.name),
+      shortDescription: normalizeWhitespace(candidate4Authored.shortDescription),
+      taskEnvelope: {
+        ...candidate3Envelope,
+        coreTasks: candidate4Authored.typicalUses.map(normalizeWhitespace),
+        limits: candidate4Authored.boundaries.map(normalizeWhitespace),
+      },
+    };
+  }
 
   return {
-    description: normalizedDescription,
+    description: candidate3Description,
     shortLabel: shortLabel(authored?.shortLabel ?? record.name),
-    shortDescription: normalizedShortDescription,
-    taskEnvelope,
+    shortDescription: candidate3ShortDescription,
+    taskEnvelope: candidate3Envelope,
   };
 }
 
@@ -1435,6 +1879,7 @@ const scythianHomeProfileUnavailabilityRouteId = "route:scythian-olog-unavailabl
 function toSpecializationRecord(
   specialization: PilotSkillContentSpecializationRecord,
 ): SkillContentSpecializationRecord {
+  const documented = documentationForRecord(specialization);
   const parentCompetencyId = specialization.prerequisites.find(({ competencyId }) => {
     const prerequisite = pilotSkillContentReleaseV1.competencies.find(
       ({ id }) => id === competencyId,
@@ -1458,16 +1903,13 @@ function toSpecializationRecord(
   return {
     ...specialization,
     acquisitionWeight: specialization.acquisitionWeight,
+    description: documented.description,
     domainId: parent.domainId,
     metadata: cloneMetadata(specialization.id, "specialization"),
     parentCompetencyId,
-    taskEnvelope:
-      authoredTaskEnvelopeByCompetencyId[specialization.id] ??
-      (() => {
-        throw new Error(`Missing specialization task envelope for ${specialization.id}`);
-      })(),
-    shortLabel: shortLabel(specialization.name),
-    shortDescription: normalizeWhitespace(specialization.description),
+    taskEnvelope: documented.taskEnvelope,
+    shortLabel: documented.shortLabel,
+    shortDescription: documented.shortDescription,
     transfer: structuredClone(specialization.transfer),
     weight: specialization.acquisitionWeight,
     prerequisites: structuredClone(specialization.prerequisites),
@@ -1572,19 +2014,19 @@ const histories: readonly SkillContentLearningHistoryRecord[] =
     } satisfies SkillContentLearningHistoryRecord;
   });
 
-export const pilotSkillContentReleaseProposalInput = {
+export const pilotSkillContentReleaseCandidate4Input = {
   accessExceptions,
   compatibility: {
     characterMigrationReviewRequired: false,
-    classification: "mechanically-compatible",
+    classification: "presentation-only",
     rationale:
-      "The release repairs authored documentation, task scopes, and access attribution recovery while preserving direct inherited mechanics.",
+      "Candidate 4 transcribes Product Owner-supplied descriptions, Typical uses, and Boundaries while preserving accepted mechanics, identities, mappings, access semantics, and compatibility classification.",
   },
   competencies,
-  contentVersion: "pilot-skills-content/2.0.0-candidate.1",
+  contentVersion: "pilot-skills-content/2.0.0-candidate.4",
   domains,
   histories,
-  id: "content-release:pilot-skills:2-candidate-1",
+  id: "content-release:pilot-skills:2-candidate-4",
   profiles,
   provenance: [...proposalMetadataReference],
   relationships,
@@ -1592,5 +2034,7 @@ export const pilotSkillContentReleaseProposalInput = {
   schemaVersion: SKILL_CONTENT_RELEASE_SCHEMA_VERSION,
   scripts,
   status: "proposal",
-  title: "Documentation-complete Pilot Skill v2 candidate",
+  title: "Player-facing Pilot Skill v2 candidate 4",
 } satisfies Omit<SkillContentRelease, "manifest">;
+
+export const pilotSkillContentReleaseProposalInput = pilotSkillContentReleaseCandidate4Input;

@@ -1,0 +1,400 @@
+.page {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 100%;
+  min-width: 0;
+}
+.loading {
+  color: #3f3422;
+}
+.candidateBanner {
+  align-items: flex-start;
+  background: rgba(255, 246, 224, 0.92);
+  border: 1px solid rgba(163, 108, 23, 0.22);
+  border-radius: 18px;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1rem 1.1rem;
+}
+.candidateBanner p {
+  color: #5f543a;
+  line-height: 1.5;
+  margin: 0.3rem 0 0;
+}
+.guideLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.metadataPanels {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.referenceSummary {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+}
+
+.referenceCount {
+  background: var(--color-surface-muted, #f4f5f7);
+  border-radius: 0.5rem;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.75rem;
+}
+
+.referenceCount strong {
+  font-size: 1.35rem;
+}
+
+.referenceCount span {
+  color: var(--color-text-muted, #5d6675);
+  font-size: 0.85rem;
+}
+
+.selectedReferenceFacts {
+  border-top: 1px solid var(--color-border, #d9dde5);
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.referenceFactList + .referenceFactList {
+  margin-top: 0.75rem;
+}
+
+.referenceFactList h4 {
+  margin-bottom: 0.25rem;
+}
+
+.referenceFactList p,
+.referenceFactList ul {
+  margin: 0;
+}
+
+.referenceFactList ul,
+.referenceColumns ul {
+  padding-left: 1.25rem;
+}
+
+.matrixScroller {
+  overflow-x: auto;
+}
+
+.matrixScroller table {
+  border-collapse: collapse;
+  min-width: 42rem;
+  width: 100%;
+}
+
+.matrixScroller th,
+.matrixScroller td {
+  border: 1px solid var(--color-border, #d9dde5);
+  padding: 0.65rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.matrixRecorded,
+.matrixContextDependent,
+.matrixUnresolved {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.matrixRecorded {
+  background: #e8f6ee;
+  color: #145c35;
+}
+
+.matrixUnresolved {
+  background: #fff3d6;
+  color: #744d00;
+}
+
+.matrixContextDependent {
+  background: #e9efff;
+  color: #294a8a;
+}
+
+.referenceColumns {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+.guideLinks a {
+  background: rgba(255, 252, 245, 0.88);
+  border: 1px solid rgba(85, 73, 48, 0.14);
+  border-radius: 999px;
+  color: #3d5b8f;
+  font-weight: 700;
+  padding: 0.65rem 0.9rem;
+  text-decoration: none;
+}
+.guideLinks a:focus-visible,
+.skillList a:focus-visible,
+.detail a:focus-visible {
+  outline: 3px solid rgba(61, 91, 143, 0.42);
+  outline-offset: 3px;
+}
+.filters {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  min-width: 0;
+}
+.filters label,
+.accessSummary label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+.filters label > span,
+.accessSummary label > span {
+  color: #5f543a;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+.filters input {
+  background: rgba(255, 252, 245, 0.92);
+  border: 1px solid rgba(85, 73, 48, 0.16);
+  border-radius: 14px;
+  box-sizing: border-box;
+  color: #2e2619;
+  font: inherit;
+  min-width: 0;
+  padding: 0.65rem 0.8rem;
+  width: 100%;
+}
+.referenceLayout {
+  align-items: flex-start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(17rem, 0.72fr) minmax(0, 1.8fr);
+  min-width: 0;
+}
+.skillList {
+  display: grid;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0;
+  max-height: 72vh;
+  overflow-y: auto;
+  padding: 0.15rem;
+}
+.skillList li {
+  border: 1px solid rgba(85, 73, 48, 0.12);
+  border-radius: 14px;
+  min-width: 0;
+}
+.skillList li.selectedSkill {
+  background: rgba(215, 226, 216, 0.72);
+  border-color: rgba(62, 122, 82, 0.3);
+}
+.skillList a {
+  color: inherit;
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.8rem;
+  text-decoration: none;
+}
+.skillName {
+  color: #2c2418;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 1.08rem;
+  font-weight: 700;
+}
+.skillSummary {
+  color: #3f3422;
+  line-height: 1.42;
+}
+.skillMeta,
+.ruleNote {
+  color: #776b52;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+.detail {
+  min-width: 0;
+  scroll-margin-top: 1rem;
+}
+.detailHeader {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+.detailHeader h2 {
+  color: #2c2418;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(1.8rem, 4vw, 2.7rem);
+  line-height: 1.08;
+  margin: 0.25rem 0 0;
+}
+.detailHeader h2:focus {
+  outline: none;
+}
+.detailHeader h2:focus-visible {
+  border-radius: 4px;
+  outline: 3px solid rgba(61, 91, 143, 0.42);
+  outline-offset: 4px;
+}
+.lede {
+  color: #3f3422;
+  font-size: 1.12rem;
+  font-weight: 650;
+  line-height: 1.5;
+  margin: 0.5rem 0 0;
+}
+.description {
+  color: #3f3422;
+  font-size: 1.02rem;
+  line-height: 1.7;
+  margin: 1.25rem 0;
+}
+.rulesSection {
+  border-top: 1px solid rgba(85, 73, 48, 0.12);
+  margin-top: 1.2rem;
+  padding-top: 1.2rem;
+}
+.rulesSection h3 {
+  color: #2c2418;
+  font-size: 1.15rem;
+  margin: 0 0 0.8rem;
+}
+.rulesSection p {
+  line-height: 1.6;
+}
+.ruleGrid {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+.ruleGrid > div {
+  background: rgba(250, 245, 234, 0.62);
+  border-radius: 14px;
+  min-width: 0;
+  padding: 0.85rem;
+}
+.ruleGrid dt {
+  color: #776b52;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ruleGrid dd {
+  color: #2e2619;
+  line-height: 1.55;
+  margin: 0.3rem 0 0;
+  overflow-wrap: anywhere;
+}
+.stackedValue {
+  display: block;
+}
+.accessSummary {
+  display: grid;
+  gap: 0.65rem;
+}
+.exception {
+  border-left: 3px solid rgba(163, 108, 23, 0.42);
+  padding-left: 0.7rem;
+}
+.envelopeGrid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.envelopeGrid > div {
+  background: rgba(250, 245, 234, 0.5);
+  border-radius: 14px;
+  padding: 0.8rem;
+}
+.envelopeGrid h4 {
+  margin: 0 0 0.45rem;
+}
+.readerGrid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.readerGrid > div {
+  background: rgba(250, 245, 234, 0.5);
+  border-radius: 14px;
+  min-width: 0;
+  padding: 0.8rem;
+}
+.readerGrid h4 {
+  margin: 0 0 0.45rem;
+}
+.readerGrid ul,
+.envelopeGrid ul,
+.relationshipList {
+  line-height: 1.55;
+  margin: 0;
+  padding-left: 1.15rem;
+}
+.relationshipList {
+  display: grid;
+  gap: 0.55rem;
+}
+.detail a {
+  color: #3d5b8f;
+  font-weight: 700;
+}
+.auditCards {
+  display: grid;
+  gap: 0.55rem;
+}
+.auditCards details {
+  border: 1px solid rgba(85, 73, 48, 0.12);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+  padding: 0.75rem;
+}
+.auditCards summary {
+  color: #2c2418;
+  cursor: pointer;
+  font-weight: 700;
+}
+.auditCards details > div {
+  color: #5f543a;
+  line-height: 1.5;
+  margin-top: 0.4rem;
+}
+.auditAnchor {
+  scroll-margin-top: 1rem;
+}
+@media (max-width: 760px) {
+  .referenceLayout,
+  .ruleGrid,
+  .readerGrid,
+  .envelopeGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .skillList {
+    max-height: none;
+  }
+  .candidateBanner,
+  .detailHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+@media (max-width: 420px) {
+  .guideLinks {
+    display: grid;
+  }
+  .guideLinks a {
+    border-radius: 14px;
+    overflow-wrap: anywhere;
+  }
+}

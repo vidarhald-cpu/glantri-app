@@ -17,6 +17,7 @@ export * from "./content/skills";
 export * from "./content/skillSemanticFixtures";
 export * from "./content/skillCatalogueAuthoring";
 export * from "./content/skillContentRelease";
+export * from "./content/skillReferenceMetadata";
 export * from "./docs/glantriTerms";
 export * from "./dice/openEndedD20";
 export * from "./encounter/armorModifier";

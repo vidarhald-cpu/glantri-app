@@ -83,6 +83,17 @@ rendering separate. Protected facts are absent from unauthorized payloads, not
 merely hidden in the client. Every future knowledge, search, collaboration,
 recap, and Campaign-object design must respect that boundary.
 
+### Setting foundation
+
+The approved
+[Setting foundation decision](../decisions/architecture/0006-setting-foundation.md)
+places reusable world definitions between generic rules content and Campaigns.
+Characters belong to one Setting; Campaigns choose one Setting; concrete
+mutable Campaign objects remain Campaign-scoped. The built-in Glantri Setting
+is repository-defined canonical content rather than seed-only database state.
+No separate Universe abstraction is introduced unless later requirements show
+that multiple Settings need a larger container.
+
 ## Near and future design areas
 
 ### Skills product area
@@ -201,14 +212,16 @@ commitments, ownership, and costs. Player-authored objects #17 preserves the old
 Creative points idea as a dependency/question only. No unit, price, grant,
 spending rule, or generic economy behavior is decided here.
 
-### Player Universe
+### Persistent player-owned resources
 
-Player Universe describes possible persistent player-created, acquired,
-controlled, or developed resources beyond a Character sheet: buildings,
-retainers, organizations, businesses, estates, and units. It depends on
-accepted Campaign-object identity, ownership/control/visibility, lifecycle,
-canonical reference, collaboration, and economy decisions. It remains strategic
-direction, not an implementation initiative.
+The older `Player Universe` label described possible persistent player-created,
+acquired, controlled, or developed resources beyond a Character sheet:
+buildings, retainers, organizations, businesses, estates, and units. It remains
+useful problem-space evidence, but it does not establish a Universe
+architecture. `Setting` is the current umbrella. These resources still depend
+on accepted Campaign-object identity, ownership/control/visibility, lifecycle,
+canonical reference, collaboration, and economy decisions and remain strategic
+direction rather than an implementation initiative.
 
 ## Agent guidance
 

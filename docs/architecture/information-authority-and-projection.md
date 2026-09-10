@@ -64,6 +64,25 @@ The complete approved boundary, including player-initiated Character joining,
 is recorded in
 [Architecture decision 0005](../decisions/architecture/0005-role-scope-and-campaign-ownership.md).
 
+## Setting and Campaign authority
+
+A Setting is reusable world-content authority between generic rules and
+Campaigns. Generic Skills declare contextual needs without embedding particular
+societies, languages, scripts, legal systems, regions, or other world instances.
+The Setting supplies those reusable definitions.
+
+Visibility of Setting content does not expose concrete Campaign state. A
+Campaign may select or filter reusable Setting definitions, but an NPC, Item,
+Artifact, Blackboard entry, Scenario, Encounter, note, or other mutable object
+created or used in Campaign A remains inside Campaign A's ownership and
+information-security boundary. A Character is created within a Setting and may
+join only a compatible Campaign under the accepted relationship-derived join
+authority.
+
+The built-in Glantri Setting is repository-defined canonical content. Runtime
+databases may reference or instantiate it but do not become its sole authority.
+See [Architecture decision 0006](../decisions/architecture/0006-setting-foundation.md).
+
 ## Projection rules
 
 1. Player payloads are minimal by default. Add a fact only for a named permitted
