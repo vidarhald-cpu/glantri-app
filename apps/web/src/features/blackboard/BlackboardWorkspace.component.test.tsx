@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -451,5 +451,81 @@ describe("BlackboardWorkspace", () => {
     expect(await screen.findByRole("heading", { name: "Removed reference" })).toBeVisible();
     expect(container).not.toHaveTextContent("The bronze bell rings twice");
     expect(container).toHaveTextContent("former content and history are no longer shared");
+  });
+
+  it("opens the same entitled Blackboard in a focused inspection presentation", async () => {
+    const user = userEvent.setup();
+    const onExitFocused = vi.fn();
+    const onInspectArtifact = vi.fn();
+
+    render(
+      <BlackboardWorkspace
+        campaignId="campaign-1"
+        isGameMaster={false}
+        onExitFocused={onExitFocused}
+        onInspectArtifact={onInspectArtifact}
+        presentation="focused"
+        routeEntryId="entry-map"
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Route to the caves" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Share a reference" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Arrange pinned reference" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Inspect Artifact" }));
+    expect(onInspectArtifact).toHaveBeenCalledWith("entry-map");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onExitFocused).toHaveBeenCalledTimes(1);
+  });
+
+  it("reauthorizes and makes an Artifact dominant with keyboard zoom and pan", async () => {
+    const user = userEvent.setup();
+    const onExitArtifact = vi.fn();
+
+    render(
+      <BlackboardWorkspace
+        artifactInspection
+        campaignId="campaign-1"
+        isGameMaster={false}
+        onExitArtifact={onExitArtifact}
+        presentation="focused"
+        routeEntryId="entry-map"
+      />,
+    );
+
+    const viewport = await screen.findByRole("group", { name: "Pan and zoom Artifact" });
+    expect(artifactMocks.fetchArtifactBlob).toHaveBeenCalledWith("campaign-1", "artifact-map");
+    expect(screen.getByText("Zoom 100%")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(screen.getByText("Zoom 125%")).toBeVisible();
+    fireEvent.keyDown(viewport, { key: "ArrowRight" });
+    expect(screen.getByRole("img")).toHaveStyle({
+      transform: "translate(48px, 0px) scale(1.25)",
+    });
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onExitArtifact).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails a stale or unauthorized Artifact inspection closed without exposing its identity", async () => {
+    const { container } = render(
+      <BlackboardWorkspace
+        artifactInspection
+        campaignId="campaign-1"
+        isGameMaster={false}
+        presentation="focused"
+        routeEntryId="foreign-artifact-entry"
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Artifact unavailable" })).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "removed or is not available in this Campaign",
+    );
+    expect(container).not.toHaveTextContent("foreign-artifact-entry");
+    expect(artifactMocks.fetchArtifactBlob).not.toHaveBeenCalled();
   });
 });
