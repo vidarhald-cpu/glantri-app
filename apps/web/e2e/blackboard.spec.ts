@@ -356,6 +356,58 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
         await mapImage.evaluate((image: HTMLImageElement) => image.naturalWidth),
       ).toBeGreaterThan(0);
 
+      await page.getByRole("link", { name: "Open focused Blackboard" }).click();
+      await expect(page).toHaveURL(
+        new RegExp(`/campaigns/${campaignId}/blackboard\\?entryId=${mapEntryId}`),
+      );
+      await expect(page.getByRole("heading", { name: mapTitle })).toBeVisible();
+      await page.getByRole("button", { name: "Inspect Artifact" }).click();
+      await expect(page).toHaveURL(/inspection=artifact/);
+      const artifactViewport = page.getByRole("group", { name: "Pan and zoom Artifact" });
+      await expect(artifactViewport).toBeVisible();
+      await page.getByRole("button", { name: "Zoom in" }).click();
+      await expect(page.getByText("Zoom 125%")).toBeVisible();
+      await artifactViewport.press("ArrowRight");
+      await expect(
+        page.getByRole("img", {
+          name: "A hand-drawn route from the mill to the hill caves",
+        }),
+      ).toHaveAttribute("style", /translate\(48px, 0px\) scale\(1.25\)/);
+      const artifactBounds = await artifactViewport.boundingBox();
+      expect(artifactBounds).not.toBeNull();
+      const artifactImage = page.getByRole("img", {
+        name: "A hand-drawn route from the mill to the hill caves",
+      });
+      const keyboardTransform = await artifactImage.getAttribute("style");
+      await page.mouse.move(artifactBounds!.x + 120, artifactBounds!.y + 120);
+      await page.mouse.down();
+      await page.mouse.move(artifactBounds!.x + 152, artifactBounds!.y + 144);
+      await page.mouse.up();
+      await expect.poll(() => artifactImage.getAttribute("style")).not.toBe(keyboardTransform);
+      await page.keyboard.press("Escape");
+      await expect(page).not.toHaveURL(/inspection=artifact/);
+      await expect(page.getByRole("heading", { name: mapTitle })).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(page).toHaveURL(new RegExp(`/campaigns/${campaignId}\\?tab=blackboard`));
+
+      const desktopViewport = page.viewportSize();
+      await page.setViewportSize({ height: 844, width: 390 });
+      await page.goto(
+        `${WEB_URL}/campaigns/${campaignId}/blackboard?entryId=${mapEntryId}&inspection=artifact`,
+      );
+      await expect(artifactViewport).toBeVisible();
+      expect(
+        await page
+          .locator("html")
+          .evaluate((element) => element.scrollWidth <= element.clientWidth),
+      ).toBe(true);
+      await page.getByRole("button", { name: "Back to Blackboard" }).click();
+      await expect(page.getByRole("heading", { name: mapTitle })).toBeVisible();
+      await page.getByRole("button", { name: "Back to Campaign" }).click();
+      await expect(page).toHaveURL(new RegExp(`/campaigns/${campaignId}\\?tab=blackboard`));
+      if (desktopViewport) await page.setViewportSize(desktopViewport);
+      await page.getByRole("button").filter({ hasText: mapTitle }).click();
+
       fs.renameSync(storedFile, withheldFile);
       let restored = false;
       try {
@@ -401,6 +453,18 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
     );
     expect(unauthorizedCapabilities.status()).toBe(404);
     expect(await unauthorizedCapabilities.json()).toEqual({ error: "Blackboard unavailable." });
+    if (mapEntryId && mapTitle) {
+      const unauthorizedPage = await unauthorizedContext.newPage();
+      await unauthorizedPage.goto(
+        `${WEB_URL}/campaigns/${campaignId}/blackboard?entryId=${mapEntryId}&inspection=artifact`,
+      );
+      await expect(unauthorizedPage.getByText(/Blackboard could not be loaded/)).toBeVisible();
+      await expect(unauthorizedPage.getByText(mapTitle)).toHaveCount(0);
+      await expect(
+        unauthorizedPage.getByText("A hand-drawn route from the mill to the hill caves"),
+      ).toHaveCount(0);
+      await unauthorizedPage.close();
+    }
 
     await unauthorizedContext.close();
     await otherPlayerContext.close();
