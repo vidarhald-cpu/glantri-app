@@ -14,6 +14,7 @@ import {
   buildPlayerSafeRoleplayStateForUser,
   formatEncounterParticipantMembershipLabel,
   isUserAssignedToEncounterMembership,
+  isUserEntitledToTerminalEncounterHistory,
   resolveEncounterParticipantForViewer,
   resolveEncounterParticipantMembership,
   type EncounterParticipant,
@@ -379,6 +380,42 @@ describe("encounter session normalization invariants", () => {
       }),
     ).toBe(true);
   });
+
+  it.each(["completed", "archived"] as const)(
+    "preserves relationship-scoped player entitlement to %s Encounter history",
+    (status) => {
+      const playerParticipant = scenarioParticipant({
+        controlledByUserId: "player-1",
+        id: "scenario-participant-gladiator",
+      });
+      const terminalEncounter = encounter({
+        participantMembershipMode: "explicit",
+        participants: [
+          encounterParticipant({
+            id: "encounter-participant-gladiator",
+            label: "The Gladiator",
+            scenarioParticipantId: playerParticipant.id,
+          }),
+        ],
+        status,
+      });
+
+      expect(
+        isUserEntitledToTerminalEncounterHistory({
+          encounter: terminalEncounter,
+          scenarioParticipants: [playerParticipant],
+          userId: "player-1",
+        }),
+      ).toBe(true);
+      expect(
+        isUserEntitledToTerminalEncounterHistory({
+          encounter: terminalEncounter,
+          scenarioParticipants: [playerParticipant],
+          userId: "player-2",
+        }),
+      ).toBe(false);
+    },
+  );
 
   it("resolves explicit and implicit viewer membership to one canonical participant identity", () => {
     const playerParticipant = scenarioParticipant({

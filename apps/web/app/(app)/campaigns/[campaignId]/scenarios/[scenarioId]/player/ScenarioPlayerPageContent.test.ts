@@ -30,4 +30,12 @@ describe("ScenarioPlayerPageContent Scenario session", () => {
     expect(source).not.toContain("Future phases will");
     expect(source).not.toContain("formatEncounterParticipantCountLabel");
   });
+
+  it("removes pickup commands from terminal Scenario history", () => {
+    const source = readSource();
+
+    expect(source).toContain("const isTerminalScenario =");
+    expect(source).toContain("Read-only Scenario history");
+    expect(source).toMatch(/onPickUp=\{\s*isTerminalScenario\s*\? undefined/);
+  });
 });

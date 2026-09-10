@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { ScenarioStatus } from "../campaign/scenario";
 import type { EncounterStatus } from "../encounter/session";
 
 export const campaignCharacterRosterCandidateSchema = z
@@ -26,6 +27,7 @@ export interface PlayerAccessibleScenario {
   description: string;
   id: string;
   name: string;
+  status: ScenarioStatus;
 }
 
 export interface AccessibleCampaignRecord {

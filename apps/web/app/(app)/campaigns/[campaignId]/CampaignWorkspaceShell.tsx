@@ -261,6 +261,10 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         getEncounterStatusRank(left.status) - getEncounterStatusRank(right.status) ||
         left.title.localeCompare(right.title),
     );
+  const activeScenarios = scenarios.filter(
+    (scenario) => scenario.status !== "completed" && scenario.status !== "archived",
+  );
+  const completedScenarios = scenarios.filter((scenario) => scenario.status === "completed");
   const activeScenario = scenarios.find(
     (scenario) => scenario.id === workspaceState.activeScenarioId,
   );
@@ -715,9 +719,9 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                 </div>
                 <section style={{ display: "grid", gap: "0.5rem" }}>
                   <h3 style={{ margin: 0 }}>Available scenarios</h3>
-                  {scenarios.length > 0 ? (
+                  {activeScenarios.length > 0 ? (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                      {scenarios.map((scenario) => (
+                      {activeScenarios.map((scenario) => (
                         <Link
                           key={scenario.id}
                           href={buildWorkspaceHref({
@@ -733,6 +737,24 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                     <div>No active scenario is currently available.</div>
                   )}
                 </section>
+                {completedScenarios.length > 0 ? (
+                  <section style={{ display: "grid", gap: "0.5rem" }}>
+                    <h3 style={{ margin: 0 }}>Completed history</h3>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                      {completedScenarios.map((scenario) => (
+                        <Link
+                          key={scenario.id}
+                          href={buildWorkspaceHref({
+                            scenarioId: scenario.id,
+                            tab: "scenario",
+                          })}
+                        >
+                          {scenario.name}
+                        </Link>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
               </section>
               <ArtifactPanel campaignId={campaignId} scenarios={[]} />
             </section>
@@ -788,9 +810,9 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
           ) : (
             <section style={panelStyle}>
               <strong>No active scenario is currently available.</strong>
-              {scenarios.length > 0 ? (
+              {activeScenarios.length > 0 || completedScenarios.length > 0 ? (
                 <div style={{ display: "grid", gap: "0.5rem" }}>
-                  {scenarios.map((scenario) => (
+                  {[...activeScenarios, ...completedScenarios].map((scenario) => (
                     <Link
                       key={scenario.id}
                       href={buildWorkspaceHref({
@@ -874,10 +896,10 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                 >
                   Back to scenario
                 </Link>
-              ) : scenarios.length > 0 ? (
+              ) : activeScenarios.length > 0 ? (
                 <div style={{ display: "grid", gap: "0.5rem" }}>
                   <div>Choose a scenario to check for player encounters.</div>
-                  {scenarios.map((scenario) => (
+                  {activeScenarios.map((scenario) => (
                     <Link
                       key={scenario.id}
                       href={buildWorkspaceHref({
@@ -952,10 +974,10 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                 >
                   Back to scenario
                 </Link>
-              ) : scenarios.length > 0 ? (
+              ) : activeScenarios.length > 0 ? (
                 <div style={{ display: "grid", gap: "0.5rem" }}>
                   <div>Choose a scenario to check for player skill rolls.</div>
-                  {scenarios.map((scenario) => (
+                  {activeScenarios.map((scenario) => (
                     <Link
                       key={scenario.id}
                       href={buildWorkspaceHref({
@@ -1069,7 +1091,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
           ) : (
             <section style={panelStyle}>
               <strong>Combat Round Manager is a GM tool.</strong>
-              {scenarios.length > 0 ? (
+              {activeScenarios.length > 0 ? (
                 <div style={{ display: "grid", gap: "0.5rem" }}>
                   <Link href={buildWorkspaceHref({ tab: "player-combat" })}>
                     Open Player combat
@@ -1153,9 +1175,9 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
           ) : (
             <section style={panelStyle}>
               <strong>Select a scenario to open player combat.</strong>
-              {scenarios.length > 0 ? (
+              {activeScenarios.length > 0 ? (
                 <div style={{ display: "grid", gap: "0.5rem" }}>
-                  {scenarios.map((scenario) => (
+                  {activeScenarios.map((scenario) => (
                     <Link
                       key={scenario.id}
                       href={buildWorkspaceHref({

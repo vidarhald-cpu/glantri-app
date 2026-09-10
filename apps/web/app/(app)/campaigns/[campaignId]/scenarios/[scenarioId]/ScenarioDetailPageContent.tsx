@@ -51,6 +51,7 @@ import type { ServerCharacterRecord } from "@/lib/api/localServiceClient";
 import { getScenarioCharacterDefaultControllerId } from "@/lib/campaigns/scenarioCharacters";
 import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 import { ScenarioSessionManagement } from "@/features/scenarios/ScenarioSessionManagement";
+import { ScenarioSessionPanel } from "@/features/scenarios/ScenarioSessionPanel";
 
 import { ScenarioCampaignRosterPickerSection } from "./components/ScenarioCampaignRosterPickerSection";
 import { ScenarioEncounterAssignmentSection } from "./components/ScenarioEncounterAssignmentSection";
@@ -964,6 +965,65 @@ export default function ScenarioDetailPageContent({
     return <section>{error ?? "Scenario not found."}</section>;
   }
 
+  if (scenario.status === "completed" || scenario.status === "archived") {
+    return (
+      <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
+        <RememberedCampaignWorkspaceEffect
+          campaignId={campaignId}
+          encounterId={null}
+          scenarioId={scenarioId}
+          tab="scenario"
+        />
+        {!embedded ? (
+          <Link href={buildCampaignWorkspaceHref({ campaignId, tab: "campaign" })}>
+            Back to campaign
+          </Link>
+        ) : null}
+        <div>
+          <h1 style={{ marginBottom: "0.5rem" }}>{scenario.name}</h1>
+        </div>
+        <section
+          style={{
+            background: "#fff8df",
+            border: "1px solid #d8c57b",
+            borderRadius: 12,
+            display: "grid",
+            gap: "0.5rem",
+            padding: "1rem",
+          }}
+        >
+          <strong>Read-only Scenario history</strong>
+          <div>
+            This Scenario is {scenario.status === "archived" ? "archived" : "closed"}. Its history
+            and completed Encounter outcomes remain available, but live-session actions, participant
+            changes, rolls, and Combat are unavailable.
+          </div>
+        </section>
+        {error ? <div role="alert">{error}</div> : null}
+        {feedback ? <div role="status">{feedback}</div> : null}
+        <section
+          aria-label="Scenario summary"
+          style={{
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            display: "grid",
+            gap: "0.5rem",
+            padding: "1rem",
+          }}
+        >
+          <h2 style={{ margin: 0 }}>Summary</h2>
+          <div>
+            <strong>Status:</strong> {scenario.status === "archived" ? "Archived" : "Closed"}
+          </div>
+          <p style={{ margin: 0 }}>{scenario.description || "No description was recorded."}</p>
+        </section>
+        {scenarioSession ? (
+          <ScenarioSessionPanel campaignId={campaignId} session={scenarioSession} />
+        ) : null}
+      </section>
+    );
+  }
+
   const selectedTemplateSource =
     templateSources.find((source) => source.entity.id === selectedTemplateSourceId) ??
     templateSources[0];
@@ -1075,7 +1135,7 @@ export default function ScenarioDetailPageContent({
         onUpdateEncounterStatus={(encounter, status, closing) =>
           void handleUpdateEncounterStatus(encounter, status, closing)
         }
-        orderedEncounters={orderedEncounters}
+        orderedEncounters={orderedEncounters.filter((encounter) => encounter.status !== "archived")}
         scenarioId={scenarioId}
       />
 

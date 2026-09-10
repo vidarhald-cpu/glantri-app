@@ -53,6 +53,7 @@ import {
   UNNAMED_CHARACTER_PLACEHOLDER,
 } from "@/lib/offline/repositories/localCharacterRepository";
 import { GmRoleplayingEncounterScreen } from "@/features/roleplay/RoleplayEncounterScreens";
+import { CompletedEncounterHistory } from "./CompletedEncounterHistory";
 
 interface EncounterDetailProps {
   campaignId?: string;
@@ -543,7 +544,7 @@ export default function EncounterDetail({
     return <section>Loading encounter...</section>;
   }
 
-  if (!encounter || !content || !encounterView) {
+  if (!encounter) {
     return (
       <section style={{ display: "grid", gap: "1rem", maxWidth: 720 }}>
         <h1 style={{ margin: 0 }}>Encounter not found</h1>
@@ -562,6 +563,42 @@ export default function EncounterDetail({
       <section style={{ display: "grid", gap: "1rem", maxWidth: 720 }}>
         <h1 style={{ margin: 0 }}>Encounter not found</h1>
         <div>This encounter does not belong to the current campaign/scenario flow.</div>
+        <Link href={backHref}>
+          {isNestedScenarioFlow ? "Back to scenario encounters" : "Back to encounters"}
+        </Link>
+      </section>
+    );
+  }
+
+  if (encounter.status === "completed" || encounter.status === "archived") {
+    return (
+      <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
+        {isNestedScenarioFlow ? (
+          <RememberedCampaignWorkspaceEffect
+            campaignId={campaignId as string}
+            encounterId={id}
+            scenarioId={scenarioId as string}
+            tab="encounter"
+          />
+        ) : null}
+        {!embedded ? (
+          <Link href={backHref}>
+            {isNestedScenarioFlow ? "Back to scenario workspace" : "Back to encounters"}
+          </Link>
+        ) : null}
+        <CompletedEncounterHistory
+          encounter={encounter}
+          scenarioName={scenarioRecord?.name}
+          viewerMode="gm"
+        />
+      </section>
+    );
+  }
+
+  if (!content || !encounterView) {
+    return (
+      <section style={{ display: "grid", gap: "1rem", maxWidth: 720 }}>
+        <h1 style={{ margin: 0 }}>Encounter not found</h1>
         <Link href={backHref}>
           {isNestedScenarioFlow ? "Back to scenario encounters" : "Back to encounters"}
         </Link>

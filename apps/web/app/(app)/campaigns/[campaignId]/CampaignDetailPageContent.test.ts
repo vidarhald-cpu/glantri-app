@@ -89,4 +89,12 @@ describe("CampaignDetailPageContent roster UI", () => {
     expect(source).toContain(">Follows</th>");
     expect(source).toContain(">Action</th>");
   });
+
+  it("shows closed Scenario history while omitting archived Scenarios from the ordinary list", () => {
+    const source = readCampaignDetailSource();
+
+    expect(source).toContain('scenario.status !== "archived"');
+    expect(source).toContain('scenario.status === "completed"');
+    expect(source).toContain("Closed · history");
+  });
 });

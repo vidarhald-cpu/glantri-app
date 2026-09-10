@@ -159,6 +159,7 @@ import {
   isCombatRoundCombatExperienceWindowOpen,
   isCombatStepAutomationProjectionWithinScope,
   isUserAssignedToEncounterMembership,
+  isUserEntitledToTerminalEncounterHistory,
   normalizeRoleplayState,
   roleplayDifficultySchema,
   normalizeCombatArmorModifierClass,
@@ -6771,6 +6772,18 @@ export function buildPlayerSafeEncounterForUser(input: {
   };
 }
 
+function hasPlayerEncounterReadAccess(input: {
+  encounter: EncounterParticipantReadSource;
+  scenarioParticipants: ScenarioParticipant[];
+  userId: string;
+}): boolean {
+  if (input.encounter.status !== "archived") {
+    return isUserAssignedToEncounterMembership(input);
+  }
+
+  return isUserEntitledToTerminalEncounterHistory(input);
+}
+
 function isPlayerVisibleCombatRoundResultPair(input: {
   attackerParticipantId: string;
   controlledEncounterParticipantIds: Set<string>;
@@ -7379,7 +7392,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
         return {
           encounters: encounterMetadata.flatMap((source) => {
-            const viewerAssigned = isUserAssignedToEncounterMembership({
+            const viewerAssigned = hasPlayerEncounterReadAccess({
               encounter: {
                 participantMembershipMode: source.participantMembershipMode,
                 participants: source.participants,
@@ -7541,7 +7554,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       if (access.mode === "player") {
         if (
-          !isUserAssignedToEncounterMembership({
+          !hasPlayerEncounterReadAccess({
             encounter: normalizedEncounter,
             scenarioParticipants,
             userId: user.id,
@@ -7661,7 +7674,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       );
       if (
         access.mode === "player" &&
-        !isUserAssignedToEncounterMembership({
+        !hasPlayerEncounterReadAccess({
           encounter: historySource,
           scenarioParticipants,
           userId: user.id,
