@@ -269,6 +269,78 @@ test.describe("Lost Seal Scenario happy path", () => {
     ]);
     expect(starts.map((response) => response.status())).toEqual([200, 200]);
 
+    const gmCampaignHref = `/campaigns/${campaign.campaign.id}?tab=campaign`;
+    const gmScenarioHref = `/campaigns/${campaign.campaign.id}?tab=scenario&scenarioId=${scenario.scenario.id}`;
+    const gmEncounterHref = `/campaigns/${campaign.campaign.id}?tab=encounter&scenarioId=${scenario.scenario.id}&encounterId=${courtyard.encounter.id}`;
+    const gmCombatHref = `/campaigns/${campaign.campaign.id}?tab=combat&scenarioId=${scenario.scenario.id}&encounterId=${courtyard.encounter.id}`;
+    await page.goto(gmCampaignHref);
+    const gmLivePlay = page.getByRole("region", { name: "Live play" });
+    await expect(gmLivePlay).toContainText("Continue the live Scenario");
+    await expect(gmLivePlay.getByText("Lost Seal", { exact: true })).toBeVisible();
+    await expect(gmLivePlay.getByText("Seal Library Investigation")).toBeVisible();
+    await expect(gmLivePlay.getByText("Courtyard Ambush")).toBeVisible();
+    await gmLivePlay.locator(`a[href="${gmScenarioHref}"]`).click();
+    await expect(page).toHaveURL(gmScenarioHref);
+    await expect(page.getByRole("navigation", { name: "Live play context" })).toContainText(
+      "Lost Seal",
+    );
+
+    await page.goto(gmCampaignHref);
+    await page.locator(`a[href="${gmEncounterHref}"]`).click();
+    await expect(page).toHaveURL(gmEncounterHref);
+    await page.getByRole("link", { name: "Combat", exact: true }).click();
+    await expect(page).toHaveURL(gmCombatHref);
+    const gmLiveContext = page.getByRole("navigation", { name: "Live play context" });
+    await expect(gmLiveContext.getByRole("link", { name: "Courtyard Ambush" })).toHaveAttribute(
+      "href",
+      gmEncounterHref,
+    );
+    await page.reload();
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(page).toHaveURL(gmCombatHref);
+    await gmLiveContext.getByRole("link", { name: "Courtyard Ambush" }).click();
+    await expect(page).toHaveURL(gmEncounterHref);
+
+    const playerCampaignHref = `/campaigns/${campaign.campaign.id}?tab=campaign`;
+    const playerEncounterHref = `/campaigns/${campaign.campaign.id}?tab=encounter&scenarioId=${scenario.scenario.id}&encounterId=${library.encounter.id}`;
+    const playerLiveCombatHref = `/campaigns/${campaign.campaign.id}?tab=player-combat&scenarioId=${scenario.scenario.id}&encounterId=${library.encounter.id}`;
+    await playerAPage.goto(playerCampaignHref);
+    const playerLivePlay = playerAPage.getByRole("region", { name: "Live play" });
+    await expect(playerLivePlay.getByText("Lost Seal", { exact: true })).toBeVisible();
+    await expect(playerLivePlay.getByText("Seal Library Investigation")).toBeVisible();
+    await expect(playerLivePlay.getByText("Courtyard Ambush")).toHaveCount(0);
+    await expect(playerLivePlay.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
+    await expect(playerLivePlay.locator(`a[href="${playerEncounterHref}"]`)).toBeVisible();
+    await expect(playerLivePlay.locator(`a[href="${playerLiveCombatHref}"]`)).toBeVisible();
+    await playerAPage.setViewportSize({ height: 844, width: 390 });
+    await playerAPage.reload();
+    await expect(playerAPage).toHaveURL(playerCampaignHref);
+    await expect(playerAPage.getByRole("region", { name: "Live play" })).toContainText(
+      "Seal Library Investigation",
+    );
+    await playerAPage.goto(
+      `/campaigns/${campaign.campaign.id}/scenarios/${scenario.scenario.id}/player`,
+    );
+
+    const alternateScenario = await json<{ scenario: { id: string; updatedAt: string } }>(
+      await page.request.post(`${API_URL}/campaigns/${campaign.campaign.id}/scenarios`, {
+        data: {
+          description: "Track the council while the seal is recovered.",
+          name: "Council Watch",
+          status: "live",
+        },
+      }),
+    );
+    await page.setViewportSize({ height: 844, width: 390 });
+    await page.goto(gmCampaignHref);
+    await expect(page.getByRole("region", { name: "Live play" })).toContainText(
+      "Choose the live Scenario",
+    );
+    await expect(
+      page.getByRole("region", { name: "Live play" }).getByText("Council Watch", { exact: true }),
+    ).toBeVisible();
+    await page.setViewportSize({ height: 900, width: 1280 });
+
     const overlap = await createEncounter({
       id: `lost-seal-overlap-${Date.now()}`,
       kind: "roleplay",
@@ -609,6 +681,35 @@ test.describe("Lost Seal Scenario happy path", () => {
     await page.goto(`/campaigns/${campaign.campaign.id}/scenarios/${scenario.scenario.id}`);
     await expect(page.getByRole("heading", { name: "Session preparation" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Private GM notes" })).toBeVisible();
+
+    expect(
+      (
+        await closeEncounter(
+          sharedCombat.encounter.id,
+          "The vault was secured.",
+          "No further private note.",
+        )
+      ).status(),
+    ).toBe(200);
+    const completeScenario = async (scenarioId: string) => {
+      for (const status of ["paused", "completed"] as const) {
+        const current = await json<{ scenario: { updatedAt: string } }>(
+          await page.request.get(`${API_URL}/scenarios/${scenarioId}`),
+        );
+        const response = await page.request.put(`${API_URL}/scenarios/${scenarioId}`, {
+          data: { expectedRevision: current.scenario.updatedAt, status },
+        });
+        expect(response.status(), await response.text()).toBe(200);
+      }
+    };
+    await completeScenario(scenario.scenario.id);
+    await completeScenario(alternateScenario.scenario.id);
+    await page.goto(gmCampaignHref);
+    await expect(page.getByRole("region", { name: "Live play" })).toContainText(
+      "No live Scenario is currently available",
+    );
+    await expect(page.getByRole("heading", { name: "Scenarios" })).toBeVisible();
+    await expect(page.getByText("Closed · history", { exact: true })).toHaveCount(2);
 
     await Promise.all([
       playerAContext.close(),

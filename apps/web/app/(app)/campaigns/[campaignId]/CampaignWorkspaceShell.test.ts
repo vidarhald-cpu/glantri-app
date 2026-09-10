@@ -45,12 +45,19 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("buildGmCharacterWorkspaceCandidates");
   });
 
-  it("renders player scenario links and useful empty states", () => {
+  it("renders a role-appropriate live-play chooser and useful empty states", () => {
     const source = readSource();
 
-    expect(source).toContain("Available scenarios");
+    expect(source).toContain('aria-label="Live play"');
+    expect(source).toContain("Choose the live Scenario you want to continue.");
+    expect(source).toContain("Continue the live Scenario and its active Encounters.");
+    expect(source).toContain("Open Scenario");
+    expect(source).toContain("Open Encounter");
+    expect(source).toContain("Open Combat");
+    expect(source).toContain('tab: canAccessGmEncounter ? "combat" : "player-combat"');
     expect(source).toContain('tab: "scenario"');
-    expect(source).toContain("No active scenario is currently available.");
+    expect(source).toContain("No live Scenario is currently available.");
+    expect(source).toContain("Campaign Home and completed history remain");
     expect(source).toContain("No encounter is currently available.");
     expect(source).toContain("No skill rolls are currently available.");
     expect(source).toContain("Waiting for GM to add you to an encounter.");
@@ -63,13 +70,24 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toMatch(/canAccessGmEncounter[\s\S]*?<ArtifactPanel campaignId=\{campaignId\}/);
   });
 
+  it("keeps the selected live Scenario and Encounter visible across workspace tabs", () => {
+    const source = readSource();
+
+    expect(source).toContain('aria-label="Live play context"');
+    expect(source).toContain("{activeScenario.name}");
+    expect(source).toContain("{activeEncounterSummary.title}");
+    expect(source).toContain("isLiveCampaignScenario(activeScenario)");
+    expect(source).toContain("encounterId: activeEncounterSummary.id");
+    expect(source).toContain("scenarioId: activeScenario.id");
+  });
+
   it("separates completed Scenario history and omits archives from ordinary selection", () => {
     const source = readSource();
 
-    expect(source).toContain("const activeScenarios = scenarios.filter");
+    expect(source).toContain("const liveScenarios = scenarios.filter(isLiveCampaignScenario)");
     expect(source).toContain("const completedScenarios = scenarios.filter");
     expect(source).toContain("Completed history");
-    expect(source).toContain('scenario.status !== "completed" && scenario.status !== "archived"');
+    expect(source).toContain("scenarios={liveScenarios}");
     expect(source).toContain('scenario.status === "completed"');
   });
 
@@ -130,11 +148,17 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("selectLatestCombatViewRevision({");
   });
 
-  it("initializes once from summaries and keeps polling scoped to the selected encounter", () => {
+  it("refreshes workspace context on focus and keeps combat polling scoped to the selected encounter", () => {
     const source = readSource();
 
     expect(source.match(/loadCampaignWorkspaceAccessForUser\(\{/g)).toHaveLength(1);
-    expect(source).toContain("async function initializeWorkspace()");
+    expect(source).toContain("const refreshWorkspaceContext = useCallback(");
+    expect(source).toContain("workspaceContextRequestIdRef.current !== requestId");
+    expect(source).toContain("await refreshWorkspaceContext(false)");
+    expect(source).toContain('window.addEventListener("focus", refreshVisibleWorkspace)');
+    expect(source).toContain(
+      'document.addEventListener("visibilitychange", refreshVisibleWorkspace)',
+    );
     expect(source).toContain("encounterSummaries");
     expect(source).toContain("activeEncounterIdRef.current !== polledEncounterId");
     expect(source).toContain("activeEncounterRequestIdRef.current !== requestId");
