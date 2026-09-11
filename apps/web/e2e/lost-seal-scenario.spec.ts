@@ -711,6 +711,22 @@ test.describe("Lost Seal Scenario happy path", () => {
     await expect(page.getByRole("heading", { name: "Scenarios" })).toBeVisible();
     await expect(page.getByText("Closed · history", { exact: true })).toHaveCount(2);
 
+    await page.goto(`/campaigns/${campaign.campaign.id}/scenarios/${scenario.scenario.id}`);
+    await expect(page.getByRole("heading", { name: "Private GM notes" })).toBeVisible();
+    expect((await page.request.post(`${API_URL}/auth/logout`)).status()).toBe(200);
+    const deniedWorkspaceRefresh = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/campaigns/${campaign.campaign.id}`) && response.status() === 401,
+    );
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await deniedWorkspaceRefresh;
+    await expect(page).toHaveURL(/\/campaigns$/);
+    await expect(
+      page.getByText("Sign in to see your Campaigns and continue playing."),
+    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Private GM notes" })).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "Live play context" })).toHaveCount(0);
+
     await Promise.all([
       playerAContext.close(),
       playerBContext.close(),

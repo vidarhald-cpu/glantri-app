@@ -201,12 +201,16 @@ function getEncounterStatusRank(status: EncounterSessionSummary["status"]): numb
   }
 }
 
+function isWorkspaceAuthorizationDenial(error: unknown): error is ApiRequestError {
+  return error instanceof ApiRequestError && (error.status === 401 || error.status === 403);
+}
+
 export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspaceShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const searchParamString = searchParams.toString();
-  const { currentUser, loading: sessionLoading } = useSessionUser();
+  const { currentUser, loading: sessionLoading, setCurrentUser } = useSessionUser();
   const [accessibleCampaign, setAccessibleCampaign] = useState<
     Campaign | PlayerAccessibleCampaign | null
   >(null);
@@ -232,6 +236,35 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   const rememberedScenarioSelection = useRememberedSelection(workspaceSelectionKeys.scenarioId);
   const rememberedEncounterSelection = useRememberedSelection(workspaceSelectionKeys.encounterId);
   const rememberedWorkspaceTab = useRememberedSelection(workspaceSelectionKeys.workspaceTab);
+  const setRememberedCampaignSelection = rememberedCampaignSelection.setValue;
+  const setRememberedScenarioSelection = rememberedScenarioSelection.setValue;
+  const setRememberedEncounterSelection = rememberedEncounterSelection.setValue;
+  const setRememberedWorkspaceTab = rememberedWorkspaceTab.setValue;
+
+  const clearUnauthorizedWorkspaceContext = useCallback(() => {
+    workspaceContextRequestIdRef.current += 1;
+    activeEncounterRequestIdRef.current += 1;
+    activeEncounterIdRef.current = undefined;
+    activeEncounterRef.current = undefined;
+    setAccessibleCampaign(null);
+    setAccessMode("none");
+    setActiveEncounter(undefined);
+    setEncounterSummaries([]);
+    setError(undefined);
+    setLoading(false);
+    setScenarioParticipants([]);
+    setScenarios([]);
+    setWorkspaceLoadError(false);
+    setRememberedCampaignSelection(undefined);
+    setRememberedScenarioSelection(undefined);
+    setRememberedEncounterSelection(undefined);
+    setRememberedWorkspaceTab(undefined);
+  }, [
+    setRememberedCampaignSelection,
+    setRememberedEncounterSelection,
+    setRememberedScenarioSelection,
+    setRememberedWorkspaceTab,
+  ]);
 
   const acceptActiveEncounter = useCallback((candidate: EncounterSession) => {
     setActiveEncounter((accepted) =>
@@ -269,6 +302,19 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
     async (initial: boolean) => {
       const requestId = workspaceContextRequestIdRef.current + 1;
       workspaceContextRequestIdRef.current = requestId;
+      let authorizationDenialStatus: 401 | 403 | undefined;
+
+      async function observeWorkspaceRequest<T>(request: () => Promise<T>): Promise<T> {
+        try {
+          return await request();
+        } catch (caughtError) {
+          if (isWorkspaceAuthorizationDenial(caughtError)) {
+            authorizationDenialStatus = caughtError.status === 401 ? 401 : 403;
+          }
+
+          throw caughtError;
+        }
+      }
 
       if (initial) {
         setLoading(true);
@@ -278,18 +324,29 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       try {
         const initialData = await loadCampaignWorkspaceInitialData({
           loadAccess: () =>
-            loadCampaignWorkspaceAccessForUser({
-              campaignId,
-              user: currentUser,
-            }),
-          loadEncounterSummaries: loadScenarioEncounterSummaries,
-          loadMyParticipant: loadScenarioMyParticipant,
-          loadParticipants: loadScenarioParticipants,
+            observeWorkspaceRequest(() =>
+              loadCampaignWorkspaceAccessForUser({
+                campaignId,
+                user: currentUser,
+              }),
+            ),
+          loadEncounterSummaries: (scenarioId) =>
+            observeWorkspaceRequest(() => loadScenarioEncounterSummaries(scenarioId)),
+          loadMyParticipant: (scenarioId) =>
+            observeWorkspaceRequest(() => loadScenarioMyParticipant(scenarioId)),
+          loadParticipants: (scenarioId) =>
+            observeWorkspaceRequest(() => loadScenarioParticipants(scenarioId)),
         });
         const workspaceAccess = initialData.access;
         const scenarioIds = workspaceAccess.scenarios.map((scenario) => scenario.id);
 
         if (workspaceContextRequestIdRef.current !== requestId) return;
+
+        if (!initial && workspaceAccess.accessMode === "none") {
+          clearUnauthorizedWorkspaceContext();
+          router.replace(buildCampaignWorkspaceHref({ campaignId, tab: "campaign" }));
+          return;
+        }
 
         setAccessibleCampaign(workspaceAccess.campaign ?? null);
         setAccessMode(workspaceAccess.accessMode);
@@ -306,6 +363,18 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         setWorkspaceLoadError(false);
       } catch {
         if (workspaceContextRequestIdRef.current !== requestId) return;
+
+        if (!initial && authorizationDenialStatus) {
+          clearUnauthorizedWorkspaceContext();
+
+          if (authorizationDenialStatus === 401) {
+            setCurrentUser(null);
+            router.replace("/campaigns");
+          } else {
+            router.replace(buildCampaignWorkspaceHref({ campaignId, tab: "campaign" }));
+          }
+          return;
+        }
 
         if (initial) {
           setError(undefined);
@@ -324,18 +393,29 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         }
       }
     },
-    [campaignId, currentUser],
+    [campaignId, clearUnauthorizedWorkspaceContext, currentUser, router, setCurrentUser],
   );
 
   useEffect(() => {
     if (sessionLoading) return;
+
+    if (!currentUser) {
+      clearUnauthorizedWorkspaceContext();
+      return;
+    }
 
     void refreshWorkspaceContext(true);
 
     return () => {
       workspaceContextRequestIdRef.current += 1;
     };
-  }, [loadAttempt, refreshWorkspaceContext, sessionLoading]);
+  }, [
+    clearUnauthorizedWorkspaceContext,
+    currentUser,
+    loadAttempt,
+    refreshWorkspaceContext,
+    sessionLoading,
+  ]);
 
   useEffect(() => {
     if (sessionLoading || loading || workspaceLoadError || accessMode === "none") return;
@@ -691,11 +771,11 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       return;
     }
 
-    rememberedCampaignSelection.setValue(campaignId);
-  }, [accessMode, campaignId, rememberedCampaignSelection, workspaceLoadError]);
+    setRememberedCampaignSelection(campaignId);
+  }, [accessMode, campaignId, setRememberedCampaignSelection, workspaceLoadError]);
 
   useEffect(() => {
-    if (sessionLoading || loading || workspaceLoadError) {
+    if (sessionLoading || loading || workspaceLoadError || accessMode === "none") {
       return;
     }
 
@@ -758,6 +838,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
     }
   }, [
     buildWorkspaceHref,
+    accessMode,
     pathname,
     rememberedEncounterSelection,
     rememberedScenarioSelection,
@@ -775,16 +856,22 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   ]);
 
   useEffect(() => {
-    rememberedScenarioSelection.setValue(workspaceState.activeScenarioId);
-  }, [rememberedScenarioSelection, workspaceState.activeScenarioId]);
+    if (accessMode !== "none") {
+      setRememberedScenarioSelection(workspaceState.activeScenarioId);
+    }
+  }, [accessMode, setRememberedScenarioSelection, workspaceState.activeScenarioId]);
 
   useEffect(() => {
-    rememberedEncounterSelection.setValue(workspaceState.activeEncounterId);
-  }, [rememberedEncounterSelection, workspaceState.activeEncounterId]);
+    if (accessMode !== "none") {
+      setRememberedEncounterSelection(workspaceState.activeEncounterId);
+    }
+  }, [accessMode, setRememberedEncounterSelection, workspaceState.activeEncounterId]);
 
   useEffect(() => {
-    rememberedWorkspaceTab.setValue(workspaceState.activeTab);
-  }, [rememberedWorkspaceTab, workspaceState.activeTab]);
+    if (accessMode !== "none") {
+      setRememberedWorkspaceTab(workspaceState.activeTab);
+    }
+  }, [accessMode, setRememberedWorkspaceTab, workspaceState.activeTab]);
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1240 }}>
@@ -889,9 +976,19 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
 
       {!loading && !workspaceLoadError && accessMode === "none" ? (
         <section style={panelStyle}>
-          <strong>Campaign unavailable</strong>
-          <div>This campaign is not accessible for the current player account.</div>
-          <Link href="/campaigns">Back to campaigns</Link>
+          {currentUser ? (
+            <>
+              <strong>Campaign unavailable</strong>
+              <div>This campaign is not accessible for the current player account.</div>
+              <Link href="/campaigns">Back to campaigns</Link>
+            </>
+          ) : (
+            <>
+              <strong>Authentication required</strong>
+              <div>Sign in to see your Campaigns and continue playing.</div>
+              <Link href="/auth">Sign in</Link>
+            </>
+          )}
         </section>
       ) : null}
 

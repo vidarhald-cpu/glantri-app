@@ -154,6 +154,9 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source.match(/loadCampaignWorkspaceAccessForUser\(\{/g)).toHaveLength(1);
     expect(source).toContain("const refreshWorkspaceContext = useCallback(");
     expect(source).toContain("workspaceContextRequestIdRef.current !== requestId");
+    expect(source).toContain("isWorkspaceAuthorizationDenial");
+    expect(source).toContain("clearUnauthorizedWorkspaceContext");
+    expect(source).toContain('router.replace("/campaigns")');
     expect(source).toContain("await refreshWorkspaceContext(false)");
     expect(source).toContain('window.addEventListener("focus", refreshVisibleWorkspace)');
     expect(source).toContain(
@@ -174,7 +177,11 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("CampaignWorkspaceLoadErrorState");
     expect(source).toContain("setWorkspaceLoadError(true)");
     expect(source).toContain("setLoadAttempt((current) => current + 1)");
-    expect(source).not.toContain('setAccessMode("none")');
+    expect(source).toContain("if (!initial && authorizationDenialStatus)");
+    expect(source).toContain('setAccessMode("none")');
+    expect(source).toContain(
+      'setError("We couldn\'t refresh live play. Try again or reload the page.")',
+    );
     expect(source).toContain(
       'setAccessMode(canManageCampaignWorkspace(currentUser) ? "gm" : "player")',
     );
