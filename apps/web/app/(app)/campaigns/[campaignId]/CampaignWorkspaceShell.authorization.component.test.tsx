@@ -178,6 +178,50 @@ describe("Campaign workspace focus-refresh authorization", () => {
     expect(mocks.replace).not.toHaveBeenCalledWith("/campaigns");
   });
 
+  it("clears mounted private context when a late 401 follows an earlier transient child failure", async () => {
+    let rejectLateAuthorization!: (reason?: unknown) => void;
+    const lateAuthorizationRequest = new Promise<never>((_resolve, reject) => {
+      rejectLateAuthorization = reject;
+    });
+
+    render(<CampaignWorkspaceShell campaignId="campaign-1" />);
+
+    await screen.findByText("The steward moved the seal after midnight.");
+    mocks.loadAccess.mockResolvedValueOnce({ accessMode: "gm", scenarios: [scenario] });
+    mocks.loadEncounterSummaries.mockRejectedValueOnce(new Error("Temporary network failure"));
+    mocks.loadParticipants.mockReturnValueOnce(lateAuthorizationRequest);
+
+    act(() => window.dispatchEvent(new Event("focus")));
+
+    await screen.findByText("We couldn't refresh live play. Try again or reload the page.");
+    expect(screen.getByText("The steward moved the seal after midnight.")).toBeVisible();
+
+    await act(async () => {
+      rejectLateAuthorization(new ApiRequestError("Authentication required.", 401));
+      await Promise.resolve();
+    });
+
+    await screen.findByText("Authentication required");
+    expect(
+      screen.queryByText("The steward moved the seal after midnight."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Live play context" })).not.toBeInTheDocument();
+    expect(mocks.setCurrentUser).toHaveBeenCalledWith(null);
+    expect(mocks.replace).toHaveBeenCalledWith("/campaigns");
+    await waitFor(() => {
+      expect(localStorage.getItem("glantri.remembered-selection.campaign-id")).toBeNull();
+      expect(
+        localStorage.getItem("glantri.remembered-selection.scenario-id:campaign-1"),
+      ).toBeNull();
+      expect(
+        localStorage.getItem("glantri.remembered-selection.encounter-id:campaign-1"),
+      ).toBeNull();
+      expect(
+        localStorage.getItem("glantri.remembered-selection.workspace-tab:campaign-1"),
+      ).toBeNull();
+    });
+  });
+
   it("clears mounted private context when focus refresh reports access denied", async () => {
     mocks.loadAccess.mockResolvedValueOnce({ accessMode: "none", scenarios: [] });
 

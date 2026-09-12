@@ -302,14 +302,26 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
     async (initial: boolean) => {
       const requestId = workspaceContextRequestIdRef.current + 1;
       workspaceContextRequestIdRef.current = requestId;
-      let authorizationDenialStatus: 401 | 403 | undefined;
+
+      function handleWorkspaceAuthorizationDenial(status: 401 | 403) {
+        if (initial || workspaceContextRequestIdRef.current !== requestId) return;
+
+        clearUnauthorizedWorkspaceContext();
+
+        if (status === 401) {
+          setCurrentUser(null);
+          router.replace("/campaigns");
+        } else {
+          router.replace(buildCampaignWorkspaceHref({ campaignId, tab: "campaign" }));
+        }
+      }
 
       async function observeWorkspaceRequest<T>(request: () => Promise<T>): Promise<T> {
         try {
           return await request();
         } catch (caughtError) {
           if (isWorkspaceAuthorizationDenial(caughtError)) {
-            authorizationDenialStatus = caughtError.status === 401 ? 401 : 403;
+            handleWorkspaceAuthorizationDenial(caughtError.status === 401 ? 401 : 403);
           }
 
           throw caughtError;
@@ -363,18 +375,6 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         setWorkspaceLoadError(false);
       } catch {
         if (workspaceContextRequestIdRef.current !== requestId) return;
-
-        if (!initial && authorizationDenialStatus) {
-          clearUnauthorizedWorkspaceContext();
-
-          if (authorizationDenialStatus === 401) {
-            setCurrentUser(null);
-            router.replace("/campaigns");
-          } else {
-            router.replace(buildCampaignWorkspaceHref({ campaignId, tab: "campaign" }));
-          }
-          return;
-        }
 
         if (initial) {
           setError(undefined);

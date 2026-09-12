@@ -177,7 +177,8 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("CampaignWorkspaceLoadErrorState");
     expect(source).toContain("setWorkspaceLoadError(true)");
     expect(source).toContain("setLoadAttempt((current) => current + 1)");
-    expect(source).toContain("if (!initial && authorizationDenialStatus)");
+    expect(source).toContain("handleWorkspaceAuthorizationDenial");
+    expect(source).toContain("initial || workspaceContextRequestIdRef.current !== requestId");
     expect(source).toContain('setAccessMode("none")');
     expect(source).toContain(
       'setError("We couldn\'t refresh live play. Try again or reload the page.")',
