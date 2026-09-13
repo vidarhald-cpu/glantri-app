@@ -13,6 +13,19 @@ const SERVICE_PATTERN = /^[a-z][a-z0-9-]*$/;
 const SENSITIVE_KEY_PATTERN =
   /authorization|cookie|password|passwd|token|secret|session|api[_-]?key/i;
 const COMPOUND_SECRET_KEY = String.raw`(?:password|passwd|token|secret|session(?:[_-]?id)?|access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|client[_-]?secret)`;
+const SECRET_ASSIGNMENT_PREFIX = String.raw`(?:"|')?\b${COMPOUND_SECRET_KEY}\b(?:"|')?\s*[:=]\s*`;
+const QUOTED_SECRET_ASSIGNMENT_PATTERN = new RegExp(
+  String.raw`(${SECRET_ASSIGNMENT_PREFIX})("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')`,
+  "gi",
+);
+const UNTERMINATED_DOUBLE_QUOTED_SECRET_PATTERN = new RegExp(
+  String.raw`(${SECRET_ASSIGNMENT_PREFIX})"(?:\\.|[^"\\])*$`,
+  "gi",
+);
+const UNTERMINATED_SINGLE_QUOTED_SECRET_PATTERN = new RegExp(
+  String.raw`(${SECRET_ASSIGNMENT_PREFIX})'(?:\\.|[^'\\])*$`,
+  "gi",
+);
 const PROBE_SCRIPT = String.raw`
 const http = require("node:http");
 const url = process.argv[1];
@@ -109,6 +122,12 @@ function sanitizeText(value) {
       /\b(authorization|proxy-authorization|cookie|set-cookie)\s*[:=]\s*[^\r\n]+/gi,
       "$1: [REDACTED]",
     )
+    .replace(QUOTED_SECRET_ASSIGNMENT_PATTERN, (_match, prefix, quotedValue) => {
+      const quote = quotedValue[0];
+      return `${prefix}${quote}[REDACTED]${quote}`;
+    })
+    .replace(UNTERMINATED_DOUBLE_QUOTED_SECRET_PATTERN, "$1[REDACTED]")
+    .replace(UNTERMINATED_SINGLE_QUOTED_SECRET_PATTERN, "$1[REDACTED]")
     .replace(new RegExp(`([?&](?:amp;)?${COMPOUND_SECRET_KEY}=)[^&\\s]+`, "gi"), "$1[REDACTED]")
     .replace(
       new RegExp(`(\\b${COMPOUND_SECRET_KEY}\\b\\s*[:=]\\s*)[^&\\s,;]+`, "gi"),

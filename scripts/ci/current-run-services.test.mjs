@@ -113,3 +113,48 @@ test("redacts compound plaintext credential and session keys", () => {
   assert.match(sanitized, /apiKey=\[REDACTED\]/);
   assert.match(sanitized, /client-secret=\[REDACTED\]/);
 });
+
+test("redacts sensitive values in pretty-printed JSON", () => {
+  const logs = [
+    "{",
+    '  "sessionId": "pretty-session-secret",',
+    '  "refresh-token": "pretty-refresh-secret",',
+    '  "safe": "visible diagnostic value"',
+    "}",
+  ].join("\n");
+  const sanitized = sanitizeLogs(logs);
+
+  assert.doesNotMatch(sanitized, /pretty-session-secret|pretty-refresh-secret/);
+  assert.match(sanitized, /"sessionId": "\[REDACTED\]",/);
+  assert.match(sanitized, /"refresh-token": "\[REDACTED\]",/);
+  assert.match(sanitized, /"safe": "visible diagnostic value"/);
+});
+
+test("redacts sensitive values in prefixed JSON fragments", () => {
+  const sanitized = sanitizeLogs(
+    'service error: {"client-secret":"prefixed-client-secret","safe":"yes"}',
+  );
+
+  assert.doesNotMatch(sanitized, /prefixed-client-secret/);
+  assert.match(sanitized, /service error: \{"client-secret":"\[REDACTED\]","safe":"yes"\}/);
+});
+
+test("redacts complete quoted plaintext values containing spaces", () => {
+  const sanitized = sanitizeLogs(
+    "sessionId=\"quoted session secret\" client-secret='single quoted secret' safe=yes",
+  );
+
+  assert.doesNotMatch(sanitized, /quoted session secret|single quoted secret|session secret/);
+  assert.match(sanitized, /sessionId=\[REDACTED\]/);
+  assert.match(sanitized, /client-secret=\[REDACTED\]/);
+  assert.match(sanitized, /safe=yes/);
+});
+
+test("fails closed for unterminated quoted plaintext secret values", () => {
+  const logs = ['apiKey="unterminated secret tail', "session_id='another secret tail"].join("\n");
+  const sanitized = sanitizeLogs(logs);
+
+  assert.doesNotMatch(sanitized, /unterminated|secret tail|another/);
+  assert.match(sanitized, /apiKey=\[REDACTED\]/);
+  assert.match(sanitized, /session_id=\[REDACTED\]/);
+});
