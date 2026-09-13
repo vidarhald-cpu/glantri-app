@@ -1,11 +1,25 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import net from "node:net";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { assertPortsFree, sanitizeLogs, validateMetadata } from "./current-run-services.mjs";
 
 const CONTAINER_ID = "a".repeat(64);
 const IMAGE_ID = `sha256:${"b".repeat(64)}`;
+const SANITIZE_LOGS_ENTRY_POINT = fileURLToPath(
+  new URL("./sanitize-service-logs.mjs", import.meta.url),
+);
+
+function sanitizeThroughProductionEntryPoint(input) {
+  const result = spawnSync(process.execPath, [SANITIZE_LOGS_ENTRY_POINT], {
+    input,
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout;
+}
 
 test("rejects an occupied task-owned port and accepts it after release", async () => {
   const server = net.createServer();
@@ -158,3 +172,36 @@ test("fails closed for unterminated quoted plaintext secret values", () => {
   assert.match(sanitized, /apiKey=\[REDACTED\]/);
   assert.match(sanitized, /session_id=\[REDACTED\]/);
 });
+
+const structuredFallbackCases = [
+  {
+    name: "pretty-printed cookie fields",
+    input: ["{", '  "cookie": "sid=qa-cookie-sentinel",', '  "safe": "yes"', "}"].join("\n"),
+    secrets: ["qa-cookie-sentinel"],
+    expected: /"cookie": "\[REDACTED\]"/,
+  },
+  {
+    name: "prefixed session objects",
+    input: 'pino-prefix {"session":{"id":"qa-nested-sentinel"},"safe":"yes"}',
+    secrets: ["qa-nested-sentinel"],
+    expected: /pino-prefix \{"session":"\[REDACTED\]","safe":"yes"\}/,
+  },
+  {
+    name: "prefixed numeric session IDs",
+    input: 'pino-prefix {"sessionId":123456789,"safe":"yes"}',
+    secrets: ["123456789"],
+    expected: /pino-prefix \{"sessionId":"\[REDACTED\]","safe":"yes"\}/,
+  },
+];
+
+for (const { name, input, secrets, expected } of structuredFallbackCases) {
+  test(`redacts ${name} through direct and production log entry points`, () => {
+    const direct = sanitizeLogs(input);
+    const production = sanitizeThroughProductionEntryPoint(input);
+
+    assert.equal(production, direct);
+    for (const secret of secrets) assert.doesNotMatch(direct, new RegExp(secret));
+    assert.match(direct, expected);
+    assert.match(direct, /"safe"(?:: |:)"yes"/);
+  });
+}

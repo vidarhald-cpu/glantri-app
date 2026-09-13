@@ -12,7 +12,7 @@ const IMAGE_ID_PATTERN = /^sha256:[a-f0-9]{64}$/;
 const SERVICE_PATTERN = /^[a-z][a-z0-9-]*$/;
 const SENSITIVE_KEY_PATTERN =
   /authorization|cookie|password|passwd|token|secret|session|api[_-]?key/i;
-const COMPOUND_SECRET_KEY = String.raw`(?:password|passwd|token|secret|session(?:[_-]?id)?|access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|client[_-]?secret)`;
+const COMPOUND_SECRET_KEY = String.raw`(?:authorization|proxy[_-]?authorization|cookie|set[_-]?cookie|password|passwd|token|secret|session(?:[_-]?id)?|access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|client[_-]?secret)`;
 const SECRET_ASSIGNMENT_PREFIX = String.raw`(?:"|')?\b${COMPOUND_SECRET_KEY}\b(?:"|')?\s*[:=]\s*`;
 const QUOTED_SECRET_ASSIGNMENT_PATTERN = new RegExp(
   String.raw`(${SECRET_ASSIGNMENT_PREFIX})("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')`,
@@ -129,35 +129,60 @@ function sanitizeText(value) {
     .replace(UNTERMINATED_DOUBLE_QUOTED_SECRET_PATTERN, "$1[REDACTED]")
     .replace(UNTERMINATED_SINGLE_QUOTED_SECRET_PATTERN, "$1[REDACTED]")
     .replace(new RegExp(`([?&](?:amp;)?${COMPOUND_SECRET_KEY}=)[^&\\s]+`, "gi"), "$1[REDACTED]")
-    .replace(
-      new RegExp(`(\\b${COMPOUND_SECRET_KEY}\\b\\s*[:=]\\s*)[^&\\s,;]+`, "gi"),
-      "$1[REDACTED]",
-    );
+    .replace(new RegExp(`(${SECRET_ASSIGNMENT_PREFIX})[^&\\s,;]+`, "gi"), "$1[REDACTED]");
+}
+
+function redactStructuredValue(entry) {
+  if (Array.isArray(entry)) return entry.map(redactStructuredValue);
+  if (typeof entry === "string") return sanitizeText(entry);
+  if (!entry || typeof entry !== "object") return entry;
+  return Object.fromEntries(
+    Object.entries(entry).map(([key, child]) => [
+      key,
+      SENSITIVE_KEY_PATTERN.test(key) ? "[REDACTED]" : redactStructuredValue(child),
+    ]),
+  );
+}
+
+function sanitizeJson(value, pretty = false) {
+  try {
+    return JSON.stringify(redactStructuredValue(JSON.parse(value)), null, pretty ? 2 : undefined);
+  } catch {
+    return undefined;
+  }
 }
 
 export function sanitizeLogs(value) {
-  return String(value)
+  const input = String(value);
+  const documentMatch = /^(\s*)([\s\S]*?)(\s*)$/.exec(input);
+  const [, leading, document, trailing] = documentMatch;
+  const sanitizedDocument = sanitizeJson(document, document.includes("\n"));
+  if (sanitizedDocument !== undefined) {
+    return `${leading}${sanitizedDocument}${trailing}`;
+  }
+
+  return input
     .split(/(?<=\n)/)
     .map((line) => {
       const newline = line.endsWith("\n") ? "\n" : "";
       const content = newline ? line.slice(0, -1) : line;
-      try {
-        const parsed = JSON.parse(content);
-        const redact = (entry) => {
-          if (Array.isArray(entry)) return entry.map(redact);
-          if (typeof entry === "string") return sanitizeText(entry);
-          if (!entry || typeof entry !== "object") return entry;
-          return Object.fromEntries(
-            Object.entries(entry).map(([key, child]) => [
-              key,
-              SENSITIVE_KEY_PATTERN.test(key) ? "[REDACTED]" : redact(child),
-            ]),
-          );
-        };
-        return `${JSON.stringify(redact(parsed))}${newline}`;
-      } catch {
-        return `${sanitizeText(content)}${newline}`;
+      const sanitizedLine = sanitizeJson(content);
+      if (sanitizedLine !== undefined) return `${sanitizedLine}${newline}`;
+
+      const objectIndex = content.indexOf("{");
+      const arrayIndex = content.indexOf("[");
+      const fragmentIndexes = [objectIndex, arrayIndex]
+        .filter((index) => index >= 0)
+        .sort((left, right) => left - right);
+      for (const fragmentIndex of fragmentIndexes) {
+        const prefix = content.slice(0, fragmentIndex);
+        const sanitizedFragment = sanitizeJson(content.slice(fragmentIndex));
+        if (sanitizedFragment !== undefined) {
+          return `${sanitizeText(prefix)}${sanitizedFragment}${newline}`;
+        }
       }
+
+      return `${sanitizeText(content)}${newline}`;
     })
     .join("");
 }
