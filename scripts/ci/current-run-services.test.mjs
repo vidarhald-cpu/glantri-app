@@ -63,3 +63,53 @@ test("redacts credentials and session secrets from collected logs", () => {
   assert.match(sanitized, /\[REDACTED\]/);
   assert.match(sanitized, /safe=yes/);
 });
+
+test("redacts credential-bearing URI userinfo while preserving diagnostic structure", () => {
+  const logs = [
+    "DATABASE_URL=postgresql://admin:db-secret@db.internal:5432/app",
+    "CACHE_URL=redis://:redis-secret@cache.internal:6379/0",
+    "UPSTREAM=https://service:p%40ss-word@example.internal/ready",
+  ].join("\n");
+  const sanitized = sanitizeLogs(logs);
+
+  assert.doesNotMatch(sanitized, /admin:db-secret|redis-secret|p%40ss-word/);
+  assert.match(sanitized, /postgresql:\/\/\[REDACTED\]@db\.internal:5432\/app/);
+  assert.match(sanitized, /redis:\/\/\[REDACTED\]@cache\.internal:6379\/0/);
+  assert.match(sanitized, /https:\/\/\[REDACTED\]@example\.internal\/ready/);
+});
+
+test("redacts credential-bearing URI userinfo inside non-sensitive JSON values", () => {
+  const logs = [
+    JSON.stringify({ url: "postgresql://admin:json-secret@db.internal:5432/app" }),
+    JSON.stringify({ endpoints: ["https://user:array-secret@example.internal/ready"] }),
+  ].join("\n");
+  const sanitized = sanitizeLogs(logs);
+
+  assert.doesNotMatch(sanitized, /json-secret|array-secret/);
+  assert.match(sanitized, /"url":"postgresql:\/\/\[REDACTED\]@db\.internal:5432\/app"/);
+  assert.match(sanitized, /https:\/\/\[REDACTED\]@example\.internal\/ready/);
+});
+
+test("redacts compound query credential keys with HTML-escaped separators", () => {
+  const sanitized = sanitizeLogs(
+    "GET /ready?access_token=query-secret&amp;safe=yes&refresh-token=refresh-secret",
+  );
+
+  assert.doesNotMatch(sanitized, /query-secret|refresh-secret/);
+  assert.match(sanitized, /access_token=\[REDACTED\]&amp;safe=yes/);
+  assert.match(sanitized, /refresh-token=\[REDACTED\]/);
+});
+
+test("redacts compound plaintext credential and session keys", () => {
+  const logs = [
+    "sessionId=session-secret safe=yes",
+    "session_id=snake-secret apiKey=api-secret client-secret=client-value",
+  ].join("\n");
+  const sanitized = sanitizeLogs(logs);
+
+  assert.doesNotMatch(sanitized, /session-secret|snake-secret|api-secret|client-value/);
+  assert.match(sanitized, /sessionId=\[REDACTED\] safe=yes/);
+  assert.match(sanitized, /session_id=\[REDACTED\]/);
+  assert.match(sanitized, /apiKey=\[REDACTED\]/);
+  assert.match(sanitized, /client-secret=\[REDACTED\]/);
+});

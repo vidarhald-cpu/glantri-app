@@ -10,6 +10,9 @@ import { pathToFileURL } from "node:url";
 const CONTAINER_ID_PATTERN = /^[a-f0-9]{64}$/;
 const IMAGE_ID_PATTERN = /^sha256:[a-f0-9]{64}$/;
 const SERVICE_PATTERN = /^[a-z][a-z0-9-]*$/;
+const SENSITIVE_KEY_PATTERN =
+  /authorization|cookie|password|passwd|token|secret|session|api[_-]?key/i;
+const COMPOUND_SECRET_KEY = String.raw`(?:password|passwd|token|secret|session(?:[_-]?id)?|access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|client[_-]?secret)`;
 const PROBE_SCRIPT = String.raw`
 const http = require("node:http");
 const url = process.argv[1];
@@ -98,6 +101,21 @@ function inspectImage(imageReference) {
   return parsed[0];
 }
 
+function sanitizeText(value) {
+  return String(value)
+    .replace(/\b([a-z][a-z0-9+.-]*:\/\/)([^/\s?#@]+)@/gi, "$1[REDACTED]@")
+    .replace(/\b(Bearer|Basic|token)\s+[A-Za-z0-9._~+/=-]+/gi, "$1 [REDACTED]")
+    .replace(
+      /\b(authorization|proxy-authorization|cookie|set-cookie)\s*[:=]\s*[^\r\n]+/gi,
+      "$1: [REDACTED]",
+    )
+    .replace(new RegExp(`([?&](?:amp;)?${COMPOUND_SECRET_KEY}=)[^&\\s]+`, "gi"), "$1[REDACTED]")
+    .replace(
+      new RegExp(`(\\b${COMPOUND_SECRET_KEY}\\b\\s*[:=]\\s*)[^&\\s,;]+`, "gi"),
+      "$1[REDACTED]",
+    );
+}
+
 export function sanitizeLogs(value) {
   return String(value)
     .split(/(?<=\n)/)
@@ -108,28 +126,18 @@ export function sanitizeLogs(value) {
         const parsed = JSON.parse(content);
         const redact = (entry) => {
           if (Array.isArray(entry)) return entry.map(redact);
+          if (typeof entry === "string") return sanitizeText(entry);
           if (!entry || typeof entry !== "object") return entry;
           return Object.fromEntries(
             Object.entries(entry).map(([key, child]) => [
               key,
-              /authorization|cookie|password|passwd|token|secret|session/i.test(key)
-                ? "[REDACTED]"
-                : redact(child),
+              SENSITIVE_KEY_PATTERN.test(key) ? "[REDACTED]" : redact(child),
             ]),
           );
         };
         return `${JSON.stringify(redact(parsed))}${newline}`;
       } catch {
-        return `${content
-          .replace(/\b(Bearer|Basic|token)\s+[A-Za-z0-9._~+/=-]+/gi, "$1 [REDACTED]")
-          .replace(
-            /\b(authorization|proxy-authorization|cookie|set-cookie)\s*[:=]\s*[^\r\n]+/gi,
-            "$1: [REDACTED]",
-          )
-          .replace(
-            /([?&](?:password|passwd|token|secret|session)=)[^&\s]+/gi,
-            "$1[REDACTED]",
-          )}${newline}`;
+        return `${sanitizeText(content)}${newline}`;
       }
     })
     .join("");
