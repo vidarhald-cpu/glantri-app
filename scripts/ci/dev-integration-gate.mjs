@@ -6,8 +6,10 @@ const shaPattern = /^[0-9a-f]{40}$/;
 const docsPattern = /^(?:AGENTS\.md|README\.md|docs\/(?!source\/|rules\/).+\.md)$/;
 // Application formatting uses checkChangedFormatting.mjs. Keep that helper on
 // the full-validation fallback until its behavior has focused tooling coverage.
+// The four service-isolation helpers are exact paths with mandatory unit,
+// production-entrypoint and real-Docker coverage in the tooling job.
 const toolingPattern =
-  /^(?:\.github\/workflows\/ci\.yml|scripts\/ci\/dev-integration-gate[^/]*\.mjs)$/;
+  /^(?:\.github\/workflows\/ci\.yml|scripts\/ci\/(?:dev-integration-gate[^/]*\.mjs|current-run-services\.mjs|current-run-services\.synthetic\.sh|current-run-services\.test\.mjs|sanitize-service-logs\.mjs))$/;
 
 function git(cwd, args) {
   return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });

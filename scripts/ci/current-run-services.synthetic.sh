@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+helper="scripts/ci/current-run-services.mjs"
+state_directory="$(mktemp -d "${TMPDIR:-/tmp}/glantri-ci-isolation.XXXXXX")"
+synthetic_tag="glantri-ci-isolation-synthetic-${CI_RESOURCE_SUFFIX}"
+synthetic_source_image="${CI_SYNTHETIC_IMAGE:-node:22-alpine}"
+stale_name="glantri-ci-isolation-stale-${CI_RESOURCE_SUFFIX}"
+current_name="glantri-ci-isolation-current-${CI_RESOURCE_SUFFIX}"
+stale_id=""
+current_id=""
+host_port=""
+
+cleanup() {
+  cleanup_status=0
+  if [ -f "$state_directory/current.json" ]; then
+    node "$helper" cleanup "$state_directory" current || cleanup_status=1
+  elif [ -n "$current_id" ]; then
+    docker rm -f "$current_id" >/dev/null 2>&1 || true
+  fi
+  if [ -n "$stale_id" ]; then
+    docker rm -f "$stale_id" >/dev/null 2>&1 || true
+  fi
+  docker image rm "$synthetic_tag" >/dev/null 2>&1 || true
+
+  if [ -n "$current_id" ] && docker inspect "$current_id" >/dev/null 2>&1; then
+    echo "Synthetic current container remains after cleanup."
+    cleanup_status=1
+  fi
+  if [ -n "$stale_id" ] && docker inspect "$stale_id" >/dev/null 2>&1; then
+    echo "Synthetic stale container remains after cleanup."
+    cleanup_status=1
+  fi
+  if docker image inspect "$synthetic_tag" >/dev/null 2>&1; then
+    echo "Synthetic image tag remains after cleanup."
+    cleanup_status=1
+  fi
+  find "$state_directory" -maxdepth 1 -type f -delete
+  rmdir "$state_directory"
+  return "$cleanup_status"
+}
+trap cleanup EXIT
+
+docker tag "$synthetic_source_image" "$synthetic_tag"
+synthetic_image_id="$(docker image inspect --format '{{.Id}}' "$synthetic_tag")"
+
+stale_id="$(
+  docker run -d --name "$stale_name" -p 0:8080 "$synthetic_tag" \
+    node -e 'require("node:http").createServer((_request,response)=>response.end("stale-service")).listen(8080,"0.0.0.0")'
+)"
+host_port="$(docker port "$stale_id" 8080/tcp | sed -n '1s/.*://p')"
+test -n "$host_port"
+stale_response=""
+for attempt in $(seq 1 20); do
+  if stale_response="$(curl -fsS "http://${CI_DIND_HOST}:${host_port}" 2>/dev/null)"; then
+    break
+  fi
+  if [ "$attempt" -eq 20 ]; then
+    echo "Synthetic stale service did not become healthy."
+    exit 1
+  fi
+  sleep 0.1
+done
+test "$stale_response" = "stale-service"
+
+if node "$helper" assert-ports-free "$CI_DIND_HOST" "$host_port"; then
+  echo "A retained healthy stale service incorrectly passed the later-run port gate."
+  exit 1
+fi
+echo "Retained healthy stale service was rejected before later-run startup."
+
+docker rm -f "$stale_id" >/dev/null
+if docker inspect "$stale_id" >/dev/null 2>&1; then
+  echo "Synthetic stale service remains after exact removal."
+  exit 1
+fi
+stale_id=""
+
+node "$helper" assert-ports-free "$CI_DIND_HOST" "$host_port"
+current_id="$(
+  docker run -d --name "$current_name" -p "${host_port}:8080" "$synthetic_tag" \
+    node -e 'require("node:http").createServer((_request,response)=>response.end("current-service")).listen(8080,"0.0.0")'
+)"
+node "$helper" record \
+  "$state_directory" current "$current_id" "$synthetic_image_id" "$synthetic_tag" 8080 "$host_port"
+node "$helper" verify "$state_directory" current
+node "$helper" wait-http "$state_directory" current "http://127.0.0.1:8080" 10 250
+test "$(curl -fsS "http://${CI_DIND_HOST}:${host_port}")" = "current-service"
+echo "Clean current service passed exact container, image, port, and readiness checks."
