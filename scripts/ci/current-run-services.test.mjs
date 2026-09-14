@@ -348,6 +348,26 @@ const incompleteSensitiveStructuredCases = [
       "Readiness failed",
     ].join("\n"),
   },
+  {
+    name: "an array string truncated before its closing quote",
+    input: [
+      "Starting API",
+      "status=503",
+      "sessionId = [",
+      '"qa151-truncated-string-sentinel',
+      "Readiness failed",
+    ].join("\n"),
+  },
+  {
+    name: "an unclosed sensitive object with an unquoted property",
+    input: [
+      "Starting API",
+      "status=503",
+      "session = {",
+      'id: "qa151-unquoted-property-sentinel"',
+      "Readiness failed",
+    ].join("\n"),
+  },
 ];
 
 for (const { name, input } of incompleteSensitiveStructuredCases) {
@@ -358,7 +378,7 @@ for (const { name, input } of incompleteSensitiveStructuredCases) {
     assert.equal(production, direct);
     assert.doesNotMatch(
       direct,
-      /qa151-truncated-object-sentinel|qa151-truncated-array-sentinel|qa151-mismatched-sentinel|qa151-nested-unclosed-sentinel/,
+      /qa151-truncated-object-sentinel|qa151-truncated-array-sentinel|qa151-mismatched-sentinel|qa151-nested-unclosed-sentinel|qa151-truncated-string-sentinel|qa151-unquoted-property-sentinel/,
     );
     assert.match(direct, /\[REDACTED\]/);
     assert.match(direct, /Starting API/);

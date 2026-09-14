@@ -115,6 +115,12 @@ Readiness failed
 Readiness failed
 session = {
 "nested":{"id":"qa-nested-unclosed-session"}
+Readiness failed
+sessionId = [
+"qa-truncated-string-session
+Readiness failed
+session = {
+id: "qa-unquoted-property-session"
 Readiness failed`); require("node:http").createServer((_request,response)=>{response.statusCode=503;response.end("deliberate-not-ready")}).listen(8080,"0.0.0.0")'
 )"
 failure_port="$(docker port "$failure_id" 8080/tcp | sed -n '1s/.*://p')"
@@ -147,7 +153,9 @@ for secret in \
   qa-truncated-object \
   qa-truncated-array \
   qa-mismatched-session \
-  qa-nested-unclosed-session; do
+  qa-nested-unclosed-session \
+  qa-truncated-string-session \
+  qa-unquoted-property-session; do
   if [[ "$failure_output" == *"$secret"* ]]; then
     echo "Synthetic secret leaked through readiness-failure log collection."
     exit 1

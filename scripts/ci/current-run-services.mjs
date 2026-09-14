@@ -27,6 +27,8 @@ const UNTERMINATED_SINGLE_QUOTED_SECRET_PATTERN = new RegExp(
   "gim",
 );
 const SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN = new RegExp(SECRET_ASSIGNMENT_PREFIX, "gi");
+const SAFE_UNCLOSED_STRUCTURE_BOUNDARY_PATTERN =
+  /^(?:Readiness failed(?:\s+status=\d{3})?|status=\d{3})$/i;
 const PROBE_SCRIPT = String.raw`
 const http = require("node:http");
 const url = process.argv[1];
@@ -185,22 +187,13 @@ function findJsonEnd(value, start) {
   return undefined;
 }
 
-function findUnclosedStructuredValueEnd(input, valueStart, assignmentStart) {
-  const assignmentColumn = assignmentStart - input.lastIndexOf("\n", assignmentStart - 1) - 1;
+function findUnclosedStructuredValueEnd(input, valueStart) {
   let newline = input.indexOf("\n", valueStart);
   while (newline !== -1) {
     const lineStart = newline + 1;
     const lineEnd = input.indexOf("\n", lineStart);
     const line = input.slice(lineStart, lineEnd < 0 ? input.length : lineEnd);
-    const trimmed = line.trim();
-    const indent = line.match(/^[\t ]*/)[0].length;
-    const looksLikeStructuredContinuation =
-      /^(?:[}\]],?\s*$|[{[]|"(?:\\.|[^"\\])*"(?:\s*:|\s*,?\s*$)|(?:-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|true|false|null)\s*,?\s*$)/i.test(
-        trimmed,
-      );
-    if (trimmed && indent <= assignmentColumn && !looksLikeStructuredContinuation) {
-      return newline;
-    }
+    if (SAFE_UNCLOSED_STRUCTURE_BOUNDARY_PATTERN.test(line.trim())) return newline;
     if (lineEnd === -1) break;
     newline = lineEnd;
   }
@@ -219,7 +212,7 @@ function sanitizeSensitiveStructuredAssignments(input) {
     }
     const valueEnd = findJsonEnd(input, valueStart);
     if (valueEnd === undefined) {
-      const recoveryEnd = findUnclosedStructuredValueEnd(input, valueStart, match.index);
+      const recoveryEnd = findUnclosedStructuredValueEnd(input, valueStart);
       output += `${input.slice(copiedThrough, match.index)}${match[0]}"[REDACTED]"`;
       copiedThrough = recoveryEnd;
       SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.lastIndex = recoveryEnd;
