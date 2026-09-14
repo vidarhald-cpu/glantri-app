@@ -94,6 +94,11 @@ import {
   type ProfessionBrowseCard,
   type SkillBrowseRow,
 } from "./chargenWizardHelpers";
+import {
+  bindLegacySocietyChargenContext,
+  createLegacyCanonicalChargenSource,
+  getLegacySocietyChargenContext,
+} from "./chargenContentContextSource";
 import { persistAuthenticatedFinalizedCharacter } from "./finalizeCharacterAuthority";
 
 const SESSION_ID = "chargen-vertical-slice";
@@ -106,7 +111,9 @@ const localCharacterRepository = new LocalCharacterRepository();
 export function useChargenWizardState() {
   const router = useRouter();
   const [characterName, setCharacterName] = useState("");
-  const [content, setContent] = useState<CanonicalContent>(defaultCanonicalContent);
+  const [contentSource, setContentSource] = useState(() =>
+    createLegacyCanonicalChargenSource(defaultCanonicalContent),
+  );
   const [currentUser, setCurrentUser] = useState<AuthUser | null>();
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [feedback, setFeedback] = useState<string[]>([]);
@@ -142,6 +149,7 @@ export function useChargenWizardState() {
   const [buildIncreaseStat, setBuildIncreaseStat] = useState<GlantriCharacteristicKey>("str");
   const [buildDecreaseStat, setBuildDecreaseStat] = useState<GlantriCharacteristicKey>("dex");
 
+  const content: CanonicalContent = contentSource.catalogue.content;
   const selectedRolledProfile = selectedProfileId
     ? selectProfile({ profileId: selectedProfileId, profiles: rolledProfiles })
     : undefined;
@@ -198,6 +206,13 @@ export function useChargenWizardState() {
       ? selectedSociety.socialBands[selectedSocialBand]
       : undefined;
   const selectedSocietyBand = selectedSociety ? selectedSocialBand : undefined;
+  const activeContentSource = bindLegacySocietyChargenContext(contentSource, {
+    socialBand: selectedSocietyBand,
+    societyId: selectedSocietyId,
+  });
+  const legacyAcquisitionContext = getLegacySocietyChargenContext(activeContentSource);
+  const activeSocietyId = legacyAcquisitionContext?.societyId;
+  const activeSocialBand = legacyAcquisitionContext?.socialBand;
   const availableProfessions = getAllowedProfessions(content.professions, selectedSocietyAccess);
   const selectedProfession = availableProfessions.find((item) => item.id === selectedProfessionId);
   const sortedSkillGroups = sortSkillGroups(content.skillGroups);
@@ -205,12 +220,12 @@ export function useChargenWizardState() {
   const availableProfessionCards: ProfessionBrowseCard[] = [...availableProfessions]
     .map((profession) => {
       const professionAccess =
-        selectedSocietyId && selectedSocietyBand !== undefined
+        activeSocietyId && activeSocialBand !== undefined
           ? buildChargenSkillAccessSummary({
               content,
               professionId: profession.id,
-              societyId: selectedSocietyId,
-              societyLevel: selectedSocietyBand,
+              societyId: activeSocietyId,
+              societyLevel: activeSocialBand,
             })
           : undefined;
       const professionPackage = resolveEffectiveProfessionPackage({
@@ -285,14 +300,14 @@ export function useChargenWizardState() {
     (profession) => profession.id === selectedProfessionId,
   );
   const skillAllocationContext =
-    selectedProfessionId && selectedSocietyId && selectedSocietyBand !== undefined
+    selectedProfessionId && activeSocietyId && activeSocialBand !== undefined
       ? {
           content,
           professionId: selectedProfessionId,
           profile: selectedProfile,
           progression,
-          societyId: selectedSocietyId,
-          societyLevel: selectedSocietyBand,
+          societyId: activeSocietyId,
+          societyLevel: activeSocialBand,
         }
       : undefined;
   const draftView = buildChargenDraftView({
@@ -301,8 +316,8 @@ export function useChargenWizardState() {
     professionId: selectedProfessionId,
     profile: selectedProfile,
     progression,
-    societyId: selectedSocietyId,
-    societyLevel: selectedSocietyBand,
+    societyId: activeSocietyId,
+    societyLevel: activeSocialBand,
   });
   const educationLinkedSkillCount = Math.max(
     0,
@@ -322,8 +337,8 @@ export function useChargenWizardState() {
       parameters: chargenRuleSet,
     },
     socialClass: selectedSocietyAccess?.socialClass,
-    societyId: selectedSocietyId,
-    societyLevel: selectedSocietyBand,
+    societyId: activeSocietyId,
+    societyLevel: activeSocialBand,
   });
   const motherTongueSummary = buildChargenMotherTongueSummary({
     civilizationId: selectedCivilizationId,
@@ -334,23 +349,23 @@ export function useChargenWizardState() {
     civilizationId: selectedCivilizationId,
     content,
     progression,
-    societyId: selectedSocietyId,
+    societyId: activeSocietyId,
   });
   const selectableSkillSummary = buildChargenSelectableSkillSummary({
     content,
     professionId: selectedProfessionId,
     progression,
-    societyId: selectedSocietyId,
-    societyLevel: selectedSocietyBand,
+    societyId: activeSocietyId,
+    societyLevel: activeSocialBand,
   });
   const groupSlotCandidateSkillIds = getGroupSlotCandidateSkillIds(selectableSkillSummary);
   const skillAccess =
-    selectedProfessionId && selectedSocietyId && selectedSocietyBand !== undefined
+    selectedProfessionId && activeSocietyId && activeSocialBand !== undefined
       ? buildChargenSkillAccessSummary({
           content,
           professionId: selectedProfessionId,
-          societyId: selectedSocietyId,
-          societyLevel: selectedSocietyBand,
+          societyId: activeSocietyId,
+          societyLevel: activeSocialBand,
         })
       : {
           normalSkillGroupIds: [],
@@ -632,7 +647,7 @@ export function useChargenWizardState() {
         : defaultCanonicalContent;
 
       if (cachedContent) {
-        setContent(startingContent);
+        setContentSource(createLegacyCanonicalChargenSource(startingContent));
       }
 
       setCurrentUser(sessionUser);
@@ -654,7 +669,7 @@ export function useChargenWizardState() {
 
         const normalizedContent = validateCanonicalContent(freshContent);
 
-        setContent(normalizedContent);
+        setContentSource(createLegacyCanonicalChargenSource(normalizedContent));
         await contentCacheRepository.save(CONTENT_CACHE_KEY, normalizedContent, "v1");
       } catch {
         // Seed and cache already cover the local-first case.
@@ -767,8 +782,8 @@ export function useChargenWizardState() {
         selectedProfessionId,
         selectedProfile,
         selectedSocialClass: selectedSocietyAccess?.socialClass,
-        selectedSocietyId,
-        selectedSocietyLevel: selectedSocietyBand,
+        selectedSocietyId: activeSocietyId,
+        selectedSocietyLevel: activeSocialBand,
       })
       .catch((error) => {
         console.error(error);
@@ -779,9 +794,9 @@ export function useChargenWizardState() {
     progression,
     selectedProfessionId,
     selectedProfile,
-    selectedSocietyBand,
+    activeSocialBand,
     selectedSocietyAccess,
-    selectedSocietyId,
+    activeSocietyId,
   ]);
 
   function handleCivilizationChange(civilizationId: string) {
@@ -831,8 +846,8 @@ export function useChargenWizardState() {
         content,
         professionId: selectedProfessionId,
         progression: current,
-        societyId: selectedSocietyId,
-        societyLevel: selectedSocietyBand,
+        societyId: activeSocietyId,
+        societyLevel: activeSocialBand,
       });
       const slot = selectableSummary.selectionSlots.find(
         (candidate) => candidate.groupId === groupId && candidate.slotId === slotId,
@@ -882,7 +897,7 @@ export function useChargenWizardState() {
         civilizationId: selectedCivilizationId,
         content,
         progression: current,
-        societyId: selectedSocietyId,
+        societyId: activeSocietyId,
       });
 
       if (!currentLanguageSummary.selectableLanguageIds.includes(languageId)) {
@@ -1500,7 +1515,7 @@ export function useChargenWizardState() {
   }
 
   async function handleFinalize() {
-    if (!selectedSocietyId || selectedSocialBand === undefined) {
+    if (!activeSocietyId || activeSocialBand === undefined) {
       return;
     }
 
@@ -1521,8 +1536,8 @@ export function useChargenWizardState() {
         parameters: chargenRuleSet,
       },
       socialClass: selectedSocietyAccess?.socialClass,
-      societyId: selectedSocietyId,
-      societyLevel: selectedSocialBand,
+      societyId: activeSocietyId,
+      societyLevel: activeSocialBand,
     });
 
     if (!result.build) {
