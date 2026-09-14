@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { createCharacterForE2e } from "./character-fixture";
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
@@ -34,22 +35,37 @@ test.describe("Critical Bleed treatment command repair", () => {
       name: `Critical treatment repair ${suffix}`,
       status: "active",
     });
+    const characterId = `treated-guard-character-${suffix}`;
+    await createCharacterForE2e({
+      apiUrl: API_URL,
+      id: characterId,
+      name: `Treated guard ${suffix}`,
+      request: playerContext.request,
+    });
+    await json(await playerContext.request.get(`${API_URL}/characters/${characterId}/equipment`));
+    await postJson(gmPage.request, `/campaigns/${campaign.campaign.id}/roster`, {
+      category: "pc",
+      sourceId: characterId,
+      sourceType: "character",
+    });
     const scenario = await postJson<{ scenario: { id: string } }>(
       gmPage.request,
       `/campaigns/${campaign.campaign.id}/scenarios`,
       { name: `Critical treatment scenario ${suffix}`, status: "live" },
     );
+    const createdParticipant = await postJson<{
+      participant: { id: string; state: Record<string, unknown> };
+    }>(gmPage.request, `/scenarios/${scenario.scenario.id}/participants/character`, {
+      characterId,
+      controlledByUserId: playerMe.user.id,
+    });
     const participant = await postJson<{
       participant: { id: string; state: Record<string, unknown> };
-    }>(gmPage.request, `/scenarios/${scenario.scenario.id}/participants/entity`, {
-      controlledByUserId: playerMe.user.id,
-      entityInput: {
-        kind: "npc",
-        name: `Treated guard ${suffix}`,
-        snapshot: { displayName: `Treated guard ${suffix}` },
-      },
-      role: "player_character",
-    });
+    }>(
+      gmPage.request,
+      `/scenarios/${scenario.scenario.id}/participants/${createdParticipant.participant.id}/refresh-character-equipment`,
+      {},
+    );
     const effectId = `critical-bleed-${suffix}`;
     const sourceEventId = `critical-event-${suffix}`;
     const createdAt = new Date().toISOString();
@@ -107,6 +123,7 @@ test.describe("Critical Bleed treatment command repair", () => {
         currentRound: 1,
         id: encounterId,
         kind: "combat",
+        participantMembershipMode: "explicit",
         participants: [
           {
             id: encounterParticipantId,
@@ -121,6 +138,18 @@ test.describe("Critical Bleed treatment command repair", () => {
         updatedAt: createdAt,
       },
     });
+
+    const createdEncounter = await json<{ encounter: { updatedAt: string } }>(
+      await gmPage.request.get(`${API_URL}/encounters/${encounterId}`),
+    );
+    await json(
+      await gmPage.request.patch(`${API_URL}/encounters/${encounterId}/status`, {
+        data: {
+          expectedRevision: createdEncounter.encounter.updatedAt,
+          status: "active",
+        },
+      }),
+    );
 
     await gmPage.setViewportSize({ height: 844, width: 390 });
     await gmPage.goto(
@@ -198,7 +227,14 @@ test.describe("Critical Bleed treatment command repair", () => {
     await expect(declarationTreatmentLogEntry).toBeVisible();
     const clearButton = gmPage.getByRole("button", { name: "Clear current step" });
     await expect(clearButton).toBeEnabled();
+    const clearResponsePromise = gmPage.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url() === `${API_URL}/encounters/${encounterId}/combat-round/clear-current-step`,
+    );
     await clearButton.click();
+    const clearResponse = await clearResponsePromise;
+    expect(clearResponse.ok(), await clearResponse.text()).toBe(true);
     await expect(
       gmPage
         .getByText("Current action", { exact: true })
