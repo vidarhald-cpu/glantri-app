@@ -15,16 +15,16 @@ const SENSITIVE_KEY_PATTERN =
 const COMPOUND_SECRET_KEY = String.raw`(?:authorization|proxy[_-]?authorization|cookie|set[_-]?cookie|password|passwd|token|secret|session(?:[_-]?id)?|access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|client[_-]?secret)`;
 const SECRET_ASSIGNMENT_PREFIX = String.raw`(?:"|')?\b${COMPOUND_SECRET_KEY}\b(?:"|')?\s*[:=]\s*`;
 const QUOTED_SECRET_ASSIGNMENT_PATTERN = new RegExp(
-  String.raw`(${SECRET_ASSIGNMENT_PREFIX})("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')`,
+  String.raw`(${SECRET_ASSIGNMENT_PREFIX})("(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*')`,
   "gi",
 );
 const UNTERMINATED_DOUBLE_QUOTED_SECRET_PATTERN = new RegExp(
-  String.raw`(${SECRET_ASSIGNMENT_PREFIX})"(?:\\.|[^"\\])*$`,
-  "gi",
+  String.raw`(${SECRET_ASSIGNMENT_PREFIX})"(?:\\.|[^"\\\r\n])*$`,
+  "gim",
 );
 const UNTERMINATED_SINGLE_QUOTED_SECRET_PATTERN = new RegExp(
-  String.raw`(${SECRET_ASSIGNMENT_PREFIX})'(?:\\.|[^'\\])*$`,
-  "gi",
+  String.raw`(${SECRET_ASSIGNMENT_PREFIX})'(?:\\.|[^'\\\r\n])*$`,
+  "gim",
 );
 const PROBE_SCRIPT = String.raw`
 const http = require("node:http");
@@ -152,6 +152,71 @@ function sanitizeJson(value, pretty = false) {
   }
 }
 
+function findJsonEnd(value, start) {
+  const stack = [];
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < value.length; index += 1) {
+    const character = value[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (character === '"') {
+      inString = true;
+    } else if (character === "{") {
+      stack.push("}");
+    } else if (character === "[") {
+      stack.push("]");
+    } else if (character === "}" || character === "]") {
+      if (stack.pop() !== character) return undefined;
+      if (stack.length === 0) return index + 1;
+    }
+  }
+  return undefined;
+}
+
+function sanitizeEmbeddedJson(input) {
+  let output = "";
+  let copiedThrough = 0;
+  let searchFrom = 0;
+
+  while (searchFrom < input.length) {
+    const objectIndex = input.indexOf("{", searchFrom);
+    const arrayIndex = input.indexOf("[", searchFrom);
+    const candidates = [objectIndex, arrayIndex].filter((index) => index >= 0);
+    if (candidates.length === 0) break;
+    const fragmentStart = Math.min(...candidates);
+    const fragmentEnd = findJsonEnd(input, fragmentStart);
+    if (fragmentEnd === undefined) {
+      searchFrom = fragmentStart + 1;
+      continue;
+    }
+
+    const fragment = input.slice(fragmentStart, fragmentEnd);
+    const sanitizedFragment = sanitizeJson(fragment, fragment.includes("\n"));
+    if (sanitizedFragment === undefined) {
+      searchFrom = fragmentStart + 1;
+      continue;
+    }
+
+    output += sanitizeText(input.slice(copiedThrough, fragmentStart));
+    output += sanitizedFragment;
+    copiedThrough = fragmentEnd;
+    searchFrom = fragmentEnd;
+  }
+
+  return `${output}${sanitizeText(input.slice(copiedThrough))}`;
+}
+
 export function sanitizeLogs(value) {
   const input = String(value);
   const documentMatch = /^(\s*)([\s\S]*?)(\s*)$/.exec(input);
@@ -160,31 +225,7 @@ export function sanitizeLogs(value) {
   if (sanitizedDocument !== undefined) {
     return `${leading}${sanitizedDocument}${trailing}`;
   }
-
-  return input
-    .split(/(?<=\n)/)
-    .map((line) => {
-      const newline = line.endsWith("\n") ? "\n" : "";
-      const content = newline ? line.slice(0, -1) : line;
-      const sanitizedLine = sanitizeJson(content);
-      if (sanitizedLine !== undefined) return `${sanitizedLine}${newline}`;
-
-      const objectIndex = content.indexOf("{");
-      const arrayIndex = content.indexOf("[");
-      const fragmentIndexes = [objectIndex, arrayIndex]
-        .filter((index) => index >= 0)
-        .sort((left, right) => left - right);
-      for (const fragmentIndex of fragmentIndexes) {
-        const prefix = content.slice(0, fragmentIndex);
-        const sanitizedFragment = sanitizeJson(content.slice(fragmentIndex));
-        if (sanitizedFragment !== undefined) {
-          return `${sanitizeText(prefix)}${sanitizedFragment}${newline}`;
-        }
-      }
-
-      return `${sanitizeText(content)}${newline}`;
-    })
-    .join("");
+  return sanitizeEmbeddedJson(input);
 }
 
 function checkPort(host, port, timeoutMs = 750) {

@@ -7,12 +7,19 @@ synthetic_tag="glantri-ci-isolation-synthetic-${CI_RESOURCE_SUFFIX}"
 synthetic_source_image="${CI_SYNTHETIC_IMAGE:-node:22-alpine}"
 stale_name="glantri-ci-isolation-stale-${CI_RESOURCE_SUFFIX}"
 current_name="glantri-ci-isolation-current-${CI_RESOURCE_SUFFIX}"
+failure_name="glantri-ci-isolation-failure-${CI_RESOURCE_SUFFIX}"
 stale_id=""
 current_id=""
+failure_id=""
 host_port=""
 
 cleanup() {
   cleanup_status=0
+  if [ -f "$state_directory/failure.json" ]; then
+    node "$helper" cleanup "$state_directory" failure || cleanup_status=1
+  elif [ -n "$failure_id" ]; then
+    docker rm -f "$failure_id" >/dev/null 2>&1 || true
+  fi
   if [ -f "$state_directory/current.json" ]; then
     node "$helper" cleanup "$state_directory" current || cleanup_status=1
   elif [ -n "$current_id" ]; then
@@ -29,6 +36,10 @@ cleanup() {
   fi
   if [ -n "$stale_id" ] && docker inspect "$stale_id" >/dev/null 2>&1; then
     echo "Synthetic stale container remains after cleanup."
+    cleanup_status=1
+  fi
+  if [ -n "$failure_id" ] && docker inspect "$failure_id" >/dev/null 2>&1; then
+    echo "Synthetic readiness-failure container remains after cleanup."
     cleanup_status=1
   fi
   if docker image inspect "$synthetic_tag" >/dev/null 2>&1; then
@@ -87,3 +98,47 @@ node "$helper" verify "$state_directory" current
 node "$helper" wait-http "$state_directory" current "http://127.0.0.1:8080" 10 250
 test "$(curl -fsS "http://${CI_DIND_HOST}:${host_port}")" = "current-service"
 echo "Clean current service passed exact container, image, port, and readiness checks."
+
+failure_id="$(
+  docker run -d --name "$failure_name" -p 0:8080 "$synthetic_tag" \
+    node -e 'console.log("Starting API"); console.log(JSON.stringify({session:{id:"qa-multiline-session"},sessionId:["qa-array-session"],cookie:"sid=qa-cookie-fixed",status:503},null,2)); console.log("Readiness failed"); require("node:http").createServer((_request,response)=>{response.statusCode=503;response.end("deliberate-not-ready")}).listen(8080,"0.0.0.0")'
+)"
+failure_port="$(docker port "$failure_id" 8080/tcp | sed -n '1s/.*://p')"
+test -n "$failure_port"
+failure_logs=""
+for attempt in $(seq 1 20); do
+  failure_logs="$(docker logs "$failure_id" 2>&1)"
+  if [[ "$failure_logs" == *"Readiness failed"* ]]; then
+    break
+  fi
+  if [ "$attempt" -eq 20 ]; then
+    echo "Synthetic readiness-failure service did not emit its fixture log."
+    exit 1
+  fi
+  sleep 0.1
+done
+node "$helper" record \
+  "$state_directory" failure "$failure_id" "$synthetic_image_id" "$synthetic_tag" 8080 "$failure_port"
+set +e
+failure_output="$(
+  node "$helper" wait-http "$state_directory" failure "http://127.0.0.1:8080" 1 0 2>&1
+)"
+failure_status=$?
+set -e
+if [ "$failure_status" -eq 0 ]; then
+  echo "Synthetic readiness-failure service unexpectedly passed."
+  exit 1
+fi
+for secret in qa-multiline-session qa-array-session qa-cookie-fixed; do
+  if [[ "$failure_output" == *"$secret"* ]]; then
+    echo "Synthetic secret leaked through readiness-failure log collection."
+    exit 1
+  fi
+done
+for diagnostic in "Starting API" '"status": 503' "Readiness failed" "[REDACTED]"; do
+  if [[ "$failure_output" != *"$diagnostic"* ]]; then
+    echo "Readiness-failure log collection lost required diagnostic structure."
+    exit 1
+  fi
+done
+echo "Readiness-failure collector preserved multiline secret context and safe diagnostics."

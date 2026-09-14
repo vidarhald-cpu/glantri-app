@@ -205,3 +205,32 @@ for (const { name, input, secrets, expected } of structuredFallbackCases) {
     assert.match(direct, /"safe"(?:: |:)"yes"/);
   });
 }
+
+test("preserves sensitive-key context across multiline JSON among ordinary log lines", () => {
+  const input = [
+    "Starting API",
+    "{",
+    '  "session": {',
+    '    "id": "qa-multiline-session"',
+    "  },",
+    '  "sessionId": [',
+    '    "qa-array-session"',
+    "  ],",
+    '  "cookie": "sid=qa-cookie-fixed",',
+    '  "status": 503',
+    "}",
+    "Readiness failed",
+  ].join("\n");
+
+  const direct = sanitizeLogs(input);
+  const production = sanitizeThroughProductionEntryPoint(input);
+
+  assert.equal(production, direct);
+  assert.doesNotMatch(direct, /qa-multiline-session|qa-array-session|qa-cookie-fixed/);
+  assert.match(direct, /"session": "\[REDACTED\]"/);
+  assert.match(direct, /"sessionId": "\[REDACTED\]"/);
+  assert.match(direct, /"cookie": "\[REDACTED\]"/);
+  assert.match(direct, /Starting API/);
+  assert.match(direct, /"status": 503/);
+  assert.match(direct, /Readiness failed/);
+});
