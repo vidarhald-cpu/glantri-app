@@ -91,7 +91,8 @@ export default defineConfig({
       reporter: ["text", "json-summary", "html"],
     },
     environment: "node",
-    exclude: ["**/.claude/**", "**/node_modules/**", "**/dist/**"],
+    // Playwright fixtures have their own runner; exclude them from root and package Vitest suites.
+    exclude: ["**/.claude/**", "**/node_modules/**", "**/dist/**", "**/browser-tests/**"],
     globals: true,
-  }
+  },
 });

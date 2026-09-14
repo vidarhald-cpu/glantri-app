@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from "react";
 import { COMBAT_ROUND_STEP_ABBREVIATIONS, COMBAT_ROUND_STEP_LABELS } from "@glantri/domain";
 
+import styles from "./CombatTracker.module.css";
+
 import type { CombatTrackerCellView, CombatTrackerModel } from "../types";
 import { scrollCombatTrackerCellIntoView } from "../view-models/combatTrackerScroll";
 
@@ -14,7 +16,6 @@ const stickyParticipantCellStyle = {
   background: "#fbfaf7",
   boxShadow: "1px 0 0 #e3e1dc",
   left: 0,
-  minWidth: "13rem",
   position: "sticky" as const,
   zIndex: 2,
 };
@@ -108,6 +109,7 @@ export function CombatTracker(input: {
           <thead>
             <tr>
               <th
+                className={styles.participantCell}
                 rowSpan={2}
                 style={{
                   ...stickyParticipantCellStyle,
@@ -174,6 +176,7 @@ export function CombatTracker(input: {
                 style={{ background: row.selected ? "#fff8e8" : undefined }}
               >
                 <td
+                  className={styles.participantCell}
                   style={{
                     ...stickyParticipantCellStyle,
                     borderTop: "1px solid #e3e1dc",

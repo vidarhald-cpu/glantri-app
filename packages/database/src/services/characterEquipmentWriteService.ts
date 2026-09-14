@@ -29,6 +29,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   createPrismaCharacterEquipmentRepository,
+  retryCharacterEquipmentRead,
   StaleEquipmentTransferError,
   type CharacterEquipmentRepository,
   type EquipmentTransitionEvidence,
@@ -443,6 +444,22 @@ export class CharacterEquipmentWriteService {
   }
 
   async ensureCharacterEquipmentInitialized(
+    characterId: string,
+    withinAggregate = false,
+  ): Promise<{
+    items: AssignedEquipmentItem[];
+    loadouts: CharacterLoadout[];
+    locations: StorageLocation[];
+  }> {
+    // A concurrent GET may have initialized the same aggregate since our read.
+    // Restart outside the transaction so we can observe its committed revision.
+    // Never replay a caller's explicit mutation or retry an aborted transaction.
+    return !withinAggregate && !this.isWithinAggregate
+      ? retryCharacterEquipmentRead(() => this.initializeCharacterEquipment(characterId))
+      : this.initializeCharacterEquipment(characterId, withinAggregate);
+  }
+
+  private async initializeCharacterEquipment(
     characterId: string,
     withinAggregate = false,
   ): Promise<{

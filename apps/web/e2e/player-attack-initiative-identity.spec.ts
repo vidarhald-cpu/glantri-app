@@ -261,10 +261,13 @@ test.describe("Player attack initiative identity", () => {
       [playerAContext, characterAId],
       [playerBContext, characterBId],
     ] as const) {
+      const equipment = await json<{ state: { revision: number } }>(
+        await context.request.get(`${API_URL}/characters/${characterId}/equipment`),
+      );
       await json(
         await context.request.post(
           `${API_URL}/characters/${characterId}/equipment/loadout/active-primary-weapon`,
-          { data: { itemId: null } },
+          { data: { expectedRevision: equipment.state.revision, itemId: null } },
         ),
       );
     }
@@ -656,14 +659,20 @@ test.describe("Player attack initiative identity", () => {
     const completedPlayerEncounter = await json<{ encounter: EncounterSession }>(
       await gmPage.request.get(`${API_URL}/encounters/${encounterId}`),
     );
-    await json(
-      await gmPage.request.put(`${API_URL}/encounters/${encounterId}`, {
+    const pausedPlayerEncounter = await json<{ encounter: EncounterSession }>(
+      await gmPage.request.patch(`${API_URL}/encounters/${encounterId}/status`, {
         data: {
           expectedRevision: completedPlayerEncounter.encounter.updatedAt,
-          session: {
-            ...completedPlayerEncounter.encounter,
-            status: "complete",
-          },
+          status: "paused",
+        },
+      }),
+    );
+    await json(
+      await gmPage.request.patch(`${API_URL}/encounters/${encounterId}/status`, {
+        data: {
+          expectedRevision: pausedPlayerEncounter.encounter.updatedAt,
+          playerOutcome: "The initiative identity check is complete.",
+          status: "completed",
         },
       }),
     );

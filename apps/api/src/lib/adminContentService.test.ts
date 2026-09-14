@@ -9,8 +9,8 @@ describe("admin content service", () => {
 
     expect(snapshot.canonical).toBeNull();
     expect(snapshot.candidate).toMatchObject({
-      contentVersion: "pilot-skills-content/2.0.0-candidate.1",
-      id: "content-release:pilot-skills:2-candidate-1",
+      contentVersion: "pilot-skills-content/2.0.0-candidate.4",
+      id: "content-release:pilot-skills:2-candidate-4",
       schemaVersion: "skill-content-release/v2",
       status: "proposal",
     });
@@ -27,7 +27,7 @@ describe("admin content service", () => {
       ({ id }) => id === "skill:medicine",
     );
 
-    expect(snapshot.candidate?.compatibility.classification).toBe("mechanically-compatible");
+    expect(snapshot.candidate?.compatibility.classification).toBe("presentation-only");
     expect(snapshot.candidate?.manifest.packageDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(snapshot.candidate?.manifest.semanticDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(snapshot.candidate?.manifest.packageDigest).not.toBe(

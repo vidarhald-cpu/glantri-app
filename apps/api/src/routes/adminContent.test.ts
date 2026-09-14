@@ -71,7 +71,7 @@ describe("admin content reference route", () => {
     expect(getSkillReference).toHaveBeenCalledTimes(1);
     expect(response.json()).toMatchObject({
       candidate: {
-        contentVersion: "pilot-skills-content/2.0.0-candidate.1",
+        contentVersion: "pilot-skills-content/2.0.0-candidate.4",
         status: "proposal",
       },
     });
