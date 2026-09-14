@@ -9,6 +9,9 @@ contract schema and acceptance detail.
 
 At authorization time, the current Forgejo issue body becomes the executable
 task contract. Comments remain evidence/history rather than a second contract.
+Before every dispatch, reconcile that body with current authorization: role,
+mode, exact baseline/candidate, scope/exclusions, Git authority, dependencies and
+return gate. A comment cannot override a stale body for execution.
 If a repository recovery contract describes an older execution state, mark it
 clearly `provenance/superseded` and link the current issue; QA should not have to
 reconstruct authorized scope from a long comment chain or stale recovery file.
@@ -52,22 +55,57 @@ Explain impact and why this task has priority.
 - Blocking, inactivity, dependency, or stale-contract support state, if any:
 - Durable authorization record (Forgejo issue body/comment/label or other named contract):
 - Canonical Codex project (`Glantri app — Forgejo`):
-- Execution role (Builder, independent QA, or bounded Investigator):
+- Provisioning source root (`/Users/vidarhald/dev/glantri-app-forgejo`) or derived worktree:
+- Execution role (Builder, independent QA, or bounded Investigator/Ops):
+- Correlation key: issue + role + mode + full exact SHA:
+- Sole supervising Development Orchestrator/parent task:
+- Provisioning request ID (pending until resolved; separate from task ID):
 - Resolved visible Work/Codex thread ID (required):
 - Direct task/thread link (required when the client provides one; otherwise unavailable):
-- Dispatch/child state (Builder/Investigator: `queued`, `running`, `completed`,
-  or `failed`; independent QA: use the states in `qa-execution.md`):
+- Liveness state, owner, last meaningful progress and next action/inspection:
+- Recovery/replacement count and changed causal conditions:
+- Builder–QA repair-cycle count, root causes and remaining allowance:
+- Worktree lease state, retained owner and terminal retirement evidence for duplicates:
 - Accepted baseline branch:
 - Accepted baseline commit SHA:
+- Requested execution commit SHA (fresh Builder: baseline; continuation: authorized parent; QA: exact candidate):
 - Isolated worktree:
+- Prelaunch identity/HEAD evidence: source, origin, common Git directory, requested versus observed SHA:
+- QA checkout state: detached exact head, no local branch or upstream:
 - Short-lived branch (or N/A when no branch applies):
-- Local-only, push authorized, or PR authorized:
+- Full bounded Builder authority or explicit narrower limit: implementation, verification, commit, task-branch push, draft PR, evidence, in-scope repair:
+- Evidence/PR publication identity and exact target; automatic Orchestrator/Recorder fallback:
+- Assigned credential role and non-secret repository-path-scoped handle:
+- Independent QA required, or explicit authorized exemption with reason:
+- Return/acceptance gate and any explicit conditional dev integration authority:
 - Intended PR target, if confirmed:
 - Required reading (exact repository paths):
 - Database capability: none, application-only, migrations, reset/seed, integration tests, or other:
 - Explicit `DATABASE_URL` owner/target, when database-capable:
 - Explicit `DATABASE_URL_TEST` owner/target, when database-capable:
 - Disposable PostgreSQL 16 setup, verification, and cleanup commands, when database-capable:
+
+All execution SHAs are full exact commit IDs. Apply the
+[prelaunch gate](./development-baseline.md#exact-sha-provisioning-gate); never infer
+from `main`, `origin/main`, remote HEAD or a default branch, and never provision
+from the historical recovery clone. A derived canonical worktree is valid.
+Pending request IDs do not satisfy the resolved task-ID/launch gate. Preserve
+binding, direct-access, attempt, lease, cleanup and blocker evidence under the
+[recovery procedure](./agent-execution.md#continuation-first-provisioning-and-worktree-leases).
+Validate every return against its correlation key before using it.
+
+Use at most two automatic recovery/replacement attempts after the initial
+attempt, stopping earlier after two substantially identical consecutive failures
+without changed causal condition. Normally allow at most two Builder–QA repair
+cycles after initial QA; the same root cause twice or exhausted allowance invokes
+the [mandatory STOP/report/confirmation rule](./agent-execution.md#numeric-anti-loop-limits).
+A lower contract limit is allowed; counters do not reset through handoffs.
+
+Authorized read-only investigation includes publishing evidence to its assigned
+issue. If the credential blocks publication, return the exact ready report and
+target for automatic Orchestrator/Recorder publication; do not invalidate the
+report, change credentials or ask the Product Owner to relay it. Surface login,
+permission or other human needs immediately as USER ACTION REQUIRED.
 
 Name only the documents needed to execute this task safely. `AGENTS.md` is always required; area-specific contracts apply only when the task touches that area. Decision records, audits, and historical reports are on-demand references, not blanket startup reading. Do not use instructions such as `read all architecture docs`.
 
@@ -80,9 +118,10 @@ on-demand escalation references separately from startup reading.
 Substantial Builder, independent QA, and dispatched Investigator work uses
 separate visible Work/Codex tasks; QA must be a different visible task from the
 Builder. Hidden internal sub-agents do not satisfy those roles. If visible task
-creation is unavailable, record the capability problem and use only an
-explicitly authorized manual visible fallback rather than substituting a hidden
-lane. Repository documents are authoritative; the Codex project and task links
+creation fails, apply bounded recovery; if unresolved, record and escalate the
+capability problem and use only an explicitly authorized manual visible fallback.
+A hidden lane is not a substitute. Repository documents are authoritative; the
+Codex project and task links
 are navigation and execution evidence only. Builders must not rely on chat
 history to reconstruct issue, baseline, sources, scope, exclusions,
 ownership/hotspots, acceptance, verification, Git/PR authority, dependencies,
@@ -306,7 +345,8 @@ Passing automated tests is necessary where specified but does not override an ob
 - Database target evidence: sanitized host, port, database names, ownership marker, PostgreSQL version, and cleanup result:
 - Performance/security checks:
 - Rule/reference documentation and Admin registration evidence:
-- Required CI jobs:
+- Required CI jobs and actual protected contexts:
+- Applicable [path-aware validation class](./development-baseline.md#path-aware-dev-gate--integrated-status), with implemented/transition state and local versus hosted evidence kept separate:
 - Product-owner acceptance script:
 
 Use `Not applicable` with a short reason rather than leaving irrelevant lines blank.
@@ -325,8 +365,9 @@ For an authorized Builder/QA loop, use the exact-SHA Builder return in
 `docs/process/agent-execution.md` and the mode-aware QA handoff and return in
 `docs/process/qa-execution.md` in addition to the evidence below. The
 Development Orchestrator harvests the Builder result and sends the compact
-immutable-head INITIAL or REPAIR contract directly to the pinned QA
-Orchestrator; the Product Owner is not the routine relay.
+immutable-head INITIAL or REPAIR contract directly to a fresh separate visible
+independent-QA task, harvests the verdict and routes it without overriding FAIL.
+The Product Owner is not the routine relay.
 
 - Result and files changed.
 - Decision records created/updated.
