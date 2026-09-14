@@ -3,9 +3,9 @@
 ## Purpose and authority
 
 This is the compact startup procedure for a visible independent-QA worker and
-the two Orchestrators that route its result. It preserves independent review of
-an immutable exact head while avoiding reconstruction of the complete Glantri
-operating model on every QA run.
+the single Development Orchestrator that routes its result. It preserves
+independent review of an immutable exact head while avoiding reconstruction of
+the complete Glantri operating model on every QA run.
 
 The Forgejo issue body is the current executable task contract once the task is
 authorized. Comments are evidence and history. Repository process documents
@@ -30,11 +30,11 @@ The Product Owner retains product, rule, UX, consequential architecture,
 acceptance, and integration authority. QA never repairs Builder-owned work,
 merges, deploys, touches `main`, or treats credentials as authority.
 
-## Thin routing gates
+## Direct routing gate
 
 ### Development Orchestrator
 
-Before direct handoff to the QA Orchestrator, confirm only:
+Before creating the fresh independent-QA task, confirm only:
 
 - the issue is durably authorized for QA and at `Ready for Independent QA`;
 - an immutable candidate head is supplied;
@@ -45,18 +45,20 @@ Before direct handoff to the QA Orchestrator, confirm only:
 This is a shallow dispatch gate. The Development Orchestrator does not repeat
 the QA worker's provenance, topology, scope, or delta verification.
 
-### QA Orchestrator
+The Development Orchestrator then:
 
-Use the known `Glantri app — Forgejo` project and pinned QA lane directly. Do
-not rediscover projects or list unrelated conversations when the recorded IDs
-remain valid. The QA Orchestrator:
-
-1. creates one isolated visible QA task;
-2. records its task ID, worktree, ownership, mode, and candidate head;
-3. supervises only known active child IDs;
-4. harvests the completed result;
+1. creates exactly one fresh isolated visible QA task directly;
+2. records one ledger entry keyed by `issue + QA + mode + exact head`, including
+   provisioning request, task ID when materialized, parent task, leased
+   worktree, requested SHA, observed `HEAD`, liveness, and next action;
+3. supervises only that known child unless it has been conclusively retired;
+4. harvests the completed result promptly;
 5. publishes the durable verdict; and
-6. returns directly to the Development Orchestrator.
+6. routes repair, acceptance, or blocker handling.
+
+There is no permanent QA Orchestrator. Independence comes from a fresh worker,
+separate visible task, separate clean exact-head worktree, and review-only
+authority—not from an additional standing routing chat.
 
 ## QA modes and handoff tuples
 
@@ -158,7 +160,7 @@ required evidence is missing or mismatched:
 2. do not spend time on broad tests or historical reconstruction;
 3. publish `BLOCKED` with expected versus observed facts and the one event
    needed to resume; and
-4. return to the QA Orchestrator.
+4. return to the Development Orchestrator.
 
 A changed PR head makes the run stale. Review the new head only through a new
 complete handoff; never silently follow a moving branch.
@@ -198,20 +200,53 @@ PASS WITH FOLLOW-UP advances the issue to
 `Ready for Control-plane Acceptance`. FAIL returns an in-scope bounded repair
 to `Active`; it never advances toward acceptance.
 
+When the issue explicitly pre-authorizes conditional integration, PASS may
+advance directly through integration only after the Development Orchestrator
+reconfirms that the live PR head is the reviewed head and every stated scope,
+dependency, topology, protected-check, and merge-target condition passes. If
+any condition is absent or false, stop at the ordinary acceptance/integration
+gate.
+
 Track the visible child separately from the exclusive Forgejo issue lifecycle:
 
 | Child state             | Meaning and next action                                                                                       |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `Running`               | Entry check passed; QA is active.                                                                             |
 | `Blocked`               | A named prerequisite or tuple mismatch stopped work; record the resume event.                                 |
-| `Completed-unharvested` | The child ended with a usable return that the QA Orchestrator has not yet reconciled.                         |
+| `Completed-unharvested` | The child ended with a usable return that the Development Orchestrator has not yet reconciled.                |
 | `Completed-harvested`   | Exact result, evidence, and Forgejo state were reconciled and returned.                                       |
 | `Failed`                | The task ended without a usable QA return; record the failure and recovery owner.                             |
 | `Stalled`               | No progress or terminal return within the declared supervision window; record last evidence and intervention. |
 
-Heartbeat supervision is a fallback. It inspects known active child IDs,
-harvests completed children, names blockers, and stops when no child is active.
-It does not globally rediscover conversations every cycle.
+Supervision follows the execution ledger. It inspects the known child, harvests
+completion, names blockers, and stops when no child is active. It does not
+globally rediscover conversations every cycle or create speculative duplicates.
+
+## QA worktree lease and recovery
+
+The QA worktree is detached at the exact supplied head, has no upstream
+tracking, and is leased to its provisioning request/task until the Development
+Orchestrator records completion, cancellation, retirement, or confirmed loss.
+No outside actor removes or reuses the leased path while the request may still
+materialize or the worker may still run. The reviewer stops and reports if its
+leased path disappears; it does not silently recreate it unless the contract
+explicitly grants that recovery.
+
+Delayed registration, missing task-list visibility, or slow output is not proof
+of loss. Before replacement, correlate the provisioning request, task registry,
+parent, worktree, PR activity, and completed returns; retire the prior request
+and release its lease first. Use only the bounded identical-contract and
+identical-SHA recovery attempts allowed by `agent-execution.md`.
+
+After the initial attempt and allowed replacements fail without meaningful
+progress, **STOP**. Publish one consolidated blocker with all request/task/path/
+SHA evidence and request explicit confirmation before any further QA task or
+different recovery. Do not repeat an unchanged blocker.
+
+If QA needs login, OS/browser permission, credential interaction, or another
+human action, it records that immediately and notifies the Development
+Orchestrator. The Orchestrator promptly surfaces `USER ACTION REQUIRED`; QA must
+not wait silently for the user to discover the child.
 
 ## Temporary timing capture
 

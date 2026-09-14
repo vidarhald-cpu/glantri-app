@@ -10,6 +10,9 @@
 - The external maintainer participates only in future production-release/deployment support at the `dev -> main -> Azure` boundary.
 - Never push or merge to `main`, deploy, change production/Azure configuration or secrets, or treat credentials as authority.
 - Pushes and PR changes require explicit task or user authorization and a confirmed target.
+- One Development Orchestrator owns execution coordination. It dispatches
+  Builders, Investigators/Ops workers, and fresh independent QA directly; a
+  permanent QA Orchestrator is not part of the operating model.
 
 Canonical operating map: `docs/process/development-operating-model.md`. Detailed
 authority and baseline policy: `docs/process/control-plane.md` and
@@ -44,6 +47,38 @@ Useful references:
 - Regression guidance: `docs/testing-regression-matrix.md`
 - Rule and architecture decisions: `docs/decisions/`
 
+## Continuation-first execution
+
+- Continue the current authorized task, branch, PR, and worker whenever it can
+  make meaningful progress. Do not create a replacement merely because status
+  delivery is delayed, a worktree path briefly disappears, or a task is slow.
+- The Development Orchestrator maintains one durable execution-ledger entry per
+  `issue + role + mode + exact SHA`, including the provisioning request, real
+  task ID, parent task, leased worktree, observed HEAD, liveness, and next
+  action. A replacement is allowed only after the prior owner is confirmed
+  completed, canceled, retired, or lost.
+- A provisioned worktree is leased to its request/task until that ownership is
+  durably released. Do not remove, reuse, or recreate it from the outside while
+  the request may still materialize or the task may still be running.
+- An authorized Builder has the full bounded authority stated in its contract:
+  implementation, proportionate tests, commit, task-branch push, draft-PR
+  publication, evidence, and automatic in-scope repair continuations. It does
+  not gain merge, product-decision, `main`, release, or production authority.
+- Independent QA is always a fresh separate visible task at the exact immutable
+  candidate head. The Development Orchestrator dispatches and harvests it
+  directly. QA reviews and reports; it never repairs Builder-owned code.
+- Read-only investigation and bounded operational diagnosis may be delegated to
+  Investigator/Ops tasks. They do not silently become implementation.
+- If a worker needs login, OS/browser permission, credential interaction, or
+  another human action, record it and surface `USER ACTION REQUIRED` promptly.
+- Integration may proceed automatically only when the task contract explicitly
+  pre-authorizes it and the exact-head QA, scope, dependency, topology, and
+  protected-check conditions all pass. Otherwise stop at the stated gate.
+- After the initial attempt and the contract's bounded recovery attempts fail
+  without meaningful progress, **STOP**. Publish one consolidated report of
+  attempts and evidence, keep the task safely non-mutating, and request explicit
+  confirmation before any further replacement or materially different action.
+
 ## Rule and architecture discipline
 
 - Cite source documents, pages, sheets, cells, ranges, formulas, or approved rule decisions precisely.
@@ -57,7 +92,10 @@ Useful references:
 ## Git, tools, and verification
 
 - Use one clean, short-lived task branch/worktree from the exact accepted `dev` SHA. Do not continue feature work on accepted or long-lived branches.
-- Substantial implementation Builder, independent QA, and dispatched bounded Investigator roles use separate visible Codex tasks. Builder and QA must never be the same visible task; hidden helper agents do not satisfy these roles.
+- Substantial implementation Builder, independent QA, and dispatched bounded
+  Investigator/Ops roles use separate visible Codex tasks. Builder and QA must
+  never be the same visible task; hidden helper agents do not satisfy these
+  roles. The single Development Orchestrator coordinates all of them directly.
 - Coordinate reserved hotspots and cross-area merge order through the task contract.
 - Existing repository tools, Docker/local database tooling, and declared dependency installation are allowed. New software, global tools, services, permissions, or external transmission require explicit approval.
 - A linked Builder/QA worktree that can reach PostgreSQL must own an explicit disposable task target; worktree filesystem isolation is not database isolation. Follow `docs/dev-database.md`, never copy the primary checkout `.env`, and never use the protected `localhost:5432/glantri` database from a linked worktree.

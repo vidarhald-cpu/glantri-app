@@ -39,29 +39,30 @@ Use this procedure for an authorized implementation case or other named durable 
    `origin/dev` SHA. If it differs from the contract's accepted baseline, stop
    for contract refresh; do not silently choose or rebase onto a new baseline.
 2. **Build in isolation.** The Builder uses a clean, short-lived branch and isolated worktree at the accepted SHA. It reads `AGENTS.md` and only the exact task-specific documents, implements the approved slice, and does not widen scope to absorb unrelated findings, dependency changes, or hotspot conflicts.
-3. **Publish, harvest, and stop.** The Builder runs proportionate verification,
+3. **Publish and continue through the bounded lane.** The Builder runs
+   proportionate verification,
    inspects the resulting diff and status, commits and pushes the authorized
    branch, opens or updates one draft PR targeting `dev`, records the exact PR
-   head and structured Builder return in Forgejo, and stops. The Development
+   head and structured Builder return in Forgejo, and waits. The Development
    Orchestrator harvests the exact result and advances the issue to
    `Ready for Independent QA`. Builder self-review does not make the PR
    accepted.
 4. **Hand off and review the exact head independently.** The Development
    Orchestrator applies only the shallow dispatch gate in
-   [`qa-execution.md`](./qa-execution.md) and sends the applicable immutable
-   INITIAL or REPAIR tuple directly to the pinned QA Orchestrator. A fresh QA
+   [`qa-execution.md`](./qa-execution.md) and creates one fresh QA task from the
+   applicable immutable INITIAL or REPAIR tuple. A fresh QA
    reviewer in a separate visible task and clean worktree independently checks
    topology, scope, the actual delta, and the selected substantive gates. A
-   mismatch returns quickly as `BLOCKED`; the Orchestrators do not duplicate
+   mismatch returns quickly as `BLOCKED`; the Orchestrator does not duplicate
    that substantive verification.
-5. **Harvest and route the verdict.** The QA Orchestrator harvests the separate
-   QA task and records `PASS`, `PASS WITH FOLLOW-UP`, or `FAIL` with durable
-   evidence, then returns directly to the Development Orchestrator.
+5. **Harvest and route the verdict.** The Development Orchestrator harvests the
+   separate QA task and records `PASS`, `PASS WITH FOLLOW-UP`, or `FAIL` with
+   durable evidence.
    `PASS WITH FOLLOW-UP` is allowed only for durably recorded non-blocking work;
    it must identify why integration is safe. PASS advances the issue to
    `Ready for Control-plane Acceptance`. FAIL never does: clear in-scope
-   defects return through the Development Orchestrator to the same Builder and
-   PR as an `Active` bounded repair. The Builder publishes a new exact head,
+   defects return to the same Builder and PR as an `Active` bounded repair. The
+   Builder has continuing authority to publish a new exact head,
    followed by a compact REPAIR handoff and fresh independent QA. A direct-child
    narrow repair may retain demonstrably unaffected prior PASS evidence;
    high-risk or unclear topology triggers broader verification as defined in
@@ -77,45 +78,43 @@ Use this procedure for an authorized implementation case or other named durable 
    external maintainer owns production release/deployment support. Ordinary
    agents do not merge `main`, deploy, or mutate Azure/production.
 
-The Development Orchestrator and QA Orchestrator move handoffs directly and keep
-the issue/PR current. The Product Owner receives decision and acceptance
-messages; they do not normally copy QA prompts or monitor child completion.
-Manual copy/paste is only an explicitly authorized technical fallback when
-direct routing is unavailable.
+The single Development Orchestrator moves handoffs directly and keeps the
+issue/PR current. The Product Owner receives decision and acceptance messages;
+they do not copy QA prompts or monitor child completion.
 
 ## Visible task dispatch and completion
 
 Substantial implementation Builder, independent QA, and dispatched bounded
-Investigator lanes each use a separate visible Work/Codex task. Builder and QA
+Investigator/Ops lanes each use a separate visible Work/Codex task. Builder and QA
 for the same result must be different visible tasks. Hidden internal sub-agents
 may assist minor orchestration inside a lane, but same-thread or hidden work does
-not satisfy a Builder, QA, or dispatched Investigator lane. If visible task
+not satisfy a Builder, QA, or dispatched Investigator/Ops lane. If visible task
 creation is unavailable, the Development Orchestrator reports the capability
 problem and uses only an explicitly authorized manual visible fallback; it does
 not claim that a hidden substitute fulfilled the role.
 
-At Builder or Investigator dispatch, record:
+At Builder, Investigator/Ops, or QA dispatch, record one execution-ledger entry
+keyed by `issue + role + mode + exact SHA`:
 
 - canonical Codex project (`Glantri app — Forgejo`);
 - role and Forgejo issue when applicable;
-- resolved visible Work/Codex thread ID, which is mandatory;
+- parent task and provisioning request ID;
+- resolved visible Work/Codex thread ID once materialized;
 - direct task/thread link when the client provides one, recorded separately from the thread ID because neither substitutes for the other;
-- isolated worktree;
+- isolated worktree and lease state;
 - branch when applicable;
-- exact accepted baseline SHA; and
-- current state: `queued`, `running`, `completed`, or `failed`.
+- requested exact SHA and observed `HEAD`; and
+- current liveness state, owner, last meaningful progress, and next action.
 
 Independent-QA dispatch and the explicit `Running`, `Blocked`,
 `Completed-unharvested`, `Completed-harvested`, `Failed`, and `Stalled`
 child states are defined in `qa-execution.md`. These coordination states do not
 replace the exclusive Forgejo issue lifecycle.
 
-The Development Orchestrator must follow each Builder/Investigator task through
-completion, retrieve its exact head/result, reconcile Forgejo evidence/status,
-and surface the harvested outcome in the consolidated return. The QA
-Orchestrator does the same for its independent-QA child and returns directly to
-the Development Orchestrator. A child task merely ending, or a dispatch
-remaining queued, is not operational completion.
+The Development Orchestrator follows every Builder, Investigator/Ops, and QA
+task through completion, retrieves its exact result, reconciles Forgejo
+evidence/status, and surfaces the harvested outcome. A child task merely
+ending, or a dispatch remaining queued, is not operational completion.
 
 ## Standing execution authority
 
@@ -126,8 +125,20 @@ apply defined lifecycle transitions for Builder completion, QA outcomes,
 bounded repair, or control-plane return without repeated product-owner
 confirmation. Normal execution also proceeds without repeated confirmation for
 worktree/branch setup, authorized task dispatch, local Forgejo push/PR/evidence,
-task-token creation/use/revocation, direct QA handoff, explicitly authorized
+task-token creation/use/revocation, direct QA handoff, automatic in-scope
 bounded repair, and disposable cleanup.
+
+The Builder receives full bounded authority stated by the issue: implement,
+run proportionate checks, commit, push its task branch, create/update the one
+draft PR, publish evidence, and continue in-scope repairs requested by QA. No
+separate approval is needed for those steps while the contract, SHA lineage,
+scope, and ownership remain valid. This never authorizes merge, scope expansion,
+product decisions, `main`, release, or production work.
+
+The Development Orchestrator may delegate read-only investigation and bounded
+operational diagnosis to visible Investigator/Ops tasks. Their contract must
+state whether they may publish evidence or make a repository-scoped process
+repair; absent that authority they remain non-implementing.
 
 This standing authority does not authorize starting work that is merely
 `Design` or `Ready`, broadening scope, accepting product/rule/UX/architecture
@@ -136,6 +147,57 @@ explicit gate. Stop and return for a material scope, product/rule/UX/architectur
 new authorization, hotspot/dependency ownership, destructive persistent-data,
 `main`/production, unresolved-behavior, or explicit acceptance/integration gate.
 
+Conditional integration may proceed without another round trip only when the
+issue explicitly pre-authorizes it and the exact QA-reviewed head, protected
+checks, scope, dependencies, topology, and merge target all satisfy the stated
+condition. Otherwise the Orchestrator stops at the acceptance/integration gate.
+
+## Continuation-first provisioning and worktree leases
+
+Continue the existing authorized worker, branch, PR, and repair path whenever
+meaningful progress remains possible. Do not create a replacement based only on
+slow startup, delayed registration, missing list visibility, a temporarily
+missing path, or an unchanged status message.
+
+Creating a worktree establishes a lease in the execution ledger for its exact
+request/task. The lease ends only when that owner is durably recorded as
+completed, canceled, retired, or confirmed lost. While leased, no outside actor
+may remove, reuse, or recreate the path. A worker that finds its leased path
+missing stops and reports; it does not silently reconstruct it unless its
+contract explicitly grants that recovery.
+
+Before any replacement:
+
+1. correlate the request across the task registry, parent task, recorded client
+   request ID, worktree, branch/PR activity, and completed returns;
+2. confirm no real child is running or able to materialize under the request;
+3. retire/cancel the prior request or task and release its lease;
+4. clean only a verified safe orphan; and
+5. submit one identical-contract, identical-SHA replacement within the bounded
+   retry allowance.
+
+The initial request plus at most two replacements is the default ceiling unless
+the task contract specifies less. If those attempts fail without meaningful
+progress, **STOP**. Publish one consolidated report containing every request,
+task ID, path, requested and observed SHA, failure stage, cleanup state, and the
+smallest action that could resume work. Obtain explicit confirmation before a
+further replacement or materially different recovery. Repeated observation of
+the same unchanged blocker produces no duplicate status messages.
+
+## Human action, liveness, and completion visibility
+
+Every authorized workflow is classified as progressing, automatically
+recovering, waiting for a named dependency, waiting for explicit human action,
+completed awaiting harvest, or explicitly stopped/blocked. No unexplained
+indefinite `Active` state is permitted.
+
+When login, OS/browser permission, credential interaction, or equivalent human
+action is required, the child records the need and notifies the Development
+Orchestrator immediately. The Orchestrator surfaces `USER ACTION REQUIRED` with
+the exact action and affected task; it does not silently wait for the user to
+inspect the child. Completed returns are harvested promptly even while the
+Orchestrator is processing another lane.
+
 ## Capacity, collisions, and exception paths
 
 - Aggressively parallelize independent design and investigation, and start independent QA when its Builder finishes.
@@ -143,7 +205,11 @@ new authorization, hotspot/dependency ownership, destructive persistent-data,
 - A blocked lane does not stop unrelated lanes. Serialize only a real hotspot or dependency, and keep its owner and merge order explicit.
 - One active task owns a reserved hotspot unless a written integration plan assigns a safe split and merge order. A dependency or hotspot collision stops the affected Builder for coordination; it does not authorize wider scope.
 - A missing product, rule, UX, privacy, or consequential architecture decision becomes `Needs decision`. State one concrete question and stop affected implementation.
-- A clear in-scope QA failure returns to the same Builder/PR, followed by fresh independent QA. An unrelated defect becomes a bounded backlog issue; low-impact non-blocking polish may become a durably recorded P3 follow-up.
+- A clear in-scope QA failure returns automatically to the same Builder/PR,
+  followed by fresh independent QA. This loop continues while it makes
+  meaningful progress and remains in scope. An unrelated defect becomes a
+  bounded backlog issue; low-impact non-blocking polish may become a durably
+  recorded P3 follow-up.
 - For a production-only problem, ordinary agents may perform safe, read-only diagnosis when authorized. They do not mutate production, change Azure, merge `main`, or deploy; route the evidence to the external-maintainer release boundary.
 - Durable decisions, scope changes, SHAs, verdicts, and status belong in the issue, PR, or repository docs. Chat-only context cannot authorize or complete work.
 
