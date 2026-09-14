@@ -346,7 +346,7 @@ Passing automated tests is necessary where specified but does not override an ob
 - Performance/security checks:
 - Rule/reference documentation and Admin registration evidence:
 - Required CI jobs and actual protected contexts:
-- Applicable [path-aware validation class](./development-baseline.md#approved-path-aware-dev-gate--pending-implementation-and-transition), with implemented/transition state and local versus hosted evidence kept separate:
+- Applicable [path-aware validation class](./development-baseline.md#path-aware-dev-gate--integrated-status), with implemented/transition state and local versus hosted evidence kept separate:
 - Product-owner acceptance script:
 
 Use `Not applicable` with a short reason rather than leaving irrelevant lines blank.

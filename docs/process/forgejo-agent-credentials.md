@@ -42,9 +42,9 @@ Keychain handle or protected-branch setting.
 ## Branch enforcement
 
 The recorded local Forgejo protected-branch configuration is below. Verify live
-state for integration. The [approved path-aware destination](./development-baseline.md#approved-path-aware-dev-gate--pending-implementation-and-transition)
-is pending separate implementation/transition; this documentation does not
-change protection or declare that destination deployed:
+state for integration. The [approved path-aware destination](./development-baseline.md#path-aware-dev-gate--integrated-status)
+is integrated by #163/PR #164. The existing required contexts below now execute
+compatibility guards requiring aggregate success; no protection setting changed:
 
 | Branch | Direct push           | Merge                                      | Additional enforcement                                                                                                                                                                                                  |
 | ------ | --------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -254,8 +254,9 @@ Verified for Forgejo issue #41 on 2026-09-06 against
 At that #41 verification, the instance had no Actions runner and required `dev`
 contexts remained waiting. That is dated provenance, not a claim about current
 runner availability. Verify live checks/runner evidence when needed; #41 never
-authorized weakening protection, and #161's policy destination is not proof of
-an implemented gate or completed transition.
+authorized weakening protection. The later #163/PR #164 integration makes the
+path-aware aggregate controlling through the unchanged protected context names;
+see the integration record linked from the baseline policy.
 
 Live Forgejo issue, PR, user, token-metadata, and branch-protection state remains
 operational truth. This document is the standing process contract, not a

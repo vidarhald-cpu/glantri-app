@@ -131,13 +131,15 @@ Before the initial or any materially reconciled `dev` baseline is published:
 - classify every failure as reconciliation regression, pre-existing issue, environment/tooling issue, or product decision; and
 - report the exact candidate topology and obtain product-owner acceptance before publishing.
 
-### Approved path-aware dev gate — pending implementation and transition
+### Path-aware dev gate — integrated status
 
 The [#161 cutover authorization](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/161#issuecomment-4354)
-approves one separate bounded gate implementation case with a separate Builder
-and fresh independent exact-head QA. The preferred destination is one required
-`dev-integration-gate` aggregate that succeeds only when all applicable checks
-for the actual change pass:
+authorized the separate gate implementation case #163/PR #164, now integrated
+at `dev@5ac0f9debda4e6c761d1c68482de24c40f266889`. The
+[integration record](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/163#issuecomment-4590)
+confirms the independently reviewed implementation and hosted proof. The
+`CI / dev-integration-gate (pull_request)` aggregate is the controlling decision
+and succeeds only when all applicable checks for the actual change pass:
 
 | Change class                          | Required validation                                                                                                                             |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -147,15 +149,18 @@ for the actual change pass:
 | Mixed changes                         | The strongest applicable validation across all affected classes; adding documentation never downgrades another class.                           |
 | Unknown or sensitive executable paths | Fail closed; require explicit classification and adequate validation before integration.                                                        |
 
-This is the approved policy destination, **not a deployed gate**. Executable
-classification, workflow/tooling changes, hosted verification and the protected
-transition belong to that separate case. This documentation does not change
-required contexts or protection. Existing protected checks remain binding until
-a verified, authorized transition is durably recorded; inspect live Forgejo
-state rather than infer it from this document.
+The implementation is integrated, not pending. The existing required
+`CI / ci (pull_request)` and `CI / docker-test (pull_request)` contexts execute
+compatibility guards which fail unless the aggregate succeeds. They enforce the
+path-aware decision without a branch-protection settings transition. Inapplicable
+application jobs are skipped, not claimed as executed runtime validation.
+The [technical gate reference](./dev-integration-gate.md) owns classification,
+workflow details and the optional future required-context rename. Verify the
+current candidate's actual hosted results and live Forgejo state; the #163
+integration record does not certify a later PR or authorize its integration.
 
 Preserve protection throughout. Do not make all checks optional, spoof success,
-or bypass a failing or absent check. If the protected transition is blocked,
+or bypass a failing or absent check. If an optional protected-context transition is blocked,
 prepare the smallest exact one-time transition proposal, with current and
 proposed settings, evidence and restoration conditions, for control-plane
 confirmation. The approval is not general authority to change credentials,

@@ -248,9 +248,10 @@ distinguishes scoped defects, unrelated CI/operational failures, decision
 findings, incomplete evidence and repeated execution failure. The Orchestrator
 cannot override QA FAIL. Conditional integration follows the
 [baseline gates](./development-baseline.md#conditional-integration). The approved
-[path-aware gate destination](./development-baseline.md#approved-path-aware-dev-gate--pending-implementation-and-transition)
-remains pending separate implementation and protected transition; no optional-all
-checks, spoofed success or bypass is authorized.
+[path-aware gate destination](./development-baseline.md#path-aware-dev-gate--integrated-status)
+was integrated by #163/PR #164 and is enforced by the existing protected
+compatibility guards without a settings transition. No optional-all checks,
+spoofed success or bypass is authorized.
 
 The Forgejo issue, when applicable, and PR hold the durable status, exact SHAs, evidence, decisions, and follow-ups. Chat may notify the product owner, but chat-only context never substitutes for those records.
 

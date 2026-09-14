@@ -93,8 +93,8 @@ Useful references:
 - The coordinator never overrides QA FAIL: scoped defects go to the existing
   Builder, unrelated CI/environment failures to bounded Ops repair, and product,
   rule, UX, consequential architecture or permission decisions to control plane.
-- The approved path-aware dev gate remains pending separate implementation and
-  protected transition. Current protected checks remain binding; no bypass or
+- The path-aware dev gate is integrated through #163/PR #164. Its aggregate
+  controls integration through the existing protected compatibility guards; no bypass or
   fabricated success. See `docs/process/development-baseline.md`.
 
 ## Rule and architecture discipline

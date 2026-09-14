@@ -312,9 +312,10 @@ Conditional integration is allowed only when the issue explicitly
 pre-authorizes it and the exact QA-reviewed head, scope, dependencies,
 topology, required checks, and merge target all satisfy that condition. No
 general standing merge authority is created. The
-[approved path-aware gate](./development-baseline.md#approved-path-aware-dev-gate--pending-implementation-and-transition)
-is pending separate implementation and protected transition; this policy does
-not deploy it or waive currently applicable protected checks.
+[approved path-aware gate](./development-baseline.md#path-aware-dev-gate--integrated-status)
+is integrated by #163/PR #164 and controls integration through the existing
+protected compatibility guards. Applicable protected checks remain binding;
+no settings transition was required.
 
 This standing authority never weakens Product Owner acceptance. Return for a
 material scope expansion; new authorization; product, UX, Glantri-rule,
