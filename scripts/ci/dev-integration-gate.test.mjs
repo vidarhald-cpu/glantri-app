@@ -532,7 +532,10 @@ test("actual workflow parses and preserves aggregate dependencies, event head an
     "bash scripts/ci/current-run-services.synthetic.sh",
   ])
     assert.ok(toolingCommands.includes(command), `missing mandatory tooling command: ${command}`);
-  assert.equal(jobs["application-docker-test"].env.CI_SERVICE_STATE_DIR, ".ci/current-run-services");
+  assert.equal(
+    jobs["application-docker-test"].env.CI_SERVICE_STATE_DIR,
+    ".ci/current-run-services",
+  );
   const dockerCommands = dockerSteps.map((step) => step.run).join("\n");
   for (const command of [
     "assert-ports-free",
