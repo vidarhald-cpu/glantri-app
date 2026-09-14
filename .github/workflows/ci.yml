@@ -7,15 +7,98 @@ on:
 
 env:
   CI_DIND_HOST: dind.docker.internal
+  GATE_BASE_SHA: ${{ forgejo.event.pull_request.base.sha || forgejo.event.before }}
+  GATE_HEAD_SHA: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
+  GATE_EVENT: ${{ forgejo.event_name }}
+  GATE_TARGET: ${{ forgejo.event.pull_request.base.ref || forgejo.ref_name }}
 
 jobs:
-  ci:
+  changes:
+    runs-on: glantri-private-ci
+    timeout-minutes: 5
+    outputs:
+      base: ${{ steps.classify.outputs.base }}
+      head: ${{ steps.classify.outputs.head }}
+      mergeBase: ${{ steps.classify.outputs.mergeBase }}
+      event: ${{ steps.classify.outputs.event }}
+      target: ${{ steps.classify.outputs.target }}
+      tooling: ${{ steps.classify.outputs.tooling }}
+      runtime: ${{ steps.classify.outputs.runtime }}
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          ref: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
+      - name: Classify exact changed paths
+        id: classify
+        run: |
+          test "$(node --version)" = "v22.23.2"
+          node scripts/ci/dev-integration-gate.mjs classify
+
+  docs:
+    needs: changes
+    runs-on: glantri-private-ci
+    timeout-minutes: 10
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          ref: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
+      - name: Verify pinned runtime and install declared tools
+        run: |
+          test "$(node --version)" = "v22.23.2"
+          corepack enable
+          test "$(pnpm --version)" = "10.6.0"
+          pnpm install --frozen-lockfile --ignore-scripts
+      - name: Exact-diff formatting, whitespace and documentation references
+        run: node scripts/ci/dev-integration-gate-docs.mjs
+
+  tooling:
+    needs: changes
+    if: needs.changes.outputs.tooling == 'true'
+    runs-on: glantri-private-ci
+    timeout-minutes: 10
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          ref: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
+      - name: Verify pinned runtime and install declared tools
+        run: |
+          test "$(node --version)" = "v22.23.2"
+          corepack enable
+          test "$(pnpm --version)" = "10.6.0"
+          pnpm install --frozen-lockfile --ignore-scripts
+      - name: Gate regressions and workflow syntax/semantics
+        run: node --test scripts/ci/dev-integration-gate*.test.mjs
+
+  dev-integration-gate:
+    needs: [changes, docs, tooling, application-ci, application-docker-test]
+    if: always()
+    runs-on: glantri-private-ci
+    timeout-minutes: 5
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          ref: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
+      - name: Require all applicable results for the exact event and candidate
+        env:
+          GATE_NEEDS: ${{ toJSON(needs) }}
+        run: |
+          test "$(node --version)" = "v22.23.2"
+          node scripts/ci/dev-integration-gate.mjs aggregate
+
+  application-ci:
+    needs: changes
+    if: needs.changes.outputs.runtime == 'true'
     runs-on: glantri-private-ci
     timeout-minutes: 45
     steps:
       - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
+          ref: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
 
       - name: Verify pinned runtime
         run: |
@@ -49,10 +132,11 @@ jobs:
       - name: File-size report
         run: node scripts/checkFileSize.mjs
 
-  docker-test:
+  application-docker-test:
     runs-on: glantri-private-ci
     timeout-minutes: 60
-    if: forgejo.event_name == 'pull_request'
+    needs: changes
+    if: forgejo.event_name == 'pull_request' && needs.changes.outputs.runtime == 'true'
     env:
       CI_RESOURCE_SUFFIX: ${{ forgejo.run_id }}-${{ forgejo.run_attempt }}
     services:
@@ -71,6 +155,8 @@ jobs:
           - 5432:5432
     steps:
       - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
 
       - name: Verify pinned runtime and isolated Docker
         run: |
@@ -237,3 +323,27 @@ jobs:
           docker image rm \
             "glantri-api-test-$CI_RESOURCE_SUFFIX" \
             "glantri-web-test-$CI_RESOURCE_SUFFIX" 2>/dev/null || true
+
+  # Keep the currently protected names fail-closed throughout the transition.
+  # These are real aggregate-result checks, never successful skipped app jobs.
+  ci:
+    needs: dev-integration-gate
+    if: always()
+    runs-on: glantri-private-ci
+    timeout-minutes: 5
+    steps:
+      - name: Require the path-aware integration decision
+        env:
+          GATE_RESULT: ${{ needs.dev-integration-gate.result }}
+        run: test "$GATE_RESULT" = success
+
+  docker-test:
+    needs: dev-integration-gate
+    if: always() && forgejo.event_name == 'pull_request'
+    runs-on: glantri-private-ci
+    timeout-minutes: 5
+    steps:
+      - name: Require the path-aware integration decision
+        env:
+          GATE_RESULT: ${{ needs.dev-integration-gate.result }}
+        run: test "$GATE_RESULT" = success
