@@ -1,7 +1,6 @@
 import type {
   SkillContentLearningHistoryRecord,
   SkillContentRelease,
-  SkillReferenceArchSkill,
   SkillReferenceArchSociety,
   SkillReferenceHistoricalAvailability,
   SkillReferenceLearningGroup,
@@ -67,23 +66,6 @@ function legacyMetadata(recordId: string) {
       note: "Reference-only Pilot suggestion; it is separate from Skill access and mechanics.",
     },
   };
-}
-
-function archSkillsForRelease(release: SkillContentRelease): SkillReferenceArchSkill[] {
-  return release.domains.map((domain) => ({
-    description: `${domain.name} is a navigation context for discovering related Skills. It does not grant competence or define access.`,
-    id: `arch-skill:${domain.id.replace(/^domain:/, "")}`,
-    mechanics: "none" as const,
-    metadata: referenceMetadata(
-      domain.id,
-      "Projected from the candidate's explicit primary domain.",
-    ),
-    membershipMeaning: "navigation-only" as const,
-    name: domain.name,
-    skillMemberships: release.competencies
-      .filter((competency) => competency.kind === "skill" && competency.domainId === domain.id)
-      .map(({ id }) => ({ placement: "primary" as const, skillId: id })),
-  }));
 }
 
 function archSocieties(): SkillReferenceArchSociety[] {
@@ -233,7 +215,9 @@ export function buildSkillReferenceMetadata(release: SkillContentRelease): Skill
       : [];
   const learningGroups: SkillReferenceLearningGroup[] = [];
   return {
-    archSkills: archSkillsForRelease(release),
+    // Domains organize the catalogue; they are not authority for Arch-Skill membership.
+    // The authored full-catalogue proposal carries the independent Arch-Skill records.
+    archSkills: [],
     archSocieties: societies,
     historicalAvailability,
     learningGroups,

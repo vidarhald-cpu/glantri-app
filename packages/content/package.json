@@ -13,6 +13,10 @@
       "types": "./dist/equipment/index.d.ts",
       "default": "./dist/equipment/index.js"
     },
+    "./full-skill-catalogue-proposal": {
+      "types": "./dist/full-skill-catalogue-proposal.d.ts",
+      "default": "./dist/full-skill-catalogue-proposal.js"
+    },
     "./semantic-fixtures": {
       "types": "./dist/semanticFixtures/index.d.ts",
       "default": "./dist/semanticFixtures/index.js"

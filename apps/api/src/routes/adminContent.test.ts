@@ -74,6 +74,10 @@ describe("admin content reference route", () => {
         contentVersion: "pilot-skills-content/2.0.0-candidate.4",
         status: "proposal",
       },
+      fullCatalogue: {
+        manifest: { competencies: 172 },
+        status: "proposal",
+      },
     });
     expect(response.json().canonical).toBeNull();
     await app.close();

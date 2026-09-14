@@ -272,4 +272,84 @@ export interface AdminSkillReferenceSnapshot {
 export interface AdminSkillReferenceResponse {
   candidate: AdminSkillReferenceSnapshot | null;
   canonical: AdminSkillReferenceSnapshot | null;
+  fullCatalogue?: AdminFullSkillCatalogueProposal;
+}
+
+export type AdminFullSkillCatalogueCompetencyType =
+  | "base-skill"
+  | "specialization"
+  | "spoken-language"
+  | "written-tradition";
+
+export interface AdminFullSkillCatalogueEntry {
+  archSkillAnnotation: string;
+  boundaries: readonly string[];
+  compatibilityNote?: string;
+  competencyType: AdminFullSkillCatalogueCompetencyType;
+  context: string;
+  description: string;
+  domain: string;
+  id: string;
+  idStatus: string;
+  learningGroupAnnotation: string;
+  name: string;
+  parent?: { id: string; name: string; note?: string };
+  provenance: string;
+  shortDescription: string;
+  typicalUses: readonly string[];
+}
+
+export interface AdminFullSkillCatalogueProposal {
+  archSkills: readonly {
+    description: string;
+    id: string;
+    name: string;
+    participantIds: readonly string[];
+    participantNames: readonly string[];
+  }[];
+  entries: readonly AdminFullSkillCatalogueEntry[];
+  exceptions: readonly { effect: string; item: string; unresolved: string }[];
+  learningGroups: readonly {
+    id: string;
+    membershipStatus: string;
+    name: string;
+    participantIds: readonly string[];
+    participantNames: readonly string[];
+  }[];
+  manifest: {
+    archSkills: number;
+    baseSkills: number;
+    competencies: number;
+    learningGroups: number;
+    pilotLearningGroups: number;
+    pilotLearningGroupLinks: number;
+    proposalDigest: `sha256:${string}`;
+    specializations: number;
+    spokenLanguages: number;
+    supportScripts: number;
+    unresolvedBindings: number;
+    writtenTraditions: number;
+  };
+  pilotLearningGroups: readonly {
+    id: string;
+    name: string;
+    skillIds: readonly string[];
+    skillNames: readonly string[];
+  }[];
+  schemaVersion: string;
+  source: { byteSize: number; path: string; sha256: string };
+  status: "proposal";
+  supportScripts: readonly {
+    id: string;
+    name: string;
+    status: string;
+    writtenAssociation: string;
+  }[];
+  title: string;
+  unresolvedBindings: readonly {
+    evidence: string;
+    name: string;
+    sourceIdentity: string;
+    unresolvedItem: string;
+  }[];
 }
