@@ -101,7 +101,7 @@ echo "Clean current service passed exact container, image, port, and readiness c
 
 failure_id="$(
   docker run -d --name "$failure_name" -p 0:8080 "$synthetic_tag" \
-    node -e 'console.log("Starting API"); console.log(JSON.stringify({session:{id:"qa-multiline-session"},sessionId:["qa-array-session"],cookie:"sid=qa-cookie-fixed",status:503},null,2)); console.log("Readiness failed"); require("node:http").createServer((_request,response)=>{response.statusCode=503;response.end("deliberate-not-ready")}).listen(8080,"0.0.0.0")'
+    node -e 'const structured=JSON.stringify({session:{id:"qa-multiline-session"},sessionId:["qa-array-session"],cookie:"sid=qa-cookie-fixed",status:503},null,2).replace(/\n}$/,",\n}"); console.log(`Starting API\n${structured}\nReadiness failed`); require("node:http").createServer((_request,response)=>{response.statusCode=503;response.end("deliberate-not-ready")}).listen(8080,"0.0.0.0")'
 )"
 failure_port="$(docker port "$failure_id" 8080/tcp | sed -n '1s/.*://p')"
 test -n "$failure_port"

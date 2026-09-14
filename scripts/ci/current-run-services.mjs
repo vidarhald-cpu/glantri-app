@@ -26,6 +26,7 @@ const UNTERMINATED_SINGLE_QUOTED_SECRET_PATTERN = new RegExp(
   String.raw`(${SECRET_ASSIGNMENT_PREFIX})'(?:\\.|[^'\\\r\n])*$`,
   "gim",
 );
+const SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN = new RegExp(SECRET_ASSIGNMENT_PREFIX, "gi");
 const PROBE_SCRIPT = String.raw`
 const http = require("node:http");
 const url = process.argv[1];
@@ -184,6 +185,34 @@ function findJsonEnd(value, start) {
   return undefined;
 }
 
+function sanitizeSensitiveStructuredAssignments(input) {
+  let output = "";
+  let copiedThrough = 0;
+  SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.lastIndex = 0;
+
+  for (let match = SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.exec(input); match; ) {
+    const valueStart = SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.lastIndex;
+    if (!["{", "["].includes(input[valueStart])) {
+      match = SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.exec(input);
+      continue;
+    }
+    const valueEnd = findJsonEnd(input, valueStart);
+    if (valueEnd === undefined) {
+      match = SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.exec(input);
+      continue;
+    }
+
+    output += input.slice(copiedThrough, match.index);
+    output += `${match[0]}"[REDACTED]"`;
+    copiedThrough = valueEnd;
+    SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.lastIndex = valueEnd;
+    match = SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.exec(input);
+  }
+
+  SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.lastIndex = 0;
+  return `${output}${input.slice(copiedThrough)}`;
+}
+
 function sanitizeEmbeddedJson(input) {
   let output = "";
   let copiedThrough = 0;
@@ -218,7 +247,7 @@ function sanitizeEmbeddedJson(input) {
 }
 
 export function sanitizeLogs(value) {
-  const input = String(value);
+  const input = sanitizeSensitiveStructuredAssignments(String(value));
   const documentMatch = /^(\s*)([\s\S]*?)(\s*)$/.exec(input);
   const [, leading, document, trailing] = documentMatch;
   const sanitizedDocument = sanitizeJson(document, document.includes("\n"));

@@ -234,3 +234,74 @@ test("preserves sensitive-key context across multiline JSON among ordinary log l
   assert.match(direct, /"status": 503/);
   assert.match(direct, /Readiness failed/);
 });
+
+const malformedStructuredCases = [
+  {
+    name: "a trailing-comma outer object",
+    input: [
+      "Starting API",
+      "{",
+      '  "session": {',
+      '    "id": "qa151-session-sentinel"',
+      "  },",
+      '  "sessionId": [',
+      '    "qa151-array-sentinel"',
+      "  ],",
+      '  "cookie": "sid=qa151-cookie-sentinel",',
+      '  "status": 503,',
+      "}",
+      "Readiness failed",
+    ].join("\n"),
+  },
+  {
+    name: "a missing-closing-brace outer object",
+    input: [
+      "Starting API",
+      "{",
+      '  "session": {',
+      '    "id": "qa151-session-sentinel"',
+      "  },",
+      '  "sessionId": [',
+      '    "qa151-array-sentinel"',
+      "  ],",
+      '  "cookie": "sid=qa151-cookie-sentinel",',
+      '  "status": 503',
+      "Readiness failed",
+    ].join("\n"),
+  },
+  {
+    name: "a plaintext session object assignment",
+    input: [
+      "Starting API",
+      'session = {"id":"qa151-session-sentinel"}',
+      "status=503",
+      "Readiness failed",
+    ].join("\n"),
+  },
+  {
+    name: "a plaintext sessionId array assignment",
+    input: [
+      "Starting API",
+      'sessionId = ["qa151-array-sentinel"]',
+      "status=503",
+      "Readiness failed",
+    ].join("\n"),
+  },
+];
+
+for (const { name, input } of malformedStructuredCases) {
+  test(`fails closed for ${name} through direct and production log entry points`, () => {
+    const direct = sanitizeLogs(input);
+    const production = sanitizeThroughProductionEntryPoint(input);
+
+    assert.equal(production, direct);
+    assert.doesNotMatch(
+      direct,
+      /qa151-session-sentinel|qa151-array-sentinel|qa151-cookie-sentinel/,
+    );
+    assert.match(direct, /\[REDACTED\]/);
+    assert.match(direct, /Starting API/);
+    assert.match(direct, /503/);
+    assert.match(direct, /Readiness failed/);
+  });
+}
