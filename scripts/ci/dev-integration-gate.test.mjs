@@ -16,6 +16,13 @@ import { parsers as yaml } from "prettier/plugins/yaml";
 import { aggregate, collectPlan, parseChanges } from "./dev-integration-gate.mjs";
 import { checkLinks } from "./dev-integration-gate-docs.mjs";
 
+const serviceHelperPaths = [
+  "scripts/ci/current-run-services.mjs",
+  "scripts/ci/current-run-services.synthetic.sh",
+  "scripts/ci/current-run-services.test.mjs",
+  "scripts/ci/sanitize-service-logs.mjs",
+];
+
 function fixture(t) {
   const cwd = mkdtempSync(path.join(tmpdir(), "glantri-gate-"));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
@@ -106,6 +113,65 @@ test("real workflow and executable test changes invoke focused tooling validatio
   const needs = successful(plan);
   needs.tooling.result = "skipped";
   assert.throws(() => aggregate(plan, needs), /tooling: skipped/);
+});
+
+for (const helper of serviceHelperPaths) {
+  test(`exact service helper requires mandatory tooling validation: ${helper}`, (t) => {
+    const f = fixture(t);
+    f.write(helper);
+    f.commit();
+    const plan = f.plan();
+    assert.deepEqual(plan.required, ["changes", "docs", "tooling"]);
+    for (const result of ["skipped", "failure", undefined]) {
+      const needs = successful(plan);
+      if (result === undefined) delete needs.tooling;
+      else needs.tooling.result = result;
+      assert.throws(() => aggregate(plan, needs), /Required job tooling/);
+    }
+  });
+}
+
+test("deleted service helper remains tooling-only but cannot bypass its mandatory job", (t) => {
+  const f = fixture(t);
+  const helper = serviceHelperPaths[0];
+  f.write(helper);
+  const base = f.commit();
+  f.git("rm", helper);
+  f.commit();
+  const plan = f.plan("pull_request", "dev", base);
+  assert.deepEqual(plan.required, ["changes", "docs", "tooling"]);
+  const needs = successful(plan);
+  needs.tooling.result = "failure";
+  assert.throws(() => aggregate(plan, needs), /Required job tooling: failure/);
+});
+
+test("renamed-away, executable and symlink service helpers fail closed to full validation", (t) => {
+  const renamed = fixture(t);
+  renamed.write(serviceHelperPaths[0]);
+  const base = renamed.commit();
+  renamed.write("scripts/ci/renamed-service-helper.mjs");
+  renamed.git("rm", serviceHelperPaths[0]);
+  renamed.commit();
+  assert.deepEqual(renamed.plan("pull_request", "dev", base).required, [
+    "changes",
+    "docs",
+    "tooling",
+    "application-ci",
+    "application-docker-test",
+  ]);
+
+  const modes = fixture(t);
+  modes.write(serviceHelperPaths[1]);
+  chmodSync(path.join(modes.cwd, serviceHelperPaths[1]), 0o755);
+  symlinkSync("current-run-services.mjs", path.join(modes.cwd, serviceHelperPaths[3]));
+  modes.commit();
+  assert.deepEqual(modes.plan().required, [
+    "changes",
+    "docs",
+    "tooling",
+    "application-ci",
+    "application-docker-test",
+  ]);
 });
 
 for (const scenario of ["deleted", "renamed-away", "broken-modified"]) {
@@ -414,6 +480,14 @@ test("actual workflow parses and preserves aggregate dependencies, event head an
     "forgejo.event_name == 'pull_request' && needs.changes.outputs.runtime == 'true'",
   );
   assert.equal(jobs.tooling.if, "needs.changes.outputs.tooling == 'true'");
+  assert.equal(
+    jobs.tooling.env.CI_SYNTHETIC_IMAGE,
+    "docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32",
+  );
+  assert.equal(
+    jobs.tooling.env.CI_RESOURCE_SUFFIX,
+    "tooling-${{ forgejo.run_id }}-${{ forgejo.run_attempt }}",
+  );
   assert.equal(jobs.docs.needs, "changes");
   assert.equal(jobs.docs.if, undefined);
   for (const legacy of ["ci", "docker-test"]) {
@@ -450,6 +524,31 @@ test("actual workflow parses and preserves aggregate dependencies, event head an
   for (const command of ["pnpm typecheck", "pnpm lint", "pnpm test", "pnpm coverage", "pnpm build"])
     assert.ok(commands.includes(command));
   const dockerSteps = jobs["application-docker-test"].steps;
+  const toolingCommands = jobs.tooling.steps.map((step) => step.run).join("\n");
+  for (const command of [
+    'docker pull "$CI_SYNTHETIC_IMAGE"',
+    "node --test scripts/ci/current-run-services.test.mjs",
+    "node scripts/ci/sanitize-service-logs.mjs",
+    "bash scripts/ci/current-run-services.synthetic.sh",
+  ])
+    assert.ok(toolingCommands.includes(command), `missing mandatory tooling command: ${command}`);
+  assert.equal(
+    jobs["application-docker-test"].env.CI_SERVICE_STATE_DIR,
+    ".ci/current-run-services",
+  );
+  const dockerCommands = dockerSteps.map((step) => step.run).join("\n");
+  for (const command of [
+    "assert-ports-free",
+    "current-run-services.test.mjs",
+    "current-run-services.synthetic.sh",
+    "current-run-services.mjs record",
+    "current-run-services.mjs verify",
+    "current-run-services.mjs wait-http",
+    "current-run-services.mjs logs",
+    "current-run-services.mjs cleanup",
+    "sanitize-service-logs.mjs",
+  ])
+    assert.ok(dockerCommands.includes(command), `missing application Docker command: ${command}`);
   assert.equal(
     dockerSteps.find((s) => s.name === "Remove run-owned Docker resources").if,
     "always()",

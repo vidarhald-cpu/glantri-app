@@ -17,16 +17,26 @@ contexts. The aggregate uses actual dependency
 results within the same workflow run. It does not create commit statuses through
 an API or use labels, titles, a manually selected class, or another run's result.
 
-| Changed surface                                                                                                                                                 | Required validation                                                                                                                                                       |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Regular, non-executable `AGENTS.md`, root `README.md`, and Markdown beneath `docs/` except `docs/source/` and `docs/rules/`                                     | Exact-diff whitespace and formatting, changed-document links/headings, inbound references to changed/deleted targets                                                      |
-| `.github/workflows/ci.yml`, `scripts/ci/dev-integration-gate*.mjs`                                                                                              | Documentation/formatting checks plus focused gate regressions and actual workflow YAML parsing/static semantics; relevant hosted proof is also required at independent QA |
-| Files beneath `apps/` or `packages/`, including tests and data                                                                                                  | Documentation/formatting checks plus retained application validation in `application-ci` and, for PRs, `application-docker-test`                                          |
-| Other paths, dependency manifests/lockfiles, raw source/rule documents, other scripts/workflows, infrastructure, symlinks, submodules, or executable file modes | Full application validation plus tooling validation; never documentation-only                                                                                             |
-| Mixed changes                                                                                                                                                   | Union of every applicable validation above                                                                                                                                |
+| Changed surface                                                                                                                                                 | Required validation                                                                                                                                                                                                                                  |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Regular, non-executable `AGENTS.md`, root `README.md`, and Markdown beneath `docs/` except `docs/source/` and `docs/rules/`                                     | Exact-diff whitespace and formatting, changed-document links/headings, inbound references to changed/deleted targets                                                                                                                                 |
+| `.github/workflows/ci.yml`, `scripts/ci/dev-integration-gate*.mjs`, and the four exact regular service-helper paths listed below                                | Documentation/formatting checks plus focused gate and service regressions, the production sanitizer entrypoint, a real Docker synthetic, and actual workflow YAML parsing/static semantics; relevant hosted proof is also required at independent QA |
+| Files beneath `apps/` or `packages/`, including tests and data                                                                                                  | Documentation/formatting checks plus retained application validation in `application-ci` and, for PRs, `application-docker-test`                                                                                                                     |
+| Other paths, dependency manifests/lockfiles, raw source/rule documents, other scripts/workflows, infrastructure, symlinks, submodules, or executable file modes | Full application validation plus tooling validation; never documentation-only                                                                                                                                                                        |
+| Mixed changes                                                                                                                                                   | Union of every applicable validation above                                                                                                                                                                                                           |
 
 The tooling allowlist is intentionally narrow. New tooling paths require all
 checks until a reviewed gate change supplies appropriate focused coverage.
+The exact service-helper paths are
+`scripts/ci/current-run-services.mjs`,
+`scripts/ci/current-run-services.synthetic.sh`,
+`scripts/ci/current-run-services.test.mjs`, and
+`scripts/ci/sanitize-service-logs.mjs`. Their narrower classification is
+coupled to mandatory helper tests, execution of the production sanitizer via
+standard input, and a real Docker synthetic in the `tooling` job. Deleting or
+breaking one of these paths fails that mandatory job. A rename to an unknown
+path, executable mode, or symlink fails closed to full validation. No broader
+scripts glob is allowlisted.
 This includes `scripts/checkChangedFormatting.mjs`, which is used by the
 application job: adding, modifying, deleting or renaming that helper requires
 full application validation plus tooling validation. A passing gate regression
@@ -73,8 +83,9 @@ The aggregate has `if: always()` and explicitly depends on every validation job.
 Failure to schedule or complete it remains non-success and cannot authorize a
 merge. The retained application commands, PostgreSQL/Docker/Playwright steps,
 failure artifacts, retention and cleanup are not replaced by synthetic tests.
-The implementation does not import the separately owned artifact or service
-isolation candidates (#138 and #151).
+The accepted #151 service-isolation behavior is mechanically imported into
+`application-docker-test`; the separately owned artifact-isolation candidate
+(#138) remains outside this change.
 
 ## Verification
 
@@ -82,6 +93,9 @@ Using pinned Node 22.23.2 and the declared dependencies:
 
 ```bash
 node --test scripts/ci/dev-integration-gate*.test.mjs
+node --test scripts/ci/current-run-services.test.mjs
+printf 'sessionId=fixture-secret safe=yes' | node scripts/ci/sanitize-service-logs.mjs
+bash scripts/ci/current-run-services.synthetic.sh
 pnpm format:check:changed <accepted-base-sha>
 ```
 
