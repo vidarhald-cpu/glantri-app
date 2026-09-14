@@ -185,11 +185,32 @@ function findJsonEnd(value, start) {
   return undefined;
 }
 
+function findUnclosedStructuredValueEnd(input, valueStart, assignmentStart) {
+  const assignmentColumn = assignmentStart - input.lastIndexOf("\n", assignmentStart - 1) - 1;
+  let newline = input.indexOf("\n", valueStart);
+  while (newline !== -1) {
+    const lineStart = newline + 1;
+    const lineEnd = input.indexOf("\n", lineStart);
+    const line = input.slice(lineStart, lineEnd < 0 ? input.length : lineEnd);
+    const trimmed = line.trim();
+    const indent = line.match(/^[\t ]*/)[0].length;
+    const looksLikeStructuredContinuation =
+      /^(?:[}\]],?\s*$|[{[]|"(?:\\.|[^"\\])*"(?:\s*:|\s*,?\s*$)|(?:-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|true|false|null)\s*,?\s*$)/i.test(
+        trimmed,
+      );
+    if (trimmed && indent <= assignmentColumn && !looksLikeStructuredContinuation) {
+      return newline;
+    }
+    if (lineEnd === -1) break;
+    newline = lineEnd;
+  }
+  return input.length;
+}
+
 function sanitizeSensitiveStructuredAssignments(input) {
   let output = "";
   let copiedThrough = 0;
   SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.lastIndex = 0;
-
   for (let match = SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.exec(input); match; ) {
     const valueStart = SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.lastIndex;
     if (!["{", "["].includes(input[valueStart])) {
@@ -198,17 +219,19 @@ function sanitizeSensitiveStructuredAssignments(input) {
     }
     const valueEnd = findJsonEnd(input, valueStart);
     if (valueEnd === undefined) {
+      const recoveryEnd = findUnclosedStructuredValueEnd(input, valueStart, match.index);
+      output += `${input.slice(copiedThrough, match.index)}${match[0]}"[REDACTED]"`;
+      copiedThrough = recoveryEnd;
+      SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.lastIndex = recoveryEnd;
       match = SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.exec(input);
       continue;
     }
-
     output += input.slice(copiedThrough, match.index);
     output += `${match[0]}"[REDACTED]"`;
     copiedThrough = valueEnd;
     SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.lastIndex = valueEnd;
     match = SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.exec(input);
   }
-
   SENSITIVE_STRUCTURED_ASSIGNMENT_PATTERN.lastIndex = 0;
   return `${output}${input.slice(copiedThrough)}`;
 }
@@ -217,7 +240,6 @@ function sanitizeEmbeddedJson(input) {
   let output = "";
   let copiedThrough = 0;
   let searchFrom = 0;
-
   while (searchFrom < input.length) {
     const objectIndex = input.indexOf("{", searchFrom);
     const arrayIndex = input.indexOf("[", searchFrom);

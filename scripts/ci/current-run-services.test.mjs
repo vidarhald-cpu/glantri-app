@@ -305,3 +305,64 @@ for (const { name, input } of malformedStructuredCases) {
     assert.match(direct, /Readiness failed/);
   });
 }
+
+const incompleteSensitiveStructuredCases = [
+  {
+    name: "a truncated sensitive object",
+    input: [
+      "Starting API",
+      "status=503",
+      '{"session": {',
+      '  "id": "qa151-truncated-object-sentinel"',
+      "Readiness failed",
+    ].join("\n"),
+  },
+  {
+    name: "a truncated sensitive array",
+    input: [
+      "Starting API",
+      "status=503",
+      "sessionId = [",
+      '  "qa151-truncated-array-sentinel"',
+      "Readiness failed",
+    ].join("\n"),
+  },
+  {
+    name: "a mismatched sensitive delimiter",
+    input: [
+      "Starting API",
+      "status=503",
+      '{"session": {',
+      '  "id": "qa151-mismatched-sentinel"',
+      "]",
+      "Readiness failed",
+    ].join("\n"),
+  },
+  {
+    name: "a valid nested object inside an unclosed sensitive parent",
+    input: [
+      "Starting API",
+      "status=503",
+      "session = {",
+      '"nested":{"id":"qa151-nested-unclosed-sentinel"}',
+      "Readiness failed",
+    ].join("\n"),
+  },
+];
+
+for (const { name, input } of incompleteSensitiveStructuredCases) {
+  test(`fails closed for ${name} through direct and production log entry points`, () => {
+    const direct = sanitizeLogs(input);
+    const production = sanitizeThroughProductionEntryPoint(input);
+
+    assert.equal(production, direct);
+    assert.doesNotMatch(
+      direct,
+      /qa151-truncated-object-sentinel|qa151-truncated-array-sentinel|qa151-mismatched-sentinel|qa151-nested-unclosed-sentinel/,
+    );
+    assert.match(direct, /\[REDACTED\]/);
+    assert.match(direct, /Starting API/);
+    assert.match(direct, /status=503/);
+    assert.match(direct, /Readiness failed/);
+  });
+}

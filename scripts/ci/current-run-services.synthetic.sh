@@ -101,7 +101,21 @@ echo "Clean current service passed exact container, image, port, and readiness c
 
 failure_id="$(
   docker run -d --name "$failure_name" -p 0:8080 "$synthetic_tag" \
-    node -e 'const structured=JSON.stringify({session:{id:"qa-multiline-session"},sessionId:["qa-array-session"],cookie:"sid=qa-cookie-fixed",status:503},null,2).replace(/\n}$/,",\n}"); console.log(`Starting API\n${structured}\nReadiness failed`); require("node:http").createServer((_request,response)=>{response.statusCode=503;response.end("deliberate-not-ready")}).listen(8080,"0.0.0.0")'
+    node -e 'console.log(`Starting API
+status=503
+{"session": {
+  "id": "qa-truncated-object"
+Readiness failed
+sessionId = [
+  "qa-truncated-array"
+Readiness failed
+{"session": {
+  "id": "qa-mismatched-session"
+]
+Readiness failed
+session = {
+"nested":{"id":"qa-nested-unclosed-session"}
+Readiness failed`); require("node:http").createServer((_request,response)=>{response.statusCode=503;response.end("deliberate-not-ready")}).listen(8080,"0.0.0.0")'
 )"
 failure_port="$(docker port "$failure_id" 8080/tcp | sed -n '1s/.*://p')"
 test -n "$failure_port"
@@ -129,16 +143,20 @@ if [ "$failure_status" -eq 0 ]; then
   echo "Synthetic readiness-failure service unexpectedly passed."
   exit 1
 fi
-for secret in qa-multiline-session qa-array-session qa-cookie-fixed; do
+for secret in \
+  qa-truncated-object \
+  qa-truncated-array \
+  qa-mismatched-session \
+  qa-nested-unclosed-session; do
   if [[ "$failure_output" == *"$secret"* ]]; then
     echo "Synthetic secret leaked through readiness-failure log collection."
     exit 1
   fi
 done
-for diagnostic in "Starting API" '"status": 503' "Readiness failed" "[REDACTED]"; do
+for diagnostic in "Starting API" "status=503" "Readiness failed" "[REDACTED]"; do
   if [[ "$failure_output" != *"$diagnostic"* ]]; then
     echo "Readiness-failure log collection lost required diagnostic structure."
     exit 1
   fi
 done
-echo "Readiness-failure collector preserved multiline secret context and safe diagnostics."
+echo "Readiness-failure collector failed closed for incomplete sensitive structures and preserved safe diagnostics."
