@@ -108,6 +108,62 @@ test("real workflow and executable test changes invoke focused tooling validatio
   assert.throws(() => aggregate(plan, needs), /tooling: skipped/);
 });
 
+for (const scenario of ["deleted", "renamed-away", "broken-modified"]) {
+  test(`formatter ${scenario} cannot pass without application validation`, (t) => {
+    const f = fixture(t);
+    const formatter = "scripts/checkChangedFormatting.mjs";
+    f.write(
+      formatter,
+      readFileSync(new URL("../checkChangedFormatting.mjs", import.meta.url), "utf8"),
+    );
+    const base = f.commit();
+    if (scenario === "deleted") f.git("rm", formatter);
+    else if (scenario === "renamed-away") {
+      // Both paths were previously allowlisted, so an unknown destination must
+      // not accidentally supply the missing application-validation requirement.
+      f.write(
+        "scripts/ci/dev-integration-gate-renamed-formatter.mjs",
+        f.git("show", `${base}:${formatter}`),
+      );
+      f.git("rm", formatter);
+    } else f.write(formatter, 'throw new Error("fixture formatting failure");\n');
+    f.commit();
+
+    assert.throws(
+      () => execFileSync(process.execPath, [formatter, base], { cwd: f.cwd, stdio: "pipe" }),
+      (error) => {
+        assert.match(
+          error.stderr.toString(),
+          scenario === "broken-modified" ? /fixture formatting failure/ : /MODULE_NOT_FOUND/,
+        );
+        return true;
+      },
+      "the retained application formatting command must expose the broken fixture",
+    );
+    for (const event of ["pull_request", "push"]) {
+      const plan = f.plan(event, "dev", base);
+      const applicationJobs =
+        event === "pull_request"
+          ? ["application-ci", "application-docker-test"]
+          : ["application-ci"];
+      for (const job of applicationJobs) {
+        for (const result of ["skipped", "failure", undefined]) {
+          const needs = successful(plan);
+          if (result === undefined) delete needs[job];
+          else needs[job].result = result;
+          assert.throws(
+            () => aggregate(plan, needs),
+            /Required job application-/,
+            `${event}: ${job} ${result ?? "missing"} must block the formatter change`,
+          );
+        }
+      }
+      assert.deepEqual(plan.required, ["changes", "docs", "tooling", ...applicationJobs]);
+      assert.match(aggregate(plan, successful(plan)), /^PASS /);
+    }
+  });
+}
+
 test("mixed docs and runtime retains both surfaces and cannot get docs-only treatment", (t) => {
   const f = fixture(t);
   f.write("docs/process/policy.md");

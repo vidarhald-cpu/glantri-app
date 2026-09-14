@@ -20,13 +20,19 @@ an API or use labels, titles, a manually selected class, or another run's result
 | Changed surface                                                                                                                                                 | Required validation                                                                                                                                                       |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Regular, non-executable `AGENTS.md`, root `README.md`, and Markdown beneath `docs/` except `docs/source/` and `docs/rules/`                                     | Exact-diff whitespace and formatting, changed-document links/headings, inbound references to changed/deleted targets                                                      |
-| `.github/workflows/ci.yml`, `scripts/ci/dev-integration-gate*.mjs`, `scripts/checkChangedFormatting.mjs`                                                        | Documentation/formatting checks plus focused gate regressions and actual workflow YAML parsing/static semantics; relevant hosted proof is also required at independent QA |
+| `.github/workflows/ci.yml`, `scripts/ci/dev-integration-gate*.mjs`                                                                                              | Documentation/formatting checks plus focused gate regressions and actual workflow YAML parsing/static semantics; relevant hosted proof is also required at independent QA |
 | Files beneath `apps/` or `packages/`, including tests and data                                                                                                  | Documentation/formatting checks plus retained application validation in `application-ci` and, for PRs, `application-docker-test`                                          |
 | Other paths, dependency manifests/lockfiles, raw source/rule documents, other scripts/workflows, infrastructure, symlinks, submodules, or executable file modes | Full application validation plus tooling validation; never documentation-only                                                                                             |
 | Mixed changes                                                                                                                                                   | Union of every applicable validation above                                                                                                                                |
 
 The tooling allowlist is intentionally narrow. New tooling paths require all
 checks until a reviewed gate change supplies appropriate focused coverage.
+This includes `scripts/checkChangedFormatting.mjs`, which is used by the
+application job: adding, modifying, deleting or renaming that helper requires
+full application validation plus tooling validation. A passing gate regression
+suite alone does not establish that the application formatting command still
+works. The conservative route remains until focused behavioral coverage can
+justify a narrower gate.
 Markdown under the runtime/source rule directories remains conservative because
 those sources can affect application behavior. Test files under application
 packages are runtime changes, even when their purpose is documentation or QA.
@@ -85,7 +91,12 @@ and workflow changes, mixed scopes, unknown paths, executable tests/modes,
 symlinks, renames/deletions, missing/invalid/empty diffs, stale provenance, every
 non-success applicable result, main/release behavior, and internal links. It
 parses the actual workflow through the already-declared Prettier YAML parser
-and checks dependency and retained application-job semantics.
+and checks dependency and retained application-job semantics. Formatter
+regressions use actual Git deletion, rename-away and broken-modification
+fixtures, execute the failing formatting command, and reject skipped, missing
+or failed application results for PR and push events. All three regressions
+failed against the prior classifier at `9094a899ab9f7b8fa689c7dc18d76acdb25c1fee`
+before the repair.
 
 `GATE_BASE_SHA`, `GATE_HEAD_SHA`, `GATE_EVENT` and `GATE_TARGET` identify the
 immutable event when invoking the helpers directly. For a local exact-commit
