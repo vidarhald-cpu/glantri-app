@@ -38,16 +38,19 @@ Use this procedure for an authorized implementation case or other named durable 
    be active. The Builder fetches the remote and resolves the exact live
    `origin/dev` SHA. If it differs from the contract's accepted baseline, stop
    for contract refresh; do not silently choose or rebase onto a new baseline.
-2. **Build in isolation.** The Builder uses a clean, short-lived branch and isolated worktree at the accepted SHA. It reads `AGENTS.md` and only the exact task-specific documents, implements the approved slice, and does not widen scope to absorb unrelated findings, dependency changes, or hotspot conflicts.
+2. **Build in isolation.** Apply the [exact-SHA provisioning gate](./development-baseline.md#exact-sha-provisioning-gate): verify the canonical project or derived worktree, origin/common Git directory and requested versus observed `HEAD` before execution. A fresh Builder starts at the accepted baseline; a continuation uses its authorized exact parent and existing branch/PR. Read `AGENTS.md` and the exact task-specific sources, implement only the approved slice, and do not absorb unrelated findings or hotspot conflicts.
 3. **Publish and continue through the bounded lane.** The Builder runs
    proportionate verification,
    inspects the resulting diff and status, commits and pushes the authorized
    branch, opens or updates one draft PR targeting `dev`, records the exact PR
-   head and structured Builder return in Forgejo, and waits. The Development
+   head and structured Builder return in Forgejo (or uses the publication fallback
+   below), and returns promptly. The Development
    Orchestrator harvests the exact result and advances the issue to
-   `Ready for Independent QA`. Builder self-review does not make the PR
-   accepted.
-4. **Hand off and review the exact head independently.** The Development
+   `Ready for Independent QA` when QA is required. A contract that explicitly
+   exempts documentation-only work from independent QA routes its complete
+   durable result to `Ready for Control-plane Acceptance`. Builder self-review
+   does not make either result accepted.
+4. **Hand off and review the exact head independently when QA is required.** The Development
    Orchestrator applies only the shallow dispatch gate in
    [`qa-execution.md`](./qa-execution.md) and creates one fresh QA task from the
    applicable immutable INITIAL or REPAIR tuple. A fresh QA
@@ -70,7 +73,9 @@ Use this procedure for an authorized implementation case or other named durable 
 6. **Accept and integrate.** On a passing QA verdict, Architecture/control plane
    evaluates the durable result and the Product Owner decides acceptance and
    integration. An authorized integration actor may merge the accepted ordinary
-   PR into shared `dev` after required checks and coordination. QA and Builder
+   PR into shared `dev` after required checks and coordination. Explicitly
+   pre-authorized conditional integration follows the
+   [baseline policy](./development-baseline.md#conditional-integration). QA and Builder
    do not infer merge authority.
 7. **Release separately when chosen.** A release is optional and separately
    authorized. The Product Owner decides release readiness; a narrow
@@ -89,24 +94,27 @@ Investigator/Ops lanes each use a separate visible Work/Codex task. Builder and 
 for the same result must be different visible tasks. Hidden internal sub-agents
 may assist minor orchestration inside a lane, but same-thread or hidden work does
 not satisfy a Builder, QA, or dispatched Investigator/Ops lane. If visible task
-creation is unavailable, the Development Orchestrator reports the capability
-problem and uses only an explicitly authorized manual visible fallback; it does
-not claim that a hidden substitute fulfilled the role.
+creation fails, use the bounded recovery below. Escalate an unresolved capability
+problem with exact evidence; only an explicitly authorized manual visible
+fallback can replace direct creation. A hidden substitute does not fulfill the role.
 
 At Builder, Investigator/Ops, or QA dispatch, record one execution-ledger entry
 keyed by `issue + role + mode + exact SHA`:
 
-- canonical Codex project (`Glantri app — Forgejo`);
+- canonical Codex project (`Glantri app — Forgejo`), provisioning source,
+  verified origin and common Git directory;
 - role and Forgejo issue when applicable;
 - parent task and provisioning request ID;
 - resolved visible Work/Codex thread ID once materialized;
 - direct task/thread link when the client provides one, recorded separately from the thread ID because neither substitutes for the other;
 - isolated worktree and lease state;
 - branch when applicable;
-- requested exact SHA and observed `HEAD`; and
+- accepted baseline, requested exact SHA and observed `HEAD`;
+- recovery/replacement count, repair-cycle count and changed causal conditions; and
 - current liveness state, owner, last meaningful progress, and next action.
 
-Independent-QA dispatch and the explicit `Running`, `Blocked`,
+Independent-QA dispatch and the explicit `Running`, `Recovering`,
+`Waiting-dependency`, `Waiting-human-action`, `Blocked`,
 `Completed-unharvested`, `Completed-harvested`, `Failed`, and `Stalled`
 child states are defined in `qa-execution.md`. These coordination states do not
 replace the exclusive Forgejo issue lifecycle.
@@ -115,6 +123,22 @@ The Development Orchestrator follows every Builder, Investigator/Ops, and QA
 task through completion, retrieves its exact result, reconciles Forgejo
 evidence/status, and surfaces the harvested outcome. A child task merely
 ending, or a dispatch remaining queued, is not operational completion.
+
+### Executable contract and dispatch correlation
+
+Before every Builder, Investigator/Ops or QA dispatch, synchronize the current
+Forgejo issue body with the latest Product Owner authorization: lifecycle,
+role, mode, full exact baseline/candidate SHAs, Git authority, scope, exclusions,
+dependencies and return gate. Comments preserve evidence and superseding
+approval, but do not override a stale issue body for dispatch. Reconcile a stale
+or contradictory body before launching dependent work.
+
+Validate every child status and return against `issue + role + mode + exact SHA`
+and its recorded request/task/lease. Quarantine a response for a different
+issue, role, mode or SHA as a routing mismatch; do not publish it as evidence
+for this workflow. A pending client-request ID is distinct from the resolved
+task ID. Neither list omission nor a differing derived-worktree path proves
+that a child is lost.
 
 ## Standing execution authority
 
@@ -135,10 +159,28 @@ separate approval is needed for those steps while the contract, SHA lineage,
 scope, and ownership remain valid. This never authorizes merge, scope expansion,
 product decisions, `main`, release, or production work.
 
-The Development Orchestrator may delegate read-only investigation and bounded
-operational diagnosis to visible Investigator/Ops tasks. Their contract must
-state whether they may publish evidence or make a repository-scoped process
-repair; absent that authority they remain non-implementing.
+### Investigation and evidence publication
+
+Substantial investigation and bounded administration/diagnosis use ephemeral
+visible Investigator/Ops tasks under the Development Orchestrator. Their
+contract names the question, evidence sources, permitted operations and return
+gate. They remain non-implementing unless a separate explicit scope authorizes
+a bounded repair; diagnosis grants no application, data or infrastructure write.
+
+Authorized read-only investigation includes publishing its report/evidence to
+the assigned Forgejo issue. Read-only describes the investigated code, data and
+systems; it does not prohibit this evidence publication. Use the assigned
+repository-scoped credential. If its scope blocks publication, return the exact
+ready report, target issue/PR, source/tuple evidence and non-secret error. The
+Development Orchestrator publishes automatically, acting as Recorder or through
+an explicitly assigned recorder, and verifies the durable link. The same
+fallback covers authorized Builder PR/evidence and QA verdict publication.
+
+A credential failure does not invalidate the report or authorize broader
+credentials/settings. Distinguish prepared from actually published, preserve
+the author's verdict and provenance, and never make the Product Owner copy
+routine evidence. If the recorder is also blocked, publish/surface one exact
+blocker with the ready result and required human action; do not retry forever.
 
 This standing authority does not authorize starting work that is merely
 `Design` or `Ready`, broadening scope, accepting product/rule/UX/architecture
@@ -168,35 +210,76 @@ contract explicitly grants that recovery.
 
 Before any replacement:
 
-1. correlate the request across the task registry, parent task, recorded client
-   request ID, worktree, branch/PR activity, and completed returns;
-2. confirm no real child is running or able to materialize under the request;
-3. retire/cancel the prior request or task and release its lease;
-4. clean only a verified safe orphan; and
-5. submit one identical-contract, identical-SHA replacement within the bounded
-   retry allowance.
+1. Record original and replacement request IDs, resolved task IDs, provisional
+   worktree, exact contract/SHA, last evidence and attempt count.
+2. Check request-to-task binding, direct task access, parent, provisional
+   worktree identity/ownership, branch/PR activity and completed returns. A
+   reachable child must be supervised or harvested even when absent from lists.
+   If binding or direct-access checks are unavailable or conflict, existence
+   remains unknown and replacement is blocked.
+3. Confirm no real child is running or able to materialize; cancel/retire the
+   prior request through a supported operation and verify it cannot launch a
+   duplicate before releasing its lease. If this cannot be proved, escalate.
+4. Clean only a proven orphan belonging to that request and canonical repository,
+   with no live/pending owner, unharvested result, unique work or persistent data.
+   Never force-delete or reset ambiguous work. Record cleanup evidence.
+5. Submit one identical-contract, identical-SHA replacement at a time and repeat
+   the prelaunch identity/HEAD gate. Supervise and harvest the retained owner.
 
-The initial request plus at most two replacements is the default ceiling unless
-the task contract specifies less. If those attempts fail without meaningful
-progress, **STOP**. Publish one consolidated report containing every request,
-task ID, path, requested and observed SHA, failure stage, cleanup state, and the
-smallest action that could resume work. Obtain explicit confirmation before a
-further replacement or materially different recovery. Repeated observation of
-the same unchanged blocker produces no duplicate status messages.
+If delayed duplicates materialize, reconcile all IDs, ownership and results,
+retain exactly one owner, prevent concurrent execution, and record the others'
+terminal retirement before releasing their leases. Mere archive/list visibility
+is not proof that execution stopped. Do not discard unique or unharvested work.
+
+### Numeric anti-loop limits
+
+- Provisioning/execution recovery: one initial attempt plus at most **two**
+  automatic recovery/replacement attempts (**three total**), or a lower contract
+  limit. Stop earlier after **two consecutive substantially identical failures**
+  without a changed causal condition.
+- Builder–QA repair: after initial QA, normally at most **two repair cycles**.
+  One cycle is an in-scope repair by the existing Builder followed by fresh
+  independent QA of the new immutable head. The same root cause failing twice,
+  or exhaustion of the allowance, requires a stop. Another cycle requires
+  explicit control-plane confirmation; apparent progress does not waive the cap.
+- Counters belong to the durable workflow and never reset on rediscovery,
+  handoff, replacement, branch/PR continuation or a new QA task. Record the
+  failed gate/root cause and changed causal condition for each attempt. Carry
+  counts into successor exact-SHA ledger entries for the same workflow.
+
+At either stop, publish **STOP — REPEATED EXECUTION FAILURE — CONTROL-PLANE
+CONFIRMATION REQUIRED** with exact attempts, request/task IDs, worktrees,
+baseline/parent/head SHAs, failures, changed conditions (or none), cleanup/lease
+state, and the smallest recommended next action. No further attempt or
+materially different recovery proceeds without confirmation. Continue unrelated
+authorized lanes and keep this one explicitly blocked. Never interpret a
+pending/lost request as completion or issue repeated unchanged blocker reports.
 
 ## Human action, liveness, and completion visibility
 
 Every authorized workflow is classified as progressing, automatically
 recovering, waiting for a named dependency, waiting for explicit human action,
 completed awaiting harvest, or explicitly stopped/blocked. No unexplained
-indefinite `Active` state is permitted.
+indefinite `Active` state is permitted. The Development Orchestrator records a
+bounded observation interval and next inspection for each lane. If no material
+change appears by that time, inspect the known request, direct child and
+worktree, then classify it as running, waiting, completed-unharvested,
+lost/unregistered or blocked. Heartbeat supervision is a fallback and stops
+when no child remains active; it does not rediscover unrelated tasks.
 
 When login, OS/browser permission, credential interaction, or equivalent human
 action is required, the child records the need and notifies the Development
 Orchestrator immediately. The Orchestrator surfaces `USER ACTION REQUIRED` with
-the exact action and affected task; it does not silently wait for the user to
-inspect the child. Completed returns are harvested promptly even while the
-Orchestrator is processing another lane.
+the exact action, affected task and consequence of delay, using a direct
+notification when available. Keep the lane visibly waiting for human action.
+The child does not wait silently for the user to discover it. If the parent is
+occupied, it first relays the usable completion/PASS/FAIL/blocker promptly, then
+continues deeper processing. Completed work awaiting publication or QA does not
+consume an implementation Builder slot.
+
+Record one durable blocker per correlation key. Publish again only when state,
+evidence, owner, next action, attempt count or required authority materially
+changes. Unchanged observations do not create repeated issue/control-plane posts.
 
 ## Capacity, collisions, and exception paths
 
@@ -207,7 +290,8 @@ Orchestrator is processing another lane.
 - A missing product, rule, UX, privacy, or consequential architecture decision becomes `Needs decision`. State one concrete question and stop affected implementation.
 - A clear in-scope QA failure returns automatically to the same Builder/PR,
   followed by fresh independent QA. This loop continues while it makes
-  meaningful progress and remains in scope. An unrelated defect becomes a
+  meaningful progress and remains in scope **within the numeric limits above**.
+  An unrelated defect becomes a
   bounded backlog issue; low-impact non-blocking polish may become a durably
   recorded P3 follow-up.
 - For a production-only problem, ordinary agents may perform safe, read-only diagnosis when authorized. They do not mutate production, change Azure, merge `main`, or deploy; route the evidence to the external-maintainer release boundary.
@@ -231,7 +315,9 @@ Explicit exclusions: <not changed>
 Tests/checks: <commands and results; distinguish pre-existing/environment failures>
 Schema/migration/data impact: <none or exact impact and database-safety evidence>
 Risks/follow-ups: <none or durable links>
-State: READY FOR INDEPENDENT QA | BLOCKED — <one concrete blocker>
+State: READY FOR INDEPENDENT QA | READY FOR CONTROL-PLANE ACCEPTANCE (explicit QA exemption) | BLOCKED
+Publication: <confirmed durable link, or ready result and recorder fallback>
+Recovery/repair counters and remaining allowance: <exact counts>
 ```
 
 ## Independent QA return
@@ -253,7 +339,8 @@ Route each finding once, without broadening the active task:
 
 - unauthorized information disclosure: blocking privacy finding; return it to the same Builder/PR when in scope, otherwise record a durable blocking defect without broadening the active task;
 - clear, in-scope defect: same Builder task and PR;
-- unrelated defect: durable backlog issue;
+- unrelated defect: durable backlog issue; unrelated CI/environment failures go
+  to bounded operational repair, with the required check still blocking;
 - clear low-impact polish: P3 backlog;
 - material product or rule ambiguity: Architecture/control plane prepares the
   question and recommendation for Product Owner decision;

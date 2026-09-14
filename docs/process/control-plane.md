@@ -155,7 +155,9 @@ acceptance dimension. See [`task-contract.md`](./task-contract.md).
 `Ready` is complete preparation, not permission. The Product Owner advances a
 bounded task to `Authorized`; the Development Orchestrator moves it to `Active`
 only when a named lane owns live work. Builder completion moves to
-`Ready for Independent QA`; QA PASS moves to
+`Ready for Independent QA` when required; an explicit documentation-only QA
+exemption routes the complete durable result to acceptance without claiming QA.
+QA PASS moves to
 `Ready for Control-plane Acceptance`; `Integrated` follows required acceptance
 and development integration. QA FAIL returns to bounded repair or another
 appropriate pre-acceptance gate. Stale contracts and blockers are recorded as
@@ -173,7 +175,7 @@ areas are kept in the
 ## Visible execution and standing authority
 
 Visible-lane requirements, mandatory dispatch evidence, completion harvesting,
-direct Development-Orchestrator-to-QA-Orchestrator routing, standing execution
+direct Development-Orchestrator-to-independent-QA routing, standing execution
 authority, return gates, and the concurrency ceiling are defined in the
 [canonical operating model](./development-operating-model.md#visible-threads-and-dispatch-evidence).
 The detailed isolated execution and exact return formats remain in
@@ -185,31 +187,70 @@ thread ID is always recorded; hidden helpers do not satisfy a lane; the
 Development Orchestrator harvests every child result; and the Product Owner is
 not expected to relay QA prompts or notice completion manually.
 
+### Standing task-provisioning recovery authority
+
+Within a Product Owner-authorized lane, the single Development Orchestrator may
+identify lost/unregistered requests, verify child existence beyond list
+visibility, cancel/retire proven lost requests, safely clean verified orphan
+worktrees and submit one identical-contract/exact-SHA replacement at a time.
+The [detailed recovery procedure](./agent-execution.md#continuation-first-provisioning-and-worktree-leases)
+requires binding/direct-access evidence, verified prevention of late duplicate
+execution, lease release, and no unique work, unharvested result or persistent
+data in cleanup. Unknown ownership/existence or unavailable platform operations
+blocks replacement. Reconcile delayed duplicates and harvest the retained owner.
+
+The ceiling is one initial attempt plus two automatic recovery/replacement
+attempts (three total), stopping earlier at two consecutive substantially
+identical failures without a changed causal condition. Normal Builder–QA repair
+has at most two cycles after initial QA; the same root cause failing twice or an
+exhausted allowance requires **STOP — REPEATED EXECUTION FAILURE — CONTROL-PLANE
+CONFIRMATION REQUIRED**. No counter resets on handoff or rediscovery. Apply the
+[exact report and confirmation rules](./agent-execution.md#numeric-anti-loop-limits)
+before any further attempt. Escalate a concrete blocker; never silently stop or
+leave unexplained indefinite Active work.
+
+Recovery grants no scope/SHA change, code repair, credential/role change, global
+Forgejo/runner configuration, protection change, integration, product decision,
+or destructive persistent-data authority. Separately authorized work retains
+its own bounds. The Product Owner is not the routine evidence relay: authorized
+Investigator, Builder and QA publication uses the
+[automatic recorder fallback](./agent-execution.md#investigation-and-evidence-publication)
+when a worker's assigned credential cannot publish.
+
 ## When I approve a case, what happens next?
 
 Approval advances a complete, current `Ready` issue to `Authorized`. From there
 the normal path follows the
 [canonical workflow](./development-operating-model.md#canonical-workflow):
 
-`Authorized issue -> isolated Builder -> draft PR to dev -> Development Orchestrator -> direct QA Orchestrator handoff -> independent QA -> control-plane acceptance -> dev integration -> optional release PR -> external-maintainer production release`
+`Authorized issue -> isolated Builder -> draft PR to dev -> Development Orchestrator -> fresh separate exact-head independent QA -> control-plane acceptance -> dev integration -> optional release PR -> external-maintainer production release`
 
-| Stage                | Who acts and what is produced                                                                                                                                                                              | Message the product owner should expect                                                               | Product-owner action                                                                  |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Authorize            | Architecture/control plane prepares a complete prompt; the Product Owner decides and copies authorization for a self-contained issue with exact baseline, scope, acceptance, hotspots, and Git authority.  | The issue is `Authorized`; the Development Orchestrator may validate gates and assign a Builder lane. | Decide priority and any product/rule/UX or consequential architecture questions.      |
-| Build                | A visible isolated Builder verifies live `origin/dev`, implements only the issue, verifies, and publishes a draft PR to `dev` with an exact-head handoff. The Development Orchestrator harvests it.        | **Ready for Independent QA** or a concrete control-plane return.                                      | None unless a decision or coordination blocker is reported.                           |
-| Independent QA       | The Development Orchestrator hands the immutable contract directly to the QA Orchestrator, which dispatches a separate visible QA task, harvests it, and records `PASS`, `PASS WITH FOLLOW-UP`, or `FAIL`. | **Repair required** or **Ready for Control-plane Acceptance**.                                        | Review acceptance evidence and decide genuinely consequential follow-ups.             |
-| Accept and integrate | Architecture/control plane evaluates the durable result; the Product Owner accepts or rejects it and decides integration; an authorized integration actor merges the accepted PR into shared `dev`.        | **Integrated to dev**, including the resulting exact `dev` SHA.                                       | Accept/reject and choose integration order.                                           |
-| Optional release     | Under separate authority, a narrow `dev -> main` release PR is prepared after release readiness is chosen.                                                                                                 | **Narrow release PR ready for external maintainer**.                                                  | Decide product release readiness; do not perform production mechanics by implication. |
-| Production boundary  | The external maintainer performs production release/deployment support and records verification.                                                                                                           | **Production deployment verified**, when applicable.                                                  | Confirm product outcome; ordinary agents remain read-only at this boundary.           |
+| Stage                | Who acts and what is produced                                                                                                                                                                             | Message the product owner should expect                                                               | Product-owner action                                                                                                  |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Authorize            | Architecture/control plane prepares a complete prompt; the Product Owner decides and copies authorization for a self-contained issue with exact baseline, scope, acceptance, hotspots, and Git authority. | The issue is `Authorized`; the Development Orchestrator may validate gates and assign a Builder lane. | Decide priority and any product/rule/UX or consequential architecture questions.                                      |
+| Build                | A visible isolated Builder verifies live `origin/dev`, implements only the issue, verifies, and publishes a draft PR to `dev` with an exact-head handoff. The Development Orchestrator harvests it.       | **Ready for Independent QA** or a concrete control-plane return.                                      | None unless a decision or coordination blocker is reported.                                                           |
+| Independent QA       | The Development Orchestrator directly dispatches a fresh separate visible QA task at the immutable head, harvests it, and publishes its verdict without overriding FAIL.                                  | **Repair required** or **Ready for Control-plane Acceptance**.                                        | Review acceptance evidence and decide genuinely consequential follow-ups.                                             |
+| Accept and integrate | Architecture/control plane evaluates the durable result; the Product Owner accepts or rejects it and decides integration; an authorized integration actor merges the accepted PR into shared `dev`.       | **Integrated to dev**, including the resulting exact `dev` SHA.                                       | Accept/reject and choose integration order, or rely on an explicit conditional integration grant with every gate met. |
+| Optional release     | Under separate authority, a narrow `dev -> main` release PR is prepared after release readiness is chosen.                                                                                                | **Narrow release PR ready for external maintainer**.                                                  | Decide product release readiness; do not perform production mechanics by implication.                                 |
+| Production boundary  | The external maintainer performs production release/deployment support and records verification.                                                                                                          | **Production deployment verified**, when applicable.                                                  | Confirm product outcome; ordinary agents remain read-only at this boundary.                                           |
 
 Exception paths stay narrow:
 
 - Missing product/rule/UX/privacy or consequential architecture decision: the Builder or QA posts **Needs decision** with one concrete question and stops affected work.
 - QA `FAIL`: the Development Orchestrator routes an in-scope bounded repair to
   the same Builder/PR, harvests the new exact head, and sends a new immutable
-  handoff to the QA Orchestrator for fresh independent QA.
+  handoff directly to fresh independent QA within the numeric repair limits.
 - Dependency or hotspot collision: stop and coordinate ownership/merge order; do not widen scope.
 - Production-only problem: ordinary agents may diagnose safely when authorized, but do not mutate production, merge `main`, change Azure, or deploy.
+
+The [result-routing table](./development-operating-model.md#result-classification-and-routing)
+distinguishes scoped defects, unrelated CI/operational failures, decision
+findings, incomplete evidence and repeated execution failure. The Orchestrator
+cannot override QA FAIL. Conditional integration follows the
+[baseline gates](./development-baseline.md#conditional-integration). The approved
+[path-aware gate destination](./development-baseline.md#approved-path-aware-dev-gate--pending-implementation-and-transition)
+remains pending separate implementation and protected transition; no optional-all
+checks, spoofed success or bypass is authorized.
 
 The Forgejo issue, when applicable, and PR hold the durable status, exact SHAs, evidence, decisions, and follow-ups. Chat may notify the product owner, but chat-only context never substitutes for those records.
 
@@ -222,10 +263,10 @@ The Forgejo issue, when applicable, and PR hold the durable status, exact SHAs, 
 5. Create one isolated, short-lived task branch/worktree.
 6. Implement only the coherent slice; record newly discovered non-blocking work separately.
 7. Run `pnpm format:check:changed` against the task's exact accepted parent. Changed files must pass Prettier and `git diff --check`; inherited untouched formatting debt does not block the task.
-8. Open a development PR only when the target and push/PR authority are confirmed; move Builder completion to `Ready for Independent QA` and route it through the Development Orchestrator.
+8. Open a development PR under the confirmed target and push/PR authority; route Builder completion through the Development Orchestrator to required independent QA, or directly to control-plane acceptance under an explicit documentation-only QA exemption.
 9. Review code, decisions, tests, compatibility, hotspot coordination, and user-visible evidence.
 10. After required QA passes, move the exact result to `Ready for Control-plane Acceptance`; only the Product Owner accepts product behavior.
-11. Merge an accepted ordinary task PR into `dev` only after the Product Owner's development-integration decision. Release preparation from `dev` to `main` is a separate production-boundary workflow.
+11. Merge an accepted ordinary task PR into `dev` only under the Product Owner's development-integration decision or explicit conditional integration contract with every gate satisfied. Release preparation from `dev` to `main` is a separate production-boundary workflow.
 
 One coherent behavior or architecture slice is the governing PR size rule. There is no rigid changed-file cap. An unusually large, high-risk, or cross-area PR must include an integration plan describing why it cannot be sliced safely, contract/merge order, hotspot ownership, review stages, verification, compatibility, rollback, and follow-up modularization.
 

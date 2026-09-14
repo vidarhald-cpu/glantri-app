@@ -23,10 +23,10 @@ authority and baseline policy: `docs/process/control-plane.md` and
 Before non-trivial work:
 
 1. Read this file and the exact additional documents named in the task contract.
-2. Confirm the current Forgejo issue, when applicable, has reached `Authorized` through the canonical lifecycle and its durable task contract remains complete and current. `Ready` alone is not permission to start.
+2. Confirm the current Forgejo issue, when applicable, has reached `Authorized` through the canonical lifecycle and its body is the complete, current executable contract. Reconcile stale bodies before dispatch; comments cannot silently override them. `Ready` alone is not permission to start.
 3. Confirm outcome, scope, ownership, accepted baseline branch/SHA, reserved hotspots, acceptance examples, verification, and Git authority.
 4. Fetch and resolve the live `origin/dev` SHA. Stop for contract refresh if it differs from the accepted baseline; do not silently choose a new baseline.
-5. Inspect the current source and tests for the affected area; do not rely on old branches or chat history.
+5. Verify canonical provisioning source, origin/common Git directory and requested versus observed exact `HEAD`; use the authorized continuation parent when specified. QA is detached with no branch/upstream. Never infer from `main`, remote HEAD or defaults. Inspect current task sources/tests, not old branches or chat history.
 6. Stop if the task requires an unapproved product/rule decision, an unknown baseline, or uncoordinated hotspot edits.
 
 Keep mandatory startup reading controlled and task-specific. Area documents are required only when the task touches that area. Decision records, audits, and historical reports are read on demand. Task contracts must name exact paths rather than say `read all architecture docs`.
@@ -65,19 +65,37 @@ Useful references:
   publication, evidence, and automatic in-scope repair continuations. It does
   not gain merge, product-decision, `main`, release, or production authority.
 - Independent QA is always a fresh separate visible task at the exact immutable
-  candidate head. The Development Orchestrator dispatches and harvests it
-  directly. QA reviews and reports; it never repairs Builder-owned code.
+  candidate head when required by the contract. An explicit documentation-only
+  exemption routes complete evidence to control-plane acceptance, without a QA
+  claim. The Development Orchestrator dispatches and harvests QA directly. QA
+  reviews/reports; it never repairs, pushes code, merges or makes product decisions.
 - Read-only investigation and bounded operational diagnosis may be delegated to
-  Investigator/Ops tasks. They do not silently become implementation.
+  Investigator/Ops tasks. They do not silently become implementation. Authorized
+  read-only investigation includes assigned-issue evidence publication; if a
+  worker cannot publish with its assigned credential, the Development
+  Orchestrator/Recorder automatically publishes the exact ready result.
 - If a worker needs login, OS/browser permission, credential interaction, or
   another human action, record it and surface `USER ACTION REQUIRED` promptly.
 - Integration may proceed automatically only when the task contract explicitly
   pre-authorizes it and the exact-head QA, scope, dependency, topology, and
   protected-check conditions all pass. Otherwise stop at the stated gate.
-- After the initial attempt and the contract's bounded recovery attempts fail
-  without meaningful progress, **STOP**. Publish one consolidated report of
-  attempts and evidence, keep the task safely non-mutating, and request explicit
-  confirmation before any further replacement or materially different action.
+- Permit one initial attempt plus at most two automatic recovery/replacement
+  attempts (three total); stop earlier after two substantially identical
+  consecutive failures without a changed causal condition. Normally allow at
+  most two Builder–QA repair cycles after initial QA; the same root cause twice
+  or exhausted allowance requires **STOP — REPEATED EXECUTION FAILURE —
+  CONTROL-PLANE CONFIRMATION REQUIRED**. Counters do not reset on handoff.
+  Publish exact attempts/IDs/SHAs/failures, changed conditions and recommendation;
+  no further attempt without confirmation. Follow `docs/process/agent-execution.md`.
+- Validate returns against the ledger key; quarantine routing mismatches.
+  Reconcile delayed duplicates to one retained owner and terminally retire the
+  others before releasing leases. Unknown child existence blocks replacement.
+- The coordinator never overrides QA FAIL: scoped defects go to the existing
+  Builder, unrelated CI/environment failures to bounded Ops repair, and product,
+  rule, UX, consequential architecture or permission decisions to control plane.
+- The approved path-aware dev gate remains pending separate implementation and
+  protected transition. Current protected checks remain binding; no bypass or
+  fabricated success. See `docs/process/development-baseline.md`.
 
 ## Rule and architecture discipline
 

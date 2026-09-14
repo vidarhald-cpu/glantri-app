@@ -17,7 +17,10 @@ for fetching the live branch, resolving the exact SHA, and reading the durable
 issue, PR, and QA record.
 
 At authorization, the Forgejo issue body is the current executable task
-contract. Comments are evidence/history. Older recovery contracts are
+contract. Before each dispatch, synchronize that body with current
+authorization; a stale
+or contradictory body blocks launch even if a newer comment grants authority.
+Comments are evidence/history. Older recovery contracts are
 provenance only once superseded and must point readers to the current issue.
 
 ## Repository, project, and operating-lane map
@@ -40,9 +43,12 @@ for each immutable candidate.
 
 All implementation and QA provisioning originates from the canonical Forgejo
 project rooted at `/Users/vidarhald/dev/glantri-app-forgejo`. Every contract
-supplies an exact SHA. QA uses a detached exact-head worktree with no upstream
-tracking. Neither a default branch nor `origin/main` may replace the supplied
-SHA. The historical project and clone never provision current work.
+supplies an exact SHA. QA uses a detached exact-head worktree with no local
+branch or upstream
+tracking. Apply the [prelaunch identity/HEAD gate](./development-baseline.md#exact-sha-provisioning-gate)
+to the canonical clone or its derived isolated worktree. Neither a default
+branch nor `origin/main` may replace the supplied SHA. The historical project
+and clone never provision current work.
 
 The named host and paths describe the current environment, not permanent role
 architecture. A later environment move updates this map without changing role
@@ -139,7 +145,11 @@ Every operational issue carries exactly one of these lifecycle statuses:
 
 Issue existence is not authorization. `Ready` is a preparation state, not
 permission. `Authorized` records approved execution. `Active` requires a named
-owner. Builder completion advances to `Ready for Independent QA`. QA PASS
+owner. Builder completion advances to `Ready for Independent QA` when required.
+An
+explicit contract exemption for documentation-only work routes the complete
+durable result directly to `Ready for Control-plane Acceptance`, without
+claiming QA PASS. QA PASS
 advances to `Ready for Control-plane Acceptance`. QA FAIL never advances to
 acceptance: an in-scope bounded repair returns to `Active`, produces a new
 immutable head, and receives fresh independent QA; a genuine decision or scope
@@ -180,7 +190,7 @@ not satisfy a required lane.
 For every visible lane, the Development Orchestrator maintains one durable
 execution-ledger record keyed by `issue + role + mode + exact SHA`, containing:
 
-- project;
+- project, provisioning root, verified origin and common Git directory;
 - role;
 - applicable Forgejo issue;
 - parent task and provisioning request ID;
@@ -188,12 +198,14 @@ execution-ledger record keyed by `issue + role + mode + exact SHA`, containing:
 - a separate direct link whenever the client exposes one;
 - leased worktree and lease state;
 - applicable branch;
-- requested SHA and independently observed `HEAD`;
+- accepted baseline, requested SHA and independently observed `HEAD`;
+- recovery/replacement and repair-cycle counts;
 - liveness state, owner, last meaningful progress, and next action.
 
 The thread ID is required once the task materializes. A request without a task
 ID remains pending, not proven lost. A direct link never substitutes for the
-task ID.
+task ID. Validate all returns against the correlation key and recorded lease;
+quarantine another issue/role/mode/SHA as a routing mismatch.
 
 ### Continuation-first and worktree leases
 
@@ -204,15 +216,27 @@ the request/task from creation until the ledger records completion,
 cancellation, retirement, or confirmed loss. No other actor removes, reuses, or
 recreates a leased worktree.
 
-Before replacement, correlate the request with the task registry, parent task,
-worktree, Forgejo branch/PR activity, and any completed return. Retire the prior
-owner first. At most the contract's bounded recovery attempts may repeat the
-identical contract and SHA. If the initial attempt and those repetitions fail
-without meaningful progress, **STOP**: publish one consolidated failure report,
-state what remains safe and unchanged, and request explicit confirmation before
-another replacement or a materially different action.
+The [recovery procedure](./agent-execution.md#continuation-first-provisioning-and-worktree-leases)
+owns binding/direct-access checks, proven-orphan cleanup and verified terminal
+retirement. Unknown child existence blocks replacement. Reconcile delayed
+duplicates, retain one owner, harvest unique results and terminally retire the
+others before releasing leases. Manual visible fallback requires explicit
+authorization; hidden substitutes never fulfill a required lane.
 
-QA child coordination uses `Running`, `Blocked`,
+One initial attempt plus at most **two automatic recovery/replacement attempts**
+(**three total**) is allowed, with one live attempt at a time. Stop earlier after
+**two consecutive substantially identical failures without a changed causal
+condition**. Normally allow at most **two Builder–QA repair cycles** after initial
+QA; the same root cause failing twice or exhausted allowance requires **STOP —
+REPEATED EXECUTION FAILURE — CONTROL-PLANE CONFIRMATION REQUIRED**. Counters do
+not reset on handoff or rediscovery. Publish exact attempts/IDs/SHAs/failures,
+changed conditions, lease/cleanup evidence and a recommendation. No further
+attempt or materially different recovery without confirmation. The detailed
+[counting and stop rules](./agent-execution.md#numeric-anti-loop-limits) apply to
+all lanes; a contract may set lower limits.
+
+QA child coordination uses `Running`, `Recovering`, `Waiting-dependency`,
+`Waiting-human-action`, `Blocked`,
 `Completed-unharvested`, `Completed-harvested`, `Failed`, and `Stalled` as
 defined in `qa-execution.md`. `Running` begins only after a visible child passes
 its entry gate. These are not additional Forgejo issue lifecycle statuses.
@@ -237,13 +261,34 @@ On FAIL, the loop is:
 
 The Development Orchestrator may repeat in-scope Builder repair and fresh QA
 without new approval while the existing task contract remains sufficient. It
-stops for a genuine product, rule, UX, architecture, priority, scope,
-dependency, or hotspot decision, or after repeated failures cease producing
-meaningful progress.
+stops for a product, rule, UX, consequential architecture, priority, scope,
+dependency or hotspot decision, and obeys the numeric limits above regardless
+of apparent progress. It cannot override QA FAIL.
 Direct-child narrow repairs may carry forward only demonstrably unaffected
 prior PASS evidence. Schema/migration, shared authority/projection/API/domain,
 concurrency/transaction, cross-cutting toolchain/export, major Combat/Scenario,
 broad-scope, or unclear/rebased topology changes require broader QA.
+
+### Result classification and routing
+
+| Result                                                                           | Required action by the Development Orchestrator                                                                                                       |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| QA PASS                                                                          | Publish exact-head evidence and route to acceptance, or conditional integration only when every explicit condition passes.                            |
+| QA PASS WITH FOLLOW-UP                                                           | Record non-blocking findings and why integration is safe; follow the contract's acceptance gate. Never relabel a blocking finding to force progress.  |
+| In-scope QA FAIL                                                                 | Return to the existing Builder/PR for bounded repair, then fresh exact-head QA within the numeric limits. Never override the verdict.                 |
+| Unrelated CI, environment or tooling failure                                     | Record evidence and route to bounded operational repair; keep unmet protected checks blocking. Do not reopen unrelated product scope or claim a pass. |
+| Product/rule/UX/consequential architecture, permission, source or scope decision | Stop affected work and return the exact question and recommendation to control plane/Product Owner.                                                   |
+| Entry/tuple/evidence mismatch or missing human action                            | Record BLOCKED or USER ACTION REQUIRED with expected/observed facts and the resume event; incomplete evidence is not FAIL or PASS certification.      |
+| Usable investigation or explicitly QA-exempt documentation                       | Publish the complete result and route to control-plane acceptance under its contract; do not manufacture QA or acceptance.                            |
+| Repeated execution failure                                                       | Apply the numeric STOP/report/confirmation rule before any further attempt.                                                                           |
+
+Authorized read-only investigation includes publishing evidence to its assigned
+issue. If a worker's credential scope blocks authorized PR/report/verdict
+publication, the Development Orchestrator acts as Recorder (or assigns an
+explicit recorder), publishes the exact ready result automatically and verifies
+the durable link. The report remains valid; prepared is not published. This is
+a recording function, not a permanent QA coordination role. See
+[publication fallback](./agent-execution.md#investigation-and-evidence-publication).
 
 ## Standing execution authority and return gates
 
@@ -266,12 +311,17 @@ product scope by implication.
 Conditional integration is allowed only when the issue explicitly
 pre-authorizes it and the exact QA-reviewed head, scope, dependencies,
 topology, required checks, and merge target all satisfy that condition. No
-general standing merge authority is created.
+general standing merge authority is created. The
+[approved path-aware gate](./development-baseline.md#approved-path-aware-dev-gate--pending-implementation-and-transition)
+is pending separate implementation and protected transition; this policy does
+not deploy it or waive currently applicable protected checks.
 
 This standing authority never weakens Product Owner acceptance. Return for a
 material scope expansion; new authorization; product, UX, Glantri-rule,
 consequential architecture, or priority decision; acceptance or integration
 gate; unexpected hotspot conflict; destructive persistent/recovery-data action;
+new permissions, global credential/runner/Forgejo infrastructure changes,
+protection changes beyond the separately approved gate transition;
 the `main`/Azure/production boundary; or unresolved behavior.
 
 Persistent Forgejo authentication follows the fail-closed contract in
@@ -299,6 +349,11 @@ Every authorized workflow is visibly progressing, recovering, waiting for a
 named dependency, waiting for explicit human action, completed awaiting
 harvest, or explicitly stopped/blocked. Unchanged blockers are deduplicated;
 completion is harvested promptly even while other orchestration work continues.
+The Orchestrator records a bounded observation interval and next inspection,
+relays usable completion before deeper processing, and releases completed work
+from implementation capacity while publication or QA is pending. Detailed
+[liveness rules](./agent-execution.md#human-action-liveness-and-completion-visibility)
+own inspection, direct notifications and deduplication.
 
 ## Parallelism and ownership
 

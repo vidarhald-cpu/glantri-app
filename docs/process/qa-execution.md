@@ -27,8 +27,10 @@ baseline, or testing regression matrix. They remain authoritative on-demand
 references when the entry check, task risk, or a named source requires them.
 
 The Product Owner retains product, rule, UX, consequential architecture,
-acceptance, and integration authority. QA never repairs Builder-owned work,
-merges, deploys, touches `main`, or treats credentials as authority.
+acceptance, and integration authority. QA is review-only: it never repairs
+Builder-owned work, commits/pushes code, merges, deploys, touches `main`, or
+makes product decisions. Authorized verdict/evidence publication is separate
+from code mutation; credentials never expand that authority.
 
 ## Direct routing gate
 
@@ -39,7 +41,7 @@ Before creating the fresh independent-QA task, confirm only:
 - the issue is durably authorized for QA and at `Ready for Independent QA`;
 - an immutable candidate head is supplied;
 - REPAIR QA includes a prior durable FAIL;
-- the applicable handoff tuple below is complete; and
+- the applicable handoff tuple below is complete and the issue body is current; and
 - no other active QA owner exists for the same candidate.
 
 This is a shallow dispatch gate. The Development Orchestrator does not repeat
@@ -55,6 +57,15 @@ The Development Orchestrator then:
 4. harvests the completed result promptly;
 5. publishes the durable verdict; and
 6. routes repair, acceptance, or blocker handling.
+
+Provision from the canonical `Glantri app — Forgejo` project or its derived
+isolated worktree, never the historical recovery checkout. Verify source,
+origin/common Git directory and requested versus observed `HEAD` before QA
+starts: detached at the exact candidate, no local branch or upstream. Record the
+accepted baseline separately; never infer either SHA from `main`, `origin/main`,
+remote HEAD or a default branch. A queued request is pending, not a passed gate.
+This mechanical provisioning check does not replace the worker's independent
+scope/topology/delta verification.
 
 There is no permanent QA Orchestrator. Independence comes from a fresh worker,
 separate visible task, separate clean exact-head worktree, and review-only
@@ -143,7 +154,10 @@ Required process examples:
 
 ## Independent worker entry check
 
-In a fresh QA worktree, fetch the authorized refs and independently resolve:
+In a fresh QA worktree, independently confirm canonical origin/common Git
+directory, detached `HEAD` at the requested exact candidate, and no local branch
+or upstream. Fetch authorized refs without attaching to a moving branch, then
+independently resolve:
 
 - PR/ref and actual candidate head;
 - accepted baseline and merge base;
@@ -212,6 +226,9 @@ Track the visible child separately from the exclusive Forgejo issue lifecycle:
 | Child state             | Meaning and next action                                                                                       |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `Running`               | Entry check passed; QA is active.                                                                             |
+| `Recovering`            | Bounded provisioning/handoff recovery; record owner and attempt count.                                        |
+| `Waiting-dependency`    | Named dependency, owner and resume event.                                                                     |
+| `Waiting-human-action`  | Login, permission, credential or equivalent action surfaced as USER ACTION REQUIRED.                          |
 | `Blocked`               | A named prerequisite or tuple mismatch stopped work; record the resume event.                                 |
 | `Completed-unharvested` | The child ended with a usable return that the Development Orchestrator has not yet reconciled.                |
 | `Completed-harvested`   | Exact result, evidence, and Forgejo state were reconciled and returned.                                       |
@@ -221,6 +238,14 @@ Track the visible child separately from the exclusive Forgejo issue lifecycle:
 Supervision follows the execution ledger. It inspects the known child, harvests
 completion, names blockers, and stops when no child is active. It does not
 globally rediscover conversations every cycle or create speculative duplicates.
+Validate every return against `issue + role + mode + exact SHA` and the recorded
+request/task/lease before publication. Quarantine mismatched responses.
+Apply the [liveness rules](./agent-execution.md#human-action-liveness-and-completion-visibility):
+record a bounded inspection interval, surface human action immediately, relay
+usable completion promptly even while occupied, and deduplicate unchanged
+blockers. If the assigned credential blocks authorized verdict publication,
+return the exact report and target; the Development Orchestrator/Recorder
+publishes it automatically without changing the verdict or credentials.
 
 ## QA worktree lease and recovery
 
@@ -235,13 +260,23 @@ explicitly grants that recovery.
 Delayed registration, missing task-list visibility, or slow output is not proof
 of loss. Before replacement, correlate the provisioning request, task registry,
 parent, worktree, PR activity, and completed returns; retire the prior request
-and release its lease first. Use only the bounded identical-contract and
+and release its lease first. If binding/direct access or terminal cancellation
+cannot be verified, replacement is blocked. A proven orphan must contain no
+unique/unharvested work or persistent data. Reconcile delayed duplicates,
+retain one owner and terminally retire the others before releasing leases.
+Use only the bounded identical-contract and
 identical-SHA recovery attempts allowed by `agent-execution.md`.
 
-After the initial attempt and allowed replacements fail without meaningful
-progress, **STOP**. Publish one consolidated blocker with all request/task/path/
-SHA evidence and request explicit confirmation before any further QA task or
-different recovery. Do not repeat an unchanged blocker.
+One initial attempt plus at most **two** automatic recovery/replacement attempts
+(**three total**) is the ceiling; stop earlier after **two consecutive
+substantially identical failures without changed causal condition**. Normal
+Builder–QA repair allows at most **two cycles** after initial QA, with a stop
+when the same root cause fails twice or the allowance is exhausted. Counters
+never reset through new tasks or handoffs. Publish **STOP — REPEATED EXECUTION
+FAILURE — CONTROL-PLANE CONFIRMATION REQUIRED**, exact attempts/IDs/SHAs/failures,
+changed conditions, cleanup/lease evidence and a recommendation. No further
+attempt or different recovery without confirmation. See the detailed
+[numeric limits](./agent-execution.md#numeric-anti-loop-limits).
 
 If QA needs login, OS/browser permission, credential interaction, or another
 human action, it records that immediately and notifies the Development
@@ -291,6 +326,8 @@ Carried-forward prior PASS evidence and rationale, or none:
 High-risk escalation trigger and expanded checks, or none:
 Privacy/security, browser, and database applicability/evidence:
 Findings and durable links:
+Recovery/repair counters and remaining allowance:
+Publication link or exact ready report/recorder fallback:
 Timings while temporary capture is active:
 Cleanup:
 Next state or exact resume event:

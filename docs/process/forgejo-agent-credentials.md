@@ -3,7 +3,8 @@
 ## Purpose and authority
 
 This document owns the local credential and repository-permission mechanics for
-the Development Orchestrator, Builder, QA Worker, and QA Orchestrator lanes. The
+the single Development Orchestrator, Builder, independent QA and assigned
+Investigator/Ops evidence roles. The
 [development operating model](./development-operating-model.md) continues to
 own role authority, lifecycle, dispatch, integration, and release boundaries.
 Credentials never authorize a task, acceptance, integration, release, `main`,
@@ -19,11 +20,11 @@ Forgejo 15.0.7 has local user accounts rather than a separate service-account
 object. Glantri therefore uses three restricted, non-admin local users whose
 random interactive passwords are not used by routine automation:
 
-| Identity               | Repository role | Repository-specific token scopes  | Operational boundary                                                                                                                                                                                                                        |
-| ---------------------- | --------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `glantri-orchestrator` | Write           | `write:repository`, `write:issue` | Read/fetch; issue, comment, label, and PR operations; accepted `dev` integration through the protected-branch merge allowlist. No direct `dev`/`main` push, no `main` merge, no repository or instance administration.                      |
-| `glantri-builder`      | Write           | `write:repository`                | Read/fetch and authorized short-lived task-branch push. No issue lifecycle scope, direct `dev`/`main` push, or protected-branch merge.                                                                                                      |
-| `glantri-qa`           | Read            | `read:repository`, `write:issue`  | QA Worker read/fetch with no code push. The QA Orchestrator may post durable issue/PR evidence through the same credential; the Development Orchestrator remains responsible for lifecycle labels that require higher repository authority. |
+| Identity               | Repository role | Repository-specific token scopes  | Operational boundary                                                                                                                                                                                                                                                                       |
+| ---------------------- | --------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `glantri-orchestrator` | Write           | `write:repository`, `write:issue` | Read/fetch; issue, comment, label, and PR operations; accepted `dev` integration through the protected-branch merge allowlist. No direct `dev`/`main` push, no `main` merge, no repository or instance administration.                                                                     |
+| `glantri-builder`      | Write           | `write:repository`                | Read/fetch and authorized short-lived task-branch push. No issue lifecycle scope, direct `dev`/`main` push, or protected-branch merge.                                                                                                                                                     |
+| `glantri-qa`           | Read            | `read:repository`, `write:issue`  | QA Worker read/fetch with no code push. Authorized independent QA or an explicitly assigned evidence publisher may post durable issue/PR evidence through this credential; the Development Orchestrator remains responsible for lifecycle labels that require higher repository authority. |
 
 All three users are restricted, have limited profile visibility, cannot create
 repositories or organizations, cannot import local repositories or manage Git
@@ -32,14 +33,18 @@ hooks, and are not instance administrators. Tokens are limited to
 standard read-only behavior for repository-specific tokens.
 
 This three-identity model keeps the QA Worker code-read-only while using the
-token's independent issue scope for evidence comments. A fourth QA control
-identity is unnecessary unless a later Forgejo limitation requires QA to
-perform a lifecycle mutation that cannot remain with the Development
-Orchestrator.
+token's independent issue scope for evidence comments. There is no permanent QA
+coordination role and no new account implied by the
+Recorder function. Lifecycle mutations remain with the Development Orchestrator.
+Role-prose reconciliation changes no account, token scope, repository permission,
+Keychain handle or protected-branch setting.
 
 ## Branch enforcement
 
-The local Forgejo protected-branch rules are:
+The recorded local Forgejo protected-branch configuration is below. Verify live
+state for integration. The [approved path-aware destination](./development-baseline.md#approved-path-aware-dev-gate--pending-implementation-and-transition)
+is pending separate implementation/transition; this documentation does not
+change protection or declare that destination deployed:
 
 | Branch | Direct push           | Merge                                      | Additional enforcement                                                                                                                                                                                                  |
 | ------ | --------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -121,12 +126,22 @@ to permit the operation. Recovery Git operations use the same pattern with
 `credential.username=recovery-admin`, but only under separate break-glass
 authority; no routine task may select it.
 
-For issue or PR API calls, the Orchestrator lanes use a local credential bridge
+For authorized issue or PR API calls, the assigned publisher uses a local
+credential bridge
 that reads the selected Keychain entry into process memory, supplies
 authentication to the loopback request through standard input rather than a
 secret-bearing argument, and unsets the value immediately. The bridge must not
 echo, trace, persist, or include the credential in an error report. API output
 must be reduced to the non-secret fields required as evidence.
+
+A Builder's full bounded PR/evidence publication authority does not imply that
+`glantri-builder` has issue API scope. Try only the assigned authorized identity;
+if it cannot publish, return the exact ready content, target and non-secret
+failure. The Development Orchestrator/Recorder publishes automatically using an
+already authorized publication role and verifies the durable link. The same
+rule covers authorized read-only investigation and QA verdicts. Do not broaden
+scopes, select recovery administration or modify credentials to avoid this
+fallback; a valid report remains valid even if its worker could not post it.
 
 Visible tasks share one macOS login session and therefore do not provide a
 cryptographic Keychain boundary between tasks running as the same macOS user.
@@ -181,7 +196,7 @@ Provisioning is incomplete until separate visible tasks prove:
 - Development Orchestrator: issue and PR reads and one harmless issue comment
   succeed through the persistent credential; the `dev` merge allowlist names
   only `glantri-orchestrator`; `main` has no merge path.
-- QA Orchestrator: a durable evidence comment succeeds through `glantri-qa`
+- Authorized QA/evidence publisher: a durable evidence comment succeeds through `glantri-qa`
   while the same credential remains unable to push code.
 
 Temporary task tokens are an exceptional fallback when a persistent handle is
@@ -219,7 +234,7 @@ and its own Keychain. If an unattended secure store cannot be made available,
 use a short-lived scoped token as the documented fallback rather than creating
 a plaintext credential file.
 
-## Current verified configuration
+## Recorded verification snapshot
 
 Verified for Forgejo issue #41 on 2026-09-06 against
 `dev@171756bb64ccf83d2e35ffa8400d8206ab24b1d5`:
@@ -236,10 +251,11 @@ Verified for Forgejo issue #41 on 2026-09-06 against
 - token values were piped directly into Keychain and were not recorded in
   repository, task output, Forgejo evidence, or Git history.
 
-This Forgejo instance currently has no Actions runner. Required `dev` status
-contexts therefore remain waiting after a push and block integration until a
-separately authorized runner is available or the control plane explicitly
-changes the gate. Issue #41 does not authorize weakening that protection.
+At that #41 verification, the instance had no Actions runner and required `dev`
+contexts remained waiting. That is dated provenance, not a claim about current
+runner availability. Verify live checks/runner evidence when needed; #41 never
+authorized weakening protection, and #161's policy destination is not proof of
+an implemented gate or completed transition.
 
 Live Forgejo issue, PR, user, token-metadata, and branch-protection state remains
 operational truth. This document is the standing process contract, not a
