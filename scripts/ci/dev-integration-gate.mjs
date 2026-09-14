@@ -64,8 +64,8 @@ export function classify(changes, event, target) {
   }
   const required = ["changes", "docs"];
   if (tooling) required.push("tooling");
-  if (runtime) required.push("ci");
-  if (runtime && event === "pull_request") required.push("docker-test");
+  if (runtime) required.push("application-ci");
+  if (runtime && event === "pull_request") required.push("application-docker-test");
   return { docs, tooling, runtime, required, reasons };
 }
 

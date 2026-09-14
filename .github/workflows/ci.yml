@@ -73,7 +73,7 @@ jobs:
         run: node --test scripts/ci/dev-integration-gate*.test.mjs
 
   dev-integration-gate:
-    needs: [changes, docs, tooling, ci, docker-test]
+    needs: [changes, docs, tooling, application-ci, application-docker-test]
     if: always()
     runs-on: glantri-private-ci
     timeout-minutes: 5
@@ -89,7 +89,7 @@ jobs:
           test "$(node --version)" = "v22.23.2"
           node scripts/ci/dev-integration-gate.mjs aggregate
 
-  ci:
+  application-ci:
     needs: changes
     if: needs.changes.outputs.runtime == 'true'
     runs-on: glantri-private-ci
@@ -132,7 +132,7 @@ jobs:
       - name: File-size report
         run: node scripts/checkFileSize.mjs
 
-  docker-test:
+  application-docker-test:
     runs-on: glantri-private-ci
     timeout-minutes: 60
     needs: changes
@@ -323,3 +323,27 @@ jobs:
           docker image rm \
             "glantri-api-test-$CI_RESOURCE_SUFFIX" \
             "glantri-web-test-$CI_RESOURCE_SUFFIX" 2>/dev/null || true
+
+  # Keep the currently protected names fail-closed throughout the transition.
+  # These are real aggregate-result checks, never successful skipped app jobs.
+  ci:
+    needs: dev-integration-gate
+    if: always()
+    runs-on: glantri-private-ci
+    timeout-minutes: 5
+    steps:
+      - name: Require the path-aware integration decision
+        env:
+          GATE_RESULT: ${{ needs.dev-integration-gate.result }}
+        run: test "$GATE_RESULT" = success
+
+  docker-test:
+    needs: dev-integration-gate
+    if: always() && forgejo.event_name == 'pull_request'
+    runs-on: glantri-private-ci
+    timeout-minutes: 5
+    steps:
+      - name: Require the path-aware integration decision
+        env:
+          GATE_RESULT: ${{ needs.dev-integration-gate.result }}
+        run: test "$GATE_RESULT" = success

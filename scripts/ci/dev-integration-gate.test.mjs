@@ -55,7 +55,7 @@ function fixture(t) {
 
 function successful(plan) {
   return Object.fromEntries(
-    ["changes", "docs", "tooling", "ci", "docker-test"].map((job) => [
+    ["changes", "docs", "tooling", "application-ci", "application-docker-test"].map((job) => [
       job,
       {
         result: plan.required.includes(job) ? "success" : "skipped",
@@ -80,8 +80,8 @@ test("real docs/process diff passes despite unrelated application and Docker fai
   const plan = f.plan();
   assert.deepEqual(plan.required, ["changes", "docs"]);
   const needs = successful(plan);
-  needs.ci.result = "failure";
-  needs["docker-test"].result = "failure";
+  needs["application-ci"].result = "failure";
+  needs["application-docker-test"].result = "failure";
   assert.match(aggregate(plan, needs), /^PASS /);
 });
 
@@ -90,10 +90,10 @@ test("real application diff requires the complete application and Docker gates",
   f.write("apps/api/src/example.ts");
   f.commit();
   const plan = f.plan();
-  assert.deepEqual(plan.required, ["changes", "docs", "ci", "docker-test"]);
+  assert.deepEqual(plan.required, ["changes", "docs", "application-ci", "application-docker-test"]);
   const needs = successful(plan);
-  needs["docker-test"].result = "failure";
-  assert.throws(() => aggregate(plan, needs), /docker-test: failure/);
+  needs["application-docker-test"].result = "failure";
+  assert.throws(() => aggregate(plan, needs), /application-docker-test: failure/);
 });
 
 test("real workflow and executable test changes invoke focused tooling validation", (t) => {
@@ -117,9 +117,9 @@ test("mixed docs and runtime retains both surfaces and cannot get docs-only trea
   assert.equal(plan.docs, true);
   assert.equal(plan.runtime, true);
   const needs = successful(plan);
-  needs.ci.result = "skipped";
-  assert.throws(() => aggregate(plan, needs), /ci: skipped/);
-  needs.ci.result = "success";
+  needs["application-ci"].result = "skipped";
+  assert.throws(() => aggregate(plan, needs), /application-ci: skipped/);
+  needs["application-ci"].result = "success";
   needs.docs.result = "failure";
   assert.throws(() => aggregate(plan, needs), /docs: failure/);
 });
@@ -138,7 +138,13 @@ for (const file of [
     const f = fixture(t);
     f.write(file);
     f.commit();
-    assert.deepEqual(f.plan().required, ["changes", "docs", "tooling", "ci", "docker-test"]);
+    assert.deepEqual(f.plan().required, [
+      "changes",
+      "docs",
+      "tooling",
+      "application-ci",
+      "application-docker-test",
+    ]);
   });
 }
 
@@ -173,7 +179,13 @@ test("executable bit and symlink under docs fail closed", (t) => {
   chmodSync(path.join(f.cwd, "docs/process/run.md"), 0o755);
   symlinkSync("../../README.md", path.join(f.cwd, "docs/process/link.md"));
   f.commit();
-  assert.deepEqual(f.plan().required, ["changes", "docs", "tooling", "ci", "docker-test"]);
+  assert.deepEqual(f.plan().required, [
+    "changes",
+    "docs",
+    "tooling",
+    "application-ci",
+    "application-docker-test",
+  ]);
 });
 
 test("missing, zero, unavailable, empty and stale SHA evidence fails closed", (t) => {
@@ -273,10 +285,15 @@ test("main/release validation stays full and Docker remains PR-only", (t) => {
     "changes",
     "docs",
     "tooling",
-    "ci",
-    "docker-test",
+    "application-ci",
+    "application-docker-test",
   ]);
-  assert.deepEqual(f.plan("push", "main").required, ["changes", "docs", "tooling", "ci"]);
+  assert.deepEqual(f.plan("push", "main").required, [
+    "changes",
+    "docs",
+    "tooling",
+    "application-ci",
+  ]);
 });
 
 test("documentation validates links, headings, references, spaces and duplicate headings", async (t) => {
@@ -331,18 +348,40 @@ test("actual workflow parses and preserves aggregate dependencies, event head an
     "changes",
     "docs",
     "tooling",
-    "ci",
-    "docker-test",
+    "application-ci",
+    "application-docker-test",
   ]);
   assert.equal(jobs["dev-integration-gate"].if, "always()");
-  assert.equal(jobs.ci.if, "needs.changes.outputs.runtime == 'true'");
+  assert.equal(jobs["application-ci"].if, "needs.changes.outputs.runtime == 'true'");
   assert.equal(
-    jobs["docker-test"].if,
+    jobs["application-docker-test"].if,
     "forgejo.event_name == 'pull_request' && needs.changes.outputs.runtime == 'true'",
   );
   assert.equal(jobs.tooling.if, "needs.changes.outputs.tooling == 'true'");
   assert.equal(jobs.docs.needs, "changes");
   assert.equal(jobs.docs.if, undefined);
+  for (const legacy of ["ci", "docker-test"]) {
+    assert.equal(jobs[legacy].needs, "dev-integration-gate");
+    assert.ok(jobs[legacy].if.startsWith("always()"));
+    assert.equal(jobs[legacy].steps.length, 1);
+    assert.equal(jobs[legacy].steps[0].env.GATE_RESULT, "${{ needs.dev-integration-gate.result }}");
+    assert.equal(jobs[legacy].steps[0].run, 'test "$GATE_RESULT" = success');
+    assert.equal(jobs[legacy].services, undefined);
+    for (const result of ["failure", "cancelled", "skipped", "pending", ""]) {
+      assert.throws(
+        () =>
+          execFileSync("sh", ["-c", jobs[legacy].steps[0].run], {
+            env: { ...process.env, GATE_RESULT: result },
+            stdio: "pipe",
+          }),
+        `legacy ${legacy} must reject aggregate ${result || "missing"}`,
+      );
+    }
+    execFileSync("sh", ["-c", jobs[legacy].steps[0].run], {
+      env: { ...process.env, GATE_RESULT: "success" },
+      stdio: "pipe",
+    });
+  }
   for (const job of Object.values(jobs)) {
     assert.equal(job["runs-on"], "glantri-private-ci");
     for (const step of job.steps) {
@@ -351,10 +390,10 @@ test("actual workflow parses and preserves aggregate dependencies, event head an
         assert.equal(step.with.ref, "${{ forgejo.event.pull_request.head.sha || forgejo.sha }}");
     }
   }
-  const commands = jobs.ci.steps.map((step) => step.run).join("\n");
+  const commands = jobs["application-ci"].steps.map((step) => step.run).join("\n");
   for (const command of ["pnpm typecheck", "pnpm lint", "pnpm test", "pnpm coverage", "pnpm build"])
     assert.ok(commands.includes(command));
-  const dockerSteps = jobs["docker-test"].steps;
+  const dockerSteps = jobs["application-docker-test"].steps;
   assert.equal(
     dockerSteps.find((s) => s.name === "Remove run-owned Docker resources").if,
     "always()",

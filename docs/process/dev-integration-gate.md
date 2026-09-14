@@ -11,8 +11,9 @@ it does not change branch protection or grant integration authority.
 
 ## Changed-path policy
 
-The workflow always emits `changes`, `docs`, `tooling`, `ci`, `docker-test` and
-`dev-integration-gate` job contexts. The aggregate uses actual dependency
+The workflow emits `changes`, `docs`, `tooling`, `application-ci`,
+`application-docker-test`, `dev-integration-gate`, `ci` and `docker-test` job
+contexts. The aggregate uses actual dependency
 results within the same workflow run. It does not create commit statuses through
 an API or use labels, titles, a manually selected class, or another run's result.
 
@@ -20,7 +21,7 @@ an API or use labels, titles, a manually selected class, or another run's result
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Regular, non-executable `AGENTS.md`, root `README.md`, and Markdown beneath `docs/` except `docs/source/` and `docs/rules/`                                     | Exact-diff whitespace and formatting, changed-document links/headings, inbound references to changed/deleted targets                                                      |
 | `.github/workflows/ci.yml`, `scripts/ci/dev-integration-gate*.mjs`, `scripts/checkChangedFormatting.mjs`                                                        | Documentation/formatting checks plus focused gate regressions and actual workflow YAML parsing/static semantics; relevant hosted proof is also required at independent QA |
-| Files beneath `apps/` or `packages/`, including tests and data                                                                                                  | Documentation/formatting checks plus existing `ci` validation and, for PRs, existing `docker-test` validation                                                             |
+| Files beneath `apps/` or `packages/`, including tests and data                                                                                                  | Documentation/formatting checks plus retained application validation in `application-ci` and, for PRs, `application-docker-test`                                          |
 | Other paths, dependency manifests/lockfiles, raw source/rule documents, other scripts/workflows, infrastructure, symlinks, submodules, or executable file modes | Full application validation plus tooling validation; never documentation-only                                                                                             |
 | Mixed changes                                                                                                                                                   | Union of every applicable validation above                                                                                                                                |
 
@@ -35,9 +36,13 @@ The deployment workflow is unchanged.
 The `docs` job installs declared tools with lifecycle scripts disabled. It does
 not run application tests, build applications, connect to a database, start
 Docker or launch browsers. A documentation-only PR can therefore pass this
-aggregate despite unrelated application or Docker failures. `ci` and
-`docker-test` are intentionally **skipped**, never represented as executed PASS,
-when their surfaces are absent. Applicable jobs must be exactly `success`;
+aggregate despite unrelated application or Docker failures. `application-ci` and
+`application-docker-test` are intentionally **skipped**, never represented as executed PASS,
+when their surfaces are absent. The legacy protected `ci` and `docker-test` PR
+jobs execute explicit aggregate-result checks instead of being skipped. Both
+fail unless the aggregate succeeds, including when it fails, is canceled, is
+skipped or has no result. They have no application steps or database services.
+Applicable jobs must be exactly `success`;
 missing, failed, canceled, pending, neutral or skipped results fail the aggregate.
 
 ## Provenance and failure handling
@@ -99,22 +104,29 @@ the candidate's real run must confirm it on this instance.
 
 ## Protected-context transition
 
-The expected aggregate PR context is
-`CI / dev-integration-gate (pull_request)`; confirm its actual emission in
-Forgejo before adopting it. The aggregate push context is not interchangeable.
+Forgejo emitted `CI / dev-integration-gate (pull_request)` for PR #164.
+Its actual terminal result at the final immutable head must be recorded before
+adopting it. The aggregate push context is not interchangeable.
 The historical `CI / ci (pull_request)` and
-`CI / docker-test (pull_request)` identities remain present. This candidate does
-not silently redefine a skipped legacy job as successful or modify required
-contexts.
+`CI / docker-test (pull_request)` identities remain present as compatibility checks that require the aggregate
+to succeed. They never treat a skipped application job as executed proof. This
+candidate does not modify required contexts.
 
-The documented current protection requires both legacy PR contexts. A candidate
-whose applicable aggregate succeeds may remain integration-blocked because
-those legacy contexts are skipped. If so, the smallest transition proposal is
-to replace only those two required names with the **observed** aggregate PR
-context, after independent exact-head QA and real hosted proof pass. Record the
-exact candidate SHA and current settings through an authorized administrative
-read before executing any transition. Builder and Orchestrator read-scope
-failures do not justify selecting an administrator credential.
+The documented current protection requires both legacy PR contexts. Keeping
+those contexts as explicit aggregate-result checks makes the current protection
+enforce the path-aware decision without waiting for a settings change. A
+Forgejo mapping from a skipped application job to a successful commit status
+cannot bypass the compatibility checks: they depend on the aggregate's actual
+job result. The new aggregate is the single decision; the legacy names only
+relay that decision through the existing protection contract.
+
+After independent exact-head QA and real hosted proof pass, the smallest
+optional settings transition is to replace only those two required names with
+`CI / dev-integration-gate (pull_request)`. If live protection still prevents
+compliant integration, return that exact proposal to control plane. Record the
+candidate SHA and current settings through an authorized administrative read
+before executing any transition. Builder and Orchestrator read-scope failures
+do not justify selecting an administrator credential.
 
 Retain direct-push prohibition, the `glantri-orchestrator` merge allowlist,
 administrator enforcement, review/outdated-head restrictions and every other
