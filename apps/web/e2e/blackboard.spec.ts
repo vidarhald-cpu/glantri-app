@@ -116,7 +116,13 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
       process.env.CI !== "true" || process.env.ARTIFACT_E2E_STORAGE_ENABLED === "1";
     const mapTitle = artifactStorageAvailable ? `Hill route ${suffix}` : undefined;
     let mapEntryId: string | undefined;
+    let storedMapFile: string | undefined;
     if (mapTitle) {
+      const artifactRoot = process.env.ARTIFACT_LOCAL_ROOT;
+      expect(artifactRoot).toBeTruthy();
+      const filesBeforeUpload = new Set(
+        filesBelow(artifactRoot!).filter((file) => !file.endsWith(".withheld")),
+      );
       const mapUploadResponse = await page.request.post(
         `${API_URL}/campaigns/${campaignId}/artifacts`,
         {
@@ -138,6 +144,11 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
         },
       );
       expect(mapUploadResponse.status()).toBe(201);
+      const newStoredFiles = filesBelow(artifactRoot!).filter(
+        (file) => !file.endsWith(".withheld") && !filesBeforeUpload.has(file),
+      );
+      expect(newStoredFiles).toHaveLength(1);
+      storedMapFile = newStoredFiles[0]!;
       const uploadedMap = (await mapUploadResponse.json()) as {
         artifact: { id: string; metadataVersion: number };
       };
@@ -340,11 +351,7 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
     expect(await boardAfterDenied.text()).toBe(await playerBoardAfterCorrection.text());
 
     if (mapTitle) {
-      const artifactRoot = process.env.ARTIFACT_LOCAL_ROOT;
-      expect(artifactRoot).toBeTruthy();
-      const storedFiles = filesBelow(artifactRoot!).filter((file) => !file.endsWith(".withheld"));
-      expect(storedFiles).toHaveLength(1);
-      const storedFile = storedFiles[0]!;
+      const storedFile = storedMapFile!;
       const withheldFile = `${storedFile}.withheld`;
 
       await page.getByRole("button").filter({ hasText: mapTitle }).click();
