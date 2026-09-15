@@ -47,6 +47,27 @@ Useful references:
 - Regression guidance: `docs/testing-regression-matrix.md`
 - Rule and architecture decisions: `docs/decisions/`
 
+## Execution efficiency
+
+- Discussion and proposed prompts are not dispatch. A Product Owner/control-plane
+  order must actually reach the Development Orchestrator; process-policy updates
+  do not authorize product work or change existing lane contracts/states.
+- Prefer the largest coherent vertical capability under one Builder. Prepare
+  settled decisions, scope, acceptance, dependencies, hotspots and verification
+  proportionately. For future work, keep durable conceptual specifications and
+  do the exact-code/baseline preflight near activation. Product lanes needing
+  substantial definition use Preparing for Ready under Design; importance alone
+  does not make a lane Active. See the [operating model](docs/process/development-operating-model.md#capability-sizing-and-preparation).
+- Substantive work requires independent immutable-head QA. Mechanical refreshes
+  use preservation QA; process/docs use light relevant checks. Unchanged exact-head
+  PASS does not expire merely with time. Run QA and hosted checks in parallel
+  unless a concrete dependency or measured resource constraint prevents it. See
+  [QA classes](docs/process/qa-execution.md#verification-classes-and-evidence-validity).
+- Safari launch, authorized testing-process control and ordinary local/development
+  Glantri browser checks have [standing authorization](docs/process/control-plane.md#standing-safari-and-development-browser-authority).
+  Actual human-only OS/login/security prompts still require immediate USER ACTION
+  REQUIRED; never bypass them or infer external/production access.
+
 ## Continuation-first execution
 
 - Continue the current authorized task, branch, PR, and worker whenever it can
@@ -62,7 +83,8 @@ Useful references:
   the request may still materialize or the task may still be running.
 - An authorized Builder has the full bounded authority stated in its contract:
   implementation, proportionate tests, commit, task-branch push, draft-PR
-  publication, evidence, and automatic in-scope repair continuations. It does
+  publication/updates, evidence, and automatic batched in-scope repair
+  continuations including repair commits/pushes without routine reapproval. It does
   not gain merge, product-decision, `main`, release, or production authority.
 - Independent QA is always a fresh separate visible task at the exact immutable
   candidate head when required by the contract. An explicit documentation-only
@@ -78,7 +100,8 @@ Useful references:
   another human action, record it and surface `USER ACTION REQUIRED` promptly.
 - Integration may proceed automatically only when the task contract explicitly
   pre-authorizes it and the exact-head QA, scope, dependency, topology, and
-  protected-check conditions all pass. Otherwise stop at the stated gate.
+  protected-check conditions all pass. Then integrate promptly without another
+  approval stamp. Otherwise stop at the stated gate.
 - Permit one initial attempt plus at most two automatic recovery/replacement
   attempts (three total); stop earlier after two substantially identical
   consecutive failures without a changed causal condition. Normally allow at
@@ -117,7 +140,7 @@ Useful references:
 - Coordinate reserved hotspots and cross-area merge order through the task contract.
 - Existing repository tools, Docker/local database tooling, and declared dependency installation are allowed. New software, global tools, services, permissions, or external transmission require explicit approval.
 - A linked Builder/QA worktree that can reach PostgreSQL must own an explicit disposable task target; worktree filesystem isolation is not database isolation. Follow `docs/dev-database.md`, never copy the primary checkout `.env`, and never use the protected `localhost:5432/glantri` database from a linked worktree.
-- Run verification proportional to the affected layers; normally typecheck, lint, tests, and build, plus database or browser checks when relevant.
+- Run verification proportional to the change class and affected layers: light relevant checks for process/docs, preservation evidence for mechanical refreshes, and applicable typecheck, lint, tests, build, database or browser proof for substantive implementation.
 - Inspect Git status after generation/build/test steps. Do not silently commit generated output.
 
 At handoff report outcome, files, decisions, exact baseline/head, verification, Git/PR state, remaining risks, and follow-ups.

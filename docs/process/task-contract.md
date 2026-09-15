@@ -25,6 +25,18 @@ still complete/current and live gates pass. Technical completeness, chat
 history, or credentials never imply authorization. `Active` means a named
 visible Builder, Investigator, QA task, or bounded repair owns work in flight.
 
+## Preparation before Ready
+
+For future work, first capture the durable specification described in
+[capability sizing and preparation](./development-operating-model.md#capability-sizing-and-preparation).
+Use Preparing for Ready as supporting Design state while substantial definition
+remains. Near activation, perform a short then-current dev preflight and fill
+this exact execution contract. Resolve predictable missing decisions before
+substantial dispatch when practical; ordinary implementation choices remain
+with the Builder. Preparation must cover objective, settled decisions,
+scope/exclusions, acceptance examples, dependencies, likely hotspots, and
+verification class without exhaustive archaeology.
+
 ## Ready contract
 
 ### Outcome
@@ -73,7 +85,7 @@ Explain impact and why this task has priority.
 - Prelaunch identity/HEAD evidence: source, origin, common Git directory, requested versus observed SHA:
 - QA checkout state: detached exact head, no local branch or upstream:
 - Short-lived branch (or N/A when no branch applies):
-- Full bounded Builder authority or explicit narrower limit: implementation, verification, commit, task-branch push, draft PR, evidence, in-scope repair:
+- Full bounded Builder authority or explicit narrower limit: implementation, verification, commit, task-branch push, create/update draft PR, evidence, batched in-scope QA repair, repair commit/push:
 - Evidence/PR publication identity and exact target; automatic Orchestrator/Recorder fallback:
 - Assigned credential role and non-secret repository-path-scoped handle:
 - Independent QA required, or explicit authorized exemption with reason:
@@ -301,7 +313,14 @@ Where risk warrants it, compare each relevant perspective across:
 
 Define the evidence the implementer and QA must provide. Prefer deterministic synthetic/test data and the repository's Playwright/browser harness for browser QA.
 
-Escalate to an isolated development browser session only when real session/authentication state, browser APIs, focus, responsive behavior, or another browser condition cannot be represented by the synthetic harness. Do not require a signed-in personal browser profile by default. Personal accounts or expanded browser/computer access require a concrete task reason and separate approval under the control plane.
+Use an isolated development browser session when real session/authentication
+state, browser APIs, focus, responsive behavior, or another required condition
+needs it. Safari launch, authorized testing-process control, and ordinary
+local/development Glantri testing have
+[standing authorization](./control-plane.md#standing-safari-and-development-browser-authority).
+Do not require a personal signed-in profile by default. Personal accounts or
+expanded access outside that scope require separate approval; actual human-only
+OS/login/security prompts are surfaced immediately.
 
 Include, as applicable:
 
@@ -333,6 +352,8 @@ Passing automated tests is necessary where specified but does not override an ob
 
 ### Verification
 
+- Verification class: substantive implementation, mechanical preservation, or documentation/process; selected evidence and rationale under [QA classes](./qa-execution.md#verification-classes-and-evidence-validity).
+- QA/hosted-check parallel schedule, or concrete dependency/measured resource constraint:
 - Unit/component tests:
 - Mechanical/rules examples or golden tests:
 - Integration/API/contract tests:
@@ -365,7 +386,7 @@ For an authorized Builder/QA loop, use the exact-SHA Builder return in
 `docs/process/agent-execution.md` and the mode-aware QA handoff and return in
 `docs/process/qa-execution.md` in addition to the evidence below. The
 Development Orchestrator harvests the Builder result and sends the compact
-immutable-head INITIAL or REPAIR contract directly to a fresh separate visible
+immutable-head INITIAL, REPAIR, or PRESERVATION contract directly to a fresh separate visible
 independent-QA task, harvests the verdict and routes it without overriding FAIL.
 The Product Owner is not the routine relay.
 
@@ -401,9 +422,11 @@ delivery shape, not the freshness requirement.
 
 ## Cross-area integration plan
 
-Add this section when a task is unusually large, high-risk, or cross-area:
+Add this section when actual size, risk, dependencies, or ownership conflicts
+need coordination. Crossing established layers or many files alone does not
+require splitting a coherent capability.
 
-- Why the behavior cannot be split into smaller independently valuable PRs.
+- Coherent user capability and reasons for any necessary split.
 - Contract-first sequence and dependency graph.
 - Hotspot owner for each stage.
 - PR/merge order and compatibility between stages.
