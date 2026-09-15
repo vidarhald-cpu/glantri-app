@@ -39,7 +39,8 @@ export function buildItemPresentationSections(
         return typeof standardInitiative === "number"
           ? [
               {
-                label: `Initiative ${override.value} (standard ${standardInitiative})`,
+                detail: "Recorded for reference only. The app does not apply it to initiative.",
+                label: `Recorded initiative ${override.value} (standard ${standardInitiative})`,
                 visibility: override.visibility,
               },
             ]
@@ -69,12 +70,12 @@ export function buildItemPresentationSections(
     },
     {
       entries: item.itemFacts.activeMechanics.map((fact) => ({
-        detail: "Applied at final attack OB for all attack modes.",
-        label: `Final attack OB ${signed(fact.value)}`,
+        detail: "Recorded for reference only. The app does not apply it to attack OB.",
+        label: `Recorded final attack OB ${signed(fact.value)}`,
         visibility: fact.visibility,
       })),
       id: "active_mechanics",
-      title: "Active mechanics",
+      title: "Recorded values — not applied by the app",
     },
     {
       entries: item.itemFacts.descriptiveTraits.map((fact) => ({

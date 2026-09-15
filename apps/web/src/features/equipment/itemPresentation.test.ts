@@ -5,7 +5,7 @@ import { equipmentTemplatesById } from "@glantri/content/equipment";
 import { buildItemPresentationSections } from "./itemPresentation";
 
 describe("campaign item presentation", () => {
-  it("keeps standard differences, active mechanics, description, and unsupported rules distinct", () => {
+  it("marks recorded initiative and final attack OB facts as reference-only", () => {
     const template = equipmentTemplatesById["weapon-template-fencing-sword"];
     expect(template).toBeDefined();
     const item = CanonicalEquipmentItemSchema.parse({
@@ -52,13 +52,19 @@ describe("campaign item presentation", () => {
 
     expect(buildItemPresentationSections(item, template!).map((section) => section.title)).toEqual([
       "Differences from standard",
-      "Active mechanics",
+      "Recorded values — not applied by the app",
       "Descriptive traits",
       "Recorded capabilities — not calculated or tracked by the app",
     ]);
-    expect(buildItemPresentationSections(item, template!)[0]?.entries[0]?.label).toContain(
-      "standard",
-    );
+    const sections = buildItemPresentationSections(item, template!);
+    expect(sections[0]?.entries[0]).toMatchObject({
+      detail: "Recorded for reference only. The app does not apply it to initiative.",
+      label: "Recorded initiative 1 (standard 1)",
+    });
+    expect(sections[1]?.entries[0]).toMatchObject({
+      detail: "Recorded for reference only. The app does not apply it to attack OB.",
+      label: "Recorded final attack OB +1",
+    });
   });
 
   it("presents Disarm-only overrides by kind without inventing initiative text", () => {
