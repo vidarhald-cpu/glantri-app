@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { Fragment, use, useEffect, useMemo, useState } from "react";
 import {
+  supportsEquipmentQuantity,
+  isSupportedAmmunitionTemplate,
   type CarryMode,
   type EquipmentItem,
   type ItemConditionState,
@@ -184,7 +186,9 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
   }, [filteredTemplateOptions]);
   const selectedTemplate =
     addTemplateId && state ? (state.templates.templatesById[addTemplateId] ?? null) : null;
-  const selectedTemplateIsStackable = selectedTemplate?.category === "valuables";
+  const selectedTemplateIsStackable = selectedTemplate
+    ? supportsEquipmentQuantity(selectedTemplate)
+    : false;
 
   useEffect(() => {
     let cancelled = false;
@@ -422,6 +426,14 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     }
 
     const quantity = Number(addQuantity);
+    if (
+      selectedTemplate &&
+      isSupportedAmmunitionTemplate(selectedTemplate) &&
+      !Number.isInteger(quantity)
+    ) {
+      setAddItemError("Enter a positive whole number of ammunition.");
+      return;
+    }
     if (!Number.isFinite(quantity) || quantity <= 0) {
       setAddItemError("Quantity must be greater than zero.");
       return;

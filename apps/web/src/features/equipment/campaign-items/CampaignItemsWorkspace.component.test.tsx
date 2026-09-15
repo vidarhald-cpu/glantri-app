@@ -90,6 +90,37 @@ describe("CampaignItemsWorkspace", () => {
     mocks.update.mockResolvedValue(assignedResponse);
   });
 
+  it("creates a positive whole-number ammunition quantity", async () => {
+    const arrow = {
+      ...rapier,
+      id: "gear-template-arrows",
+      category: "gear",
+      name: "Arrows",
+      specificityTypeDefault: "generic",
+      ammunitionProfile: { family: "arrow", quantityPerShot: 1 },
+    };
+    mocks.load.mockResolvedValue({
+      ...emptyResponse,
+      state: { ...emptyResponse.state, templatesById: { [rapier.id]: rapier, [arrow.id]: arrow } },
+    });
+    const user = userEvent.setup();
+    render(<CampaignItemsWorkspace campaignId="campaign-1" />);
+    await user.click(await screen.findByRole("button", { name: "Create item" }));
+    await user.selectOptions(screen.getByLabelText("Template"), arrow.id);
+    await user.clear(screen.getByLabelText("Quantity"));
+    await user.type(screen.getByLabelText("Quantity"), "1.5");
+    await user.click(screen.getByRole("button", { name: "Create item" }));
+    expect(mocks.create).not.toHaveBeenCalled();
+    await user.clear(screen.getByLabelText("Quantity"));
+    await user.type(screen.getByLabelText("Quantity"), "20");
+    await user.click(screen.getByRole("button", { name: "Create item" }));
+    await waitFor(() =>
+      expect(mocks.create).toHaveBeenCalledWith(
+        expect.objectContaining({ templateId: arrow.id, quantity: 20 }),
+      ),
+    );
+  });
+
   it("preserves structured Disarm overrides when unrelated item details are edited", async () => {
     const user = userEvent.setup();
     const disarmOverrides = [

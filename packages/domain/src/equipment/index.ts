@@ -4,3 +4,4 @@ export * from "./derived";
 export * from "./validation";
 export * from "./weapon";
 export * from "./itemFacts";
+export * from "./quantity";

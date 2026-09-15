@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { supportsEquipmentQuantity } from "@glantri/domain/equipment";
 import type {
   CanonicalEquipmentItem,
   DescriptiveItemTraitCategory,
@@ -36,6 +37,7 @@ const emptyFacts = (): CampaignItemFactDraft => ({
 });
 
 type Draft = {
+  quantity: string;
   description: string;
   displayName: string;
   facts: CampaignItemFactDraft;
@@ -45,6 +47,7 @@ type Draft = {
 
 function itemToDraft(item: CanonicalEquipmentItem): Draft {
   return {
+    quantity: String(item.quantity),
     description: item.notes ?? "",
     displayName: item.displayName ?? "",
     facts: {
@@ -113,6 +116,7 @@ function CampaignItemEditor({
     editingItem
       ? itemToDraft(editingItem)
       : {
+          quantity: "1",
           description: "",
           displayName: "",
           facts: emptyFacts(),
@@ -138,6 +142,11 @@ function CampaignItemEditor({
       setError("Choose an item template.");
       return;
     }
+    const quantity = Number(draft.quantity);
+    if (!editingItem && (!Number.isInteger(quantity) || quantity <= 0)) {
+      setError("Enter a positive whole number for quantity.");
+      return;
+    }
     setSaving(true);
     setError(undefined);
     try {
@@ -155,6 +164,7 @@ function CampaignItemEditor({
             displayName: draft.displayName,
             facts: draft.facts,
             holderCharacterId: draft.holderCharacterId || null,
+            quantity,
             templateId: draft.templateId,
           });
       onSaved(response.state, response.characters);
@@ -175,7 +185,7 @@ function CampaignItemEditor({
         <select
           disabled={Boolean(editingItem)}
           onChange={(event) =>
-            setDraft((current) => ({ ...current, templateId: event.target.value }))
+            setDraft((current) => ({ ...current, templateId: event.target.value, quantity: "1" }))
           }
           value={draft.templateId}
         >
@@ -188,6 +198,20 @@ function CampaignItemEditor({
             ))}
         </select>
       </label>
+      {!editingItem && selectedTemplate && supportsEquipmentQuantity(selectedTemplate) ? (
+        <label style={{ display: "grid", gap: "0.25rem" }}>
+          <span>Quantity</span>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            value={draft.quantity}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, quantity: event.target.value }))
+            }
+          />
+        </label>
+      ) : null}
       <div
         style={{
           display: "grid",
