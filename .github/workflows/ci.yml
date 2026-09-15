@@ -7,15 +7,109 @@ on:
 
 env:
   CI_DIND_HOST: dind.docker.internal
+  GATE_BASE_SHA: ${{ forgejo.event.pull_request.base.sha || forgejo.event.before }}
+  GATE_HEAD_SHA: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
+  GATE_EVENT: ${{ forgejo.event_name }}
+  GATE_TARGET: ${{ forgejo.event.pull_request.base.ref || forgejo.ref_name }}
 
 jobs:
-  ci:
+  changes:
+    runs-on: glantri-private-ci
+    timeout-minutes: 5
+    outputs:
+      base: ${{ steps.classify.outputs.base }}
+      head: ${{ steps.classify.outputs.head }}
+      mergeBase: ${{ steps.classify.outputs.mergeBase }}
+      event: ${{ steps.classify.outputs.event }}
+      target: ${{ steps.classify.outputs.target }}
+      tooling: ${{ steps.classify.outputs.tooling }}
+      runtime: ${{ steps.classify.outputs.runtime }}
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          ref: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
+      - name: Classify exact changed paths
+        id: classify
+        run: |
+          test "$(node --version)" = "v22.23.2"
+          node scripts/ci/dev-integration-gate.mjs classify
+
+  docs:
+    needs: changes
+    runs-on: glantri-private-ci
+    timeout-minutes: 10
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          ref: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
+      - name: Verify pinned runtime and install declared tools
+        run: |
+          test "$(node --version)" = "v22.23.2"
+          corepack enable
+          test "$(pnpm --version)" = "10.6.0"
+          pnpm install --frozen-lockfile --ignore-scripts
+      - name: Exact-diff formatting, whitespace and documentation references
+        run: node scripts/ci/dev-integration-gate-docs.mjs
+
+  tooling:
+    needs: changes
+    if: needs.changes.outputs.tooling == 'true'
+    runs-on: glantri-private-ci
+    timeout-minutes: 10
+    env:
+      CI_RESOURCE_SUFFIX: tooling-${{ forgejo.run_id }}-${{ forgejo.run_attempt }}
+      CI_SYNTHETIC_IMAGE: docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          ref: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
+      - name: Verify pinned runtime and install declared tools
+        run: |
+          test "$(node --version)" = "v22.23.2"
+          corepack enable
+          test "$(pnpm --version)" = "10.6.0"
+          pnpm install --frozen-lockfile --ignore-scripts
+      - name: Gate regressions and workflow syntax/semantics
+        run: node --test scripts/ci/dev-integration-gate*.test.mjs
+      - name: Service-isolation regressions, production sanitizer, and Docker synthetic
+        run: |
+          test "$(docker version --format '{{.Server.Version}}' | cut -d. -f1)" = "29"
+          docker pull "$CI_SYNTHETIC_IMAGE"
+          node --test scripts/ci/current-run-services.test.mjs
+          sanitized="$(printf 'sessionId=tooling-synthetic-secret safe=yes' | node scripts/ci/sanitize-service-logs.mjs)"
+          test "$sanitized" = "sessionId=[REDACTED] safe=yes"
+          bash scripts/ci/current-run-services.synthetic.sh
+
+  dev-integration-gate:
+    needs: [changes, docs, tooling, application-ci, application-docker-test]
+    if: always()
+    runs-on: glantri-private-ci
+    timeout-minutes: 5
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          ref: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
+      - name: Require all applicable results for the exact event and candidate
+        env:
+          GATE_NEEDS: ${{ toJSON(needs) }}
+        run: |
+          test "$(node --version)" = "v22.23.2"
+          node scripts/ci/dev-integration-gate.mjs aggregate
+
+  application-ci:
+    needs: changes
+    if: needs.changes.outputs.runtime == 'true'
     runs-on: glantri-private-ci
     timeout-minutes: 45
     steps:
       - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
+          ref: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
 
       - name: Verify pinned runtime
         run: |
@@ -49,12 +143,14 @@ jobs:
       - name: File-size report
         run: node scripts/checkFileSize.mjs
 
-  docker-test:
+  application-docker-test:
     runs-on: glantri-private-ci
     timeout-minutes: 60
-    if: forgejo.event_name == 'pull_request'
+    needs: changes
+    if: forgejo.event_name == 'pull_request' && needs.changes.outputs.runtime == 'true'
     env:
       CI_RESOURCE_SUFFIX: ${{ forgejo.run_id }}-${{ forgejo.run_attempt }}
+      CI_SERVICE_STATE_DIR: .ci/current-run-services
     services:
       postgres:
         image: docker.io/library/postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
@@ -71,6 +167,8 @@ jobs:
           - 5432:5432
     steps:
       - uses: https://data.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ forgejo.event.pull_request.head.sha || forgejo.sha }}
 
       - name: Verify pinned runtime and isolated Docker
         run: |
@@ -79,6 +177,9 @@ jobs:
           test "$(pnpm --version)" = "10.6.0"
           test "$(docker version --format '{{.Server.Version}}' | cut -d. -f1)" = "29"
           test -n "$CI_RESOURCE_SUFFIX"
+
+      - name: Verify browser service ports are free
+        run: node scripts/ci/current-run-services.mjs assert-ports-free "$CI_DIND_HOST" 3000 4000
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -114,6 +215,11 @@ jobs:
             docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 \
             node:22-alpine
 
+      - name: Test current-run service isolation helper
+        run: |
+          node --test scripts/ci/current-run-services.test.mjs
+          bash scripts/ci/current-run-services.synthetic.sh
+
       - name: Build API image
         run: docker build -t "glantri-api-test-$CI_RESOURCE_SUFFIX" -f apps/api/Dockerfile .
 
@@ -126,51 +232,68 @@ jobs:
 
       - name: Start API container
         run: |
-          docker run -d --name "glantri-api-test-$CI_RESOURCE_SUFFIX" \
-            --network host \
-            -e DATABASE_URL="postgresql://postgres:postgres@localhost:5432/glantri_test" \
+          api_image_tag="glantri-api-test-$CI_RESOURCE_SUFFIX"
+          api_image_id="$(docker image inspect --format '{{.Id}}' "$api_image_tag")"
+          api_container_id=""
+          log_api_startup_failure() {
+            startup_status=$?
+            if [ "$startup_status" -ne 0 ] && [ -n "$api_container_id" ]; then
+              docker logs "$api_container_id" 2>&1 | node scripts/ci/sanitize-service-logs.mjs
+            fi
+            exit "$startup_status"
+          }
+          trap log_api_startup_failure EXIT
+          api_container_id="$(docker run -d --name "$api_image_tag" \
+            --add-host host.docker.internal:host-gateway \
+            -p 4000:4000 \
+            -e DATABASE_URL="postgresql://postgres:postgres@host.docker.internal:5432/glantri_test" \
             -e WEB_ORIGIN="http://localhost:3000" \
             -e NODE_ENV="production" \
-            "glantri-api-test-$CI_RESOURCE_SUFFIX"
+            "$api_image_tag")"
+          node scripts/ci/current-run-services.mjs record \
+            "$CI_SERVICE_STATE_DIR" api "$api_container_id" "$api_image_id" "$api_image_tag" 4000 4000
+          node scripts/ci/current-run-services.mjs verify "$CI_SERVICE_STATE_DIR" api
+          trap - EXIT
 
       - name: Start Web container
         run: |
-          docker run -d --name "glantri-web-test-$CI_RESOURCE_SUFFIX" \
-            --network host \
+          web_image_tag="glantri-web-test-$CI_RESOURCE_SUFFIX"
+          web_image_id="$(docker image inspect --format '{{.Id}}' "$web_image_tag")"
+          web_container_id=""
+          log_web_startup_failure() {
+            startup_status=$?
+            if [ "$startup_status" -ne 0 ] && [ -n "$web_container_id" ]; then
+              docker logs "$web_container_id" 2>&1 | node scripts/ci/sanitize-service-logs.mjs
+            fi
+            exit "$startup_status"
+          }
+          trap log_web_startup_failure EXIT
+          web_container_id="$(docker run -d --name "$web_image_tag" \
+            -p 3000:3000 \
             -e NODE_ENV="production" \
-            "glantri-web-test-$CI_RESOURCE_SUFFIX"
+            "$web_image_tag")"
+          node scripts/ci/current-run-services.mjs record \
+            "$CI_SERVICE_STATE_DIR" web "$web_container_id" "$web_image_id" "$web_image_tag" 3000 3000
+          node scripts/ci/current-run-services.mjs verify "$CI_SERVICE_STATE_DIR" web
+          trap - EXIT
 
       - name: Wait for API to be ready
-        run: |
-          for i in $(seq 1 12); do
-            if curl -fsS "http://$CI_DIND_HOST:4000/ready"; then
-              echo ""
-              echo "Readiness check passed on attempt $i"
-              exit 0
-            fi
-            echo "Attempt $i/12 failed, retrying in 5s..."
-            sleep 5
-          done
-          echo "API failed to start after 60s. Container logs:"
-          docker logs "glantri-api-test-$CI_RESOURCE_SUFFIX"
-          exit 1
+        run: >-
+          node scripts/ci/current-run-services.mjs wait-http
+          "$CI_SERVICE_STATE_DIR" api http://127.0.0.1:4000/ready 12 5000
 
       - name: Wait for Web to be ready
-        run: |
-          for i in $(seq 1 12); do
-            if curl -fsS -o /dev/null "http://$CI_DIND_HOST:3000"; then
-              echo "Web started on attempt $i"
-              exit 0
-            fi
-            echo "Attempt $i/12 failed, retrying in 5s..."
-            sleep 5
-          done
-          echo "Web failed to start after 60s. Container logs:"
-          docker logs "glantri-web-test-$CI_RESOURCE_SUFFIX"
-          exit 1
+        run: >-
+          node scripts/ci/current-run-services.mjs wait-http
+          "$CI_SERVICE_STATE_DIR" web http://127.0.0.1:3000 12 5000
 
       - name: Install Playwright browsers
         run: pnpm --filter @glantri/web exec playwright install --with-deps chromium
+
+      - name: Verify current-run services before browser execution
+        run: |
+          node scripts/ci/current-run-services.mjs verify "$CI_SERVICE_STATE_DIR" api
+          node scripts/ci/current-run-services.mjs verify "$CI_SERVICE_STATE_DIR" web
 
       - name: Run Playwright smoke tests
         env:
@@ -213,9 +336,9 @@ jobs:
         if: failure()
         run: |
           mkdir -p apps/web/test-results/ci
-          docker logs "glantri-api-test-$CI_RESOURCE_SUFFIX" \
+          node scripts/ci/current-run-services.mjs logs "$CI_SERVICE_STATE_DIR" api \
             > apps/web/test-results/ci/api-container.log 2>&1 || true
-          docker logs "glantri-web-test-$CI_RESOURCE_SUFFIX" \
+          node scripts/ci/current-run-services.mjs logs "$CI_SERVICE_STATE_DIR" web \
             > apps/web/test-results/ci/web-container.log 2>&1 || true
 
       - name: Upload Playwright report on failure
@@ -231,9 +354,47 @@ jobs:
       - name: Remove run-owned Docker resources
         if: always()
         run: |
-          docker rm -f \
-            "glantri-api-test-$CI_RESOURCE_SUFFIX" \
-            "glantri-web-test-$CI_RESOURCE_SUFFIX" 2>/dev/null || true
-          docker image rm \
-            "glantri-api-test-$CI_RESOURCE_SUFFIX" \
-            "glantri-web-test-$CI_RESOURCE_SUFFIX" 2>/dev/null || true
+          cleanup_failed=0
+          for service in api web; do
+            resource_name="glantri-${service}-test-$CI_RESOURCE_SUFFIX"
+            if [ -f "$CI_SERVICE_STATE_DIR/$service.json" ]; then
+              node scripts/ci/current-run-services.mjs cleanup \
+                "$CI_SERVICE_STATE_DIR" "$service" || cleanup_failed=1
+            else
+              docker rm -f "$resource_name" >/dev/null 2>&1 || true
+              docker image rm "$resource_name" >/dev/null 2>&1 || true
+            fi
+            if docker inspect "$resource_name" >/dev/null 2>&1; then
+              echo "Run-owned container $resource_name remains after cleanup."
+              cleanup_failed=1
+            fi
+            if docker image inspect "$resource_name" >/dev/null 2>&1; then
+              echo "Run-owned image tag $resource_name remains after cleanup."
+              cleanup_failed=1
+            fi
+          done
+          exit "$cleanup_failed"
+
+  # Keep the currently protected names fail-closed throughout the transition.
+  # These are real aggregate-result checks, never successful skipped app jobs.
+  ci:
+    needs: dev-integration-gate
+    if: always()
+    runs-on: glantri-private-ci
+    timeout-minutes: 5
+    steps:
+      - name: Require the path-aware integration decision
+        env:
+          GATE_RESULT: ${{ needs.dev-integration-gate.result }}
+        run: test "$GATE_RESULT" = success
+
+  docker-test:
+    needs: dev-integration-gate
+    if: always() && forgejo.event_name == 'pull_request'
+    runs-on: glantri-private-ci
+    timeout-minutes: 5
+    steps:
+      - name: Require the path-aware integration decision
+        env:
+          GATE_RESULT: ${{ needs.dev-integration-gate.result }}
+        run: test "$GATE_RESULT" = success

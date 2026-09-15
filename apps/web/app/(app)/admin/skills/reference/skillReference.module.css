@@ -22,6 +22,44 @@
   line-height: 1.5;
   margin: 0.3rem 0 0;
 }
+.catalogueDisclosure {
+  background: rgba(255, 252, 245, 0.88);
+  border: 1px solid rgba(85, 73, 48, 0.14);
+  border-radius: 14px;
+  min-width: 0;
+  padding: 0.85rem 1rem;
+}
+.catalogueDisclosure summary,
+.provenanceDisclosure summary {
+  color: #3d5b8f;
+  cursor: pointer;
+  font-weight: 700;
+}
+.catalogueDisclosure summary:focus-visible,
+.provenanceDisclosure summary:focus-visible {
+  outline: 3px solid rgba(61, 91, 143, 0.42);
+  outline-offset: 3px;
+}
+.catalogueDisclosureBody {
+  color: #5f543a;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  padding-top: 0.75rem;
+}
+.catalogueDisclosureBody h3 {
+  color: #2c2418;
+  font-size: 1rem;
+  margin: 1rem 0 0.35rem;
+}
+.catalogueDisclosureBody ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.provenanceDisclosure {
+  border-top: 1px solid rgba(85, 73, 48, 0.12);
+  margin-top: 0.25rem;
+  padding-top: 0.75rem;
+}
 .guideLinks {
   display: flex;
   flex-wrap: wrap;
@@ -254,6 +292,12 @@
   font-size: 1.02rem;
   line-height: 1.7;
   margin: 1.25rem 0;
+}
+.description p {
+  margin: 0;
+}
+.description p + p {
+  margin-top: 0.8rem;
 }
 .rulesSection {
   border-top: 1px solid rgba(85, 73, 48, 0.12);

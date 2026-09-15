@@ -24,14 +24,11 @@ const bands: readonly SkillReferenceSocialBand[] = [
 ];
 
 describe("Skill Reference metadata foundation", () => {
-  it("projects explicit navigation, history, and profession facts as separate records", () => {
+  it("keeps Domains separate from authored Arch Skills and projects other reference facts", () => {
     const release = buildSkillContentRelease(pilotSkillContentReleaseCandidate4Input);
     const metadata = buildSkillReferenceMetadata(release);
 
-    expect(metadata.archSkills.length).toBe(release.domains.length);
-    expect(metadata.archSkills.flatMap(({ skillMemberships }) => skillMemberships)).toEqual(
-      expect.arrayContaining([{ placement: "primary", skillId: "skill:medicine" }]),
-    );
+    expect(metadata.archSkills).toEqual([]);
     expect(metadata.learningGroups).toEqual([]);
     expect(metadata.learningHistories.length).toBe(release.histories.length);
     expect(metadata.professionReferences.length).toBeGreaterThan(0);

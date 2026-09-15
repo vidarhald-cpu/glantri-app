@@ -1,0 +1,11 @@
+.participantCell {
+  min-width: 13rem;
+}
+
+@media (max-width: 640px) {
+  .participantCell {
+    min-width: 7rem;
+    max-width: 7rem;
+    overflow-wrap: anywhere;
+  }
+}

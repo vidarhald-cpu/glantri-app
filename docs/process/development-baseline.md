@@ -26,7 +26,8 @@ short-lived task branches/worktrees
   integration decisions. Within an already authorized bounded lane, the
   Development Orchestrator may perform the routine branch, PR, evidence, and
   lifecycle operations granted by the canonical operating model; an authorized
-  integration actor merges only after the required acceptance gate.
+  integration actor merges only after the required acceptance gate, including
+  explicitly pre-authorized conditional integration when every condition passes.
 - The external maintainer is not part of routine development. Their role is limited to production-release/deployment support at the future `dev -> main -> Azure` boundary.
 - `main` is production-coupled and remains outside ordinary agent authority. Agents do not push or merge to it, change its rules, deploy, or alter Azure/production configuration.
 - Pushes to `dev` run `.github/workflows/ci.yml`. They do not trigger `.github/workflows/deploy.yml`, whose push trigger is restricted to `main`.
@@ -49,11 +50,33 @@ Credentials never replace task authorization. Pushes, PR creation/updates, branc
   explicitly through the repository-path-scoped handles in
   [`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md).
 - `main`, Azure, and production remain the external-maintainer release boundary described above.
-- The current pinned Development and QA Orchestrator tasks may coordinate from
-  their verified historical-project UI association, but must not mutate or use
-  that historical project/clone as current development authority. All new
-  substantial Builder, Investigator, and independent-QA execution uses
-  `Glantri app — Forgejo`.
+- One Development Orchestrator coordinates all visible execution directly. Its
+  UI association is operator configuration, not repository authority. Historical
+  coordinators are retired from normal routing after their running children are
+  harvested; they do not provision new work. All substantial Builder,
+  Investigator/Ops, and independent-QA execution uses `Glantri app — Forgejo`.
+
+### Exact-SHA provisioning gate
+
+All implementation and QA provisioning, including replacements, originates from
+`Glantri app — Forgejo` rooted at
+`/Users/vidarhald/dev/glantri-app-forgejo`, or an isolated worktree derived from
+that saved project. A derived path is valid execution, not an identity failure.
+The historical `/Users/vidarhald/dev/glantri-app` checkout never provisions work.
+
+Every contract supplies full exact accepted baseline and requested execution
+SHAs. A fresh Builder starts at the accepted `dev` baseline; an authorized
+continuation starts at its separately specified exact parent on the existing
+branch/PR. QA starts at the immutable candidate head, with the accepted baseline
+recorded separately. Never infer a SHA from `main`, `origin/main`, remote HEAD,
+or a project/default branch.
+
+Before execution, verify the source project, root/worktree, canonical loopback
+Forgejo origin, common Git directory, and `HEAD` equal to the requested SHA.
+Record requested versus observed facts. QA is detached at that head with no
+local branch or upstream tracking. A queued client request, task-list entry, or
+branch name alone does not pass this gate. A mismatch blocks launch and requires
+explicit reconciliation; never substitute a baseline silently.
 
 ## Operational baseline status (2026-08-11)
 
@@ -107,6 +130,52 @@ Before the initial or any materially reconciled `dev` baseline is published:
 - inspect Git status after generation/build/test steps and finish with a clean committed candidate;
 - classify every failure as reconciliation regression, pre-existing issue, environment/tooling issue, or product decision; and
 - report the exact candidate topology and obtain product-owner acceptance before publishing.
+
+### Path-aware dev gate — integrated status
+
+The [#161 cutover authorization](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/161#issuecomment-4354)
+authorized the separate gate implementation case #163/PR #164, now integrated
+at `dev@5ac0f9debda4e6c761d1c68482de24c40f266889`. The
+[integration record](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/163#issuecomment-4590)
+confirms the independently reviewed implementation and hosted proof. The
+`CI / dev-integration-gate (pull_request)` aggregate is the controlling decision
+and succeeds only when all applicable checks for the actual change pass:
+
+| Change class                          | Required validation                                                                                                                             |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pure non-executable documentation     | Changed-file formatting, whitespace, links/references, scope and policy/content consistency.                                                    |
+| CI, workflow, or tooling              | Focused tooling/workflow checks and regressions, plus relevant hosted execution/artifact proof. Local proof does not stand in for hosted proof. |
+| Application runtime, schema, or data  | The full appropriate application gate, including relevant typecheck, lint, tests/build, database, privacy/security, and browser evidence.       |
+| Mixed changes                         | The strongest applicable validation across all affected classes; adding documentation never downgrades another class.                           |
+| Unknown or sensitive executable paths | Fail closed; require explicit classification and adequate validation before integration.                                                        |
+
+The implementation is integrated, not pending. The existing required
+`CI / ci (pull_request)` and `CI / docker-test (pull_request)` contexts execute
+compatibility guards which fail unless the aggregate succeeds. They enforce the
+path-aware decision without a branch-protection settings transition. Inapplicable
+application jobs are skipped, not claimed as executed runtime validation.
+The [technical gate reference](./dev-integration-gate.md) owns classification,
+workflow details and the optional future required-context rename. Verify the
+current candidate's actual hosted results and live Forgejo state; the #163
+integration record does not certify a later PR or authorize its integration.
+
+Preserve protection throughout. Do not make all checks optional, spoof success,
+or bypass a failing or absent check. If an optional protected-context transition is blocked,
+prepare the smallest exact one-time transition proposal, with current and
+proposed settings, evidence and restoration conditions, for control-plane
+confirmation. The approval is not general authority to change credentials,
+runner/Forgejo infrastructure, other protections, `main`, Azure or production.
+
+### Conditional integration
+
+Only an issue contract that explicitly grants conditional `dev` integration
+allows it without another approval round trip. The integration actor must verify
+the live head equals the independently reviewed exact head, required QA is PASS,
+applicable protected checks are PASS, and all scope, decision, dependency,
+topology, target and acceptance conditions are satisfied. An explicit acceptance
+gate remains binding. A documented QA exemption is not a QA PASS and does not
+create conditional integration authority. Never override FAIL or infer merge
+authority from local verification or technical mergeability.
 
 ### Formatting debt baseline
 

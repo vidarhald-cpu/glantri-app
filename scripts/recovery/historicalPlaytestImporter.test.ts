@@ -1,4 +1,5 @@
-import { readdirSync } from "node:fs";
+import { lstatSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { assertRecoveryClientEndpoint } from "../../packages/database/src/recoveryClient";
@@ -110,6 +111,9 @@ describe("approved transformations", () => {
 describe("fail-closed target guards", () => {
   const currentTarget = RECOVERY_IDENTITY.targets["target-a"];
   const container = currentTarget.container;
+  const isLinkedWorktree = lstatSync(resolve(repositoryRoot, ".git")).isFile();
+  const ordinaryCheckoutError =
+    "Historical recovery database access requires a linked task worktree.";
 
   it.each([
     "postgresql://postgres@localhost:5432/glantri",
@@ -146,17 +150,23 @@ describe("fail-closed target guards", () => {
     );
   });
 
-  it("accepts the current worktree identity and rejects a foreign explicit URL", () => {
+  it("accepts the current endpoint only in a linked worktree and rejects foreign ownership", () => {
     const currentUrl = `postgresql://postgres@127.0.0.1:55432/${currentTarget.database}`;
-    expect(() =>
+    const assertCurrentEndpoint = () =>
       assertRecoveryClientEndpoint(currentUrl, {
         ...currentTarget,
         host: "127.0.0.1",
         issue: ISSUE,
         port: "55432",
         worktreeKey: RECOVERY_IDENTITY.worktreeKey,
-      }),
-    ).not.toThrow();
+      });
+
+    // Hosted Actions uses an ordinary checkout; recovery must still fail closed there.
+    if (isLinkedWorktree) {
+      expect(assertCurrentEndpoint).not.toThrow();
+    } else {
+      expect(assertCurrentEndpoint).toThrow(ordinaryCheckoutError);
+    }
 
     const foreign = deriveRecoveryIdentity(
       "/Users/qa/.codex/worktrees/foreign/glantri-app-forgejo",
@@ -166,10 +176,14 @@ describe("fail-closed target guards", () => {
     const foreignSourceUrl = `postgresql://postgres@127.0.0.1:55431/${foreign.source.database}`;
 
     expect(() => validateSourceEndpoint(foreignSourceUrl, foreign.source.container)).toThrow(
-      "issue #61 restored source database",
+      isLinkedWorktree
+        ? "issue #61 restored source database"
+        : "Historical recovery commands require the current linked task worktree.",
     );
     expect(() => validateTargetEndpoint(foreignUrl, "target-a", foreignTarget.container)).toThrow(
-      "exact target-a resource",
+      isLinkedWorktree
+        ? "exact target-a resource"
+        : "Historical recovery commands require the current linked task worktree.",
     );
     expect(() =>
       assertRecoveryClientEndpoint(foreignUrl, {
@@ -179,7 +193,11 @@ describe("fail-closed target guards", () => {
         port: "55432",
         worktreeKey: foreign.worktreeKey,
       }),
-    ).toThrow(`not current worktree ${RECOVERY_IDENTITY.worktreeKey}`);
+    ).toThrow(
+      isLinkedWorktree
+        ? `not current worktree ${RECOVERY_IDENTITY.worktreeKey}`
+        : ordinaryCheckoutError,
+    );
 
     expect(RECOVERY_IDENTITY).toEqual(deriveRecoveryIdentity(repositoryRoot));
   });

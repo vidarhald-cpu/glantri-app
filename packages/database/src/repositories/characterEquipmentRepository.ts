@@ -190,7 +190,7 @@ function mapLoadout(record: {
 }
 
 export interface CharacterEquipmentRepository {
-  /** A repeatable-read snapshot of every normalized record in one Character aggregate. */
+  /** A coherent, share-locked read of every normalized record in one Character aggregate. */
   getCharacterEquipmentAggregateState(
     characterId: string,
   ): Promise<CharacterEquipmentAggregateState>;
@@ -270,6 +270,28 @@ export class StaleCharacterEquipmentAggregateError extends Error {
   constructor() {
     super("Character equipment changed. Reload it before trying again.");
     this.name = "StaleCharacterEquipmentAggregateError";
+  }
+}
+
+/** Only reads and idempotent lazy initialization may restart after a conflict. */
+export async function retryCharacterEquipmentRead<T>(read: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await read();
+    } catch (error) {
+      const retryable =
+        error instanceof StaleCharacterEquipmentAggregateError ||
+        (error instanceof Prisma.PrismaClientKnownRequestError &&
+          (error.code === "P2034" ||
+            (error.code === "P2010" && error.meta?.code === "40001") ||
+            (error.code === "P2002" &&
+              error.meta?.modelName === "CharacterEquipmentAggregate" &&
+              Array.isArray(error.meta.target) &&
+              error.meta.target.length === 1 &&
+              error.meta.target[0] === "characterId")));
+      if (!retryable || attempt >= 3) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 10 * (attempt + 1)));
+    }
   }
 }
 
@@ -439,11 +461,18 @@ export function createPrismaCharacterEquipmentRepository(
     async getCharacterEquipmentAggregateState(characterId) {
       const read = async (transaction: Prisma.TransactionClient) =>
         loadAggregateState(transaction, characterId);
+      // READ COMMITTED lets FOR SHARE wait for a writer and read its committed
+      // revision instead of rejecting an older repeatable-read snapshot (40001).
+      // Holding that lock until all components are read prevents an aggregate
+      // mutation from committing between queries. Caller-owned transactions keep
+      // their isolation and must handle their own conflicts.
       return transactionClient
         ? read(transactionClient)
-        : prisma.$transaction(read, {
-            isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
-          });
+        : retryCharacterEquipmentRead(() =>
+            prisma.$transaction(read, {
+              isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+            }),
+          );
     },
     async mutateCharacterEquipmentAggregate(input) {
       if (input.expectedRevision < 0 || !Number.isInteger(input.expectedRevision)) {

@@ -262,9 +262,19 @@ test.describe("B2 campaign item authoring and reveal", () => {
     await playerPage.getByRole("button", { name: "Add item" }).click();
     await expect(playerPage.locator('input[value="B2 player standard dagger"]')).toBeVisible();
 
-    const playerEquipmentPayload = await (
-      await playerPage.request.get(`${API_URL}/characters/${characterId}/equipment`)
-    ).json();
+    const playerEquipmentResponse = await playerPage.request.get(
+      `${API_URL}/characters/${characterId}/equipment`,
+    );
+    const playerEquipmentBody = await playerEquipmentResponse.text();
+    // Keep the raw synthetic-fixture response in the assertion output: hosted
+    // artifact upload may be unavailable. Never include cookies or request headers.
+    const playerEquipmentDiagnostic = `B2 equipment GET returned ${playerEquipmentResponse.status()}: ${playerEquipmentBody}`;
+    expect(playerEquipmentResponse.status(), playerEquipmentDiagnostic).toBe(200);
+    expect(() => JSON.parse(playerEquipmentBody), playerEquipmentDiagnostic).not.toThrow();
+    const playerEquipmentPayload = JSON.parse(playerEquipmentBody);
+    expect(playerEquipmentPayload?.state?.itemsById, playerEquipmentDiagnostic).toBeInstanceOf(
+      Object,
+    );
     expect(Object.values(playerEquipmentPayload.state.itemsById)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: authoredItem!.id }),
