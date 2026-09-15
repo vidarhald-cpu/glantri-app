@@ -586,6 +586,9 @@ export function GenericCombatActionPanel({
               style={controlStyle}
               value={selectedAction?.id ?? ""}
               onChange={(event) => {
+                const nextAction =
+                  actions.find((action) => action.id === event.target.value) ?? suggestedAction;
+                if (nextAction === selectedAction) return;
                 setDraftActionId("");
                 setResultAudience([]);
                 setResultDraft(undefined);
