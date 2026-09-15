@@ -5,6 +5,8 @@ import {
 } from "@glantri/content/full-skill-catalogue-proposal";
 import {
   chargenTargetSkillDefinitionSchema,
+  targetRuntimeSkillDefinitionSchema,
+  targetRuntimeSpecializationSchema,
   skillSpecializationSchema,
   type ChargenTargetSkillDefinition,
   type SkillDefinition,
@@ -16,10 +18,76 @@ import {
   UNBOUND_GENERAL_CHARGEN_ACQUISITION_CONTEXT,
 } from "./chargenContentContextSource";
 
+// Approved issue168 comment5074, with the PO Campaign Strategy amendment.
+const approvedLinkedStats: Readonly<Record<string, readonly string[]>> = {
+  "skill:interrogation": ["int", "cha"],
+  "skill:intimidation": ["cha", "pow"],
+  "skill:teaching": ["int", "cha"],
+  "skill:document-forgery": ["dex", "int"],
+  "skill:palaeography-decipherment": ["int", "int"],
+  "skill:translation-interpretation": ["int", "int"],
+  "skill:fibre-working": ["dex", "int"],
+  "skill:locksmithing": ["dex", "int"],
+  "skill:sailmaking": ["dex", "int"],
+  "skill:smelting": ["int", "dex"],
+  "skill:architecture": ["int", "int"],
+  "skill:shipbuilding": ["int", "dex"],
+  "skill:siege-engineering": ["int", "int"],
+  "skill:veterinary-medicine": ["int", "dex"],
+  "skill:cartography": ["int", "dex"],
+  "skill:firearms": ["dex", "dex"],
+  "skill:campaign-strategy": ["int", "int"],
+  "skill:military-logistics": ["int", "int"],
+  "skill:military-reconnaissance": ["int", "pow"],
+  "skill:siege-engine-operation": ["dex", "int"],
+  "skill:animal-lore": ["int", "int"],
+  "skill:weather-lore": ["int", "pow"],
+  "skill:fishing": ["dex", "int"],
+  "skill:hunting": ["int", "dex"],
+  "skill:survival": ["int", "dex"],
+  "skill:tracking": ["int", "pow"],
+  "skill:geography": ["int", "int"],
+  "skill:farming": ["int", "dex"],
+  "skill:visual-art": ["dex", "int"],
+  "skill:deception": ["int", "cha"],
+  "skill:leadership": ["cha", "pow"],
+  "skill:mnemonics": ["int", "pow"],
+  "skill:research": ["int", "int"],
+  "skill:armoring": ["dex", "int"],
+  "skill:cooking": ["dex", "int"],
+  "skill:distilling": ["int", "dex"],
+  "skill:masonry": ["dex", "int"],
+  "skill:winemaking": ["dex", "int"],
+  "skill:mining": ["int", "dex"],
+  "skill:surgery": ["int", "dex"],
+  "skill:celestial-navigation": ["int", "int"],
+  "skill:chart-navigation": ["int", "int"],
+  "skill:dead-reckoning": ["int", "int"],
+  "skill:pilotage": ["dex", "int"],
+  "skill:seamanship": ["dex", "int"],
+  "skill:wayfinding": ["int", "pow"],
+  "skill:trapping": ["int", "dex"],
+  "skill:athletics": ["dex", "str"],
+  "skill:sleight-of-hand": ["dex", "int"],
+  "skill:trapmaking": ["dex", "int"],
+  "skill:politics": ["int", "int"],
+  "skill:religion": ["int", "int"],
+  "skill:streetwise": ["int", "cha"],
+  "skill:underworld": ["int", "cha"],
+  "skill:animal-handling": ["dex", "int"],
+  "skill:animal-husbandry": ["dex", "int"],
+  "skill:poetry-literary-composition": ["int", "cha"],
+  "skill:sculpture": ["dex", "int"],
+  "written:mogrebi:sacred-mogrebi": ["int", "int"],
+  "written:ologian:church-ologian": ["int", "int"],
+  "written:phoenician:phoenician": ["int", "int"],
+};
+
 type TargetSkillType = "base-skill" | "spoken-language" | "written-tradition";
 
 export type TargetLinkedStats =
   | { status: "pending-linked-stats" }
+  | { status: "approved"; linkedStats: readonly string[] }
   | {
       status: "legacy-counterpart";
       legacySkillId: string;
@@ -65,6 +133,8 @@ function resolveLinkedStats(
 ): TargetLinkedStats {
   // The existing concrete Language(name) rows all use this spoken-language metadata.
   // Written traditions deliberately cannot reuse generic Literacy or Language.
+  if (approvedLinkedStats[entry.id])
+    return { status: "approved", linkedStats: [...approvedLinkedStats[entry.id]] };
   const counterpart: SkillDefinition | undefined =
     entry.competencyType === "spoken-language"
       ? content.skills.find(({ id }) => id === "language")
@@ -160,8 +230,7 @@ export function getTargetCompetencyActivationBlockers(
 }
 
 /**
- * Produces only the complete resolved target set. The existing wizard is not switched to
- * these definitions while any source entry is awaiting an approved linked-stat mapping.
+ * Produces only the complete resolved target set and rejects missing linked-stat mappings.
  */
 export function buildTargetChargenDefinitions(source: TargetCompetencyChargenSource): {
   skills: ChargenTargetSkillDefinition[];
@@ -201,7 +270,7 @@ export function buildTargetChargenDefinitions(source: TargetCompetencyChargenSou
           minimumParentLevel: entry.minimumParentLevel,
         }),
       );
-    } else if (entry.linkedStats.status === "legacy-counterpart") {
+    } else if (entry.linkedStats.status !== "pending-linked-stats") {
       skills.push(
         chargenTargetSkillDefinitionSchema.parse({
           competencyType: entry.competencyType,
@@ -210,10 +279,72 @@ export function buildTargetChargenDefinitions(source: TargetCompetencyChargenSou
           description: entry.description,
           shortDescription: entry.shortDescription,
           linkedStats: [...entry.linkedStats.linkedStats],
-          legacySkillId: entry.linkedStats.legacySkillId,
+          legacySkillId:
+            entry.linkedStats.status === "legacy-counterpart"
+              ? entry.linkedStats.legacySkillId
+              : undefined,
         }),
       );
     }
   }
   return { skills, specializations };
+}
+
+/** Active target source, with legacy inputs retained solely for compatibility calculations. */
+export function buildTargetRuntimeContent(source: TargetCompetencyChargenSource): CanonicalContent {
+  const definitions = buildTargetChargenDefinitions(source);
+  const legacy = source.compatibilityContent;
+  const skills = definitions.skills.map((definition, sortOrder) => {
+    // Only unchanged identities retain their existing Group membership/access. A stat
+    // counterpart is not a grant of that counterpart's Profession or Group routes.
+    const sameIdentity = legacy.skills.find(({ id }) => id === definition.id);
+    return targetRuntimeSkillDefinitionSchema.parse({
+      ...(sameIdentity ?? {}),
+      ...definition,
+      catalogueSource: "full-target-competencies",
+      groupId: sameIdentity?.groupId,
+      groupIds: sameIdentity?.groupIds ?? [],
+      category: sameIdentity?.category ?? "secondary",
+      dependencies: sameIdentity?.dependencies ?? [],
+      dependencySkillIds: sameIdentity?.dependencySkillIds ?? [],
+      allowsSpecializations: definitions.specializations.some(
+        ({ skillId }) => skillId === definition.id,
+      ),
+      sortOrder,
+    });
+  });
+  const statsById = new Map(skills.map((skill) => [skill.id, skill.linkedStats]));
+  function parentStats(id: string, visited = new Set<string>()): string[] {
+    const known = statsById.get(id);
+    if (known) return known;
+    if (visited.has(id)) throw new Error(`Cyclic target parent: ${id}`);
+    visited.add(id);
+    const parent = definitions.specializations.find((specialization) => specialization.id === id);
+    if (!parent) throw new Error(`Missing target parent: ${id}`);
+    return parentStats(parent.skillId, visited);
+  }
+  const specializations = definitions.specializations.map((definition, sortOrder) =>
+    targetRuntimeSpecializationSchema.parse({
+      ...definition,
+      catalogueSource: "full-target-competencies",
+      competencyType: "specialization",
+      linkedStats: parentStats(definition.skillId),
+      sortOrder,
+    }),
+  );
+  const targetIds = new Set([...skills, ...specializations].map(({ id }) => id));
+  return {
+    ...legacy,
+    skills: [...skills, ...legacy.skills.filter(({ id }) => !targetIds.has(id))],
+    specializations: [
+      ...specializations,
+      ...legacy.specializations.filter(({ id }) => !targetIds.has(id)),
+    ],
+    chargenCatalogue: {
+      sourceId: "full-target-competencies",
+      skillIds: skills.map(({ id }) => id),
+      specializationIds: specializations.map(({ id }) => id),
+    },
+    compatibilityContent: legacy,
+  };
 }

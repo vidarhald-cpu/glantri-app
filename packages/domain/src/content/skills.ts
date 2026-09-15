@@ -496,7 +496,18 @@ export const civilizationDefinitionSchema = z.preprocess(
 export type SkillGroupSkillMembership = z.infer<typeof skillGroupSkillMembershipSchema>;
 export type SkillGroupSelectionSlot = z.infer<typeof skillGroupSelectionSlotSchema>;
 export type SkillGroupDefinition = z.infer<typeof skillGroupDefinitionSchema>;
-export type SkillDefinition = z.infer<typeof skillDefinitionSchema>;
+// Legacy JSON remains validated by skillDefinitionSchema. Only the explicit target
+// variant permits absent Group identity in a runtime Chargen projection.
+export const targetRuntimeSkillDefinitionSchema = skillDefinitionSchema.innerType().extend({
+  catalogueSource: z.literal("full-target-competencies"),
+  competencyType: z.enum(["base-skill", "spoken-language", "written-tradition"]),
+  groupId: idSchema.optional(),
+  groupIds: z.array(idSchema).default([]),
+});
+export type LegacySkillDefinition = z.infer<typeof skillDefinitionSchema>;
+export type SkillDefinition =
+  | LegacySkillDefinition
+  | z.infer<typeof targetRuntimeSkillDefinitionSchema>;
 
 /**
  * Group-free input for the target Chargen adapter. This is deliberately separate from
@@ -519,7 +530,14 @@ export type ChargenTargetSkillDefinition = z.infer<typeof chargenTargetSkillDefi
 export type SkillDependency = z.infer<typeof skillDependencySchema>;
 export type DerivedSkillGrant = z.infer<typeof derivedSkillGrantSchema>;
 export type MeleeCrossTraining = z.infer<typeof meleeCrossTrainingSchema>;
-export type SkillSpecialization = z.infer<typeof skillSpecializationSchema>;
+export const targetRuntimeSpecializationSchema = skillSpecializationSchema.innerType().extend({
+  catalogueSource: z.literal("full-target-competencies"),
+  competencyType: z.literal("specialization"),
+  linkedStats: z.array(z.string().min(1)).min(1),
+});
+export type SkillSpecialization =
+  | z.infer<typeof skillSpecializationSchema>
+  | z.infer<typeof targetRuntimeSpecializationSchema>;
 export type SocietyLevelAccess = z.infer<typeof societyLevelAccessSchema>;
 export type SocietyBandSkillAccess = z.infer<typeof societyBandSkillAccessSchema>;
 export type SocietyDefinition = z.infer<typeof societyDefinitionSchema>;
@@ -555,7 +573,8 @@ export function getSkillDependencies(
 
 export function getSkillGroupIds(skill: Pick<SkillDefinition, "groupId" | "groupIds">): string[] {
   const seen = new Set<string>();
-  const groupIds = skill.groupIds.length > 0 ? skill.groupIds : [skill.groupId];
+  const groupIds =
+    skill.groupIds.length > 0 ? skill.groupIds : skill.groupId ? [skill.groupId] : [];
 
   return groupIds.filter((groupId) => {
     if (seen.has(groupId)) {

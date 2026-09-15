@@ -7,6 +7,7 @@ import {
 function removeRetiredSkillGroupMemberships(
   skill: CanonicalContent["skills"][number],
 ): CanonicalContent["skills"][number] {
+  if ("catalogueSource" in skill) return skill;
   const removedGroupIds = new Set(REMOVED_SKILL_GROUP_IDS_BY_SKILL_ID[skill.id] ?? []);
 
   if (removedGroupIds.size === 0) {
@@ -26,6 +27,7 @@ function normalizeCanonicalSkillGroupMembershipsInSkill(
   activeCanonicalGroupIds: Set<string>,
   skill: CanonicalContent["skills"][number],
 ): CanonicalContent["skills"][number] {
+  if ("catalogueSource" in skill) return skill;
   const groupIds = new Set(skill.groupIds);
 
   for (const [groupId, skillIds] of Object.entries(CANONICAL_SKILL_GROUP_MEMBERSHIPS)) {
@@ -102,16 +104,20 @@ export function validateSkillRelationships(content: CanonicalContent): Canonical
 
   for (const skill of content.skills) {
     if (!skill.categoryId) {
-      issues.push(`Skill "${skill.name}" (${skill.id}) is missing an explicit player-facing categoryId.`);
+      issues.push(
+        `Skill "${skill.name}" (${skill.id}) is missing an explicit player-facing categoryId.`,
+      );
     }
 
     for (const groupId of skill.groupIds) {
       if (!skillGroupIds.has(groupId)) {
-        issues.push(`Skill "${skill.name}" (${skill.id}) references unknown skill group "${groupId}".`);
+        issues.push(
+          `Skill "${skill.name}" (${skill.id}) references unknown skill group "${groupId}".`,
+        );
       }
     }
 
-    if (!skill.groupIds.includes(skill.groupId)) {
+    if (skill.groupId !== undefined && !skill.groupIds.includes(skill.groupId)) {
       issues.push(
         `Skill "${skill.name}" (${skill.id}) uses primary group "${skill.groupId}" that is missing from groupIds.`,
       );
@@ -161,7 +167,9 @@ export function validateSkillRelationships(content: CanonicalContent): Canonical
   for (const group of content.skillGroups) {
     for (const membership of group.skillMemberships ?? []) {
       if (!skillIds.has(membership.skillId)) {
-        issues.push(`Skill group "${group.name}" (${group.id}) references unknown skill "${membership.skillId}".`);
+        issues.push(
+          `Skill group "${group.name}" (${group.id}) references unknown skill "${membership.skillId}".`,
+        );
         continue;
       }
 

@@ -148,7 +148,15 @@ export function buildCharacterSheetSkillRows(input: {
   label: string;
   rows: CharacterSheetSkillRow[];
 }> {
-  const rows = sortSkills(input.content.skills).flatMap((skill) => {
+  const savedTargets = input.build.progression.skills.flatMap((row) =>
+    row.targetDefinition ? [row.targetDefinition] : [],
+  );
+  const savedTargetIds = new Set(savedTargets.map(({ id }) => id));
+  const definitions = [
+    ...input.content.skills.filter(({ id }) => !savedTargetIds.has(id)),
+    ...savedTargets,
+  ];
+  const rows = sortSkills(definitions).flatMap((skill) => {
     if (skill.specializationOfSkillId) {
       return [];
     }
@@ -238,10 +246,6 @@ export function buildCharacterSheetSpecializationRows(input: {
         (specialization) => specialization.id === specializationView.specializationId,
       );
 
-      if (!definition) {
-        return null;
-      }
-
       return {
         grantedSourceLabel: formatDerivedSkillSourceLabel({
           sourceSkillName: specializationView.relationshipGrantedSourceSkillName,
@@ -249,8 +253,8 @@ export function buildCharacterSheetSpecializationRows(input: {
         }),
         grantedXp: specializationView.relationshipGrantedSpecializationLevel ?? 0,
         parentSkillName: specializationView.parentSkillName,
-        specializationId: definition.id,
-        specializationName: definition.name,
+        specializationId: specializationView.specializationId,
+        specializationName: definition?.name ?? specializationView.name,
         total: specializationView.effectiveSpecializationNumber,
         xp: specializationView.secondaryRanks,
       } satisfies CharacterSheetSpecializationRow;

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { validateCanonicalContent } from "@glantri/content";
-import type { CharacterProgression, SkillDefinition, SkillSpecialization } from "@glantri/domain";
+import { skillDefinitionSchema } from "@glantri/domain";
+import type {
+  CharacterProgression,
+  LegacySkillDefinition,
+  SkillSpecialization,
+} from "@glantri/domain";
 
 import { createChargenProgression } from "../chargen/primaryAllocation";
 
@@ -302,14 +307,14 @@ const testContent = validateCanonicalContent({
   ],
 });
 
-function getSkill(skillId: string): SkillDefinition {
+function getSkill(skillId: string): LegacySkillDefinition {
   const skill = testContent.skills.find((candidate) => candidate.id === skillId);
 
   if (!skill) {
     throw new Error(`Missing test skill ${skillId}.`);
   }
 
-  return skill;
+  return skillDefinitionSchema.parse(skill);
 }
 
 function getSpecialization(specializationId: string): SkillSpecialization {

@@ -21,7 +21,7 @@ export type ChargenSkillAccessRoute = "ordinary" | "flexible";
 
 export function getSkillSpendCost(skill: SkillDefinition): number;
 export function getSkillSpendCost(
-  skill: ChargenTargetSkillDefinition,
+  skill: SkillDefinition | ChargenTargetSkillDefinition,
   accessRoute: ChargenSkillAccessRoute,
 ): number;
 export function getSkillSpendCost(
@@ -62,7 +62,9 @@ export function getActiveGroupSkillCost(input: {
     return { error: "Skill group definition not found." };
   }
 
-  const skillsById = new Map(input.content.skills.map((skill) => [skill.id, skill]));
+  const skillsById = new Map(
+    (input.content.compatibilityContent ?? input.content).skills.map((skill) => [skill.id, skill]),
+  );
   const fixedGroupSkillIds = (group.skillMemberships ?? []).map((membership) => membership.skillId);
   const hasSelectionSlots = (group.selectionSlots?.length ?? 0) > 0;
   const activeSkillIds = new Set(
@@ -179,7 +181,9 @@ export function getPrimaryPurchaseCostForSkill(
 ): number {
   void progression;
 
-  return getSkillSpendCost(skillDefinition);
+  return "catalogueSource" in skillDefinition
+    ? getSkillSpendCost(skillDefinition, "ordinary")
+    : getSkillSpendCost(skillDefinition);
 }
 
 export function getSecondaryPurchaseCostForSkill(
@@ -188,7 +192,9 @@ export function getSecondaryPurchaseCostForSkill(
 ): number {
   void progression;
 
-  return getSkillSpendCost(skillDefinition);
+  return "catalogueSource" in skillDefinition
+    ? getSkillSpendCost(skillDefinition, "flexible")
+    : getSkillSpendCost(skillDefinition);
 }
 
 export function getSecondaryPurchaseCostForSpecialization(
