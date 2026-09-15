@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CharacterLoadoutSchema,
+  CanonicalEquipmentItemSchema,
   EquipmentItemSchema,
   StorageLocationSchema,
   type AssignedEquipmentItem,
@@ -362,5 +363,116 @@ describe("CharacterEquipmentWriteService campaign item ownership", () => {
       service.removeCharacterEquipmentItem(characterId, ordinaryItem.id),
     ).resolves.toBeUndefined();
     expect(items.has(ordinaryItem.id)).toBe(false);
+  });
+});
+
+describe("supported ammunition quantity creation", () => {
+  const ammunitionTemplates = [
+    "gear-template-arrows",
+    "gear-template-crossbow-bolts",
+    "gear-template-sling-projectiles",
+  ];
+  function setup() {
+    const location = createLocation({
+      id: `${characterId}:loc-person`,
+      name: "On person",
+      type: "person_system",
+      availabilityClass: "with_you",
+    });
+    const stub = createRepositoryStub({ locations: [location] });
+    stub.repository.createCampaignEquipmentItem = async (item) =>
+      CanonicalEquipmentItemSchema.parse(item);
+    return { ...stub, location, service: new CharacterEquipmentWriteService(stub.repository) };
+  }
+  const facts = {
+    version: 1 as const,
+    activeMechanics: [],
+    descriptiveTraits: [],
+    templateOverrides: [],
+    unsupportedCapabilities: [],
+  };
+
+  it.each(ammunitionTemplates)(
+    "preserves twenty %s through personal and Campaign creation",
+    async (templateId) => {
+      const { service, location, repository } = setup();
+      const personal = await service.addCharacterEquipmentItem(characterId, {
+        templateId,
+        quantity: 20,
+        initialLocationId: location.id,
+        initialCarryMode: "on_person",
+      });
+      expect(personal).toMatchObject({ quantity: 20, isStackable: true });
+      expect(await repository.getCanonicalEquipmentItemById(personal.id)).toMatchObject({
+        quantity: 20,
+      });
+      const campaign = await service.createCampaignEquipmentItem({
+        campaignId: "campaign",
+        templateId,
+        quantity: 20,
+        itemFacts: facts,
+      });
+      expect(campaign).toMatchObject({ quantity: 20, isStackable: true });
+      expect(campaign.id).not.toBe(personal.id);
+      expect(
+        await service.createCampaignEquipmentItem({
+          campaignId: "campaign",
+          templateId,
+          itemFacts: facts,
+        }),
+      ).toMatchObject({ quantity: 1 });
+    },
+  );
+
+  it.each([0, -1, 1.5, NaN, Infinity])(
+    "rejects invalid ammunition quantity %s without flooring",
+    async (quantity) => {
+      const { service, location, items } = setup();
+      await expect(
+        service.addCharacterEquipmentItem(characterId, {
+          templateId: ammunitionTemplates[0]!,
+          quantity,
+          initialLocationId: location.id,
+          initialCarryMode: "on_person",
+        }),
+      ).rejects.toThrow(/quantity/);
+      await expect(
+        service.createCampaignEquipmentItem({
+          campaignId: "campaign",
+          templateId: ammunitionTemplates[0]!,
+          quantity,
+          itemFacts: facts,
+        }),
+      ).rejects.toThrow(/quantity/);
+      expect(items.size).toBe(0);
+    },
+  );
+
+  it("does not grant quantity capability to ordinary gear or ammunition containers", async () => {
+    const { service, location } = setup();
+    await expect(
+      service.addCharacterEquipmentItem(characterId, {
+        templateId: "gear-template-quiver",
+        quantity: 20,
+        initialLocationId: location.id,
+        initialCarryMode: "on_person",
+      }),
+    ).rejects.toThrow("Only stackable");
+    await expect(
+      service.createCampaignEquipmentItem({
+        campaignId: "campaign",
+        templateId: "gear-template-quiver",
+        quantity: 20,
+        itemFacts: facts,
+      }),
+    ).rejects.toThrow("Only stackable");
+    const create = () =>
+      service.addCharacterEquipmentItem(characterId, {
+        templateId: "gear-template-quiver",
+        quantity: 1,
+        initialLocationId: location.id,
+        initialCarryMode: "on_person",
+      });
+    expect((await create()).id).not.toBe((await create()).id);
   });
 });
