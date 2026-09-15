@@ -10,6 +10,18 @@ function readEncounterDetailSource(): string {
 }
 
 describe("EncounterDetail table rendering", () => {
+  it("saves local transitions against the loaded server revision", () => {
+    const source = readEncounterDetailSource();
+    const persist = source.slice(
+      source.indexOf("async function persistEncounter("),
+      source.indexOf("async function handleAssignRoleplayStatCheck("),
+    );
+
+    expect(persist).toContain("expectedRevision: encounter?.updatedAt");
+    expect(persist).toContain("session: nextEncounter");
+    expect(persist).toContain("localEncounterRepository.save(nextEncounter)");
+  });
+
   it("routes roleplay encounters to the GM roleplaying screen", () => {
     const source = readEncounterDetailSource();
 

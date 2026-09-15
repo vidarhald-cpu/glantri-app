@@ -184,12 +184,14 @@ export async function loadCombatHistory(
 
 export async function updateEncounterOnServer(input: {
   encounterId: string;
+  expectedRevision?: string;
   session: EncounterSession;
 }): Promise<EncounterSession> {
   const payload = await sendJson<{ encounter: EncounterSession }>(
     `/encounters/${input.encounterId}`,
     {
       body: JSON.stringify({
+        expectedRevision: input.expectedRevision,
         session: input.session,
       }),
       method: "PUT",
