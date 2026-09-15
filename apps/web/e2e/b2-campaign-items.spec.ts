@@ -67,13 +67,20 @@ test.describe("B2 campaign item authoring and reveal", () => {
     await expect(page.getByRole("heading", { name: "Campaign items" })).toBeVisible();
 
     await page.getByRole("button", { name: "Create item" }).click();
-    await page.getByLabel("Template").selectOption("weapon-template-dagger");
+    await page
+      .getByRole("combobox", { name: "Template", exact: true })
+      .selectOption("weapon-template-dagger");
     await page.getByLabel("Item name (optional)").fill(assignmentItemName);
     await page.getByRole("button", { name: "Create item" }).click();
     await expect(page.getByRole("status")).toHaveText("Item created.");
-    await expect(page.getByText("Unassigned / in campaign", { exact: true })).toBeVisible();
+    const createdAssignmentCard = page.locator("article").filter({ hasText: assignmentItemName });
+    await expect(
+      createdAssignmentCard.getByText("Unassigned / in campaign", { exact: true }),
+    ).toBeVisible();
     await page.reload();
-    await expect(page.getByText("Unassigned / in campaign", { exact: true })).toBeVisible();
+    await expect(
+      createdAssignmentCard.getByText("Unassigned / in campaign", { exact: true }),
+    ).toBeVisible();
 
     const beforeAssignmentPayload = await (
       await page.request.get(`${API_URL}/campaigns/${b2CampaignId}/items`)
@@ -118,7 +125,9 @@ test.describe("B2 campaign item authoring and reveal", () => {
     await page.setViewportSize({ height: 900, width: 1280 });
 
     await page.getByRole("button", { name: "Create item" }).click();
-    await page.getByLabel("Template").selectOption("weapon-template-rapier");
+    await page
+      .getByRole("combobox", { name: "Template", exact: true })
+      .selectOption("weapon-template-rapier");
     await page.getByLabel("Item name (optional)").fill(itemName);
     await page.getByLabel("Description (optional)").fill("A balanced sword prepared by the GM.");
     await page.getByLabel("Initial assignment").selectOption(characterId);

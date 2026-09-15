@@ -202,6 +202,39 @@ describe("campaign item routes", () => {
     await app.close();
   });
 
+  it("forwards ammunition quantity and defaults omitted quantity to one", async () => {
+    const routeServices = services();
+    const app = await appWith(routeServices);
+    for (const quantity of [20, undefined]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/campaigns/campaign-1/items",
+        payload: { templateId: "gear-template-arrows", quantity },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(routeServices.writeService.createCampaignEquipmentItem).toHaveBeenLastCalledWith(
+        expect.objectContaining({ quantity: quantity ?? 1 }),
+      );
+    }
+    await app.close();
+  });
+
+  it.each([1.5, "20", null])(
+    "rejects non-integer Campaign quantity %s before writing",
+    async (quantity) => {
+      const routeServices = services();
+      const app = await appWith(routeServices);
+      const response = await app.inject({
+        method: "POST",
+        url: "/campaigns/campaign-1/items",
+        payload: { templateId: "gear-template-arrows", quantity },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(routeServices.writeService.createCampaignEquipmentItem).not.toHaveBeenCalled();
+      await app.close();
+    },
+  );
+
   it("assigns and unassigns the same existing Item with revision checks", async () => {
     const routeServices = services();
     const app = await appWith(routeServices);

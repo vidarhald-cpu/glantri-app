@@ -55,6 +55,48 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(item.conditionState).toBe("intact");
     });
 
+    it.each([
+      "gear-template-arrows",
+      "gear-template-crossbow-bolts",
+      "gear-template-sling-projectiles",
+    ])("persists twenty %s in personal and Campaign item records", async (templateId) => {
+      const user = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, user.id);
+      const campaign = await createTestCampaign(prisma!, user.id);
+      const repo = createPrismaCharacterEquipmentRepository(prisma!);
+      const service = new CharacterEquipmentWriteService(repo);
+      const state = await service.ensureCharacterEquipmentInitialized(character.id);
+      const location = state.locations.find((entry) => entry.type === "person_system")!;
+      const personal = await service.addCharacterEquipmentItem(character.id, {
+        templateId,
+        quantity: 20,
+        initialLocationId: location.id,
+        initialCarryMode: "on_person",
+      });
+      const campaignItem = await service.createCampaignEquipmentItem({
+        campaignId: campaign.id,
+        templateId,
+        quantity: 20,
+        itemFacts: {
+          version: 1,
+          activeMechanics: [],
+          descriptiveTraits: [],
+          templateOverrides: [],
+          unsupportedCapabilities: [],
+        },
+      });
+      const reloaded = createPrismaCharacterEquipmentRepository(prisma!);
+      expect(await reloaded.getCanonicalEquipmentItemById(personal.id)).toMatchObject({
+        quantity: 20,
+        isStackable: true,
+      });
+      expect(await reloaded.getCanonicalEquipmentItemById(campaignItem.id)).toMatchObject({
+        quantity: 20,
+        isStackable: true,
+        campaignContextId: campaign.id,
+      });
+    });
+
     it("round-trips typed item facts without changing the shared template", async () => {
       const user = await createTestUser(prisma!);
       const character = await createTestCharacter(prisma!, user.id);

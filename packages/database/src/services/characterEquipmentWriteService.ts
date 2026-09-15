@@ -20,6 +20,8 @@ import {
   StorageLocationSchema,
   getStorageAssignmentForLocation,
   isSystemLocation,
+  isSupportedAmmunitionTemplate,
+  supportsEquipmentQuantity,
   isWithYouLocation,
   validateEquipmentItem,
   validateLoadout,
@@ -118,6 +120,7 @@ function buildCampaignEquipmentItemId(campaignId: string): string {
 }
 
 export interface CreateCampaignEquipmentItemInput {
+  quantity?: number;
   campaignId: string;
   displayName?: string | null;
   evidence?: EquipmentTransitionEvidence;
@@ -256,6 +259,14 @@ export class CharacterEquipmentWriteService {
       throw new Error("Equipment template not found.");
     }
 
+    const quantity = input.quantity ?? 1;
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new Error("quantity must be a positive whole number");
+    }
+    if (!supportsEquipmentQuantity(template) && quantity !== 1) {
+      throw new Error("Only stackable items can have quantity greater than one.");
+    }
+
     let storageAssignment: ItemStorageAssignment | null = null;
     if (input.holderCharacterId) {
       const snapshot = await this.ensureCharacterEquipmentInitialized(input.holderCharacterId);
@@ -286,13 +297,13 @@ export class CharacterEquipmentWriteService {
       id: buildCampaignEquipmentItemId(input.campaignId),
       isEquipped: false,
       isFavorite: null,
-      isStackable: template.category === "valuables",
+      isStackable: supportsEquipmentQuantity(template),
       itemFacts: input.itemFacts,
       material: template.defaultMaterial,
       notes: input.notes?.trim() || null,
       previousStorageAssignment: null,
       quality: "standard",
-      quantity: 1,
+      quantity,
       specificityType: template.specificityTypeDefault,
       statusTags: null,
       storageAssignment,
@@ -635,7 +646,10 @@ export class CharacterEquipmentWriteService {
       characterId,
     );
 
-    const isStackable = template.category === "valuables";
+    const isStackable = supportsEquipmentQuantity(template);
+    if (isSupportedAmmunitionTemplate(template) && !Number.isInteger(input.quantity)) {
+      throw new Error("quantity must be a positive whole number");
+    }
     const quantity = Math.floor(input.quantity);
 
     if (!Number.isFinite(quantity) || quantity <= 0) {
