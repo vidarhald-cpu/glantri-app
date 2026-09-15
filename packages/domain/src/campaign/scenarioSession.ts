@@ -1,8 +1,11 @@
 import { z } from "zod";
 
+import { projectCombatGenericActionsForPlayer } from "../encounter/combatGenericAction";
+import { buildPlayerSafeCombatScopeForUser } from "../encounter/combatPlayerVisibility";
 import {
   encounterStatusSchema,
   isUserAssignedToEncounterMembership,
+  isUserEntitledToTerminalEncounterHistory,
   type EncounterSession,
 } from "../encounter/session";
 import {
@@ -157,6 +160,59 @@ function eventKind(event: ScenarioEventLog): string {
   return typeof value === "string" && value.length > 0 ? value : event.eventType;
 }
 
+function canViewCurrentItemOutcome(
+  event: ScenarioEventLog,
+  context:
+    | {
+        encounters: EncounterSession[];
+        participants: ScenarioParticipant[];
+        userId: string;
+      }
+    | undefined,
+): boolean {
+  if (!context || !eventAudienceParticipantIds(event)?.length) return false;
+  const payload = readEventPayload(event);
+  const encounter = context.encounters.find((entry) => entry.id === eventEncounterId(event));
+  const state = encounter?.combatRoundState;
+  if (!encounter || !state || typeof payload.actionId !== "string") return false;
+  const action = [state, ...state.rounds]
+    .flatMap((round) => round.genericActions)
+    .find((entry) => entry.id === payload.actionId);
+  if (action?.preset !== "item_interaction" || action.status !== "completed") return false;
+  const owner = encounter.participants.find(
+    (participant) =>
+      participant.id === action.ownerParticipantId ||
+      participant.scenarioParticipantId === action.ownerParticipantId,
+  );
+  if (
+    !owner?.scenarioParticipantId ||
+    owner.scenarioParticipantId !== eventActorParticipantId(event)
+  ) {
+    return false;
+  }
+  const scope = buildPlayerSafeCombatScopeForUser({
+    // Terminal history uses the existing read-only relationship interpretation;
+    // active-control resolution deliberately rejects an archived Encounter.
+    encounter:
+      encounter.status === "archived" &&
+      isUserEntitledToTerminalEncounterHistory({
+        encounter,
+        scenarioParticipants: context.participants,
+        userId: context.userId,
+      })
+        ? { ...encounter, status: "completed" }
+        : encounter,
+    scenarioParticipants: context.participants,
+    userId: context.userId,
+  });
+  const [visibleAction] = projectCombatGenericActionsForPlayer({
+    actions: [action],
+    controlledParticipantIds: scope.controlledEncounterParticipantIds,
+    visibleParticipantIds: scope.visibleParticipantIds,
+  });
+  return visibleAction?.resolution?.text === event.summary;
+}
+
 function valueReferencesParticipant(value: unknown, participantIds: ReadonlySet<string>): boolean {
   if (typeof value === "string") return participantIds.has(value);
   if (Array.isArray(value)) {
@@ -185,6 +241,11 @@ export function projectScenarioObjectiveHistory(input: {
   eventLogs: ScenarioEventLog[];
   excludedParticipantIds?: ReadonlySet<string>;
   excludedParticipantNames?: ReadonlySet<string>;
+  itemOutcomeContext?: {
+    encounters: EncounterSession[];
+    participants: ScenarioParticipant[];
+    userId: string;
+  };
   viewerMode: "gm" | "player";
 }): z.infer<typeof scenarioSessionHistoryEventSchema>[] {
   return [...input.eventLogs]
@@ -197,6 +258,15 @@ export function projectScenarioObjectiveHistory(input: {
     .flatMap((event) => {
       const parsedType = scenarioObjectiveHistoryEventTypeSchema.safeParse(event.eventType);
       if (!parsedType.success || !playerSafeHistoryTypes.has(parsedType.data)) return [];
+
+      if (
+        input.viewerMode === "player" &&
+        parsedType.data === "encounter_combat_outcome" &&
+        eventKind(event) === "item_resolution" &&
+        !canViewCurrentItemOutcome(event, input.itemOutcomeContext)
+      ) {
+        return [];
+      }
 
       if (
         input.viewerMode === "player" &&
@@ -346,6 +416,11 @@ export function buildScenarioSessionView(input: {
       eventLogs: input.eventLogs,
       excludedParticipantIds,
       excludedParticipantNames,
+      itemOutcomeContext: {
+        encounters: input.encounters,
+        participants: input.participants,
+        userId: input.userId,
+      },
       viewerMode: input.viewerMode,
     }),
     participants,
