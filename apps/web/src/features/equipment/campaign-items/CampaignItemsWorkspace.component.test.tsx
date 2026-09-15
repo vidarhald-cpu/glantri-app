@@ -134,6 +134,53 @@ describe("CampaignItemsWorkspace", () => {
     expect(mocks.update.mock.calls[0]?.[0].facts.templateOverrides).toEqual(disarmOverrides);
   });
 
+  it("shows reloaded initiative and final attack OB facts as recorded reference values", async () => {
+    const user = userEvent.setup();
+    mocks.load.mockResolvedValue({
+      ...assignedResponse,
+      state: {
+        ...assignedResponse.state,
+        itemsById: {
+          [assignedItem.id]: {
+            ...assignedItem,
+            itemFacts: {
+              ...assignedItem.itemFacts,
+              activeMechanics: [
+                {
+                  id: "recorded-ob",
+                  kind: "final_attack_ob_delta" as const,
+                  value: 2,
+                  visibility: "revealed" as const,
+                },
+              ],
+              templateOverrides: [
+                {
+                  id: "recorded-initiative",
+                  kind: "weapon_initiative_override" as const,
+                  value: 1,
+                  visibility: "revealed" as const,
+                },
+              ],
+            },
+          },
+        },
+      },
+    });
+    render(<CampaignItemsWorkspace campaignId="campaign-1" />);
+
+    expect(await screen.findByText("Recorded initiative 1 (standard 2)")).toBeVisible();
+    expect(screen.getByText("Recorded final attack OB +2")).toBeVisible();
+    expect(
+      screen.getAllByText(/Recorded for reference only\. The app does not apply it/),
+    ).toHaveLength(2);
+
+    await user.click(screen.getByRole("button", { name: "Edit item" }));
+    expect(screen.getByText("Recorded initiative — reference only")).toBeVisible();
+    expect(screen.getByText("Recorded final attack OB — reference only")).toBeVisible();
+    expect(screen.getByLabelText("Recorded initiative")).toHaveValue(1);
+    expect(screen.getByLabelText("Recorded final attack OB")).toHaveValue(2);
+  });
+
   it("creates ordinary and customized items through the same focused flow", async () => {
     const user = userEvent.setup();
     render(<CampaignItemsWorkspace campaignId="campaign-1" />);
@@ -146,6 +193,12 @@ describe("CampaignItemsWorkspace", () => {
     );
     expect(screen.getByText("Standard initiative: 2")).toBeVisible();
     expect(
+      screen.getByText("The app records this value but does not apply it to initiative."),
+    ).toBeVisible();
+    expect(
+      screen.getByText("The app records this value but does not apply it to attack OB."),
+    ).toBeVisible();
+    expect(
       screen.getByText(
         "These are real item capabilities, but the app does not automatically calculate or track them.",
       ),
@@ -153,9 +206,9 @@ describe("CampaignItemsWorkspace", () => {
 
     await user.type(screen.getByLabelText("Item name (optional)"), "Silverston");
     await user.selectOptions(screen.getByLabelText("Initial assignment"), "character-1");
-    await user.click(screen.getByLabelText("Use a different initiative"));
-    await user.clear(screen.getByLabelText("Actual initiative"));
-    await user.type(screen.getByLabelText("Actual initiative"), "1");
+    await user.click(screen.getByLabelText("Record a different initiative"));
+    await user.clear(screen.getByLabelText("Recorded initiative"));
+    await user.type(screen.getByLabelText("Recorded initiative"), "1");
     await user.click(screen.getByRole("button", { name: "Add descriptive trait" }));
     expect(screen.getByRole("combobox", { name: "Trait 1 category" })).toBeVisible();
     await user.type(screen.getByLabelText("Trait 1"), "House Silverston");

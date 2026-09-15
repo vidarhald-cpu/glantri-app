@@ -246,8 +246,9 @@ function CampaignItemEditor({
       {selectedTemplate?.category === "weapon" &&
       typeof selectedTemplate.initiative === "number" ? (
         <fieldset style={panelStyle}>
-          <legend>Differences from standard</legend>
+          <legend>Recorded initiative — reference only</legend>
           <div>Standard initiative: {selectedTemplate.initiative}</div>
+          <div>The app records this value but does not apply it to initiative.</div>
           <label>
             <input
               checked={Boolean(draft.facts.initiativeOverride)}
@@ -260,12 +261,12 @@ function CampaignItemEditor({
               }
               type="checkbox"
             />{" "}
-            Use a different initiative
+            Record a different initiative
           </label>
           {draft.facts.initiativeOverride ? (
             <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "1fr 1fr" }}>
               <label style={{ display: "grid", gap: "0.25rem" }}>
-                <span>Actual initiative</span>
+                <span>Recorded initiative</span>
                 <input
                   type="number"
                   value={draft.facts.initiativeOverride.value}
@@ -293,7 +294,8 @@ function CampaignItemEditor({
       ) : null}
 
       <fieldset style={panelStyle}>
-        <legend>Active mechanics</legend>
+        <legend>Recorded final attack OB — reference only</legend>
+        <div>The app records this value but does not apply it to attack OB.</div>
         <label>
           <input
             checked={Boolean(draft.facts.finalAttackObDelta)}
@@ -306,12 +308,12 @@ function CampaignItemEditor({
             }
             type="checkbox"
           />{" "}
-          Add final attack OB contribution
+          Record final attack OB
         </label>
         {draft.facts.finalAttackObDelta ? (
           <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "1fr 1fr" }}>
             <label style={{ display: "grid", gap: "0.25rem" }}>
-              <span>Final attack OB</span>
+              <span>Recorded final attack OB</span>
               <input
                 type="number"
                 value={draft.facts.finalAttackObDelta.value}
@@ -335,7 +337,7 @@ function CampaignItemEditor({
             />
           </div>
         ) : (
-          <div>No active mechanics added.</div>
+          <div>No recorded final attack OB.</div>
         )}
       </fieldset>
 
