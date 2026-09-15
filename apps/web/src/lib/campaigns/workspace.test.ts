@@ -114,7 +114,7 @@ describe("campaign workspace", () => {
       requestedEncounterId: "enc-unassigned",
       requestedScenarioId: "scn-1",
       requestedTab: "player-combat",
-      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+      scenarios: [scenario({ id: "scn-1", name: "Session one", status: "live" })],
     });
 
     expect(state.activeEncounterId).toBe("enc-assigned");
@@ -209,7 +209,7 @@ describe("campaign workspace", () => {
       requestedEncounterId: null,
       requestedScenarioId: null,
       requestedTab: "character",
-      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+      scenarios: [scenario({ id: "scn-1", name: "Session one", status: "live" })],
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
@@ -268,7 +268,7 @@ describe("campaign workspace", () => {
       requestedEncounterId: null,
       requestedScenarioId: null,
       requestedTab: "combat",
-      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+      scenarios: [scenario({ id: "scn-1", name: "Session one", status: "live" })],
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
@@ -283,14 +283,14 @@ describe("campaign workspace", () => {
       requestedEncounterId: null,
       requestedScenarioId: null,
       requestedTab: "player-combat",
-      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+      scenarios: [scenario({ id: "scn-1", name: "Session one", status: "live" })],
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
     expect(state.activeTab).toBe("player-combat");
   });
 
-  it("keeps the Combat tab open with a missing-context state when no scenario is selected", () => {
+  it("returns Combat without a live Scenario to Campaign Home", () => {
     const state = resolveCampaignWorkspaceState({
       activeCampaignId: "camp-1",
       canAccessGmEncounter: true,
@@ -302,7 +302,7 @@ describe("campaign workspace", () => {
     });
 
     expect(state.activeScenarioId).toBeUndefined();
-    expect(state.activeTab).toBe("combat");
+    expect(state.activeTab).toBe("campaign");
   });
 
   it("keeps the GM Combat tab in selection mode when multiple encounters are available", () => {
@@ -326,7 +326,7 @@ describe("campaign workspace", () => {
       requestedEncounterId: null,
       requestedScenarioId: "scn-1",
       requestedTab: "combat",
-      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+      scenarios: [scenario({ id: "scn-1", name: "Session one", status: "live" })],
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
@@ -355,7 +355,7 @@ describe("campaign workspace", () => {
       requestedEncounterId: null,
       requestedScenarioId: "scn-1",
       requestedTab: "combat",
-      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+      scenarios: [scenario({ id: "scn-1", name: "Session one", status: "live" })],
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
@@ -384,7 +384,7 @@ describe("campaign workspace", () => {
       requestedEncounterId: "roleplay-encounter",
       requestedScenarioId: "scn-1",
       requestedTab: "combat",
-      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+      scenarios: [scenario({ id: "scn-1", name: "Session one", status: "live" })],
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
@@ -440,7 +440,7 @@ describe("campaign workspace", () => {
           id: "scn-1",
           kind: "mixed",
           name: "Session one",
-          status: "draft",
+          status: "live",
           updatedAt: "2026-04-23T00:00:00.000Z",
         },
       ],
@@ -467,7 +467,7 @@ describe("campaign workspace", () => {
           id: "scn-1",
           kind: "mixed",
           name: "Session one",
-          status: "draft",
+          status: "live",
           updatedAt: "2026-04-23T00:00:00.000Z",
         },
       ],
@@ -520,7 +520,7 @@ describe("campaign workspace", () => {
           id: "scn-1",
           kind: "mixed",
           name: "Session one",
-          status: "draft",
+          status: "live",
           updatedAt: "2026-04-23T00:00:00.000Z",
         },
       ],
@@ -585,7 +585,7 @@ describe("campaign workspace", () => {
           id: "scn-1",
           kind: "mixed",
           name: "Session one",
-          status: "draft",
+          status: "live",
           updatedAt: "2026-04-23T00:00:00.000Z",
         },
       ],
@@ -663,15 +663,16 @@ describe("campaign workspace", () => {
         }),
       ).toMatchObject({ activeScenarioId: terminalScenario.id, activeTab: "scenario" });
 
-      expect(
-        resolveCampaignWorkspaceState({
-          activeCampaignId: "camp-1",
-          canAccessGmEncounter: false,
-          encounters: [],
-          requestedTab: "scenario",
-          scenarios: [terminalScenario],
-        }).activeScenarioId,
-      ).toBeUndefined();
+      const withoutSelection = resolveCampaignWorkspaceState({
+        activeCampaignId: "camp-1",
+        canAccessGmEncounter: false,
+        encounters: [],
+        requestedTab: "scenario",
+        scenarios: [terminalScenario],
+      });
+
+      expect(withoutSelection.activeScenarioId).toBeUndefined();
+      expect(withoutSelection.activeTab).toBe("campaign");
     },
   );
 
@@ -705,12 +706,76 @@ describe("campaign workspace", () => {
       requestedEncounterId: null,
       requestedScenarioId: null,
       requestedTab: "scenario",
-      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+      scenarios: [scenario({ id: "scn-1", name: "Session one", status: "live" })],
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
     expect(state.activeTab).toBe("scenario");
   });
+
+  it("keeps the Scenario tab in choice mode when several live Scenarios are available", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: true,
+      encounters: [],
+      requestedTab: "scenario",
+      scenarios: [
+        scenario({ id: "scn-1", name: "Session one", status: "live" }),
+        scenario({ id: "scn-2", name: "Session two", status: "live" }),
+      ],
+    });
+
+    expect(state.activeScenarioId).toBeUndefined();
+    expect(state.activeTab).toBe("scenario");
+  });
+
+  it.each(["draft", "paused"] as const)(
+    "does not restore a remembered %s Scenario as live play",
+    (status) => {
+      const state = resolveCampaignWorkspaceState({
+        activeCampaignId: "camp-1",
+        canAccessGmEncounter: true,
+        encounters: [],
+        rememberedScenarioId: "scn-1",
+        rememberedTab: "scenario",
+        scenarios: [scenario({ id: "scn-1", name: "Session one", status })],
+      });
+
+      expect(state.activeScenarioId).toBeUndefined();
+      expect(state.activeTab).toBe("campaign");
+    },
+  );
+
+  it("keeps an explicit draft Scenario link available for GM preparation", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: true,
+      encounters: [],
+      requestedScenarioId: "scn-draft",
+      requestedTab: "scenario",
+      scenarios: [scenario({ id: "scn-draft", name: "Preparation", status: "draft" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-draft");
+    expect(state.activeTab).toBe("scenario");
+  });
+
+  it.each(["draft", "paused"] as const)(
+    "does not open an explicit %s Scenario as player live play",
+    (status) => {
+      const state = resolveCampaignWorkspaceState({
+        activeCampaignId: "camp-1",
+        canAccessGmEncounter: false,
+        encounters: [],
+        requestedScenarioId: "scn-1",
+        requestedTab: "scenario",
+        scenarios: [scenario({ id: "scn-1", name: "Session one", status })],
+      });
+
+      expect(state.activeScenarioId).toBeUndefined();
+      expect(state.activeTab).toBe("campaign");
+    },
+  );
 
   it("resolves the first assigned player encounter when opening player encounter without ids", () => {
     const state = resolveCampaignWorkspaceState({
@@ -806,7 +871,7 @@ describe("campaign workspace", () => {
           scenarioId: "scn-1",
         }),
       ],
-      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+      scenarios: [scenario({ id: "scn-1", name: "Session one", status: "live" })],
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
@@ -837,7 +902,7 @@ describe("campaign workspace", () => {
           scenarioId: "scn-1",
         }),
       ],
-      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+      scenarios: [scenario({ id: "scn-1", name: "Session one", status: "live" })],
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
@@ -873,7 +938,7 @@ describe("campaign workspace", () => {
           scenarioId: "scn-1",
         }),
       ],
-      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+      scenarios: [scenario({ id: "scn-1", name: "Session one", status: "live" })],
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
@@ -909,7 +974,7 @@ describe("campaign workspace", () => {
       rememberedScenarioId: "scn-1",
       rememberedTab: "player-encounter",
       scenarioParticipants,
-      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+      scenarios: [scenario({ id: "scn-1", name: "Session one", status: "live" })],
     });
     const explicitState = resolveCampaignWorkspaceState({
       activeCampaignId: "camp-1",
@@ -927,7 +992,7 @@ describe("campaign workspace", () => {
       rememberedScenarioId: "scn-1",
       rememberedTab: "player-encounter",
       scenarioParticipants,
-      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+      scenarios: [scenario({ id: "scn-1", name: "Session one", status: "live" })],
     });
 
     expect(fallbackState.activeEncounterId).toBe("enc-changing");
@@ -958,7 +1023,7 @@ describe("campaign workspace", () => {
           scenarioId: "scn-1",
         }),
       ],
-      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+      scenarios: [scenario({ id: "scn-1", name: "Session one", status: "live" })],
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
@@ -1058,7 +1123,7 @@ describe("campaign workspace", () => {
           scenarioId: "scn-1",
         }),
       ],
-      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+      scenarios: [scenario({ id: "scn-1", name: "Session one", status: "live" })],
     });
 
     expect(state.activeScenarioId).toBe("scn-1");

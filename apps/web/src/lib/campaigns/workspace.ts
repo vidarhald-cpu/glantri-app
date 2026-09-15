@@ -141,7 +141,7 @@ function resolveRequestedCampaignWorkspaceTab(input: {
     case "items":
       return input.canAccessGmEncounter ? "items" : fallbackTab;
     case "scenario":
-      return input.activeScenarioId || !input.canAccessGmEncounter ? "scenario" : "campaign";
+      return "scenario";
     case "encounter":
     case "player-encounter":
       if (!input.activeScenarioId || !input.activeEncounterId) {
@@ -207,6 +207,10 @@ function isSelectableWorkspaceEncounter(encounter: WorkspaceEncounterSummary): b
 
 function isTerminalScenario(scenario: Scenario | PlayerAccessibleScenario): boolean {
   return scenario.status === "completed" || scenario.status === "archived";
+}
+
+export function isLiveCampaignScenario(scenario: Scenario | PlayerAccessibleScenario): boolean {
+  return scenario.status === "live";
 }
 
 function isHistoricalWorkspaceTab(tab?: string | null): boolean {
@@ -330,21 +334,36 @@ export function resolveCampaignWorkspaceState(input: {
   const requestedScenarioId = input.requestedScenarioId ?? input.rememberedScenarioId;
   const requestedEncounterId = input.requestedEncounterId ?? input.rememberedEncounterId;
   const requestedTab = input.requestedTab ?? input.rememberedTab;
-  const selectableScenarios = input.scenarios.filter((scenario) => !isTerminalScenario(scenario));
+  const liveScenarios = input.scenarios.filter(isLiveCampaignScenario);
   const requestedScenario = input.scenarios.find((scenario) => scenario.id === requestedScenarioId);
+  const requestedScenarioExplicitly = Boolean(
+    input.requestedScenarioId && requestedScenario?.id === input.requestedScenarioId,
+  );
   const terminalScenarioExplicitlyRequested = Boolean(
     input.requestedScenarioId &&
     requestedScenario?.id === input.requestedScenarioId &&
+    isTerminalScenario(requestedScenario) &&
     isHistoricalWorkspaceTab(input.requestedTab),
   );
   const terminalEncounterExplicitlyRequested = Boolean(
     input.requestedEncounterId && isHistoricalWorkspaceTab(input.requestedTab),
   );
-  let activeScenarioId =
+  const requestedScenarioCanOpen = Boolean(
     requestedScenario &&
-    (!isTerminalScenario(requestedScenario) || terminalScenarioExplicitlyRequested)
-      ? requestedScenario.id
-      : undefined;
+    (isLiveCampaignScenario(requestedScenario) ||
+      (requestedScenarioExplicitly &&
+        ((input.canAccessGmEncounter && !isTerminalScenario(requestedScenario)) ||
+          terminalScenarioExplicitlyRequested))),
+  );
+  let activeScenarioId = requestedScenarioCanOpen ? requestedScenario?.id : undefined;
+
+  if (
+    (requestedTab === "combat" || requestedTab === "player-combat") &&
+    requestedScenario &&
+    !isLiveCampaignScenario(requestedScenario)
+  ) {
+    activeScenarioId = undefined;
+  }
   let activeEncounterId = input.encounters.some(
     (encounter) =>
       Boolean(activeScenarioId) &&
@@ -365,9 +384,9 @@ export function resolveCampaignWorkspaceState(input: {
         requestedTab === "encounter" ||
         requestedTab === "skill-rolls" ||
         requestedTab === "player-skill-rolls") &&
-      selectableScenarios.length === 1
+      liveScenarios.length === 1
     ) {
-      activeScenarioId = selectableScenarios[0]?.id;
+      activeScenarioId = liveScenarios[0]?.id;
     }
 
     if (
@@ -377,9 +396,9 @@ export function resolveCampaignWorkspaceState(input: {
         requestedTab === "skill-rolls" ||
         requestedTab === "player-skill-rolls" ||
         requestedTab === "player-combat") &&
-      selectableScenarios.length === 1
+      liveScenarios.length === 1
     ) {
-      activeScenarioId = selectableScenarios[0]?.id;
+      activeScenarioId = liveScenarios[0]?.id;
     }
 
     if (
@@ -408,8 +427,8 @@ export function resolveCampaignWorkspaceState(input: {
       }
     }
   } else if (requestedTab === "combat" || requestedTab === "player-combat") {
-    if (!activeScenarioId && selectableScenarios.length === 1) {
-      activeScenarioId = selectableScenarios[0]?.id;
+    if (!activeScenarioId && liveScenarios.length === 1) {
+      activeScenarioId = liveScenarios[0]?.id;
     }
 
     const explicitlyRequestedEncounter = input.requestedEncounterId
@@ -433,6 +452,20 @@ export function resolveCampaignWorkspaceState(input: {
     }
   }
 
+  const requestedTabForResolution =
+    !activeScenarioId &&
+    ((requestedTab === "scenario" && (!input.requestedTab || liveScenarios.length === 0)) ||
+      requestedTab === "encounter" ||
+      requestedTab === "gm-encounter" ||
+      requestedTab === "player-encounter" ||
+      requestedTab === "skill-rolls" ||
+      requestedTab === "player-skill-rolls" ||
+      requestedTab === "character" ||
+      requestedTab === "combat" ||
+      requestedTab === "player-combat")
+      ? "campaign"
+      : requestedTab;
+
   return {
     activeCampaignId: input.activeCampaignId,
     activeEncounterId,
@@ -441,7 +474,7 @@ export function resolveCampaignWorkspaceState(input: {
       activeEncounterId,
       activeScenarioId,
       canAccessGmEncounter: input.canAccessGmEncounter,
-      requestedTab,
+      requestedTab: requestedTabForResolution,
     }),
   };
 }
