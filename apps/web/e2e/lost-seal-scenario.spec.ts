@@ -711,6 +711,13 @@ test.describe("Lost Seal Scenario happy path", () => {
     await expect(page.getByRole("heading", { name: "Scenarios" })).toBeVisible();
     await expect(page.getByText("Closed · history", { exact: true })).toHaveCount(2);
 
+    expect(
+      (
+        await page.request.post(`${API_URL}/auth/login`, {
+          data: { email: "smoke-gm@test.local", password: "smoketest123" },
+        })
+      ).status(),
+    ).toBe(200);
     await page.goto(`/campaigns/${campaign.campaign.id}/scenarios/${scenario.scenario.id}`);
     await expect(page.getByRole("heading", { name: "Private GM notes" })).toBeVisible();
     expect((await page.request.post(`${API_URL}/auth/logout`)).status()).toBe(200);
