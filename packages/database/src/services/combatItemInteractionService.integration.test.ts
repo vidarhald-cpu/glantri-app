@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  buildScenarioSessionView,
   commitCombatRoundDisarm,
   encounterSessionSchema,
   initializeCombatRoundState,
@@ -9,6 +10,7 @@ import {
 
 import { createPrismaCharacterEquipmentRepository } from "../repositories/characterEquipmentRepository";
 import { createPrismaCharacterRepository } from "../repositories/characterRepository";
+import { createPrismaCombatStateReadRepository } from "../repositories/combatStateReadRepository";
 import { createPrismaCombatStatePersistenceRepository } from "../repositories/combatStatePersistenceRepository";
 import { createPrismaScenarioRepository } from "../repositories/scenarioRepository";
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
@@ -110,12 +112,14 @@ if (!process.env.DATABASE_URL_TEST) {
           {
             characterId: character.id,
             id: `participant-${suffix}`,
+            scenarioParticipantId: scenarioParticipants[0]!.id,
             label: character.name,
             participantType: "character",
           },
           {
             characterId: recipient.id,
             id: `participant-recipient-${suffix}`,
+            scenarioParticipantId: scenarioParticipants[1]!.id,
             label: recipient.name,
             participantType: "character",
           },
@@ -336,8 +340,199 @@ if (!process.env.DATABASE_URL_TEST) {
         );
         expect(
           await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
-        ).toBe(1);
+        ).toBe(2);
+        const events = await prisma!.scenarioEventLog.findMany({
+          where: { scenarioId: current.scenario.id },
+        });
+        expect(events.map((event) => event.eventType).sort()).toEqual([
+          "encounter_combat_outcome",
+          "encounter_updated",
+        ]);
+        const retried = await new CombatItemInteractionService(
+          current.itemRepository,
+          prisma!,
+        ).commitResolution(input);
+        expect(retried.item.alreadyApplied).toBe(true);
+        expect(
+          await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
+        ).toBe(2);
       }
+    });
+
+    it("records pass/drop/pickup once with mapped intersected audiences and reload chronology", async () => {
+      const current = await fixture("history-sequence");
+      const service = new CombatItemInteractionService(current.itemRepository, prisma!);
+      let latest = current.persisted;
+      let item = current.item;
+      const ownerIds = ["participant-history-sequence", "participant-recipient-history-sequence"];
+      const lifecycleTypes = ["encounter_paused", "encounter_resumed", "encounter_closed"];
+      for (const [index, operation] of (["pass", "drop", "pickup"] as const).entries()) {
+        const ownerIndex = operation === "drop" ? 1 : 0;
+        const template = current.persisted.combatRoundState!.genericActions[0]!;
+        const action = {
+          ...template,
+          id: `history-${operation}`,
+          ownerParticipantId: ownerIds[ownerIndex]!,
+          itemInteraction: {
+            ...template.itemInteraction!,
+            operation,
+            itemRevision: item.revision!,
+            recipientParticipantId: operation === "pass" ? ownerIds[1] : undefined,
+            visibleToParticipantIds: [ownerIds[0]!],
+          },
+          reference: { ...template.reference!, ownerParticipantId: ownerIds[ownerIndex]! },
+        };
+        latest = await createPrismaCombatStatePersistenceRepository(prisma!).updateCombatEncounter({
+          campaignId: current.campaign.id,
+          encounterId: current.encounterId,
+          expectedRevision: latest.updatedAt,
+          scenarioId: current.scenario.id,
+          session: encounterSessionSchema.parse({
+            ...latest,
+            combatRoundState: {
+              ...latest.combatRoundState!,
+              genericActions: [
+                ...latest.combatRoundState!.genericActions.filter(
+                  (entry) => entry.status === "completed",
+                ),
+                action,
+              ],
+            },
+          }),
+        });
+        const completed = encounterSessionSchema.parse({
+          ...latest,
+          combatRoundState: {
+            ...latest.combatRoundState!,
+            genericActions: latest.combatRoundState!.genericActions.map((entry) =>
+              entry.id === action.id
+                ? {
+                    ...entry,
+                    status: "completed",
+                    resolution: {
+                      resolvedAt: "2026-08-16T10:03:00.000Z",
+                      text: `Safe ${operation} result.`,
+                      resolvedByUserId: current.gm.id,
+                      visibleToParticipantIds: ownerIds,
+                    },
+                  }
+                : entry,
+            ),
+          },
+        });
+        const input = {
+          actionId: action.id,
+          actorUserId: current.gm.id,
+          campaignId: current.campaign.id,
+          encounterId: current.encounterId,
+          encounterSession: completed,
+          expectedEncounterRevision: latest.updatedAt,
+          interaction: action.itemInteraction,
+          ownerCharacterId: ownerIndex === 0 ? current.character.id : current.recipient.id,
+          recipientCharacterId: operation === "pass" ? current.recipient.id : undefined,
+          roundNumber: 1,
+          scenarioId: current.scenario.id,
+        };
+        const committed = await service.commitResolution(input);
+        expect(committed.item.item.holderCharacterId).toBe(
+          operation === "drop"
+            ? null
+            : operation === "pass"
+              ? current.recipient.id
+              : current.character.id,
+        );
+        latest = committed.encounter;
+        item = committed.item.item;
+        const beforeRetry = await prisma!.scenarioEventLog.findMany({
+          where: { scenarioId: current.scenario.id },
+        });
+        expect((await service.commitResolution(input)).item.alreadyApplied).toBe(true);
+        expect(
+          await prisma!.scenarioEventLog.findMany({ where: { scenarioId: current.scenario.id } }),
+        ).toEqual(beforeRetry);
+        await prisma!.scenarioEventLog.create({
+          data: {
+            eventType: lifecycleTypes[index]!,
+            payloadJson: { encounterId: current.encounterId },
+            scenarioId: current.scenario.id,
+            summary: `Lifecycle ${index}.`,
+          },
+        });
+      }
+      const events = await current.scenarioService.listScenarioEventLogs(current.scenario.id);
+      const safe = events.filter((event) => event.eventType === "encounter_combat_outcome");
+      expect(safe).toHaveLength(3);
+      for (const event of safe) {
+        expect(event.payload).toEqual({
+          actionId: expect.stringMatching(/^history-(pass|drop|pickup)$/),
+          actorParticipantId: expect.any(String),
+          audienceParticipantIds: [current.scenarioParticipants[0]!.id],
+          encounterId: current.encounterId,
+          eventKind: "item_resolution",
+        });
+      }
+      expect(events.filter((event) => event.eventType === "encounter_updated")).toHaveLength(3);
+      const reloaded = (await createPrismaCombatStateReadRepository(prisma!).getFullEncounterById(
+        current.encounterId,
+      ))!.encounter;
+      const scenario = (await current.scenarioService.getScenarioById(current.scenario.id))!;
+      const view = (userId: string, viewerMode: "gm" | "player") =>
+        buildScenarioSessionView({
+          availableObjects: [],
+          encounters: [reloaded],
+          eventLogs: [...events].reverse(),
+          participants: current.scenarioParticipants,
+          scenario,
+          userId,
+          viewerMode,
+        });
+      const expected = [
+        "Safe pass result.",
+        "Lifecycle 0.",
+        "Safe drop result.",
+        "Lifecycle 1.",
+        "Safe pickup result.",
+        "Lifecycle 2.",
+      ];
+      expect(view(current.gm.id, "gm").history.map((event) => event.summary)).toEqual(expected);
+      const playerHistory = view(
+        current.scenarioParticipants[0]!.controlledByUserId!,
+        "player",
+      ).history;
+      expect(playerHistory.map((event) => event.summary)).toEqual(expected);
+      expect(
+        view(current.scenarioParticipants[1]!.controlledByUserId!, "player").history.filter(
+          (event) => event.type === "encounter_combat_outcome",
+        ),
+      ).toEqual([]);
+      expect(JSON.stringify(playerHistory)).not.toMatch(
+        /holderCharacterId|itemRevision|resolvedByUserId|payload|audienceParticipantIds/,
+      );
+    });
+
+    it("keeps an unmapped Item audience empty rather than public", async () => {
+      const current = await fixture("unmapped-history");
+      const session = encounterSessionSchema.parse(current.completedSession);
+      session.participants = session.participants.map((entry) => ({
+        ...entry,
+        scenarioParticipantId: undefined,
+      }));
+      await new CombatItemInteractionService(current.itemRepository, prisma!).commitResolution({
+        actionId: current.actionId,
+        actorUserId: current.gm.id,
+        campaignId: current.campaign.id,
+        encounterId: current.encounterId,
+        encounterSession: session,
+        expectedEncounterRevision: current.persisted.updatedAt,
+        interaction: session.combatRoundState!.genericActions[0]!.itemInteraction!,
+        ownerCharacterId: current.character.id,
+        roundNumber: 1,
+        scenarioId: current.scenario.id,
+      });
+      const safe = await prisma!.scenarioEventLog.findFirstOrThrow({
+        where: { scenarioId: current.scenario.id, eventType: "encounter_combat_outcome" },
+      });
+      expect(safe.payloadJson).toMatchObject({ audienceParticipantIds: [] });
     });
 
     it("blocks authoritative Combat after an external equipment change until GM reconciliation", async () => {
@@ -1177,7 +1372,7 @@ if (!process.env.DATABASE_URL_TEST) {
       );
       expect(
         await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
-      ).toBe(beforeEvents + 1);
+      ).toBe(beforeEvents + 2);
 
       const exactRetry = await service.commitResolution(secondInput);
       expect(exactRetry.item).toMatchObject({
@@ -1188,7 +1383,7 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(exactRetry.encounter.updatedAt).toBe(second.encounter.updatedAt);
       expect(
         await prisma!.scenarioEventLog.count({ where: { scenarioId: current.scenario.id } }),
-      ).toBe(beforeEvents + 1);
+      ).toBe(beforeEvents + 2);
       const stored = await prisma!.characterEquipmentItem.findUniqueOrThrow({
         where: { id: current.item.id },
       });

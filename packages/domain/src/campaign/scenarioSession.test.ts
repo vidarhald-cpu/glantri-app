@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import {
+  combatGenericActionSchema,
+  projectCombatGenericActionsForPlayer,
+} from "../encounter/combatGenericAction";
+import { initializeCombatRoundState } from "../encounter/combatRoundManager";
 import { encounterSessionSchema } from "../encounter/session";
 import { scenarioParticipantSchema, scenarioSchema } from "./scenario";
 import {
@@ -59,7 +64,239 @@ function encounter(id: string, participantId: string, title: string) {
   });
 }
 
+function itemHistoryFixture() {
+  const scenario = scenarioSchema.parse({
+    campaignId: "campaign-1",
+    createdAt: now,
+    id: "scenario-1",
+    name: "Item history",
+    status: "live",
+    updatedAt: now,
+  });
+  const participants = [
+    participant("participant-a", "user-a", "Player A"),
+    participant("participant-b", "user-b", "Player B"),
+  ];
+  const action = combatGenericActionSchema.parse({
+    createdAt: now,
+    duration: { kind: "gm_decided" },
+    id: "item-action",
+    intent: "Drop the dagger.",
+    itemInteraction: {
+      itemId: "item-1",
+      itemLabel: "Dagger",
+      itemRevision: now,
+      operation: "drop",
+      stateAtDeclaration: "held",
+      visibleToParticipantIds: ["encounter-participant-a", "encounter-participant-b"],
+    },
+    lastUpdatedAt: now,
+    ownerParticipantId: "encounter-participant-b",
+    preset: "item_interaction",
+    progress: { completedRounds: 0 },
+    resolution: {
+      resolvedAt: now,
+      text: "Player B dropped the dagger.",
+      visibleToParticipantIds: ["encounter-participant-a", "encounter-participant-b"],
+    },
+    status: "completed",
+  });
+  const eventLogs = [
+    {
+      createdAt: now,
+      eventType: "encounter_combat_outcome",
+      id: "item-outcome",
+      payload: {
+        actionId: action.id,
+        actorParticipantId: "participant-b",
+        audienceParticipantIds: ["participant-a", "participant-b"],
+        encounterId: "encounter-1",
+        eventKind: "item_resolution",
+      },
+      scenarioId: scenario.id,
+      sequence: 1,
+      summary: action.resolution!.text,
+    },
+  ];
+  const currentEncounter = encounterSessionSchema.parse({
+    ...encounter("encounter-1", "participant-a", "Courtyard"),
+    kind: "combat",
+    participants: participants.map((entry) => ({
+      id: `encounter-${entry.id}`,
+      label: entry.snapshot.displayName,
+      participantType: "scenario",
+      scenarioParticipantId: entry.id,
+    })),
+    roleplayState: {
+      visibility: {
+        "encounter-participant-a": { "encounter-participant-b": true },
+      },
+    },
+  });
+  currentEncounter.combatRoundState = {
+    ...initializeCombatRoundState({ encounter: currentEncounter }),
+    genericActions: [action],
+  };
+  return { scenario, participants, action, eventLogs, currentEncounter };
+}
+
 describe("Scenario session privacy projection", () => {
+  it("withholds an Item outcome when its owner becomes hidden in the Encounter visibility grid", () => {
+    const { scenario, participants, action, eventLogs, currentEncounter } = itemHistoryFixture();
+    for (const ownerVisible of [true, false, true]) {
+      currentEncounter.roleplayState!.visibility["encounter-participant-a"]![
+        "encounter-participant-b"
+      ] = ownerVisible;
+      const combatResult = projectCombatGenericActionsForPlayer({
+        actions: [action],
+        controlledParticipantIds: new Set(["encounter-participant-a"]),
+        visibleParticipantIds: new Set([
+          "encounter-participant-a",
+          ...(ownerVisible ? ["encounter-participant-b"] : []),
+        ]),
+      });
+      expect(combatResult).toHaveLength(ownerVisible ? 1 : 0);
+      const session = buildScenarioSessionView({
+        availableObjects: [],
+        encounters: [currentEncounter],
+        eventLogs,
+        participants,
+        scenario,
+        userId: "user-a",
+        viewerMode: "player",
+      });
+      expect(session.history).toHaveLength(combatResult.length);
+    }
+  });
+
+  it("requires a currently permitted completed Item result and exact context mapping", () => {
+    const original = itemHistoryFixture();
+    const view = (
+      current: ReturnType<typeof itemHistoryFixture>,
+      viewerMode: "player" | "gm" = "player",
+    ) =>
+      buildScenarioSessionView({
+        availableObjects: [],
+        encounters: [current.currentEncounter],
+        eventLogs: current.eventLogs,
+        participants: current.participants,
+        scenario: current.scenario,
+        userId: "user-a",
+        viewerMode,
+      });
+    expect(view(original).history).toHaveLength(1);
+    const mutations: Array<(current: ReturnType<typeof itemHistoryFixture>) => void> = [
+      (current) => {
+        current.eventLogs[0]!.payload.audienceParticipantIds = [];
+      },
+      (current) => {
+        current.eventLogs[0]!.payload.audienceParticipantIds = ["participant-b"];
+      },
+      (current) => {
+        current.eventLogs[0]!.payload.actionId = "missing";
+      },
+      (current) => {
+        current.eventLogs[0]!.payload.encounterId = "missing";
+      },
+      (current) => {
+        current.eventLogs[0]!.payload.actorParticipantId = "missing";
+      },
+      (current) => {
+        current.currentEncounter.participants[1]!.scenarioParticipantId = undefined;
+      },
+      (current) => {
+        current.action.itemInteraction!.visibleToParticipantIds = [];
+      },
+      (current) => {
+        current.action.resolution!.visibleToParticipantIds = [];
+      },
+      (current) => {
+        current.action.status = "active";
+      },
+      (current) => {
+        current.action.resolution = undefined;
+      },
+      (current) => {
+        current.participants[1]!.visibilityOverrides = { visibility: "hidden" };
+      },
+      (current) => {
+        current.participants[0]!.controlledByUserId = "someone-else";
+      },
+      (current) => {
+        current.currentEncounter.combatRoundState = undefined;
+      },
+    ];
+    for (const mutate of mutations) {
+      const current = itemHistoryFixture();
+      mutate(current);
+      expect(view(current).history).toEqual([]);
+      expect(view(current, "gm").history).toHaveLength(1);
+    }
+    expect(
+      projectScenarioObjectiveHistory({
+        controlledParticipantIds: new Set(["participant-a"]),
+        eventLogs: original.eventLogs,
+        viewerMode: "player",
+      }),
+    ).toEqual([]);
+  });
+
+  it("keeps owned and closed Item history, archived control rules, and other chronology unchanged", () => {
+    const current = itemHistoryFixture();
+    current.currentEncounter.roleplayState!.visibility = { "encounter-participant-a": {} };
+    const view = (userId: string) =>
+      buildScenarioSessionView({
+        availableObjects: [],
+        encounters: [current.currentEncounter],
+        eventLogs: current.eventLogs,
+        participants: current.participants,
+        scenario: current.scenario,
+        userId,
+        viewerMode: "player",
+      });
+    expect(view("user-b").history).toHaveLength(1);
+    current.currentEncounter.status = "completed";
+    expect(view("user-b").history).toHaveLength(1);
+    current.currentEncounter.status = "archived";
+    expect(view("user-b").history).toHaveLength(1);
+    for (const visible of [true, false, true]) {
+      current.currentEncounter.roleplayState!.visibility = {
+        "encounter-participant-a": { "encounter-participant-b": visible },
+      };
+      expect(view("user-a").history).toHaveLength(visible ? 1 : 0);
+      expect(view("unrelated").history).toEqual([]);
+      expect(current.currentEncounter.status).toBe("archived");
+    }
+    const otherEvents = ["encounter_closed", "encounter_paused", "encounter_resumed"].map(
+      (eventType, index) => ({
+        createdAt: now,
+        eventType,
+        id: eventType,
+        scenarioId: current.scenario.id,
+        sequence: 5 - index,
+        summary: eventType,
+      }),
+    );
+    const ordered = projectScenarioObjectiveHistory({
+      controlledParticipantIds: new Set(["participant-b"]),
+      eventLogs: [
+        ...otherEvents,
+        current.eventLogs[0]!,
+        { ...current.eventLogs[0]!, eventType: "encounter_updated", id: "internal" },
+      ],
+      viewerMode: "gm",
+    });
+    expect(ordered.map((entry) => entry.id)).toEqual([
+      "item-outcome",
+      "encounter_resumed",
+      "encounter_paused",
+      "encounter_closed",
+    ]);
+    expect(JSON.stringify(ordered)).not.toMatch(
+      /payload|audienceParticipantIds|actionId|visibility|item-1/,
+    );
+  });
+
   it("shows disjoint active Encounters only to involved players and hides their occupants", () => {
     const scenario = scenarioSchema.parse({
       campaignId: "campaign-1",
