@@ -17,7 +17,7 @@ Ordinary QA startup reading is limited to:
 
 1. `AGENTS.md`;
 2. this document;
-3. the exact INITIAL or REPAIR QA task contract; and
+3. the exact INITIAL, REPAIR, or PRESERVATION QA task contract; and
 4. only the task-specific domain, rule, decision, or source sections named by
    that contract.
 
@@ -40,7 +40,7 @@ Before creating the fresh independent-QA task, confirm only:
 
 - the issue is durably authorized for QA and at `Ready for Independent QA`;
 - an immutable candidate head is supplied;
-- REPAIR QA includes a prior durable FAIL;
+- REPAIR QA includes a prior durable FAIL; PRESERVATION includes prior durable PASS;
 - the applicable handoff tuple below is complete and the issue body is current; and
 - no other active QA owner exists for the same candidate.
 
@@ -70,6 +70,34 @@ scope/topology/delta verification.
 There is no permanent QA Orchestrator. Independence comes from a fresh worker,
 separate visible task, separate clean exact-head worktree, and review-only
 authority—not from an additional standing routing chat.
+
+## Verification classes and evidence validity
+
+- **Substantive implementation:** separate review-only QA at the immutable exact
+  head, with applicable functional/runtime and regression proof. Builder
+  self-acceptance and Orchestrator override of FAIL remain prohibited.
+- **Mechanical refresh:** independent preservation QA verifies equivalence,
+  relevant blobs/trees, topology, actual diff and scope, and applicable protected
+  checks. It does not repeat full feature review or expensive browser tests
+  solely because the SHA changed. Record why prior functional proof remains
+  applicable; if behavior changed or preservation cannot be established, use
+  substantive QA for the affected claim.
+- **Documentation/process:** light formatting, whitespace, internal references,
+  scope, and policy/content consistency checks plus the applicable protected
+  gate. No unrelated application, database, or browser proof is required. An
+  explicit documentation-only QA exemption routes evidence to acceptance and
+  does not manufacture independent QA PASS.
+
+An unchanged exact-head QA PASS does not expire merely through elapsed time or
+unrelated work. A mechanical head change requires preservation QA; a product
+change requires fresh substantive exact-head QA. Changed dependencies or other
+concrete risks need an applicability assessment, not automatic expiry.
+
+Once an immutable candidate is QA-ready, QA and hosted checks run in parallel
+unless one actually depends on the other. Record any measured resource
+contention and its scheduling constraint; do not impose blanket serial waiting.
+When required QA and applicable checks pass, the integration actor promptly
+applies existing conditional integration authority and every remaining gate.
 
 ## QA modes and handoff tuples
 
@@ -152,6 +180,17 @@ Required process examples:
   record the high-risk trigger and broaden database, API, privacy, and other
   relevant regression verification even when the head is a direct child.
 
+### PRESERVATION QA
+
+Use for a mechanically refreshed candidate with prior durable PASS, rather than
+inventing a prior FAIL to use REPAIR. Supply the INITIAL tuple plus the prior
+reviewed head/PASS link, new exact baseline/head, refresh operation, declared
+delta, and selected equivalence evidence. Independently verify topology, scope,
+relevant blob/tree comparisons, and applicability of carried-forward gates.
+Return an exact-head preservation verdict with that durable evidence. A product
+change instead needs fresh substantive QA. The same separate-task, immutable
+entry, lease, and anti-loop rules apply.
+
 ## Independent worker entry check
 
 In a fresh QA worktree, independently confirm canonical origin/common Git
@@ -184,7 +223,8 @@ An intended or merely queued dispatch is not started work.
 
 ## Substantive verification gates
 
-For either mode, verify and record:
+For substantive INITIAL or REPAIR QA, verify and record; for PRESERVATION,
+retain independence, exact-head and scope gates and apply the verification class:
 
 - independence: separate visible task, reviewer, and clean worktree from the
   Builder;
@@ -283,6 +323,11 @@ human action, it records that immediately and notifies the Development
 Orchestrator. The Orchestrator promptly surfaces `USER ACTION REQUIRED`; QA must
 not wait silently for the user to discover the child.
 
+Local Safari/development-browser testing already has
+[standing authorization](./control-plane.md#standing-safari-and-development-browser-authority).
+Do not ask for it again; actual human-only permission/login/security prompts
+still require immediate USER ACTION REQUIRED.
+
 ## Temporary timing capture
 
 For the first several QA cycles after this process is integrated (target: five,
@@ -315,7 +360,7 @@ observed end-to-end comparison.
 
 ```text
 QA RETURN
-Mode: INITIAL | REPAIR
+Mode: INITIAL | REPAIR | PRESERVATION
 Dispatch: Glantri app — Forgejo / independent QA / <child state>
 Thread ID / direct link when available / worktree:
 PR / exact reviewed head:

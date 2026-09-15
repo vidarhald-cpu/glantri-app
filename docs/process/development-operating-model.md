@@ -69,6 +69,11 @@ The Product Owner copy step is an intentional decision boundary. It is not
 optimized away or inferred from discussion, technical readiness, credentials,
 or an existing issue.
 
+Architecture discussion, proposed prompts, and planning notes are not execution
+orders. A Product Owner/control-plane prompt is dispatched only when actually
+sent to the Development Orchestrator. Policy changes and implementation orders
+remain separate; an approved process update does not dispatch product work.
+
 ### Architecture/control plane
 
 Architecture/control plane lives in the ChatGPT project
@@ -121,8 +126,8 @@ Product Owner sets direction
   -> Development Orchestrator dispatches separate exact-head independent QA
   -> Development Orchestrator harvests and records the verdict or blocker
   -> bounded repair and fresh QA, or meaningful control-plane gate
-  -> Architecture/control plane evaluates the durable result
-  -> Product Owner accepts, integrates, or makes the next decision
+  -> integrate promptly when explicit conditional authority and all gates pass
+  -> otherwise Architecture/control plane and Product Owner resolve acceptance or decisions
 ```
 
 The Product Owner does not relay QA prompts or monitor child completion. The
@@ -164,6 +169,38 @@ does not gain a parallel “completed” lifecycle.
 Supporting fields or labels may record priority, inactivity, dependencies, or a
 blocker, but they do not replace or silently change the exclusive lifecycle
 status.
+
+## Capability sizing and preparation
+
+Prefer the largest coherent vertical user capability whose decisions are settled,
+hotspots are manageable, one Builder can own it, and QA can review it as a
+meaningful unit. Crossing domain, rules, persistence, API, UI, tests, or many
+files is not itself a reason to split. Split for a real unresolved decision,
+dependency, conflicting ownership, materially different verification risk, or
+size beyond coherent ownership. Four Builders is a ceiling, not a utilization
+target.
+
+Before substantial dispatch, prepare the objective, settled known decisions,
+scope and exclusions, acceptance examples, dependencies, likely hotspots, and
+verification class. Resolve predictable missing decisions first when practical.
+Preparation is targeted and proportionate; it does not require exhaustive
+historical investigation. Ordinary implementation choices remain Builder authority.
+
+An active product lane needs a sizeable implementation-ready capability available
+or executing; importance alone is insufficient. When substantial definition is
+still needed, record **Preparing for Ready** as supporting preparation state
+under Design, then use the normal Ready, Authorized, and Active gates. This does
+not introduce another exclusive Forgejo lifecycle status or prohibit separately
+authorized bounded investigation. An Active issue still requires a named owner
+of live work.
+
+For future work that is not immediately next, keep preparation durable and
+conceptual: objectives, workflows, rules, concepts, permissions, invariants,
+acceptance, content, architecture boundaries, exclusions, and Product Owner
+decisions. Avoid premature current-code audits, SHA-specific designs, exact-path
+contracts, migration plans, and exhaustive runtime investigations likely to go
+stale. Near activation, a short preflight against then-current dev translates
+that specification into the exact executable contract and accepted baseline.
 
 ## Self-contained task contracts
 
@@ -249,7 +286,7 @@ and includes the outcome in its consolidated return. The Product Owner is not
 expected to monitor child tasks.
 
 At `Ready for Independent QA`, the Development Orchestrator dispatches one
-fresh separate visible QA task with the immutable INITIAL or REPAIR contract.
+fresh separate visible QA task with the immutable INITIAL, REPAIR, or PRESERVATION contract.
 It supervises that exact child, harvests its result, records durable evidence,
 and routes the outcome. The QA worker independently verifies the exact head,
 topology, scope, and actual delta; any tuple mismatch produces a quick
@@ -259,6 +296,7 @@ On FAIL, the loop is:
 
 `bounded Builder repair -> new immutable head -> direct QA handoff -> fresh independent QA`
 
+Batch related in-scope defects into one coherent Builder repair, then fresh QA.
 The Development Orchestrator may repeat in-scope Builder repair and fresh QA
 without new approval while the existing task contract remains sufficient. It
 stops for a product, rule, UX, consequential architecture, priority, scope,
@@ -336,7 +374,11 @@ is a separate, explicitly selected break-glass path and never a default.
 A Builder never self-accepts. Architecture/control plane and the Development
 Orchestrator do not substitute for QA. The Development Orchestrator dispatches
 a fresh independent worker, and that worker reviews the exact immutable head in
-appropriate isolation. Only durable Forgejo evidence can advance the result.
+appropriate isolation for substantive implementation. Mechanical refreshes use
+preservation QA; documentation/process work uses light relevant checks and its
+explicit exemption route where applicable. Follow the
+[verification classes](./qa-execution.md#verification-classes-and-evidence-validity).
+Only durable Forgejo evidence can advance the result.
 
 ## Human action and liveness escalation
 
@@ -358,16 +400,31 @@ own inspection, direct notifications and deduplication.
 
 ## Parallelism and ownership
 
-Parallelize independent architecture, design, and investigation aggressively.
+Parallelize independent architecture, design, and investigation where useful;
+keep future preparation proportionate and durable.
 No more than four implementation Builders run concurrently; four is a ceiling,
 not a target. Reserve repair or infrastructure capacity when useful, begin QA
-as soon as a Builder finishes, and do not pause unrelated lanes. Serialize only
-real dependencies or declared hotspots, with explicit write ownership and
-merge order. Cross-area redesign returns for control-plane coordination.
+as soon as a Builder finishes, and do not pause unrelated lanes. Run QA and
+hosted checks for the immutable candidate in parallel whenever neither
+depends on the other. Do not wait for hosted completion merely to start QA.
+Serialize only real dependencies, declared hotspots, or measured resource
+contention; record the concrete constraint, owner, and scheduling or merge
+order. Blanket serial ordering is not the default. Cross-area redesign returns
+for control-plane coordination.
 
 Favor batched Product Owner decisions over serial requests for trivial
 approvals. This improves throughput without bypassing the deliberate Product
 Owner authorization and acceptance gates.
+
+## Process update boundary
+
+The execution-efficiency policy in
+[case #192](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/192) authorizes publication and
+integration of process Markdown only through the normal documentation/process
+gate. It does not start, stop, reprioritize, change lane state, or dispatch
+implementation in Chargen, Campaign, Combat, Equipment, or any other product
+lane. Existing separately authorized product contracts continue unchanged; only
+separately dispatched product orders authorize that work.
 
 ## Durable authority hierarchy
 
