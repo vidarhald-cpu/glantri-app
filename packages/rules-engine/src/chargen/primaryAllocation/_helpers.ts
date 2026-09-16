@@ -37,6 +37,10 @@ export const LANGUAGE_SKILL_ID = "language";
 export interface CanonicalContentShape {
   chargenCatalogue?: {
     sourceId: "full-target-competencies";
+    professionSourceDigest?: string;
+    groupSourceDigest?: string;
+    professionIds?: readonly string[];
+    groupIds?: readonly string[];
     skillIds: readonly string[];
     specializationIds: readonly string[];
   };

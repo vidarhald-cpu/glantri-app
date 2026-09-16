@@ -34,6 +34,10 @@ export type CanonicalContent = Omit<z.infer<typeof canonicalContentSchema>, "ski
   skills: import("@glantri/domain").SkillDefinition[];
   chargenCatalogue?: {
     sourceId: "full-target-competencies";
+    professionSourceDigest?: string;
+    groupSourceDigest?: string;
+    professionIds?: readonly string[];
+    groupIds?: readonly string[];
     skillIds: readonly string[];
     specializationIds: readonly string[];
   };

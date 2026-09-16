@@ -1,3 +1,4 @@
+import { resolveRetainedTargetCharacterContent } from "../skills/retainedCharacterSkillReadModel";
 import {
   deriveCharacterStatLayers,
   type CharacterBuild,
@@ -107,10 +108,12 @@ export function buildCharacterSheetSummary(input: {
   content: CanonicalContentShape;
   additionalCurrentStatModifiers?: Record<string, number>;
 }): CharacterSheetSummary {
+  input = { ...input, content: resolveRetainedTargetCharacterContent(input.build, input.content) };
   const statLayers = deriveCharacterStatLayers(input.build, input.additionalCurrentStatModifiers);
   const draftView = buildChargenDraftView({
     content: input.content,
     professionId: input.build.professionId,
+    civilizationId: input.build.civilizationId,
     profile: input.build.profile,
     progression: input.build.progression,
     skillLinkedStats: statLayers.current,

@@ -415,7 +415,9 @@
 
 /* Specialization table */
 .specializationTableHeader {
-  grid-template-columns: minmax(180px, 2fr) minmax(160px, 1.6fr) repeat(2, minmax(88px, 104px)) minmax(150px, 1fr);
+  grid-template-columns:
+    minmax(180px, 2fr) minmax(160px, 1.6fr) repeat(2, minmax(88px, 104px))
+    minmax(150px, 1fr);
 }
 
 .specializationTableRow {
@@ -429,7 +431,9 @@
   align-items: center;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: minmax(180px, 2fr) minmax(160px, 1.6fr) repeat(2, minmax(88px, 104px)) minmax(150px, 1fr);
+  grid-template-columns:
+    minmax(180px, 2fr) minmax(160px, 1.6fr) repeat(2, minmax(88px, 104px))
+    minmax(150px, 1fr);
 }
 
 /* Skills summary table */
@@ -573,4 +577,16 @@
   flex-wrap: wrap;
   gap: 0.5rem;
   justify-content: flex-end;
+}
+
+.wizard {
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .wizard > section {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+  }
 }

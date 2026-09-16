@@ -13,6 +13,7 @@ import {
 } from "@glantri/domain";
 import {
   getCharacteristicGm,
+  resolveRetainedTargetCharacterContent,
   selectBestSkillGroupContribution,
   type CharacterSheetSummary,
 } from "@glantri/rules-engine";
@@ -149,9 +150,10 @@ export function buildCharacterSheetSkillRows(input: {
   label: string;
   rows: CharacterSheetSkillRow[];
 }> {
+  input = { ...input, content: resolveRetainedTargetCharacterContent(input.build, input.content) };
   assertApprovedTargetProgression(input.build.progression);
-  const savedTargets = input.build.progression.skills.flatMap((row) =>
-    row.targetDefinition ? [row.targetDefinition] : [],
+  const savedTargets = (input.build.targetChargen ? [] : input.build.progression.skills).flatMap(
+    (row) => (row.targetDefinition ? [row.targetDefinition] : []),
   );
   const savedTargetIds = new Set(savedTargets.map(({ id }) => id));
   const definitions = [
@@ -172,7 +174,9 @@ export function buildCharacterSheetSkillRows(input: {
           const groupView = input.sheetSummary.draftView.groups.find(
             (group) => group.groupId === groupId,
           );
-          const groupDefinition = input.content.skillGroups.find((group) => group.id === groupId);
+          const groupDefinition =
+            input.build.progression.skillGroups.find((group) => group.groupId === groupId)
+              ?.targetDefinition ?? input.content.skillGroups.find((group) => group.id === groupId);
 
           if (!groupView || groupView.groupLevel <= 0) {
             return null;

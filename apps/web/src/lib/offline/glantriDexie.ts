@@ -1,3 +1,4 @@
+import type { ChargenStatAdjustmentState } from "@glantri/rules-engine";
 import Dexie, { type Table } from "dexie";
 
 import type { CanonicalContent } from "@glantri/content";
@@ -13,6 +14,10 @@ export interface ChargenSessionDraft {
   id: string;
   createdAt: string;
   progression: CharacterProgression;
+  rolledProfiles?: RolledCharacterProfile[];
+  profileAdjustments?: Record<string, ChargenStatAdjustmentState>;
+  characterName?: string;
+  selectedCivilizationId?: string;
   selectedProfessionId?: string;
   selectedProfile?: RolledCharacterProfile;
   selectedSocialClass?: string;

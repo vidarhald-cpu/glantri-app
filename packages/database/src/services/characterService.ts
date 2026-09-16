@@ -1,8 +1,8 @@
-import { getApprovedTargetDefinitions } from "@glantri/content";
+import { getApprovedTargetDefinitions, getApprovedTargetChargenContent } from "@glantri/content";
 import { isDeepStrictEqual } from "node:util";
 
 import { characterBuildSchema } from "@glantri/domain";
-import { validateCharacterBuild } from "@glantri/rules-engine";
+import { validateCharacterBuild, validateTargetChargenBuild } from "@glantri/rules-engine";
 
 import {
   createPrismaCharacterRepository,
@@ -73,6 +73,23 @@ export class CharacterService {
   async saveCharacter(input: CreateCharacterRecordInput): Promise<CharacterRecord> {
     const build = characterBuildSchema.parse(input.build);
     assertNoLegacyEquipmentWrite(build);
+    const targetErrors = validateTargetChargenBuild(build, getApprovedTargetChargenContent());
+    if (targetErrors.length) throw new CharacterValidationError(targetErrors);
+    if (build.professionId?.startsWith("profession:")) {
+      const trusted = getApprovedTargetChargenContent();
+      const profession = trusted.professions.find((p) => p.id === build.professionId)!;
+      for (const group of build.progression.skillGroups)
+        group.targetDefinition = structuredClone(
+          trusted.skillGroups.find((g) => g.id === group.groupId)!,
+        );
+      build.targetChargen = {
+        familyId: profession.familyId,
+        trackId: profession.id === profession.familyId ? undefined : profession.id,
+        professionName: profession.name,
+        sourceDigest: trusted.chargenCatalogue!.professionSourceDigest!,
+        groupSourceDigest: trusted.chargenCatalogue!.groupSourceDigest!,
+      };
+    }
     const trustedTargets = getApprovedTargetDefinitions();
     const validation = validateCharacterBuild({
       availableSkills: trustedTargets.skills,
@@ -180,6 +197,23 @@ export class CharacterService {
 
     const build = characterBuildSchema.parse(input.build);
     assertNoLegacyEquipmentWrite(build, characterBuildSchema.parse(existingCharacter.build));
+    const targetErrors = validateTargetChargenBuild(build, getApprovedTargetChargenContent());
+    if (targetErrors.length) throw new CharacterValidationError(targetErrors);
+    if (build.professionId?.startsWith("profession:")) {
+      const trusted = getApprovedTargetChargenContent();
+      const profession = trusted.professions.find((p) => p.id === build.professionId)!;
+      for (const group of build.progression.skillGroups)
+        group.targetDefinition = structuredClone(
+          trusted.skillGroups.find((g) => g.id === group.groupId)!,
+        );
+      build.targetChargen = {
+        familyId: profession.familyId,
+        trackId: profession.id === profession.familyId ? undefined : profession.id,
+        professionName: profession.name,
+        sourceDigest: trusted.chargenCatalogue!.professionSourceDigest!,
+        groupSourceDigest: trusted.chargenCatalogue!.groupSourceDigest!,
+      };
+    }
     const trustedTargets = getApprovedTargetDefinitions();
     const validation = validateCharacterBuild({
       availableSkills: trustedTargets.skills,

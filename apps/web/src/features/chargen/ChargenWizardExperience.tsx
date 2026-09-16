@@ -1,5 +1,7 @@
 "use client";
 
+import styles from "./ChargenWizardExperience.module.css";
+import { defaultCanonicalContent } from "@glantri/content";
 import { useChargenWizardState } from "./useChargenWizardState";
 import { FeedbackPanel } from "./components";
 import { formatProfileSocialBand } from "./chargenWizardHelpers";
@@ -14,14 +16,54 @@ import {
   StartStep,
   StatsStep,
   ResolveStatsStep,
-  ProfessionStep
+  ProfessionStep,
 } from "./steps";
 
 export default function ChargenWizard() {
   const state = useChargenWizardState();
 
+  if (state.historicalDraft) {
+    const draft = state.historicalDraft;
+    return (
+      <section>
+        <h1>Historical Chargen draft</h1>
+        <p>{draft.characterName || draft.selectedProfile?.label}</p>
+        <p>
+          Profession:{" "}
+          {defaultCanonicalContent.professions.find((p) => p.id === draft.selectedProfessionId)
+            ?.name ?? draft.selectedProfessionId}
+        </p>
+        <p>
+          Recorded ordinary spend: {draft.progression.primaryPoolSpent}. Recorded flexible spend:{" "}
+          {draft.progression.secondaryPoolSpent}.
+        </p>
+        <ul>
+          {draft.progression.skillGroups.map((g) => (
+            <li key={g.groupId}>
+              {g.targetDefinition?.name ??
+                defaultCanonicalContent.skillGroups.find((d) => d.id === g.groupId)?.name ??
+                g.groupId}
+              : {g.ranks} ranks
+            </li>
+          ))}
+        </ul>
+        <p>
+          This historical draft is preserved for reading. Its identities and recorded spending have
+          not been converted to the target catalogue.
+        </p>
+      </section>
+    );
+  }
   return (
-    <section style={{ display: "grid", gap: "1.5rem", maxWidth: 1080 }}>
+    <section
+      className={styles.wizard}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1fr)",
+        gap: "1.5rem",
+        maxWidth: 1080,
+      }}
+    >
       <div>
         <h1 style={{ marginBottom: "0.25rem" }}>Chargen</h1>
         <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>Draft saved locally.</div>

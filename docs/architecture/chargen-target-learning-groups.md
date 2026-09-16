@@ -2,6 +2,8 @@
 
 ## 1. Status and scope
 
+**Current execution:** issue #206 implements Learning Groups and Professions together after integrated Slice 2. The combined milestone below and the current #206 PO rulings supersede earlier sequential activation and speculative legacy-completion wording. Independent acceptance and integration remain separate gates.
+
 This is the final durable product/architecture contract for **Chargen Slice 3 — Target Learning Group Consumption** under Chargen #114.
 
 It defines the product behavior required for Chargen to consume the approved target Learning Group catalogue.
@@ -508,20 +510,18 @@ Compatibility mechanics, persistence technique and any narrowly required legacy-
 
 The durable contract is complete.
 
-Implementation remains dependency- and activation-gated.
+Combined implementation is authorized under #206; acceptance and integration remain gated by its current executable contract.
 
-## Publication authority and forward pipeline
+## Combined implementation milestone — issue #206
 
-Product Owner approved, 16 September 2026. Portfolio #114 remains **Active**. Current/preceding work: Slice 2 Target Competencies; next prepared milestone: Slice 3 Target Learning Groups; following prepared milestone: Slice 4 Target Professions.
+PO ruling 6056 authorizes combined target Learning Group and Profession consumption after integrated Slice 2. The former sequential Slice 3 then Slice 4 activation plan is superseded. Issue #206 owns the executable baseline, implementation, verification and independent acceptance gates; this document does not claim integration.
 
-**Slice 2 — Target Competencies → Slice 3 — Target Learning Groups → Slice 4 — Target Professions → later #113 contextual availability / Setting-sensitive Chargen.**
+Profession opportunities default to additive family-level access menus. Only explicit source-defined complete tracks are selectable identities. Ambiguous alternative/additional apprenticeship wording does not imply exclusivity, and review-ledger facets are not canonical tracks. Selection grants no competencies or resources. Section G military compositions preserve their separate melee, ranged and mounted courses.
 
-Slice 3 requires stable/integrated Slice 2 competency identities. Slice 4 requires stable/integrated Slice 3 Learning Group identities and membership semantics. Legacy content and pending proposals cannot bypass this chain.
+Target group access requires an approved Profession route. Flexible funds can pay an accessible group but do not create entitlement. Group prices include only base-Skill members under the existing formula. Explicit Specializations are access-only, bought separately for 4 initially and 2 per increase, with normal immediate-parent eligibility.
 
-Both contracts are product architecture Ready; neither is Active implementation, Authorized or Integrated by this documentation publication. A separate control-plane order must authorize activation preflight. No Builder/QA dispatch, implementation, migrations or runtime changes are authorized here.
+Generic/unbound choices do not inherit legacy Society or Social Band filters. #113 contextual availability remains unfinished and inactive. Personal browser drafts are unverified and nonblocking; isolated synthetic historical fixtures establish compatibility without speculative legacy-completion or personal-storage inspection.
 
-Both slices consume approved target content in general/unbound context. Unfinished Setting, Society, Arch-Society, Social-Band, geography, period and context bindings remain non-operative. Later #113 contextual availability may constrain the target model only after completion and separate activation. The Social Band step remains, but its legacy Profession filter must not restrict the 84 target Professions.
+## Bounded P09/P14 purchase alternatives
 
-Target content is authoritative for new writes; legacy identities remain readable without retroactive repricing, retrospective competency-level changes, forced semantic migration or a competing full legacy catalogue. Compatibility details await separately authorized activation-time inspection of real persisted data.
-
-Related approved contracts: [target Learning Groups](chargen-target-learning-groups.md), [target Professions](chargen-target-professions.md), and [Profession provenance/availability](profession-provenance-availability.md).
+The current #206 PO ruling makes P09 Sailor and Boat Worker’s F09/G06 routes alternative group purchases: F09 is the fuller rigged-vessel route and replaces G06 for that path. P14 Guard, Watcher and Escort’s F30/G08 group routes are likewise mutually exclusive; G08+F35 remains permitted when both sets are taught. These rules apply only to purchases through those Professions. They do not exclude independent/direct competency purchases, create tracks or imply exclusions elsewhere. Each alternative retains its existing cost and access rules; refused purchases leave spending and progression unchanged.

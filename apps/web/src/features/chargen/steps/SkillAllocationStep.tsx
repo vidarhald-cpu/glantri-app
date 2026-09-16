@@ -1,9 +1,6 @@
-import {
-  allocateChargenPoint
-} from "@glantri/rules-engine";
-import {
-  mergeSkillBrowseRowsBySkillId
-} from "@/lib/chargen/chargenBrowse";
+import { TargetGroupDetails } from "../components/TargetPackageDetails";
+import { allocateChargenPoint } from "@glantri/rules-engine";
+import { mergeSkillBrowseRowsBySkillId } from "@/lib/chargen/chargenBrowse";
 import {
   getBadgeStyle,
   getGroupScopedSkillAllocationMetrics,
@@ -12,7 +9,7 @@ import {
   getSkillTierLabel,
   getSkillTierTone,
   sortSkills,
-  type SkillBrowseRow
+  type SkillBrowseRow,
 } from "../chargenWizardHelpers";
 import { OtherSkillsStep } from "./OtherSkillsStep";
 import { SpecializationsStep } from "./SpecializationsStep";
@@ -74,14 +71,14 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
     specialAccessSection,
     toggleAllocationSection,
     visibleOtherSkillRows,
-    visibleSpecializationRows
+    visibleSpecializationRows,
   } = state;
   return (
     <section
       style={{
         display: "grid",
         gap: "0.75rem",
-        opacity: selectedProfession ? 1 : 0.6
+        opacity: selectedProfession ? 1 : 0.6,
       }}
     >
       <div style={{ display: "grid", gap: "1rem" }}>
@@ -97,7 +94,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
             padding: "0.75rem 0.9rem",
             position: "sticky",
             top: "0.5rem",
-            zIndex: 4
+            zIndex: 4,
           }}
         >
           <div style={{ display: "grid", gap: "0.2rem" }}>
@@ -123,12 +120,13 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
               borderRadius: 10,
               display: "grid",
               gap: "0.2rem",
-              padding: "0.65rem 0.8rem"
+              padding: "0.65rem 0.8rem",
             }}
           >
             <strong style={{ fontSize: "0.9rem" }}>Ordinary points</strong>
             <div>
-              Ordinary spent {progression.primaryPoolSpent} / Remaining {draftView.primaryPoolAvailable}
+              Ordinary spent {progression.primaryPoolSpent} / Remaining{" "}
+              {draftView.primaryPoolAvailable}
             </div>
           </div>
           <div
@@ -138,12 +136,13 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
               borderRadius: 10,
               display: "grid",
               gap: "0.2rem",
-              padding: "0.65rem 0.8rem"
+              padding: "0.65rem 0.8rem",
             }}
           >
             <strong style={{ fontSize: "0.9rem" }}>Flexible points</strong>
             <div>
-              Flexible spent {progression.secondaryPoolSpent} / Remaining {draftView.secondaryPoolAvailable}
+              Flexible spent {progression.secondaryPoolSpent} / Remaining{" "}
+              {draftView.secondaryPoolAvailable}
             </div>
           </div>
         </div>
@@ -155,14 +154,14 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
             borderRadius: 12,
             display: "grid",
             gap: "1rem",
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           <strong>Society granted skills</strong>
 
           {renderSkillRowsTable({
             emptyMessage: "No society-granted foundational skills are currently available.",
-            rows: societyGrantedSkillRows
+            rows: societyGrantedSkillRows,
           })}
         </section>
 
@@ -173,7 +172,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
             borderRadius: 12,
             display: "grid",
             gap: "1rem",
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           <strong>Profession skills</strong>
@@ -186,7 +185,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                 borderRadius: 12,
                 display: "grid",
                 gap: "1rem",
-                padding: "1rem"
+                padding: "1rem",
               }}
             >
               <div
@@ -194,20 +193,26 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                   alignItems: "start",
                   display: "grid",
                   gap: "0.75rem",
-                  gridTemplateColumns: "minmax(0, 1fr) auto"
+                  gridTemplateColumns: "minmax(0, 1fr) auto",
                 }}
               >
                 <div style={{ display: "grid", gap: "0.25rem" }}>
                   <strong>Profession groups</strong>
                 </div>
-                <button onClick={() => toggleAllocationSection("core-profession-skills")} type="button">
-                  {expandedAllocationSections.includes("core-profession-skills") ? "Collapse" : "Expand"}
+                <button
+                  onClick={() => toggleAllocationSection("core-profession-skills")}
+                  type="button"
+                >
+                  {expandedAllocationSections.includes("core-profession-skills")
+                    ? "Collapse"
+                    : "Expand"}
                 </button>
               </div>
 
               {expandedAllocationSections.includes("core-profession-skills") ? (
                 <div style={{ display: "grid", gap: "1rem" }}>
-                  {motherTongueSummary.displayLabel || languageSelectionSummary.selectableLanguages.length > 0 ? (
+                  {motherTongueSummary.displayLabel ||
+                  languageSelectionSummary.selectableLanguages.length > 0 ? (
                     <section
                       style={{
                         background: "#fbfaf5",
@@ -215,14 +220,14 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                         borderRadius: 10,
                         display: "grid",
                         gap: "0.75rem",
-                        padding: "1rem"
+                        padding: "1rem",
                       }}
                     >
                       <div style={{ display: "grid", gap: "0.25rem" }}>
                         <strong>Languages</strong>
                         <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                          Mother tongue is granted automatically. Extra civilization languages become real
-                          {" "}Language entries when selected here.
+                          Mother tongue is granted automatically. Extra civilization languages
+                          become real Language entries when selected here.
                         </div>
                       </div>
 
@@ -235,8 +240,17 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
 
                       {languageSelectionSummary.selectableLanguages.length > 0 ? (
                         <div style={{ display: "grid", gap: "0.5rem" }}>
-                          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                            <span style={getBadgeStyle({ muted: true })}>Optional language choices</span>
+                          <div
+                            style={{
+                              alignItems: "center",
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "0.5rem",
+                            }}
+                          >
+                            <span style={getBadgeStyle({ muted: true })}>
+                              Optional language choices
+                            </span>
                             <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
                               Select any civilization languages you want available in this draft.
                             </span>
@@ -244,7 +258,9 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                             {languageSelectionSummary.selectableLanguages.map((language) => {
                               const isSelected =
-                                languageSelectionSummary.selectedOptionalLanguageIds.includes(language.id);
+                                languageSelectionSummary.selectedOptionalLanguageIds.includes(
+                                  language.id,
+                                );
 
                               return (
                                 <button
@@ -255,7 +271,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                                     border: isSelected ? "1px solid #8b7345" : "1px solid #d9ddd8",
                                     borderRadius: 999,
                                     cursor: "pointer",
-                                    padding: "0.4rem 0.75rem"
+                                    padding: "0.4rem 0.75rem",
                                   }}
                                   type="button"
                                 >
@@ -270,15 +286,16 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                       {languageSkillViews.length > 0 ? (
                         <div style={{ display: "grid", gap: "0.5rem" }}>
                           {languageSkillViews.map((skillView) => {
-                            const rowFeedback = rowActionFeedback[
-                              getRowActionFeedbackKey(skillView.skillKey, "skill")
-                            ];
+                            const rowFeedback =
+                              rowActionFeedback[
+                                getRowActionFeedbackKey(skillView.skillKey, "skill")
+                              ];
                             const addPreview = skillAllocationContext
                               ? allocateChargenPoint({
                                   ...skillAllocationContext,
                                   targetId: skillView.skillId,
                                   targetLanguageName: skillView.languageName,
-                                  targetType: "skill"
+                                  targetType: "skill",
                                 })
                               : undefined;
 
@@ -289,7 +306,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                                   borderTop: "1px solid #e7e2d7",
                                   display: "grid",
                                   gap: "0.5rem",
-                                  paddingTop: "0.75rem"
+                                  paddingTop: "0.75rem",
                                 }}
                               >
                                 <div
@@ -298,7 +315,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                                     display: "grid",
                                     gap: "0.75rem",
                                     gridTemplateColumns:
-                                      "minmax(180px, 2fr) repeat(4, minmax(72px, 84px)) minmax(150px, 1fr)"
+                                      "minmax(180px, 2fr) repeat(4, minmax(72px, 84px)) minmax(150px, 1fr)",
                                   }}
                                 >
                                   <div style={{ display: "grid", gap: "0.3rem" }}>
@@ -307,20 +324,31 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                                         alignItems: "center",
                                         display: "flex",
                                         flexWrap: "wrap",
-                                        gap: "0.5rem"
+                                        gap: "0.5rem",
                                       }}
                                     >
-                                      <span>{getSkillDisplayName({ languageName: skillView.languageName, skill: { name: skillView.name } })}</span>
-                                      <span style={getSkillTierTone({ category: skillView.category })}>
+                                      <span>
+                                        {getSkillDisplayName({
+                                          languageName: skillView.languageName,
+                                          skill: { name: skillView.name },
+                                        })}
+                                      </span>
+                                      <span
+                                        style={getSkillTierTone({ category: skillView.category })}
+                                      >
                                         {getSkillTierLabel({ category: skillView.category })}
                                       </span>
                                       {skillView.sourceTag === "mother-tongue" ? (
-                                        <span style={getBadgeStyle({ muted: true })}>Mother tongue</span>
+                                        <span style={getBadgeStyle({ muted: true })}>
+                                          Mother tongue
+                                        </span>
                                       ) : null}
                                       {languageSelectionSummary.selectedOptionalLanguages.some(
-                                        (language) => language.name === skillView.languageName
+                                        (language) => language.name === skillView.languageName,
                                       ) ? (
-                                        <span style={getBadgeStyle({ muted: true })}>Selected option</span>
+                                        <span style={getBadgeStyle({ muted: true })}>
+                                          Selected option
+                                        </span>
                                       ) : null}
                                     </div>
                                     {addPreview?.spentCost ? (
@@ -337,7 +365,11 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                                     <button
                                       disabled={!skillAllocationContext}
                                       onClick={() =>
-                                        handleAllocate(skillView.skillId, "skill", skillView.languageName)
+                                        handleAllocate(
+                                          skillView.skillId,
+                                          "skill",
+                                          skillView.languageName,
+                                        )
                                       }
                                       type="button"
                                     >
@@ -346,7 +378,11 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                                     <button
                                       disabled={!skillAllocationContext}
                                       onClick={() =>
-                                        handleRemoveAllocation(skillView.skillId, "skill", skillView.languageName)
+                                        handleRemoveAllocation(
+                                          skillView.skillId,
+                                          "skill",
+                                          skillView.languageName,
+                                        )
                                       }
                                       type="button"
                                     >
@@ -355,7 +391,10 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                                   </div>
                                 </div>
                                 {rowFeedback ? (
-                                  <div role="status" style={{ color: "#7a4b00", fontSize: "0.85rem" }}>
+                                  <div
+                                    role="status"
+                                    style={{ color: "#7a4b00", fontSize: "0.85rem" }}
+                                  >
                                     {rowFeedback}
                                   </div>
                                 ) : null}
@@ -376,7 +415,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                         borderRadius: 10,
                         display: "grid",
                         gap: "0.75rem",
-                        padding: "1rem"
+                        padding: "1rem",
                       }}
                     >
                       <div style={{ display: "grid", gap: "0.25rem" }}>
@@ -387,26 +426,28 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                       </div>
 
                       {section.groups.map((group) => {
-                        const groupView = draftView.groups.find((item) => item.groupId === group.id);
+                        const groupView = draftView.groups.find(
+                          (item) => item.groupId === group.id,
+                        );
                         const groupSelectionSlots = selectableSkillSummary.selectionSlots.filter(
-                          (slot) => slot.groupId === group.id
+                          (slot) => slot.groupId === group.id,
                         );
                         const selectedGroupSlotSkillIds = new Set(
-                          groupSelectionSlots.flatMap((slot) => slot.selectedSkillIds)
+                          groupSelectionSlots.flatMap((slot) => slot.selectedSkillIds),
                         );
                         const addPreview = skillAllocationContext
                           ? allocateChargenPoint({
                               ...skillAllocationContext,
                               targetId: group.id,
-                              targetType: "group"
+                              targetType: "group",
                             })
                           : undefined;
                         const groupSkillRows = sortSkills(
                           content.skills.filter(
                             (skill) =>
                               skillDisplayGroupIds.get(skill.id) === group.id ||
-                              selectedGroupSlotSkillIds.has(skill.id)
-                          )
+                              selectedGroupSlotSkillIds.has(skill.id),
+                          ),
                         )
                           .map((skill) => {
                             const row = skillRowsById.get(skill.id);
@@ -424,8 +465,8 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                                 profile: selectedProfile,
                                 progression,
                                 skill: row.skill,
-                                targetLanguageName: row.targetLanguageName
-                              })
+                                targetLanguageName: row.targetLanguageName,
+                              }),
                             };
                           })
                           .filter((row): row is SkillBrowseRow => row !== undefined);
@@ -443,7 +484,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                               borderRadius: 10,
                               display: "grid",
                               gap: "0.75rem",
-                              padding: "1rem"
+                              padding: "1rem",
                             }}
                           >
                             <div
@@ -451,13 +492,15 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                                 alignItems: "start",
                                 display: "grid",
                                 gap: "0.75rem",
-                                gridTemplateColumns: "minmax(0, 1fr) auto"
+                                gridTemplateColumns: "minmax(0, 1fr) auto",
                               }}
                             >
                               <div style={{ display: "grid", gap: "0.2rem" }}>
                                 <strong>{group.name}</strong>
+                                <TargetGroupDetails groupId={group.id} />
                                 <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                                  Included training package • {visibleSkillRows.length} actual skill
+                                  Included training package • {visibleSkillRows.length} displayed
+                                  skill
                                   {visibleSkillRows.length === 1 ? "" : "s"}
                                   {hasOwnedContent ? " • currently invested" : ""}
                                 </div>
@@ -468,7 +511,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                                   display: "flex",
                                   flexWrap: "wrap",
                                   gap: "0.5rem",
-                                  justifyContent: "flex-end"
+                                  justifyContent: "flex-end",
                                 }}
                               >
                                 <button
@@ -492,7 +535,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                               style={{
                                 display: "grid",
                                 gap: "0.5rem",
-                                gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))"
+                                gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
                               }}
                             >
                               <div>
@@ -509,7 +552,9 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                               </div>
                             </div>
 
-                            {addPreview?.spentCost ? <div>Next purchase cost: {addPreview.spentCost}</div> : null}
+                            {addPreview?.spentCost ? (
+                              <div>Next purchase cost: {addPreview.spentCost}</div>
+                            ) : null}
                             {addPreview?.error ? (
                               <div style={{ color: "#8a3b12", fontSize: "0.9rem" }}>
                                 {addPreview.error}
@@ -525,15 +570,25 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                                       borderTop: "1px solid #e7e2d7",
                                       display: "grid",
                                       gap: "0.5rem",
-                                      paddingTop: "0.75rem"
+                                      paddingTop: "0.75rem",
                                     }}
                                   >
-                                    <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                                    <div
+                                      style={{
+                                        alignItems: "center",
+                                        display: "flex",
+                                        flexWrap: "wrap",
+                                        gap: "0.5rem",
+                                      }}
+                                    >
                                       <span style={getBadgeStyle({ muted: !slot.isSatisfied })}>
-                                        {slot.required ? "Required" : "Optional"} • Choose {slot.chooseCount}
+                                        {slot.required ? "Required" : "Optional"} • Choose{" "}
+                                        {slot.chooseCount}
                                       </span>
                                     </div>
-                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                                    <div
+                                      style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}
+                                    >
                                       {slot.candidateSkills.map((skill) => {
                                         const isSelected = slot.selectedSkillIds.includes(skill.id);
 
@@ -541,7 +596,11 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                                           <button
                                             key={`${slot.slotId}-${skill.id}`}
                                             onClick={() =>
-                                              handleSelectGroupSlotSkill(slot.groupId, slot.slotId, skill.id)
+                                              handleSelectGroupSlotSkill(
+                                                slot.groupId,
+                                                slot.slotId,
+                                                skill.id,
+                                              )
                                             }
                                             style={{
                                               background: isSelected ? "#ece8da" : "#fff",
@@ -550,7 +609,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                                                 : "1px solid #d9ddd8",
                                               borderRadius: 999,
                                               cursor: "pointer",
-                                              padding: "0.4rem 0.75rem"
+                                              padding: "0.4rem 0.75rem",
                                             }}
                                             type="button"
                                           >
@@ -566,7 +625,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
 
                             {renderSkillRowsTable({
                               emptyMessage: "No skills in this group are currently available.",
-                              rows: visibleSkillRows
+                              rows: visibleSkillRows,
                             })}
                           </section>
                         );
@@ -576,11 +635,13 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                         <div style={{ display: "grid", gap: "0.5rem" }}>
                           <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
                             <strong>Direct skills in this area</strong>
-                            <span style={getBadgeStyle({ muted: true })}>No separate included package</span>
+                            <span style={getBadgeStyle({ muted: true })}>
+                              No separate included package
+                            </span>
                           </div>
                           {renderSkillRowsTable({
                             emptyMessage: "No direct normal-access skills in this area.",
-                            rows: section.directRows
+                            rows: section.directRows,
                           })}
                         </div>
                       ) : null}
@@ -599,7 +660,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                 borderRadius: 12,
                 display: "grid",
                 gap: "1rem",
-                padding: "1rem"
+                padding: "1rem",
               }}
             >
               <div
@@ -607,7 +668,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                   alignItems: "start",
                   display: "grid",
                   gap: "0.75rem",
-                  gridTemplateColumns: "minmax(0, 1fr) auto"
+                  gridTemplateColumns: "minmax(0, 1fr) auto",
                 }}
               >
                 <div style={{ display: "grid", gap: "0.25rem" }}>
@@ -621,7 +682,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
               {expandedAllocationSections.includes("special-access")
                 ? renderSkillRowsTable({
                     emptyMessage: "No direct profession-linked skills are currently available.",
-                    rows: specialAccessSection.directRows
+                    rows: specialAccessSection.directRows,
                   })
                 : null}
             </section>
@@ -662,4 +723,3 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
     </section>
   );
 }
-

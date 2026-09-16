@@ -9,7 +9,7 @@ const professionGrantScopeSchema = z.enum(["family", "profession"]);
 const retiredProfessionIdAliases: Record<string, string> = {
   entertainers_dancer_acrobat: "dancer_acrobat",
   entertainers_singer_musician: "musician",
-  entertainers_trickster_fool: "entertainer"
+  entertainers_trickster_fool: "entertainer",
 };
 
 export function normalizeProfessionId(input: unknown): string | undefined {
@@ -23,7 +23,7 @@ export function normalizeProfessionId(input: unknown): string | undefined {
 export const professionFamilyDefinitionSchema = z.object({
   id: idSchema,
   name: z.string().min(1),
-  description: z.string().optional()
+  description: z.string().optional(),
 });
 
 export const professionDefinitionSchema = z.preprocess(
@@ -42,7 +42,7 @@ export const professionDefinitionSchema = z.preprocess(
     return {
       ...candidate,
       familyId: candidate.familyId ?? candidate.id,
-      subtypeName: candidate.subtypeName ?? candidate.name
+      subtypeName: candidate.subtypeName ?? candidate.name,
     };
   },
   z.object({
@@ -50,8 +50,9 @@ export const professionDefinitionSchema = z.preprocess(
     familyId: idSchema,
     name: z.string().min(1),
     subtypeName: z.string().min(1),
-    description: z.string().optional()
-  })
+    description: z.string().optional(),
+    exclusiveLearningGroupPairs: z.array(z.tuple([idSchema, idSchema])).optional(),
+  }),
 );
 
 export const professionSkillMapSchema = z.preprocess(
@@ -64,7 +65,7 @@ export const professionSkillMapSchema = z.preprocess(
 
     return {
       ...candidate,
-      skillGroupId: normalizeSkillGroupId(candidate.skillGroupId) ?? candidate.skillGroupId
+      skillGroupId: normalizeSkillGroupId(candidate.skillGroupId) ?? candidate.skillGroupId,
     };
   },
   z.object({
@@ -75,8 +76,8 @@ export const professionSkillMapSchema = z.preprocess(
     skillGroupId: idSchema.optional(),
     specializationId: idSchema.optional(),
     ranks: z.number().int().nonnegative().default(0),
-    isCore: z.boolean().default(false)
-  })
+    isCore: z.boolean().default(false),
+  }),
 );
 
 export type ProfessionFamilyDefinition = z.infer<typeof professionFamilyDefinitionSchema>;

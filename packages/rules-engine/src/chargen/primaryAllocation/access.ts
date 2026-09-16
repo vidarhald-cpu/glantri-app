@@ -5,7 +5,7 @@ import {
   type CanonicalContentShape,
   getSkillDefinitionGroupIds,
   getSocietyAccess,
-  getNextSocietyAccess
+  getNextSocietyAccess,
 } from "./_helpers";
 
 export type ChargenSkillAccessSource =
@@ -21,13 +21,10 @@ export interface ChargenSkillAccessSummary {
   skillSources: Record<string, ChargenSkillAccessSource[]>;
 }
 
-function resolveProfessionPackageInternal(
-  content: CanonicalContentShape,
-  professionId: string
-) {
+function resolveProfessionPackageInternal(content: CanonicalContentShape, professionId: string) {
   return resolveEffectiveProfessionPackage({
     content,
-    subtypeId: professionId
+    subtypeId: professionId,
   });
 }
 
@@ -35,8 +32,19 @@ export function getAllowedSkillGroupIdsInternal(
   content: CanonicalContentShape,
   professionId: string,
   societyId: string | undefined,
-  societyLevel: number
+  societyLevel: number,
 ): string[] {
+  if (content.chargenCatalogue?.professionIds) {
+    if (!content.chargenCatalogue.professionIds.includes(professionId))
+      throw new Error("Unknown target Profession.");
+    const resolved = resolveProfessionPackageInternal(content, professionId);
+    return [
+      ...new Set([
+        ...resolved.core.finalEffectiveGroupIds,
+        ...resolved.favored.finalEffectiveGroupIds,
+      ]),
+    ];
+  }
   const society = getSocietyAccess(content, societyLevel, societyId);
 
   if (!society) {
@@ -46,7 +54,7 @@ export function getAllowedSkillGroupIdsInternal(
   const professionPackage = resolveProfessionPackageInternal(content, professionId);
   const professionGroupIds = new Set([
     ...professionPackage.core.finalEffectiveGroupIds,
-    ...professionPackage.favored.finalEffectiveGroupIds
+    ...professionPackage.favored.finalEffectiveGroupIds,
   ]);
 
   return society.skillGroupIds.filter((groupId) => professionGroupIds.has(groupId));
@@ -62,23 +70,23 @@ export function buildChargenSkillAccessSummaryInternal(input: {
     input.content,
     input.professionId,
     input.societyId,
-    input.societyLevel
+    input.societyLevel,
   );
   const normalGroupIdSet = new Set(normalSkillGroupIds);
   const professionPackage = resolveProfessionPackageInternal(input.content, input.professionId);
   const professionDirectSkillIds = new Set([
     ...professionPackage.core.finalEffectiveSkillIds,
-    ...professionPackage.favored.finalEffectiveSkillIds
+    ...professionPackage.favored.finalEffectiveSkillIds,
   ]);
-  const societySkillIds =
-    getSocietyAccess(input.content, input.societyLevel, input.societyId)?.skillIds ?? [];
-  const foundationalSkillIds = getAccessibleFoundationalSkillIdsForSocietyBand(
-    input.content.societyBandSkillAccess ?? [],
-    {
-      socialBand: input.societyLevel,
-      societyId: input.societyId ?? ""
-    }
-  );
+  const societySkillIds = input.content.chargenCatalogue?.professionIds
+    ? []
+    : (getSocietyAccess(input.content, input.societyLevel, input.societyId)?.skillIds ?? []);
+  const foundationalSkillIds = input.content.chargenCatalogue?.professionIds
+    ? []
+    : getAccessibleFoundationalSkillIdsForSocietyBand(input.content.societyBandSkillAccess ?? [], {
+        socialBand: input.societyLevel,
+        societyId: input.societyId ?? "",
+      });
   const skillSources = new Map<string, Set<ChargenSkillAccessSource>>();
 
   for (const skill of input.content.skills) {
@@ -121,8 +129,8 @@ export function buildChargenSkillAccessSummaryInternal(input: {
       .filter((skill) => !normalSkillIdSet.has(skill.id))
       .map((skill) => skill.id),
     skillSources: Object.fromEntries(
-      [...skillSources.entries()].map(([skillId, sources]) => [skillId, [...sources.values()]])
-    )
+      [...skillSources.entries()].map(([skillId, sources]) => [skillId, [...sources.values()]]),
+    ),
   };
 }
 
@@ -130,7 +138,7 @@ export function getAllowedPrimaryGroupIdsInternal(
   content: CanonicalContentShape,
   professionId: string,
   societyId: string | undefined,
-  societyLevel: number
+  societyLevel: number,
 ): string[] {
   return getAllowedSkillGroupIdsInternal(content, professionId, societyId, societyLevel);
 }
@@ -138,7 +146,7 @@ export function getAllowedPrimaryGroupIdsInternal(
 export function getAllowedSecondaryGroupIdsInternal(
   content: CanonicalContentShape,
   societyId: string | undefined,
-  societyLevel: number
+  societyLevel: number,
 ): string[] {
   const current = getSocietyAccess(content, societyLevel, societyId);
   const next = getNextSocietyAccess(content, societyLevel, societyId);
@@ -154,7 +162,7 @@ export function getAllowedPrimaryGroupIds(
   content: CanonicalContentShape,
   professionId: string,
   societyId: string | undefined,
-  societyLevel: number
+  societyLevel: number,
 ): string[] {
   return getAllowedSkillGroupIdsInternal(content, professionId, societyId, societyLevel);
 }
@@ -171,7 +179,7 @@ export function buildChargenSkillAccessSummary(input: {
 export function getAllowedSecondaryGroupIds(
   content: CanonicalContentShape,
   societyId: string | undefined,
-  societyLevel: number
+  societyLevel: number,
 ): string[] {
   return getAllowedSecondaryGroupIdsInternal(content, societyId, societyLevel);
 }

@@ -59,3 +59,5 @@ export * from "./skills/selectBestSkillGroupContribution";
 export * from "./stats/calculateAdjustedStats";
 export * from "./stats/characteristicGms";
 export * from "./validation/validateCharacterBuild";
+
+export { validateTargetChargenBuild } from "./chargen/validateTargetChargenBuild";

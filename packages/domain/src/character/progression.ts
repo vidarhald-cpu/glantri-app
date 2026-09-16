@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  skillGroupDefinitionSchema,
   inferPlayerFacingSkillCategoryIdFromGroupIds,
   normalizePlayerFacingSkillCategoryId,
   normalizeSkillGroupId,
@@ -48,6 +49,7 @@ export const characterSkillGroupSchema = z.preprocess(
   },
   z.object({
     groupId: z.string().min(1),
+    targetDefinition: skillGroupDefinitionSchema.optional(),
     grantedRanks: z.number().int().nonnegative().default(0),
     primaryRanks: z.number().int().nonnegative().default(0),
     secondaryRanks: z.number().int().nonnegative().default(0),
@@ -352,7 +354,11 @@ export function validateTargetProgressionMetadata(
   for (const row of progression.skills) {
     if (!row.targetDefinition) continue;
     const approved = trustedSkills.find(
-      (definition) => definition.id === row.skillId && "catalogueSource" in definition,
+      (definition) =>
+        definition.id === row.skillId &&
+        "catalogueSource" in definition &&
+        JSON.stringify(targetRuntimeSkillDefinitionSchema.safeParse(row.targetDefinition).data) ===
+          JSON.stringify(definition),
     );
     const parsed = targetRuntimeSkillDefinitionSchema.safeParse(row.targetDefinition);
     if (

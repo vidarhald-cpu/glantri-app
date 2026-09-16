@@ -19,3 +19,5 @@ export * from "./validators";
 
 export * from "./targetCompetencies";
 export * from "./skillContentPlatform/targetLearningGroups";
+
+export * from "./targetProfessions";
