@@ -1,0 +1,2290 @@
+# Glantri full-catalogue Learning Groups — Product Owner proposal
+
+**Complete Learning Group authoring pass. Content proposal only.**
+
+This package proposes **52 Learning Groups** for the controlling catalogue of **131 base Skills, 26 Specializations, 12 spoken-language competencies and 3 written traditions**. It preserves all **18 Pilot groups and 46 exact Pilot memberships** as an explicit source snapshot. It does not change the competency roster or any Skill prose.
+
+The future group pages contain **115 base-Skill memberships across 82 distinct base Skills**, plus **8 explicitly taught Specialization memberships across 8 distinct Specializations**. **49 base Skills and 18 Specializations remain deliberately groupless.** No exact spoken-language or written-tradition membership is proposed in a generic group. These are group-membership counts, not new acquisitions or grants.
+
+The roster comprises the **18 preserved G groups**, **3 previously accepted conditional F-group concepts**, and **31 new F-group proposals**. Group count follows the supported learning practices; it was not a coverage target.
+
+**Review navigation:** [A. Group roster and pages](#a-roster) · [B. All 131 base Skills](#b-reverse) · [C. Changes and preserved Pilot links](#c-changes) · [D. Coverage and overlap audit](#d-audit) · [E. Remaining decision](#e-decisions) · [Specializations and language competencies](#associated-review) · [Evidence and validation](#evidence)
+
+## Reading this proposal
+
+A Learning Group is a recognizable practice through which its listed competences are ordinarily taught together. For each member the page identifies something the learner repeatedly does and receives correction on. A useful companion, a material input, a task occasionally encountered or another worker in the same workshop is insufficient.
+
+The complete competence must be taught within the practice and context described. This does not mean mastering every advanced application or every culture’s methods. It does mean more than a small borrowed technique: tying two knots does not establish Ropework, reading one crop does not establish Plant Lore, and taking a few measurements does not establish Surveying. A narrowly divided workplace may teach different learners different Skills; its shared address is not a shared curriculum.
+
+Oral instruction, households, apprenticeships, service, practitioner lineages and supervised field work can all provide teaching. None requires a modern school. Every new group below describes a particular sustained teaching practice, not a claim that all people in that activity encounter all its Skills.
+
+Membership creates **no grant, transfer, prerequisite, cost, availability, rank, Profession or Learning History**. Domains, Arch Skills, Learning Histories, Professions, Arch Societies, structural Society Level, Social Band, DS/AB and Setting/context binding remain separate. Context is identified where relevant to understanding a practice, without authoring access or availability. Occupational words such as physician, clerk or sailor identify possible teachers and working situations only.
+
+### Evidence key
+
+| Marker | Meaning and authority |
+|---|---|
+| **[T]** | The completed reader-prose catalogue: controlling target IDs, names, types, scopes and approved specialization parents. |
+| **[L2]** | Learning Groups Revision 2, promoted to the approved Pilot foundation by the subsequent Product Owner instructions. |
+| **[PO]** | An explicit Product Owner ruling in this thread. It controls over an older proposal or legacy identity. |
+| **[R]** | A recovered repository fact reported in the supplied investigation. Repository material was not accessed in this pass. |
+| **[P]** | A new content proposal or competence-based inference in this package. It is not a recovered mapping or established historical curriculum. |
+| **[H1–H3]** | A verified historical or practitioner-context source, cited next to its limited conclusion. It does not authorize game membership or availability. |
+| **[Q]** | A genuine unresolved Product Owner presentation decision. It never supplies a missing rule. |
+
+The full descriptions are newly authored **[P]** reader prose constrained by **[T]**. Preserved memberships and approved additions carry their separate status. Historical examples support the possibility or character of teaching practices; they do not prove universal co-training. Where no specific legacy antecedent is recovered, the provenance says the group is proposed instead of manufacturing one.
+
+<a id="a-roster"></a>
+## A. Complete proposed Learning Group roster
+
+**52 groups.** Names and codes G01–G18 remain unchanged in this working roster. F01–F03 retain the previously accepted concepts; F04–F34 are new proposals. Each member below uses the exact target ID and name. The original Pilot-only weapon IDs appear separately in the preservation snapshot, not as duplicate target acquisitions.
+
+
+| Code | Name | Target members | Group status |
+| --- | --- | --- | --- |
+| [G01](#g01) | Patient care | 3 base | Preserved Pilot group |
+| [G02](#g02) | Plant and remedy preparation | 2 base | Preserved Pilot group |
+| [G03](#g03) | Tracking and hunting practice | 4 base | Preserved Pilot group |
+| [G04](#g04) | Field travel and camp practice | 3 base | Preserved Pilot group |
+| [G05](#g05) | Mounted travel and animal care | 2 base | Preserved Pilot group |
+| [G06](#g06) | Working a boat | 1 base | Preserved Pilot group |
+| [G07](#g07) | Passage navigation | 3 base | Preserved Pilot group |
+| [G08](#g08) | Close weapon practice | 1 base | Preserved Pilot group |
+| [G09](#g09) | Unit coordination and command practice | 3 base | Preserved Pilot group |
+| [G10](#g10) | Council and mediation practice | 4 base | Preserved Pilot group |
+| [G11](#g11) | Records-office practice | 2 base | Preserved Pilot group |
+| [G12](#g12) | Trading practice | 3 base | Preserved Pilot group |
+| [G13](#g13) | Metalworking apprenticeship | 1 base | Preserved Pilot group |
+| [G14](#g14) | Local contacts and information gathering | 2 base | Preserved Pilot group |
+| [G15](#g15) | Covert entry practice | 3 base | Preserved Pilot group |
+| [G16](#g16) | Impersonation and distraction practice | 2 base | Preserved Pilot group |
+| [G17](#g17) | Interview and evidence practice | 4 base | Preserved Pilot group |
+| [G18](#g18) | Operative care practice | 2 base | Preserved Pilot group |
+| [F01](#f01) | Field surveying and map production | 2 base | Previously accepted conditional concept |
+| [F02](#f02) | Fibre-to-cloth workshop practice | 2 base | Previously accepted conditional concept |
+| [F03](#f03) | Timber vessel construction | 2 base | Previously accepted conditional concept |
+| [F04](#f04) | Running and athletic field practice | 2 base | New proposal |
+| [F05](#f05) | Pastoral stockkeeping apprenticeship | 3 base | New proposal |
+| [F06](#f06) | Draught-team and vehicle practice | 2 base | New proposal |
+| [F07](#f07) | Falconry apprenticeship | 2 base + 2 specialization | New proposal |
+| [F08](#f08) | Mixed crop-and-stock household practice | 2 base | New proposal |
+| [F09](#f09) | Rigged-vessel deck apprenticeship | 2 base | New proposal |
+| [F10](#f10) | Fishing-boat apprenticeship | 2 base | New proposal |
+| [F11](#f11) | Charted open-water navigation practice | 3 base | New proposal |
+| [F12](#f12) | Credit-house accounts and obligations | 2 base | New proposal |
+| [F13](#f13) | Legal study and pleading practice | 2 base + 1 specialization | New proposal |
+| [F14](#f14) | Speech and memory practice | 2 base | New proposal |
+| [F15](#f15) | Historical text investigation | 2 base | New proposal |
+| [F16](#f16) | Lineage investigation apprenticeship | 1 base + 1 specialization | New proposal |
+| [F17](#f17) | Self-accompanied song practice | 2 base | New proposal |
+| [F18](#f18) | Dramatic acting and dance practice | 2 base | New proposal |
+| [F19](#f19) | Oral narrative composition and performance | 2 base | New proposal |
+| [F20](#f20) | Drawing and modelling workshop | 2 base | New proposal |
+| [F21](#f21) | Modelled ceramic workshop | 2 base | New proposal |
+| [F22](#f22) | Seasonal kitchen and preservation practice | 1 base + 1 specialization | New proposal |
+| [F23](#f23) | Distilling remedy workshop | 2 base | New proposal |
+| [F24](#f24) | Ironmaking and forge apprenticeship | 2 base | New proposal |
+| [F25](#f25) | Weapon-forge and servicing apprenticeship | 2 base + 1 specialization | New proposal |
+| [F26](#f26) | Forged-metal armor workshop | 2 base | New proposal |
+| [F27](#f27) | Timber millwright apprenticeship | 2 base | New proposal |
+| [F28](#f28) | Building design and site surveying | 2 base | New proposal |
+| [F29](#f29) | Field surgical apprenticeship | 2 base + 1 specialization | New proposal |
+| [F30](#f30) | Swashbuckling fencing instruction | 2 base + 1 specialization | New proposal |
+| [F31](#f31) | Polearm and formation drill | 2 base | New proposal |
+| [F32](#f32) | Mounted lance practice | 2 base | New proposal |
+| [F33](#f33) | Concealed field reconnaissance practice | 4 base | New proposal |
+| [F34](#f34) | Trapline and trail practice | 2 base | New proposal |
+
+
+**Member-status note.** G01’s Nursing, G09’s Military Command and G17’s explicitly taught Interrogation are approved full-catalogue additions. F01–F03 are accepted conditional concepts whose full teaching is specified here. The word “approved” refers to the existing content ruling only; it does not activate a group or grant a Skill. G08 carries the separate presentation exception described in Section E.
+
+
+<a id="g01"></a>
+### G01 — Patient care
+
+
+**Short description.** Learners assess patients, give immediate help and follow continuing care under an experienced practitioner.
+
+
+Learners accompany a practitioner through repeated cases, discuss what they observe, carry out appropriate care and return to see how the patient changes. The teacher corrects missed signs, mistaken explanations and poorly performed care, rather than merely letting the learner watch.
+
+This is a practice in which both immediate assistance and considered treatment are taught. Learners also receive sustained instruction in bedside care, observation and reporting. A household practitioner, healer or organized place of care can provide this instruction; the group does not depend on a modern hospital.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:first-aid` — First Aid | Base Skill | Learners repeatedly assess an immediate problem, give initial assistance and explain when further care is needed. | Preserved Pilot membership |
+| `skill:medicine` — Medicine | Base Skill | Learners compare symptoms and histories, consider explanations and review treatment choices against the course of actual cases. | Preserved Pilot membership |
+| `nursing` — Nursing | Base Skill | Learners are corrected in ongoing bedside care, noticing changes and communicating what a patient needs over time. | Approved full-catalogue addition |
+
+
+**Exclusions and boundaries**
+
+
+- Surgery requires deliberate operative instruction; observing operations does not supply it.
+- Pharmacy requires making and dispensing preparations, rather than merely giving a prepared medicine.
+- Diagnostic Medicine, Bone Setting, Obstetrics and Poison Treatment require their own specialist teaching and are not included automatically.
+
+
+**Provenance / review annotation.** [L2] Preserved G01: First Aid and Medicine. [PO] Nursing addition accepted for the described sustained-care practice. [R] healing_practice supports the group concept; herb_and_remedy_craft supports a remedy-related subset, not the full curriculum.
+
+
+<a id="g02"></a>
+### G02 — Plant and remedy preparation
+
+
+**Short description.** Learners identify useful plants and turn medicinal ingredients into dependable preparations under a remedy maker.
+
+
+Teaching follows ingredients from recognition and collection through preparation, preservation and dispensing. Learners compare plants and habitats, distinguish similar materials and explain why a particular ingredient or preparation is suitable. Their teacher checks both the identification and the finished remedy.
+
+The practice includes wider plant knowledge and the practical preparation of medicines. A workshop that buys all its ingredients and teaches only preparation does not exemplify the whole group, nor does a plant walk that never develops remedies. Instruction may be oral and practical, supported by written recipes where those are used.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:plant-lore` — Plant Lore | Base Skill | Learners repeatedly identify and compare plants, their habitats and relevant properties, with errors corrected by an experienced practitioner. | Preserved Pilot membership |
+| `skill:pharmacy` — Pharmacy | Base Skill | Learners prepare, preserve and dispense medicines while a teacher checks ingredients, quantities, condition and consistency. | Preserved Pilot membership |
+
+
+**Exclusions and boundaries**
+
+
+- Medicine concerns assessing and treating illness; making a remedy does not ordinarily teach the complete clinical competence.
+- Distilling and Alchemy are not included merely because a workshop uses their products.
+- Poisons is a distinct body of preparation and use, rather than another name for remedy craft.
+
+
+**Provenance / review annotation.** [L2] Preserved G02. [R] herb_and_remedy_craft supports the concept; its legacy Herb Lore identity is not adopted as a Candidate or target identity.
+
+
+<a id="g03"></a>
+### G03 — Tracking and hunting practice
+
+
+**Short description.** Learners follow quarry, approach it unobtrusively and make hunting decisions under an experienced hunter.
+
+
+Instruction takes place through repeated searches and hunts in which the learner does more than accompany the party. A teacher asks them to locate signs, follow and recover a trail, choose an approach and explain when a hunt should continue or change. Missed observations and noisy or conspicuous movements are revisited and corrected.
+
+Observation and concealment receive their own exercises as well as field practice. This makes the group a body of taught techniques, rather than a list of everything a hunter might find useful. The quarry and methods can differ between traditions without supplying every possible weapon or trapping practice.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:tracking` — Tracking | Base Skill | Learners follow connected signs, recover interrupted trails and compare their reconstruction with what later evidence shows. | Preserved Pilot membership |
+| `skill:hunting` — Hunting | Base Skill | Learners choose quarry, approach and timing, and receive correction on decisions throughout the hunt. | Preserved Pilot membership |
+| `skill:stealth` — Stealth | Base Skill | Learners rehearse quiet, unobtrusive movement and receive feedback on what revealed their position. | Preserved Pilot membership |
+| `skill:perception` — Perception | Base Skill | Learners practise systematic observation and searching, then compare what they noticed with details they missed. | Preserved Pilot membership |
+
+
+**Exclusions and boundaries**
+
+
+- Weapon-family Skills require their own complete weapon instruction.
+- Trapping and Trapmaking are not taught by a hunt that does not design, set or tend traps.
+- Animal Lore and Survival are not established by knowing this quarry or spending time outdoors.
+
+
+**Provenance / review annotation.** [L2] All four G03 memberships preserved. [R] mounted_service is profession-shaped and does not establish this curriculum. [P] Wording makes the existing observation and stealth instruction explicit.
+
+
+<a id="g04"></a>
+### G04 — Field travel and camp practice
+
+
+**Short description.** Learners plan routes, judge changing weather and maintain a workable camp through supervised travel.
+
+
+An experienced traveller guides repeated journeys and camps, asking learners to choose a route, explain signs of changing conditions and provide shelter and other immediate necessities. Decisions are reviewed against the ground actually encountered and the condition of the camp and its occupants.
+
+Route knowledge, weather judgment and practical survival are each taught throughout the experience. Merely travelling with an expedition is insufficient: a passenger or a helper who always follows instructions may learn only part of this practice. Routes and camp methods can be transmitted through demonstration, oral description and remembered landmarks.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:survival` — Survival | Base Skill | Learners repeatedly establish shelter and meet immediate needs, with the teacher correcting unsuitable sites and ineffective methods. | Preserved Pilot membership |
+| `skill:wayfinding` — Wayfinding | Base Skill | Learners choose and recover routes using connected landscape cues and explain their decisions during supervised travel. | Preserved Pilot membership |
+| `skill:weather-lore` — Weather Lore | Base Skill | Learners observe developing conditions, make practical forecasts and compare those judgments with subsequent weather. | Preserved Pilot membership |
+
+
+**Exclusions and boundaries**
+
+
+- Athletics, Running, Climbing and Swimming require deliberate practice of their distinct movement techniques.
+- Hunting, Fishing and Trapping are not included merely because food is needed.
+- Dead Reckoning requires sustained instruction in estimating progress, beyond recognizing a route.
+
+
+**Provenance / review annotation.** [L2] Preserved G04. [R] mounted_service is a profession-shaped antecedent, not proof that all of these competences were co-taught.
+
+
+<a id="g05"></a>
+### G05 — Mounted travel and animal care
+
+
+**Short description.** Learners handle a mount on the ground and ride it through the demands of ordinary mounted travel.
+
+
+Training alternates between working beside the animal and travelling on it. A teacher corrects approach, restraint, signals and responses to agitation, then works on the rider’s balance, aids, pace and judgment on changing ground. The same learner practises both sides of the partnership.
+
+Ordinary care associated with a mount provides occasions to practise handling alongside riding. Long-term care, breeding and population management belong to the distinct Animal Husbandry competence; tending one mount does not by itself teach that entire body of work.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:animal-handling` — Animal Handling | Base Skill | Learners practise approaching, controlling and calming mounts on the ground, with correction of inconsistent signals and poor positioning. | Preserved Pilot membership |
+| `skill:riding` — Riding | Base Skill | Learners repeatedly manage balance, pace, direction and terrain while an instructor corrects their mounted technique. | Preserved Pilot membership |
+
+
+**Exclusions and boundaries**
+
+
+- Animal Husbandry requires sustained population-care and breeding instruction, beyond daily attention to a riding animal.
+- Mounted Combat and Lance require combat training.
+- Animal Training and Steppe Remount Training are specialist practices and do not follow from learning to ride.
+
+
+**Provenance / review annotation.** [L2] Both G05 memberships and the group name preserved. [R] mounted_service supports a subset and is also profession-shaped. [P] Boundary clarified for the expanded Animal Husbandry identity.
+
+
+<a id="g06"></a>
+### G06 — Working a boat
+
+
+**Short description.** Learners practise the routines and manoeuvres needed to operate a vessel under experienced crew.
+
+
+Training takes place through repeated work aboard a vessel, where learners operate its equipment, respond to changing loading and conditions and coordinate ordinary manoeuvres. An experienced crew member corrects timing, handling and the learner’s interpretation of how the craft is responding.
+
+This remains an intentionally small group. Its unity comes from the vessel’s working routines, not from the number of Skills listed. More specific apprenticeships can teach ropework or fishing alongside Seamanship, but those additions need the further instruction described on their own group pages.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:seamanship` — Seamanship | Base Skill | Learners repeatedly operate the vessel and its equipment, receiving correction on manoeuvres, routine work and developing operational problems. | Preserved Pilot membership |
+
+
+**Exclusions and boundaries**
+
+
+- Swimming is not ordinarily taught by working aboard.
+- Pilotage, Chart Navigation and other position-finding practices require separate navigation instruction.
+- Ropework is not included merely because learners tie a few task-specific knots.
+- Shipbuilding and Sailmaking concern substantial making and repair practices rather than ordinary operation.
+
+
+**Provenance / review annotation.** [L2] G06 and its single approved Seamanship membership preserved. [R] craft_group is too broad to establish additional training. [P] F09 and F10 describe narrower proposed apprenticeships.
+
+
+<a id="g07"></a>
+### G07 — Passage navigation
+
+
+**Short description.** Learners estimate progress and relate a passage to landmarks, routes and local waters under a navigator.
+
+
+A navigator teaches learners to keep track of movement, connect their estimated position with recognizable features and work through the local approach to a destination. Learners make their own judgments during a passage, compare them with observations and explain discrepancies before continuing.
+
+This particular practice includes route finding and local pilotage as well as estimating progress. Its complete teaching is more than simply obeying a helmsman’s directions. Oral sailing directions and remembered coastal features can support it; charts and observations of celestial bodies are additional practices, not assumptions about all seafaring.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:dead-reckoning` — Dead Reckoning | Base Skill | Learners estimate direction and distance travelled, maintain a running position and correct their account when observations disagree. | Preserved Pilot membership |
+| `skill:wayfinding` — Wayfinding | Base Skill | Learners relate recognizable features and remembered routes to the next part of the journey and practise recovering a lost route. | Preserved Pilot membership |
+| `skill:pilotage` — Pilotage | Base Skill | Learners repeatedly plan and conduct local passages while a teacher corrects judgments about waters, approaches and hazards. | Preserved Pilot membership |
+
+
+**Exclusions and boundaries**
+
+
+- Chart Navigation and Celestial Navigation require those methods to be deliberately taught.
+- Seamanship concerns vessel operation and is not supplied by learning to choose a passage.
+- Cartography and Surveying require making maps and reliable measurements, rather than using local directions.
+
+
+**Historical, context or review note.** Pilotage retains its geographic context. Teaching another coast or waterway requires the relevant local knowledge; this note assigns no acquisition or transfer rule.
+
+
+**Provenance / review annotation.** [L2] All three G07 memberships preserved. [R] mercantile_practice is unrelated as evidence for navigation instruction.
+
+
+<a id="g08"></a>
+### G08 — Close weapon practice
+
+
+**Short description.** Learners rehearse close exchanges under an instructor who corrects movement away from an incoming attack.
+
+
+An instructor sets up repeated close encounters and corrects how learners judge an approaching attack, move out of its path and remain able to respond to the developing exchange. Practice includes movement as an expressly taught defensive competence, rather than treating any movement with a weapon as evidence of Dodge.
+
+Weapon exercises can provide a setting for this training, but the learner receives separate correction on movement away from attacks. The weapon instructor must teach that defensive practice deliberately; merely handling a weapon or moving through an exercise does not establish it.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `dodge` — Dodge | Base Skill | Learners repeatedly judge an incoming attack and move clear of it, with an instructor correcting timing and direction. | Preserved Pilot membership |
+
+
+**Exclusions and boundaries**
+
+
+- No live weapon-family Skill is added solely because its weapons can be used at close range.
+- Parry is not an alias for Pilot Shield and receives no inferred G08 membership.
+- Fencing requires instruction in the established specialist tradition.
+
+
+**Historical, context or review note.** Review exception: the future page has one target member. Retaining or improving its eventual title is a Product Owner presentation decision; it is not authority to substitute weapon identities.
+
+
+**Provenance / review annotation.** [L2] Original G08 links to skill:sword, skill:shield, skill:knife-dagger, skill:spear and skill:dodge remain intact as provenance. [PO] Only target dodge is listed here; live weapon identities remain frozen. [R] basic_melee_training supports the concept but its identity/type structure is incompatible with copying the old weapon membership wholesale.
+
+
+<a id="g09"></a>
+### G09 — Unit coordination and command practice
+
+
+**Short description.** Learners decide a unit’s tactical tasks, issue workable directions and practise leading the people who must carry them out.
+
+
+An experienced commander supervises exercises and service in which learners consider the situation, decide what a unit should do and turn that decision into orders, responsibilities and coordinated action. The teacher reviews both the plan and what actually happened when people tried to carry it out.
+
+Professional command receives its own sustained instruction. Learners practise maintaining the unit’s organization and command responsibilities as well as motivating people and reasoning about tactical choices. These are related but distinct lessons; participation as an ordinary formation member does not provide the whole practice.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `tactics` — Battle Tactics | Base Skill | Learners repeatedly choose and justify tactical courses of action, then revise them after exercises and changing situations. | Preserved Pilot membership |
+| `skill:leadership` — Leadership | Base Skill | Learners practise explaining purposes, motivating people and coordinating their effort, with feedback on the response they obtain. | Preserved Pilot membership |
+| `captaincy` — Military Command | Base Skill | Learners issue and follow through on orders, allocate responsibilities and manage an organized unit under a commander’s supervision. | Approved full-catalogue addition |
+
+
+**Exclusions and boundaries**
+
+
+- Formation Fighting concerns performing effectively within a formation, not exercising command over it.
+- Campaign Strategy and Military Logistics require sustained instruction beyond the tactical unit exercises described here.
+- Battlefield Awareness and Combat Experience are not established by discussing plans.
+
+
+**Provenance / review annotation.** [L2] Battle Tactics and Leadership preserved as Pilot concepts; exact Pilot IDs remain in the snapshot. [PO] Target tactics and captaincy retain the approved names Battle Tactics and Military Command; the Military Command addition is approved. [R] mounted_service is profession-shaped; basic_melee_training is unrelated as evidence for command teaching.
+
+
+<a id="g10"></a>
+### G10 — Council and mediation practice
+
+
+**Short description.** Learners listen to disputes, address a gathering and negotiate workable terms under an experienced convenor.
+
+
+Learners take part in supervised discussions where they must understand the parties, explain a position publicly and explore terms that participants might accept. A teacher corrects misread reactions, poorly framed proposals and breaches of the conventions governing the encounter.
+
+The practice includes direct teaching of social conventions, speech and negotiation. It can be learned through community deliberation and oral instruction as well as more formal councils. Resolving a dispute is the shared activity; it is not a separate base Mediation Skill and does not establish expertise in every legal system.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:oratory` — Oratory | Base Skill | Learners prepare and deliver arguments to a gathering and receive correction on structure, clarity and response to listeners. | Preserved Pilot membership |
+| `skill:insight` — Insight | Base Skill | Learners compare their interpretation of participants’ reactions and intentions with further questioning and the course of the discussion. | Preserved Pilot membership |
+| `skill:customs` — Customs | Base Skill | Learners rehearse and receive correction in the conventions that govern address, standing, obligations and participation in the relevant society. | Preserved Pilot membership |
+| `skill:bargaining` — Bargaining | Base Skill | Learners exchange proposals, judge concessions and practise arriving at terms while a teacher reviews their choices. | Preserved Pilot membership |
+
+
+**Exclusions and boundaries**
+
+
+- Law requires instruction in a legal system’s authorities, rules and procedures.
+- Leadership is useful to a convenor but is not automatically taught to every learner in mediation practice.
+- Courtly Protocol and Court Advocacy require their narrower specialist instruction.
+
+
+**Provenance / review annotation.** [L2] All four memberships preserved. [PO] Customs is confirmed as knowledge of social conventions; no scope hold remains. [R] mercantile_practice supports the negotiation subset; commercial_administration is too broad.
+
+
+<a id="g11"></a>
+### G11 — Records-office practice
+
+
+**Short description.** Learners organize recurring office work and maintain accounts through supervised handling of real records.
+
+
+A clerk or administrator teaches learners to receive matters, preserve a usable record, follow work through its stages and keep obligations from being overlooked. Alongside this, learners enter and reconcile accounts rather than merely copying figures prepared by someone else.
+
+The connection is repeated responsibility for both the work and its record. An office can teach these through practical apprenticeship, dictated instruction and the written conventions it uses. Access to a writing tradition and knowledge of the office’s business remain separate from the two competencies listed here.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:administration` — Administration | Base Skill | Learners organize recurring work, track responsibilities and correct failures in the handling and follow-through of matters. | Preserved Pilot membership |
+| `skill:bookkeeping` — Bookkeeping | Base Skill | Learners enter transactions, reconcile totals and balances and investigate discrepancies under supervision. | Preserved Pilot membership |
+
+
+**Exclusions and boundaries**
+
+
+- Research requires inquiry and evaluation of evidence; orderly filing alone does not teach it.
+- Law and Banking & Credit require their own substantive judgment.
+- No named Written Tradition is included merely because records are written.
+- Court Administration is not inherited automatically from Administration.
+
+
+**Provenance / review annotation.** [L2] Both G11 memberships preserved. [R] commercial_administration supports the concept. It does not establish named written-competency or profession rules.
+
+
+<a id="g12"></a>
+### G12 — Trading practice
+
+
+**Short description.** Learners assess goods, negotiate terms and carry transactions through under an experienced trader.
+
+
+Teaching takes place through repeated buying and selling in which the learner examines goods, compares their condition and likely value, discusses terms and follows the transaction to completion. The teacher explains errors in judgment and reviews the result rather than assigning the learner only carrying or copying work.
+
+The learner is taught the whole practical exchange: commercial decisions, negotiation and appraisal. Markets, travelling trade and fixed shops can provide this practice, but simply being present in a market does not. The goods and trading conventions can vary without making every associated financial or administrative competence a member.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:trade` — Trade | Base Skill | Learners judge transactions, sources and outlets, and review the practical success of commercial choices. | Preserved Pilot membership |
+| `skill:bargaining` — Bargaining | Base Skill | Learners negotiate prices and conditions, with correction on proposals, concessions and agreement. | Preserved Pilot membership |
+| `skill:appraisal` — Appraisal | Base Skill | Learners inspect and compare goods, explain their valuation and learn from expert correction and later results. | Preserved Pilot membership |
+
+
+**Exclusions and boundaries**
+
+
+- Bookkeeping requires systematic accounts rather than remembering individual prices.
+- Banking & Credit concerns obligations and financial exposure beyond ordinary buying and selling.
+- Streetwise and Underworld are not supplied by commercial contact with a place or network.
+
+
+**Provenance / review annotation.** [L2] All three G12 memberships preserved. [R] mercantile_practice supports the group concept; commercial_administration supports a subset.
+
+
+<a id="g13"></a>
+### G13 — Metalworking apprenticeship
+
+
+**Short description.** Learners make and repair metal objects under a smith who corrects their working of the material.
+
+
+The apprentice works through material selection, shaping, fitting and repair on repeated objects. A smith demonstrates techniques, inspects the result and has the learner correct weaknesses or repeat work until form and serviceability are reliable.
+
+This intentionally small group describes a substantial apprenticeship even with one base Skill. Producing metal, making armor and maintaining weapons each involve further distinct work; none is taught simply because it may take place near a forge. More narrowly defined workshops below explain when another complete competence is deliberately taught alongside Smithing.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:smithing` — Smithing | Base Skill | Learners repeatedly shape, fit and repair metalwork, with correction of tool use, material judgment and weaknesses in the finished object. | Preserved Pilot membership |
+
+
+**Exclusions and boundaries**
+
+
+- Smelting requires managing a process that produces metal from starting material, not merely heating purchased metal.
+- Armoring requires protective design and fit around a moving body.
+- Weaponsmithing and Weapon Maintenance require specialist making or servicing instruction.
+
+
+**Provenance / review annotation.** [L2] G13 and its single Smithing membership preserved. [R] craft_group is too broad to establish additional members; no Candidate-to-legacy Skill or group identity mapping is created.
+
+
+<a id="g14"></a>
+### G14 — Local contacts and information gathering
+
+
+**Short description.** Learners build useful local contacts and interpret what people will tell them through guided work in an urban milieu.
+
+
+An experienced local guide or contact teaches learners where to seek information, how to approach people and how to keep a conversation useful without misreading its reception. Learners compare accounts from different encounters and discuss why a contact was forthcoming, guarded or misleading.
+
+The local network and the interpretation of people are both explicitly taught. This is more than walking through a settlement or knowing its customs. It can be learned through repeated accompanied visits and oral instruction, without assuming that the milieu is illicit.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:streetwise` — Streetwise | Base Skill | Learners practise finding and approaching the people and places through which local information and practical assistance circulate. | Preserved Pilot membership |
+| `skill:insight` — Insight | Base Skill | Learners test interpretations of reactions and motives against follow-up encounters and correction from their guide. | Preserved Pilot membership |
+
+
+**Exclusions and boundaries**
+
+
+- Underworld requires knowledge of the relevant illicit network and its working arrangements.
+- Bargaining and Deception are not established by asking questions or making introductions.
+- Research requires a fuller disciplined inquiry than collecting local reports.
+
+
+**Historical, context or review note.** Streetwise retains its urban milieu or settlement context. Shared locality alone is not the reason Insight belongs here; coached interpretation is.
+
+
+**Provenance / review annotation.** [L2] Both G14 memberships preserved. [R] covert_entry is unrelated to contact-building; no specific legacy antecedent supplies a wider curriculum.
+
+
+<a id="g15"></a>
+### G15 — Covert entry practice
+
+
+**Short description.** Learners inspect an approach, move without attracting notice and open locks through coached entry exercises.
+
+
+A teacher prepares and reviews repeated entries in which learners search for relevant details, choose a quiet approach and work with familiar lock mechanisms. Afterward they examine what they overlooked, what exposed them and why a lock did or did not yield.
+
+Observation, unobtrusive movement and manipulation of locks each receive deliberate practice. The group concerns this combined instruction, not every way of entering a place or every competence useful to someone acting covertly. Demonstrations and supervised exercises can teach it without a formal institution.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:stealth` — Stealth | Base Skill | Learners rehearse concealed approaches and departures and correct the movements or sounds that exposed them. | Preserved Pilot membership |
+| `skill:perception` — Perception | Base Skill | Learners systematically inspect places and objects, then compare their observations with overlooked details revealed during review. | Preserved Pilot membership |
+| `skill:lockpicking` — Lockpicking | Base Skill | Learners repeatedly interpret and manipulate familiar lock mechanisms while a teacher corrects their diagnosis and technique. | Preserved Pilot membership |
+
+
+**Exclusions and boundaries**
+
+
+- Trapmaking requires technical knowledge of constructed traps; seeing a suspicious feature does not teach their design or bypass.
+- Climbing is not included merely because some entries involve height.
+- Warded-Lock Entry needs its specialist lock instruction.
+- Underworld is knowledge of an illicit milieu, not an entry technique.
+
+
+**Provenance / review annotation.** [L2] All three G15 memberships preserved. [R] covert_entry supports the concept. It does not justify adding other covert Skills.
+
+
+<a id="g16"></a>
+### G16 — Impersonation and distraction practice
+
+
+**Short description.** Learners prepare an assumed appearance and sustain a misleading account through rehearsed encounters.
+
+
+Training alternates preparation with encounters in which another person questions or challenges the presentation. Learners adjust clothing, grooming and other identifying details, develop a consistent account and review the points where appearance and explanation failed to agree.
+
+The teacher directly corrects the making of a disguise and the delivery of a deception. Encounters may involve distraction, but distracting an observer does not itself establish Sleight of Hand, Acting or another separate competence. A learner may encounter those further lessons through other instruction.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:deception` — Deception | Base Skill | Learners sustain misleading accounts under follow-up questions and correct contradictions or implausible explanations. | Preserved Pilot membership |
+| `skill:disguise` — Disguise | Base Skill | Learners construct and revise an assumed appearance while the teacher identifies details that disclose or undermine the intended identity. | Preserved Pilot membership |
+
+
+**Exclusions and boundaries**
+
+
+- Acting concerns dramatic performance and is not inferred from impersonation.
+- Sleight of Hand requires deliberate manual manipulation practice.
+- Customs may supply useful contextual knowledge but must be taught separately.
+- Document & Credential Forgery requires making convincing documents rather than carrying them.
+
+
+**Provenance / review annotation.** [L2] Both G16 memberships and the title preserved. [R] covert_entry is unrelated as evidence for these lessons. [P] The full-catalogue boundary makes the title’s limited meaning explicit.
+
+
+<a id="g17"></a>
+### G17 — Interview and evidence practice
+
+
+**Short description.** Learners conduct structured inquiries, question people and compare accounts with observable evidence under a mentor.
+
+
+A mentor has learners frame questions, locate witnesses or other evidence and keep track of the origin of claims. Learners practise interviews, check what an answer actually establishes and revisit observations that do not fit. Feedback concerns the conduct of the inquiry as well as what was noticed or inferred.
+
+Interrogation belongs in the expanded version described here because structured questioning, follow-up and evaluation of answers are expressly rehearsed. It is not inferred from any conversation. Research can proceed through oral testimony and physical observations; literacy and an archive are not inherent requirements of this practice.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:research` — Research | Base Skill | Learners frame inquiries, compare sources and revise conclusions while a mentor challenges unsupported inferences. | Preserved Pilot membership |
+| `skill:insight` — Insight | Base Skill | Learners examine interpretations of witnesses’ reactions and intentions and correct overconfident readings. | Preserved Pilot membership |
+| `skill:perception` — Perception | Base Skill | Learners practise searching and close observation, checking what they noticed against a later inspection or demonstration. | Preserved Pilot membership |
+| `skill:interrogation` — Interrogation | Base Skill | Learners plan and conduct sustained questioning, pursue relevant answers and review the quality and limits of the information obtained. | Approved full-catalogue addition |
+
+
+**Exclusions and boundaries**
+
+
+- Law requires learning a particular legal system and its procedure.
+- Intimidation and Deception are not necessary constituents of structured questioning.
+- Palaeography & Decipherment requires specialist instruction with writing, beyond using a readable record.
+- No spoken or written competency is acquired merely because an inquiry uses it.
+
+
+**Provenance / review annotation.** [L2] Research, Insight and Perception preserved. [PO] Interrogation addition is accepted only for the explicit instruction supplied here. [R] commercial_administration is unrelated as evidence for this inquiry curriculum.
+
+
+<a id="g18"></a>
+### G18 — Operative care practice
+
+
+**Short description.** Learners provide initial care and undertake supervised operative treatment with an experienced surgeon.
+
+
+The teacher guides learners from an injured patient’s immediate needs through preparation for an intervention and the controlled work of the operation. Learners repeatedly practise initial assistance as well as operative judgment and technique, and discuss what must be watched afterward.
+
+This is a surgical apprenticeship that actually teaches both listed competences. Being a bystander to an operation, handing over instruments or providing only later bedside care does not cover the whole practice. Its methods depend on the operative tradition and circumstances without turning Surgery into a specialization of Medicine.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:surgery` — Surgery | Base Skill | Learners assess and perform operative work under supervision, with correction of anatomical judgment, technique and responses to difficulties. | Preserved Pilot membership |
+| `skill:first-aid` — First Aid | Base Skill | Learners repeatedly assess immediate injury and give initial assistance before further operative decisions are made. | Preserved Pilot membership |
+
+
+**Exclusions and boundaries**
+
+
+- Medicine requires a broader clinical practice than the operative work described here.
+- Nursing requires sustained bedside-care teaching, beyond brief assistance around an operation.
+- Battlefield Surgery and other medical specializations require their own narrower instruction.
+
+
+**Provenance / review annotation.** [L2] Both G18 memberships preserved. [PO] Surgery remains a base Skill. [R] healing_practice supports a subset; legacy Surgery-as-Specialization is incompatible identity/type evidence, not a target rule.
+
+
+<a id="f01"></a>
+### F01 — Field surveying and map production
+
+
+**Short description.** Learners measure ground and turn their checked observations into usable maps under a field surveyor and map maker.
+
+
+Learners establish reference points, take connected measurements and check their work before deciding how to represent the ground. They then make maps, choose signs and scale appropriate to the purpose, and compare the result with another visit or an independent set of observations.
+
+The apprenticeship follows the work from field measurement through cartographic judgment. It does not describe a survey party in which one learner only carries equipment while someone else makes the map. A teacher may combine both practices, or two practitioners may supervise the same learner through the whole process.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `surveying` — Surveying | Base Skill | Learners repeatedly establish reference points, measure connected positions and resolve discrepancies under field supervision. | Approved full-catalogue addition |
+| `skill:cartography` — Cartography | Base Skill | Learners select, arrange and revise mapped information, with correction of scale, signs, omissions and the reader’s likely interpretation. | Approved full-catalogue addition |
+
+
+**Exclusions and boundaries**
+
+
+- Chart Navigation concerns using a navigation chart, not producing a map.
+- Geography requires a wider body of knowledge than the area being measured.
+- Mathematics is not included merely because the work teaches the calculations needed for a survey.
+
+
+**Historical, context or review note.** Measurement and representation may use different instruments and conventions across traditions. No particular map projection or instrument is required by the group.
+
+
+**Provenance / review annotation.** [PO] Previously approved conditional group concept. [P] This page specifies the complete two-part apprenticeship required for both members; no additional legacy membership is claimed.
+
+
+<a id="f02"></a>
+### F02 — Fibre-to-cloth workshop practice
+
+
+**Short description.** Learners prepare fibres and yarn and weave them into cloth through a complete household or workshop practice.
+
+
+An experienced worker takes the learner through sorting and preparing fibre, making usable yarn and setting up and working a loom. The learner sees how uneven preparation becomes a fault in the fabric and learns to correct problems at the stage where they arise.
+
+Both parts are taught through repeated production, including preparation, weaving and inspection of the result. A household may sustain the whole practice; a divided workshop may teach the two crafts to different people. The latter arrangement does not establish this combined group for a learner who works in only one part.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:fibre-working` — Fibre Working | Base Skill | Learners prepare and work fibres into consistent intermediate material, with correction of sorting, alignment, twist and faults. | Approved full-catalogue addition |
+| `weaving` — Weaving | Base Skill | Learners prepare a loom, interlace the material into cloth and diagnose faults while an experienced weaver checks their work. | Approved full-catalogue addition |
+
+
+**Exclusions and boundaries**
+
+
+- Tailoring and Sailmaking concern making different finished products, not simply producing cloth.
+- Cordage / Ropemaking requires deliberate instruction in making substantial cordage.
+- Ropework concerns using and joining ropes, not preparing fibres or weaving.
+
+
+**Provenance / review annotation.** [PO] Previously approved conditional group concept. [R] craft_group is too broad to prove this combined apprenticeship. [P] Membership rests on teaching the learner both complete crafts.
+
+
+<a id="f03"></a>
+### F03 — Timber vessel construction
+
+
+**Short description.** Learners work timber and build or substantially repair wooden hulls under an experienced vessel builder.
+
+
+The apprentice selects and works timber, makes fitted joints and learns how those pieces contribute to a sound vessel. Repeated construction and substantial repairs teach the learner to connect the quality of individual pieces with the hull’s shape, strength and behaviour in water.
+
+The teacher corrects both ordinary woodworking and the vessel builder’s decisions. This group describes an apprenticeship that includes substantial carpentry, rather than a narrowly allocated task such as preparing one repeated component. It also requires learning the vessel as a whole, rather than making timber to another person’s instructions without understanding its use.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `carpentry` — Carpentry | Base Skill | Learners repeatedly select, shape and join timber, correcting weaknesses in fit, grain judgment and construction. | Approved full-catalogue addition |
+| `skill:shipbuilding` — Shipbuilding | Base Skill | Learners build and assess hull structures, relate form to intended service and diagnose substantial vessel defects under supervision. | Approved full-catalogue addition |
+
+
+**Exclusions and boundaries**
+
+
+- Seamanship concerns operating a vessel and is not taught merely by building it.
+- Sailmaking and Ropework require their own making or working practices.
+- Architecture concerns buildings; timber construction alone does not establish its design competence.
+
+
+**Provenance / review annotation.** [PO] Previously approved conditional group concept. [R] craft_group is too broad to establish the two complete competencies. [P] The described full apprenticeship supplies the ordinary-training justification.
+
+
+<a id="f04"></a>
+### F04 — Running and athletic field practice
+
+
+**Short description.** Learners train running technique alongside jumping, vaulting and balance under an athletic instructor.
+
+
+The instructor alternates coached running sessions with deliberate work on jumps, vaults and controlled movement. Learners practise pace and efficient running as well as take-off, landing and balance, receiving separate correction on each technique and on the way fatigue changes it.
+
+This is a recognizable combined athletic course, not a claim that running to a training ground teaches Running or that general fitness supplies every physical Skill. A community trainer, experienced athlete or organized athletic gathering can sustain it. The particular exercises vary without collapsing the distinct movement competencies.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:running` — Running | Base Skill | Learners repeatedly practise pace, speed, economy, endurance and adjustment to ground, with correction of their running technique. | New proposal |
+| `skill:athletics` — Athletics | Base Skill | Learners rehearse jumps, vaults, balance and related body control, with correction of take-off, movement and landing. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Climbing and Swimming require their own techniques and practice environments.
+- Dance requires a movement tradition and expressive or formal performance instruction.
+- Brawling and Dodge are not supplied by general athletic movement.
+
+
+**Historical, context or review note.** Ancient Greek athletics offers one documented example of coached training and events combining running with jumping. It does not establish this curriculum for all athletes or societies. [The Met: Athletics in Ancient Greece](https://www.metmuseum.org/essays/athletics-in-ancient-greece).
+
+
+**Provenance / review annotation.** [P] New combined training proposal grounded in the two target scopes. [H1] Historical athletic coaching and combined running/jumping competition support the practice concept, not this exact game membership.
+
+
+<a id="f05"></a>
+### F05 — Pastoral stockkeeping apprenticeship
+
+
+**Short description.** Learners handle animals, move a herd and sustain its condition through a complete pastoral cycle.
+
+
+An experienced keeper supervises daily contact with animals, the movement of the herd between grazing and resting places, and the longer cycle of feed, breeding and care of young. Learners take responsibility for each part and review the results as animals and conditions change.
+
+The co-training comes from sustained responsibility for the herd, not from merely being near livestock. Learners practise immediate handling, collective movement and population care as separate tasks within the same continuing work. Someone assigned only to watch a boundary or drive animals along a familiar route may learn a narrower practice.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:animal-handling` — Animal Handling | Base Skill | Learners approach, restrain and direct individual animals and correct their responses to agitation or confusion. | New proposal |
+| `skill:animal-husbandry` — Animal Husbandry | Base Skill | Learners plan and review feeding, shelter, breeding and care of young across the changing needs of a population. | New proposal |
+| `herding` — Herding | Base Skill | Learners repeatedly position and move a group of animals, recover stragglers and respond to collective movement under supervision. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Riding is not included merely because some keepers work from mounts.
+- Veterinary Medicine requires clinical investigation and treatment beyond routine husbandry.
+- Animal Training is the deliberate establishment of learned behaviours, not every act of control.
+- Animal Lore extends beyond the practical knowledge of the managed population.
+
+
+**Provenance / review annotation.** [P] New full-catalogue apprenticeship proposal. [R] mounted_service is profession-shaped and does not establish this population-management curriculum.
+
+
+<a id="f06"></a>
+### F06 — Draught-team and vehicle practice
+
+
+**Short description.** Learners handle draught animals on the ground and drive a working cart or wagon under an experienced driver.
+
+
+Teaching moves between harnessing and controlling the animals beside the vehicle and guiding the loaded team along a route. The instructor corrects signals, team coordination, pace and decisions about turns, slopes and difficult ground. Learners also practise responding when the team becomes confused or unsettled.
+
+The repeated connection is between immediate animal handling and the behaviour of animals joined to a vehicle. This does not require the learner to be taught herd breeding or the construction of the cart. The means of harness and control vary with animals and vehicles while preserving that shared practice.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:animal-handling` — Animal Handling | Base Skill | Learners repeatedly approach, position and control draught animals, with correction of ground handling and responses to agitation. | New proposal |
+| `skill:cart-driving` — Cart Driving | Base Skill | Learners guide loaded vehicles and coordinated teams, adjusting pace, turns and ground choices under an instructor’s correction. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Animal Husbandry requires sustained population and breeding care, beyond tending a working team.
+- Riding concerns mounted technique, not driving from a vehicle or alongside it.
+- Ropework and Carpentry are not taught completely by securing a load or noticing a damaged cart.
+
+
+**Provenance / review annotation.** [P] New proposal based on the distinct target Animal Handling and Cart Driving scopes. [R] Legacy Teamstering/Animal Care task evidence is provenance only; no automatic legacy identity or group allocation is made.
+
+
+<a id="f07"></a>
+### F07 — Falconry apprenticeship
+
+
+**Short description.** Learners handle and train a hunting bird and conduct hunts with it under an experienced falconer.
+
+
+The apprenticeship joins daily handling, deliberate training of responses and supervised work with quarry. The learner practises approaching and managing the bird, developing reliable learned behaviour and judging when and how to conduct a hunt. The teacher reviews both the animal’s response and the course of the field outing.
+
+This full apprenticeship includes the hunting decisions; a course confined to displaying or flying a bird does not cover it. The specialist bird practice adds work with flight, return and hunting condition to the underlying training of learned behaviour. These lessons preserve Falconry within Animal Training rather than turning it into another base Skill.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:animal-handling` — Animal Handling | Base Skill | Learners repeatedly manage direct contact with the bird and correct positioning, signals and responses to its behaviour. | New proposal |
+| `skill:hunting` — Hunting | Base Skill | Learners choose and conduct hunts, judging quarry, approach, timing and when to continue or abandon an attempt. | New proposal |
+| `spec:animal-training` — Animal Training | Specialization; parent: `skill:animal-handling` — Animal Handling | Learners deliberately establish and maintain learned responses, adjusting the training when the bird does not learn as intended. | New proposal |
+| `spec:falconry` — Falconry | Specialization; parent: `spec:animal-training` — Animal Training | Learners rehearse the specialist coordination of hunting flight, return and the bird’s working condition under a falconer’s correction. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Animal Husbandry and Veterinary Medicine are not established by the narrower daily care of a hunting bird.
+- Tracking is not automatically taught by pursuing quarry with a bird.
+- No weapon-family Skill is supplied by this hunting method.
+
+
+**Historical, context or review note.** UNESCO describes falconry as training and flying birds of prey, transmitted through mentoring, families and organized instruction. The precise four-competency curriculum here is a proposal, not a claim that every falconry tradition teaches every part. [UNESCO: Falconry, a Living Human Heritage](https://www.unesco.org/archives/multimedia/document-4349).
+
+
+**Provenance / review annotation.** [P] New group proposal. [PO] Falconry → Animal Training → Animal Handling remains the exact nested parent structure; group membership does not establish prerequisites. [H2] Mentoring and family transmission support the apprenticeship context.
+
+
+<a id="f08"></a>
+### F08 — Mixed crop-and-stock household practice
+
+
+**Short description.** Learners manage crops and a domestic animal population through the seasonal work of a mixed holding.
+
+
+An experienced household member teaches the learner to establish and tend crops while maintaining feed, shelter, breeding and care for the holding’s animals. Learners follow the consequences of decisions through a complete season and revise their work when growth, feed supplies or animal condition differ from expectations.
+
+Both branches are deliberately taught to the same learner. The group describes sustained mixed husbandry rather than everything a household does. Dividing duties so one person only works crops and another only tends animals does not by itself demonstrate this combined learning practice.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:farming` — Farming | Base Skill | Learners plan and carry out cultivation, recognize developing crop problems and review the results across a seasonal cycle. | New proposal |
+| `skill:animal-husbandry` — Animal Husbandry | Base Skill | Learners manage the continuing feed, shelter, breeding and care of the holding’s animals and correct failures over time. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Plant Lore is not established by learning only the crops and weeds encountered in this work.
+- Animal Handling and Herding require their own complete instruction in direct control or collective movement.
+- Cooking, Tailoring and other household crafts are not included by household association.
+
+
+**Provenance / review annotation.** [P] New proposal for a complete mixed-holding learning practice. No inherited profession, household status or legacy omnibus group supplies membership.
+
+
+<a id="f09"></a>
+### F09 — Rigged-vessel deck apprenticeship
+
+
+**Short description.** Learners operate a rigged vessel and maintain its working ropes through supervised deck work.
+
+
+The learner takes part in ordinary manoeuvres and equipment routines while receiving sustained instruction in knots, splices, attachments and the condition of working lines. The teacher has the learner diagnose and correct rope problems as well as explain how the vessel responds to the crew’s work.
+
+This is a fuller deck apprenticeship than learning a handful of knots for one assigned job. It combines competent vessel work with a substantial repertoire of rope techniques and inspection. Vessels and rigging traditions differ, and the generic Working a boat group therefore remains smaller.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:seamanship` — Seamanship | Base Skill | Learners operate the vessel and its equipment through repeated manoeuvres, with correction of coordination and handling. | New proposal |
+| `ropework` — Ropework | Base Skill | Learners make, inspect and correct working knots, splices and attachments across the rigging’s recurring needs. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Swimming and navigation Skills require explicit instruction outside these deck routines.
+- Cordage / Ropemaking concerns manufacturing cordage, not working finished rope.
+- Sailmaking requires the design and construction of sails, not setting or adjusting them.
+
+
+**Provenance / review annotation.** [P] New narrower apprenticeship alongside preserved G06. [R] craft_group is too broad to establish this or additional maritime craft membership.
+
+
+<a id="f10"></a>
+### F10 — Fishing-boat apprenticeship
+
+
+**Short description.** Learners operate a fishing vessel and carry out the full capture-and-landing practice under experienced fishers.
+
+
+Learners rotate through vessel manoeuvres and the choices and techniques of fishing: preparing an approach, working the fishing equipment, judging conditions and handling the catch. Their teacher corrects both the operation of the craft and decisions affecting the fishing itself.
+
+The group applies to an apprenticeship that actually teaches both bodies of work. A learner who only sorts a catch or performs one repeated deck task receives a narrower experience. Shore fishing and vessel work without fishing remain coherent practices with different teaching.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:seamanship` — Seamanship | Base Skill | Learners repeatedly handle the vessel during departure, approach, working manoeuvres and return, with correction from experienced crew. | New proposal |
+| `skill:fishing` — Fishing | Base Skill | Learners choose and work fishing methods, judge likely results and correct capture and landing techniques under a fisher’s supervision. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Pilotage and other navigation methods require separate route and position instruction.
+- Ropework is not established by the few knots used with a particular fishing implement.
+- Shipbuilding and Food Preservation require additional making or preservation practice.
+
+
+**Provenance / review annotation.** [P] New proposal grounded in a complete working-boat apprenticeship; no generic maritime or subsistence category is treated as evidence of co-training.
+
+
+<a id="f11"></a>
+### F11 — Charted open-water navigation practice
+
+
+**Short description.** Learners compare estimated progress, navigation charts and celestial observations through a navigator’s integrated instruction.
+
+
+The teacher has learners maintain an account of direction and distance, work through routes and positions on actual navigation charts, and use the sky observations of the navigation tradition. Learners compare the different results, explain disagreement and revise the passage judgment with the uncertainty still visible.
+
+The complete course deliberately teaches all three methods through repeated problems and observations. It is not inferred from ocean travel, owning a chart or recognizing a star. Instruction may combine a navigator’s demonstrations ashore with supervised practice during passages, using only methods actually present in the tradition.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:dead-reckoning` — Dead Reckoning | Base Skill | Learners maintain and revise estimated progress, checking the effects of uncertain direction, distance and movement. | New proposal |
+| `skill:chart-navigation` — Chart Navigation | Base Skill | Learners repeatedly interpret real navigation charts, plan and follow passages on them and correct their reading of position and charted information. | New proposal |
+| `skill:celestial-navigation` — Celestial Navigation | Base Skill | Learners make and interpret the sky observations used by their tradition to establish direction or position, checking their results against other evidence. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Astronomy and Mathematics are not established by selected observations or calculations used for navigation.
+- Pilotage requires local-water judgment; it is not automatically taught by open-water method instruction.
+- Cartography concerns producing maps and charts.
+- Seamanship concerns operating the vessel.
+
+
+**Historical, context or review note.** The course is meaningful only where its chart and celestial procedures are historically appropriate to the chosen tradition. This page supplies neither a date nor an Arch-Society applicability decision.
+
+
+**Provenance / review annotation.** [P] New integrated navigator-training proposal, not a historical availability finding. [PO] Chart Navigation membership depends on the explicitly taught chart practice; it is never inferred from maritime activity.
+
+
+<a id="f12"></a>
+### F12 — Credit-house accounts and obligations
+
+
+**Short description.** Learners judge credit obligations and maintain the accounts through which a credit business follows them.
+
+
+An experienced practitioner has the learner examine proposed obligations, consider repayment and exposure, record the resulting transactions and reconcile what remains due. Learners review disagreements between their commercial judgment, the written or otherwise maintained accounts and what debtors actually repay.
+
+The apprenticeship teaches both financial decisions and complete accounting work. Copying a credit ledger without learning how obligations are assessed does not teach Banking & Credit; discussing loans without keeping and checking accounts does not teach Bookkeeping. The practice need not resemble a modern bank.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `banking` — Banking & Credit | Base Skill | Learners repeatedly assess obligations, repayment prospects and financial exposure and review their decisions as those obligations develop. | New proposal |
+| `skill:bookkeeping` — Bookkeeping | Base Skill | Learners maintain and reconcile the business’s transactions and balances, investigating discrepancies under supervision. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Trade, Bargaining and Appraisal require their own complete exchange, negotiation or valuation instruction.
+- Administration is not established merely because the business has an office.
+- Law requires learning the legal system, beyond recognizing the forms used for familiar obligations.
+
+
+**Provenance / review annotation.** [P] New full-catalogue proposal. [R] commercial_administration supports the accounting subset, not the whole credit competence; mercantile_practice does not erase the Trade/Banking & Credit distinction.
+
+
+<a id="f13"></a>
+### F13 — Legal study and pleading practice
+
+
+**Short description.** Learners study a legal system and prepare and deliver formal arguments under an experienced advocate.
+
+
+The teacher works through actual or rehearsed disputes, asking the learner to identify governing rules, distinguish legally relevant facts and prepare a case. Learners deliver their arguments before listeners and revise them after questions, criticism and examination of the procedure followed.
+
+This apprenticeship includes substantive law, coached public speech and specialist advocacy in a forum that recognizes it. Neither silent legal study nor rehearsing speeches without learning the law covers the whole practice. Instruction can draw on remembered decisions and oral proceedings as well as written material.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:law` — Law | Base Skill | Learners repeatedly interpret the legal system’s rules and authorities and correct their treatment of claims, evidence and procedure. | New proposal |
+| `skill:oratory` — Oratory | Base Skill | Learners compose and deliver arguments to an audience and receive direct correction on structure, clarity and response to questions. | New proposal |
+| `spec:court-advocacy` — Court Advocacy | Specialization; parent: `skill:law` — Law | Learners practise the forum’s specialist preparation, presentation and response in formal legal proceedings under an advocate’s supervision. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Research is not supplied by receiving a prepared case or using already assembled authorities.
+- Customs and Courtly Protocol are not established by learning courtroom procedure.
+- Mnemonics requires taught memory techniques, rather than memorizing a particular speech.
+
+
+**Historical, context or review note.** The legal system and the advocacy forum must be supplied as context. Their shared context alone does not justify membership; substantive law, public speech and specialist pleading are all directly taught here.
+
+
+**Provenance / review annotation.** [P] New contextual apprenticeship proposal. [PO] Court Advocacy remains a contextual Law Specialization; no base Mediation Skill is introduced. No specific legacy group establishes these three target memberships.
+
+
+<a id="f14"></a>
+### F14 — Speech and memory practice
+
+
+**Short description.** Learners prepare and deliver speeches while deliberately training techniques for organizing and retrieving what they intend to say.
+
+
+An instructor teaches learners to build an argument, arrange it for listeners and deliver it without losing the sequence of ideas. Alongside speech practice, learners experiment with deliberate associations, ordered images or other taught memory methods and are asked to recover material after interruptions or changes of order.
+
+Feedback addresses the speech and the method of remembering separately. Repeating a text until it happens to be remembered is not sufficient evidence for Mnemonics. This group describes a rhetorical teaching tradition in which trained recall is an explicit part of the lessons.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:oratory` — Oratory | Base Skill | Learners repeatedly structure and deliver speeches, adapting them after criticism of their argument and delivery. | New proposal |
+| `skill:mnemonics` — Mnemonics | Base Skill | Learners construct, test and revise deliberate recall techniques and practise retrieving material in ways that reveal weaknesses in those methods. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Poetry & Literary Composition concerns literary creation rather than merely an effective speech.
+- Storytelling is not established by including an anecdote in an argument.
+- Meditation is not supplied by composing oneself before speaking.
+
+
+**Provenance / review annotation.** [P] New proposal based on explicit instruction in speech and deliberate recall. It does not assign Mnemonics to all oral traditions, councils or legal training.
+
+
+<a id="f15"></a>
+### F15 — Historical text investigation
+
+
+**Short description.** Learners investigate questions by examining difficult writing and testing what the recovered text can establish.
+
+
+A scholar or experienced reader gives learners material whose signs, hands or abbreviations require investigation. Learners compare examples, propose readings and search for further evidence, while keeping separate what they can read, what they infer and what remains uncertain.
+
+The teaching also develops a full inquiry: learners frame a question, seek relevant sources and revise an explanation when the evidence resists it. Copying unfamiliar characters alone is insufficient. The group describes mentored investigation using texts, rather than treating literacy as the definition of Research.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:research` — Research | Base Skill | Learners frame and pursue questions, compare independent evidence and correct explanations that exceed what the sources establish. | New proposal |
+| `skill:palaeography-decipherment` — Palaeography & Decipherment | Base Skill | Learners compare forms and repeated signs, test possible readings and revise them through direct expert correction and further examples. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- A particular Written Tradition is not taught automatically by examining its difficult forms.
+- Translation & Interpretation concerns conveying meaning between languages, rather than recovering signs.
+- History requires a broader learned account of the past than a single investigation.
+- Document & Credential Forgery concerns producing misleading documents, not examining old ones.
+
+
+**Historical, context or review note.** The relevant writing and document contexts must be known for the exercise. No automatic spoken/written competence or complete decipherment of an unknown system is implied.
+
+
+**Provenance / review annotation.** [P] New specialist inquiry apprenticeship. [R] Records-office or commercial-administration antecedents do not establish palaeographic or research instruction.
+
+
+<a id="f16"></a>
+### F16 — Lineage investigation apprenticeship
+
+
+**Short description.** Learners investigate family connections and assess the evidence for a pedigree under an experienced genealogist.
+
+
+Learners gather remembered accounts and surviving records, distinguish people with similar names and test whether dates and relationships can fit together. The teacher asks them to seek independent support, revisit weak connections and explain contradictions instead of filling gaps with a plausible story.
+
+This teaches disciplined inquiry together with the narrower craft of tracing kinship. The learner may work largely through oral testimony or through written records. Learning an accepted list of ancestors without investigating it does not supply the full practice.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:research` — Research | Base Skill | Learners plan inquiries, evaluate testimony and other sources, and revise conclusions when independent evidence disagrees. | New proposal |
+| `spec:genealogy` — Genealogy | Specialization; parent: `history` — History | Learners reconstruct and test family connections, resolving confused identities and explicitly qualifying unsupported links. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- History, the specialization’s parent, is not automatically taught in its full breadth by investigating pedigrees.
+- Heraldry and Law require their own bodies of instruction.
+- Palaeography & Decipherment is not needed as a member merely because some evidence is written.
+
+
+**Provenance / review annotation.** [P] New inquiry apprenticeship. [PO] Genealogy remains a History Specialization; listing it without its parent does not decide how specializations are acquired.
+
+
+<a id="f17"></a>
+### F17 — Self-accompanied song practice
+
+
+**Short description.** Learners develop their singing and instrumental playing together through coached self-accompanied performance.
+
+
+A teacher works with the learner on the voice and the instrument separately, then on keeping them coordinated through complete songs. Learners practise musical phrasing, timing and responsiveness as well as vocal production, breath and clear delivery of the sung material.
+
+The same learner is taught both competencies. Merely rehearsing in an ensemble where one person sings and another plays does not establish this combined group. The instrument and musical tradition give the practice its character without becoming a new base Skill or supplying a language by association.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `music` — Music | Base Skill | Learners rehearse instrumental technique, musical structure and coordinated performance, with correction beyond simply repeating a single accompaniment. | New proposal |
+| `singing` — Singing | Base Skill | Learners repeatedly train vocal production, pitch, phrasing and breath through solo and accompanied work under a teacher’s correction. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Music Composition requires deliberate composition and revision instruction.
+- Storytelling and Poetry & Literary Composition are not supplied by performing an existing song.
+- A spoken language is not established by memorizing lyrics.
+
+
+**Provenance / review annotation.** [P] New proposal for the same learner’s full vocal and instrumental training. It is not a generic Music/Singing pairing for every ensemble.
+
+
+<a id="f18"></a>
+### F18 — Dramatic acting and dance practice
+
+
+**Short description.** Learners portray dramatic roles and perform a developed movement tradition through an actor-dancer’s instruction.
+
+
+Training alternates the interpretation of a role with repeated work on the movements, timing and expression of the performance tradition. Learners rehearse complete scenes and movement passages while teachers correct both dramatic intention and the execution of dance.
+
+This describes traditions in which performers genuinely train as both actors and dancers. Moving to a place on a stage is not enough to establish Dance, and repeating dance steps without dramatic role work is not enough to establish Acting. Instruction can be transmitted through a performer’s household or apprenticeship as readily as through a theatre school.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `acting` — Acting | Base Skill | Learners develop and sustain dramatic roles in rehearsed scenes, correcting choices that fail to convey the intended character or action. | New proposal |
+| `dancing` — Dance | Base Skill | Learners repeatedly rehearse the tradition’s movement vocabulary, timing and expressive execution with a teacher’s correction. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Athletics is not established merely by difficult or energetic movement.
+- Music and Singing require their own complete musical or vocal instruction.
+- Disguise and Deception are not supplied by theatrical costume or portraying a fictional person.
+- Oratory has a different persuasive task from playing a role.
+
+
+**Provenance / review annotation.** [P] New proposal for an integrated actor-dancer tradition; co-location of dancers and actors in one company does not suffice.
+
+
+<a id="f19"></a>
+### F19 — Oral narrative composition and performance
+
+
+**Short description.** Learners compose verbal narratives and perform them for listeners under an experienced storyteller and composer.
+
+
+Learners create and revise plots, descriptions and language, then test their work through spoken performance. The teacher corrects both the composition and the way the story is made understandable and engaging to listeners, including pacing, emphasis and adaptation to the occasion.
+
+The practice can be oral throughout. It does not assume that original composition requires writing or that an accomplished teller necessarily composes new work. This group describes the apprenticeship that deliberately teaches both creation and performance rather than simply learning a fixed tale.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `storytelling` — Storytelling | Base Skill | Learners repeatedly tell complete narratives and revise pacing, sequence and delivery in response to listeners and expert feedback. | New proposal |
+| `skill:poetry-literary-composition` — Poetry & Literary Composition | Base Skill | Learners create and revise verbal art, developing structure, imagery and language under sustained criticism of the work. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Mnemonics requires deliberate memory techniques, not oral transmission alone.
+- Acting requires dramatic role practice beyond giving characters distinctive voices in a tale.
+- Oratory concerns addressing an audience for explanation or persuasion rather than necessarily narrating a story.
+- No Written Tradition is implied by literary composition.
+
+
+**Provenance / review annotation.** [P] New oral composition-and-performance proposal grounded in the two target scopes; a shared narrative subject alone would not establish co-training.
+
+
+<a id="f20"></a>
+### F20 — Drawing and modelling workshop
+
+
+**Short description.** Learners develop images and three-dimensional forms through a workshop that teaches both drawing and sculpture.
+
+
+The teacher has learners study forms through composed drawings and through original modelling or carving. Learners revise proportion, arrangement and the treatment of surfaces in both media, comparing what each form of representation makes clear or distorts.
+
+Both practices must develop beyond preparatory marks or mechanical copying. A sculptor who gives a learner only a few layout sketches is not necessarily teaching the full Visual Art competence. This group describes an integrated artistic apprenticeship with sustained work and criticism in both.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:visual-art` — Visual Art | Base Skill | Learners compose and revise substantial images, receiving correction on representation, arrangement and the use of their medium. | New proposal |
+| `skill:sculpture` — Sculpture | Base Skill | Learners develop original three-dimensional forms and correct proportion, volume and surface through a sculptor’s criticism. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Masonry concerns construction-oriented stonework, not sculpture’s artistic purpose.
+- Pottery requires the complete ceramic process, beyond using clay as a modelling material.
+- Cartography is not supplied by making a picture of a place.
+
+
+**Provenance / review annotation.** [P] New integrated artistic apprenticeship proposal. [R] craft_group is too broad to justify it without the two sustained practices.
+
+
+<a id="f21"></a>
+### F21 — Modelled ceramic workshop
+
+
+**Short description.** Learners create sculptural forms in clay and carry them through the full ceramic production process.
+
+
+An experienced ceramic artist teaches the learner to prepare clay, form and revise an original object, manage drying and firing, and inspect the result. Criticism concerns the artistic form as well as faults in the material and firing process that alter or spoil it.
+
+The learner is taught a complete pottery practice alongside sculptural creation. Pressing a supplied mould or decorating a purchased pot does not cover this group. It can be learned in a small workshop without implying that every pottery worker is a sculptor or every sculptor is a potter.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `pottery` — Pottery | Base Skill | Learners repeatedly prepare, form, dry and fire clay work and correct production faults under an experienced potter’s supervision. | New proposal |
+| `skill:sculpture` — Sculpture | Base Skill | Learners conceive and revise original three-dimensional forms, receiving criticism of volume, proportion and the intended visual effect. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Visual Art is not established merely by applying a limited decoration to a vessel.
+- Masonry and Mining require different material and construction practices.
+- Alchemy is not supplied by knowing a particular firing or glaze recipe.
+
+
+**Provenance / review annotation.** [P] New proposal for an integrated ceramic-sculpture workshop. [R] craft_group is too broad to establish the combined teaching.
+
+
+<a id="f22"></a>
+### F22 — Seasonal kitchen and preservation practice
+
+
+**Short description.** Learners prepare meals and preserve food for later use through a kitchen’s continuing seasonal work.
+
+
+A household cook or kitchen teacher guides repeated preparation of meals and the planned work of preserving supplies. Learners practise cooking across the kitchen’s usual range, then prepare and store preserved food, inspect its condition and learn why a batch deteriorated or kept well.
+
+The preservation work receives sustained instruction of its own; it is not simply the incidental keeping of leftovers. This group describes a kitchen apprenticeship containing both general cookery and that specialist practice. Other kitchens may divide them between different workers.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:cooking` — Cooking | Base Skill | Learners repeatedly prepare varied meals and correct preparation, heat control, timing and the condition of the finished food. | New proposal |
+| `spec:food-preservation` — Food Preservation | Specialization; parent: `skill:cooking` — Cooking | Learners carry out the tradition’s preservation methods, manage storage and diagnose spoilage or deterioration through supervised practice. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Baking requires its narrower dough, leavening and baking instruction.
+- Court Cookery depends on specialist preparation and service expectations and is not supplied by working in a large kitchen.
+- Brewing, Winemaking and Distilling remain distinct crafts.
+- Farming is not learned merely by using seasonal produce.
+
+
+**Provenance / review annotation.** [P] New full-catalogue group. [PO] Food Preservation remains a Cooking Specialization; its inclusion rests on explicit specialist work, not inherited parent membership.
+
+
+<a id="f23"></a>
+### F23 — Distilling remedy workshop
+
+
+**Short description.** Learners make and dispense medicines while also learning the workshop’s complete distilling practice.
+
+
+An experienced remedy maker teaches ingredient judgment, preparation, preservation and dispensing alongside the setting up and conduct of distillation. Learners inspect the material and equipment, follow the process, judge the resulting preparation and correct errors in both the remedy work and the distilling itself.
+
+This describes a medicinal workshop that actually teaches both practices. Using a purchased distilled ingredient does not teach Distilling, and producing a medicinal distillate from a fixed instruction does not alone teach the wider Pharmacy competence. The full apprenticeship requires repeated responsibility for each body of work.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:pharmacy` — Pharmacy | Base Skill | Learners prepare and dispense a range of medicines, correcting ingredient, quantity, consistency and preservation problems under supervision. | New proposal |
+| `skill:distilling` — Distilling | Base Skill | Learners repeatedly set up and conduct the distilling process and judge its results, correcting faults in materials, equipment and operation. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Plant Lore requires sustained plant identification and properties instruction, beyond using already identified ingredients.
+- Alchemy and Poisons are not established by the workshop’s equipment or by potent preparations.
+- Medicine concerns clinical judgment rather than making the preparation.
+
+
+**Historical, context or review note.** The medicinal and distilling traditions must both be specified in later context. This is no claim that all historical remedy makers distilled or that all distillers practised Pharmacy.
+
+
+**Provenance / review annotation.** [P] New integrated workshop proposal. [R] herb_and_remedy_craft supports only the remedy subset and cannot establish Distilling membership by itself.
+
+
+<a id="f24"></a>
+### F24 — Ironmaking and forge apprenticeship
+
+
+**Short description.** Learners produce usable iron and make finished metalwork through an apprenticeship spanning furnace and forge.
+
+
+The teacher takes the learner through repeated furnace cycles and the subsequent making and repair of useful objects. Learners judge starting material and the smelting process, then practise the shaping, joining and fitting needed to turn metal into serviceable work.
+
+The apprenticeship deliberately crosses the two complete crafts. Merely consolidating newly produced metal is not the full Smithing competence, and working bought iron does not teach Smelting. A combined small-scale practice can teach both, while a divided production site may train different workers in each.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:smelting` — Smelting | Base Skill | Learners manage repeated production cycles, assess material and furnace behaviour and correct failures in obtaining usable metal. | New proposal |
+| `skill:smithing` — Smithing | Base Skill | Learners make and repair finished objects, receiving correction on shaping, fitting, material behaviour and serviceability. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Mining requires extraction practice rather than judging supplied ore.
+- Weaponsmithing and Armoring require their further design and construction instruction.
+- Alchemy is not supplied by controlling a smelting process.
+
+
+**Provenance / review annotation.** [P] New proposal for an expressly integrated apprenticeship. [R] craft_group is too broad to establish it. [PO] Smelting and Smithing remain separate base Skills.
+
+
+<a id="f25"></a>
+### F25 — Weapon-forge and servicing apprenticeship
+
+
+**Short description.** Learners make metal weapons and maintain weapons in service through a smith’s combined making-and-repair practice.
+
+
+The apprentice works on ordinary metal objects as well as complete weapons, learning how material, fit and workmanship affect their use. The same workshop gives sustained instruction in inspection, routine servicing and the recognition of faults on weapons brought back after use.
+
+All three lessons are substantial parts of the apprenticeship. Making a new weapon does not automatically teach the range of maintenance judgment, and sharpening one blade does not establish full Smithing or Weaponsmithing. This group describes the maker who teaches both production and continuing service, within the familiar constructions of the workshop.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:smithing` — Smithing | Base Skill | Learners repeatedly shape, fit and repair metalwork and correct weaknesses in material judgment and workmanship. | New proposal |
+| `weapon_maintenance` — Weapon Maintenance | Base Skill | Learners inspect and service used weapons, distinguish routine care from maker-level repairs and correct missed or misjudged faults. | New proposal |
+| `spec:weaponsmithing` — Weaponsmithing | Specialization; parent: `skill:smithing` — Smithing | Learners make complete weapons and revise their construction, balance and workmanship under a specialist smith’s criticism. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- No weapon-family Skill is supplied by making or maintaining a weapon.
+- Armoring requires protective fit and construction around a body.
+- Smelting requires instruction in producing metal from starting material.
+
+
+**Provenance / review annotation.** [P] New combined making-and-service apprenticeship. [PO] Weaponsmithing remains a Smithing Specialization; Weapon Maintenance remains a separate base identity. [R] craft_group is too broad to establish the curriculum.
+
+
+<a id="f26"></a>
+### F26 — Forged-metal armor workshop
+
+
+**Short description.** Learners forge and fit protective metal equipment through a complete armorer’s workshop apprenticeship.
+
+
+An armorer teaches the learner to work metal pieces and to shape protection around a body that must move. The learner repeatedly fits, joins and adjusts parts, checks coverage and movement, and corrects failures of workmanship or protective fit.
+
+This particular workshop includes substantial Smithing as well as Armoring. An apprenticeship confined to assembling purchased parts, or one using a different material tradition, may teach Armoring without that entire metalworking craft. The group therefore describes a specific making practice rather than all armor work.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:smithing` — Smithing | Base Skill | Learners repeatedly shape and fit forged metal parts, diagnose weaknesses and correct the metalworking needed for dependable service. | New proposal |
+| `skill:armoring` — Armoring | Base Skill | Learners design, make and adjust protective equipment around a moving body, correcting coverage, fastening, weight and articulation. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Tailoring and Leatherwork are not established by attaching a lining or strap.
+- Weapon Maintenance and weapon-family practice concern different objects and tasks.
+- Weaponsmithing is not supplied by working protective metal.
+
+
+**Historical, context or review note.** Surviving armor includes metal, leather and textile construction, with different solutions for protective coverage and movement. That diversity is why this is a forged-metal workshop rather than a universal Armoring/Smithing group. [The Met: The Decoration of European Armor](https://www.metmuseum.org/essays/the-decoration-of-european-armor).
+
+
+**Provenance / review annotation.** [P] New material-specific apprenticeship proposal. [PO] Armoring remains a normal base Skill, not a Smithing Specialization. [R] craft_group is too broad. [H3] Museum evidence supports material and construction diversity, not a universal apprenticeship.
+
+
+<a id="f27"></a>
+### F27 — Timber millwright apprenticeship
+
+
+**Short description.** Learners make timber machinery and diagnose its working through a millwright’s combined woodworking and mechanical instruction.
+
+
+The apprentice works through substantial timber selection, shaping and joinery while constructing and adjusting machinery. A teacher asks the learner to explain how force and movement pass through the parts, locate the cause of poor operation and alter the construction to put it right.
+
+The shared practice is building and maintaining working wooden mechanisms, not merely putting together a frame to another person’s design. It teaches complete carpentry and sustained mechanical reasoning within the machinery tradition. A large workshop that assigns woodwork and mechanism design to separate learners does not necessarily provide the combined apprenticeship.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `carpentry` — Carpentry | Base Skill | Learners make and fit timber structures and components, correcting joinery, alignment and material faults. | New proposal |
+| `mechanics` — Mechanics | Base Skill | Learners design, test and diagnose mechanisms, correcting their understanding of forces, motion and interacting parts. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Smithing is not established by fitting bought metal components.
+- Architecture and Surveying require complete building-design or field-measurement instruction.
+- Mathematics is not supplied by the calculations used for a particular mechanism.
+- Siege Engine Operation requires operating those machines in their own practice.
+
+
+**Provenance / review annotation.** [P] New proposal for an integrated timber-machinery apprenticeship. [R] craft_group is too broad to prove co-training; no exact legacy group identity is adopted.
+
+
+<a id="f28"></a>
+### F28 — Building design and site surveying
+
+
+**Short description.** Learners measure and set out sites and develop workable building designs under a master builder’s instruction.
+
+
+The teacher takes learners through connected measurements and checks of a site, then through decisions about layout, structure and intended use. Learners compare the proposed building with the measured ground, set out work and revise design or measurement when the pieces fail to agree.
+
+This is a full design-and-surveying apprenticeship. Taking a few dimensions for a building is not enough: the learner receives sustained instruction in establishing and checking reliable measurements as well as architectural judgment. Building the walls or cutting the timber can be taught by other practitioners without becoming members of this group.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:architecture` — Architecture | Base Skill | Learners repeatedly develop and revise building designs, with correction of layout, structural judgment and fitness for intended use. | New proposal |
+| `surveying` — Surveying | Base Skill | Learners establish reference points, take connected site measurements and check and correct the setting out of work. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Masonry and Carpentry require performing their full construction crafts, not specifying the work.
+- Mechanics concerns mechanisms and forces in a broader distinct practice, not every building calculation.
+- Fortification requires specialist defensive design instruction.
+- Cartography is not established by drawing a site plan solely to set out one building.
+
+
+**Provenance / review annotation.** [P] New master-builder apprenticeship proposal, explicitly including complete field measurement and design. [R] craft_group is too broad; no group is inferred from the Domain Construction.
+
+
+<a id="f29"></a>
+### F29 — Field surgical apprenticeship
+
+
+**Short description.** Learners give immediate casualty care and perform operative work under the supervision of an experienced field surgeon.
+
+
+The teacher guides learners through initial injury assessment, operative preparation and the conduct and follow-through of surgery in difficult field conditions. Learners practise the full operative craft as well as adapting priorities, equipment and arrangements when ordinary facilities are absent or overwhelmed.
+
+The field constraints receive sustained specialist teaching rather than being treated as incidental discomfort. A course confined to carrying casualties or assisting with one task does not teach the whole group. The shared practice is patient care and surgery in the field, not military command or fighting.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:first-aid` — First Aid | Base Skill | Learners repeatedly assess immediate injuries and carry out initial assistance before more extensive treatment is arranged. | New proposal |
+| `skill:surgery` — Surgery | Base Skill | Learners assess, undertake and review operative interventions under direct correction of judgment and technique. | New proposal |
+| `battlefield_surgery` — Battlefield Surgery | Specialization; parent: `skill:surgery` — Surgery | Learners practise the specialist organization and adaptation of operative treatment under battlefield casualty conditions and restricted resources. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Medicine and Nursing require broader clinical or sustained bedside-care instruction than is automatically supplied by this apprenticeship.
+- Military Command, Battle Tactics and Combat Experience are not taught by treating casualties.
+- Poison Treatment and other medical specializations require their specific casework.
+
+
+**Provenance / review annotation.** [P] New specialist apprenticeship alongside G18. [PO] Battlefield Surgery remains a Surgery Specialization; its inclusion here is direct instruction, not inheritance from G18. [R] healing_practice supports only a general care subset.
+
+
+<a id="f30"></a>
+### F30 — Swashbuckling fencing instruction
+
+
+**Short description.** Learners practise the established Fencing tradition alongside complete blade-handling and parrying instruction.
+
+
+An experienced fencer teaches the learner’s blade fundamentals, defensive parrying and the refined timing, distance and combinations of the established tradition. Repeated exchanges are broken down and corrected, then practised again so that the learner can carry the lessons into a developing encounter.
+
+This course includes substantial instruction in one-handed edged weapon practice and in Parry, rather than assuming them from the name of the specialization. The sword-and-buckler and main-gauche work belongs to this swashbuckling tradition. It is not a modern sport-fencing curriculum.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `one_handed_edged` — 1-h edged | Base Skill | Learners repeatedly practise the full one-handed edged weapon competence, with direct correction of handling, control and use beyond specialist combinations. | New proposal |
+| `parry` — Parry | Base Skill | Learners deliberately rehearse and receive correction on the distinct defensive practice of meeting and redirecting attacks. | New proposal |
+| `fencing` — Fencing | Specialization; parent: `one_handed_edged` — 1-h edged | Learners refine the established tradition’s coordinated exchanges, timing and distance through a fencing teacher’s specialist instruction. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Dodge is not included merely because a fencer moves their body.
+- No second weapon family, Pilot Shield acquisition or new off-hand Skill is inferred from the tradition’s equipment.
+- Formation Fighting and Mounted Combat require their own instruction.
+
+
+**Historical, context or review note.** All descriptions stay within the existing tradition. This group does not redefine what any weapon family covers or establish that a pupil acquires every member.
+
+
+**Provenance / review annotation.** [P] New proposed training group. [PO] Existing Fencing identity and parent remain intact; no runtime weapon binding or combat action is changed. [R] basic_melee_training supports only the broad existence of weapon instruction; its older identities cannot supply these target memberships.
+
+
+<a id="f31"></a>
+### F31 — Polearm and formation drill
+
+
+**Short description.** Learners practise a polearm individually and perform their place in an organized formation through coordinated drill.
+
+
+An instructor alternates individual polearm exercises with repeated movement and fighting practice as a formation member. Learners are corrected on their own weapon use, spacing, response to signals and ability to continue working with adjacent members as the exercise changes.
+
+Both lessons must be substantial: simply carrying a polearm in a line does not teach the full weapon practice, and individual polearm lessons do not teach formation participation. The shared drill concerns performing within the formation, not choosing its tactics or commanding it.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `polearms` — Polearms | Base Skill | Learners rehearse and correct complete individual polearm handling and use, beyond carrying out one fixed formation motion. | New proposal |
+| `formation_fighting` — Formation Fighting | Base Skill | Learners repeatedly perform their assigned place in coordinated formations and correct errors in spacing, timing and response to other members. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Military Command, Battle Tactics and Leadership are not taught to every formation member.
+- Parry and Dodge require their own complete practice rather than being assumed from defensive movements.
+- No other weapon family is included by army or formation association.
+
+
+**Provenance / review annotation.** [P] New shared-drill proposal using existing live identities. [PO] Formation Fighting remains distinct; Formation Command is not added. [R] basic_melee_training cannot establish a live-family crosswalk or every support Skill.
+
+
+<a id="f32"></a>
+### F32 — Mounted lance practice
+
+
+**Short description.** Learners coordinate lance use with a mount through an instructor’s repeated mounted-combat exercises.
+
+
+The instructor works on the lance’s handling and on keeping weapon, rider and mount coordinated through an encounter. Learners repeat approaches and changing exchanges, correct alignment and timing, and explain how the mount’s movement changes what they can do with the weapon.
+
+This is a shared practice of mounted fighting and lance use. It does not claim that every mounted fighter uses a lance or that every lance course includes all ordinary riding instruction. Work on mounted combat is distinguished from simply travelling while carrying a weapon.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `lance` — Lance | Base Skill | Learners repeatedly practise complete lance handling and use, with direct correction of weapon technique in the mounted exercises. | New proposal |
+| `mounted_combat` — Mounted Combat | Base Skill | Learners rehearse the coordination of fighting with the movement and demands of a mount, correcting failures that do not arise in ordinary travel. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Riding is used during the exercises but the complete riding competence is not automatically taught by them.
+- Animal Handling and Animal Husbandry require their separate ground or continuing-care instruction.
+- Battle Tactics and Military Command are not established by mounted weapon practice.
+
+
+**Provenance / review annotation.** [P] New proposal for a genuine shared combat-training practice. [PO] Lance, Mounted Combat and Riding remain distinct; no prerequisite or weapon mapping is authored. [R] mounted_service supports a subset and is profession-shaped, not an automatic membership source.
+
+
+<a id="f33"></a>
+### F33 — Concealed field reconnaissance practice
+
+
+**Short description.** Learners gather and report military information while deliberately practising observation, unnoticed movement and prepared concealment.
+
+
+An experienced scout teaches learners to turn a reconnaissance task into a workable observation plan, carry it out and report what they found and failed to establish. Separate exercises develop careful searching, movement that avoids notice and the preparation and checking of concealed positions.
+
+Review includes the quality of the military information and the actual details that revealed or hid the learner. This is a complete covert field-scouting course, not all reconnaissance: open observation, mounted patrols and other methods may teach a different selection. Camouflage receives its own preparation and inspection work rather than being treated as another name for Stealth.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:military-reconnaissance` — Military Reconnaissance | Base Skill | Learners plan, conduct and report military information gathering, correcting omissions, poor observation tasks and unsupported conclusions. | New proposal |
+| `skill:perception` — Perception | Base Skill | Learners repeatedly scan and search real ground and objects, comparing their reports with details exposed in supervised review. | New proposal |
+| `skill:stealth` — Stealth | Base Skill | Learners rehearse unobtrusive movement and approaches, with observers identifying what betrayed them. | New proposal |
+| `camouflage` — Camouflage | Base Skill | Learners prepare and test concealed people, equipment or positions, correcting visual features that reveal them. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Tracking is not established by searching an area without sustained trail-following instruction.
+- Wayfinding and Survival may be useful but require their own full route or camp teaching.
+- Battlefield Awareness concerns the developing fight rather than automatically following from a scouting report.
+- Research is not established by following a defined reconnaissance task.
+
+
+**Provenance / review annotation.** [P] New, deliberately narrow field-training proposal. [R] mounted_service is profession-shaped and cannot establish this four-member curriculum; no Arch-Skill or Domain grouping is used as its basis.
+
+
+<a id="f34"></a>
+### F34 — Trapline and trail practice
+
+
+**Short description.** Learners follow animal trails and tend a trapline through repeated supervised field work.
+
+
+The teacher has learners follow connected signs, recover an interrupted trail and use what they learn to choose and maintain animal traps. Repeated rounds include judging sites, setting and inspecting traps, finding changes in animal movement and reviewing why particular placements succeeded or failed.
+
+Tracking is deliberately taught beyond recognizing a few signs beside a trap. Trapping is taught beyond following quarry to a place chosen by someone else. This group describes a field apprenticeship that does both; other trapping methods may require little trail work.
+
+
+**Member competencies and ordinary training**
+
+
+| ID and name | Type / parent | What is repeatedly practised and corrected | Membership status |
+| --- | --- | --- | --- |
+| `skill:tracking` — Tracking | Base Skill | Learners repeatedly follow and recover trails, test their reconstruction of animal movement and correct mistaken interpretations. | New proposal |
+| `skill:trapping` — Trapping | Base Skill | Learners choose, set, tend and evaluate animal traps under an experienced trapper’s correction. | New proposal |
+
+
+**Exclusions and boundaries**
+
+
+- Hunting concerns conducting the hunt and is not inferred merely from taking an animal in a trap.
+- Trapmaking concerns the substantial design, construction and technical treatment of constructed traps, not every animal-trap method.
+- Perception requires its broader direct observational instruction rather than being inferred from noticing a sign.
+
+
+**Provenance / review annotation.** [P] New proposal for an expressly integrated trapline-and-trail apprenticeship. It does not inherit all G03 members or merge Trapping with Trapmaking.
+
+
+<a id="b-reverse"></a>
+## B. Complete base Skill → Learning Group reverse index
+
+**131 rows: every target base Skill exactly once.** Group pages supply a rationale for every individual membership. This index gives a brief reason for the Skill’s classification; multiple groups reflect different complete teaching practices, not transfer between them.
+
+Status is stated per group where it differs: **Preserved Pilot membership**, **Approved full-catalogue addition**, **New proposal**, or **Deliberately groupless**. **Unresolved** is reserved for a blocked classification; no base Skill needs that status in this proposal. G08 has a title/presentation decision, not a hidden weapon assignment. For target `dodge` and `tactics`, “preserved” describes the approved membership concept; the exact source IDs remain untouched in Section C.
+
+For groupless Skills, the rationale names a plausible direct teaching route and explains why no generic combined group is proposed. A direct route here is descriptive, not an authored Learning History, occupational entitlement, availability finding or prerequisite.
+
+
+| Skill ID | Skill name | Learning Group(s) | Status | Brief rationale |
+| --- | --- | --- | --- | --- |
+| `one_handed_concussion_axe` | 1-h conc./axe | — | Deliberately groupless | Direct instruction in this frozen weapon-family Skill is a route; no evidenced combined curriculum is proposed merely from its Combat classification. |
+| `one_handed_edged` | 1-h edged | [F30](#f30) | New proposal: F30 | Learners repeatedly practise the full one-handed edged weapon competence, with direct correction of handling, control and use beyond specialist combinations. |
+| `two_handed_concussion_axe` | 2-h conc./axe | — | Deliberately groupless | A weapon instructor can teach this family directly; neither polearm drill nor generic close-weapon practice establishes complete instruction in it. |
+| `two_handed_edged` | 2-h edged | — | Deliberately groupless | Direct family-specific instruction is a route; Fencing and formation participation do not establish the full two-handed edged practice. |
+| `acting` | Acting | [F18](#f18) | New proposal: F18 | Learners develop and sustain dramatic roles in rehearsed scenes, correcting choices that fail to convey the intended character or action. |
+| `skill:administration` | Administration | [G11](#g11) | Preserved Pilot membership: G11 | Learners organize recurring work, track responsibilities and correct failures in the handling and follow-through of matters. |
+| `alchemy` | Alchemy | — | Deliberately groupless | A material-practice lineage can teach its investigations and operations; sharing ingredients or equipment with Pharmacy or Smelting is insufficient. |
+| `skill:animal-handling` | Animal Handling | [G05](#g05), [F05](#f05), [F06](#f06), [F07](#f07) | Preserved Pilot membership: G05; New proposal: F05, F06, F07 | Learners practise approaching, controlling and calming mounts on the ground, with correction of inconsistent signals and poor positioning. Each listed page specifies the distinct teaching practice. |
+| `skill:animal-husbandry` | Animal Husbandry | [F05](#f05), [F08](#f08) | New proposal: F05, F08 | Learners plan and review feeding, shelter, breeding and care of young across the changing needs of a population. Each listed page specifies the distinct teaching practice. |
+| `skill:animal-lore` | Animal Lore | — | Deliberately groupless | A knowledgeable teacher can develop broad animal knowledge; experience of a managed herd or particular quarry does not cover the whole competence. |
+| `skill:appraisal` | Appraisal | [G12](#g12) | Preserved Pilot membership: G12 | Learners inspect and compare goods, explain their valuation and learn from expert correction and later results. |
+| `skill:architecture` | Architecture | [F28](#f28) | New proposal: F28 | Learners repeatedly develop and revise building designs, with correction of layout, structural judgment and fitness for intended use. |
+| `skill:armoring` | Armoring | [F26](#f26) | New proposal: F26 | Learners design, make and adjust protective equipment around a moving body, correcting coverage, fastening, weight and articulation. |
+| `astrology` | Astrology | — | Deliberately groupless | A teacher can train the contextual astrological practice; sharing celestial subject matter with Astronomy or Divination does not establish co-training. |
+| `astronomy` | Astronomy | — | Deliberately groupless | Sustained sky observation and instruction provide a route; selected navigation observations or astrological tables do not establish the complete body of knowledge. |
+| `skill:athletics` | Athletics | [F04](#f04) | New proposal: F04 | Learners rehearse jumps, vaults, balance and related body control, with correction of take-off, movement and landing. |
+| `banking` | Banking & Credit | [F12](#f12) | New proposal: F12 | Learners repeatedly assess obligations, repayment prospects and financial exposure and review their decisions as those obligations develop. |
+| `skill:bargaining` | Bargaining | [G10](#g10), [G12](#g12) | Preserved Pilot membership: G10, G12 | Learners exchange proposals, judge concessions and practise arriving at terms while a teacher reviews their choices. Each listed page specifies the distinct teaching practice. |
+| `tactics` | Battle Tactics | [G09](#g09) | Preserved Pilot membership: G09 | Learners repeatedly choose and justify tactical courses of action, then revise them after exercises and changing situations. |
+| `battlefield_awareness` | Battlefield Awareness | — | Deliberately groupless | Deliberate battlefield observation and guided review provide a route; general service alone does not prove co-training with another whole Skill. |
+| `skill:bookkeeping` | Bookkeeping | [G11](#g11), [F12](#f12) | Preserved Pilot membership: G11; New proposal: F12 | Learners enter transactions, reconcile totals and balances and investigate discrepancies under supervision. Each listed page specifies the distinct teaching practice. |
+| `bow` | Bow | — | Deliberately groupless | An archery teacher can train Bow directly; neither hunting nor formation service automatically teaches it, and Longbow receives no inherited group. |
+| `brawling` | Brawling | — | Deliberately groupless | An instructor can teach its complete unarmed practice; athletic conditioning and weapon drill do not themselves supply it. |
+| `skill:brewing` | Brewing | — | Deliberately groupless | A brewer can teach the complete fermentation craft; preparing a distiller’s wash or working in a kitchen does not establish co-training. |
+| `camouflage` | Camouflage | [F33](#f33) | New proposal: F33 | Learners prepare and test concealed people, equipment or positions, correcting visual features that reveal them. |
+| `skill:campaign-strategy` | Campaign Strategy | — | Deliberately groupless | Mentored planning and review across operations provide a route; considering supplies does not ordinarily teach complete Military Logistics. |
+| `carpentry` | Carpentry | [F03](#f03), [F27](#f27) | Approved full-catalogue addition: F03; New proposal: F27 | Learners repeatedly select, shape and join timber, correcting weaknesses in fit, grain judgment and construction. Each listed page specifies the distinct teaching practice. |
+| `skill:cart-driving` | Cart Driving | [F06](#f06) | New proposal: F06 | Learners guide loaded vehicles and coordinated teams, adjusting pace, turns and ground choices under an instructor’s correction. |
+| `skill:cartography` | Cartography | [F01](#f01) | Approved full-catalogue addition: F01 | Learners select, arrange and revise mapped information, with correction of scale, signs, omissions and the reader’s likely interpretation. |
+| `skill:celestial-navigation` | Celestial Navigation | [F11](#f11) | New proposal: F11 | Learners make and interpret the sky observations used by their tradition to establish direction or position, checking their results against other evidence. |
+| `skill:chart-navigation` | Chart Navigation | [F11](#f11) | New proposal: F11 | Learners repeatedly interpret real navigation charts, plan and follow passages on them and correct their reading of position and charted information. |
+| `climb` | Climbing | — | Deliberately groupless | Supervised climbing provides a route; general athletic training and learning a few climbing knots do not justify another whole co-taught Skill. |
+| `combat_experience` | Combat Experience | — | Deliberately groupless | Guided participation and reflection on combat conditions can develop it; exposure alone is not an authored shared-training curriculum. |
+| `conceal_object` | Conceal Object | — | Deliberately groupless | A practitioner can teach hiding objects and testing discovery; entry, disguise and visual field camouflage do not necessarily teach its whole practice. |
+| `skill:cooking` | Cooking | [F22](#f22) | New proposal: F22 | Learners repeatedly prepare varied meals and correct preparation, heat control, timing and the condition of the finished food. |
+| `crossbow` | Crossbow | — | Deliberately groupless | Direct instruction can teach the existing Crossbow competence; use in a unit does not establish another complete co-taught Skill. |
+| `skill:customs` | Customs | [G10](#g10) | Preserved Pilot membership: G10 | Learners rehearse and receive correction in the conventions that govern address, standing, obligations and participation in the relevant society. |
+| `dancing` | Dance | [F18](#f18) | New proposal: F18 | Learners repeatedly rehearse the tradition’s movement vocabulary, timing and expressive execution with a teacher’s correction. |
+| `skill:dead-reckoning` | Dead Reckoning | [G07](#g07), [F11](#f11) | Preserved Pilot membership: G07; New proposal: F11 | Learners estimate direction and distance travelled, maintain a running position and correct their account when observations disagree. Each listed page specifies the distinct teaching practice. |
+| `skill:deception` | Deception | [G16](#g16) | Preserved Pilot membership: G16 | Learners sustain misleading accounts under follow-up questions and correct contradictions or implausible explanations. |
+| `skill:disguise` | Disguise | [G16](#g16) | Preserved Pilot membership: G16 | Learners construct and revise an assumed appearance while the teacher identifies details that disclose or undermine the intended identity. |
+| `skill:distilling` | Distilling | [F23](#f23) | New proposal: F23 | Learners repeatedly set up and conduct the distilling process and judge its results, correcting faults in materials, equipment and operation. |
+| `divination` | Divination | — | Deliberately groupless | Instruction within a defined method provides a route; religious participation and a common tradition do not demonstrate complete co-training. |
+| `skill:document-forgery` | Document & Credential Forgery | — | Deliberately groupless | A specialist can teach document construction and imitation; records work and disguise do not ordinarily teach the complete craft. |
+| `dodge` | Dodge | [G08](#g08) | Preserved Pilot membership: G08 | Learners repeatedly judge an incoming attack and move clear of it, with an instructor correcting timing and direction. |
+| `skill:farming` | Farming | [F08](#f08) | New proposal: F08 | Learners plan and carry out cultivation, recognize developing crop problems and review the results across a seasonal cycle. |
+| `skill:fibre-working` | Fibre Working | [F02](#f02) | Approved full-catalogue addition: F02 | Learners prepare and work fibres into consistent intermediate material, with correction of sorting, alignment, twist and faults. |
+| `skill:firearms` | Firearms | — | Deliberately groupless | A firearms instructor can teach the single handheld-firearms competence; formation service and weapon maintenance are not automatic companion curricula. |
+| `skill:first-aid` | First Aid | [G01](#g01), [G18](#g18), [F29](#f29) | Preserved Pilot membership: G01, G18; New proposal: F29 | Learners repeatedly assess an immediate problem, give initial assistance and explain when further care is needed. Each listed page specifies the distinct teaching practice. |
+| `skill:fishing` | Fishing | [F10](#f10) | New proposal: F10 | Learners choose and work fishing methods, judge likely results and correct capture and landing techniques under a fisher’s supervision. |
+| `formation_fighting` | Formation Fighting | [F31](#f31) | New proposal: F31 | Learners repeatedly perform their assigned place in coordinated formations and correct errors in spacing, timing and response to other members. |
+| `gambling` | Gambling | — | Deliberately groupless | A knowledgeable player can teach the developed gambling practice; monetary stakes do not make it part of trade or credit instruction. |
+| `skill:geography` | Geography | — | Deliberately groupless | Guided study of places and their relations provides a route; route finding or mapping one area does not teach the broader competence. |
+| `heraldry` | Heraldry | — | Deliberately groupless | A specialist can teach identifying and interpreting heraldic devices; genealogy and court contact do not ordinarily teach the complete subject. |
+| `herding` | Herding | [F05](#f05) | New proposal: F05 | Learners repeatedly position and move a group of animals, recover stragglers and respond to collective movement under supervision. |
+| `history` | History | — | Deliberately groupless | Oral or written historical instruction provides a route; a lineage investigation does not itself teach the parent subject in its full breadth. |
+| `skill:hunting` | Hunting | [G03](#g03), [F07](#f07) | Preserved Pilot membership: G03; New proposal: F07 | Learners choose quarry, approach and timing, and receive correction on decisions throughout the hunt. Each listed page specifies the distinct teaching practice. |
+| `skill:insight` | Insight | [G10](#g10), [G14](#g14), [G17](#g17) | Preserved Pilot membership: G10, G14, G17 | Learners compare their interpretation of participants’ reactions and intentions with further questioning and the course of the discussion. Each listed page specifies the distinct teaching practice. |
+| `skill:interrogation` | Interrogation | [G17](#g17) | Approved full-catalogue addition: G17 | Learners plan and conduct sustained questioning, pursue relevant answers and review the quality and limits of the information obtained. |
+| `skill:intimidation` | Intimidation | — | Deliberately groupless | Focused instruction can teach threats, pressure and their interpretation; interviewing or command practice does not ordinarily teach this complete competence. |
+| `lance` | Lance | [F32](#f32) | New proposal: F32 | Learners repeatedly practise complete lance handling and use, with direct correction of weapon technique in the mounted exercises. |
+| `skill:law` | Law | [F13](#f13) | New proposal: F13 | Learners repeatedly interpret the legal system’s rules and authorities and correct their treatment of claims, evidence and procedure. |
+| `skill:leadership` | Leadership | [G09](#g09) | Preserved Pilot membership: G09 | Learners practise explaining purposes, motivating people and coordinating their effort, with feedback on the response they obtain. |
+| `leatherworking` | Leatherwork | — | Deliberately groupless | A leatherworker’s apprenticeship is a normal practice; handling straps in another craft does not teach the whole leatherworking competence. |
+| `skill:lockpicking` | Lockpicking | [G15](#g15) | Preserved Pilot membership: G15 | Learners repeatedly interpret and manipulate familiar lock mechanisms while a teacher corrects their diagnosis and technique. |
+| `skill:locksmithing` | Locksmithing | — | Deliberately groupless | A lock maker can teach mechanism construction and repair; opening locks or generic metalworking does not ordinarily teach the entire craft. |
+| `skill:masonry` | Masonry | — | Deliberately groupless | Supervised construction teaches masonry and construction-oriented stone dressing; design, sculpture and timber work do not ordinarily teach it. |
+| `mathematics` | Mathematics | — | Deliberately groupless | A teacher can develop mathematical reasoning through sustained problems; the selected calculations used by another craft do not teach its full scope. |
+| `mechanics` | Mechanics | [F27](#f27) | New proposal: F27 | Learners design, test and diagnose mechanisms, correcting their understanding of forces, motion and interacting parts. |
+| `skill:medicine` | Medicine | [G01](#g01) | Preserved Pilot membership: G01 | Learners compare symptoms and histories, consider explanations and review treatment choices against the course of actual cases. |
+| `meditation` | Meditation | — | Deliberately groupless | A practitioner can teach the deliberate preparatory mental discipline; ritual participation or composure during another activity is insufficient. |
+| `captaincy` | Military Command | [G09](#g09) | Approved full-catalogue addition: G09 | Learners issue and follow through on orders, allocate responsibilities and manage an organized unit under a commander’s supervision. |
+| `skill:military-logistics` | Military Logistics | — | Deliberately groupless | Supervised supply planning and distribution provide a route; commanding a unit or considering campaign resources does not teach the whole competence. |
+| `skill:military-reconnaissance` | Military Reconnaissance | [F33](#f33) | New proposal: F33 | Learners plan, conduct and report military information gathering, correcting omissions, poor observation tasks and unsupported conclusions. |
+| `skill:mining` | Mining | — | Deliberately groupless | Supervised extraction work provides a route; using ore or stone in another workshop does not teach extraction and its practical judgments. |
+| `skill:mnemonics` | Mnemonics | [F14](#f14) | New proposal: F14 | Learners construct, test and revise deliberate recall techniques and practise retrieving material in ways that reveal weaknesses in those methods. |
+| `mounted_combat` | Mounted Combat | [F32](#f32) | New proposal: F32 | Learners rehearse the coordination of fighting with the movement and demands of a mount, correcting failures that do not arise in ordinary travel. |
+| `music` | Music | [F17](#f17) | New proposal: F17 | Learners rehearse instrumental technique, musical structure and coordinated performance, with correction beyond simply repeating a single accompaniment. |
+| `nursing` | Nursing | [G01](#g01) | Approved full-catalogue addition: G01 | Learners are corrected in ongoing bedside care, noticing changes and communicating what a patient needs over time. |
+| `skill:oratory` | Oratory | [G10](#g10), [F13](#f13), [F14](#f14) | Preserved Pilot membership: G10; New proposal: F13, F14 | Learners prepare and deliver arguments to a gathering and receive correction on structure, clarity and response to listeners. Each listed page specifies the distinct teaching practice. |
+| `skill:palaeography-decipherment` | Palaeography & Decipherment | [F15](#f15) | New proposal: F15 | Learners compare forms and repeated signs, test possible readings and revise them through direct expert correction and further examples. |
+| `parry` | Parry | [F30](#f30) | New proposal: F30 | Learners deliberately rehearse and receive correction on the distinct defensive practice of meeting and redirecting attacks. |
+| `skill:perception` | Perception | [G03](#g03), [G15](#g15), [G17](#g17), [F33](#f33) | Preserved Pilot membership: G03, G15, G17; New proposal: F33 | Learners practise systematic observation and searching, then compare what they noticed with details they missed. Each listed page specifies the distinct teaching practice. |
+| `skill:pharmacy` | Pharmacy | [G02](#g02), [F23](#f23) | Preserved Pilot membership: G02; New proposal: F23 | Learners prepare, preserve and dispense medicines while a teacher checks ingredients, quantities, condition and consistency. Each listed page specifies the distinct teaching practice. |
+| `philosophy` | Philosophy | — | Deliberately groupless | Guided argument, conceptual inquiry and criticism provide a route; a shared scholarly or religious subject does not demonstrate co-training. |
+| `skill:pilotage` | Pilotage | [G07](#g07) | Preserved Pilot membership: G07 | Learners repeatedly plan and conduct local passages while a teacher corrects judgments about waters, approaches and hazards. |
+| `skill:plant-lore` | Plant Lore | [G02](#g02) | Preserved Pilot membership: G02 | Learners repeatedly identify and compare plants, their habitats and relevant properties, with errors corrected by an experienced practitioner. |
+| `skill:poetry-literary-composition` | Poetry & Literary Composition | [F19](#f19) | New proposal: F19 | Learners create and revise verbal art, developing structure, imagery and language under sustained criticism of the work. |
+| `skill:poisons` | Poisons | — | Deliberately groupless | A specialist can teach the distinct body of poisonous materials and their use; Pharmacy and Alchemy do not automatically supply it. |
+| `polearms` | Polearms | [F31](#f31) | New proposal: F31 | Learners rehearse and correct complete individual polearm handling and use, beyond carrying out one fixed formation motion. |
+| `skill:politics` | Politics | — | Deliberately groupless | Mentored study and participation in political affairs provide a route; council speech or command alone does not teach the complete competence. |
+| `pottery` | Pottery | [F21](#f21) | New proposal: F21 | Learners repeatedly prepare, form, dry and fire clay work and correct production faults under an experienced potter’s supervision. |
+| `skill:religion` | Religion | — | Deliberately groupless | A tradition’s practitioners can teach its substantive knowledge and interpretation; shared ritual context does not imply Meditation, Theology or Divination instruction. |
+| `skill:research` | Research | [G17](#g17), [F15](#f15), [F16](#f16) | Preserved Pilot membership: G17; New proposal: F15, F16 | Learners frame inquiries, compare sources and revise conclusions while a mentor challenges unsupported inferences. Each listed page specifies the distinct teaching practice. |
+| `skill:riding` | Riding | [G05](#g05) | Preserved Pilot membership: G05 | Learners repeatedly manage balance, pace, direction and terrain while an instructor corrects their mounted technique. |
+| `ropework` | Ropework | [F09](#f09) | New proposal: F09 | Learners make, inspect and correct working knots, splices and attachments across the rigging’s recurring needs. |
+| `skill:running` | Running | [F04](#f04) | New proposal: F04 | Learners repeatedly practise pace, speed, economy, endurance and adjustment to ground, with correction of their running technique. |
+| `skill:sailmaking` | Sailmaking | — | Deliberately groupless | A sailmaker’s apprenticeship teaches design, cutting and construction; using purchased cloth does not teach Weaving or Tailoring, and deck work is different. |
+| `skill:sculpture` | Sculpture | [F20](#f20), [F21](#f21) | New proposal: F20, F21 | Learners develop original three-dimensional forms and correct proportion, volume and surface through a sculptor’s criticism. Each listed page specifies the distinct teaching practice. |
+| `skill:seamanship` | Seamanship | [G06](#g06), [F09](#f09), [F10](#f10) | Preserved Pilot membership: G06; New proposal: F09, F10 | Learners repeatedly operate the vessel and its equipment, receiving correction on manoeuvres, routine work and developing operational problems. Each listed page specifies the distinct teaching practice. |
+| `skill:shipbuilding` | Shipbuilding | [F03](#f03) | Approved full-catalogue addition: F03 | Learners build and assess hull structures, relate form to intended service and diagnose substantial vessel defects under supervision. |
+| `skill:siege-engine-operation` | Siege Engine Operation | — | Deliberately groupless | Experienced crews can directly train engine operation; construction and tactical planning do not ordinarily teach the complete operating practice. |
+| `skill:siege-engineering` | Siege Engineering | — | Deliberately groupless | A siege engineer can teach specialist design and works; operating a siege engine or general mechanical work does not ordinarily teach it. |
+| `singing` | Singing | [F17](#f17) | New proposal: F17 | Learners repeatedly train vocal production, pitch, phrasing and breath through solo and accompanied work under a teacher’s correction. |
+| `skill:sleight-of-hand` | Sleight of Hand | — | Deliberately groupless | Repeated coached manipulation provides a route; distraction or lock work does not ordinarily teach the full concealed-handling competence. |
+| `sling` | Sling | — | Deliberately groupless | A practitioner can teach slinging directly; hunting or general throwing activity does not establish the distinct live competence. |
+| `skill:smelting` | Smelting | [F24](#f24) | New proposal: F24 | Learners manage repeated production cycles, assess material and furnace behaviour and correct failures in obtaining usable metal. |
+| `skill:smithing` | Smithing | [G13](#g13), [F24](#f24), [F25](#f25), [F26](#f26) | Preserved Pilot membership: G13; New proposal: F24, F25, F26 | Learners repeatedly shape, fit and repair metalwork, with correction of tool use, material judgment and weaknesses in the finished object. Each listed page specifies the distinct teaching practice. |
+| `skill:stealth` | Stealth | [G03](#g03), [G15](#g15), [F33](#f33) | Preserved Pilot membership: G03, G15; New proposal: F33 | Learners rehearse quiet, unobtrusive movement and receive feedback on what revealed their position. Each listed page specifies the distinct teaching practice. |
+| `storytelling` | Storytelling | [F19](#f19) | New proposal: F19 | Learners repeatedly tell complete narratives and revise pacing, sequence and delivery in response to listeners and expert feedback. |
+| `skill:streetwise` | Streetwise | [G14](#g14) | Preserved Pilot membership: G14 | Learners practise finding and approaching the people and places through which local information and practical assistance circulate. |
+| `skill:surgery` | Surgery | [G18](#g18), [F29](#f29) | Preserved Pilot membership: G18; New proposal: F29 | Learners assess and perform operative work under supervision, with correction of anatomical judgment, technique and responses to difficulties. Each listed page specifies the distinct teaching practice. |
+| `surveying` | Surveying | [F01](#f01), [F28](#f28) | Approved full-catalogue addition: F01; New proposal: F28 | Learners repeatedly establish reference points, measure connected positions and resolve discrepancies under field supervision. Each listed page specifies the distinct teaching practice. |
+| `skill:survival` | Survival | [G04](#g04) | Preserved Pilot membership: G04 | Learners repeatedly establish shelter and meet immediate needs, with the teacher correcting unsuitable sites and ineffective methods. |
+| `skill:swimming` | Swimming | — | Deliberately groupless | Repeated coached swimming provides a route; working aboard a vessel does not ordinarily teach it. |
+| `tailoring` | Tailoring | — | Deliberately groupless | A garment maker can teach cutting, fit and construction; weaving cloth, fitting armor or making sails does not teach the same craft. |
+| `skill:teaching` | Teaching | — | Deliberately groupless | Mentored lesson preparation, demonstration and correction provide a route; being a learner in another group does not teach Teaching. |
+| `throwing` | Throwing | — | Deliberately groupless | Direct instruction can develop the retained Throwing practice; athletic exercise does not automatically teach the live combat competence. |
+| `skill:tracking` | Tracking | [G03](#g03), [F34](#f34) | Preserved Pilot membership: G03; New proposal: F34 | Learners follow connected signs, recover interrupted trails and compare their reconstruction with what later evidence shows. Each listed page specifies the distinct teaching practice. |
+| `skill:trade` | Trade | [G12](#g12) | Preserved Pilot membership: G12 | Learners judge transactions, sources and outlets, and review the practical success of commercial choices. |
+| `skill:translation-interpretation` | Translation & Interpretation | — | Deliberately groupless | Supervised translation and interpreted exchanges provide a route; using two languages or investigating texts does not itself train the full competence. |
+| `skill:trapmaking` | Trapmaking | — | Deliberately groupless | A specialist can teach constructed traps and technical treatment; animal trapping and noticing suspicious features do not ordinarily teach its full scope. |
+| `skill:trapping` | Trapping | [F34](#f34) | New proposal: F34 | Learners choose, set, tend and evaluate animal traps under an experienced trapper’s correction. |
+| `skill:underworld` | Underworld | — | Deliberately groupless | A mentor within an illicit milieu can teach its networks and arrangements; ordinary local contacts or covert techniques do not ordinarily train it. |
+| `skill:veterinary-medicine` | Veterinary Medicine | — | Deliberately groupless | Supervised clinical care of animals provides a route; routine husbandry and handling do not ordinarily teach complete veterinary investigation and treatment. |
+| `skill:visual-art` | Visual Art | [F20](#f20) | New proposal: F20 | Learners compose and revise substantial images, receiving correction on representation, arrangement and the use of their medium. |
+| `skill:wayfinding` | Wayfinding | [G04](#g04), [G07](#g07) | Preserved Pilot membership: G04, G07 | Learners choose and recover routes using connected landscape cues and explain their decisions during supervised travel. Each listed page specifies the distinct teaching practice. |
+| `weapon_maintenance` | Weapon Maintenance | [F25](#f25) | New proposal: F25 | Learners inspect and service used weapons, distinguish routine care from maker-level repairs and correct missed or misjudged faults. |
+| `skill:weather-lore` | Weather Lore | [G04](#g04) | Preserved Pilot membership: G04 | Learners observe developing conditions, make practical forecasts and compare those judgments with subsequent weather. |
+| `weaving` | Weaving | [F02](#f02) | Approved full-catalogue addition: F02 | Learners prepare a loom, interlace the material into cloth and diagnose faults while an experienced weaver checks their work. |
+| `skill:winemaking` | Winemaking | — | Deliberately groupless | A vintner can teach the complete fruit-to-wine process; Brewing and Distilling do not automatically train it. |
+
+
+<a id="c-changes"></a>
+## C. Changes from the Pilot
+
+### Preserved groups and exact original memberships
+
+**All G01–G18 codes and names are preserved. No approved Pilot membership has been deleted or reassigned.** The following snapshot contains the **46 original links**, using the original Candidate IDs. It is provenance, not a list of additional future acquisitions.
+
+
+| Pilot code | Preserved name | Exact original Pilot members | Links |
+| --- | --- | --- | --- |
+| G01 | Patient care | `skill:first-aid` — First Aid; `skill:medicine` — Medicine | 2 |
+| G02 | Plant and remedy preparation | `skill:pharmacy` — Pharmacy; `skill:plant-lore` — Plant Lore | 2 |
+| G03 | Tracking and hunting practice | `skill:perception` — Perception; `skill:stealth` — Stealth; `skill:tracking` — Tracking; `skill:hunting` — Hunting | 4 |
+| G04 | Field travel and camp practice | `skill:survival` — Survival; `skill:weather-lore` — Weather Lore; `skill:wayfinding` — Wayfinding | 3 |
+| G05 | Mounted travel and animal care | `skill:animal-handling` — Animal Handling; `skill:riding` — Riding | 2 |
+| G06 | Working a boat | `skill:seamanship` — Seamanship | 1 |
+| G07 | Passage navigation | `skill:dead-reckoning` — Dead Reckoning; `skill:pilotage` — Pilotage; `skill:wayfinding` — Wayfinding | 3 |
+| G08 | Close weapon practice | `skill:dodge` — Dodge; `skill:sword` — Sword; `skill:shield` — Shield; `skill:knife-dagger` — Knife/Dagger; `skill:spear` — Spear | 5 |
+| G09 | Unit coordination and command practice | `skill:battle-tactics` — Battle Tactics; `skill:leadership` — Leadership | 2 |
+| G10 | Council and mediation practice | `skill:insight` — Insight; `skill:customs` — Customs; `skill:oratory` — Oratory; `skill:bargaining` — Bargaining | 4 |
+| G11 | Records-office practice | `skill:administration` — Administration; `skill:bookkeeping` — Bookkeeping | 2 |
+| G12 | Trading practice | `skill:trade` — Trade; `skill:bargaining` — Bargaining; `skill:appraisal` — Appraisal | 3 |
+| G13 | Metalworking apprenticeship | `skill:smithing` — Smithing | 1 |
+| G14 | Local contacts and information gathering | `skill:streetwise` — Streetwise; `skill:insight` — Insight | 2 |
+| G15 | Covert entry practice | `skill:perception` — Perception; `skill:stealth` — Stealth; `skill:lockpicking` — Lockpicking | 3 |
+| G16 | Impersonation and distraction practice | `skill:deception` — Deception; `skill:disguise` — Disguise | 2 |
+| G17 | Interview and evidence practice | `skill:research` — Research; `skill:perception` — Perception; `skill:insight` — Insight | 3 |
+| G18 | Operative care practice | `skill:first-aid` — First Aid; `skill:surgery` — Surgery | 2 |
+
+
+### Source identities and target display
+
+The target catalogue already made the identity decisions below. This authoring pass preserves their provenance and does not approve source conversion, migration or a Candidate-to-legacy crosswalk.
+
+| Original Pilot identity | Treatment in this package |
+|---|---|
+| `skill:sword`, `skill:shield`, `skill:knife-dagger`, `skill:spear` | All four exact G08 links remain in the snapshot. None appears as a future acquisition or becomes an inferred live weapon-family membership. |
+| `skill:dodge` | Exact original G08 link preserved; the target group page uses the controlling roster’s `dodge` identity and the name Dodge. |
+| `skill:battle-tactics` | Exact original G09 link preserved; the target page uses the controlling roster’s `tactics` identity and the name Battle Tactics. |
+| `skill:law:olog-princely` | Originally groupless. The future generic `skill:law` is proposed in F13 with a legal-system context; no Olog legal history or binding is authored here. |
+
+**The arithmetic remains separate:** 46 source links are preserved; 42 have carried-forward target membership annotations, while 4 source-only weapon links remain solely in the snapshot. Adding 3 accepted G-group memberships and 6 memberships in F01–F03 gives 51 previously carried/accepted target base memberships. This pass proposes 64 further base memberships and 8 Specialization memberships. It does not convert the original 46 links into an implementation crosswalk.
+
+### Added members in preserved groups
+
+| Group | Exact added target member | Status and constraint |
+|---|---|---|
+| G01 Patient care | `nursing` — Nursing | [PO] Accepted addition; this page expressly teaches sustained bedside care, observation and reporting. |
+| G09 Unit coordination and command practice | `captaincy` — Military Command | [PO] Approved addition; distinct from Leadership and Battle Tactics. |
+| G17 Interview and evidence practice | `skill:interrogation` — Interrogation | [PO] Conditionally accepted; the page expressly teaches structured questioning, follow-up and answer evaluation. |
+
+No other new target member is inserted into a preserved G group. In particular, G06 does not gain Swimming or generic navigation; G13 does not acquire every metal-related craft; G08 does not acquire all live combat families.
+
+### New groups
+
+**F01–F03** are the three previously accepted conditional concepts, now fully authored. **F04–F34** are the 31 new group proposals listed in Section A. Each page’s exact membership table is the complete proposed addition; there are no hidden optional members or inherited Specializations.
+
+### Wording, removals and small groups
+
+All 18 Pilot pages receive fuller reader prose and clearer exclusions. Their working names are unchanged. G05 explains that ordinary mounted-care routines are not the whole Animal Husbandry competence. G16 explains that distraction does not automatically train Sleight of Hand. G10 uses the confirmed Customs scope without the older scope hold. G07 retains its three approved members; the specific chart course appears separately as F11.
+
+**Removed approved Pilot links: zero.** The four non-target weapon identities remain visibly preserved as provenance rather than being silently replaced. No surviving original link failed the ordinary-training test once its approved teaching was stated explicitly. Perception and Insight still require the coached observation or interpretation stated on their pages; mere use remains insufficient.
+
+| Intentionally small group | Current target size | Why retained |
+|---|---|---|
+| G06 Working a boat | 1 base Skill: Seamanship | A substantial preserved vessel-working practice; broader maritime memberships would be unsupported. |
+| G08 Close weapon practice | 1 base Skill: Dodge | Preserves the Pilot practice without inventing live weapon-family assignments; its future title is separately flagged. |
+| G13 Metalworking apprenticeship | 1 base Skill: Smithing | A substantial preserved apprenticeship; additional crafts require the narrower proposed workshops. |
+| F16 Lineage investigation apprenticeship | Research + Genealogy Specialization | Direct inquiry and narrower kinship work are both taught; the History parent is not inherited. |
+| F22 Seasonal kitchen and preservation practice | Cooking + Food Preservation Specialization | General cookery and sustained specialist preservation are both taught; neither label alone establishes the other. |
+
+A single-Skill apprenticeship remains a perfectly legitimate way to learn. This package does not add a second label for every such route merely to eliminate blanks. The three inherited single-member groups remain explicit exceptions of continuity and review utility, not a reason to manufacture dozens of equivalent wrappers.
+
+### Original groupless Skills
+
+| Original Pilot Skill | Future classification in this proposal |
+|---|---|
+| Law — Olog Princely Law | Generic target Law in F13; the original localized identity and lack of a Pilot group remain source facts. |
+| Chart Navigation | New F11 proposal, requiring a genuine chart-using curriculum. |
+| Athletics | New F04 proposal, requiring coached athletic movement as well as Running instruction. |
+| Underworld | Deliberately groupless; illicit-network teaching remains a possible direct route. |
+| Sleight of Hand | Deliberately groupless; manual training is not inferred from distraction or entry. |
+| Swimming | Deliberately groupless; a swimming instructor is a direct route, not a reason to add it to boat work. |
+
+### Full-catalogue base Skills deliberately left groupless
+
+**49 Skills.** Each has its individual reason and plausible teaching route in the reverse index.
+
+
+1-h conc./axe; 2-h conc./axe; 2-h edged; Alchemy; Animal Lore; Astrology; Astronomy; Battlefield Awareness; Bow; Brawling; Brewing; Campaign Strategy; Climbing; Combat Experience; Conceal Object; Crossbow; Divination; Document & Credential Forgery; Firearms; Gambling; Geography; Heraldry; History; Intimidation; Leatherwork; Locksmithing; Masonry; Mathematics; Meditation; Military Logistics; Mining; Philosophy; Poisons; Politics; Religion; Sailmaking; Siege Engine Operation; Siege Engineering; Sleight of Hand; Sling; Swimming; Tailoring; Teaching; Throwing; Translation & Interpretation; Trapmaking; Underworld; Veterinary Medicine; Winemaking.
+
+
+<a id="d-audit"></a>
+## D. Coverage and overlap audit
+
+### Count and completeness check
+
+
+| Measure | Result |
+| --- | --- |
+| Controlling target base Skills / reverse-index rows | 131 / 131; exact IDs and names; no duplicate row |
+| Proposed Learning Groups | 52 = 18 preserved + 3 previously accepted concepts + 31 new proposals |
+| Base Skills with at least one proposed group | 82 |
+| Base Skills deliberately groupless | 49 |
+| Target base memberships | 115 = 42 carried Pilot annotations + 9 accepted additions + 64 new proposals |
+| Specializations reviewed / with a proposed group | 26 / 8 |
+| Specialization memberships | 8, each individually justified; 18 Specializations deliberately groupless |
+| Spoken languages / written traditions reviewed | 12 / 3; no generic exact-language memberships proposed |
+| Original Pilot links preserved | 46 / 46, independently checked against the Revision 2 attachment |
+| Groups with only one target competence | 3: G06, G08 and G13 |
+| Largest proposed group | 4 target competencies; G03, G10, G17, F07 and F33 |
+| Highest base-Skill group count | 4: Perception, Animal Handling and Smithing |
+| Blocked base classification | None; one G08 presentation decision remains |
+
+
+### Groups that need careful boundaries
+
+| Groups | Main risk | Resolution in the proposed pages |
+|---|---|---|
+| G03, G15, G17; F33 | Every activity that needs observation could acquire Perception. | Each explicitly rehearses searching or observation and corrects missed details; no other field group gets it merely by usefulness. |
+| G10, G14, G17 | Every conversation could acquire Insight. | Each directly teaches and checks interpretations of people; ordinary conversation is insufficient. |
+| G05, F05, F06, F07 | All animal knowledge could collapse into one package. | Ground control, population care, herd movement, driving, training and falconry are separately taught tasks. Veterinary Medicine is never inferred. |
+| F03, F24–F28 | A workshop may divide production between specialists. | Each group describes the same learner’s complete apprenticeship in both crafts; making a component or sharing a site is insufficient. |
+| F08 | A household could become an omnibus group. | Only cultivation and continuing population care are included; household cooking, clothing and general plant knowledge are excluded. |
+| F11 | Maritime activity could be mistaken for chart or celestial training. | Actual chart interpretation and celestial methods are explicitly taught; no maritime or historical-applicability inference is made. |
+| F13, F15, F16 | Professional subject matter could imply every scholarly Skill. | Only directly taught legal/public pleading, difficult-text inquiry or lineage investigation is included; parents and adjacent subjects are not inherited. |
+| F17–F21 | An ensemble or workshop could train different performers in different roles. | Each page requires the same learner’s sustained work in both competencies; mere performance or production together is insufficient. |
+| F22, F29, F30 | A Specialization could inherit its parent’s groups. | Each includes the narrower practice expressly; the specialist memberships do not spread to other parent groups. |
+| F30–F32 | Training prose could silently alter Combat identities or mappings. | Only exact target identities are listed. No new style, weapon assignment, defensive action or modifier is supplied. |
+
+The conditional language identifies the particular training practice proposed. It is not permission to include useful Skills whenever a biography happens to combine them. If a later historical example lacks a complete member’s instruction, that example does not substantiate this whole group; a Learning History can still describe its mixed or narrower experience.
+
+### Similar groups retained separately
+
+| Groups | Why they are not merged |
+|---|---|
+| G01 / G18 / F29 | General ongoing patient care, operative apprenticeship and explicitly specialist battlefield operative work teach different selections. |
+| G02 / F23 | Plant identification with remedy preparation is different from a remedy workshop that also teaches complete distillation. Neither implies the other’s companion Skill. |
+| G03 / F34 / F33 | Coached hunting and trail work, trapline apprenticeship and concealed military information gathering have different central tasks and teaching. |
+| G04 / G07 / F11 | Camp-and-route practice, progress/local-passage navigation and chart-plus-celestial instruction are distinct. They are not stages of one universal navigation ladder. |
+| G06 / F09 / F10 | Generic vessel work stays small; rigging work and fishing each add a different deliberately taught competence. |
+| G05 / F05 / F06 / F07 | Riding, pastoral keeping, driving a team and training a hunting bird are recognizable different practices; Animal Handling repeats for different directly taught interactions. |
+| G11 / F12 | Office work and credit-house apprenticeship share accounts, while teaching different substantive responsibility. |
+| G10 / F13 / F14 | Council negotiation, formal legal pleading and deliberate speech-memory instruction do not teach the same companion Skills. |
+| G17 / F15 / F16 | General interviewing, difficult-text inquiry and lineage investigation share Research but require different specialist practice. |
+| G13 / F24 / F25 / F26 | Generic smithing, metal production, weapon making/service and forged armor construction differ in what additional work is learned. |
+| F01 / F28 | Field map production and building design both teach Surveying but do not necessarily teach the other’s companion competence. |
+| F20 / F21 | Drawing with sculpture and sculpture with complete pottery production are different integrated workshops. |
+| G08 / F30 / F31 / F32 | The carried Dodge practice and three proposed combat curricula do not form a universal all-weapon group or a style taxonomy. |
+
+### Skills appearing in several groups
+
+
+| Skill | Groups | Codes | Why the repetition survives review |
+| --- | --- | --- | --- |
+| Animal Handling | 4 | G05, F05, F06, F07 | Direct animal control is corrected in mounted travel, herd keeping, driving and falconry; population care and deliberate behavioural training remain distinct. |
+| Perception | 4 | G03, G15, G17, F33 | Coached searching/observation in hunting, entry, inquiry and concealed reconnaissance; observation as a mere input is excluded elsewhere. |
+| Smithing | 4 | G13, F24, F25, F26 | Full metalworking is taught in the generic forge and in explicitly integrated ironmaking, weapon and metal-armor workshops. |
+| First Aid | 3 | G01, G18, F29 | Immediate-care technique is directly taught in general patient, operative and field-surgical practices; not inferred from every hazardous activity. |
+| Insight | 3 | G10, G14, G17 | Interpretation of people receives direct correction in councils, local contact work and structured inquiry. |
+| Oratory | 3 | G10, F13, F14 | Public speech is corrected in council practice, formal advocacy and a speech-memory course; ordinary interview or theatre work is excluded. |
+| Research | 3 | G17, F15, F16 | Full inquiry is taught in interviewing, difficult-text investigation and genealogy; merely using evidence elsewhere does not suffice. |
+| Seamanship | 3 | G06, F09, F10 | Vessel operation is fully taught in generic boat work and in two narrower deck/fishing apprenticeships. |
+| Stealth | 3 | G03, G15, F33 | Concealed movement is rehearsed in hunting, entry and covert reconnaissance; it is not inferred from all outdoor travel. |
+
+
+### Coherent practices deliberately not made into more groups
+
+| Practice considered | Why no further generic group is proposed |
+|---|---|
+| Supervised combat service | Combat Experience and Battlefield Awareness can both develop through guided service, but shared exposure does not demonstrate complete ordinary co-training. Their direct routes remain open descriptively. |
+| Campaign planning and supply work | Campaign Strategy uses logistical information. That does not establish that strategists ordinarily receive the whole Military Logistics competence, or the reverse. |
+| General religious or ritual instruction | A common tradition does not demonstrate full co-training of Religion, Divination, Meditation or Theology. Meditation’s approved preparatory game role remains intact. |
+| Astronomy with Astrology | Shared celestial subject matter and use of tables do not prove complete astronomical and astrological instruction together. |
+| Philosophical or theological study | A doctrinal argument may use reasoning without teaching the whole Philosophy competence; the proposed roster does not equate them. |
+| Climbing with Ropework; swimming with boat work | A few safety knots do not teach all Ropework; being aboard does not teach Swimming. Both movement Skills retain direct routes. |
+| Brewing or Winemaking with Distilling | A sequence of materials is not a learning curriculum. Preparing a wash or buying wine does not ordinarily teach the complete earlier craft. |
+| Sailmaking with Tailoring or Weaving | These are distinct crafts. Buying cloth and making a sail does not teach garments or full cloth production. Sailmaking remains a base Skill with its own apprenticeship route. |
+| Generic maternal care | Obstetrics can be taught through specialist maternal practice, but neither generic G01 nor attending a birth alone establishes all specialist obstetric and Nursing instruction. |
+| Every craft with its tools or supplies | A mason need not be taught Mining, a smith need not be taught Smelting, and a lockpicker need not be taught Locksmithing. Specific integrated exceptions are individually authored. |
+| General martial training | Service, hunting or Combat classification does not establish one curriculum for all live weapon families. Direct family instruction remains legitimate. |
+| Interpreter or scribe training with all named languages | Competence in particular languages and writing traditions needs its own direct teaching evidence. Co-use is insufficient, and no generic Literacy Skill is added. |
+
+These are deliberate nongrouping decisions, not missing-competence findings or requests for Product Owner rulings. A later specific curriculum may justify a different group proposal; a Learning History may already combine several separate lessons without changing generic membership.
+
+The review covered all 131 base Skills, including weapons, military command and support, distinct physical competencies, farming and animal populations, maritime work, healing, administration and finance, material crafts, construction, the arts, religion, texts and investigation. Coverage means every Skill was considered; it does not require a group for every one. No new Skill, Profession or Arch Skill is added to fill a blank.
+
+<a id="associated-review"></a>
+## Associated competency review
+
+### All 26 Specializations
+
+**8 proposed memberships; 18 deliberately groupless.** None inherits its parent’s groups. The parent column reproduces the controlling roster, including the nested Falconry specialization. A group can teach a narrow specialist practice without listing its parent if the parent’s complete broader competence is not ordinarily taught there; this says nothing about prerequisite or acquisition rules.
+
+
+| Specialization ID and name | Unchanged parent | Group(s) | Status | Rationale |
+| --- | --- | --- | --- | --- |
+| `spec:animal-training` — Animal Training | `skill:animal-handling` — Animal Handling | [F07](#f07) | New proposal | Learners deliberately establish and maintain learned responses, adjusting the training when the bird does not learn as intended. |
+| `spec:baking` — Baking | `skill:cooking` — Cooking | — | Deliberately groupless | A baking apprenticeship is coherent, but the proposed seasonal kitchen group does not itself supply this distinct specialist curriculum. |
+| `battlefield_surgery` — Battlefield Surgery | `skill:surgery` — Surgery | [F29](#f29) | New proposal | Learners practise the specialist organization and adaptation of operative treatment under battlefield casualty conditions and restricted resources. |
+| `bone_setting` — Bone Setting | `skill:medicine` — Medicine | — | Deliberately groupless | Patient care and surgery do not automatically include sustained instruction in this narrower medical practice. |
+| `spec:cordage-ropemaking` — Cordage / Ropemaking | `skill:fibre-working` — Fibre Working | — | Deliberately groupless | Preparing fibres and weaving cloth do not ordinarily teach substantial cordage manufacture; working rope aboard is also different. |
+| `spec:court-administration` — Court Administration | `skill:administration` — Administration | — | Deliberately groupless | Specialist court-office responsibilities are not ordinarily taught in every records office; no inheritance from Administration’s G11. |
+| `spec:court-advocacy` — Court Advocacy | `skill:law` — Law | [F13](#f13) | New proposal | Learners practise the forum’s specialist preparation, presentation and response in formal legal proceedings under an advocate’s supervision. |
+| `spec:court-cookery` — Court Cookery | `skill:cooking` — Cooking | — | Deliberately groupless | Court context alone is insufficient; its specialist repertoire and preparation expectations require explicit instruction. |
+| `spec:courtly-protocol` — Courtly Protocol | `skill:customs` — Customs | — | Deliberately groupless | Council conventions and legal proceedings do not ordinarily teach the full specialist court practice. |
+| `spec:diagnostic-medicine` — Diagnostic Medicine | `skill:medicine` — Medicine | — | Deliberately groupless | General clinical learning uses diagnosis, but the additional specialist competence is not automatically taught in G01. |
+| `spec:falconry` — Falconry | `spec:animal-training` — Animal Training | [F07](#f07) | New proposal | Learners rehearse the specialist coordination of hunting flight, return and the bird’s working condition under a falconer’s correction. |
+| `fencing` — Fencing | `one_handed_edged` — 1-h edged | [F30](#f30) | New proposal | Learners refine the established tradition’s coordinated exchanges, timing and distance through a fencing teacher’s specialist instruction. |
+| `spec:food-preservation` — Food Preservation | `skill:cooking` — Cooking | [F22](#f22) | New proposal | Learners carry out the tradition’s preservation methods, manage storage and diagnose spoilage or deterioration through supervised practice. |
+| `spec:fortification` — Fortification | `skill:architecture` — Architecture | — | Deliberately groupless | Defensive design needs its own specialist exercises; F28 building design and surveying does not automatically include them. |
+| `spec:genealogy` — Genealogy | `history` — History | [F16](#f16) | New proposal | Learners reconstruct and test family connections, resolving confused identities and explicitly qualifying unsupported links. |
+| `longbow` — Longbow | `bow` — Bow | — | Deliberately groupless | Direct longbow teaching remains possible; no new archery group or automatic weapon-family membership is manufactured. |
+| `spec:music-composition` — Music Composition | `music` — Music | — | Deliberately groupless | Playing, singing or interpreting existing pieces does not automatically teach composition and revision. |
+| `obstetrics` — Obstetrics | `skill:medicine` — Medicine | — | Deliberately groupless | A maternal-care apprenticeship is a route; generic patient care does not establish it, nor does birth attendance alone teach all Nursing. |
+| `spec:omen-reading` — Omen Reading | `divination` — Divination | — | Deliberately groupless | Shared divinatory subject matter does not establish a complete combined curriculum; specific omen instruction remains a separate route. |
+| `spec:pickpocketing` — Pickpocketing | `skill:sleight-of-hand` — Sleight of Hand | — | Deliberately groupless | Sleight of Hand does not automatically include the narrower theft-from-person practice, and distraction training does not establish it. |
+| `poison_treatment` — Poison Treatment | `skill:medicine` — Medicine | — | Deliberately groupless | Specific poisoning casework and specialist treatment teaching are not ordinary outcomes of every clinical apprenticeship. |
+| `spec:siege-operations` — Siege Operations | `tactics` — Battle Tactics | — | Deliberately groupless | Specialist siege planning is not an ordinary component of every G09 unit-command course. |
+| `spec:steppe-remount-training` — Steppe Remount Training | `skill:animal-husbandry` — Animal Husbandry | — | Deliberately groupless | Specialist management and rotation of multiple mounts needs its own instruction; G05 riding or F05 herd care does not automatically teach it. |
+| `spec:theology` — Theology | `skill:religion` — Religion | — | Deliberately groupless | Systematic doctrinal study requires its own teaching; shared religious context does not establish it or full Philosophy instruction. |
+| `spec:warded-lock-entry` — Warded-Lock Entry | `skill:lockpicking` — Lockpicking | — | Deliberately groupless | Generic lock-entry lessons need not include this specialist mechanism practice. |
+| `spec:weaponsmithing` — Weaponsmithing | `skill:smithing` — Smithing | [F25](#f25) | New proposal | Learners make complete weapons and revise their construction, balance and workmanship under a specialist smith’s criticism. |
+
+
+### All 12 spoken-language competencies and 3 written traditions
+
+**No exact generic Learning Group membership is proposed for these 15 competencies.** That is a nongrouping decision, not an access or existence decision. Conversation, oral correction and immersion can teach a named spoken language. Reading and writing with a teacher can teach a named written tradition. A particular bilingual, scribal or interpretive apprenticeship may teach more than one complete competency, but that needs evidence of the particular teaching rather than an inference from common context or use.
+
+The named records below are retained exactly as target context identities. Their inclusion invents no fictional linguistic history, pronunciation, script relation or Setting society. Script-support records remain support-only and do not enter competency or group-membership counts.
+
+
+| Exact target ID and name | Type | Group(s) | Status | Reason |
+| --- | --- | --- | --- | --- |
+| `spoken:common` — Spoken Common | Spoken language | — | Deliberately groupless | Direct instruction in this spoken language; using it during another practice does not establish that it is taught there. |
+| `spoken:mogrebi` — Spoken Mogrebi | Spoken language | — | Deliberately groupless | Direct instruction in this spoken language; using it during another practice does not establish that it is taught there. |
+| `spoken:ologian` — Spoken Ologian | Spoken language | — | Deliberately groupless | Direct instruction in this spoken language; using it during another practice does not establish that it is taught there. |
+| `spoken:phoenician` — Spoken Phoenician | Spoken language | — | Deliberately groupless | Direct instruction in this spoken language; using it during another practice does not establish that it is taught there. |
+| `spoken:nkolian` — Spoken N'kolian | Spoken language | — | Deliberately groupless | Direct instruction in this spoken language; using it during another practice does not establish that it is taught there. |
+| `spoken:scythian` — Spoken Scythian | Spoken language | — | Deliberately groupless | Direct instruction in this spoken language; using it during another practice does not establish that it is taught there. |
+| `spoken:mycenaean-greek` — Spoken Mycenaean Greek | Spoken language | — | Deliberately groupless | Direct instruction in this spoken language; using it during another practice does not establish that it is taught there. |
+| `spoken:old-common` — Spoken Old Common | Spoken language | — | Deliberately groupless | Direct instruction in this spoken language; using it during another practice does not establish that it is taught there. |
+| `spoken:old-latin` — Spoken Old Latin | Spoken language | — | Deliberately groupless | Direct instruction in this spoken language; using it during another practice does not establish that it is taught there. |
+| `spoken:old-persian` — Spoken Old Persian | Spoken language | — | Deliberately groupless | Direct instruction in this spoken language; using it during another practice does not establish that it is taught there. |
+| `spoken:scandian` — Spoken Scandian | Spoken language | — | Deliberately groupless | Direct instruction in this spoken language; using it during another practice does not establish that it is taught there. |
+| `spoken:sumerian` — Spoken Sumerian | Spoken language | — | Deliberately groupless | Direct instruction in this spoken language; using it during another practice does not establish that it is taught there. |
+| `written:mogrebi:sacred-mogrebi` — Written Mogrebi in Sacred Mogrebi | Written tradition | — | Deliberately groupless | Direct instruction in this written tradition; records or text investigation do not automatically teach the complete tradition. |
+| `written:ologian:church-ologian` — Written Ologian in Church Ologian | Written tradition | — | Deliberately groupless | Direct instruction in this written tradition; records or text investigation do not automatically teach the complete tradition. |
+| `written:phoenician:phoenician` — Written Phoenician in Phoenician script | Written tradition | — | Deliberately groupless | Direct instruction in this written tradition; records or text investigation do not automatically teach the complete tradition. |
+
+
+Translation & Interpretation and Palaeography & Decipherment remain base Skills. F15 teaches difficult-text investigation without granting a named Written Tradition. Translation & Interpretation remains groupless because no exact language-learning curriculum is supplied. Spoken competence, written competence and script familiarity are not equated, and there is no automatic spoken-to-written or written-to-spoken transfer.
+
+<a id="e-decisions"></a>
+## E. Remaining Product Owner decision
+
+**One genuine presentation decision remains; no base-Skill classification is blocked.** Routine acceptance, amendment or rejection of the clearly marked new group proposals is the purpose of reviewing this package, rather than a separate list of unanswered mechanics questions.
+
+| Decision | Why it remains | Recommendation |
+|---|---|---|
+| **[Q] G08’s future reader-facing title and usefulness as a one-member page** | The preserved Pilot title names close weapon practice, while four original weapon acquisitions are source-only and Dodge is the sole safely carried target member. Adding live families to repair the title would invent memberships. | Preserve G08 and all five exact Pilot links as historical provenance. For the eventual target page, consider **Close-combat evasion practice** as a reader-facing rename reflecting the current Dodge-only scope. The working roster in this package keeps the original title until that choice is accepted. Alternatively retain the title provisionally for a later evidenced curriculum review. Neither option authorizes weapon reassignment. |
+
+No further ruling is requested to make a groupless Skill learnable: absence of a generic group does not remove direct instruction. No old type, parent, Combat identity, Society-Level, Social-Band, DS/AB, Profession or acquisition decision is reopened. Fencing and its included practice, base Surgery, base Armoring, base Sailmaking, the nested Falconry parent and Steppe Remount Training’s Animal Husbandry parent remain as already settled.
+
+<a id="evidence"></a>
+## Evidence and provenance package
+
+### Controlling supplied sources
+
+1. **[T] Completed competency reader-prose catalogue.** [Glantri_Complete_Competency_Catalogue_Reader_Prose.md](sandbox:/workspace/scratch/61f8e746a1f9/outputs/reader_prose_61f8e746a1f9/Glantri_Complete_Competency_Catalogue_Reader_Prose.md). Controlling 131/26/12/3 roster, exact identities, full competence scopes, context and specialization parents. This pass reads but does not rewrite it.
+2. **[L2] Candidate 4 Learning Groups Revision 2.** [Candidate4_Learning_Groups_Historical_Availability_Proposal_ver2.md](sandbox:/workspace/scratch/61f8e746a1f9/upload/01-Candidate4_Learning_Groups_Historical_Availability_Proposal_ver2.md). The 18-group retained-membership table was checked directly against the preserved 46 source pairs. Later PO instructions resolve its old Customs hold and control over earlier type assumptions.
+3. **[R] Complete #89 A1 recovery package.** [Full-catalogue target-roster recovery PDF](sandbox:/workspace/scratch/61f8e746a1f9/upload/01-89-SKILLS-RECOVERY-A1-full-catalogue-target-roster-recovery-recovery-admin-glantri-app-For.pdf). Authority is the investigator package beginning “Forgejo #89 — A1 full-catalogue target-roster recovery”; surrounding issue lifecycle text is context only. Repository paths and live identities reported there are evidence, not permission to access or edit repository state.
+4. **[PO] Product Owner rulings in this thread.** The completed target catalogue, ordinary-training test, preserved Pilot links, three G-group additions, three conditional new concepts, final specialization parents, frozen Combat identities and nonmechanical authoring boundary control this proposal.
+
+### What the legacy group evidence supports
+
+The recovered current catalogue contains **66 groups: 33 normalized training groups, 15 taxonomy groups and 18 generated profession/training groups**. Candidate 4 has no authored Skill Group field or approved crosswalk; **zero Candidate-to-canonical group mappings are approved**. The recovered **16 of 44 lexical/ID counterparts** do not constitute identity mappings, and the remaining 28 are not repaired by inference. The earlier 16-group material is provenance where the investigation actually recovers it; this package does not invent its unrecovered individual contents or assign every antecedent to a historical layer.
+
+The following judgments concern a **group concept or a training subset**, not source-to-target Skill identity. The prior any-group availability behaviour is not carried forward.
+
+| Recovered antecedent | Evidence classification | Limited use here |
+|---|---|---|
+| `healing_practice` | **Supports group concept** for G01; **supports subset** for G18/F29; legacy Surgery typing is **incompatible identity/type** if copied. | Supports a recognizable care practice; cannot supply every medical specialization or convert Surgery into one. |
+| `herb_and_remedy_craft` | **Supports group concept** for G02; **supports subset** for G01/F23. | Supports ingredient/remedy teaching; does not prove full Distilling or a Herb Lore-to-Plant Lore identity conversion. |
+| `mounted_service` | **Supports subset** of G05/F32 and is **profession-shaped** more broadly. | Suggests mounted training contexts; does not establish all riding, husbandry, command or reconnaissance instruction. |
+| `basic_melee_training` | **Supports group concept** for G08; old weapons are **incompatible identity/type** if copied; **unrelated** to proof of G09 command instruction. | Supports direct weapon/drill teaching in principle, not target-family or support-Skill membership by category. |
+| `commercial_administration` | **Supports group concept** for G11; **supports subset** of G12/F12; **too broad** for G10; **unrelated** as proof of G17 Research. | Supports office/accounts practice while leaving substantive law, credit and inquiry separately justified. |
+| `mercantile_practice` | **Supports group concept** for G12; **supports subset** of G10; **unrelated** as proof of G07 navigation. | Supports exchange and negotiation without turning all commercial contacts into one training group. |
+| `craft_group` | **Too broad**. | Does not establish complete co-training merely because two crafts share materials, tools, a workshop or a Domain. |
+| `covert_entry` | **Supports group concept** for G15; **unrelated** as evidence for G14 contact-building or G16 impersonation. | Supports deliberate entry instruction without adding every covert or social competence. |
+
+No exact named legacy antecedent is claimed for a new group unless the supplied evidence supports the limited relationship stated. All full-catalogue memberships still require the target competence and ordinary-training justification on their page.
+
+### External evidence limits
+
+**[H1]** The Met’s athletic account supports historical coaching and combined running/jumping events. Its use is confined to the contextual note on F04; the proposed Skill selection remains [P]. **[H2]** UNESCO’s falconry account supports mentoring and family transmission of training/flying birds of prey. It does not prove every tradition teaches the exact four F07 members. **[H3]** The Met’s armor account supports variation in materials and construction. It does not establish one universal armorer’s curriculum. Direct source links appear with those claims on the relevant pages.
+
+The remaining new groups are explicitly competence-based proposals. No assertion of particular historical normal acquisition, universal apprenticeship practice or Arch-Society applicability is smuggled in through their plausible working descriptions.
+
+### Validation record
+
+- All 131 target base Skills appear exactly once in the reverse index, with exact target IDs and names.
+- Every member listed on a group page has a matching reverse entry for its own competency type; all members occur in the controlling target roster.
+- All 26 Specializations and 15 spoken/written competencies were individually considered. No automatic parent membership was generated.
+- All 18 Pilot member sets were checked against the actual Revision 2 attachment. All 46 original ID/group pairs remain intact and explicitly displayed.
+- Target identity spelling changes for Dodge and Battle Tactics are documented as display/provenance facts. The four Pilot-only weapon identities never enter the future acquisition or target membership count.
+- Counts distinguish original source links, target base memberships and specialist memberships. There are 52 group pages and 123 total target competency memberships: 115 base plus 8 specialist.
+- The controlling reader-prose document was left unchanged. No Skill, specialization parent, language identity, script type or held compatibility identity was redesigned.
+- No repository, Forgejo, database or runtime action was performed. No availability, cost, prerequisite, rank, transfer, Profession roster, Learning History or combat procedure was authored.
+
+**End of the Learning Group proposal.** Profession authoring and any implementation or publication remain separate later phases.

@@ -1,0 +1,794 @@
+# Glantri Learning Groups — martial / weapon-training revision
+
+**Focused Product Owner content proposal. Baseline: the completed 52-group Learning Group package.**
+
+This revision proposes **11 fighting and weapon-training groups: 4 amended groups and 7 additions**. It retains all other **48 baseline groups unchanged**, giving a proposed full roster of **59 groups**. It adds no Skill or Specialization and changes no competency prose.
+
+Every proposed close-combat curriculum contains **Dodge + Parry + at least one weapon Skill**. The five military or rough-contact close-combat curricula also deliberately teach **Brawling**. The two narrow civilian/specialist armed courses, G08 and F30, do not claim to teach complete unarmed fighting.
+
+The recommended structure combines **complete close-combat curricula** with **separate ranged-and-formation components**. F38–F40 are not whole military careers: every military archer, crossbow or firearm example below includes a complete close-combat curriculum as well. This uses the Product Owner’s permission for later Professions to draw on several groups, without defining a Profession or prerequisite.
+
+The only new non-martial membership is **Hunting → F41**, where a full longbow-hunting apprenticeship directly teaches it. No existing non-martial group or description changes. Original Pilot G08 and all five exact original links remain in the historical snapshot; revised target G08 is an explicitly new curriculum decision using the live identities.
+
+**Navigation:** [A. Martial groups](#a) · [B. Complete martial reverse index](#b) · [C. G08 disposition](#c) · [D. Illustrative Profession compositions](#d) · [E. Overlap audit](#e) · [F. Exact baseline changes](#f) · [Remaining decision](#decisions) · [Evidence and validation](#evidence)
+
+## Authority and interpretation
+
+| Marker | Meaning |
+|---|---|
+| **[B]** | A fact from the completed 52-group baseline; retained unless this revision explicitly changes it. |
+| **[T]** | An exact target competency identity, type, scope or parent from the completed reader-prose catalogue. |
+| **[PO-M1–M8]** | The eight controlling martial principles in the current request. **[PO-M-G08]** identifies the specific G08 ruling. |
+| **[PO]** | Other settled Product Owner rules in this thread. |
+| **[P]** | A proposed curriculum, membership or authoring judgment in this revision. It is not recovered canon or an implemented rule. |
+| **[R]** | Legacy evidence reported in the supplied investigation, used only within its demonstrated scope. |
+| **[Q]** | The remaining choice about the recommended group composition, separated from the settled principles. |
+
+All new memberships require the described competence to be repeatedly practised and corrected. The close-combat completeness rule controls which competences must be included in a complete melee curriculum; the prose then states the actual instruction, instead of adding defensive labels without teaching them. Brawling concerns complete unarmed fighting, not merely a single restraint, a forceful attitude or contact while fencing.
+
+**No group grants a Skill, implies transfer, establishes a prerequisite, sets a cost, assigns availability or creates a Profession.** The future individual-cost/group-rebate principle is acknowledged as a reason not to suppress legitimate overlap; no rebate formula or purchasing procedure is authored. Labels such as civilian and military describe these teaching practices, not social access or restrictions.
+
+Equipment descriptions state what the proposed learners actually train. The existing weapon-family identities and template mappings are untouched. A common shape, a historical weapon name or an item mentioned in a tradition is never used here to reclassify a live template. The full Skill remains the target competence, even where instruction works with equipment familiar to a particular teacher.
+
+<a id="a"></a>
+## A. Revised martial Learning Group roster
+
+**11 groups in this fighting/weapon-training revision.** Seven teach complete close combat; three teach a ranged-and-formation component; one teaches hunting with specialist longbow practice. There are no optional or hidden member choices: the membership list for each proposed group is exact.
+
+
+| Code | Proposed name | Status | Curriculum | Base / specialization members |
+| --- | --- | --- | --- | --- |
+| [G08](#g08) | One-handed edged close-combat practice | Revised | Complete civilian close-combat curriculum | 3 / 0 |
+| [F30](#f30) | Swashbuckling fencing instruction | Revised | Complete specialist close-combat curriculum | 3 / 1 |
+| [F31](#f31) | Spear, sidearm and throwing formation drill | Revised | Complete military close-combat and throwing curriculum | 7 / 0 |
+| [F32](#f32) | Mounted lance and troop drill | Revised | Complete mounted military close-combat curriculum | 7 / 0 |
+| [F35](#f35) | Guard and rough-fighting drill | New | Complete civilian close-combat curriculum with unarmed fighting | 4 / 0 |
+| [F36](#f36) | One-handed arms and formation drill | New | Complete military close-combat curriculum | 6 / 0 |
+| [F37](#f37) | Two-handed military weapon practice | New | Complete military close-combat curriculum | 5 / 0 |
+| [F38](#f38) | Military bow and formation practice | New | Ranged training component; not a complete soldier curriculum | 2 / 0 |
+| [F39](#f39) | Military crossbow and formation practice | New | Ranged training component; not a complete soldier curriculum | 2 / 0 |
+| [F40](#f40) | Military firearms and formation practice | New | Ranged training component; not a complete soldier curriculum | 2 / 0 |
+| [F41](#f41) | Longbow hunting apprenticeship | New | Civilian hunting and specialist archery practice; no close-combat teaching | 2 / 1 |
+
+
+**Codes.** G08, F30, F31 and F32 retain their codes with the amendments stated below. F35–F41 are new proposed codes, continuing after the baseline F34. No group code is deleted or superseded. Only the obsolete Dodge-only target interpretation of G08 and the inadequate exclusions in the other amended pages are superseded.
+
+
+<a id="g08"></a>
+### G08 — One-handed edged close-combat practice
+
+
+**Status:** Revised. **Purpose:** Complete civilian close-combat curriculum.
+
+
+**Short description.** Learners fight with one-handed edged weapons while directly practising avoidance and parrying under a weapon instructor.
+
+
+A teacher works through weapon control, distance and movement in paired practice, then has learners use those lessons in changing close exchanges. Avoiding an attack and meeting or redirecting it receive separate demonstrations, repetition and correction. The learner is taught all three competences, rather than being expected to acquire defensive judgment merely by holding a weapon.
+
+This is a narrow course that can be taught by a household instructor, an independent weapon teacher or an organized civilian practice. It concentrates on armed exchanges. It does not claim to teach the whole rough-fighting, restraint or unarmed struggle practice of a watch or guard.
+
+
+**Equipment and taught practice.** One-handed edged weapons within the unchanged 1-h edged family; no second weapon family is promised.
+
+
+| Exact member ID and name | Type / parent | Repeated practice and correction | Change from baseline |
+| --- | --- | --- | --- |
+| `one_handed_edged` — 1-h edged | Base Skill | Learners repeatedly practise handling, attack control, distance and recovery with one-handed edged weapons, correcting faults throughout an exchange. | New proposed membership |
+| `dodge` — Dodge | Base Skill | Learners rehearse reading an attack and moving clear of its path, with direct correction of timing, footing and available space. | Retained membership |
+| `parry` — Parry | Base Skill | Learners practise intercepting or redirecting attacks and recovering a usable position, with an instructor correcting contact, timing and judgment. | New proposed membership |
+
+
+**Explicit exclusions**
+
+
+- Brawling is excluded because this course does not teach sustained unarmed fighting, restraint and bodily struggles.
+- Fencing is not supplied by ordinary edged-weapon lessons; F30 teaches the established specialization directly.
+- Other weapon families, Formation Fighting and Mounted Combat require their own complete instruction.
+- No separate Sword, Shield, Knife/Dagger or Spear acquisition is created.
+
+
+**Provenance / review annotation.** [PO-M1, M2, M-G08] G08 is explicitly proposed for reuse as a revised future curriculum, with a new reader-facing name. [B] Dodge remains a target member; 1-h edged and Parry are newly proposed target memberships. The historical Pilot title and all five original links remain unchanged in Section C. [P] Selection of this one-handed family is a new curriculum proposal, not a legacy identity conversion.
+
+
+<a id="f30"></a>
+### F30 — Swashbuckling fencing instruction
+
+
+**Status:** Revised. **Purpose:** Complete specialist close-combat curriculum.
+
+
+**Short description.** Learners combine the established Fencing tradition with complete blade, avoidance and parrying instruction.
+
+
+An experienced fencer teaches one-handed edged weapon fundamentals, deliberate evasion and parrying, then develops the timing, distance and coordinated exchanges of the swashbuckling tradition. Learners repeat and correct defensive decisions as well as the finer blade work; a graceful change of position alone is not treated as complete Dodge instruction.
+
+The course expressly teaches the specialist sword-and-buckler and main-gauche practice already belonging to Fencing. It remains a course in that established tradition, not modern sport fencing. Unarmed rough fighting is not part of the curriculum described here.
+
+
+**Equipment and taught practice.** The established Fencing tradition’s blade, sword-and-buckler and main-gauche practice; existing identities and equipment bindings remain unchanged.
+
+
+| Exact member ID and name | Type / parent | Repeated practice and correction | Change from baseline |
+| --- | --- | --- | --- |
+| `one_handed_edged` — 1-h edged | Base Skill | Learners practise the complete one-handed edged weapon competence, with correction of handling and use beyond specialist combinations. | Retained membership |
+| `dodge` — Dodge | Base Skill | Learners repeatedly read incoming attacks and move clear, receiving correction of evasion as a distinct defensive competence. | New proposed membership |
+| `parry` — Parry | Base Skill | Learners practise meeting and redirecting attacks and are corrected on the position and continuing exchange left afterward. | Retained membership |
+| `fencing` — Fencing | Specialization; parent `one_handed_edged` — 1-h edged | Learners refine the established tradition’s timing, distance and coordinated blade, buckler and main-gauche practice through specialist correction. | Retained membership |
+
+
+**Explicit exclusions**
+
+
+- Brawling is not inferred from physical contact during fencing; this page does not teach its whole unarmed practice.
+- No separate Sword & Buckler / Main-Gauche specialization, off-hand Skill or new combat style is introduced.
+- No additional weapon-family membership is inferred from an item used within the approved tradition.
+- Formation Fighting, Mounted Combat and Weapon Maintenance remain separate instruction.
+
+
+**Provenance / review annotation.** [B] Existing 1-h edged, Parry and Fencing memberships are retained. [PO-M1] Dodge is added through explicit instruction, replacing the baseline exclusion. [PO] Fencing’s parent remains one_handed_edged; its established included practice is preserved. This curriculum does not adjudicate shield or off-hand runtime bindings.
+
+
+<a id="f31"></a>
+### F31 — Spear, sidearm and throwing formation drill
+
+
+**Status:** Revised. **Purpose:** Complete military close-combat and throwing curriculum.
+
+
+**Short description.** Learners fight in formation with spears, edged sidearms and thrown weapons, supported by deliberate defensive and unarmed practice.
+
+
+An instructor rotates the same learners through spear handling, short-sword work and thrown-weapon practice before bringing those lessons into coordinated formation exercises. Learners practise each weapon beyond a single command or gesture. They also rehearse evasion, parrying and unarmed struggles when an orderly armed exchange breaks down.
+
+Formation lessons address spacing, response to signals, compatible movement and recovery after disruption. This is the curriculum of the stated equipment set, not a definition of all infantry. The teacher is preparing the participants to fight their own part, rather than teaching them to select tactics or command the unit.
+
+
+**Equipment and taught practice.** The PO-supplied equipment example: spears, short swords and thrown spears, represented here by Polearms, 1-h edged and Throwing; organized formation participation is directly taught.
+
+
+| Exact member ID and name | Type / parent | Repeated practice and correction | Change from baseline |
+| --- | --- | --- | --- |
+| `polearms` — Polearms | Base Skill | Learners repeatedly practise individual spear and related family handling and correct reach, control and recovery before and during collective exercises. | Retained membership |
+| `one_handed_edged` — 1-h edged | Base Skill | Learners train complete edged-sidearm use, including changes of distance and recovery when the spear’s working situation changes. | New proposed membership |
+| `throwing` — Throwing | Base Skill | Learners repeatedly judge and execute weapon throws, correcting release, direction and distance rather than merely carrying throwing weapons. | New proposed membership |
+| `dodge` — Dodge | Base Skill | Learners practise reading and avoiding attacks, with correction of movement in the space actually available. | New proposed membership |
+| `parry` — Parry | Base Skill | Learners repeatedly practise the established parrying competence and correct the timing, means and position of their defence. | New proposed membership |
+| `brawling` — Brawling | Base Skill | Learners rehearse close unarmed struggles, maintaining balance and responding to grabs and strikes when bodies crowd together. | New proposed membership |
+| `formation_fighting` — Formation Fighting | Base Skill | Learners practise spacing, shared movement, signals and recovery of their place while fighting as members of an organized body. | Retained membership |
+
+
+**Explicit exclusions**
+
+
+- Bow, Crossbow, Firearms, Sling and other weapon families are not included; adding them to the role’s expected equipment would require their training.
+- Military Command, Battle Tactics and Leadership are not taught to every formation participant.
+- Athletics is not inferred from drill or exertion.
+- Weapon Maintenance is not inferred from routine checking of one’s own kit.
+- Combat Experience and Battlefield Awareness are not automatically supplied by exercises or membership in a military unit.
+
+
+**Provenance / review annotation.** [B] Polearms and Formation Fighting remain. [PO-M1, M3, M5] Add 1-h edged, Throwing, Dodge, Parry and Brawling through the expressly described full curriculum. [P] The revised equipment-specific title prevents it from standing for all polearm or infantry traditions. The spear/short-sword/thrown-spear example is supplied by the Product Owner; no runtime template is rebound.
+
+
+<a id="f32"></a>
+### F32 — Mounted lance and troop drill
+
+
+**Status:** Revised. **Purpose:** Complete mounted military close-combat curriculum.
+
+
+**Short description.** Learners fight with lance and edged sidearm, practise defensive and unarmed combat, and coordinate their place in a mounted troop.
+
+
+A mounted instructor teaches the handling of lance and sidearm and the coordination of fighting with the mount’s movement. Separate dismounted lessons develop avoidance, parrying and unarmed fighting as complete practices. The learner is not expected to gain them merely by taking part in a mounted pass.
+
+Troop exercises also correct spacing, shared changes of movement, response to signals and recovery after the group is disturbed. This is a broader mounted military curriculum than isolated lance lessons. It does not include the whole ordinary riding course or long-term animal care merely because both matter to cavalry service.
+
+
+**Equipment and taught practice.** Lance and a one-handed edged sidearm; individual mounted fighting and coordinated troop participation are both taught, alongside dismounted close-combat exercises.
+
+
+| Exact member ID and name | Type / parent | Repeated practice and correction | Change from baseline |
+| --- | --- | --- | --- |
+| `lance` — Lance | Base Skill | Learners repeatedly practise lance handling and use, correcting alignment, distance, control and recovery through supervised exercises. | Retained membership |
+| `one_handed_edged` — 1-h edged | Base Skill | Learners practise complete sidearm technique and its use when the encounter no longer suits the lance. | New proposed membership |
+| `dodge` — Dodge | Base Skill | Learners receive direct paired instruction in reading and avoiding attacks, including substantial dismounted practice. | New proposed membership |
+| `parry` — Parry | Base Skill | Learners practise the established defensive interception or redirection of attacks, with correction of means, timing and recovery. | New proposed membership |
+| `brawling` — Brawling | Base Skill | Learners repeatedly practise unarmed struggles and recovery of balance in close bodily conflict, rather than relying only on armed exercises. | New proposed membership |
+| `mounted_combat` — Mounted Combat | Base Skill | Learners correct the coordination of fighting with the mount’s movement, changing space and nearby combatants. | Retained membership |
+| `formation_fighting` — Formation Fighting | Base Skill | Learners rehearse mounted troop spacing, compatible movement, signals and regathering, with correction of their own place in the group. | New proposed membership |
+
+
+**Explicit exclusions**
+
+
+- Riding and Animal Handling remain in unchanged G05; their complete teaching is not inferred from using a mount here.
+- Animal Husbandry, Animal Training and Steppe Remount Training are not automatically included.
+- Bow and Firearms are not part of this stated mounted equipment set.
+- Military Command and Battle Tactics remain distinct from troop participation.
+- The prose does not authorize any particular mounted Dodge, Parry or Brawling action or modifier; those remain governed by existing combat rules.
+
+
+**Provenance / review annotation.** [B] Lance and Mounted Combat remain. [PO-M1, M3, M5] Add the actual sidearm, direct defensive and unarmed teaching. [P] Formation Fighting is added because the revised group explicitly includes troop exercises; it is not inferred from being mounted. The complete seven-member curriculum and title are proposed together.
+
+
+<a id="f35"></a>
+### F35 — Guard and rough-fighting drill
+
+
+**Status:** New. **Purpose:** Complete civilian close-combat curriculum with unarmed fighting.
+
+
+**Short description.** Learners use one-handed impact weapons and handle close bodily struggles through a guard’s coached armed and unarmed practice.
+
+
+An instructor alternates controlled weapon exchanges with repeated practice in close physical struggles, restraint and keeping one’s balance when crowded. Learners separately rehearse moving out of an attack’s path and meeting or redirecting it. Correction concerns their actual fighting and control of contact, not simply their willingness to apply force.
+
+The course can be taught in a household guard, estate watch, caravan guard detail or a less formal rough-fighting practice. Those settings do not confer authority or occupational status. The shared lessons are the complete armed and unarmed techniques, and this particular curriculum teaches the stated one-handed family.
+
+
+**Equipment and taught practice.** One-handed concussion/axe-family arms, such as the clubs, maces or axes actually used by the practice; sustained unarmed contact and restraint exercises are directly taught.
+
+
+| Exact member ID and name | Type / parent | Repeated practice and correction | Change from baseline |
+| --- | --- | --- | --- |
+| `one_handed_concussion_axe` — 1-h conc./axe | Base Skill | Learners repeatedly control and recover a one-handed head-weighted weapon, correcting reach, balance and the path of its working head. | New proposed membership |
+| `dodge` — Dodge | Base Skill | Learners practise avoiding attacks amid close contact and obstacles, with correction of timing and movement. | New proposed membership |
+| `parry` — Parry | Base Skill | Learners rehearse the established means of meeting or redirecting attacks and correct the continuing position of their defence. | New proposed membership |
+| `brawling` — Brawling | Base Skill | Learners repeatedly practise balance, bodily contact, restraint and responses to grabs or strikes in sustained unarmed exchanges. | New proposed membership |
+
+
+**Explicit exclusions**
+
+
+- Intimidation is not supplied by forceful conduct; its psychological and social practice is separate.
+- Law, Streetwise, Underworld and Leadership are not taught by the fighting course itself.
+- 1-h edged is not a member of this curriculum; an edged-weapon role needs its actual instruction, for example G08.
+- Formation Fighting and Mounted Combat require collective or mounted lessons not described here.
+
+
+**Provenance / review annotation.** [P; PO-M1, M2] New reusable civilian/guard curriculum. Brawling is justified by repeated rough-contact instruction, not assumed for every civilian martial group. Naming possible occupations creates no Profession or access rule.
+
+
+<a id="f36"></a>
+### F36 — One-handed arms and formation drill
+
+
+**Status:** New. **Purpose:** Complete military close-combat curriculum.
+
+
+**Short description.** Learners train both principal one-handed weapon families, defence and unarmed fighting while practising their place in an organized unit.
+
+
+A unit instructor teaches the same learners to fight with edged arms and with head-weighted one-handed weapons. They receive sustained correction in each family, in deliberate evasion and parrying, and in unarmed struggles. Exercises then bring that personal fighting into shared movement and formation work.
+
+This is a reusable military foundation for a force that expects both sorts of one-handed arm to be used. It may be taught through militia, garrison or household-retinue drill. It is not a claim that every soldier is issued both weapons, or a substitute for teaching a unit’s spear, bow or firearm when that is part of its equipment.
+
+
+**Equipment and taught practice.** Both one-handed edged and one-handed concussion/axe-family arms; the same learners practise both weapon families and organized formation participation.
+
+
+| Exact member ID and name | Type / parent | Repeated practice and correction | Change from baseline |
+| --- | --- | --- | --- |
+| `one_handed_edged` — 1-h edged | Base Skill | Learners practise complete one-handed edged fighting and correct control, reach and recovery through individual and unit exercises. | New proposed membership |
+| `one_handed_concussion_axe` — 1-h conc./axe | Base Skill | Learners separately practise head-weighted one-handed arms and correct the different handling and recovery those weapons demand. | New proposed membership |
+| `dodge` — Dodge | Base Skill | Learners repeatedly identify and avoid attacks, with direct feedback on distance, footing and the available space. | New proposed membership |
+| `parry` — Parry | Base Skill | Learners practise defensive interception or redirection as a distinct competence and correct their timing and resulting position. | New proposed membership |
+| `brawling` — Brawling | Base Skill | Learners rehearse complete unarmed close fighting, including crowding, grabs, strikes and the recovery of balance. | New proposed membership |
+| `formation_fighting` — Formation Fighting | Base Skill | Learners repeatedly maintain and recover their place, respond to signals and coordinate movement with neighbours during unit exercises. | New proposed membership |
+
+
+**Explicit exclusions**
+
+
+- Polearms, Throwing and two-handed families require their own instruction; they are not hidden under the word military.
+- No ranged weapon Skill is supplied by this foundation.
+- Military Command and Battle Tactics are not acquired by following an instructor’s commands.
+- Combat Experience, Battlefield Awareness and Weapon Maintenance are not inferred from general military preparation.
+
+
+**Provenance / review annotation.** [P; PO-M1, M3, M5, M6] New explicitly mixed-equipment military curriculum. Its extra Formation Fighting teaching distinguishes it from simply listing the union of G08 and F35. It can accompany a ranged component without becoming an archery or firearms group itself.
+
+
+<a id="f37"></a>
+### F37 — Two-handed military weapon practice
+
+
+**Status:** New. **Purpose:** Complete military close-combat curriculum.
+
+
+**Short description.** Learners train two-handed edged and impact weapons together with direct defensive and unarmed fighting practice.
+
+
+A weapon instructor teaches a cadre expected to handle both two-handed edged arms and heavy head-weighted arms. Learners alternate substantial individual lessons in each family with paired exercises in distance, recovery, evasion and parrying. They also receive direct instruction in unarmed fighting when close contact prevents an orderly weapon exchange.
+
+The shared practice is preparation for the specified two-handed arms, not a collection of everything large or difficult to lift. It can serve a household military retinue or specialist troop practice. This page does not claim to teach an organized formation; that requires its own actual collective instruction.
+
+
+**Equipment and taught practice.** Both unchanged two-handed families: 2-h edged and 2-h conc./axe. Learners are deliberately taught both; polearms are not included by resemblance.
+
+
+| Exact member ID and name | Type / parent | Repeated practice and correction | Change from baseline |
+| --- | --- | --- | --- |
+| `two_handed_edged` — 2-h edged | Base Skill | Learners repeatedly practise the two-handed edged competence, correcting control, distance and recovery through the weapon’s path. | New proposed membership |
+| `two_handed_concussion_axe` — 2-h conc./axe | Base Skill | Learners separately train the head-weighted two-handed family, correcting the space, commitment and recovery its handling requires. | New proposed membership |
+| `dodge` — Dodge | Base Skill | Learners practise reading and moving clear of attacks, receiving correction beyond the footwork needed simply to swing their weapon. | New proposed membership |
+| `parry` — Parry | Base Skill | Learners rehearse the established parrying practice with direct correction of timing, means and position. | New proposed membership |
+| `brawling` — Brawling | Base Skill | Learners practise complete close unarmed exchanges and balance under bodily pressure, rather than treating contact as an incidental interruption. | New proposed membership |
+
+
+**Explicit exclusions**
+
+
+- Polearms remain a separate family; an axe-like head is not a reason to classify a polearm as 2-h conc./axe.
+- No one-handed sidearm is promised by this particular group; a role using one needs that training as well.
+- Formation Fighting is excluded because the described course teaches personal and paired fighting, not a whole collective curriculum.
+- Athletics is not taught merely through the exertion of handling a large weapon.
+- No Heavy Weapon Skill, martial style or specialization is created.
+
+
+**Provenance / review annotation.** [P; PO-M1, M3, M5] New two-family curriculum rather than one group per weapon. It describes a cadre that actually trains both complete competencies, not all troops issued any two-handed weapon.
+
+
+<a id="f38"></a>
+### F38 — Military bow and formation practice
+
+
+**Status:** New. **Purpose:** Ranged training component; not a complete soldier curriculum.
+
+
+**Short description.** Learners develop complete bow technique while practising coordinated movement, shooting space and recovery within an archer formation.
+
+
+An archery instructor works on individual handling, aim and consistent shooting, then has learners use those lessons while maintaining their places among other archers. Exercises correct spacing, response to signals, coordinated changes of position and the recovery of an orderly body after movement or disturbance.
+
+These are sustained archery and formation lessons. They are one component of military training: the soldier’s close-combat instruction is supplied by a separately described curriculum. Merely standing in a row for target practice is not enough to teach Formation Fighting.
+
+
+**Equipment and taught practice.** Bows within the unchanged Bow identity; coordinated archer movement and formation participation. No close-combat weapon is part of this component’s lessons.
+
+
+| Exact member ID and name | Type / parent | Repeated practice and correction | Change from baseline |
+| --- | --- | --- | --- |
+| `bow` — Bow | Base Skill | Learners repeatedly practise bow handling and shooting, diagnose inconsistent results and correct technique under an archery teacher. | New proposed membership |
+| `formation_fighting` — Formation Fighting | Base Skill | Learners practise their position, signals, shared movement and recovery within an archer body, with correction of how their actions affect neighbours. | New proposed membership |
+
+
+**Explicit exclusions**
+
+
+- Dodge, Parry, Brawling and close-combat weapons are taught in the accompanying close-combat curriculum, not claimed by these ranged lessons.
+- Longbow is not inherited from Bow; additional specialist practice must be expressly taught.
+- Battlefield Awareness, Battle Tactics and Military Command are not established by maintaining one’s place or following a signal.
+- Hunting is not supplied by shooting at targets or practising military archery.
+
+
+**Provenance / review annotation.** [P; PO-M4, M6, M8] New two-Skill ranged component, not a Bow-only wrapper or a complete military-archer background. Section D explicitly combines it with complete military close-combat instruction. That composition is a content example, not a prerequisite or grant rule.
+
+
+<a id="f39"></a>
+### F39 — Military crossbow and formation practice
+
+
+**Status:** New. **Purpose:** Ranged training component; not a complete soldier curriculum.
+
+
+**Short description.** Learners develop crossbow handling and shooting while practising coordinated movement and their place in a crossbow formation.
+
+
+An instructor corrects preparation, alignment, handling and shot judgment, then has learners carry out their work amid the movement and space needs of other crossbow users. Learners rehearse signals, changes of position and recovery of their place after the arrangement is disturbed.
+
+The course teaches complete crossbow practice and collective participation, not merely a loading sequence. It is a ranged component of a soldier’s training. Close fighting is taught elsewhere, and operating a complete emplaced engine is a distinct task even where its weapon belongs to the existing Crossbow family.
+
+
+**Equipment and taught practice.** The familiar crossbows taught by the unit, within the unchanged Crossbow family; coordinated movement and formation participation. No large-engine emplacement or melee weapon is promised.
+
+
+| Exact member ID and name | Type / parent | Repeated practice and correction | Change from baseline |
+| --- | --- | --- | --- |
+| `crossbow` — Crossbow | Base Skill | Learners repeatedly prepare, handle and shoot familiar crossbows, correcting alignment, mechanism judgment and the choice and execution of shots. | New proposed membership |
+| `formation_fighting` — Formation Fighting | Base Skill | Learners practise spacing, signals, shared movement and recovery within a crossbow body, with correction of interference and lost coordination. | New proposed membership |
+
+
+**Explicit exclusions**
+
+
+- A complete military crossbow background also needs the separately taught close-combat package shown in Section D.
+- Siege Engine Operation is not included: emplacement and complete engine-crew work are not described by this course.
+- The group does not narrow Crossbow’s frozen family or remove its existing large-weapon mappings.
+- Bow, Firearms, Weapon Maintenance and Locksmithing are not supplied by crossbow lessons.
+
+
+**Provenance / review annotation.** [P; PO-M5, M6, M8] New two-Skill ranged component. [T] Crossbow retains its whole identity; instruction with familiar equipment does not promise all weapons or the separate complete engine task. No template, family or operating-rule change is made.
+
+
+<a id="f40"></a>
+### F40 — Military firearms and formation practice
+
+
+**Status:** New. **Purpose:** Ranged training component; not a complete soldier curriculum.
+
+
+**Short description.** Learners handle and shoot handheld firearms while practising coordinated movement and their place in a formed firing unit.
+
+
+An instructor repeatedly corrects preparation, handling, alignment and the firing practices appropriate to the unit’s firearms. Collective exercises teach the learner to maintain working space, respond to signals, change position with companions and recover the group’s arrangement after disruption.
+
+This is a ranged component, not a soldier’s whole fighting education. Its lessons concern the issued firearms and collective participation. The group does not describe fighting with a gun as a club, a bayonet, a sword or a pike without the separate instruction for those actual uses.
+
+
+**Equipment and taught practice.** The handheld firearms actually issued for the described unit practice, within the one Firearms Skill; coordinated movement and formation participation. No cannon or bayonet method is promised.
+
+
+| Exact member ID and name | Type / parent | Repeated practice and correction | Change from baseline |
+| --- | --- | --- | --- |
+| `skill:firearms` — Firearms | Base Skill | Learners repeatedly practise complete handheld-firearm handling and shooting, with correction of preparation, alignment and weapon-specific operating judgment. | New proposed membership |
+| `formation_fighting` — Formation Fighting | Base Skill | Learners rehearse spacing, shared movement, signals and recovery within a firearm-using body, correcting actions that disrupt neighbouring participants. | New proposed membership |
+
+
+**Explicit exclusions**
+
+
+- Close-combat defence, Brawling and melee weapons belong to the accompanying complete close-combat course.
+- Firearms is not split into pistol, rifle or musket base Skills.
+- No bayonet classification, gun-as-club mapping, cannon practice or new combat action is authored.
+- Weapon Maintenance, Smithing and Alchemy are not supplied by ordinary firing routines.
+
+
+**Provenance / review annotation.** [P; PO-M5, M6, M8] New two-Skill ranged component. [PO] The six existing Firearms template mappings remain later binding evidence, not assignments changed by this package. The military-infantry example includes its separate close-combat training.
+
+
+<a id="f41"></a>
+### F41 — Longbow hunting apprenticeship
+
+
+**Status:** New. **Purpose:** Civilian hunting and specialist archery practice; no close-combat teaching.
+
+
+**Short description.** Learners hunt with a longbow while receiving complete archery instruction and sustained correction of specialist longbow technique.
+
+
+A hunting teacher alternates archery lessons with supervised hunts. Learners practise the broader bow competence, then receive further repeated correction in the longbow’s particular handling demands. In the field they choose an approach, judge when to attempt a shot and review whether continuing the hunt is sensible.
+
+The same learner is taught the course of the hunt as well as the shooting. This is one specific longbow hunting apprenticeship, not every civilian archery lesson. It teaches neither formation participation nor human close-combat fighting, and it does not imply that ordinary Bow instruction always includes a specialization.
+
+
+**Equipment and taught practice.** Longbow practice within the approved Bow / Longbow parent-specialization relationship, used in a full hunting apprenticeship. No close-fighting weapon is taught.
+
+
+| Exact member ID and name | Type / parent | Repeated practice and correction | Change from baseline |
+| --- | --- | --- | --- |
+| `bow` — Bow | Base Skill | Learners practise complete bow handling and shooting, correcting technique under sustained instruction beyond individual hunting shots. | New proposed membership |
+| `skill:hunting` — Hunting | Base Skill | Learners plan and conduct hunts, receiving correction of approach, quarry response, timing and decisions to continue or stop. | New proposed membership |
+| `longbow` — Longbow | Specialization; parent `bow` — Bow | Learners undertake additional specialist correction of longbow handling, coordinated draw and release and consistency through repeated practice. | New proposed membership |
+
+
+**Explicit exclusions**
+
+
+- Tracking, Stealth and Perception are not added merely because they are useful to a hunt; this page does not teach those entire competences.
+- Dodge, Parry and Brawling are not included because this is not a human close-combat curriculum.
+- Formation Fighting is not taught by hunting with another person.
+- A military archer does not gain Hunting or Longbow merely from belonging to F38.
+- This is not a new bow type, new specialization or weapon-access rule.
+
+
+**Provenance / review annotation.** [P; PO-M4, M8] New reusable two-base-Skill and one-Specialization apprenticeship. [T] Longbow remains a Bow Specialization. Hunting gains one narrowly documented membership; no existing non-martial page or Skill prose changes. The longbow-specific scope makes specialist teaching explicit rather than conditional or inherited.
+
+
+### Related groups preserved by reference
+
+These are **preserved**, not additional fighting curricula. The close-combat completeness rule does not turn command study, making weapons or reconnaissance into weapon instruction. Their full baseline pages, members and rationales remain unchanged; this table supplies the relevant connection without rewriting those pages.
+
+
+| Code | Preserved name | Exact retained members | Reason it is unchanged |
+| --- | --- | --- | --- |
+| G09 | Unit coordination and command practice | `tactics` — Battle Tactics; `skill:leadership` — Leadership; `captaincy` — Military Command | Teaches tactical decisions, general leadership and professional command; following or issuing orders does not teach the listed weapon competences. |
+| F25 | Weapon-forge and servicing apprenticeship | `skill:smithing` — Smithing; `weapon_maintenance` — Weapon Maintenance; `spec:weaponsmithing` — Weaponsmithing | Teaches making and servicing weapons; it promises no ability to fight with them. |
+| F33 | Concealed field reconnaissance practice | `skill:military-reconnaissance` — Military Reconnaissance; `skill:perception` — Perception; `skill:stealth` — Stealth; `camouflage` — Camouflage | Teaches concealed military information gathering; it promises no close-combat or ranged-weapon curriculum. |
+
+
+<a id="b"></a>
+## B. Complete martial Skill → Learning Group reverse index
+
+**18 base rows:** all **14 Weapon Practice base identities**, including Dodge, Parry and Brawling, plus **Formation Fighting, Mounted Combat, Combat Experience and Battlefield Awareness**. Each appears exactly once. All memberships are the full proposed list after applying this revision to the unchanged baseline, not merely newly added links.
+
+“Deliberately groupless” is not a prohibition on learning. The direct practice or experience route remains descriptive and creates no Learning History, access or acquisition rule.
+
+
+| Exact Skill ID | Name | All proposed groups | Status | Reason |
+| --- | --- | --- | --- | --- |
+| `dodge` | Dodge | [G08](#g08), [F30](#f30), [F31](#f31), [F32](#f32), [F35](#f35), [F36](#f36), [F37](#f37) | Membership list amended | Direct avoidance instruction in every complete close-combat curriculum; none is inferred from general movement or exertion. |
+| `parry` | Parry | [G08](#g08), [F30](#f30), [F31](#f31), [F32](#f32), [F35](#f35), [F36](#f36), [F37](#f37) | Membership list amended | Deliberate defensive interception/redirection in every complete close-combat curriculum; no Shield identity is converted into it. |
+| `brawling` | Brawling | [F31](#f31), [F32](#f32), [F35](#f35), [F36](#f36), [F37](#f37) | Membership list amended | Whole unarmed and rough-contact instruction in the five military or guard courses; excluded from narrow G08 and F30. |
+| `one_handed_edged` | 1-h edged | [G08](#g08), [F30](#f30), [F31](#f31), [F32](#f32), [F36](#f36) | Membership list amended | Actually taught in civilian edged practice, Fencing, spear-sidearm infantry, mounted sidearm work and mixed one-handed military drill. |
+| `one_handed_concussion_axe` | 1-h conc./axe | [F35](#f35), [F36](#f36) | Membership list amended | Actually taught in the guard course and in the military curriculum that trains both one-handed families. |
+| `two_handed_edged` | 2-h edged | [F37](#f37) | Membership list amended | F37 teaches this complete family alongside separately taught two-handed impact arms and close-combat defence. |
+| `two_handed_concussion_axe` | 2-h conc./axe | [F37](#f37) | Membership list amended | F37 directly teaches this family; its membership does not capture axe-headed Polearms by resemblance. |
+| `polearms` | Polearms | [F31](#f31) | Membership retained; group revised | F31 teaches the stated spear equipment fully; no melee-spear/throwing-spear equivalence or Pilot identity conversion is inferred. |
+| `lance` | Lance | [F32](#f32) | Membership retained; group revised | F32 directly teaches the lance as part of complete mounted troop instruction. |
+| `throwing` | Throwing | [F31](#f31) | Membership list amended | F31 expressly trains the thrown-weapon part of the stated infantry equipment, beyond carrying or melee use. |
+| `sling` | Sling | — | Deliberately groupless | Deliberately groupless: direct sling instruction remains possible, but no additional shared curriculum is justified merely to fill this last weapon blank. |
+| `bow` | Bow | [F38](#f38), [F41](#f41) | Membership list amended | F38 teaches bow and formation practice; F41 teaches complete archery within a specialist longbow-hunting apprenticeship. |
+| `crossbow` | Crossbow | [F39](#f39) | Membership list amended | F39 deliberately teaches the unchanged crossbow competence and formation participation; full military close training is composed separately. |
+| `skill:firearms` | Firearms | [F40](#f40) | Membership list amended | F40 teaches the single handheld-firearms Skill plus coordinated formation participation; military close training is composed separately. |
+| `formation_fighting` | Formation Fighting | [F31](#f31), [F32](#f32), [F36](#f36), [F38](#f38), [F39](#f39), [F40](#f40) | Membership list amended | Direct individual participation in infantry, mounted and three ranged formations; repeated contexts do not create new formation Skills. |
+| `mounted_combat` | Mounted Combat | [F32](#f32) | Membership retained; group revised | F32 directly teaches coordination of fighting with the mount; ordinary Riding remains distinct. |
+| `combat_experience` | Combat Experience | — | Deliberately groupless | Deliberately groupless: functioning in actual combat may develop through guided service and reflection; drill alone does not establish that complete experience. |
+| `battlefield_awareness` | Battlefield Awareness | — | Deliberately groupless | Deliberately groupless: reading the wider developing encounter needs its own practice and guided review; local formation coordination is insufficient. |
+
+
+### Combat Specializations
+
+
+| Exact ID | Name | Unchanged parent | All proposed groups | Status / reason |
+| --- | --- | --- | --- | --- |
+| `fencing` | Fencing | `one_handed_edged` — 1-h edged | [F30](#f30) | Retained F30 membership; its narrower swashbuckling practice is expressly taught. Dodge is added to the group, not to the specialization’s mechanics. |
+| `longbow` | Longbow | `bow` — Bow | [F41](#f41) | New F41 membership, supported by explicit specialist longbow instruction alongside full Bow and Hunting. No automatic membership in F38. |
+
+
+No other combat specialization is added to a group. Siege Operations remains separately authored and groupless; Weaponsmithing remains in unchanged F25. Household Guard Sword-and-Shield Drill remains deferred. Sword & Buckler / Main-Gauche remains part of Fencing, not another target specialization.
+
+Longbow instruction can also occur directly in a military tradition. F38’s generic bow lessons do not automatically include that specialist refinement, and F41 must not be attached to a military background solely to obtain Longbow when Hunting is not actually taught. Neither statement decides whether a specialization is required to use any particular weapon.
+
+### Other relevant support identities: unchanged
+
+
+| Exact ID | Name | Unchanged groups | Reason |
+| --- | --- | --- | --- |
+| `tactics` | Battle Tactics | G09 | Choosing what the unit should do is separate from carrying out weapon and formation drills. |
+| `captaincy` | Military Command | G09 | Exercising professional command is separate from being trained to fight in the unit. |
+| `weapon_maintenance` | Weapon Maintenance | F25 | Complete inspection and servicing remain in the existing workshop practice; routine care of issued kit does not add it to every combat course. |
+
+
+<a id="c"></a>
+## C. Exact G08 disposition
+
+**Historical Pilot G08 is unchanged.** Its historical name is **Close weapon practice** and its exact original membership remains:
+
+| Historical group | Exact original Pilot ID | Original name |
+|---|---|---|
+| G08 — Close weapon practice | `skill:dodge` | Dodge |
+| G08 — Close weapon practice | `skill:sword` | Sword |
+| G08 — Close weapon practice | `skill:shield` | Shield |
+| G08 — Close weapon practice | `skill:knife-dagger` | Knife/Dagger |
+| G08 — Close weapon practice | `skill:spear` | Spear |
+
+All other original Pilot links also remain intact: **46 of 46 historical links are preserved**.
+
+**Future target: retain code G08, explicitly as a revised curriculum.** Proposed name: **One-handed edged close-combat practice**. Exact target members:
+
+| Target ID | Name | Basis |
+|---|---|---|
+| `one_handed_edged` | 1-h edged | Newly selected target family for the proposed civilian course; taught directly. |
+| `dodge` | Dodge | Existing target membership retained, with explicit defensive teaching. |
+| `parry` | Parry | New direct training required by the Product Owner’s complete close-combat rule. |
+
+This does **not** assert `skill:sword` → `one_handed_edged`, `skill:shield` → `parry`, or any other source conversion. No source weapon record is deleted, replaced, merged or rebound. The historical snapshot and future curriculum are different authoring statements kept visibly separate. Reusing the group code preserves continuity of purpose; it does not establish a migration rule.
+
+The previous Dodge-only target page and the suggestion to solve it by renaming it **Close-combat evasion practice** are **superseded**. The new page teaches a complete three-Skill close-combat course. The previous G08 title-only decision is therefore closed by the present Product Owner instruction and this concrete proposal, rather than carried forward as an unresolved cosmetic issue.
+
+<a id="d"></a>
+## D. Illustrative future Profession compositions
+
+These are **architecture checks only**. They do not create Professions, grant access, require a group, assign equipment or set a cost. Each row describes a particular equipment and teaching example; an actual future Profession must not inherit extra training simply because its occupational label resembles the example.
+
+Each military ranged example has a complete close-combat component. The union column makes the full proposed teaching visible, with repeated memberships shown once for readability only; it is not a purchase calculation.
+
+
+| Illustrative role only | Equipment / teaching assumption | Possible group composition | Exact competency union | Boundary |
+| --- | --- | --- | --- | --- |
+| Civilian guard / watch | A watch taught one-handed impact arms and rough-contact control. | F35 | 1-h conc./axe; Dodge; Parry; Brawling | A watch also taught an edged sidearm could combine G08 + F35; an armed-only civilian course without whole unarmed fighting can remain G08. Neither composition teaches Law or confers authority. |
+| Thug / enforcer | A club- or impact-weapon practice with sustained unarmed struggles. | F35 | 1-h conc./axe; Dodge; Parry; Brawling | Intimidation, Underworld and Streetwise are separate potential lessons; they are not granted by this fighting practice. |
+| Ordinary infantry / militia example | A formed unit that actually teaches both one-handed edged and concussion/axe-family arms. | F36 | 1-h edged; 1-h conc./axe; Dodge; Parry; Brawling; Formation Fighting | This is one equipment-specific ordinary infantry example, not a universal infantry package. A different primary weapon changes the training needed. |
+| Spear-and-short-sword infantry | The supplied equipment example: spears, short swords and thrown spears, with formation drill. | F31 | Polearms; 1-h edged; Throwing; Dodge; Parry; Brawling; Formation Fighting | All three required weapon competencies are present. This exact group is not the default for a unit that never teaches throwing. |
+| Military archer | Archers trained in the F36 one-handed military foundation and coordinated bow practice. | F36 + F38 | 1-h edged; 1-h conc./axe; Dodge; Parry; Brawling; Formation Fighting; Bow | Includes Bow, two close-weapon families, Dodge, Parry, Brawling and actual formation teaching. Longbow is not inferred; direct specialist instruction remains separately describable. |
+| Military crossbow user | Crossbow troops trained in the same stated close-combat foundation. | F36 + F39 | 1-h edged; 1-h conc./axe; Dodge; Parry; Brawling; Formation Fighting; Crossbow | Includes the whole close package and crossbow formation practice. Emplaced-engine service would require its own actual operating training, not an implicit addition here. |
+| Cavalry / lancer | A lance-and-edged-sidearm troop whose background also teaches ordinary mounted travel. | G05 + F32 | Animal Handling; Riding; Lance; 1-h edged; Dodge; Parry; Brawling; Mounted Combat; Formation Fighting | G05 supplies Animal Handling and Riding; F32 supplies the full military fighting and troop practice. No remount or animal-training specialization is inferred. |
+| Swashbuckler | A pupil of the established Fencing tradition. | F30 | 1-h edged; Dodge; Parry; Fencing | Includes 1-h edged, Dodge, Parry and Fencing. A rough-contact background needs actual Brawling instruction separately; it is not presumed of every fencer. |
+| Firearms infantry | A formed firearm unit trained in the F36 one-handed close-combat curriculum as well. | F36 + F40 | 1-h edged; 1-h conc./axe; Dodge; Parry; Brawling; Formation Fighting; Firearms | Includes Firearms plus a full military close package. No bayonet or gun-as-club technique is claimed. A different actual melee kit would need its own matching teaching. |
+
+
+**Hunting and longbow distinction.** A civilian longbow hunter can exemplify F41. Military service with a longbow does not imply the Hunting lesson in F41. A later specific military longbow curriculum could justify a further specialist membership, but neither a named occupation nor use of a longbow automatically supplies it here.
+
+**Formation distinction.** Formation Fighting can be deliberately taught in both the close-combat foundation and the ranged component because their exercises correct participation with different working space and equipment. Repetition across the examples is intentional. No new “archer formation” or “cavalry formation” Skill is created, and no mechanical transfer between contexts is decided.
+
+<a id="e"></a>
+## E. Overlap and completeness audit
+
+### Every group teaching the common defensive and unarmed competencies
+
+
+| Skill | Every proposed group | Count | Assessment |
+| --- | --- | --- | --- |
+| Dodge | [G08](#g08), [F30](#f30), [F31](#f31), [F32](#f32), [F35](#f35), [F36](#f36), [F37](#f37) | 7 | Useful and required: direct evasion instruction appears in all seven complete close-combat groups, not in the ranged-only or hunting components. |
+| Parry | [G08](#g08), [F30](#f30), [F31](#f31), [F32](#f32), [F35](#f35), [F36](#f36), [F37](#f37) | 7 | Useful and required: all seven close-combat groups directly teach the separate parrying competence; none comes from converting Pilot Shield. |
+| Brawling | [F31](#f31), [F32](#f32), [F35](#f35), [F36](#f36), [F37](#f37) | 5 | Useful where the practice teaches complete unarmed fighting: five guard or military curricula; omitted from narrow G08 and F30. |
+
+
+### Weapon Skills appearing in more than one group
+
+
+| Weapon Skill | Every proposed group | Count | Why the overlap is useful |
+| --- | --- | --- | --- |
+| `one_handed_concussion_axe` — 1-h conc./axe | [F35](#f35), [F36](#f36) | 2 | Both the guard’s rough-contact course and the mixed one-handed military course deliberately teach the family; their additional training differs. |
+| `one_handed_edged` — 1-h edged | [G08](#g08), [F30](#f30), [F31](#f31), [F32](#f32), [F36](#f36) | 5 | The same base technique receives complete teaching in a narrow civilian course, specialist Fencing, an infantry equipment set, mounted sidearm work and mixed one-handed unit drill. |
+| `bow` — Bow | [F38](#f38), [F41](#f41) | 2 | Both military archery and the longbow-hunting apprenticeship explicitly teach complete bow practice, with different companion and specialist instruction. |
+
+
+All other weapon-family Skills occur in one proposed group except **Sling**, which remains deliberately groupless. The above list excludes Dodge, Parry and Brawling only because their complete lists are already reported separately; it is not a taxonomy change.
+
+**Formation Fighting** appears in **F31, F32, F36, F38, F39 and F40**. The six memberships each describe actual collective exercises and correction, not military employment as a proxy. **Mounted Combat** appears only in F32. Combat Experience and Battlefield Awareness have no generic group membership in this pass.
+
+### Similarity that survives review
+
+| Groups | Useful distinction / redundancy check |
+|---|---|
+| G08 / F30 | F30 contains all three G08 base members and adds expressly taught Fencing. G08 remains useful for ordinary edged-weapon instruction without that tradition. F30 is not an automatic add-on or prerequisite chain. |
+| F35 / F36 | F35 teaches a narrow impact-weapon and unarmed course. F36 actually trains both one-handed families and formation participation. The guard course remains meaningful without those additions. |
+| G08 + F35 / F36 | The first pair’s union supplies both one-handed families, defence and Brawling, but does not teach Formation Fighting. F36 also supplies a real integrated unit-drill context; it is not merely a shorter occupational label. |
+| F31 / F36 | Both teach complete unit fighting. F31 trains the specified spear, edged-sidearm and throwing equipment; F36 instead trains both one-handed families. Neither stands for all infantry. |
+| F32 / F31 | Shared defence, sidearm and formation lessons do not make mounted coordination or lance technique interchangeable with spear and throwing drill. |
+| F37 / other military groups | The two-handed course directly trains two different families. It does not silently supply one-handed sidearms, polearms or formation participation. |
+| F38 / F39 / F40 | Each teaches a distinct existing ranged Skill alongside sustained collective practice. They are separate recognizable equipment curricula, not a claim that all missile weapons are ordinarily learned together. |
+| F38 / F41 | Both teach Bow; one teaches military formation participation, the other Hunting and explicit Longbow specialization. An archer’s job label does not interchange their companions. |
+
+### Size and one-Skill-group checks
+
+
+| Measure | Result |
+| --- | --- |
+| Revised/new martial groups with one target base Skill | 0. The smallest contain two base Skills; F41 also teaches Longbow. |
+| Martial groups with one total target competency | 0. The former G08 singleton is replaced by a complete three-Skill course. |
+| Largest fighting curricula | F31 and F32: 7 base Skills each. |
+| F31 seven-member rationale | 3 expressly trained weapon Skills + Dodge + Parry + Brawling + Formation Fighting. Every member is tied to the described infantry equipment and drill. |
+| F32 seven-member rationale | Lance + edged sidearm + Dodge + Parry + Brawling + Mounted Combat + Formation Fighting. Individual, dismounted and troop lessons are expressly taught. |
+| Generic omnibus Combat group | None. No group claims all weapons, command, strategy, observation, survival or maintenance. |
+| One-Skill groups elsewhere in the full roster | G06 and G13 remain unchanged and outside this martial revision. |
+
+
+The largest two groups deserve scrutiny if later historical examples teach only part of the curriculum. F31 must not claim Throwing merely because a soldier carries a spear. F32 must not claim Formation Fighting merely because several riders train nearby. The current proposed pages directly teach those competencies; an example that lacks the instruction is not an example of the whole group.
+
+The ranged groups also require genuine collective training: standing side by side while independently shooting is insufficient for Formation Fighting. Such a lesson remains direct Bow, Crossbow or Firearms instruction without a named group. No one-Skill wrapper is added for it.
+
+### Close-combat rule check
+
+
+| Complete close-combat group | Dodge | Parry | Explicit weapon families | Brawling | Formation Fighting |
+| --- | --- | --- | --- | --- | --- |
+| G08 | Yes | Yes | 1-h edged | No: narrow armed/specialist course | Not taught here |
+| F30 | Yes | Yes | 1-h edged | No: narrow armed/specialist course | Not taught here |
+| F31 | Yes | Yes | Polearms; 1-h edged; Throwing | Yes | Yes |
+| F32 | Yes | Yes | Lance; 1-h edged | Yes | Yes |
+| F35 | Yes | Yes | 1-h conc./axe | Yes | Not taught here |
+| F36 | Yes | Yes | 1-h edged; 1-h conc./axe | Yes | Yes |
+| F37 | Yes | Yes | 2-h edged; 2-h conc./axe | Yes | Not taught here |
+
+
+F38–F40 do not teach close fighting and are explicitly composed with it in every military role example. F41 teaches hunting and archery, not human melee fighting. No course is called “complete close combat” while omitting the mandated defensive or weapon competence.
+
+<a id="f"></a>
+## F. Exact patch-style summary against the 52-group baseline
+
+This is a **content amendment specification**, not an applied file, repository or data migration patch. The original 52-group document remains available unchanged; this package supplies only the martial revision and the necessary derived-count amendments.
+
+### Group changes
+
+| Operation | Exact scope |
+|---|---|
+| **KEEP unchanged** | **G01–G07, G09–G18, F01–F29, F33–F34**: 48 existing group pages, with their exact members and prose unchanged. This includes related G09, F25 and F33. |
+| **AMEND** | **G08, F30, F31, F32**: replace their proposed target pages with Section A’s exact titles, members, rationales and exclusions. |
+| **SUPERSEDE group codes** | **None.** All 52 existing codes survive. |
+| **SUPERSEDE old target interpretation** | G08’s Dodge-only future page and its “Close-combat evasion practice” suggestion; the old exclusions of directly required Dodge/Parry teaching on amended pages. |
+| **ADD** | **F35–F41**: seven proposed groups, exactly as authored in Section A. |
+| **PRESERVE historical evidence** | Original G08 Close weapon practice and all five exact source links; all 46 original Pilot links remain unchanged. |
+| **PRESERVE catalogue** | 131 base Skills, 26 Specializations, 12 spoken languages, 3 written traditions; no identity, type, parent or Skill prose change. |
+
+### Exact membership additions
+
+No baseline target membership is removed. Every addition is listed below, including the exact target ID.
+
+
+| Group | Operation | Retained target members | Add exact target members | Remove |
+| --- | --- | --- | --- | --- |
+| G08 | Revised | `dodge` — Dodge | `one_handed_edged` — 1-h edged; `parry` — Parry | None |
+| F30 | Revised | `one_handed_edged` — 1-h edged; `parry` — Parry; `fencing` — Fencing | `dodge` — Dodge | None |
+| F31 | Revised | `polearms` — Polearms; `formation_fighting` — Formation Fighting | `one_handed_edged` — 1-h edged; `throwing` — Throwing; `dodge` — Dodge; `parry` — Parry; `brawling` — Brawling | None |
+| F32 | Revised | `lance` — Lance; `mounted_combat` — Mounted Combat | `one_handed_edged` — 1-h edged; `dodge` — Dodge; `parry` — Parry; `brawling` — Brawling; `formation_fighting` — Formation Fighting | None |
+| F35 | New | — | `one_handed_concussion_axe` — 1-h conc./axe; `dodge` — Dodge; `parry` — Parry; `brawling` — Brawling | None |
+| F36 | New | — | `one_handed_edged` — 1-h edged; `one_handed_concussion_axe` — 1-h conc./axe; `dodge` — Dodge; `parry` — Parry; `brawling` — Brawling; `formation_fighting` — Formation Fighting | None |
+| F37 | New | — | `two_handed_edged` — 2-h edged; `two_handed_concussion_axe` — 2-h conc./axe; `dodge` — Dodge; `parry` — Parry; `brawling` — Brawling | None |
+| F38 | New | — | `bow` — Bow; `formation_fighting` — Formation Fighting | None |
+| F39 | New | — | `crossbow` — Crossbow; `formation_fighting` — Formation Fighting | None |
+| F40 | New | — | `skill:firearms` — Firearms; `formation_fighting` — Formation Fighting | None |
+| F41 | New | — | `bow` — Bow; `skill:hunting` — Hunting; `longbow` — Longbow | None |
+
+
+**Membership delta:** 13 base memberships added to the four amended groups; 23 base memberships and 1 Specialization membership added through F35–F41. Total change: **+36 base memberships, +1 Specialization membership, −0 existing memberships**. Of those 36 base memberships, **35 concern martial Skills and 1 is Hunting → F41**.
+
+### Derived reverse-index changes
+
+Section B replaces the martial rows’ group lists. Their target IDs and Skill names remain unchanged. The full reverse index still has 131 base rows; the only non-martial row whose group list changes is:
+
+| Exact base Skill | Before | After | Narrow reason |
+|---|---|---|---|
+| `skill:hunting` — Hunting | G03, F07 | G03, F07, F41 | F41 explicitly teaches conducting the hunt as well as bow and specialist longbow practice. No G03/F07 prose or membership changes. |
+
+Longbow’s separate Specialization row changes from groupless to **F41**. Fencing remains in F30. All other Specialization, language and writing group lists remain unchanged.
+
+The eight formerly groupless base Skills that gain a group are **1-h conc./axe, 2-h conc./axe, 2-h edged, Bow, Brawling, Crossbow, Firearms and Throwing**. **Sling, Combat Experience and Battlefield Awareness remain deliberately groupless** among the 18 reviewed martial base identities.
+
+### Resulting proposed counts
+
+
+| Measure | 52-group baseline | After this proposed revision | Change |
+| --- | --- | --- | --- |
+| Full Learning Group roster | 52 | 59 | +7 |
+| Existing group pages unchanged | 52 | 48 | 4 pages amended; none removed |
+| Historical Pilot memberships preserved | 46 | 46 | 0 |
+| Base Skills in the target roster | 131 | 131 | 0 |
+| Base Skills with at least one group | 82 | 90 | +8 |
+| Base Skills deliberately groupless | 49 | 41 | -8 |
+| Base Skills group memberships | 115 | 151 | +36 |
+| Specializations in the target roster | 26 | 26 | 0 |
+| Specializations with at least one group | 8 | 9 | +1 |
+| Specializations deliberately groupless | 18 | 17 | -1 |
+| Specializations group memberships | 8 | 9 | +1 |
+| Spoken languages: grouped / roster | 0 / 12 | 0 / 12 | 0 |
+| Written traditions: grouped / roster | 0 / 3 | 0 / 3 | 0 |
+| All target competency group memberships | 123 | 160 | +37 |
+| Single-member groups in the whole catalogue | 3 | 2 | G06 and G13 remain; G08 is no longer a singleton |
+
+
+Counts describe the proposed amended content if accepted. They do not indicate activation or acquisition. Script-support records and held compatibility cases remain outside competency counts.
+
+### Baseline review passages superseded or needing a derived update
+
+- Replace the G08 title-only Product Owner question with Section C’s complete curriculum disposition.
+- Replace the martial reverse-index and overlap statements with Sections B and E; the new seven-group Dodge/Parry repetition is intentional, not an audit defect.
+- Remove the former deliberately-groupless conclusions for the eight newly grouped base Skills and for Longbow; retain all other groupless judgments.
+- Retain the earlier rejection of an all-weapons generic Combat group. It now coexists with the specific multi-weapon curricula authorized and authored here.
+- Update aggregate group, membership and grouped/groupless counts to the table above. Do not revise the remaining 48 group pages to make the old summary numbers appear consistent.
+- Add only the Hunting → F41 reverse-index link outside the martial set. Its prior G03 and F07 links remain unchanged.
+
+No changes are proposed to Learning Histories, Professions, Arch Skills, Arch Societies, Society-Level floors, Social Bands, DS/AB, context binding, rebates, costs or runtime behaviour.
+
+<a id="decisions"></a>
+## Remaining Product Owner choice
+
+**The recommended proposal is fully specified; no membership is left as an unresolved optional slot.** One materially different way of organizing the ranged teaching remains a Product Owner review choice, rather than something this pass treats as already settled:
+
+| Choice | Recommendation supplied here | Alternative and consequence |
+|---|---|---|
+| **[Q] Ranged components versus whole-role ranged groups** | Accept F38–F40 as ranged-and-formation components, and use a separately authored complete close-combat curriculum in a military background, as illustrated in Section D. This gives the exact **59-group / 90-grouped-base-Skill** proposal reported here. | Whole-role military-archer, crossbow and firearm groups could each include their own complete close-combat package. Their exact kits and companion memberships would need separate authorship; they are not silently added to this proposal or mixed into its counts. |
+
+The option to compose several groups is already authorized by PO-M6; the open review choice is whether this particular use of it is the desired reusable authoring structure. It is not a request to waive the close-combat rule and does not introduce a prerequisite. A ranged component by itself must not be presented later as a soldier’s complete training.
+
+The proposed G08 family, F31 equipment set, F32 mounted troop scope, F36 two-family foundation and F37 two-handed curriculum are concrete content recommendations for this review, not universal historical claims. A future role with a different equipment set must not receive an untrained weapon Skill or be described as complete while omitting it. No further ruling is needed merely because Sling, Combat Experience or Battlefield Awareness remain groupless.
+
+<a id="evidence"></a>
+## Evidence, historical limits and validation
+
+**Controlling baseline [B].** [Glantri_Full_Catalogue_Learning_Groups_PO_Proposal.md](sandbox:/workspace/scratch/61f8e746a1f9/outputs/full_learning_groups_61f8e746a1f9/Glantri_Full_Catalogue_Learning_Groups_PO_Proposal.md). The four original martial pages were read directly, and their member sets were used to calculate additions. The other 48 group objects, pages and member lists are not revised.
+
+**Target identities and scopes [T].** [Glantri_Complete_Competency_Catalogue_Reader_Prose.md](sandbox:/workspace/scratch/61f8e746a1f9/outputs/reader_prose_61f8e746a1f9/Glantri_Complete_Competency_Catalogue_Reader_Prose.md). Exact names, IDs, base/Specialization types and the Fencing/Longbow parents are preserved. In particular, Crossbow’s broad identity, the distinct two-handed families and Polearms, and separate mounted/ordinary riding competence are not narrowed through group prose.
+
+**Historical Pilot evidence.** [Learning Groups Revision 2](sandbox:/workspace/scratch/61f8e746a1f9/upload/01-Candidate4_Learning_Groups_Historical_Availability_Proposal_ver2.md) and the preserved 46-link baseline snapshot remain unchanged. The present Product Owner instruction explicitly authorizes reconsidering the future G08 curriculum while keeping its exact historical links.
+
+**Legacy provenance [R].** The recovered `basic_melee_training` antecedent supports the existence of direct weapon instruction in principle; its identities cannot be copied onto the live families. `mounted_service` supports part of a mounted training context and is also profession-shaped; it does not supply automatic membership in all cavalry-related Skills. Neither is used as a Candidate-to-legacy group crosswalk.
+
+**Historical plausibility [P], not universal attestation.** Household instruction, guard practice, militia or retained-unit drill, collective missile practice, mounted troop exercises and hunting apprenticeships are the recognizable settings proposed for the actual lessons. The exact game member sets and mandatory Dodge/Parry completeness are Product Owner design rules and authored proposals, not claims that every historical teacher distinguished or taught those categories. No dates, Society Levels, Social Bands or Arch-Society applicability are inferred. No fictional Glantri institution or combat style is invented.
+
+**Checks completed**
+
+- Exact target identity and type checked for every member; no obsolete Pilot weapon appears as a target acquisition.
+- All seven complete close-combat groups contain Dodge, Parry and an actual weapon family. All four complete military courses and the rough-contact guard course include directly taught Brawling.
+- Every piece of fighting equipment explicitly promised by a military curriculum has its approved Skill in that curriculum or the clearly stated illustrative combination. No unclassified bayonet, gun-as-club or engine-operating task is smuggled into an example.
+- All 18 required martial base identities appear once in the reverse index, with complete post-revision group lists. Fencing and Longbow appear separately with unchanged parents.
+- The exact additions total 36 base memberships and one Specialization membership; no baseline target membership is removed.
+- All 48 unamended groups compare unchanged with the baseline. The sole new non-martial membership is Hunting → F41; it does not change Hunting prose or its earlier groups.
+- All five historical G08 links and all 46 original Pilot links are preserved. The original baseline and competency reader-prose files remain unchanged.
+- No repository, Forgejo, branch, PR, database or runtime state was accessed or modified. No mechanics, weapon mappings, Skill prose, availability or Profession system was authored or changed.
+
+**End of the martial revision package.**

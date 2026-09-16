@@ -8,6 +8,11 @@ describe("admin content service", () => {
     const snapshot = await service.getSkillReference();
 
     expect(snapshot.canonical).toBeNull();
+    expect(snapshot.targetLearningGroups?.manifest).toMatchObject({
+      groups: 59,
+      totalMemberships: 160,
+      pilotLinks: 46,
+    });
     expect(snapshot.candidate).toMatchObject({
       contentVersion: "pilot-skills-content/2.0.0-candidate.4",
       id: "content-release:pilot-skills:2-candidate-4",

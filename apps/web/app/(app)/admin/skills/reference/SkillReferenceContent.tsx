@@ -253,7 +253,12 @@ export function SkillReferenceContent() {
   }
 
   if (response.fullCatalogue) {
-    return <FullCatalogueReference proposal={response.fullCatalogue} />;
+    return (
+      <FullCatalogueReference
+        proposal={response.fullCatalogue}
+        groups={response.targetLearningGroups}
+      />
+    );
   }
 
   if (!snapshot) {
@@ -569,7 +574,13 @@ export function SkillReferenceContent() {
   );
 }
 
-function FullCatalogueReference({ proposal }: { proposal: AdminFullSkillCatalogueProposal }) {
+function FullCatalogueReference({
+  proposal,
+  groups,
+}: {
+  proposal: AdminFullSkillCatalogueProposal;
+  groups?: AdminSkillReferenceResponse["targetLearningGroups"];
+}) {
   const [searchText, setSearchText] = useState("");
   const [selectedKind, setSelectedKind] = useState<"all" | FullCatalogueKind>("all");
   const [selectedDomain, setSelectedDomain] = useState("all");
@@ -821,11 +832,44 @@ function FullCatalogueReference({ proposal }: { proposal: AdminFullSkillCatalogu
                   ) : null}
                   <RuleFact label="Context" value={selected.context} />
                 </dl>
-                <ReferenceFactList
-                  label="Learning Groups"
-                  empty="None authored."
-                  values={[selected.learningGroupAnnotation]}
-                />
+                {groups ? (
+                  <section>
+                    <h4>Learning Groups</h4>
+                    {groups.groups.some((group) =>
+                      group.members.some((member) => member.competencyId === selected.id),
+                    ) ? (
+                      <ul>
+                        {groups.groups
+                          .filter((group) =>
+                            group.members.some((member) => member.competencyId === selected.id),
+                          )
+                          .map((group) => (
+                            <li key={group.id}>
+                              <a href={`/admin/skills/reference/groups#group-${group.id}`}>
+                                {group.name}
+                              </a>
+                            </li>
+                          ))}
+                      </ul>
+                    ) : (
+                      <p>
+                        {selected.competencyType === "base-skill"
+                          ? "Deliberately groupless in the approved Learning Group catalogue."
+                          : "No explicit Learning Group membership. Membership is not inherited from a parent or sibling."}
+                      </p>
+                    )}
+                    <details className={styles.provenanceDisclosure}>
+                      <summary>Earlier catalogue annotation</summary>
+                      <p>{selected.learningGroupAnnotation}</p>
+                    </details>
+                  </section>
+                ) : (
+                  <ReferenceFactList
+                    label="Learning Groups"
+                    empty="None authored."
+                    values={[selected.learningGroupAnnotation]}
+                  />
+                )}
                 <ReferenceFactList
                   label="Arch Skills"
                   empty="None authored."
