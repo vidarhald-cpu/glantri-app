@@ -1,4 +1,6 @@
 import {
+  assertApprovedTargetProgression,
+  getApprovedTargetChargenContent,
   getPilotSkillCharacterBuildInput,
   pilotSkillContentReleaseV1,
   validatePilotSkillContentRelease,
@@ -8,6 +10,7 @@ import {
   PILOT_SKILL_CONTENT_RELEASE_ID,
   PILOT_SKILL_CONTENT_VERSION,
   PILOT_SKILL_RULES_RELEASE_ID,
+  type CharacterBuild,
   type CharacterEffectiveSkillProjection,
   type CharacterEffectiveSkillReadModel,
   type CharacterEffectiveSkillRow,
@@ -479,5 +482,39 @@ export function projectRetainedCharacterRevision(
     perspective,
     provenanceDetail: "owner_safe",
     revisionState: revision.revisionState,
+  };
+}
+
+/** Reuse this module's authoritative content boundary for ordinary target Character reads.
+ * No progression row, purchase or historical build is rewritten.
+ */
+export function resolveRetainedTargetCharacterContent<T>(build: CharacterBuild, content: T): T {
+  if (!build.targetChargen) return content;
+  assertApprovedTargetProgression(build.progression);
+  const approved = getApprovedTargetChargenContent();
+  const profession = approved.professions.find((p) => p.id === build.professionId);
+  const identity = build.targetChargen;
+  if (
+    !profession ||
+    identity.familyId !== profession.familyId ||
+    identity.trackId !== (profession.id === profession.familyId ? undefined : profession.id) ||
+    identity.professionName !== profession.name ||
+    identity.sourceDigest !== approved.chargenCatalogue!.professionSourceDigest ||
+    identity.groupSourceDigest !== approved.chargenCatalogue!.groupSourceDigest
+  ) {
+    throw new RetainedCharacterRulesError(
+      "TARGET_CHARACTER_CONTENT_MISMATCH",
+      "Saved target Profession metadata does not match its approved source.",
+    );
+  }
+  return {
+    ...content,
+    professionFamilies: approved.professionFamilies,
+    professions: approved.professions,
+    professionSkills: approved.professionSkills,
+    skillGroups: approved.skillGroups,
+    skills: approved.skills,
+    specializations: approved.specializations,
+    chargenCatalogue: approved.chargenCatalogue,
   };
 }

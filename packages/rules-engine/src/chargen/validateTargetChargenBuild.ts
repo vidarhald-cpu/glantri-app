@@ -1,3 +1,4 @@
+import { applyRelationshipMinimumGrants } from "../skills/deriveSkillRelationships";
 import { getExclusiveProfessionGroupErrors } from "./exclusiveProfessionGroups";
 import type { CharacterBuild } from "@glantri/domain";
 import type { CanonicalContentShape } from "./primaryAllocation/_helpers";
@@ -49,6 +50,59 @@ export function validateTargetChargenBuild(
   let primary = 0,
     secondary = 0;
   const p = build.progression;
+  // Derived grants are recomputed from purchases using the existing relationship engine.
+  // Submitted derived ranks and attribution cannot seed or amplify that computation.
+  const purchases = structuredClone(p);
+  for (const row of [...purchases.skills, ...purchases.specializations]) {
+    row.relationshipGrantedRanks = 0;
+    delete row.relationshipGrantSourceName;
+    delete row.relationshipGrantSourceSkillId;
+    delete row.relationshipGrantSourceType;
+    if ("primaryRanks" in row) {
+      if (row.sourceTag !== "mother-tongue") row.grantedRanks = 0;
+      row.ranks = row.grantedRanks + row.primaryRanks + row.secondaryRanks;
+    } else row.ranks = row.secondaryRanks;
+  }
+  const derived = applyRelationshipMinimumGrants({
+    content: {
+      ...content,
+      skills: content.skills.filter(
+        (s) =>
+          content.chargenCatalogue!.skillIds.includes(s.id) ||
+          p.skills.some((row) => row.skillId === s.id),
+      ),
+      specializations: content.specializations.filter(
+        (s) =>
+          content.chargenCatalogue!.specializationIds.includes(s.id) ||
+          p.specializations.some((row) => row.specializationId === s.id),
+      ),
+    },
+    progression: purchases,
+  });
+  const grantKeys = [
+    "relationshipGrantedRanks",
+    "relationshipGrantSourceName",
+    "relationshipGrantSourceSkillId",
+    "relationshipGrantSourceType",
+  ] as const;
+  for (const expected of [...derived.skills, ...derived.specializations]) {
+    const id =
+      "skillId" in expected && !("specializationId" in expected)
+        ? expected.skillId
+        : expected.specializationId;
+    const actual =
+      "specializationId" in expected
+        ? p.specializations.find((s) => s.specializationId === id)
+        : p.skills.find((s) => s.skillId === id && s.languageName === expected.languageName);
+    if (
+      grantKeys.some((key) =>
+        key === "relationshipGrantedRanks"
+          ? (actual?.[key] ?? 0) !== (expected[key] ?? 0)
+          : actual?.[key] !== expected[key],
+      )
+    )
+      errors.push(`Invalid derived relationship grant: ${id}.`);
+  }
   for (const group of p.skillGroups) {
     const approved = content.skillGroups.find((g) => g.id === group.groupId);
     if (
@@ -86,7 +140,11 @@ export function validateTargetChargenBuild(
       secondary += skill.secondaryRanks * 2;
       continue;
     }
-    if (skill.grantedRanks !== 0 || skill.ranks !== skill.primaryRanks + skill.secondaryRanks)
+    if (
+      skill.grantedRanks !== 0 ||
+      skill.ranks !==
+        skill.primaryRanks + skill.secondaryRanks + (skill.relationshipGrantedRanks ?? 0)
+    )
       errors.push(`Invalid unpurchased competency ranks: ${skill.skillId}.`);
     if (!content.chargenCatalogue?.skillIds.includes(skill.skillId)) {
       errors.push(`Unknown target competency ${skill.skillId}.`);
@@ -107,7 +165,7 @@ export function validateTargetChargenBuild(
     secondary += skill.secondaryRanks * (ordinary ? 2 : 1);
   }
   for (const spec of p.specializations) {
-    if (spec.ranks !== spec.secondaryRanks)
+    if (spec.ranks !== spec.secondaryRanks + (spec.relationshipGrantedRanks ?? 0))
       errors.push(`Invalid unpurchased Specialization ranks: ${spec.specializationId}.`);
     if (!content.chargenCatalogue?.specializationIds.includes(spec.specializationId))
       errors.push(`Unknown target Specialization ${spec.specializationId}.`);

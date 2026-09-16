@@ -1,3 +1,4 @@
+import { resolveRetainedTargetCharacterContent } from "../skills/retainedCharacterSkillReadModel";
 import {
   deriveCharacterStatLayers,
   type CharacterBuild,
@@ -107,50 +108,7 @@ export function buildCharacterSheetSummary(input: {
   content: CanonicalContentShape;
   additionalCurrentStatModifiers?: Record<string, number>;
 }): CharacterSheetSummary {
-  // Retained target snapshots are validated by the service boundary. Historical builds
-  // keep their own definitions and spend; no successor mapping or repricing occurs here.
-  if (input.build.targetChargen) {
-    const merge = <T extends { id: string }>(base: T[], snapshots: T[]) => [
-      ...snapshots,
-      ...base.filter((item) => !snapshots.some((s) => s.id === item.id)),
-    ];
-    const identity = input.build.targetChargen;
-    input = {
-      ...input,
-      content: {
-        ...input.content,
-        professions: merge(input.content.professions, [
-          {
-            id: input.build.professionId!,
-            familyId: identity.familyId,
-            name: identity.professionName,
-            subtypeName: identity.professionName,
-          },
-        ]),
-        professionFamilies: merge(input.content.professionFamilies, [
-          { id: identity.familyId, name: identity.professionName },
-        ]),
-        skillGroups: merge(
-          input.content.skillGroups,
-          input.build.progression.skillGroups.flatMap((g) =>
-            g.targetDefinition ? [g.targetDefinition] : [],
-          ),
-        ),
-        skills: merge(
-          input.content.skills,
-          input.build.progression.skills.flatMap((s) =>
-            s.targetDefinition ? [s.targetDefinition] : [],
-          ),
-        ),
-        specializations: merge(
-          input.content.specializations,
-          input.build.progression.specializations.flatMap((s) =>
-            s.targetDefinition ? [s.targetDefinition] : [],
-          ),
-        ),
-      },
-    };
-  }
+  input = { ...input, content: resolveRetainedTargetCharacterContent(input.build, input.content) };
   const statLayers = deriveCharacterStatLayers(input.build, input.additionalCurrentStatModifiers);
   const draftView = buildChargenDraftView({
     content: input.content,

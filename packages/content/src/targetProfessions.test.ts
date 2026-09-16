@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { targetProfessionSource } from "./targetProfessionSource";
 import { readFileSync } from "node:fs";
 import {
   targetProfessionCatalogue,
@@ -15,17 +16,20 @@ import { defaultCanonicalContent } from "./seeds/defaultContent";
 import { characterProgressionSchema } from "@glantri/domain";
 describe("approved target Profession projection", () => {
   it("verifies the exact source, inventories and all public foreign keys", () => {
-    expect(
-      sha256(
-        readFileSync(
-          new URL(
-            "../../../docs/source/professions/Glantri_Full_Profession_Catalogue_PO_Proposal.md.txt",
-            import.meta.url,
-          ),
-          "utf8",
-        ),
-      ),
-    ).toBe(TARGET_PROFESSION_SOURCE_DIGEST);
+    const root = new URL("../../../docs/source/professions/", import.meta.url);
+    const provenance = JSON.parse(
+      readFileSync(new URL("profession-source-provenance.json", root), "utf8"),
+    );
+    const original = Buffer.from(
+      readFileSync(new URL(provenance.archiveFile, root), "utf8"),
+      "base64",
+    );
+    const normalized = readFileSync(new URL(provenance.readableFile, root), "utf8");
+    expect(original.equals(Buffer.from(targetProfessionSource, "utf8"))).toBe(true);
+    expect(sha256(original.toString("utf8"))).toBe(TARGET_PROFESSION_SOURCE_DIGEST);
+    expect(provenance.originalSha256).toBe(TARGET_PROFESSION_SOURCE_DIGEST);
+    expect(sha256(normalized)).toBe(provenance.normalizedSha256);
+    expect(normalized).toBe(targetProfessionSource.replace(/[ \t]+$/gm, ""));
     expect(targetProfessionCatalogue.families).toHaveLength(84);
     expect(targetProfessionCatalogue.opportunities).toHaveLength(203);
     expect(targetProfessionCatalogue.families.flatMap((f) => f.tracks)).toHaveLength(21);

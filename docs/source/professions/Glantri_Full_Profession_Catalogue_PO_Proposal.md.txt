@@ -250,7 +250,7 @@ Training follows plants through different seasons and habitats, with an experien
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 collectors can possess deep expertise; B2–B3 roles may arrange supply or specialist expeditions.
 
-**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -289,7 +289,7 @@ None proposed outside the named groups. Useful adjacent Skills are not added mer
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 guides work through local knowledge or hired service; higher bands may manage expeditions or serve patrons.
 
-**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** civilian/compact combat — armed variant. The exact providing groups are the martial entries in the access list; no other fighting training is implied.
 
@@ -629,7 +629,7 @@ None proposed outside the named groups. Useful adjacent Skills are not added mer
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 is an ordinary service entry; trusted household or official work can extend through B2–B3.
 
-**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -668,7 +668,7 @@ None proposed outside the named groups. Useful adjacent Skills are not added mer
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 peddlers, itinerant dealers and household agents remain viable; B2–B3 increase scale and capital relationships without a grant of wealth.
 
-**Arch-Society applicability [P]:** proposed applicable — S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** civilian/compact combat — armed variant. The exact providing groups are the martial entries in the access list; no other fighting training is implied.
 
@@ -744,7 +744,7 @@ Learners work with experienced enforcers who teach rough fighting, restraint and
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 hired muscle is an ordinary entry; B2–B3 may exercise delegated influence without gaining authority from the profession.
 
-**Arch-Society applicability [P]:** proposed applicable — S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** civilian/compact combat. The exact providing groups are the martial entries in the access list; no other fighting training is implied.
 
@@ -782,7 +782,7 @@ A learner accompanies a well-connected practitioner, observes how introductions 
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 local workers can possess valuable contacts; higher bands change the circles reached rather than the basic competence.
 
-**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -897,7 +897,7 @@ None proposed outside the named groups. Useful adjacent Skills are not added mer
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 itinerants and assistants can enter; more privileged contexts change opportunities rather than the competence.
 
-**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02. 
+**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -936,7 +936,7 @@ Training combines genuine dealing with practical instruction in concealing cargo
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 carriers and small dealers remain practical routes; B2–B3 may coordinate larger dealings.
 
-**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02. 
+**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -974,7 +974,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 trained copyists or assistants can enter; B2–B3 may encounter more consequential documents.
 
-**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -1142,7 +1142,7 @@ Learners work under experienced commanders, practise choosing tactical responses
 
 **Social-Band range [P]: B1 / B2 / B3 / B4.** B1 entry is a conditional route through demonstrated service or communal selection; B2–B4 may offer household, institutional or elite pathways. No commission is granted.
 
-**Arch-Society applicability [P]:** proposed applicable — S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** organized military combat. The exact providing groups are the martial entries in the access list; no other fighting training is implied.
 
@@ -1254,7 +1254,7 @@ Learners assist experienced builders and siege specialists, comparing the intend
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 trained work crews can provide entry; B2–B3 may carry design and supervisory responsibility.
 
-**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -1403,7 +1403,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 is an ordinary route; B2–B3 may involve household supervision or larger places of care.
 
-**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -1475,7 +1475,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 service or practitioner-lineage entry is plausible; B2–B3 may supply specialist patronage and larger case loads.
 
-**Arch-Society applicability [P]:** proposed applicable — S02, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S03. 
+**Arch-Society applicability [P]:** proposed applicable — S02, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S03.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -1586,7 +1586,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 furnace workers can become highly skilled; B2–B3 may organize production.
 
-**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02, S03. 
+**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02, S03.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -1622,7 +1622,7 @@ An experienced maker teaches how a protective piece is formed, fitted and assemb
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 dependent craftsmen and apprentices can enter; B2–B3 may receive elite commissions without a band requirement for competence.
 
-**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02, S03. 
+**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02, S03.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -1732,7 +1732,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 workshop and ship-service routes are plausible; B2–B3 may coordinate supply or workshops.
 
-**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S03. 
+**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S03.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -1804,7 +1804,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 household and service makers can be highly trained; B2–B3 may serve broader or wealthier customers.
 
-**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S01, S02. 
+**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S01, S02.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -1840,7 +1840,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 makers and apprentices remain ordinary routes; B2–B3 may organize larger workshops.
 
-**Arch-Society applicability [P]:** proposed applicable — S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S01. 
+**Arch-Society applicability [P]:** proposed applicable — S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S01.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -1876,7 +1876,7 @@ Apprentices learn how prepared clay behaves through forming, drying and firing, 
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 household makers and workshop workers can be skilled; B2–B3 may organize larger production.
 
-**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S01, S02. 
+**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S01, S02.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -1912,7 +1912,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 apprentices and employed masons remain viable; B2–B3 may lead crews or major commissions.
 
-**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S03. 
+**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S03.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -1948,7 +1948,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 skilled labour and apprenticeship are ordinary; B2–B3 may organize a working or hold its rights.
 
-**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S01, S02. 
+**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S01, S02.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -1984,7 +1984,7 @@ None proposed outside the named groups. Useful adjacent Skills are not added mer
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 workshop service can lead to complete competence; B2–B3 may hold larger technical responsibilities.
 
-**Arch-Society applicability [P]:** proposed applicable — S06, S07, S08, S09, S10, S11; conditional — S04, S05. 
+**Arch-Society applicability [P]:** proposed applicable — S06, S07, S08, S09, S10, S11; conditional — S04, S05.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2020,7 +2020,7 @@ Learners assist an experienced designer in measuring sites, developing plans and
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 construction-service entry is plausible where a mentor teaches the full practice; B2–B3 commonly alter scale and responsibility.
 
-**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2056,7 +2056,7 @@ None proposed outside the named groups. Useful adjacent Skills are not added mer
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 assistants can learn the full practice through service; B2–B3 may undertake larger or official commissions.
 
-**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S03. 
+**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S03.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2092,7 +2092,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 apprentices and dependent makers remain plausible; B2–B3 may serve broader customers.
 
-**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S03. 
+**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S03.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2128,7 +2128,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 craft service is plausible; B2–B3 may alter commissions and materials.
 
-**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02. 
+**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2166,7 +2166,7 @@ Learners work through preparation, cooking and the care of ingredients under an 
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 household and service cooks remain ordinary; B2–B3 may direct larger kitchens or serve patrons.
 
-**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2204,7 +2204,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 household and employed brewers remain skilled; B2–B3 may organize commercial production.
 
-**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02. 
+**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2240,7 +2240,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 household or estate producers can enter; B2–B3 may organize larger production.
 
-**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02, S03. 
+**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02, S03.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2276,7 +2276,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 assistants can learn the complete process; B2–B3 may maintain workshops or supply establishments.
 
-**Arch-Society applicability [P]:** proposed applicable — S06, S07, S09, S10, S11; conditional — S05, S08. 
+**Arch-Society applicability [P]:** proposed applicable — S06, S07, S09, S10, S11; conditional — S05, S08.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2312,7 +2312,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B2 / B3 / B4.** B2–B4 are the proposed ordinary routes to sustained specialist study, through a practitioner, institution or patron. B1 entry remains a conditional service or teacher-supported route only when the complete education is actually supplied; it is not inferred from assisting with a task.
 
-**Arch-Society applicability [P]:** proposed applicable — S06, S07, S09, S10, S11; conditional — S05, S08. 
+**Arch-Society applicability [P]:** proposed applicable — S06, S07, S09, S10, S11; conditional — S05, S08.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2388,7 +2388,7 @@ Learners study rules and decisions with an experienced practitioner, compare cas
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 assistants and practitioner-lineage learners may enter; B2–B3 commonly gain formal clients or patronage. Court representation can carry separate institutional restrictions.
 
-**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02, S03. 
+**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02, S03.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2427,7 +2427,7 @@ None proposed outside the named groups. Useful adjacent Skills are not added mer
 
 **Social-Band range [P]: B1 / B2 / B3 / B4.** B1 community representatives or service messengers may progress into entrusted negotiation; B2–B4 change patronage, scope and access.
 
-**Arch-Society applicability [P]:** proposed applicable — S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2465,7 +2465,7 @@ None proposed outside the named groups. Useful adjacent Skills are not added mer
 
 **Social-Band range [P]: B1 / B2 / B3 / B4.** B1 recognized practical convenors remain possible; higher bands may provide wider patronage or more formal audiences, not automatic authority.
 
-**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2503,7 +2503,7 @@ None proposed outside the named groups. Useful adjacent Skills are not added mer
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 clerical or household service can provide entry to the learned practice; B2–B3 change responsibility and capital relationships without granting assets.
 
-**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2539,7 +2539,7 @@ Training comes through assisting experienced organizers and representatives, com
 
 **Social-Band range [P]: B1 / B2 / B3 / B4.** B1 community and association service can provide meaningful entry where participation is permitted; B2–B4 change the circles and institutions reached.
 
-**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02. 
+**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2613,7 +2613,7 @@ The ordinary route directly teaches a context-selected **Written Tradition**; it
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 dependent scribes or apprentices can be competent; B2–B3 may obtain wider commissions or trusted service.
 
-**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2690,7 +2690,7 @@ Learners study with an experienced keeper or investigator of the past, comparing
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 practitioner-lineage or service routes are plausible; B2–B3 may gain broader collections and patronage.
 
-**Arch-Society applicability [P]:** proposed applicable — S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S01. 
+**Arch-Society applicability [P]:** proposed applicable — S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S01.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2728,7 +2728,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B2 / B3 / B4.** B2–B4 are the proposed ordinary routes to sustained specialist study, through a practitioner, institution or patron. B1 entry remains a conditional service or teacher-supported route only when the complete education is actually supplied; it is not inferred from assisting with a task.
 
-**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2764,7 +2764,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B2 / B3 / B4.** B2–B4 are the proposed ordinary routes to sustained specialist study, through a practitioner, institution or patron. B1 entry remains a conditional service or teacher-supported route only when the complete education is actually supplied; it is not inferred from assisting with a task.
 
-**Arch-Society applicability [P]:** proposed applicable — S06, S07, S08, S09, S10, S11; conditional — S04, S05. 
+**Arch-Society applicability [P]:** proposed applicable — S06, S07, S08, S09, S10, S11; conditional — S04, S05.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2800,7 +2800,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B2 / B3 / B4.** B2–B4 are the proposed ordinary routes to sustained specialist study, through a practitioner, institution or patron. B1 entry remains a conditional service or teacher-supported route only when the complete education is actually supplied; it is not inferred from assisting with a task.
 
-**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02, S03. 
+**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02, S03.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2838,7 +2838,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 assistants can learn through a practitioner; B2–B3 may provide wider study or patronage.
 
-**Arch-Society applicability [P]:** proposed applicable — S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2877,7 +2877,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 local specialists can possess substantial knowledge; B2–B3 may obtain wider travel, collections or patronage.
 
-**Arch-Society applicability [P]:** proposed applicable — S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S01. 
+**Arch-Society applicability [P]:** proposed applicable — S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S01.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2913,7 +2913,7 @@ Learners compare travellers’ accounts, known routes and other evidence with an
 
 **Social-Band range [P]: B2 / B3 / B4.** B2–B4 are the proposed ordinary routes to sustained specialist study, through a practitioner, institution or patron. B1 entry remains a conditional service or teacher-supported route only when the complete education is actually supplied; it is not inferred from assisting with a task.
 
-**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2951,7 +2951,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3 / B4.** B1 communal or service practitioners remain meaningful; B2–B4 may provide prolonged study, institutional responsibility or patronage.
 
-**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -2990,7 +2990,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 household or community practitioners can enter; B2–B3 may serve patrons or larger institutions.
 
-**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -3070,7 +3070,7 @@ Learners rehearse with an experienced performer who corrects execution, phrasing
 
 **Social-Band range [P]: B1 / B2 / B3 / B4.** B1 communal and travelling performers remain viable; B2–B4 may offer longer study, patronage and specialist occasions.
 
-**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -3109,7 +3109,7 @@ Learners rehearse roles and movements with experienced performers, receiving cor
 
 **Social-Band range [P]: B1 / B2 / B3 / B4.** B1 communal and itinerant performers remain skilled; B2–B4 may change patronage and occasions.
 
-**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -3146,7 +3146,7 @@ Learners work through studies and commissions under an experienced maker, compar
 
 **Social-Band range [P]: B1 / B2 / B3 / B4.** B1 makers and apprentices remain viable; B2–B4 can bring longer study and larger commissions.
 
-**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -3182,7 +3182,7 @@ Learners compose, rehearse and revise with an experienced practitioner, learning
 
 **Social-Band range [P]: B1 / B2 / B3 / B4.** B1 communal and itinerant practitioners remain useful; B2–B4 may provide specialist patronage or study.
 
-**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed. 
+**Arch-Society applicability [P]:** proposed applicable — S01, S02, S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — None proposed.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -3220,7 +3220,7 @@ None proposed outside the named groups. Useful adjacent Skills are not added mer
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 community performers and service trainees can enter; B2–B3 may support longer practice and patronage.
 
-**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S01, S02. 
+**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S01, S02.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 
@@ -3294,7 +3294,7 @@ No suitable existing group for the ordinary practice described; use only the dir
 
 **Social-Band range [P]: B1 / B2 / B3.** B1 itinerant and venue players remain plausible; B2–B3 may change stakes and patrons without a grant of money.
 
-**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02. 
+**Arch-Society applicability [P]:** proposed applicable — S03, S04, S05, S06, S07, S08, S09, S10, S11; conditional — S02.
 
 **Combat profile:** none. No combat Learning Group is supplied by this entry.
 

@@ -172,6 +172,40 @@ describe.skipIf(!enabled)("combined target Chargen API authority", () => {
           expect(await prisma.character.findUnique({ where: { id: forged.id } })).toBeNull();
         }
       }
+      const directBow = allocateChargenPoint({
+        ...context,
+        progression: purchase.progression,
+        targetId: "bow",
+        targetType: "skill",
+      });
+      const overlap = finalizeChargenDraft({
+        ...context,
+        progression: directBow.progression,
+        name: "Synthetic group and direct overlap",
+      });
+      expect(overlap.errors).toEqual([]);
+      const overlapSave = await app.inject({
+        method: "POST",
+        url: "/characters/",
+        headers: { cookie },
+        payload: { build: overlap.build },
+      });
+      expect(overlapSave.statusCode, overlapSave.body).toBe(200);
+      const excessive = structuredClone(overlap.build!);
+      excessive.id = crypto.randomUUID();
+      const crossbow = excessive.progression.skills.find((s) => s.skillId === "crossbow")!;
+      expect(crossbow.relationshipGrantedRanks).toBe(1);
+      crossbow.relationshipGrantedRanks = 99;
+      crossbow.ranks = 99;
+      const excessiveSave = await app.inject({
+        method: "POST",
+        url: "/characters/",
+        headers: { cookie },
+        payload: { build: excessive },
+      });
+      expect(excessiveSave.statusCode).toBe(400);
+      expect(excessiveSave.body).toContain("Invalid derived relationship grant");
+      expect(await prisma.character.findUnique({ where: { id: excessive.id } })).toBeNull();
       const headless = { ...build, id: crypto.randomUUID() };
       const headlessResult = await app.inject({
         method: "POST",
