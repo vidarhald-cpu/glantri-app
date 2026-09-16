@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { validateCanonicalContent } from "@glantri/content";
-import type { CharacterProgression, SkillDefinition, SkillSpecialization } from "@glantri/domain";
+import { skillDefinitionSchema } from "@glantri/domain";
+import type {
+  CharacterProgression,
+  LegacySkillDefinition,
+  SkillSpecialization,
+} from "@glantri/domain";
 
 import { createChargenProgression } from "../chargen/primaryAllocation";
 
@@ -12,18 +17,18 @@ const testContent = validateCanonicalContent({
     {
       id: "scholarly",
       name: "Scholarly",
-      sortOrder: 1
+      sortOrder: 1,
     },
     {
       id: "social",
       name: "Social",
-      sortOrder: 2
+      sortOrder: 2,
     },
     {
       id: "combat",
       name: "Combat",
-      sortOrder: 3
-    }
+      sortOrder: 3,
+    },
   ],
   skills: [
     {
@@ -37,7 +42,7 @@ const testContent = validateCanonicalContent({
       category: "secondary",
       requiresLiteracy: "no",
       sortOrder: 1,
-      allowsSpecializations: false
+      allowsSpecializations: false,
     },
     {
       id: "history",
@@ -48,14 +53,14 @@ const testContent = validateCanonicalContent({
       dependencies: [
         {
           skillId: "literacy",
-          strength: "required"
-        }
+          strength: "required",
+        },
       ],
       dependencySkillIds: ["literacy"],
       category: "ordinary",
       requiresLiteracy: "no",
       sortOrder: 2,
-      allowsSpecializations: false
+      allowsSpecializations: false,
     },
     {
       id: "etiquette",
@@ -68,7 +73,7 @@ const testContent = validateCanonicalContent({
       category: "ordinary",
       requiresLiteracy: "no",
       sortOrder: 3,
-      allowsSpecializations: false
+      allowsSpecializations: false,
     },
     {
       id: "appraisal",
@@ -79,14 +84,14 @@ const testContent = validateCanonicalContent({
       dependencies: [
         {
           skillId: "etiquette",
-          strength: "recommended"
-        }
+          strength: "recommended",
+        },
       ],
       dependencySkillIds: [],
       category: "secondary",
       requiresLiteracy: "no",
       sortOrder: 4,
-      allowsSpecializations: false
+      allowsSpecializations: false,
     },
     {
       id: "insight",
@@ -97,14 +102,14 @@ const testContent = validateCanonicalContent({
       dependencies: [
         {
           skillId: "appraisal",
-          strength: "helpful"
-        }
+          strength: "helpful",
+        },
       ],
       dependencySkillIds: [],
       category: "secondary",
       requiresLiteracy: "no",
       sortOrder: 5,
-      allowsSpecializations: false
+      allowsSpecializations: false,
     },
     {
       id: "archives",
@@ -117,7 +122,7 @@ const testContent = validateCanonicalContent({
       category: "ordinary",
       requiresLiteracy: "required",
       sortOrder: 6,
-      allowsSpecializations: false
+      allowsSpecializations: false,
     },
     {
       id: "diplomacy",
@@ -130,7 +135,7 @@ const testContent = validateCanonicalContent({
       category: "ordinary",
       requiresLiteracy: "recommended",
       sortOrder: 7,
-      allowsSpecializations: false
+      allowsSpecializations: false,
     },
     {
       id: "statecraft",
@@ -141,22 +146,22 @@ const testContent = validateCanonicalContent({
       dependencies: [
         {
           skillId: "literacy",
-          strength: "required"
+          strength: "required",
         },
         {
           skillId: "etiquette",
-          strength: "recommended"
+          strength: "recommended",
         },
         {
           skillId: "appraisal",
-          strength: "helpful"
-        }
+          strength: "helpful",
+        },
       ],
       dependencySkillIds: ["literacy"],
       category: "ordinary",
       requiresLiteracy: "no",
       sortOrder: 8,
-      allowsSpecializations: false
+      allowsSpecializations: false,
     },
     {
       id: "weapon_training",
@@ -169,7 +174,7 @@ const testContent = validateCanonicalContent({
       category: "ordinary",
       requiresLiteracy: "no",
       sortOrder: 9,
-      allowsSpecializations: true
+      allowsSpecializations: true,
     },
     {
       id: "bow",
@@ -182,7 +187,7 @@ const testContent = validateCanonicalContent({
       category: "ordinary",
       requiresLiteracy: "no",
       sortOrder: 10,
-      allowsSpecializations: false
+      allowsSpecializations: false,
     },
     {
       id: "crossbow",
@@ -195,7 +200,7 @@ const testContent = validateCanonicalContent({
       category: "ordinary",
       requiresLiteracy: "no",
       sortOrder: 11,
-      allowsSpecializations: false
+      allowsSpecializations: false,
     },
     {
       id: "longbow",
@@ -209,7 +214,7 @@ const testContent = validateCanonicalContent({
       requiresLiteracy: "no",
       sortOrder: 12,
       allowsSpecializations: false,
-      specializationOfSkillId: "bow"
+      specializationOfSkillId: "bow",
     },
     {
       id: "one_handed_edged",
@@ -222,8 +227,8 @@ const testContent = validateCanonicalContent({
       category: "ordinary",
       requiresLiteracy: "no",
       sortOrder: 13,
-      allowsSpecializations: true
-    }
+      allowsSpecializations: true,
+    },
   ],
   specializations: [
     {
@@ -232,7 +237,7 @@ const testContent = validateCanonicalContent({
       name: "Dueling",
       minimumGroupLevel: 3,
       minimumParentLevel: 3,
-      sortOrder: 1
+      sortOrder: 1,
     },
     {
       id: "court_intrigue",
@@ -240,7 +245,7 @@ const testContent = validateCanonicalContent({
       name: "Court Intrigue",
       minimumGroupLevel: 1,
       minimumParentLevel: 1,
-      sortOrder: 2
+      sortOrder: 2,
     },
     {
       id: "longbow",
@@ -253,8 +258,8 @@ const testContent = validateCanonicalContent({
         parentExcessOffset: 5,
         parentSkillId: "bow",
         reverseFactor: 1,
-        threshold: 6
-      }
+        threshold: 6,
+      },
     },
     {
       id: "fencing",
@@ -267,9 +272,9 @@ const testContent = validateCanonicalContent({
         parentExcessOffset: 5,
         parentSkillId: "one_handed_edged",
         reverseFactor: 1,
-        threshold: 6
-      }
-    }
+        threshold: 6,
+      },
+    },
   ],
   professionFamilies: [],
   professions: [],
@@ -279,42 +284,42 @@ const testContent = validateCanonicalContent({
       societyId: "test",
       societyLevel: 1,
       societyName: "Test Society",
-      socialClass: "Band 1"
+      socialClass: "Band 1",
     },
     {
       societyId: "test",
       societyLevel: 2,
       societyName: "Test Society",
-      socialClass: "Band 2"
+      socialClass: "Band 2",
     },
     {
       societyId: "test",
       societyLevel: 3,
       societyName: "Test Society",
-      socialClass: "Band 3"
+      socialClass: "Band 3",
     },
     {
       societyId: "test",
       societyLevel: 4,
       societyName: "Test Society",
-      socialClass: "Band 4"
-    }
-  ]
+      socialClass: "Band 4",
+    },
+  ],
 });
 
-function getSkill(skillId: string): SkillDefinition {
+function getSkill(skillId: string): LegacySkillDefinition {
   const skill = testContent.skills.find((candidate) => candidate.id === skillId);
 
   if (!skill) {
     throw new Error(`Missing test skill ${skillId}.`);
   }
 
-  return skill;
+  return skillDefinitionSchema.parse(skill);
 }
 
 function getSpecialization(specializationId: string): SkillSpecialization {
   const specialization = testContent.specializations.find(
-    (candidate) => candidate.id === specializationId
+    (candidate) => candidate.id === specializationId,
   );
 
   if (!specialization) {
@@ -326,7 +331,7 @@ function getSpecialization(specializationId: string): SkillSpecialization {
 
 function buildProgression(
   skillRanks: Record<string, number>,
-  groupRanks: Record<string, number> = {}
+  groupRanks: Record<string, number> = {},
 ): CharacterProgression {
   return {
     ...createChargenProgression(),
@@ -336,7 +341,7 @@ function buildProgression(
       groupId,
       primaryRanks: ranks,
       ranks,
-      secondaryRanks: 0
+      secondaryRanks: 0,
     })),
     skills: Object.entries(skillRanks).map(([skillId, ranks]) => {
       const skill = getSkill(skillId);
@@ -349,9 +354,9 @@ function buildProgression(
         primaryRanks: ranks,
         ranks,
         secondaryRanks: 0,
-        skillId
+        skillId,
       };
-    })
+    }),
   };
 }
 
@@ -362,13 +367,13 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({}),
       target: {
         skill: getSkill("history"),
-        targetType: "skill"
-      }
+        targetType: "skill",
+      },
     });
 
     expect(evaluation.isAllowed).toBe(false);
     expect(evaluation.blockingReasons.map((reason) => reason.code)).toEqual([
-      "missing-required-dependency"
+      "missing-required-dependency",
     ]);
     expect(evaluation.blockingReasons[0]?.message).toContain("Literacy");
   });
@@ -379,8 +384,8 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({ literacy: 1 }),
       target: {
         skill: getSkill("history"),
-        targetType: "skill"
-      }
+        targetType: "skill",
+      },
     });
 
     expect(evaluation.isAllowed).toBe(true);
@@ -395,8 +400,8 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({}, { scholarly: 1 }),
       target: {
         skill: getSkill("history"),
-        targetType: "skill"
-      }
+        targetType: "skill",
+      },
     });
 
     expect(evaluation.isAllowed).toBe(true);
@@ -409,14 +414,14 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({}),
       target: {
         skill: getSkill("appraisal"),
-        targetType: "skill"
-      }
+        targetType: "skill",
+      },
     });
 
     expect(evaluation.isAllowed).toBe(true);
     expect(evaluation.blockingReasons).toHaveLength(0);
     expect(evaluation.warnings.map((warning) => warning.code)).toEqual([
-      "missing-recommended-dependency"
+      "missing-recommended-dependency",
     ]);
     expect(evaluation.advisories).toHaveLength(0);
   });
@@ -427,8 +432,8 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({}, { social: 1 }),
       target: {
         skill: getSkill("appraisal"),
-        targetType: "skill"
-      }
+        targetType: "skill",
+      },
     });
 
     expect(evaluation.isAllowed).toBe(true);
@@ -441,15 +446,15 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({}),
       target: {
         skill: getSkill("insight"),
-        targetType: "skill"
-      }
+        targetType: "skill",
+      },
     });
 
     expect(evaluation.isAllowed).toBe(true);
     expect(evaluation.blockingReasons).toHaveLength(0);
     expect(evaluation.warnings).toHaveLength(0);
     expect(evaluation.advisories.map((advisory) => advisory.code)).toEqual([
-      "missing-helpful-dependency"
+      "missing-helpful-dependency",
     ]);
   });
 
@@ -459,13 +464,13 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({}),
       target: {
         skill: getSkill("archives"),
-        targetType: "skill"
-      }
+        targetType: "skill",
+      },
     });
 
     expect(evaluation.isAllowed).toBe(false);
     expect(evaluation.blockingReasons.map((reason) => reason.code)).toEqual([
-      "missing-required-literacy"
+      "missing-required-literacy",
     ]);
     expect(evaluation.blockingReasons[0]?.message).toBe("Archives requires Literacy.");
   });
@@ -476,14 +481,14 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({}),
       target: {
         skill: getSkill("diplomacy"),
-        targetType: "skill"
-      }
+        targetType: "skill",
+      },
     });
 
     expect(evaluation.isAllowed).toBe(true);
     expect(evaluation.blockingReasons).toHaveLength(0);
     expect(evaluation.warnings.map((warning) => warning.code)).toEqual([
-      "missing-recommended-literacy"
+      "missing-recommended-literacy",
     ]);
     expect(evaluation.warnings[0]?.message).toBe("Diplomacy recommends Literacy.");
   });
@@ -494,25 +499,25 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({}),
       target: {
         specialization: getSpecialization("longbow"),
-        targetType: "specialization"
-      }
+        targetType: "specialization",
+      },
     });
     const tooLow = evaluateSkillSelection({
       content: testContent,
       progression: buildProgression({ bow: 5 }),
       target: {
         specialization: getSpecialization("longbow"),
-        targetType: "specialization"
-      }
+        targetType: "specialization",
+      },
     });
 
     expect(missingParent.isAllowed).toBe(false);
     expect(missingParent.blockingReasons.map((reason) => reason.code)).toEqual([
-      "missing-specialization-parent-skill"
+      "missing-specialization-parent-skill",
     ]);
     expect(tooLow.isAllowed).toBe(false);
     expect(tooLow.blockingReasons.map((reason) => reason.code)).toEqual([
-      "specialization-parent-skill-too-low"
+      "specialization-parent-skill-too-low",
     ]);
     expect(tooLow.blockingReasons[0]?.requiredLevel).toBe(6);
     expect(tooLow.blockingReasons[0]?.currentLevel).toBe(5);
@@ -524,30 +529,32 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({ bow: 6 }),
       target: {
         specialization: getSpecialization("longbow"),
-        targetType: "specialization"
-      }
+        targetType: "specialization",
+      },
     });
     const groupParent = evaluateSkillSelection({
       content: testContent,
       progression: buildProgression({}, { combat: 6 }),
       target: {
         specialization: getSpecialization("longbow"),
-        targetType: "specialization"
-      }
+        targetType: "specialization",
+      },
     });
     const derivedLookingParent = evaluateSkillSelection({
       content: testContent,
       progression: buildProgression({ crossbow: 20 }),
       target: {
         specialization: getSpecialization("longbow"),
-        targetType: "specialization"
-      }
+        targetType: "specialization",
+      },
     });
 
     expect(directParent.isAllowed).toBe(true);
     expect(groupParent.isAllowed).toBe(true);
     expect(derivedLookingParent.isAllowed).toBe(false);
-    expect(derivedLookingParent.blockingReasons[0]?.code).toBe("missing-specialization-parent-skill");
+    expect(derivedLookingParent.blockingReasons[0]?.code).toBe(
+      "missing-specialization-parent-skill",
+    );
   });
 
   it("blocks a specialization when the parent skill is missing", () => {
@@ -556,13 +563,13 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({}),
       target: {
         specialization: getSpecialization("dueling"),
-        targetType: "specialization"
-      }
+        targetType: "specialization",
+      },
     });
 
     expect(evaluation.isAllowed).toBe(false);
     expect(evaluation.blockingReasons.map((reason) => reason.code)).toEqual([
-      "missing-specialization-parent-skill"
+      "missing-specialization-parent-skill",
     ]);
   });
 
@@ -572,23 +579,21 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({ one_handed_edged: 8 }),
       target: {
         specialization: getSpecialization("fencing"),
-        targetType: "specialization"
-      }
+        targetType: "specialization",
+      },
     });
     const derivedOnly = evaluateSkillSelection({
       content: testContent,
       progression: buildProgression({ longbow: 20 }),
       target: {
         specialization: getSpecialization("fencing"),
-        targetType: "specialization"
-      }
+        targetType: "specialization",
+      },
     });
 
     expect(allowed.isAllowed).toBe(true);
     expect(derivedOnly.isAllowed).toBe(false);
-    expect(derivedOnly.blockingReasons[0]?.code).toBe(
-      "missing-specialization-parent-skill"
-    );
+    expect(derivedOnly.blockingReasons[0]?.code).toBe("missing-specialization-parent-skill");
   });
 
   it("blocks a specialization when the parent skill level is too low", () => {
@@ -597,13 +602,13 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({ weapon_training: 2 }),
       target: {
         specialization: getSpecialization("dueling"),
-        targetType: "specialization"
-      }
+        targetType: "specialization",
+      },
     });
 
     expect(evaluation.isAllowed).toBe(false);
     expect(evaluation.blockingReasons.map((reason) => reason.code)).toEqual([
-      "specialization-parent-skill-too-low"
+      "specialization-parent-skill-too-low",
     ]);
     expect(evaluation.blockingReasons[0]?.requiredLevel).toBe(3);
     expect(evaluation.blockingReasons[0]?.currentLevel).toBe(2);
@@ -615,13 +620,13 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({ insight: 2 }),
       target: {
         specialization: getSpecialization("court_intrigue"),
-        targetType: "specialization"
-      }
+        targetType: "specialization",
+      },
     });
 
     expect(evaluation.isAllowed).toBe(false);
     expect(evaluation.blockingReasons.map((reason) => reason.code)).toEqual([
-      "specialization-parent-disallows-specializations"
+      "specialization-parent-disallows-specializations",
     ]);
   });
 
@@ -631,8 +636,8 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({ weapon_training: 3 }),
       target: {
         specialization: getSpecialization("dueling"),
-        targetType: "specialization"
-      }
+        targetType: "specialization",
+      },
     });
 
     expect(evaluation.isAllowed).toBe(true);
@@ -645,8 +650,8 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({}, { combat: 3 }),
       target: {
         specialization: getSpecialization("dueling"),
-        targetType: "specialization"
-      }
+        targetType: "specialization",
+      },
     });
 
     expect(evaluation.isAllowed).toBe(true);
@@ -667,11 +672,11 @@ describe("evaluateSkillSelection", () => {
               chooseCount: 1,
               id: "melee_weapon_choice",
               label: "Choose one melee weapon",
-              required: true
-            }
+              required: true,
+            },
           ],
-          sortOrder: 4
-        }
+          sortOrder: 4,
+        },
       ],
       skills: [
         ...testContent.skills,
@@ -686,7 +691,7 @@ describe("evaluateSkillSelection", () => {
           linkedStats: ["str", "dex"],
           name: "Longsword",
           requiresLiteracy: "no",
-          sortOrder: 10
+          sortOrder: 10,
         },
         {
           allowsSpecializations: false,
@@ -694,8 +699,8 @@ describe("evaluateSkillSelection", () => {
           dependencies: [
             {
               skillId: "battleaxe",
-              strength: "required"
-            }
+              strength: "required",
+            },
           ],
           dependencySkillIds: ["battleaxe"],
           groupId: "social",
@@ -704,7 +709,7 @@ describe("evaluateSkillSelection", () => {
           linkedStats: ["str", "dex"],
           name: "Axe Mastery",
           requiresLiteracy: "no",
-          sortOrder: 11
+          sortOrder: 11,
         },
         {
           allowsSpecializations: false,
@@ -717,7 +722,7 @@ describe("evaluateSkillSelection", () => {
           linkedStats: ["str", "dex"],
           name: "Battleaxe",
           requiresLiteracy: "no",
-          sortOrder: 12
+          sortOrder: 12,
         },
         {
           allowsSpecializations: false,
@@ -730,10 +735,10 @@ describe("evaluateSkillSelection", () => {
           linkedStats: ["str", "dex"],
           name: "Spear",
           requiresLiteracy: "no",
-          sortOrder: 13
-        }
+          sortOrder: 13,
+        },
       ],
-      specializations: testContent.specializations
+      specializations: testContent.specializations,
     });
 
     const evaluation = evaluateSkillSelection({
@@ -745,11 +750,11 @@ describe("evaluateSkillSelection", () => {
             {
               groupId: "advanced_melee_training",
               selectedSkillIds: ["longsword"],
-              slotId: "melee_weapon_choice"
-            }
+              slotId: "melee_weapon_choice",
+            },
           ],
           selectedLanguageIds: [],
-          selectedSkillIds: []
+          selectedSkillIds: [],
         },
         skillGroups: [
           {
@@ -758,20 +763,20 @@ describe("evaluateSkillSelection", () => {
             groupId: "advanced_melee_training",
             primaryRanks: 3,
             ranks: 3,
-            secondaryRanks: 0
-          }
+            secondaryRanks: 0,
+          },
         ],
-        skills: []
+        skills: [],
       },
       target: {
         skill: contentWithCombatSlots.skills.find((skill) => skill.id === "axe_mastery")!,
-        targetType: "skill"
-      }
+        targetType: "skill",
+      },
     });
 
     expect(evaluation.isAllowed).toBe(false);
     expect(evaluation.blockingReasons.map((reason) => reason.code)).toEqual([
-      "missing-required-dependency"
+      "missing-required-dependency",
     ]);
   });
 
@@ -781,19 +786,117 @@ describe("evaluateSkillSelection", () => {
       progression: buildProgression({}),
       target: {
         skill: getSkill("statecraft"),
-        targetType: "skill"
-      }
+        targetType: "skill",
+      },
     });
 
     expect(evaluation.isAllowed).toBe(false);
     expect(evaluation.blockingReasons.map((reason) => reason.code)).toEqual([
-      "missing-required-dependency"
+      "missing-required-dependency",
     ]);
     expect(evaluation.warnings.map((warning) => warning.code)).toEqual([
-      "missing-recommended-dependency"
+      "missing-recommended-dependency",
     ]);
     expect(evaluation.advisories.map((advisory) => advisory.code)).toEqual([
-      "missing-helpful-dependency"
+      "missing-helpful-dependency",
     ]);
+  });
+});
+
+describe("immediate Specialization parent eligibility", () => {
+  const animalHandling = {
+    ...getSkill("weapon_training"),
+    id: "skill:animal-handling",
+    name: "Animal Handling",
+    allowsSpecializations: true,
+  };
+  const animalTraining: SkillSpecialization = {
+    id: "spec:animal-training",
+    name: "Animal Training",
+    skillId: animalHandling.id,
+    minimumParentLevel: 11,
+    minimumGroupLevel: 11,
+    sortOrder: 1,
+  };
+  const falconry: SkillSpecialization = {
+    id: "spec:falconry",
+    name: "Falconry",
+    skillId: animalTraining.id,
+    minimumParentLevel: 11,
+    minimumGroupLevel: 11,
+    sortOrder: 2,
+  };
+  const content = {
+    ...testContent,
+    skills: [...testContent.skills, animalHandling],
+    specializations: [...testContent.specializations, animalTraining, falconry],
+  };
+
+  function evaluate(parentRanks: number, relationshipRanks = 0) {
+    const progression = buildProgression({});
+    progression.skills.push({
+      skillId: animalHandling.id,
+      groupId: animalHandling.groupId,
+      grantedRanks: 0,
+      primaryRanks: 30,
+      secondaryRanks: 0,
+      ranks: 30,
+      level: 30,
+      relationshipGrantedRanks: 0,
+      category: "ordinary",
+    });
+    if (parentRanks || relationshipRanks) {
+      progression.specializations.push({
+        specializationId: animalTraining.id,
+        skillId: animalHandling.id,
+        secondaryRanks: parentRanks,
+        relationshipGrantedRanks: relationshipRanks,
+        ranks: parentRanks + relationshipRanks,
+        level: parentRanks + relationshipRanks,
+      });
+    }
+    return evaluateSkillSelection({
+      content,
+      progression,
+      target: { targetType: "specialization", specialization: falconry },
+    });
+  }
+
+  it("does not flatten Falconry onto Animal Handling or use relationship ranks", () => {
+    expect(evaluate(0).blockingReasons[0]).toMatchObject({
+      code: "missing-specialization-parent-skill",
+      skillId: animalTraining.id,
+    });
+    expect(evaluate(0, 30).isAllowed).toBe(false);
+    expect(evaluate(10, 30).blockingReasons[0]).toMatchObject({
+      code: "specialization-parent-skill-too-low",
+      currentLevel: 10,
+      requiredLevel: 11,
+    });
+    expect(evaluate(11).isAllowed).toBe(true);
+  });
+
+  it("still requires the authored base parent for Animal Training", () => {
+    expect(
+      evaluateSkillSelection({
+        content,
+        progression: buildProgression({}),
+        target: { targetType: "specialization", specialization: animalTraining },
+      }).isAllowed,
+    ).toBe(false);
+    expect(falconry.skillId).toBe(animalTraining.id);
+    expect(animalTraining.skillId).toBe(animalHandling.id);
+  });
+
+  it("rejects missing and self-referencing parents", () => {
+    for (const skillId of ["missing-parent", falconry.id]) {
+      expect(
+        evaluateSkillSelection({
+          content,
+          progression: buildProgression({}),
+          target: { targetType: "specialization", specialization: { ...falconry, skillId } },
+        }).blockingReasons[0]?.code,
+      ).toBe("invalid-specialization-parent-skill");
+    }
   });
 });

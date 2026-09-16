@@ -3,7 +3,7 @@ import type {
   ProfessionDefinition,
   ProfessionSkillMap,
   SkillDefinition,
-  SkillGroupDefinition
+  SkillGroupDefinition,
 } from "@glantri/domain";
 
 function uniqueValues(values: string[]): string[] {
@@ -15,7 +15,7 @@ export function parseCommaSeparatedList(value: string): string[] {
     value
       .split(",")
       .map((item) => item.trim())
-      .filter((item) => item.length > 0)
+      .filter((item) => item.length > 0),
   );
 }
 
@@ -27,7 +27,7 @@ export function normalizeOptionalId(value: string): string | undefined {
 
 export function buildNormalizedGroupIds(
   selectedGroupIds: string[],
-  fallbackGroupId: string
+  fallbackGroupId: string,
 ): string[] {
   const normalized = uniqueValues(selectedGroupIds);
 
@@ -40,47 +40,50 @@ export function buildNormalizedGroupIds(
 
 export function normalizeSkillDefinition(
   skill: SkillDefinition,
-  selectedGroupIds: string[]
+  selectedGroupIds: string[],
 ): SkillDefinition {
+  if ("catalogueSource" in skill) return skill;
   const groupIds = buildNormalizedGroupIds(selectedGroupIds, skill.groupId);
 
   return {
     ...skill,
     dependencySkillIds: uniqueValues(skill.dependencySkillIds),
     groupId: groupIds[0],
-    groupIds
+    groupIds,
   };
 }
 
 export function updateSkillInContent(
   content: CanonicalContent,
-  nextSkill: SkillDefinition
+  nextSkill: SkillDefinition,
 ): CanonicalContent {
   return {
     ...content,
-    skills: content.skills.map((skill) => (skill.id === nextSkill.id ? nextSkill : skill))
+    skills: content.skills.map((skill) => (skill.id === nextSkill.id ? nextSkill : skill)),
   };
 }
 
 export function updateSkillGroupInContent(
   content: CanonicalContent,
-  nextGroup: SkillGroupDefinition
+  nextGroup: SkillGroupDefinition,
 ): CanonicalContent {
   return {
     ...content,
-    skillGroups: content.skillGroups.map((group) => (group.id === nextGroup.id ? nextGroup : group))
+    skillGroups: content.skillGroups.map((group) =>
+      group.id === nextGroup.id ? nextGroup : group,
+    ),
   };
 }
 
 export function updateProfessionInContent(
   content: CanonicalContent,
-  nextProfession: ProfessionDefinition
+  nextProfession: ProfessionDefinition,
 ): CanonicalContent {
   return {
     ...content,
     professions: content.professions.map((profession) =>
-      profession.id === nextProfession.id ? nextProfession : profession
-    )
+      profession.id === nextProfession.id ? nextProfession : profession,
+    ),
   };
 }
 
@@ -91,23 +94,23 @@ export function replaceProfessionRelations(
     groupIds: string[];
     ordinarySkillIds: string[];
     secondarySkillIds: string[];
-  }
+  },
 ): CanonicalContent {
   const existingProfessionGrants = content.professionSkills.filter(
-    (professionSkill) => professionSkill.professionId === professionId
+    (professionSkill) => professionSkill.professionId === professionId,
   );
   const otherProfessionGrants = content.professionSkills.filter(
-    (professionSkill) => professionSkill.professionId !== professionId
+    (professionSkill) => professionSkill.professionId !== professionId,
   );
 
   const buildGrant = (
     grantType: ProfessionSkillMap["grantType"],
-    targetId: string
+    targetId: string,
   ): ProfessionSkillMap => {
     const existing = existingProfessionGrants.find((professionSkill) =>
       grantType === "group"
         ? professionSkill.grantType === "group" && professionSkill.skillGroupId === targetId
-        : professionSkill.grantType === grantType && professionSkill.skillId === targetId
+        : professionSkill.grantType === grantType && professionSkill.skillId === targetId,
     );
 
     if (existing) {
@@ -121,7 +124,7 @@ export function replaceProfessionRelations(
       ranks: 0,
       scope: "profession",
       skillGroupId: grantType === "group" ? targetId : undefined,
-      skillId: grantType === "group" ? undefined : targetId
+      skillId: grantType === "group" ? undefined : targetId,
     };
   };
 
@@ -131,11 +134,11 @@ export function replaceProfessionRelations(
       ...otherProfessionGrants,
       ...uniqueValues(relations.groupIds).map((groupId) => buildGrant("group", groupId)),
       ...uniqueValues(relations.ordinarySkillIds).map((skillId) =>
-        buildGrant("ordinary-skill", skillId)
+        buildGrant("ordinary-skill", skillId),
       ),
       ...uniqueValues(relations.secondarySkillIds).map((skillId) =>
-        buildGrant("secondary-skill", skillId)
-      )
-    ]
+        buildGrant("secondary-skill", skillId),
+      ),
+    ],
   };
 }

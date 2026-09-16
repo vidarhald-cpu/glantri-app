@@ -1,9 +1,10 @@
+import { validateTargetProgressionMetadata } from "@glantri/domain";
 import type {
   CharacterBuild,
   CharacterBuildValidationResult,
   CharacterValidationIssue,
   SkillDefinition,
-  SkillSpecialization
+  SkillSpecialization,
 } from "@glantri/domain";
 
 export interface ValidateCharacterBuildInput {
@@ -13,20 +14,24 @@ export interface ValidateCharacterBuildInput {
 }
 
 export function validateCharacterBuild(
-  input: ValidateCharacterBuildInput
+  input: ValidateCharacterBuildInput,
 ): CharacterBuildValidationResult {
-  const issues: CharacterValidationIssue[] = [];
+  const issues: CharacterValidationIssue[] = validateTargetProgressionMetadata(
+    input.build.progression,
+    input.availableSkills ?? [],
+    input.availableSpecializations ?? [],
+  ).map((message) => ({ code: "invalid-target-definition", message, path: "progression" }));
 
   if (input.build.progression.level < 1) {
     issues.push({
       code: "invalid-level",
       message: "Character level must be at least 1.",
-      path: "progression.level"
+      path: "progression.level",
     });
   }
 
   return {
     valid: issues.length === 0,
-    issues
+    issues,
   };
 }

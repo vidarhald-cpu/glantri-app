@@ -1,3 +1,4 @@
+import { characterSkillSchema } from "@glantri/domain";
 import type {
   CivilizationDefinition,
   CharacterChargenGroupSlotSelection,
@@ -11,12 +12,12 @@ import type {
   SkillGroupDefinition,
   SocietyBandSkillAccess,
   SocietyDefinition,
-  SocietyLevelAccess
+  SocietyLevelAccess,
 } from "@glantri/domain";
 import {
   getAccessibleFoundationalSkillIdsForSocietyBand,
   getCharacterSkillKey,
-  getSkillGroupIds
+  getSkillGroupIds,
 } from "@glantri/domain";
 
 import { resolveEffectiveProfessionPackage } from "../professions/resolveEffectiveProfessionPackage";
@@ -28,6 +29,7 @@ import { resolveEffectiveProfessionPackage } from "../professions/resolveEffecti
 */
 
 interface ChargenSelectionContentShape {
+  chargenCatalogue?: { skillIds: readonly string[] };
   civilizations?: CivilizationDefinition[];
   languages?: LanguageDefinition[];
   professionFamilies: ProfessionFamilyDefinition[];
@@ -89,10 +91,13 @@ function uniqueIds(ids: Iterable<string>): string[] {
 
 function sortLanguageIds(
   content: Pick<ChargenSelectionContentShape, "languages">,
-  ids: string[]
+  ids: string[],
 ): string[] {
   const orderById = new Map(
-    (content.languages ?? []).map((language, index) => [language.id, [language.name, index] as const])
+    (content.languages ?? []).map((language, index) => [
+      language.id,
+      [language.name, index] as const,
+    ]),
   );
 
   return [...ids].sort((left, right) => {
@@ -105,7 +110,7 @@ function sortLanguageIds(
 
 function sortSkillIds(content: ChargenSelectionContentShape, ids: string[]): string[] {
   const orderById = new Map(
-    content.skills.map((skill, index) => [skill.id, [skill.sortOrder, index] as const])
+    content.skills.map((skill, index) => [skill.id, [skill.sortOrder, index] as const]),
   );
 
   return [...ids].sort((left, right) => {
@@ -121,7 +126,8 @@ function sortSkillIds(content: ChargenSelectionContentShape, ids: string[]): str
 }
 
 function createEmptySkillProgressionRow(skill: SkillDefinition) {
-  return {
+  return characterSkillSchema.parse({
+    ...("catalogueSource" in skill ? { targetDefinition: skill } : {}),
     category: skill.category,
     categoryId: skill.categoryId,
     grantedRanks: 0,
@@ -132,23 +138,20 @@ function createEmptySkillProgressionRow(skill: SkillDefinition) {
     ranks: 0,
     secondaryRanks: 0,
     skillId: skill.id,
-    sourceTag: undefined
-  } satisfies CharacterProgression["skills"][number];
+    sourceTag: undefined,
+  });
 }
 
-function createEmptyLanguageSkillProgressionRow(
-  skill: SkillDefinition,
-  languageName: string
-) {
+function createEmptyLanguageSkillProgressionRow(skill: SkillDefinition, languageName: string) {
   return {
     ...createEmptySkillProgressionRow(skill),
-    languageName
+    languageName,
   } satisfies CharacterProgression["skills"][number];
 }
 
 function findSkillIndex(
   skills: CharacterProgression["skills"],
-  target: Pick<CharacterSkill, "skillId" | "languageName">
+  target: Pick<CharacterSkill, "skillId" | "languageName">,
 ): number {
   const targetKey = getCharacterSkillKey(target);
   return skills.findIndex((skill) => getCharacterSkillKey(skill) === targetKey);
@@ -158,7 +161,7 @@ const MOTHER_TONGUE_SKILL_ID = "language";
 
 function getCivilizationDefinition(
   content: Pick<ChargenSelectionContentShape, "civilizations">,
-  civilizationId: string | undefined
+  civilizationId: string | undefined,
 ): CivilizationDefinition | undefined {
   if (!civilizationId) {
     return undefined;
@@ -181,7 +184,7 @@ export function buildChargenMotherTongueSummary(input: {
       languageName: undefined,
       optionalLanguageNames: [],
       skill: undefined,
-      startingLevel: 0
+      startingLevel: 0,
     };
   }
 
@@ -193,12 +196,12 @@ export function buildChargenMotherTongueSummary(input: {
     languageName,
     optionalLanguageNames: civilization.optionalLanguageNames ?? [],
     skill,
-    startingLevel
+    startingLevel,
   };
 }
 
 function normalizeGroupSlotSelections(
-  selections: CharacterChargenGroupSlotSelection[]
+  selections: CharacterChargenGroupSlotSelection[],
 ): CharacterChargenGroupSlotSelection[] {
   const normalizedByKey = new Map<string, CharacterChargenGroupSlotSelection>();
 
@@ -206,14 +209,16 @@ function normalizeGroupSlotSelections(
     normalizedByKey.set(`${selection.groupId}:${selection.slotId}`, {
       groupId: selection.groupId,
       selectedSkillIds: uniqueIds(selection.selectedSkillIds ?? []),
-      slotId: selection.slotId
+      slotId: selection.slotId,
     });
   }
 
   return [...normalizedByKey.values()];
 }
 
-function getStoredGroupSlotSelections(progression: CharacterProgression): CharacterChargenGroupSlotSelection[] {
+function getStoredGroupSlotSelections(
+  progression: CharacterProgression,
+): CharacterChargenGroupSlotSelection[] {
   return normalizeGroupSlotSelections(progression.chargenSelections?.selectedGroupSlots ?? []);
 }
 
@@ -224,7 +229,7 @@ function getResolvedSelectedSlotSkillIds(input: {
   const activeGroupIds = new Set(
     input.progression.skillGroups
       .filter((group) => (group.ranks ?? 0) > 0 || (group.grantedRanks ?? 0) > 0)
-      .map((group) => group.groupId)
+      .map((group) => group.groupId),
   );
   const groupById = new Map(input.skillGroups.map((group) => [group.id, group]));
 
@@ -242,13 +247,13 @@ function getResolvedSelectedSlotSkillIds(input: {
         return selection.selectedSkillIds
           .filter((skillId) => slot.candidateSkillIds.includes(skillId))
           .slice(0, slot.chooseCount);
-      })
+      }),
   );
 }
 
 function getSocietyDefinition(
   content: Pick<ChargenSelectionContentShape, "societies">,
-  societyId: string | undefined
+  societyId: string | undefined,
 ): SocietyDefinition | undefined {
   if (!societyId) {
     return undefined;
@@ -260,7 +265,7 @@ function getSocietyDefinition(
 function getSocietyAccess(
   content: ChargenSelectionContentShape,
   societyLevel: number | undefined,
-  societyId?: string
+  societyId?: string,
 ): SocietyLevelAccess | undefined {
   if (societyLevel === undefined) {
     return undefined;
@@ -268,7 +273,8 @@ function getSocietyAccess(
 
   return content.societyLevels.find(
     (item) =>
-      item.societyLevel === societyLevel && (societyId === undefined || item.societyId === societyId)
+      item.societyLevel === societyLevel &&
+      (societyId === undefined || item.societyId === societyId),
   );
 }
 
@@ -277,7 +283,7 @@ function getLanguageDefinitionMaps(content: Pick<ChargenSelectionContentShape, "
 
   return {
     byId: new Map(languages.map((language) => [language.id, language])),
-    byName: new Map(languages.map((language) => [language.name, language]))
+    byName: new Map(languages.map((language) => [language.name, language])),
   };
 }
 
@@ -292,7 +298,7 @@ export function buildChargenLanguageSelectionSummary(input: {
   const languageMaps = getLanguageDefinitionMaps(input.content);
   const requiredLanguageIds = sortLanguageIds(
     input.content,
-    uniqueIds(society?.baselineLanguageIds ?? [])
+    uniqueIds(society?.baselineLanguageIds ?? []),
   );
   const requiredLanguageIdSet = new Set(requiredLanguageIds);
   const selectableLanguageIds = sortLanguageIds(
@@ -301,19 +307,19 @@ export function buildChargenLanguageSelectionSummary(input: {
       (civilization?.optionalLanguageNames ?? [])
         .map((languageName) => languageMaps.byName.get(languageName)?.id)
         .filter((languageId): languageId is string => languageId !== undefined)
-        .filter((languageId) => !requiredLanguageIdSet.has(languageId))
-    )
+        .filter((languageId) => !requiredLanguageIdSet.has(languageId)),
+    ),
   );
   const selectableLanguageIdSet = new Set(selectableLanguageIds);
   const selectedOptionalLanguageIds = sortLanguageIds(
     input.content,
     (input.progression.chargenSelections?.selectedLanguageIds ?? []).filter((languageId) =>
-      selectableLanguageIdSet.has(languageId)
-    )
+      selectableLanguageIdSet.has(languageId),
+    ),
   );
   const selectedLanguageIds = sortLanguageIds(
     input.content,
-    uniqueIds([...requiredLanguageIds, ...selectedOptionalLanguageIds])
+    uniqueIds([...requiredLanguageIds, ...selectedOptionalLanguageIds]),
   );
 
   return {
@@ -332,7 +338,7 @@ export function buildChargenLanguageSelectionSummary(input: {
     selectedOptionalLanguageIds,
     selectedOptionalLanguages: selectedOptionalLanguageIds
       .map((languageId) => languageMaps.byId.get(languageId))
-      .filter((language): language is LanguageDefinition => language !== undefined)
+      .filter((language): language is LanguageDefinition => language !== undefined),
   };
 }
 
@@ -351,39 +357,43 @@ export function buildChargenSelectableSkillSummary(input: {
       selectableSkillIds: [],
       selectableSkills: [],
       selectedSkillIds: [],
-      selectedSkills: []
+      selectedSkills: [],
     };
   }
 
   const professionPackage = resolveEffectiveProfessionPackage({
     content: input.content,
-    subtypeId: input.professionId
+    subtypeId: input.professionId,
   });
   const societyAccess = getSocietyAccess(input.content, input.societyLevel, input.societyId);
   const allowedGroupIds = uniqueIds(
     societyAccess?.skillGroupIds.filter((groupId) =>
       [
         ...professionPackage.core.finalEffectiveGroupIds,
-        ...professionPackage.favored.finalEffectiveGroupIds
-      ].includes(groupId)
-    ) ?? []
+        ...professionPackage.favored.finalEffectiveGroupIds,
+      ].includes(groupId),
+    ) ?? [],
   );
   const normalSkillIds = uniqueIds([
     ...input.content.skills
-      .filter((skill) => getSkillGroupIds(skill).some((groupId) => allowedGroupIds.includes(groupId)))
+      .filter((skill) =>
+        getSkillGroupIds(skill).some((groupId) => allowedGroupIds.includes(groupId)),
+      )
       .map((skill) => skill.id),
     ...(societyAccess?.skillIds ?? []),
-    ...getAccessibleFoundationalSkillIdsForSocietyBand(
-      input.content.societyBandSkillAccess ?? [],
-      {
-        socialBand: input.societyLevel,
-        societyId: input.societyId ?? ""
-      }
-    ),
+    ...getAccessibleFoundationalSkillIdsForSocietyBand(input.content.societyBandSkillAccess ?? [], {
+      socialBand: input.societyLevel,
+      societyId: input.societyId ?? "",
+    }),
     ...professionPackage.core.finalEffectiveSkillIds,
-    ...professionPackage.favored.finalEffectiveSkillIds
+    ...professionPackage.favored.finalEffectiveSkillIds,
   ]);
-  const normalSkillIdSet = new Set(normalSkillIds);
+  const normalSkillIdSet = new Set(
+    normalSkillIds.filter(
+      (id) =>
+        !input.content.chargenCatalogue || input.content.chargenCatalogue.skillIds.includes(id),
+    ),
+  );
   const skillsById = new Map(input.content.skills.map((skill) => [skill.id, skill]));
   const groupById = new Map(input.content.skillGroups.map((group) => [group.id, group]));
   const storedGroupSlotSelections = getStoredGroupSlotSelections(input.progression);
@@ -393,17 +403,26 @@ export function buildChargenSelectableSkillSummary(input: {
     return (group?.selectionSlots ?? []).map((slot) => {
       const candidateSkillIds = sortSkillIds(
         input.content,
-        uniqueIds(slot.candidateSkillIds.filter((skillId) => skillsById.has(skillId)))
+        uniqueIds(
+          slot.candidateSkillIds.filter(
+            (skillId) =>
+              skillsById.has(skillId) &&
+              (!input.content.chargenCatalogue ||
+                input.content.chargenCatalogue.skillIds.includes(skillId)),
+          ),
+        ),
       );
       const candidateSkillIdSet = new Set(candidateSkillIds);
       const storedSelection = storedGroupSlotSelections.find(
-        (selection) => selection.groupId === groupId && selection.slotId === slot.id
+        (selection) => selection.groupId === groupId && selection.slotId === slot.id,
       );
       const selectedSkillIds = sortSkillIds(
         input.content,
         uniqueIds(
-          (storedSelection?.selectedSkillIds ?? []).filter((skillId) => candidateSkillIdSet.has(skillId))
-        ).slice(0, slot.chooseCount)
+          (storedSelection?.selectedSkillIds ?? []).filter((skillId) =>
+            candidateSkillIdSet.has(skillId),
+          ),
+        ).slice(0, slot.chooseCount),
       );
 
       return {
@@ -421,7 +440,7 @@ export function buildChargenSelectableSkillSummary(input: {
         selectedSkills: selectedSkillIds
           .map((skillId) => skillsById.get(skillId))
           .filter((skill): skill is SkillDefinition => skill !== undefined),
-        slotId: slot.id
+        slotId: slot.id,
       } satisfies ChargenSelectableSkillSlotSummary;
     });
   });
@@ -429,33 +448,33 @@ export function buildChargenSelectableSkillSummary(input: {
   const coreSkillIds = sortSkillIds(
     input.content,
     professionPackage.core.finalEffectiveReachableSkillIds.filter(
-      (skillId) => normalSkillIdSet.has(skillId) && !slotCandidateSkillIdSet.has(skillId)
-    )
+      (skillId) => normalSkillIdSet.has(skillId) && !slotCandidateSkillIdSet.has(skillId),
+    ),
   );
   const coreSkillIdSet = new Set(coreSkillIds);
   const selectableSkillIds = sortSkillIds(
     input.content,
     normalSkillIds.filter(
-      (skillId) => !coreSkillIdSet.has(skillId) && !slotCandidateSkillIdSet.has(skillId)
-    )
+      (skillId) =>
+        normalSkillIdSet.has(skillId) &&
+        !coreSkillIdSet.has(skillId) &&
+        !slotCandidateSkillIdSet.has(skillId),
+    ),
   );
-  const filteredSelectableSkillIds = sortSkillIds(
-    input.content,
-    selectableSkillIds
-  );
+  const filteredSelectableSkillIds = sortSkillIds(input.content, selectableSkillIds);
   const selectableSkillIdSet = new Set(filteredSelectableSkillIds);
   const selectedFreeChoiceSkillIds = sortSkillIds(
     input.content,
     (input.progression.chargenSelections?.selectedSkillIds ?? []).filter((skillId) =>
-      selectableSkillIdSet.has(skillId)
-    )
+      selectableSkillIdSet.has(skillId),
+    ),
   );
   const selectedSkillIds = sortSkillIds(
     input.content,
     uniqueIds([
       ...selectedFreeChoiceSkillIds,
-      ...selectionSlots.flatMap((slot) => slot.selectedSkillIds)
-    ])
+      ...selectionSlots.flatMap((slot) => slot.selectedSkillIds),
+    ]),
   );
 
   return {
@@ -471,22 +490,27 @@ export function buildChargenSelectableSkillSummary(input: {
     selectedSkillIds,
     selectedSkills: selectedSkillIds
       .map((skillId) => skillsById.get(skillId))
-      .filter((skill): skill is SkillDefinition => skill !== undefined)
+      .filter((skill): skill is SkillDefinition => skill !== undefined),
   };
 }
 
 export function syncChargenSelectionSkillRows(input: {
-  content: Pick<ChargenSelectionContentShape, "skillGroups" | "skills">;
+  content: Pick<ChargenSelectionContentShape, "skillGroups" | "skills" | "chargenCatalogue">;
   progression: CharacterProgression;
 }): CharacterProgression {
   const selectedSkillIds = new Set([
     ...(input.progression.chargenSelections?.selectedSkillIds ?? []),
     ...getResolvedSelectedSlotSkillIds({
       progression: input.progression,
-      skillGroups: input.content.skillGroups
-    })
+      skillGroups: input.content.skillGroups,
+    }),
   ]);
-  const selectedDefinitions = input.content.skills.filter((skill) => selectedSkillIds.has(skill.id));
+  const selectedDefinitions = input.content.skills.filter(
+    (skill) =>
+      selectedSkillIds.has(skill.id) &&
+      (!input.content.chargenCatalogue ||
+        input.content.chargenCatalogue.skillIds.includes(skill.id)),
+  );
   const nextSkills = [...input.progression.skills];
 
   for (const skill of selectedDefinitions) {
@@ -511,7 +535,7 @@ export function syncChargenSelectionSkillRows(input: {
 
   return {
     ...input.progression,
-    skills: cleanedSkills
+    skills: cleanedSkills,
   };
 }
 
@@ -531,15 +555,15 @@ export function syncChargenLanguageSkillRows(input: {
     civilizationId: input.civilizationId,
     content: input.content,
     progression: input.progression,
-    societyId: input.societyId
+    societyId: input.societyId,
   });
   const selectedLanguageKeys = new Set(
     languageSelectionSummary.selectedOptionalLanguages.map((language) =>
       getCharacterSkillKey({
         languageName: language.name,
-        skillId: MOTHER_TONGUE_SKILL_ID
-      })
-    )
+        skillId: MOTHER_TONGUE_SKILL_ID,
+      }),
+    ),
   );
   const nextSkills = [...input.progression.skills];
 
@@ -547,7 +571,7 @@ export function syncChargenLanguageSkillRows(input: {
     if (
       findSkillIndex(nextSkills, {
         languageName: language.name,
-        skillId: MOTHER_TONGUE_SKILL_ID
+        skillId: MOTHER_TONGUE_SKILL_ID,
       }) >= 0
     ) {
       continue;
@@ -579,7 +603,7 @@ export function syncChargenLanguageSkillRows(input: {
 
   return {
     ...input.progression,
-    skills: cleanedSkills
+    skills: cleanedSkills,
   };
 }
 
@@ -592,11 +616,11 @@ export function syncChargenMotherTongueSkillRow(input: {
   const motherTongue = buildChargenMotherTongueSummary({
     content: input.content,
     civilizationId: input.civilizationId,
-    educationLevel: input.educationLevel
+    educationLevel: input.educationLevel,
   });
   const nextSkills = [...input.progression.skills];
   const motherTongueIndex = nextSkills.findIndex(
-    (skill) => skill.skillId === MOTHER_TONGUE_SKILL_ID && skill.sourceTag === "mother-tongue"
+    (skill) => skill.skillId === MOTHER_TONGUE_SKILL_ID && skill.sourceTag === "mother-tongue",
   );
   const legacyGenericLanguageRows = nextSkills
     .map((skill, index) => ({ index, skill }))
@@ -604,7 +628,7 @@ export function syncChargenMotherTongueSkillRow(input: {
       ({ skill }) =>
         skill.skillId === MOTHER_TONGUE_SKILL_ID &&
         skill.sourceTag !== "mother-tongue" &&
-        !skill.languageName
+        !skill.languageName,
     );
 
   if (!motherTongue.skill || !motherTongue.languageName) {
@@ -623,7 +647,7 @@ export function syncChargenMotherTongueSkillRow(input: {
       grantedRanks: 0,
       languageName: undefined,
       ranks: (existing.primaryRanks ?? 0) + (existing.secondaryRanks ?? 0),
-      sourceTag: undefined
+      sourceTag: undefined,
     };
 
     if ((clearedSkill.primaryRanks ?? 0) <= 0 && (clearedSkill.secondaryRanks ?? 0) <= 0) {
@@ -634,13 +658,13 @@ export function syncChargenMotherTongueSkillRow(input: {
 
     return {
       ...input.progression,
-      skills: nextSkills
+      skills: nextSkills,
     };
   }
 
   const matchingLanguageIndex = findSkillIndex(nextSkills, {
     languageName: motherTongue.languageName,
-    skillId: MOTHER_TONGUE_SKILL_ID
+    skillId: MOTHER_TONGUE_SKILL_ID,
   });
   const legacyGenericLanguageSkill = legacyGenericLanguageRows[0]?.skill;
   const legacyAdditionalPrimaryRanks = legacyGenericLanguageRows
@@ -654,8 +678,8 @@ export function syncChargenMotherTongueSkillRow(input: {
       ? nextSkills[motherTongueIndex]
       : matchingLanguageIndex >= 0
         ? nextSkills[matchingLanguageIndex]
-        : legacyGenericLanguageSkill ?? createEmptySkillProgressionRow(motherTongue.skill);
-  const syncedSkill = {
+        : (legacyGenericLanguageSkill ?? createEmptySkillProgressionRow(motherTongue.skill));
+  const syncedSkill = characterSkillSchema.parse({
     ...baseSkill,
     category: motherTongue.skill.category,
     grantedRanks: motherTongue.startingLevel,
@@ -669,8 +693,8 @@ export function syncChargenMotherTongueSkillRow(input: {
       (baseSkill.secondaryRanks ?? 0) +
       legacyAdditionalSecondaryRanks,
     secondaryRanks: (baseSkill.secondaryRanks ?? 0) + legacyAdditionalSecondaryRanks,
-    sourceTag: "mother-tongue" as const
-  };
+    sourceTag: "mother-tongue" as const,
+  });
 
   if (motherTongueIndex >= 0) {
     nextSkills[motherTongueIndex] = syncedSkill;
@@ -687,7 +711,7 @@ export function syncChargenMotherTongueSkillRow(input: {
     skills: nextSkills.filter(
       (skill, index) =>
         !legacyGenericLanguageIndexes.has(index) ||
-        getCharacterSkillKey(skill) === getCharacterSkillKey(syncedSkill)
-    )
+        getCharacterSkillKey(skill) === getCharacterSkillKey(syncedSkill),
+    ),
   };
 }

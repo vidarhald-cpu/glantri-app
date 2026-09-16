@@ -16,3 +16,5 @@ export * from "./skillContentPlatform";
 export * from "./skillContentPlatform/skillReferenceMetadata";
 export * from "./types";
 export * from "./validators";
+
+export * from "./targetCompetencies";

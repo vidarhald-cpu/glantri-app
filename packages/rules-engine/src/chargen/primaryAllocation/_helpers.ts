@@ -19,6 +19,7 @@ import type {
   SocietyLevelAccess,
 } from "@glantri/domain";
 import {
+  characterSkillSchema,
   getCharacterSkillKey,
   normalizeCharacterSkillLanguageName,
   getSkillGroupIds,
@@ -34,6 +35,12 @@ export const LITERACY_SKILL_ID = "literacy";
 export const LANGUAGE_SKILL_ID = "language";
 
 export interface CanonicalContentShape {
+  chargenCatalogue?: {
+    sourceId: "full-target-competencies";
+    skillIds: readonly string[];
+    specializationIds: readonly string[];
+  };
+  compatibilityContent?: CanonicalContentShape;
   civilizations?: CivilizationDefinition[];
   languages?: LanguageDefinition[];
   professionFamilies: ProfessionFamilyDefinition[];
@@ -63,7 +70,8 @@ export function createEmptyGroup(groupId: string): CharacterSkillGroup {
 }
 
 export function createEmptySkill(skill: SkillDefinition): CharacterSkill {
-  return {
+  return characterSkillSchema.parse({
+    ...("catalogueSource" in skill ? { targetDefinition: skill } : {}),
     category: skill.category,
     categoryId: skill.categoryId,
     grantedRanks: 0,
@@ -74,7 +82,7 @@ export function createEmptySkill(skill: SkillDefinition): CharacterSkill {
     relationshipGrantedRanks: 0,
     secondaryRanks: 0,
     skillId: skill.id,
-  };
+  });
 }
 
 export function createEmptySpecialization(
@@ -85,6 +93,7 @@ export function createEmptySpecialization(
     ranks: 0,
     relationshipGrantedRanks: 0,
     secondaryRanks: 0,
+    ...("catalogueSource" in specialization ? { targetDefinition: specialization } : {}),
     skillId: specialization.skillId,
     specializationId: specialization.id,
   };
@@ -111,7 +120,7 @@ export function normalizeSkill(skill: CharacterSkill): CharacterSkill {
   const relationshipGrantedRanks = skill.relationshipGrantedRanks ?? 0;
   const secondaryRanks = skill.secondaryRanks ?? 0;
 
-  return {
+  return characterSkillSchema.parse({
     ...skill,
     category: skill.category ?? "ordinary",
     categoryId: skill.categoryId,
@@ -124,7 +133,7 @@ export function normalizeSkill(skill: CharacterSkill): CharacterSkill {
     relationshipGrantedRanks,
     secondaryRanks,
     sourceTag: skill.sourceTag,
-  };
+  });
 }
 
 export function normalizeSpecialization(

@@ -1,6 +1,13 @@
+import { assertApprovedTargetProgression } from "@glantri/content";
 import { characterBuildSchema, type CharacterBuild, type CharacterRecord } from "@glantri/domain";
 
 import { localDb, type LocalCharacterRecord } from "../glantriDexie";
+
+function parseApprovedBuild(input: unknown): CharacterBuild {
+  const build = characterBuildSchema.parse(input);
+  assertApprovedTargetProgression(build.progression);
+  return build;
+}
 
 export interface SaveLocalCharacterInput {
   build: CharacterBuild;
@@ -65,7 +72,7 @@ export class LocalCharacterRepository {
 
     return {
       ...record,
-      build: characterBuildSchema.parse(record.build),
+      build: parseApprovedBuild(record.build),
     };
   }
 
@@ -74,7 +81,7 @@ export class LocalCharacterRepository {
 
     return records.map((record) => ({
       ...record,
-      build: characterBuildSchema.parse(record.build),
+      build: parseApprovedBuild(record.build),
     }));
   }
 
@@ -103,7 +110,7 @@ export class LocalCharacterRepository {
   async save(input: SaveLocalCharacterInput): Promise<LocalCharacterRecord> {
     const now = input.updatedAt ?? new Date().toISOString();
     const existing = await localDb.localCharacters.get(input.build.id);
-    const build = characterBuildSchema.parse(input.build);
+    const build = parseApprovedBuild(input.build);
     const syncStatus = input.syncStatus ?? existing?.syncStatus ?? "local";
     const inheritedServerRevision = existing ? getServerCharacterRevision(existing) : undefined;
     const serverUpdatedAt =
@@ -142,7 +149,7 @@ export class LocalCharacterRepository {
     const updated: LocalCharacterRecord = {
       ...existing,
       build: {
-        ...characterBuildSchema.parse(existing.build),
+        ...parseApprovedBuild(existing.build),
         name: normalizeCharacterName(name),
       },
       serverUpdatedAt: getServerCharacterRevision(existing),

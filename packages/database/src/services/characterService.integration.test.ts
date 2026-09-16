@@ -1,4 +1,6 @@
+import { getApprovedTargetSkillDefinition } from "@glantri/content";
 import { beforeEach, describe, expect, it } from "vitest";
+import { characterBuildSchema } from "@glantri/domain";
 
 import { createPrismaCharacterRepository } from "../repositories/characterRepository";
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
@@ -28,6 +30,45 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(results[0].id).toBe(character.id);
       expect(results[0].name).toBe("Brave Warrior");
       expect(results[0].ownerId).toBe(user.id);
+    });
+
+    it("persists a group-free target definition and retains owner-scoped reads", async () => {
+      const service = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const owner = await createTestUser(prisma!, { email: "target-owner@example.test" });
+      const unrelated = await createTestUser(prisma!, {
+        email: "target-unrelated@example.test",
+        roles: ["admin"],
+      });
+      const seed = await createTestCharacter(prisma!, owner.id);
+      const original = await service.getCharacterById(seed.id);
+      const targetDefinition = getApprovedTargetSkillDefinition("skill:surgery")!;
+      const build = characterBuildSchema.parse({
+        ...original!.build,
+        id: "issue168-persisted-target",
+        name: "Saved target",
+        progression: {
+          ...original!.build.progression,
+          secondaryPoolSpent: 1,
+          skills: [
+            {
+              skillId: targetDefinition.id,
+              targetDefinition,
+              category: "secondary",
+              secondaryRanks: 1,
+              ranks: 1,
+            },
+          ],
+        },
+      });
+      await service.saveCharacter({ id: build.id, name: build.name, ownerId: owner.id, build });
+      const reloaded = await service.getOwnedCharacter(owner.id, build.id);
+      expect(reloaded?.build).toEqual(build);
+      expect(reloaded?.build.progression.skills[0].groupId).toBeUndefined();
+      expect(reloaded?.build.progression.skills[0].targetDefinition).toEqual(targetDefinition);
+      expect(await service.getOwnedCharacter(unrelated.id, build.id)).toBeNull();
+      expect((await service.listCharacters(unrelated.id)).some(({ id }) => id === build.id)).toBe(
+        false,
+      );
     });
 
     it("does not return another user's character via getOwnedCharacter", async () => {

@@ -58,7 +58,7 @@ export interface ChargenSkillView {
   // used by combat math, combining the best contributing group with direct
   // skill ranks, before any linked-stat average is added.
   effectiveSkillNumber: number;
-  groupId: string;
+  groupId?: string;
   groupIds: string[];
   groupLevel: number;
   languageName?: string;
@@ -182,6 +182,27 @@ export function buildChargenDraftView(input: {
   societyId?: string;
   societyLevel?: number;
 }): ChargenDraftView {
+  // Saved target definitions keep group-free and nested competencies readable
+  // when a character is reopened with the unchanged legacy content bundle.
+  const savedSkills = input.progression.skills.flatMap((row) =>
+    row.targetDefinition ? [row.targetDefinition] : [],
+  );
+  const savedSpecializations = input.progression.specializations.flatMap((row) =>
+    row.targetDefinition ? [row.targetDefinition] : [],
+  );
+  const savedSkillIds = new Set(savedSkills.map(({ id }) => id));
+  const savedSpecializationIds = new Set(savedSpecializations.map(({ id }) => id));
+  input = {
+    ...input,
+    content: {
+      ...input.content,
+      skills: [...input.content.skills.filter(({ id }) => !savedSkillIds.has(id)), ...savedSkills],
+      specializations: [
+        ...input.content.specializations.filter(({ id }) => !savedSpecializationIds.has(id)),
+        ...savedSpecializations,
+      ],
+    },
+  };
   const selectionSyncedProgression = recalculateProgression(
     syncChargenSelectionSkillRows({
       content: input.content,
@@ -238,6 +259,12 @@ export function buildChargenDraftView(input: {
   });
 
   const skills = input.content.skills
+    .filter(
+      ({ id }) =>
+        !input.content.chargenCatalogue ||
+        input.content.chargenCatalogue.skillIds.includes(id) ||
+        progression.skills.some(({ skillId }) => skillId === id),
+    )
     .flatMap((definition) => {
       if (definition.specializationOfSkillId) {
         return [];
@@ -263,7 +290,7 @@ export function buildChargenDraftView(input: {
             ? [undefined]
             : [];
 
-      if (!resolvedGroupId) {
+      if (!resolvedGroupId && !("catalogueSource" in definition)) {
         return [];
       }
 
@@ -362,6 +389,9 @@ export function buildChargenDraftView(input: {
       const parentSkillDefinition = definition
         ? getSkillById(input.content, definition.skillId)
         : undefined;
+      const parentSpecializationDefinition = definition
+        ? getSpecializationById(input.content, definition.skillId)
+        : undefined;
       const groupView = parentSkillDefinition
         ? selectBestSkillGroupContribution(
             getActiveSkillGroupIds({
@@ -388,7 +418,7 @@ export function buildChargenDraftView(input: {
           )
         : undefined;
 
-      if (!definition || !parentSkillDefinition) {
+      if (!definition || (!parentSkillDefinition && !parentSpecializationDefinition)) {
         return null;
       }
 
@@ -424,7 +454,7 @@ export function buildChargenDraftView(input: {
           : undefined,
         relationshipGrantedSpecializationLevel,
         name: definition.name,
-        parentSkillName: parentSkillDefinition.name,
+        parentSkillName: (parentSkillDefinition ?? parentSpecializationDefinition)!.name,
         secondaryRanks: progressionSpecialization?.secondaryRanks ?? 0,
         specializationId: definition.id,
         specializationLevel,

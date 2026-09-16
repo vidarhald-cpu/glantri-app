@@ -20,15 +20,20 @@ export const playerFacingSkillCategoryIdSchema = z.enum([
   "mystical",
   "craft",
   "physical",
-  "special-access"
+  "special-access",
 ]);
 
-export function normalizePlayerFacingSkillCategoryId(input: string | undefined): string | undefined {
+export function normalizePlayerFacingSkillCategoryId(
+  input: string | undefined,
+): string | undefined {
   if (!input) {
     return undefined;
   }
 
-  const normalized = input.trim().toLowerCase().replace(/[\s_]+/g, "-");
+  const normalized = input
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-");
 
   if (normalized === "court-social") {
     return "social";
@@ -44,7 +49,7 @@ export function normalizePlayerFacingSkillCategoryId(input: string | undefined):
 const SKILL_GROUP_ID_ALIASES: Record<string, string> = {
   field_soldiering: "veteran_soldiering",
   officer_training: "veteran_leadership",
-  trap_and_intrusion_work: "covert_entry"
+  trap_and_intrusion_work: "covert_entry",
 };
 
 export function normalizeSkillGroupId(input: unknown): string | undefined {
@@ -61,8 +66,8 @@ export function normalizeSkillGroupIds(input: readonly unknown[] | undefined): s
     ...new Set(
       (input ?? [])
         .map(normalizeSkillGroupId)
-        .filter((groupId): groupId is string => Boolean(groupId))
-    )
+        .filter((groupId): groupId is string => Boolean(groupId)),
+    ),
   ];
 }
 const skillSocietyLevelSchema = z.number().int().min(1).max(6);
@@ -75,7 +80,7 @@ export const specializationBridgeSchema = z.object({
   parentExcessOffset: z.number().int().nonnegative(),
   parentSkillId: idSchema,
   reverseFactor: derivedSkillGrantFactorSchema,
-  threshold: z.number().int().nonnegative()
+  threshold: z.number().int().nonnegative(),
 });
 
 const LEGACY_PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID: Partial<
@@ -138,18 +143,16 @@ const LEGACY_PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID: Partial<
   veteran_leadership: "military",
   veteran_soldiering: "military",
   watch_civic_guard: "social",
-  wilderness_group: "fieldcraft"
+  wilderness_group: "fieldcraft",
 };
 
 const SKILL_DEPENDENCY_STRENGTH_PRIORITY: Record<SkillDependencyStrength, number> = {
   helpful: 0,
   recommended: 1,
-  required: 2
+  required: 2,
 };
 
-function getRequiredDependencySkillIds(
-  dependencies: unknown
-): unknown[] {
+function getRequiredDependencySkillIds(dependencies: unknown): unknown[] {
   if (!Array.isArray(dependencies)) {
     return [];
   }
@@ -191,7 +194,9 @@ function dedupeDependencies(dependencies: unknown[]): unknown[] {
     if (
       !existing ||
       SKILL_DEPENDENCY_STRENGTH_PRIORITY[dependency.strength as SkillDependencyStrength] >
-        SKILL_DEPENDENCY_STRENGTH_PRIORITY[(existing as { strength: SkillDependencyStrength }).strength]
+        SKILL_DEPENDENCY_STRENGTH_PRIORITY[
+          (existing as { strength: SkillDependencyStrength }).strength
+        ]
     ) {
       strongestDependencyBySkillId.set(skillId, dependency);
     }
@@ -216,8 +221,8 @@ function normalizeSkillDependencies(input: {
     dependencies.push(
       ...input.dependencySkillIds.map((skillId) => ({
         skillId,
-        strength: "required"
-      }))
+        strength: "required",
+      })),
     );
   }
 
@@ -225,8 +230,8 @@ function normalizeSkillDependencies(input: {
     dependencies.push(
       ...input.recommendedDependencySkillIds.map((skillId) => ({
         skillId,
-        strength: "recommended"
-      }))
+        strength: "recommended",
+      })),
     );
   }
 
@@ -234,8 +239,8 @@ function normalizeSkillDependencies(input: {
     dependencies.push(
       ...input.helpfulDependencySkillIds.map((skillId) => ({
         skillId,
-        strength: "helpful"
-      }))
+        strength: "helpful",
+      })),
     );
   }
 
@@ -244,7 +249,7 @@ function normalizeSkillDependencies(input: {
 
 export const skillGroupSkillMembershipSchema = z.object({
   skillId: idSchema,
-  relevance: skillGroupSkillRelevanceSchema.default("optional")
+  relevance: skillGroupSkillRelevanceSchema.default("optional"),
 });
 
 export const skillGroupSelectionSlotSchema = z.object({
@@ -252,7 +257,7 @@ export const skillGroupSelectionSlotSchema = z.object({
   chooseCount: z.number().int().positive().default(1),
   id: idSchema,
   label: z.string().min(1),
-  required: z.boolean().default(true)
+  required: z.boolean().default(true),
 });
 
 export const skillGroupDefinitionSchema = z.object({
@@ -261,22 +266,22 @@ export const skillGroupDefinitionSchema = z.object({
   description: z.string().optional(),
   skillMemberships: z.array(skillGroupSkillMembershipSchema).optional(),
   selectionSlots: z.array(skillGroupSelectionSlotSchema).optional(),
-  sortOrder: z.number().int().default(0)
+  sortOrder: z.number().int().default(0),
 });
 
 export const skillDependencySchema = z.object({
   skillId: idSchema,
-  strength: skillDependencyStrengthSchema.default("required")
+  strength: skillDependencyStrengthSchema.default("required"),
 });
 
 export const derivedSkillGrantSchema = z.object({
   factor: derivedSkillGrantFactorSchema,
-  skillId: idSchema
+  skillId: idSchema,
 });
 
 export const meleeCrossTrainingSchema = z.object({
   attackStyle: meleeWeaponAttackStyleSchema,
-  handClass: meleeWeaponHandClassSchema
+  handClass: meleeWeaponHandClassSchema,
 });
 
 export const skillDefinitionSchema = z.preprocess(
@@ -307,16 +312,14 @@ export const skillDefinitionSchema = z.preprocess(
     const explicitCategoryId = normalizePlayerFacingSkillCategoryId(
       typeof candidate.categoryId === "string" && candidate.categoryId.length > 0
         ? candidate.categoryId
-        : undefined
+        : undefined,
     );
-    const normalizedCategoryId =
-      candidate.id === "language" ? "language" : explicitCategoryId;
+    const normalizedCategoryId = candidate.id === "language" ? "language" : explicitCategoryId;
     const inferredCategoryId = inferPlayerFacingSkillCategoryIdFromGroupIds({
       groupId: String(normalizedGroupId ?? ""),
       groupIds: Array.isArray(normalizedGroupIds)
-        ? normalizedGroupIds
-            .filter((groupId): groupId is string => typeof groupId === "string")
-        : []
+        ? normalizedGroupIds.filter((groupId): groupId is string => typeof groupId === "string")
+        : [],
     });
 
     return {
@@ -325,7 +328,7 @@ export const skillDefinitionSchema = z.preprocess(
       dependencies: normalizedDependencies,
       dependencySkillIds: getRequiredDependencySkillIds(normalizedDependencies),
       groupId: normalizedGroupId,
-      groupIds: normalizedGroupIds.length > 0 ? normalizedGroupIds : rawGroupIds
+      groupIds: normalizedGroupIds.length > 0 ? normalizedGroupIds : rawGroupIds,
     };
   },
   z.object({
@@ -349,8 +352,8 @@ export const skillDefinitionSchema = z.preprocess(
     allowsSpecializations: z.boolean().default(false),
     derivedGrants: z.array(derivedSkillGrantSchema).optional(),
     meleeCrossTraining: meleeCrossTrainingSchema.optional(),
-    specializationBridge: specializationBridgeSchema.optional()
-  })
+    specializationBridge: specializationBridgeSchema.optional(),
+  }),
 );
 
 export const skillSpecializationSchema = z.preprocess(
@@ -369,7 +372,7 @@ export const skillSpecializationSchema = z.preprocess(
     return {
       ...candidate,
       minimumGroupLevel: normalizedMinimumParentLevel,
-      minimumParentLevel: normalizedMinimumParentLevel
+      minimumParentLevel: normalizedMinimumParentLevel,
     };
   },
   z.object({
@@ -380,8 +383,8 @@ export const skillSpecializationSchema = z.preprocess(
     minimumGroupLevel: z.number().int().nonnegative().default(11),
     minimumParentLevel: z.number().int().nonnegative().default(11),
     sortOrder: z.number().int().default(0),
-    specializationBridge: specializationBridgeSchema.optional()
-  })
+    specializationBridge: specializationBridgeSchema.optional(),
+  }),
 );
 
 export const societyLevelAccessSchema = z.preprocess(
@@ -404,7 +407,7 @@ export const societyLevelAccessSchema = z.preprocess(
       societyName:
         candidate.societyName !== undefined || candidate.label === undefined
           ? candidate.societyName
-          : candidate.label
+          : candidate.label,
     };
   },
   z.object({
@@ -417,8 +420,8 @@ export const societyLevelAccessSchema = z.preprocess(
     professionIds: z.array(idSchema).default([]),
     skillGroupIds: z.array(idSchema).default([]),
     skillIds: z.array(idSchema).default([]),
-    notes: z.string().optional()
-  })
+    notes: z.string().optional(),
+  }),
 );
 
 // Society-band skill access means "eligible to spend main skill points here",
@@ -429,7 +432,7 @@ export const societyBandSkillAccessSchema = z.object({
   linkedSocietyLevel: z.number().int().min(1).max(6),
   socialBand: z.number().int().min(1).max(4),
   skillId: idSchema,
-  notes: z.string().optional()
+  notes: z.string().optional(),
 });
 
 export const societyDefinitionSchema = z.object({
@@ -440,14 +443,14 @@ export const societyDefinitionSchema = z.object({
   shortDescription: z.string().min(1),
   historicalReference: z.string().optional(),
   glantriExamples: z.string().optional(),
-  notes: z.string().optional()
+  notes: z.string().optional(),
 });
 
 export const languageDefinitionSchema = z.object({
   id: idSchema,
   name: z.string().min(1),
   notes: z.string().optional(),
-  sourceSocietyId: idSchema.optional()
+  sourceSocietyId: idSchema.optional(),
 });
 
 export const civilizationDefinitionSchema = z.preprocess(
@@ -471,7 +474,7 @@ export const civilizationDefinitionSchema = z.preprocess(
           : candidate.spokenLanguageName,
       optionalLanguageNames: Array.isArray(candidate.optionalLanguageNames)
         ? candidate.optionalLanguageNames
-        : []
+        : [],
     };
   },
   z.object({
@@ -486,18 +489,55 @@ export const civilizationDefinitionSchema = z.preprocess(
     period: z.string().min(1),
     linkedSocietyId: idSchema,
     linkedSocietyLevel: z.number().int().min(1).max(6),
-    notes: z.string().optional()
-  })
+    notes: z.string().optional(),
+  }),
 );
 
 export type SkillGroupSkillMembership = z.infer<typeof skillGroupSkillMembershipSchema>;
 export type SkillGroupSelectionSlot = z.infer<typeof skillGroupSelectionSlotSchema>;
 export type SkillGroupDefinition = z.infer<typeof skillGroupDefinitionSchema>;
-export type SkillDefinition = z.infer<typeof skillDefinitionSchema>;
+// Legacy JSON remains validated by skillDefinitionSchema. Only the explicit target
+// variant permits absent Group identity in a runtime Chargen projection.
+export const targetRuntimeSkillDefinitionSchema = skillDefinitionSchema.innerType().extend({
+  catalogueSource: z.literal("full-target-competencies"),
+  competencyType: z.enum(["base-skill", "spoken-language", "written-tradition"]),
+  groupId: idSchema.optional(),
+  groupIds: z.array(idSchema).default([]),
+});
+export type LegacySkillDefinition = z.infer<typeof skillDefinitionSchema>;
+export type SkillDefinition =
+  | LegacySkillDefinition
+  | z.infer<typeof targetRuntimeSkillDefinitionSchema>;
+
+/**
+ * Group-free input for the target Chargen adapter. This is deliberately separate from
+ * legacy SkillDefinition and is not added to CanonicalContent or Character/API schemas.
+ * Linked stats must be resolved before a target can enter this runtime representation.
+ */
+export const chargenTargetSkillDefinitionSchema = z
+  .object({
+    competencyType: z.enum(["base-skill", "spoken-language", "written-tradition"]),
+    id: idSchema,
+    name: z.string().min(1),
+    description: z.string().min(1),
+    shortDescription: z.string().min(1),
+    linkedStats: z.array(z.string().min(1)).min(1),
+    legacySkillId: idSchema.optional(),
+  })
+  .strict();
+
+export type ChargenTargetSkillDefinition = z.infer<typeof chargenTargetSkillDefinitionSchema>;
 export type SkillDependency = z.infer<typeof skillDependencySchema>;
 export type DerivedSkillGrant = z.infer<typeof derivedSkillGrantSchema>;
 export type MeleeCrossTraining = z.infer<typeof meleeCrossTrainingSchema>;
-export type SkillSpecialization = z.infer<typeof skillSpecializationSchema>;
+export const targetRuntimeSpecializationSchema = skillSpecializationSchema.innerType().extend({
+  catalogueSource: z.literal("full-target-competencies"),
+  competencyType: z.literal("specialization"),
+  linkedStats: z.array(z.string().min(1)).min(1),
+});
+export type SkillSpecialization =
+  | z.infer<typeof skillSpecializationSchema>
+  | z.infer<typeof targetRuntimeSpecializationSchema>;
 export type SocietyLevelAccess = z.infer<typeof societyLevelAccessSchema>;
 export type SocietyBandSkillAccess = z.infer<typeof societyBandSkillAccessSchema>;
 export type SocietyDefinition = z.infer<typeof societyDefinitionSchema>;
@@ -512,7 +552,7 @@ export type MeleeWeaponHandClass = z.infer<typeof meleeWeaponHandClassSchema>;
 export type MeleeWeaponAttackStyle = z.infer<typeof meleeWeaponAttackStyleSchema>;
 
 export function getSkillDependencies(
-  skill: Pick<SkillDefinition, "dependencies">
+  skill: Pick<SkillDefinition, "dependencies">,
 ): SkillDependency[] {
   const strongestDependencyBySkillId = new Map<string, SkillDependency>();
 
@@ -533,7 +573,8 @@ export function getSkillDependencies(
 
 export function getSkillGroupIds(skill: Pick<SkillDefinition, "groupId" | "groupIds">): string[] {
   const seen = new Set<string>();
-  const groupIds = skill.groupIds.length > 0 ? skill.groupIds : [skill.groupId];
+  const groupIds =
+    skill.groupIds.length > 0 ? skill.groupIds : skill.groupId ? [skill.groupId] : [];
 
   return groupIds.filter((groupId) => {
     if (seen.has(groupId)) {
@@ -546,13 +587,13 @@ export function getSkillGroupIds(skill: Pick<SkillDefinition, "groupId" | "group
 }
 
 export function inferPlayerFacingSkillCategoryIdFromGroupIds(
-  skill: Pick<SkillDefinition, "groupId" | "groupIds"> | { groupId?: string; groupIds?: string[] }
+  skill: Pick<SkillDefinition, "groupId" | "groupIds"> | { groupId?: string; groupIds?: string[] },
 ): PlayerFacingSkillCategoryId {
   const primaryGroupId = normalizeSkillGroupId(skill.groupId);
   const groupIds = normalizeSkillGroupIds(skill.groupIds ?? []);
   const orderedGroupIds = [
     ...(primaryGroupId ? [primaryGroupId] : []),
-    ...groupIds.filter((groupId) => groupId !== primaryGroupId)
+    ...groupIds.filter((groupId) => groupId !== primaryGroupId),
   ];
 
   for (const groupId of orderedGroupIds) {
@@ -569,7 +610,7 @@ export function getPlayerFacingSkillCategoryId(
   skill:
     | Pick<SkillDefinition, "categoryId" | "groupId" | "groupIds">
     | { categoryId?: string; groupId?: string; groupIds?: string[] },
-  options?: { preferDirectProfession?: boolean }
+  options?: { preferDirectProfession?: boolean },
 ): PlayerFacingSkillCategoryId {
   if (options?.preferDirectProfession) {
     return "special-access";
@@ -588,12 +629,10 @@ export function getPlayerFacingSkillCategoryId(
 
 export function getAccessibleFoundationalSkillIdsForSocietyBand(
   entries: SocietyBandSkillAccess[],
-  input: { socialBand: number; societyId: string }
+  input: { socialBand: number; societyId: string },
 ): string[] {
   const matchingEntries = entries.filter(
-    (entry) =>
-      entry.societyId === input.societyId &&
-      entry.socialBand === input.socialBand
+    (entry) => entry.societyId === input.societyId && entry.socialBand === input.socialBand,
   );
 
   return [...new Set(matchingEntries.map((entry) => entry.skillId))];
