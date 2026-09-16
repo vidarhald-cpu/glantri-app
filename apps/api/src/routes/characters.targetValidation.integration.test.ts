@@ -21,7 +21,7 @@ afterAll(async () => {
 });
 
 describe.skipIf(!enabled)("approved target metadata API/PG boundary", () => {
-  it("rejects consistently forged POST/PUT definitions, protects repository reads, and preserves valid and legacy builds", async () => {
+  it("rejects consistently forged POST/PUT definitions, protects repository reads, and finalizes valid target and legacy builds", async () => {
     const owner = await createTestUser(prisma);
     ownedUserIds.push(owner.id);
     const seed = await createTestCharacter(prisma, owner.id);
@@ -75,6 +75,42 @@ describe.skipIf(!enabled)("approved target metadata API/PG boundary", () => {
         (await app.inject({ method: "GET", url: `/characters/${seed.id}`, headers: { cookie } }))
           .statusCode,
       ).toBe(200);
+      const headlessCommand = (candidate: CharacterBuild) => ({
+        build: candidate,
+        configuration: { flexBudget: 26, formationBudget: 60, id: "target-validation" },
+        idempotencyKey: `finalize-${candidate.id}`,
+        pilotCharacterId: "character:pilot:glantrian-retainer-veteran",
+      });
+      // Real headless caller must resolve its own trusted catalogue for all four types.
+      for (const candidate of [build, base]) {
+        const headlessBuild = { ...candidate, id: crypto.randomUUID() };
+        const payload = headlessCommand(headlessBuild);
+        const finalized = await app.inject({
+          method: "POST",
+          url: "/chargen/headless/finalize",
+          headers: { cookie },
+          payload,
+        });
+        expect(finalized.statusCode, finalized.body).toBe(200);
+        expect((await repository.findOwnedById(owner.id, headlessBuild.id))?.build).toEqual(
+          headlessBuild,
+        );
+        const reloaded = await app.inject({
+          method: "GET",
+          url: `/characters/${headlessBuild.id}`,
+          headers: { cookie },
+        });
+        expect(reloaded.statusCode).toBe(200);
+        expect(reloaded.json().character.build).toEqual(JSON.parse(JSON.stringify(headlessBuild)));
+        const replay = await app.inject({
+          method: "POST",
+          url: "/chargen/headless/finalize",
+          headers: { cookie },
+          payload,
+        });
+        expect(replay.statusCode).toBe(200);
+        expect(replay.json()).toEqual(finalized.json());
+      }
       const revision = valid.json().character.updatedAt;
       const mutations: Array<[string, (candidate: CharacterBuild) => void]> = [
         [
@@ -150,6 +186,15 @@ describe.skipIf(!enabled)("approved target metadata API/PG boundary", () => {
           }),
           label,
         ).rejects.toThrow("approved target");
+        const headless = await app.inject({
+          method: "POST",
+          url: "/chargen/headless/finalize",
+          headers: { cookie },
+          payload: headlessCommand(forged),
+        });
+        expect(headless.statusCode, label).toBe(400);
+        expect(headless.body, label).not.toContain("targetDefinition");
+        expect(await prisma.character.findUnique({ where: { id: forged.id } }), label).toBeNull();
         forged.id = build.id;
         const put = await app.inject({
           method: "PUT",

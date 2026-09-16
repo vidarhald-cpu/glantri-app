@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { pilotSkillContentReleaseV1 } from "@glantri/content";
+import { getApprovedTargetDefinitions, pilotSkillContentReleaseV1 } from "@glantri/content";
 import {
   CHARACTER_ACQUISITION_LEDGER_VERSION,
   CHARACTER_MIGRATION_PREVIEW_VERSION,
@@ -429,7 +429,12 @@ export class RetainedCharacterService {
     if (existingCharacter) {
       await this.assertCharacterLifecycleAuthority(input.actor, build.id);
     }
-    const validation = validateCharacterBuild({ build });
+    const trustedTargets = getApprovedTargetDefinitions();
+    const validation = validateCharacterBuild({
+      availableSkills: trustedTargets.skills,
+      availableSpecializations: trustedTargets.specializations,
+      build,
+    });
     if (!validation.valid) {
       throw new CharacterValidationError(validation.issues.map((issue) => issue.message));
     }
