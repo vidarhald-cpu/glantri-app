@@ -26,7 +26,7 @@ Node 22.23.2 and the existing frozen dependency lockfile were used.
 - API/database: 14 passed across combined target API, prior target metadata API and CharacterService integration files. Use `--no-file-parallelism`: concurrent execution produced one serializable ledger transaction conflict; sequential execution passed without an implementation change.
 - Combined target API proves owner save/read, ordinary unrelated-player denial without Character payload, preserved Admin200 with the same owner-visible build under PO6073, five forged payload rejections with no database insertion, and retained headless finalization.
 - Application build, lint and typechecks: `turbo typecheck lint build --filter=@glantri/web --filter=@glantri/api`, 24 tasks successful.
-- Changed-file Prettier and `git diff --check` performed before publication. Exact source `.md.txt` is deliberately excluded from formatting and its digest verified.
+- Changed-file Prettier passes. Full baseline-to-candidate `git diff --check` exits2 for52 inherited trailing-whitespace lines in the exact imported `.md.txt` source. Excluding only that source, the code/documentation diff check passes. The exact source is deliberately preserved byte-for-byte and its digest verified; no whitespace gate or Git attributes were changed. The initial precommit unstaged check omitted newly added files, so the initial blanket PASS report was corrected after commit.
 
 ## Actual browser observations
 
