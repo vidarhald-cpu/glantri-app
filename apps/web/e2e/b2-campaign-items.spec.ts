@@ -67,13 +67,20 @@ test.describe("B2 campaign item authoring and reveal", () => {
     await expect(page.getByRole("heading", { name: "Campaign items" })).toBeVisible();
 
     await page.getByRole("button", { name: "Create item" }).click();
-    await page.getByLabel("Template").selectOption("weapon-template-dagger");
+    await page
+      .getByRole("combobox", { name: "Template", exact: true })
+      .selectOption("weapon-template-dagger");
     await page.getByLabel("Item name (optional)").fill(assignmentItemName);
     await page.getByRole("button", { name: "Create item" }).click();
     await expect(page.getByRole("status")).toHaveText("Item created.");
-    await expect(page.getByText("Unassigned / in campaign", { exact: true })).toBeVisible();
+    const createdAssignmentCard = page.locator("article").filter({ hasText: assignmentItemName });
+    await expect(
+      createdAssignmentCard.getByText("Unassigned / in campaign", { exact: true }),
+    ).toBeVisible();
     await page.reload();
-    await expect(page.getByText("Unassigned / in campaign", { exact: true })).toBeVisible();
+    await expect(
+      createdAssignmentCard.getByText("Unassigned / in campaign", { exact: true }),
+    ).toBeVisible();
 
     const beforeAssignmentPayload = await (
       await page.request.get(`${API_URL}/campaigns/${b2CampaignId}/items`)
@@ -118,14 +125,18 @@ test.describe("B2 campaign item authoring and reveal", () => {
     await page.setViewportSize({ height: 900, width: 1280 });
 
     await page.getByRole("button", { name: "Create item" }).click();
-    await page.getByLabel("Template").selectOption("weapon-template-rapier");
+    await page
+      .getByRole("combobox", { name: "Template", exact: true })
+      .selectOption("weapon-template-rapier");
     await page.getByLabel("Item name (optional)").fill(itemName);
     await page.getByLabel("Description (optional)").fill("A balanced sword prepared by the GM.");
     await page.getByLabel("Initial assignment").selectOption(characterId);
-    await page.getByLabel("Use a different initiative").check();
-    await page.getByLabel("Actual initiative").fill("1");
-    await page.getByLabel("Add final attack OB contribution").check();
-    await page.getByLabel("Final attack OB", { exact: true }).fill("1");
+    await page.getByLabel("Record a different initiative").check();
+    await page.getByLabel("Recorded initiative").fill("1");
+    await page.getByLabel("Record final attack OB").check();
+    await page.getByLabel("Recorded final attack OB", { exact: true }).fill("1");
+    await page.getByLabel("Player visibility").nth(0).selectOption("revealed");
+    await page.getByLabel("Player visibility").nth(1).selectOption("revealed");
     await page.getByRole("button", { name: "Add descriptive trait" }).click();
     await expect(page.getByRole("combobox", { name: "Trait 1 category" })).toBeVisible();
     await page.getByLabel("Trait 1", { exact: true }).fill(hiddenTrait);
@@ -136,7 +147,14 @@ test.describe("B2 campaign item authoring and reveal", () => {
     await page.getByRole("button", { name: "Create item" }).click();
 
     await expect(page.getByText(itemName, { exact: true })).toBeVisible();
-    await expect(page.getByText("Initiative 1 (standard 2)")).toBeVisible();
+    await expect(page.getByText("Recorded initiative 1 (standard 2)")).toBeVisible();
+    await expect(page.getByText("Recorded final attack OB +1")).toBeVisible();
+    await expect(
+      page.getByText("Recorded for reference only. The app does not apply it to initiative."),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Recorded for reference only. The app does not apply it to attack OB."),
+    ).toBeVisible();
     await expect(
       page.getByText("Recorded capabilities — not calculated or tracked by the app"),
     ).toBeVisible();
@@ -255,6 +273,14 @@ test.describe("B2 campaign item authoring and reveal", () => {
     const afterPayload = await (await afterPayloadPromise).text();
     expect(afterPayload).toContain(hiddenTrait);
     await expect(playerPage.getByText(hiddenTrait)).toBeVisible();
+    await expect(playerPage.getByText("Recorded initiative 1 (standard 2)")).toBeVisible();
+    await expect(playerPage.getByText("Recorded final attack OB +1")).toBeVisible();
+    await expect(
+      playerPage.getByText("Recorded for reference only. The app does not apply it to initiative."),
+    ).toBeVisible();
+    await expect(
+      playerPage.getByText("Recorded for reference only. The app does not apply it to attack OB."),
+    ).toBeVisible();
 
     await playerPage.getByLabel("Template").selectOption("weapon-template-dagger");
     await playerPage.getByLabel("Initial location").selectOption({ label: "With you: Equipped" });

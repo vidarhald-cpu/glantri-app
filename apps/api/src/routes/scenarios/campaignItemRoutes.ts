@@ -225,6 +225,7 @@ export function createCampaignItemRoutes(
           holderCharacterId,
           itemFacts: parseCampaignItemFacts(body.facts ?? {}),
           notes: optionalText(body, "description"),
+          quantity: body.quantity === undefined ? 1 : integerValue(body, "quantity"),
           templateId: requiredText(body, "templateId"),
         });
 

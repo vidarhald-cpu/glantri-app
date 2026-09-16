@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { supportsEquipmentQuantity } from "@glantri/domain/equipment";
 import type {
   CanonicalEquipmentItem,
   DescriptiveItemTraitCategory,
@@ -36,6 +37,7 @@ const emptyFacts = (): CampaignItemFactDraft => ({
 });
 
 type Draft = {
+  quantity: string;
   description: string;
   displayName: string;
   facts: CampaignItemFactDraft;
@@ -45,6 +47,7 @@ type Draft = {
 
 function itemToDraft(item: CanonicalEquipmentItem): Draft {
   return {
+    quantity: String(item.quantity),
     description: item.notes ?? "",
     displayName: item.displayName ?? "",
     facts: {
@@ -113,6 +116,7 @@ function CampaignItemEditor({
     editingItem
       ? itemToDraft(editingItem)
       : {
+          quantity: "1",
           description: "",
           displayName: "",
           facts: emptyFacts(),
@@ -138,6 +142,11 @@ function CampaignItemEditor({
       setError("Choose an item template.");
       return;
     }
+    const quantity = Number(draft.quantity);
+    if (!editingItem && (!Number.isInteger(quantity) || quantity <= 0)) {
+      setError("Enter a positive whole number for quantity.");
+      return;
+    }
     setSaving(true);
     setError(undefined);
     try {
@@ -155,6 +164,7 @@ function CampaignItemEditor({
             displayName: draft.displayName,
             facts: draft.facts,
             holderCharacterId: draft.holderCharacterId || null,
+            quantity,
             templateId: draft.templateId,
           });
       onSaved(response.state, response.characters);
@@ -175,7 +185,7 @@ function CampaignItemEditor({
         <select
           disabled={Boolean(editingItem)}
           onChange={(event) =>
-            setDraft((current) => ({ ...current, templateId: event.target.value }))
+            setDraft((current) => ({ ...current, templateId: event.target.value, quantity: "1" }))
           }
           value={draft.templateId}
         >
@@ -188,6 +198,20 @@ function CampaignItemEditor({
             ))}
         </select>
       </label>
+      {!editingItem && selectedTemplate && supportsEquipmentQuantity(selectedTemplate) ? (
+        <label style={{ display: "grid", gap: "0.25rem" }}>
+          <span>Quantity</span>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            value={draft.quantity}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, quantity: event.target.value }))
+            }
+          />
+        </label>
+      ) : null}
       <div
         style={{
           display: "grid",
@@ -246,8 +270,9 @@ function CampaignItemEditor({
       {selectedTemplate?.category === "weapon" &&
       typeof selectedTemplate.initiative === "number" ? (
         <fieldset style={panelStyle}>
-          <legend>Differences from standard</legend>
+          <legend>Recorded initiative — reference only</legend>
           <div>Standard initiative: {selectedTemplate.initiative}</div>
+          <div>The app records this value but does not apply it to initiative.</div>
           <label>
             <input
               checked={Boolean(draft.facts.initiativeOverride)}
@@ -260,12 +285,12 @@ function CampaignItemEditor({
               }
               type="checkbox"
             />{" "}
-            Use a different initiative
+            Record a different initiative
           </label>
           {draft.facts.initiativeOverride ? (
             <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "1fr 1fr" }}>
               <label style={{ display: "grid", gap: "0.25rem" }}>
-                <span>Actual initiative</span>
+                <span>Recorded initiative</span>
                 <input
                   type="number"
                   value={draft.facts.initiativeOverride.value}
@@ -293,7 +318,8 @@ function CampaignItemEditor({
       ) : null}
 
       <fieldset style={panelStyle}>
-        <legend>Active mechanics</legend>
+        <legend>Recorded final attack OB — reference only</legend>
+        <div>The app records this value but does not apply it to attack OB.</div>
         <label>
           <input
             checked={Boolean(draft.facts.finalAttackObDelta)}
@@ -306,12 +332,12 @@ function CampaignItemEditor({
             }
             type="checkbox"
           />{" "}
-          Add final attack OB contribution
+          Record final attack OB
         </label>
         {draft.facts.finalAttackObDelta ? (
           <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "1fr 1fr" }}>
             <label style={{ display: "grid", gap: "0.25rem" }}>
-              <span>Final attack OB</span>
+              <span>Recorded final attack OB</span>
               <input
                 type="number"
                 value={draft.facts.finalAttackObDelta.value}
@@ -335,7 +361,7 @@ function CampaignItemEditor({
             />
           </div>
         ) : (
-          <div>No active mechanics added.</div>
+          <div>No recorded final attack OB.</div>
         )}
       </fieldset>
 

@@ -1667,6 +1667,42 @@ export class CombatItemInteractionService {
                 summary: "Canonical Combat Item action resolve.",
               },
             });
+            const committedAction = findResolutionActionContext(encounter, input.actionId)?.action;
+            if (committedAction?.status !== "completed" || !committedAction.resolution) {
+              throw new CombatItemUnavailableError();
+            }
+            const toScenarioParticipantId = (participantId: string) =>
+              encounter.participants.find(
+                (participant) =>
+                  participant.id === participantId ||
+                  participant.scenarioParticipantId === participantId,
+              )?.scenarioParticipantId;
+            const itemAudience = new Set(committedAction.itemInteraction?.visibleToParticipantIds);
+            const audienceParticipantIds = [
+              ...new Set(
+                committedAction.resolution.visibleToParticipantIds
+                  .filter((participantId) => itemAudience.has(participantId))
+                  .flatMap((participantId) => {
+                    const mapped = toScenarioParticipantId(participantId);
+                    return mapped ? [mapped] : [];
+                  }),
+              ),
+            ];
+            await transaction.scenarioEventLog.create({
+              data: {
+                eventType: "encounter_combat_outcome",
+                payloadJson: {
+                  actionId: committedAction.id,
+                  actorParticipantId: toScenarioParticipantId(committedAction.ownerParticipantId),
+                  audienceParticipantIds,
+                  encounterId: encounter.id,
+                  eventKind: "item_resolution",
+                },
+                roundNumber: input.roundNumber,
+                scenarioId: input.scenarioId,
+                summary: committedAction.resolution.text,
+              },
+            });
             await this.transactionBoundaryHook?.("event");
             return { encounter, item };
           },

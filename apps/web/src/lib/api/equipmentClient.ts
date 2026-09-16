@@ -78,6 +78,7 @@ export async function loadCampaignItems(campaignId: string): Promise<CampaignIte
 }
 
 export async function createCampaignItemOnServer(input: {
+  quantity?: number;
   campaignId: string;
   description?: string | null;
   displayName?: string | null;
@@ -90,6 +91,7 @@ export async function createCampaignItemOnServer(input: {
       description: input.description ?? null,
       displayName: input.displayName ?? null,
       facts: input.facts,
+      quantity: input.quantity ?? 1,
       holderCharacterId: input.holderCharacterId ?? null,
       templateId: input.templateId,
     }),

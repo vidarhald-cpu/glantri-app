@@ -3,9 +3,12 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { EncounterSession, ScenarioParticipant } from "@glantri/domain";
+import type { CombatGenericAction, EncounterSession, ScenarioParticipant } from "@glantri/domain";
 
-import { updateGenericCombatActionOnServer } from "@/lib/api/localServiceClient";
+import {
+  updateCombatItemInteractionOnServer,
+  updateGenericCombatActionOnServer,
+} from "@/lib/api/localServiceClient";
 import { GenericCombatActionPanel } from "./GenericCombatActionPanel";
 
 vi.mock("@/lib/api/localServiceClient", () => ({
@@ -36,10 +39,142 @@ const scenarioParticipant = {
   snapshot: { displayName: "Aster" },
 } as unknown as ScenarioParticipant;
 
+const canonicalDrop: CombatGenericAction = {
+  createdAt: "2026-08-14T09:00:00.000Z",
+  duration: { kind: "gm_decided" },
+  id: "canonical-drop",
+  intent: "Drop the silver dagger.",
+  itemInteraction: {
+    itemId: "canonical-dagger",
+    itemLabel: "Silver dagger",
+    itemRevision: "2026-08-14T08:00:00.000Z",
+    operation: "drop",
+    stateAtDeclaration: "held",
+    visibleToParticipantIds: ["encounter-aster"],
+  },
+  lastUpdatedAt: "2026-08-14T09:00:00.000Z",
+  ownerParticipantId: "encounter-aster",
+  preset: "item_interaction",
+  progress: { completedRounds: 0 },
+  reference: {
+    itemId: "canonical-dagger",
+    kind: "item",
+    label: "Silver dagger",
+    ownerParticipantId: "encounter-aster",
+  },
+  status: "declared",
+};
+
+function withActions(...actions: CombatGenericAction[]): EncounterSession {
+  return {
+    ...encounter,
+    combatRoundState: {
+      ...encounter.combatRoundState,
+      genericActions: actions,
+    },
+  } as EncounterSession;
+}
+
 describe("GenericCombatActionPanel", () => {
   beforeEach(() => {
+    vi.mocked(updateCombatItemInteractionOnServer).mockReset();
+    vi.mocked(updateCombatItemInteractionOnServer).mockResolvedValue(encounter);
     vi.mocked(updateGenericCombatActionOnServer).mockReset();
     vi.mocked(updateGenericCombatActionOnServer).mockResolvedValue(encounter);
+  });
+
+  it.each(["initial", "same value", "fallback"])(
+    "keeps a canonical Drop reviewable after %s selection with its edited duration",
+    async (selection) => {
+      const props = {
+        isGm: true,
+        onEncounterUpdated: vi.fn(),
+        scenarioParticipants: [scenarioParticipant],
+      };
+      const { rerender } = render(
+        <GenericCombatActionPanel encounter={withActions()} {...props} />,
+      );
+      rerender(<GenericCombatActionPanel encounter={withActions(canonicalDrop)} {...props} />);
+      const review = screen.getByRole("button", { name: "Review action" });
+      await waitFor(() => expect(review).toBeEnabled());
+      expect(screen.getByLabelText("Reviewed duration")).toHaveValue("gm_decided");
+      expect(screen.queryByLabelText("Reviewed Item")).toBeNull();
+      expect(screen.queryByLabelText("Reviewed reference")).toBeNull();
+      fireEvent.change(screen.getByLabelText("Reviewed duration"), {
+        target: { value: "rounds" },
+      });
+      fireEvent.change(screen.getByLabelText("Reviewed rounds"), { target: { value: "3" } });
+      if (selection !== "initial") {
+        fireEvent.change(screen.getByLabelText("Action and task history"), {
+          target: { value: selection === "same value" ? canonicalDrop.id : "" },
+        });
+      }
+      expect(review).toBeEnabled();
+      expect(screen.getByLabelText("Reviewed rounds")).toHaveValue(3);
+      fireEvent.click(review);
+      await waitFor(() => expect(updateCombatItemInteractionOnServer).toHaveBeenCalledTimes(1));
+      expect(updateCombatItemInteractionOnServer).toHaveBeenCalledWith({
+        actionId: canonicalDrop.id,
+        duration: { kind: "rounds", rounds: 3 },
+        encounterId: encounter.id,
+        expectedRevision: encounter.updatedAt,
+        operation: "review",
+        resultText: undefined,
+        visibleToParticipantIds: undefined,
+      });
+      expect(updateGenericCombatActionOnServer).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps canonical review busy and reports a stale revision without advancing the encounter", async () => {
+    let rejectReview!: (error: Error) => void;
+    vi.mocked(updateCombatItemInteractionOnServer).mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectReview = reject;
+      }),
+    );
+    const onEncounterUpdated = vi.fn();
+    render(
+      <GenericCombatActionPanel
+        encounter={withActions(canonicalDrop)}
+        isGm
+        onEncounterUpdated={onEncounterUpdated}
+        scenarioParticipants={[scenarioParticipant]}
+      />,
+    );
+    const review = screen.getByRole("button", { name: "Review action" });
+    fireEvent.click(review);
+    expect(review).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Action and task history"), {
+      target: { value: canonicalDrop.id },
+    });
+    fireEvent.click(review);
+    expect(updateCombatItemInteractionOnServer).toHaveBeenCalledTimes(1);
+    rejectReview(
+      new Error("The canonical Item action changed. Refresh and review the latest state."),
+    );
+    await screen.findByText(
+      "The canonical Item action changed. Refresh and review the latest state.",
+    );
+    expect(onEncounterUpdated).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Reviewed duration")).toHaveValue("gm_decided");
+  });
+
+  it("does not offer GM review to a player", () => {
+    render(
+      <GenericCombatActionPanel
+        encounter={withActions(canonicalDrop)}
+        isGm={false}
+        onEncounterUpdated={vi.fn()}
+        participantId="encounter-aster"
+        scenarioParticipants={[scenarioParticipant]}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Action and task history"), {
+      target: { value: canonicalDrop.id },
+    });
+    expect(screen.queryByRole("button", { name: "Review action" })).toBeNull();
+    expect(updateCombatItemInteractionOnServer).not.toHaveBeenCalled();
   });
 
   it("declares the Survey preset with canonical Perception and a visible numeric Difficulty", async () => {
@@ -234,6 +369,15 @@ describe("GenericCombatActionPanel", () => {
       target: { value: "environment" },
     });
     fireEvent.change(screen.getByLabelText("Reviewed environment"), {
+      target: { value: "   " },
+    });
+    fireEvent.change(screen.getByLabelText("Action and task history"), {
+      target: { value: "action-review" },
+    });
+    expect(screen.getByRole("button", { name: "Review action" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Review action" }));
+    expect(updateGenericCombatActionOnServer).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Reviewed environment"), {
       target: { value: "The gatehouse roofline" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Review action" }));
@@ -322,6 +466,12 @@ describe("GenericCombatActionPanel", () => {
     fireEvent.change(screen.getByLabelText("Player-safe result"), {
       target: { value: "This belongs only to the door action." },
     });
+    expect(resolveButton).toBeEnabled();
+    fireEvent.change(selector, { target: { value: "action-no-roll" } });
+    expect(screen.getByLabelText("Player-safe result")).toHaveValue(
+      "This belongs only to the door action.",
+    );
+    expect(screen.getByRole("checkbox", { name: "Aster" })).toBeChecked();
     expect(resolveButton).toBeEnabled();
 
     fireEvent.change(selector, { target: { value: "action-three-rounds" } });

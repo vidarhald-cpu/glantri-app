@@ -8,8 +8,8 @@ Use this procedure for an authorized implementation case or other named durable 
   owns the role map, workflow, lifecycle, visible-lane requirements, standing
   authority, and return gates. This document owns the detailed isolated
   Builder procedure and Builder return. The compact
-  [independent QA procedure](./qa-execution.md) owns QA startup, INITIAL versus
-  REPAIR QA, QA handoffs, entry checks, child states, and the QA return.
+  [independent QA procedure](./qa-execution.md) owns QA startup, INITIAL, REPAIR and
+  PRESERVATION QA, QA handoffs, entry checks, child states, and the QA return.
 - The Product Owner decides priority, product and rule behavior, UX,
   consequential architecture, authorization, acceptance, and `dev`
   integration. Architecture/control plane proposes and interprets; it does not
@@ -53,7 +53,7 @@ Use this procedure for an authorized implementation case or other named durable 
 4. **Hand off and review the exact head independently when QA is required.** The Development
    Orchestrator applies only the shallow dispatch gate in
    [`qa-execution.md`](./qa-execution.md) and creates one fresh QA task from the
-   applicable immutable INITIAL or REPAIR tuple. A fresh QA
+   applicable immutable INITIAL, REPAIR, or PRESERVATION tuple. A fresh QA
    reviewer in a separate visible task and clean worktree independently checks
    topology, scope, the actual delta, and the selected substantive gates. A
    mismatch returns quickly as `BLOCKED`; the Orchestrator does not duplicate
@@ -158,6 +158,17 @@ draft PR, publish evidence, and continue in-scope repairs requested by QA. No
 separate approval is needed for those steps while the contract, SHA lineage,
 scope, and ownership remain valid. This never authorizes merge, scope expansion,
 product decisions, `main`, release, or production work.
+
+Batch related in-scope QA findings into one coherent repair, then return the new
+immutable head to fresh QA. Repair commits and pushes remain authorized; all
+existing repair-cycle and repeated-root-cause limits still apply. A mechanical
+refresh uses [preservation QA](./qa-execution.md#preservation-qa), without a
+routine new Product Owner approval while its contract and lineage remain valid.
+
+Local Safari/development-browser testing has
+[standing authorization](./control-plane.md#standing-safari-and-development-browser-authority),
+including launch and authorized testing-process control. Actual unavoidable
+human-only OS/login/security prompts still require immediate USER ACTION REQUIRED.
 
 ### Investigation and evidence publication
 
@@ -283,9 +294,9 @@ changes. Unchanged observations do not create repeated issue/control-plane posts
 
 ## Capacity, collisions, and exception paths
 
-- Aggressively parallelize independent design and investigation, and start independent QA when its Builder finishes.
+- Prepare future work proportionately using durable specifications; start independent QA as soon as an immutable candidate is ready. Run QA and hosted checks in parallel unless a concrete dependency or measured resource constraint requires scheduling.
 - No more than four authorized implementation Builders may be active at once. This is a ceiling, not a requirement to fill all lanes.
-- A blocked lane does not stop unrelated lanes. Serialize only a real hotspot or dependency, and keep its owner and merge order explicit.
+- A blocked lane does not stop unrelated lanes. Serialize only a real hotspot, dependency, or measured resource constraint, and keep its owner and scheduling/merge order explicit.
 - One active task owns a reserved hotspot unless a written integration plan assigns a safe split and merge order. A dependency or hotspot collision stops the affected Builder for coordination; it does not authorize wider scope.
 - A missing product, rule, UX, privacy, or consequential architecture decision becomes `Needs decision`. State one concrete question and stop affected implementation.
 - A clear in-scope QA failure returns automatically to the same Builder/PR,

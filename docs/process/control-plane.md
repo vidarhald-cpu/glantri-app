@@ -90,6 +90,23 @@ Existing standard local tools may be used on Glantri files inside the assigned w
 
 The normal repository dependency workflow may install dependencies already declared by the repository and make task-authorized dependency changes using the repository's package manager. It does not authorize installing unrelated or global software.
 
+### Standing Safari and development-browser authority
+
+Builders and QA have standing Product Owner authorization to launch Safari,
+allow the authorized testing process to control it, navigate local/development
+Glantri, and perform ordinary interactions, acceptance checks, and regression
+testing without asking for the same permission again. Use the relevant browser
+or harness for the required proof; synthetic evidence does not replace a real
+browser condition that the acceptance contract requires.
+
+This authority excludes production, main, Azure, unrelated external sites,
+purchases, security bypasses, and credentials outside the task context. It does
+not override actual macOS permission, login, or security prompts. If an
+unavoidable prompt needs human action, immediately surface **USER ACTION
+REQUIRED** with the exact action and blocked task; never wait silently or bypass
+it. Expanded access outside this standing scope still follows the approval
+rules below.
+
 ### Actions that require explicit approval
 
 Obtain explicit user approval, tied to a concrete task need, before:
@@ -100,7 +117,7 @@ Obtain explicit user approval, tied to a concrete task need, before:
 - granting personal-cloud or account access; or
 - granting computer-control, Accessibility, screen-recording/screen-capture, or other expanded privileges.
 
-If an existing tool cannot complete the task without one of these changes, stop and request the narrowest useful permission or installation rather than treating the task itself as blanket approval.
+Apply existing task and standing Safari authorization first; do not request it again. For an unapproved expansion, stop and request the narrowest useful permission or installation. Actual human-only OS/security prompts must still be surfaced immediately.
 
 ### External transmission and personal services
 
@@ -154,7 +171,9 @@ acceptance dimension. See [`task-contract.md`](./task-contract.md).
 
 `Ready` is complete preparation, not permission. The Product Owner advances a
 bounded task to `Authorized`; the Development Orchestrator moves it to `Active`
-only when a named lane owns live work. Builder completion moves to
+only when a named lane owns live work. Product-lane readiness and the
+Preparing for Ready supporting state follow
+[capability preparation](./development-operating-model.md#capability-sizing-and-preparation). Builder completion moves to
 `Ready for Independent QA` when required; an explicit documentation-only QA
 exemption routes the complete durable result to acceptance without claiming QA.
 QA PASS moves to
@@ -259,7 +278,7 @@ The Forgejo issue, when applicable, and PR hold the durable status, exact SHAs, 
 
 1. Capture the observation or objective in an issue.
 2. Triage area, type, priority, risk, and whether a product/rule decision is required.
-3. Complete the task contract and architecture review for high-risk/cross-area work.
+3. Complete the task contract and proportionate architecture review for consequential decisions or actual cross-area risks.
 4. Name the exact accepted baseline branch and SHA.
 5. Create one isolated, short-lived task branch/worktree.
 6. Implement only the coherent slice; record newly discovered non-blocking work separately.
@@ -269,7 +288,13 @@ The Forgejo issue, when applicable, and PR hold the durable status, exact SHAs, 
 10. After required QA passes, move the exact result to `Ready for Control-plane Acceptance`; only the Product Owner accepts product behavior.
 11. Merge an accepted ordinary task PR into `dev` only under the Product Owner's development-integration decision or explicit conditional integration contract with every gate satisfied. Release preparation from `dev` to `main` is a separate production-boundary workflow.
 
-One coherent behavior or architecture slice is the governing PR size rule. There is no rigid changed-file cap. An unusually large, high-risk, or cross-area PR must include an integration plan describing why it cannot be sliced safely, contract/merge order, hotspot ownership, review stages, verification, compatibility, rollback, and follow-up modularization.
+Prefer the largest coherent vertical capability under one Builder with settled
+decisions and meaningful QA. File count or crossing layers alone does not
+justify splitting or a separate integration plan. Use targeted
+architecture review and an integration plan when actual size, risk, dependencies,
+or ownership conflicts require them; explain the capability boundary, hotspot
+ownership, sequence, verification, compatibility, and rollback. Follow
+[capability sizing and preparation](./development-operating-model.md#capability-sizing-and-preparation).
 
 ## Cross-area coordination
 
@@ -278,7 +303,7 @@ One coherent behavior or architecture slice is the governing PR size rule. There
 - Treat the hotspots in `docs/architecture/ownership.md` as reserved surfaces.
 - Permit only one task to edit a hotspot unless the integration plan assigns the split and merge order.
 - Establish shared contract/schema changes before dependent implementations where practical.
-- Architecture review is required before cross-area or high-risk work becomes `Ready`.
+- Resolve consequential architecture and actual cross-area risks before `Ready`; routine work crossing established layers does not require a new decision or exhaustive review.
 - Record interface decisions under `docs/decisions/architecture/` when they create a durable boundary.
 - Use PR/issue timelines for active handoffs; do not create a shared mutable agent-log file.
 
@@ -289,6 +314,14 @@ Source PDFs, texts, workbooks, and tables are evidence and provenance, not unque
 Agents must cite relevant evidence, record conflicts and deviations, and never silently reinterpret a source. Material rulings use `docs/decisions/templates/rule-decision.md`, remain traceable when superseded, and are protected by focused executable examples or golden tests.
 
 ## Product-owner checkpoints
+
+Routine mechanics, standing local-browser use, authorized commit/push/PR work,
+QA, bounded repairs, mechanical refreshes, and conditionally authorized dev
+integration do not require another Product Owner round trip. Return for genuine
+product/rule/UX decisions, consequential architecture outside the contract,
+meaningful scope expansion, unresolved cross-lane hotspot conflict, repeated
+failure under the anti-loop limits, or production/release boundaries. Explicit
+acceptance gates and unapproved permissions remain binding.
 
 The product owner should normally need to monitor three queues:
 

@@ -177,6 +177,16 @@ gate remains binding. A documented QA exemption is not a QA PASS and does not
 create conditional integration authority. Never override FAIL or infer merge
 authority from local verification or technical mergeability.
 
+When all stated conditions pass, integrate promptly without another Product
+Owner stamp; do not leave completed candidates idle and create avoidable refresh
+churn. An unresolved rule, product, UX, or consequential architecture finding
+still blocks integration. QA and hosted checks run in parallel by default once
+the immutable candidate is ready, except for concrete dependencies or measured
+resource contention. An unchanged exact-head PASS remains valid over time;
+mechanical head changes use preservation QA, while product changes require fresh
+substantive QA under [verification classes](./qa-execution.md#verification-classes-and-evidence-validity).
+None of this grants main, production, or Azure authority.
+
 ### Formatting debt baseline
 
 The initial reconciliation inherited 470 files that fail a full-repository Prettier check. Wholesale normalization is explicit P3 technical debt and is not part of initial `dev` publication. `pnpm format:check` remains the debt-audit command; it is not a publication gate while that debt remains.

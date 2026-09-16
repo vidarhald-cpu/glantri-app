@@ -325,6 +325,7 @@ export default function EncounterDetail({
       campaignId && scenarioId
         ? await updateEncounterOnServer({
             encounterId: nextEncounter.id,
+            expectedRevision: encounter?.updatedAt,
             session: nextEncounter,
           })
         : await localEncounterRepository.save(nextEncounter);
