@@ -725,3 +725,9 @@ They do not prevent approval of this architecture.
 Final status
 
 # #113 Profession Provenance / Availability — architecture approved; bounded reconciliation/content completion remains before Ready.
+
+## Reconciliation evidence update — 16 September 2026
+
+The [PO-approved reconciliation dossier](../source/professions/README.md) supersedes the earlier completion assessment above: 69 mapped/reconciled, 22 historical/legacy-only and five unresolved identities, totaling 96. All 523 recovered association occurrences are retained (49 family-scoped, 474 Profession-scoped); 518 is the controlling source claim, not a certified recovered total. E00 remains OPEN pending source correction or scoped healer ownership evidence.
+
+Architecture and the 84-family / 59-group / 115-LG-opportunity / 88-direct-opportunity target model are unchanged. Remaining work is the five narrow source questions, E00 certification and contextual family/variant/opportunity availability, bindings and S01/B1 evidence. These do not block generic/unbound Chargen consumption under separate authorization. Overall #113 remains Preparing for Ready. No further content or implementation work is authorized by this publication.
