@@ -6,13 +6,15 @@ not a new request for a product decision. Publication does not activate Chargen,
 acquisition, costs, grants, availability, Professions, or Combat.
 
 The subject directory follows the existing `docs/source/professions` and
-`docs/source/combat` convention. Both Markdown files retain their original names
-and exact supplied UTF-8 bytes. Do not format them.
+`docs/source/combat` convention. Both raw evidence files preserve exact supplied UTF-8 bytes. The `.md.txt`
+suffix identifies verbatim Markdown source stored as plain text, separate from
+this formatted reader guide. Their original supplied filenames are retained
+before the final `.txt` suffix. Do not format the raw evidence.
 
-| Supplied file                                           | SHA-256                                                          |
-| ------------------------------------------------------- | ---------------------------------------------------------------- |
-| Glantri_Full_Catalogue_Learning_Groups_PO_Proposal.md   | 7452da9e5fb0b324ea74b3eb618472c512d3c3f04288a49f124fa50821790423 |
-| Glantri_Learning_Groups_Martial_Revision_PO_Proposal.md | f44447d438fc33f0a37cc3703bb33d711f4423b95c9c0e047691ea4a12004e8a |
+| Supplied file                                                                                                          | SHA-256                                                          |
+| ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| [Glantri_Full_Catalogue_Learning_Groups_PO_Proposal.md](Glantri_Full_Catalogue_Learning_Groups_PO_Proposal.md.txt)     | 7452da9e5fb0b324ea74b3eb618472c512d3c3f04288a49f124fa50821790423 |
+| [Glantri_Learning_Groups_Martial_Revision_PO_Proposal.md](Glantri_Learning_Groups_Martial_Revision_PO_Proposal.md.txt) | f44447d438fc33f0a37cc3703bb33d711f4423b95c9c0e047691ea4a12004e8a |
 
 Original source directory: `/Users/vidarhald/Documents/Glantri local/`.
 

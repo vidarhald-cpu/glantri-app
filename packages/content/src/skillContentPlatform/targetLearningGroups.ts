@@ -9,12 +9,12 @@ import {
 const sourceDefinitions = [
   {
     markdown: fullLearningGroupsSource,
-    path: "docs/source/learning-groups/Glantri_Full_Catalogue_Learning_Groups_PO_Proposal.md",
+    path: "docs/source/learning-groups/Glantri_Full_Catalogue_Learning_Groups_PO_Proposal.md.txt",
     sha256: "7452da9e5fb0b324ea74b3eb618472c512d3c3f04288a49f124fa50821790423",
   },
   {
     markdown: martialLearningGroupsSource,
-    path: "docs/source/learning-groups/Glantri_Learning_Groups_Martial_Revision_PO_Proposal.md",
+    path: "docs/source/learning-groups/Glantri_Learning_Groups_Martial_Revision_PO_Proposal.md.txt",
     sha256: "f44447d438fc33f0a37cc3703bb33d711f4423b95c9c0e047691ea4a12004e8a",
   },
 ] as const;

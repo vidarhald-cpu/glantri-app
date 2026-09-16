@@ -28,11 +28,6 @@ describe("approved target Learning Groups", () => {
       expect(sha256(disk)).toBe(source.sha256);
     }
     expect(buildTargetLearningGroupCatalogue()).toEqual(catalogue);
-    expect(
-      readFileSync(new URL("../../../../.prettierignore", import.meta.url), "utf8")
-        .trim()
-        .split("\n"),
-    ).toEqual(catalogue.sources.map((source) => source.path));
     expect(catalogue.manifest).toMatchObject({
       groups: 59,
       baseMemberships: 151,
