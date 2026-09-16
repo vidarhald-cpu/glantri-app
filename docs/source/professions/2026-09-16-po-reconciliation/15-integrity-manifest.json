@@ -1,0 +1,163 @@
+{
+  "revision": "PO-113-2026-09-16",
+  "original_uploaded_zip_sha256": "305908a6da758ba9088f2031e7883148f0355d435115e6d36b771fd1f79fdd7f",
+  "recomputed_summary": {
+    "mapped_reconciled": 69,
+    "historical_legacy_only": 22,
+    "unresolved": 5,
+    "total": 96
+  },
+  "source_register_unchanged": true,
+  "raw_identity_provenance_unchanged_records": 96,
+  "unchanged_other_legacy_interpretations": 84,
+  "byte_identical_original_files": [
+    "00-source-register.md",
+    "01-legacy-recovery.md",
+    "02-association-accounting.md",
+    "05-family-availability.md",
+    "06-variant-availability.md",
+    "07-opportunity-availability.md",
+    "08-contextual-bindings.md",
+    "09-history-and-restriction-evidence.md"
+  ],
+  "files": {
+    "00-source-register.md": {
+      "before_sha256": "5120df6663bed6d81244d30467ac5b7dce183a018634600ce19fe253afe93751",
+      "after_sha256": "5120df6663bed6d81244d30467ac5b7dce183a018634600ce19fe253afe93751",
+      "change": "unchanged"
+    },
+    "01-legacy-recovery.md": {
+      "before_sha256": "65216ef980f2852fdbd4b7bf4de319a7a87296fd2662e19bc3331f9994876385",
+      "after_sha256": "65216ef980f2852fdbd4b7bf4de319a7a87296fd2662e19bc3331f9994876385",
+      "change": "unchanged"
+    },
+    "02-association-accounting.md": {
+      "before_sha256": "51cbb893a6bf963e0b81558d52b50ed00e52a3ce9621be879e2fbe75d7181e27",
+      "after_sha256": "51cbb893a6bf963e0b81558d52b50ed00e52a3ce9621be879e2fbe75d7181e27",
+      "change": "unchanged"
+    },
+    "03-reconciliation.md": {
+      "before_sha256": "d44f5d1ce94fea9d5528bd7155731bacadefde25f2a5f86d7b71874fa703f48e",
+      "after_sha256": "ba4a971a8bc96d47ee709372b050462f8a532f6cd074ee7c0c233a3ca274a3ac",
+      "change": "updated"
+    },
+    "04-unresolved-exceptions.md": {
+      "before_sha256": "b8b2310c332ddecd5edbd73fb48b5e79f95e63346a546c5ce8a1708362ac80f4",
+      "after_sha256": "cd3864f64c3983a3a57e4bf4ccd798cbb12b01dae87e6ba4c55993a99acecb87",
+      "change": "updated"
+    },
+    "05-family-availability.md": {
+      "before_sha256": "b406803350cb88f5d668b50ad817517152ef80d6ce39bcf63be03694dd62a362",
+      "after_sha256": "b406803350cb88f5d668b50ad817517152ef80d6ce39bcf63be03694dd62a362",
+      "change": "unchanged"
+    },
+    "06-variant-availability.md": {
+      "before_sha256": "050c8bca22a32048c71cb4b143a0bdb51737dc371127674283c63bc82e7c914a",
+      "after_sha256": "050c8bca22a32048c71cb4b143a0bdb51737dc371127674283c63bc82e7c914a",
+      "change": "unchanged"
+    },
+    "07-opportunity-availability.md": {
+      "before_sha256": "949beb1187901b0fdc1181ab70aa9ba2c9f99917ffe84416debd1d23e959884e",
+      "after_sha256": "949beb1187901b0fdc1181ab70aa9ba2c9f99917ffe84416debd1d23e959884e",
+      "change": "unchanged"
+    },
+    "08-contextual-bindings.md": {
+      "before_sha256": "a392fef7f7e6c460531cfe76a93d7a6d4296de4d9fa5983941d937fbf0c8fc1a",
+      "after_sha256": "a392fef7f7e6c460531cfe76a93d7a6d4296de4d9fa5983941d937fbf0c8fc1a",
+      "change": "unchanged"
+    },
+    "09-history-and-restriction-evidence.md": {
+      "before_sha256": "e53f6e9f846397013a1e8379d728fe2a922d40490d9547d696ccb46faaf2c4c1",
+      "after_sha256": "e53f6e9f846397013a1e8379d728fe2a922d40490d9547d696ccb46faaf2c4c1",
+      "change": "unchanged"
+    },
+    "10-S01-evidence-package.md": {
+      "before_sha256": "b486e3bcfc62e4e6dfca53c49303ffb793a40d48fd0de5592b88fb51ee0a7f9d",
+      "after_sha256": "5c952c5c9f515acac4a38619631b7819f950b58d1932b52985a07d95fc2f6791",
+      "change": "updated"
+    },
+    "11-PO-decisions-and-readiness.md": {
+      "before_sha256": "b33690a017ba2e722c59de02f6b7cbe394f0cc48820e2cd34cfb9b0184d0b16d",
+      "after_sha256": "55be3d3ccbf8e83428b93321ccdb31e32bd56a53e948d7353b6497110792a167",
+      "change": "updated"
+    },
+    "12-verification.md": {
+      "before_sha256": "44f2a08f4f12c405d4e509dfe63997aa6f993bdbe717c41aeabca1d6b01ec426",
+      "after_sha256": "6c811637e36844ff6bc110bcf3892ac863c2e82dc0c90f710aeb820012e969e6",
+      "change": "updated"
+    },
+    "13-change-log.md": {
+      "before_sha256": null,
+      "after_sha256": "3c970d21f7db8f7586297d0ea3357db6713ef93ba1a887b38dc1905ea14f34f1",
+      "change": "added"
+    },
+    "14-po-rulings.md": {
+      "before_sha256": null,
+      "after_sha256": "29348de1bfc0b190aa52aabb1c17a338a56cf0f12f4fcbfae3088edbeafcd09e",
+      "change": "added"
+    },
+    "README.md": {
+      "before_sha256": "43a87cbd02ca716459a03c60bf76793dc3b8088fd39b63236c839f208d0a6050",
+      "after_sha256": "40c3c058c8568576adf725a49fc76bb903830ad0b0257cc77ef5d7baa0df9577",
+      "change": "updated"
+    },
+    "profession-113-ledgers.json": {
+      "before_sha256": "37f0e5fc80ccbc4ee92436fba2ef914d2e24bc693f73d92664f2a6383e50ef09",
+      "after_sha256": "950ba72c292a34f065cdebb65d0b0eddc1e260eb0cd56dabede6ac409a93e209",
+      "change": "updated"
+    },
+    "validation.json": {
+      "before_sha256": "421ac435cfae573b139383779ae3d4ee140b5de19a3940adc00e0e3feff67af5",
+      "after_sha256": "295907bd4c80d3bb5fd04fb254694c55ff832f817479e9fed3d82e59385e6425",
+      "change": "updated"
+    }
+  },
+  "protected_json_sections": {
+    "legacy_availability_profiles": {
+      "before_sha256": "ec7fb19a42340675cd3e7cb4235bbd77512d3d5c45fbb8562dd5b431892c45d5",
+      "after_sha256": "ec7fb19a42340675cd3e7cb4235bbd77512d3d5c45fbb8562dd5b431892c45d5",
+      "unchanged": true
+    },
+    "legacy_family_reference_registry": {
+      "before_sha256": "10fa9337f948e6b4aa85eb271b2c099f3d87b02a53ae4d04192b8c663392be91",
+      "after_sha256": "10fa9337f948e6b4aa85eb271b2c099f3d87b02a53ae4d04192b8c663392be91",
+      "unchanged": true
+    },
+    "legacy_printed_association_occurrences": {
+      "before_sha256": "c1866b5b9282cd823cf73405591e6b1fd6d85d40ea6f58dcd0e4693c6ac50593",
+      "after_sha256": "c1866b5b9282cd823cf73405591e6b1fd6d85d40ea6f58dcd0e4693c6ac50593",
+      "unchanged": true
+    },
+    "target_families": {
+      "before_sha256": "1ee3b97eef504a0c3db63c096fc7124c1b6c61a8c9ce420f65b92edd20326d16",
+      "after_sha256": "1ee3b97eef504a0c3db63c096fc7124c1b6c61a8c9ce420f65b92edd20326d16",
+      "unchanged": true
+    },
+    "target_learning_groups": {
+      "before_sha256": "ae389fbd2115aa1561ac3ebe7fb138bde696b475d8258af4de33f9b6dafc94fd",
+      "after_sha256": "ae389fbd2115aa1561ac3ebe7fb138bde696b475d8258af4de33f9b6dafc94fd",
+      "unchanged": true
+    },
+    "variant_route_ledger": {
+      "before_sha256": "189cfe25fc5c354fd8595ce0aaf62c6217b9bb5bf3c2f796e60ec957f398d55d",
+      "after_sha256": "189cfe25fc5c354fd8595ce0aaf62c6217b9bb5bf3c2f796e60ec957f398d55d",
+      "unchanged": true
+    },
+    "target_training_opportunities": {
+      "before_sha256": "983050591232fed8798584d5c885ae3a179506071e44feeb51beb0e9175f1119",
+      "after_sha256": "983050591232fed8798584d5c885ae3a179506071e44feeb51beb0e9175f1119",
+      "unchanged": true
+    },
+    "military_compositions": {
+      "before_sha256": "15584e4eb0c63df9470969e0f2e4549122c6c17c6b50c8700333cbd84467f0bb",
+      "after_sha256": "15584e4eb0c63df9470969e0f2e4549122c6c17c6b50c8700333cbd84467f0bb",
+      "unchanged": true
+    },
+    "context_binding_ledger": {
+      "before_sha256": "219701db38e7587829c88f9205ae1e8131f6badba1eab140f8388b793b62bb05",
+      "after_sha256": "219701db38e7587829c88f9205ae1e8131f6badba1eab140f8388b793b62bb05",
+      "unchanged": true
+    }
+  },
+  "manifest_note": "This manifest excludes its own hash; final ZIP hash is supplied beside the package."
+}
