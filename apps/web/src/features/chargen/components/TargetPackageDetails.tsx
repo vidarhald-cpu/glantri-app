@@ -1,5 +1,9 @@
 import { fullSkillCatalogueProposal } from "@glantri/content/full-skill-catalogue-proposal";
-import { targetLearningGroupCatalogue, targetProfessionCatalogue } from "@glantri/content";
+import {
+  TARGET_PROFESSION_EXCLUSIVE_GROUP_PAIRS,
+  targetLearningGroupCatalogue,
+  targetProfessionCatalogue,
+} from "@glantri/content";
 
 export function TargetGroupDetails({ groupId }: { groupId: string }) {
   const group = targetLearningGroupCatalogue.groups.find((g) => g.id === groupId);
@@ -43,6 +47,13 @@ export function TargetPackageDetails({ professionId }: { professionId: string })
           is supplied by this Profession.
         </p>
       ) : null}
+      {(TARGET_PROFESSION_EXCLUSIVE_GROUP_PAIRS[family.id] ?? []).map(([a, b]) => (
+        <p key={a}>
+          Choose either {targetLearningGroupCatalogue.groups.find((g) => g.id === a)?.name} or{" "}
+          {targetLearningGroupCatalogue.groups.find((g) => g.id === b)?.name}; these alternative
+          routes cannot both be purchased through this Profession.
+        </p>
+      ))}
       {opportunities.map((o) => (
         <section key={o.id}>
           <strong>

@@ -121,6 +121,57 @@ describe.skipIf(!enabled)("combined target Chargen API authority", () => {
         expect(bad.statusCode, bad.body).toBe(400);
         expect(await prisma.character.findUnique({ where: { id: b.id } })).toBeNull();
       }
+      for (const [professionId, a, b] of [
+        ["profession:sailor", "F09", "G06"],
+        ["profession:guard-escort", "F30", "G08"],
+      ]) {
+        const routeContext = { ...context, professionId };
+        const routes = [a, b].map((targetId) =>
+          allocateChargenPoint({
+            ...routeContext,
+            progression: createChargenProgression(),
+            targetId,
+            targetType: "group",
+          }),
+        );
+        for (const route of routes) {
+          const individual = finalizeChargenDraft({
+            ...routeContext,
+            progression: route.progression,
+            name: "Synthetic individual route",
+          });
+          expect(individual.errors).toEqual([]);
+          const response = await app.inject({
+            method: "POST",
+            url: "/characters/",
+            headers: { cookie },
+            payload: { build: individual.build },
+          });
+          expect(response.statusCode, response.body).toBe(200);
+        }
+        for (const ordered of [routes, [...routes].reverse()]) {
+          const forged = characterBuildSchema.parse({
+            ...base,
+            id: crypto.randomUUID(),
+            professionId,
+            progression: {
+              ...ordered[0].progression,
+              primaryPoolSpent:
+                ordered[0].progression.primaryPoolSpent + ordered[1].progression.primaryPoolSpent,
+              skillGroups: ordered.flatMap((r) => r.progression.skillGroups),
+            },
+          });
+          const response = await app.inject({
+            method: "POST",
+            url: "/characters/",
+            headers: { cookie },
+            payload: { build: forged },
+          });
+          expect(response.statusCode, response.body).toBe(400);
+          expect(response.body).toContain("alternative training routes");
+          expect(await prisma.character.findUnique({ where: { id: forged.id } })).toBeNull();
+        }
+      }
       const headless = { ...build, id: crypto.randomUUID() };
       const headlessResult = await app.inject({
         method: "POST",

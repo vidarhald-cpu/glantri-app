@@ -1,3 +1,4 @@
+import { getExclusiveProfessionGroupErrors } from "../exclusiveProfessionGroups";
 import type {
   ChargenMode,
   CharacterProgression,
@@ -352,6 +353,12 @@ export function allocateChargenPoint(input: AllocateChargenPointInput): SpendPoi
   });
 
   if (input.targetType === "group") {
+    const exclusiveError = getExclusiveProfessionGroupErrors({
+      ...input,
+      purchasingGroupId: input.targetId,
+    })[0];
+    if (exclusiveError)
+      return { error: exclusiveError, progression: structuredClone(input.progression), warnings };
     const normalAccess = access.normalSkillGroupIds.includes(input.targetId);
 
     if (!normalAccess) {
@@ -510,6 +517,12 @@ export function spendPrimaryPoint(input: SpendPrimaryPointInput): SpendPointResu
   }
 
   if (input.targetType === "group") {
+    const exclusiveError = getExclusiveProfessionGroupErrors({
+      ...input,
+      purchasingGroupId: input.targetId,
+    })[0];
+    if (exclusiveError)
+      return { error: exclusiveError, progression: structuredClone(input.progression), warnings };
     if (!allowedGroupIds.includes(input.targetId)) {
       return {
         error: "That group is not available for the selected profession and society.",

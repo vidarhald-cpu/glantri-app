@@ -521,3 +521,7 @@ Profession opportunities default to additive family-level access menus. Only exp
 Target group access requires an approved Profession route. Flexible funds can pay an accessible group but do not create entitlement. Group prices include only base-Skill members under the existing formula. Explicit Specializations are access-only, bought separately for 4 initially and 2 per increase, with normal immediate-parent eligibility.
 
 Generic/unbound choices do not inherit legacy Society or Social Band filters. #113 contextual availability remains unfinished and inactive. Personal browser drafts are unverified and nonblocking; isolated synthetic historical fixtures establish compatibility without speculative legacy-completion or personal-storage inspection.
+
+## Bounded P09/P14 purchase alternatives
+
+The current #206 PO ruling makes P09 Sailor and Boat Worker’s F09/G06 routes alternative group purchases: F09 is the fuller rigged-vessel route and replaces G06 for that path. P14 Guard, Watcher and Escort’s F30/G08 group routes are likewise mutually exclusive; G08+F35 remains permitted when both sets are taught. These rules apply only to purchases through those Professions. They do not exclude independent/direct competency purchases, create tracks or imply exclusions elsewhere. Each alternative retains its existing cost and access rules; refused purchases leave spending and progression unchanged.

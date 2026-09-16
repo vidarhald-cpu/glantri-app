@@ -13,6 +13,12 @@ import type { CanonicalContent } from "./types";
 
 export const TARGET_PROFESSION_SOURCE_DIGEST =
   "548a81ec323321609fb7af1a2a78459450556dc32a4df5818965c10b2b48def6";
+/** Bounded PO ruling for #206; these pairs do not imply additional tracks or exclusions. */
+export const TARGET_PROFESSION_EXCLUSIVE_GROUP_PAIRS: Record<string, [string, string][]> = {
+  "profession:sailor": [["F09", "G06"]],
+  "profession:guard-escort": [["F30", "G08"]],
+};
+
 export interface TargetProfessionOpportunity {
   id: string;
   familyId: string;
@@ -182,6 +188,7 @@ export function withTargetLearningGroupsAndProfessions(
               familyId: f.id,
               name: f.name,
               subtypeName: f.name,
+              exclusiveLearningGroupPairs: TARGET_PROFESSION_EXCLUSIVE_GROUP_PAIRS[f.id],
               description: f.description,
             }),
           ],

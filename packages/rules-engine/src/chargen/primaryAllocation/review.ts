@@ -1,3 +1,4 @@
+import { getExclusiveProfessionGroupErrors } from "../exclusiveProfessionGroups";
 import type { CharacterProgression, RolledCharacterProfile } from "@glantri/domain";
 
 import { evaluateSkillSelection } from "../../skills/evaluateSkillSelection";
@@ -97,7 +98,7 @@ export function reviewChargenDraft(input: ReviewChargenDraftInput): ReviewCharge
     societyLevel: input.societyLevel,
   });
 
-  const errorSet = new Set<string>();
+  const errorSet = new Set<string>(getExclusiveProfessionGroupErrors({ ...input, progression }));
   const warningSet = new Set<string>();
 
   if (!input.profile) {

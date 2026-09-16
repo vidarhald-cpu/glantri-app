@@ -1,6 +1,6 @@
 # Issue 206 — combined target Chargen Builder evidence
 
-Status: draft candidate, not independent QA or integration acceptance. P09 and P14 access-pair semantics remain pending Product Owner ruling. Their raw opportunities are preserved and currently projected through the additive default; this is provisional for those two pairs and must not be treated as accepted exclusivity semantics.
+Status: Builder candidate for independent immutable-head QA. The Product Owner resolved P09/P14 in the bounded continuation from `79382951f872d06805f8f01840ed9db81c346c32`: P09 F09/G06 and P14 F30/G08 are mutually exclusive Profession group purchases. No other exclusivity is inferred.
 
 ## Provenance and authority
 
@@ -44,4 +44,12 @@ These are Builder observations, not independent QA certification. A fresh immuta
 
 Owned target `issue-206-490a`, container `glantri-task-issue-206-490a-pg16`, loopback49746, databases `glantri_task_issue_206_490a` and `glantri_task_issue_206_490a_test`. Supported setup/verify/migrate/exec/cleanup tooling used. Web/API processes stopped; cleanup removed the container, anonymous volumes and `.env.task`. No protected database or playtest data touched.
 
-Pending source decisions are exactly P09 source line503 (F09 normally replaces G06 as fuller route) and P14 source line700 (F30 alternative to G08). No additional review facets have been manufactured into tracks. Do not mark this draft ready for acceptance until the parent records those rulings and the candidate reflects them. Initial Builder publication; zero postpublication repair cycles. No merge authority exercised.
+The former P09 source line503 and P14 source line700 questions are resolved by the current #206 PO ruling. Family menus and explicit tracks are preserved; the two scoped group alternatives are enforced during ordinary/flexible purchase preview, direct primary purchase, finalization, API and local Character validation. Direct competency purchases remain unaffected; P14 G08+F35 remains allowed. No new track or route-composition workflow is introduced. Parent owns fresh immutable-head QA, protected checks and any conditional dev integration. Independent-QA repair cycles remain zero.
+
+## Bounded PO continuation verification
+
+Entry HEAD `79382951f872d06805f8f01840ed9db81c346c32`, clean same branch/worktree; fetched live dev still `065248929f5274caf1da0d356ffc47b5ac68074f`. Source bytes and deterministic source manifest remain unchanged. Profession runtime metadata contains only the two approved exclusion pairs.
+
+Focused tests cover both purchase orders, unchanged state/pools on refusal in both purchase entry points, each route alone, refund then switch, forged combined submissions, unaffected direct Skill purchases and unrelated Professions, and allowed P14 G08+F35. API tests save each route alone and reject both forged ordering combinations without inserting a Character. Existing owner/unrelated-player/Admin6073 and headless checks remain in the same API test.
+
+Continuation checks:62 affected regression tests PASS;2 API integration files PASS (including valid individual routes and four forged pair/order rejections); application build/lint/typechecks24 tasks PASS. Changed-file formatting and continuation diff checks PASS. The prior full-baseline raw-source whitespace exception remains unchanged. No further browser run is claimed for this bounded continuation; package text and purchase-preview restrictions use the existing inspected UI paths and require independent QA review. Supported cleanup removed the continuation container, anonymous volumes and `.env.task`. The new task target uses owner `issue-issue-206-490a`, loopback51888, container `glantri-task-issue-issue-206-490a-pg16` and application/test databases `glantri_task_issue_issue_206_490a` / `glantri_task_issue_issue_206_490a_test`; the repeated word in the generated owner name is harmless and no previous lease or protected target is reused.
