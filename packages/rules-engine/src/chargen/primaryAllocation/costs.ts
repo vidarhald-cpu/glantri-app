@@ -1,8 +1,9 @@
 import type {
   CharacterProgression,
+  ChargenTargetSkillDefinition,
   RolledCharacterProfile,
   SkillDefinition,
-  SkillSpecialization
+  SkillSpecialization,
 } from "@glantri/domain";
 import { getSkillGroupIds } from "@glantri/domain";
 
@@ -16,7 +17,21 @@ export const LEGACY_GROUP_POINT_COST = 4;
 export const NEW_SPECIALIZATION_COST = 4;
 export const EXISTING_SPECIALIZATION_COST = 2;
 
-export function getSkillSpendCost(skill: SkillDefinition): number {
+export type ChargenSkillAccessRoute = "ordinary" | "flexible";
+
+export function getSkillSpendCost(skill: SkillDefinition): number;
+export function getSkillSpendCost(
+  skill: SkillDefinition | ChargenTargetSkillDefinition,
+  accessRoute: ChargenSkillAccessRoute,
+): number;
+export function getSkillSpendCost(
+  skill: SkillDefinition | ChargenTargetSkillDefinition,
+  accessRoute?: ChargenSkillAccessRoute,
+): number {
+  if ("competencyType" in skill) {
+    if (!accessRoute) throw new Error("Target Skill cost requires an active access route.");
+    return accessRoute === "flexible" ? SECONDARY_SKILL_POINT_COST : ORDINARY_SKILL_POINT_COST;
+  }
   return skill.category === "secondary" ? SECONDARY_SKILL_POINT_COST : ORDINARY_SKILL_POINT_COST;
 }
 
@@ -31,7 +46,7 @@ export function getSelectedSkillIdsForGroupSlot(input: {
 }): string[] {
   return (
     input.progression.chargenSelections?.selectedGroupSlots.find(
-      (selection) => selection.groupId === input.groupId && selection.slotId === input.slotId
+      (selection) => selection.groupId === input.groupId && selection.slotId === input.slotId,
     )?.selectedSkillIds ?? []
   );
 }
@@ -47,7 +62,9 @@ export function getActiveGroupSkillCost(input: {
     return { error: "Skill group definition not found." };
   }
 
-  const skillsById = new Map(input.content.skills.map((skill) => [skill.id, skill]));
+  const skillsById = new Map(
+    (input.content.compatibilityContent ?? input.content).skills.map((skill) => [skill.id, skill]),
+  );
   const fixedGroupSkillIds = (group.skillMemberships ?? []).map((membership) => membership.skillId);
   const hasSelectionSlots = (group.selectionSlots?.length ?? 0) > 0;
   const activeSkillIds = new Set(
@@ -55,9 +72,9 @@ export function getActiveGroupSkillCost(input: {
       ? fixedGroupSkillIds
       : hasSelectionSlots
         ? []
-      : input.content.skills
-          .filter((skill) => getSkillGroupIds(skill).includes(input.groupId))
-          .map((skill) => skill.id)
+        : input.content.skills
+            .filter((skill) => getSkillGroupIds(skill).includes(input.groupId))
+            .map((skill) => skill.id),
   );
 
   for (const slot of group.selectionSlots ?? []) {
@@ -65,7 +82,7 @@ export function getActiveGroupSkillCost(input: {
     const selectedSkillIds = getSelectedSkillIdsForGroupSlot({
       groupId: input.groupId,
       progression: input.progression,
-      slotId: slot.id
+      slotId: slot.id,
     }).filter((skillId) => candidateSkillIds.has(skillId));
 
     if (slot.required && selectedSkillIds.length < slot.chooseCount) {
@@ -88,7 +105,7 @@ export function getActiveGroupSkillCost(input: {
   }
 
   return {
-    cost: Math.max(1, Math.floor(totalIndividualCost * 0.6))
+    cost: Math.max(1, Math.floor(totalIndividualCost * 0.6)),
   };
 }
 
@@ -106,7 +123,7 @@ export function getOrdinaryPoolTotal(progression?: CharacterProgression): number
 
 export function getFlexiblePoolTotal(
   profile: RolledCharacterProfile | undefined,
-  progression?: Pick<CharacterProgression, "flexiblePointFactor" | "secondaryPoolTotal">
+  progression?: Pick<CharacterProgression, "flexiblePointFactor" | "secondaryPoolTotal">,
 ): number {
   const resolvedStats = getResolvedProfileStats(profile);
 
@@ -116,7 +133,7 @@ export function getFlexiblePoolTotal(
 
   return Math.floor(
     ((resolvedStats.int ?? 0) + (resolvedStats.lck ?? 0)) *
-      (progression?.flexiblePointFactor ?? STANDARD_CHARGEN_METHOD_POLICY.flexiblePointFactor)
+      (progression?.flexiblePointFactor ?? STANDARD_CHARGEN_METHOD_POLICY.flexiblePointFactor),
   );
 }
 
@@ -134,7 +151,8 @@ export function chooseChargenPool(input: {
   profile?: RolledCharacterProfile;
   progression: CharacterProgression;
 }): "primary" | "secondary" | null {
-  const ordinaryRemaining = getOrdinaryPoolTotal(input.progression) - input.progression.primaryPoolSpent;
+  const ordinaryRemaining =
+    getOrdinaryPoolTotal(input.progression) - input.progression.primaryPoolSpent;
   const flexibleRemaining =
     getFlexiblePoolTotal(input.profile, input.progression) - input.progression.secondaryPoolSpent;
 
@@ -151,7 +169,7 @@ export function chooseChargenPool(input: {
 
 export function getPrimaryPurchaseCostForGroup(
   progression: CharacterProgression,
-  groupId: string
+  groupId: string,
 ): number {
   const group = progression.skillGroups.find((item) => item.groupId === groupId);
   return group && group.ranks > 0 ? LEGACY_GROUP_POINT_COST : LEGACY_GROUP_POINT_COST * 2;
@@ -159,28 +177,32 @@ export function getPrimaryPurchaseCostForGroup(
 
 export function getPrimaryPurchaseCostForSkill(
   progression: CharacterProgression,
-  skillDefinition: SkillDefinition
+  skillDefinition: SkillDefinition,
 ): number {
   void progression;
 
-  return getSkillSpendCost(skillDefinition);
+  return "catalogueSource" in skillDefinition
+    ? getSkillSpendCost(skillDefinition, "ordinary")
+    : getSkillSpendCost(skillDefinition);
 }
 
 export function getSecondaryPurchaseCostForSkill(
   progression: CharacterProgression,
-  skillDefinition: SkillDefinition
+  skillDefinition: SkillDefinition,
 ): number {
   void progression;
 
-  return getSkillSpendCost(skillDefinition);
+  return "catalogueSource" in skillDefinition
+    ? getSkillSpendCost(skillDefinition, "flexible")
+    : getSkillSpendCost(skillDefinition);
 }
 
 export function getSecondaryPurchaseCostForSpecialization(
   progression: CharacterProgression,
-  specializationDefinition: SkillSpecialization
+  specializationDefinition: SkillSpecialization,
 ): number {
   const specialization = progression.specializations.find(
-    (item) => item.specializationId === specializationDefinition.id
+    (item) => item.specializationId === specializationDefinition.id,
   );
   return getSpecializationSpendCost(Boolean(specialization && specialization.secondaryRanks > 0));
 }

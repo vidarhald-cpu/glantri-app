@@ -1,7 +1,14 @@
+import { assertApprovedTargetProgression } from "@glantri/content";
 import { characterBuildSchema, type CharacterBuild } from "@glantri/domain";
 
 import { localDb, type LocalCharacterDraft, type LocalCharacterRecord } from "../glantriDexie";
 import { getServerCharacterRevision } from "./localCharacterRepository";
+
+function parseApprovedBuild(input: unknown): CharacterBuild {
+  const build = characterBuildSchema.parse(input);
+  assertApprovedTargetProgression(build.progression);
+  return build;
+}
 
 export interface SaveCharacterDraftInput {
   advancementPointsSpent: number;
@@ -24,14 +31,14 @@ export class CharacterDraftRepository {
 
     return {
       ...record,
-      build: characterBuildSchema.parse(record.build),
+      build: parseApprovedBuild(record.build),
     };
   }
 
   async save(input: SaveCharacterDraftInput): Promise<LocalCharacterDraft> {
     const now = input.updatedAt ?? new Date().toISOString();
     const existing = await localDb.characterDrafts.get(input.id);
-    const build = characterBuildSchema.parse(input.build);
+    const build = parseApprovedBuild(input.build);
 
     const record: LocalCharacterDraft = {
       advancementPointsSpent: input.advancementPointsSpent,
@@ -75,7 +82,7 @@ export class CharacterDraftRepository {
 
     return records.map((record) => ({
       ...record,
-      build: characterBuildSchema.parse(record.build),
+      build: parseApprovedBuild(record.build),
     }));
   }
 

@@ -73,7 +73,6 @@ import {
   getAllowedProfessions,
   buildSocietyOptions,
   buildCivilizationOptions,
-  buildConcreteLanguageBrowseRows,
   compareRolledProfileCards,
   formatActionError,
   formatSkillStats,
@@ -95,10 +94,9 @@ import {
   type SkillBrowseRow,
 } from "./chargenWizardHelpers";
 import {
-  bindLegacySocietyChargenContext,
-  createLegacyCanonicalChargenSource,
-  getLegacySocietyChargenContext,
-} from "./chargenContentContextSource";
+  createTargetCompetencyChargenSource,
+  buildTargetRuntimeContent,
+} from "./targetCompetencyContent";
 import { persistAuthenticatedFinalizedCharacter } from "./finalizeCharacterAuthority";
 
 const SESSION_ID = "chargen-vertical-slice";
@@ -112,7 +110,7 @@ export function useChargenWizardState() {
   const router = useRouter();
   const [characterName, setCharacterName] = useState("");
   const [contentSource, setContentSource] = useState(() =>
-    createLegacyCanonicalChargenSource(defaultCanonicalContent),
+    createTargetCompetencyChargenSource(defaultCanonicalContent),
   );
   const [currentUser, setCurrentUser] = useState<AuthUser | null>();
   const [isFinalizing, setIsFinalizing] = useState(false);
@@ -149,7 +147,10 @@ export function useChargenWizardState() {
   const [buildIncreaseStat, setBuildIncreaseStat] = useState<GlantriCharacteristicKey>("str");
   const [buildDecreaseStat, setBuildDecreaseStat] = useState<GlantriCharacteristicKey>("dex");
 
-  const content: CanonicalContent = contentSource.catalogue.content;
+  const content: CanonicalContent = useMemo(
+    () => buildTargetRuntimeContent(contentSource),
+    [contentSource],
+  );
   const selectedRolledProfile = selectedProfileId
     ? selectProfile({ profileId: selectedProfileId, profiles: rolledProfiles })
     : undefined;
@@ -206,13 +207,10 @@ export function useChargenWizardState() {
       ? selectedSociety.socialBands[selectedSocialBand]
       : undefined;
   const selectedSocietyBand = selectedSociety ? selectedSocialBand : undefined;
-  const activeContentSource = bindLegacySocietyChargenContext(contentSource, {
-    socialBand: selectedSocietyBand,
-    societyId: selectedSocietyId,
-  });
-  const legacyAcquisitionContext = getLegacySocietyChargenContext(activeContentSource);
-  const activeSocietyId = legacyAcquisitionContext?.societyId;
-  const activeSocialBand = legacyAcquisitionContext?.socialBand;
+  // Civilization/Society still drives existing Profession compatibility calculations.
+  // Target acquisitions use the separate explicit unbound/general source context.
+  const activeSocietyId = selectedSocietyId;
+  const activeSocialBand = selectedSocietyBand;
   const availableProfessions = getAllowedProfessions(content.professions, selectedSocietyAccess);
   const selectedProfession = availableProfessions.find((item) => item.id === selectedProfessionId);
   const sortedSkillGroups = sortSkillGroups(content.skillGroups);
@@ -375,16 +373,13 @@ export function useChargenWizardState() {
             .map((skill) => skill.id),
           skillSources: {},
         };
-  const visibleSkillDefinitions = content.skills.filter((skill) => !skill.specializationOfSkillId);
+  const visibleSkillDefinitions = content.skills.filter((skill) =>
+    content.chargenCatalogue!.skillIds.includes(skill.id),
+  );
   const normalSkillGroups = sortedSkillGroups.filter((group) =>
     skillAccess.normalSkillGroupIds.includes(group.id),
   );
-  const concreteLanguageRows = buildConcreteLanguageBrowseRows({
-    content,
-    draftView,
-    profile: selectedProfile,
-    progression,
-  });
+  const concreteLanguageRows: SkillBrowseRow[] = [];
   const languageSkillViews = draftView.skills
     .filter((skill) => skill.skillId === "language")
     .sort(
@@ -579,10 +574,14 @@ export function useChargenWizardState() {
         .filter((row): row is NonNullable<typeof row> => row !== null);
     });
   const groupedPlayerSkillTableRows = groupRowsBySkillType(playerSkillTableRows);
-  const specializationRows = [...content.specializations]
+  const specializationRows = content.specializations
+    .filter(({ id }) => content.chargenCatalogue!.specializationIds.includes(id))
     .sort((left, right) => left.sortOrder - right.sortOrder)
     .map((specialization) => {
       const parentSkill = content.skills.find((skill) => skill.id === specialization.skillId);
+      const parentSpecialization = content.specializations.find(
+        ({ id }) => id === specialization.skillId,
+      );
       const parentMetrics = parentSkill
         ? getSkillAllocationMetrics({
             content,
@@ -612,8 +611,12 @@ export function useChargenWizardState() {
           : undefined,
         grantedSpecializationLevel: specializationView?.relationshipGrantedSpecializationLevel ?? 0,
         evaluation,
-        parentSkillLevel: (parentMetrics?.groupXp ?? 0) + (parentMetrics?.skillXp ?? 0),
-        parentSkillName: parentSkill?.name ?? specialization.skillId,
+        parentSkillLevel: parentSpecialization
+          ? (progression.specializations.find(
+              ({ specializationId }) => specializationId === parentSpecialization.id,
+            )?.secondaryRanks ?? 0)
+          : (parentMetrics?.groupXp ?? 0) + (parentMetrics?.skillXp ?? 0),
+        parentSkillName: parentSkill?.name ?? parentSpecialization?.name ?? specialization.skillId,
         secondaryRanks: specializationView?.secondaryRanks ?? 0,
         specialization,
         specializationName: specialization.name,
@@ -647,7 +650,7 @@ export function useChargenWizardState() {
         : defaultCanonicalContent;
 
       if (cachedContent) {
-        setContentSource(createLegacyCanonicalChargenSource(startingContent));
+        setContentSource(createTargetCompetencyChargenSource(startingContent));
       }
 
       setCurrentUser(sessionUser);
@@ -669,7 +672,7 @@ export function useChargenWizardState() {
 
         const normalizedContent = validateCanonicalContent(freshContent);
 
-        setContentSource(createLegacyCanonicalChargenSource(normalizedContent));
+        setContentSource(createTargetCompetencyChargenSource(normalizedContent));
         await contentCacheRepository.save(CONTENT_CACHE_KEY, normalizedContent, "v1");
       } catch {
         // Seed and cache already cover the local-first case.

@@ -11,7 +11,7 @@ import {
   skillDefinitionSchema,
   skillGroupDefinitionSchema,
   skillSpecializationSchema,
-  societyLevelAccessSchema
+  societyLevelAccessSchema,
 } from "@glantri/domain";
 
 export const canonicalContentSchema = z.object({
@@ -25,10 +25,20 @@ export const canonicalContentSchema = z.object({
   professionSkills: z.array(professionSkillMapSchema).default([]),
   societies: z.array(societyDefinitionSchema).default([]),
   societyLevels: z.array(societyLevelAccessSchema).default([]),
-  societyBandSkillAccess: z.array(societyBandSkillAccessSchema).default([])
+  societyBandSkillAccess: z.array(societyBandSkillAccessSchema).default([]),
 });
 
-export type CanonicalContent = z.infer<typeof canonicalContentSchema>;
+// Runtime Chargen can project explicitly tagged target definitions after validating
+// the legacy compatibility payload. This does not widen the canonical JSON schema.
+export type CanonicalContent = Omit<z.infer<typeof canonicalContentSchema>, "skills"> & {
+  skills: import("@glantri/domain").SkillDefinition[];
+  chargenCatalogue?: {
+    sourceId: "full-target-competencies";
+    skillIds: readonly string[];
+    specializationIds: readonly string[];
+  };
+  compatibilityContent?: CanonicalContent;
+};
 
 export interface CanonicalContentLoader {
   load(): Promise<CanonicalContent>;

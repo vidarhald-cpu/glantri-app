@@ -5,8 +5,8 @@ export interface ChargenCatalogueIdentity {
   sourceId: string;
 }
 
-export interface ChargenCatalogueProjection {
-  content: CanonicalContent;
+export interface ChargenCatalogueProjection<TContent = CanonicalContent> {
+  content: TContent;
   identity: ChargenCatalogueIdentity;
 }
 
@@ -25,16 +25,16 @@ export type ChargenAcquisitionContext =
   | LegacySocietyChargenAcquisitionContext
   | UnboundGeneralChargenAcquisitionContext;
 
-export interface ChargenContentContextSource {
+export interface ChargenContentContextSource<TContent = CanonicalContent> {
   acquisitionContext: ChargenAcquisitionContext;
-  catalogue: ChargenCatalogueProjection;
+  catalogue: ChargenCatalogueProjection<TContent>;
 }
 
 export interface LegacyCanonicalChargenContentSource extends ChargenContentContextSource {
   acquisitionContext: LegacySocietyChargenAcquisitionContext;
 }
 
-/** Future adapter context only; current legacy content remains Society/Social-Band bound. */
+/** Context identity only: unbound does not grant availability or ordinary-point access. */
 export const UNBOUND_GENERAL_CHARGEN_ACQUISITION_CONTEXT = {
   kind: "unbound",
   scope: "general",
@@ -75,7 +75,7 @@ export function bindLegacySocietyChargenContext(
 }
 
 export function getLegacySocietyChargenContext(
-  source: ChargenContentContextSource,
+  source: ChargenContentContextSource<unknown>,
 ): LegacySocietyChargenAcquisitionContext | undefined {
   return source.acquisitionContext.kind === "legacy-society"
     ? source.acquisitionContext

@@ -2,7 +2,7 @@ import type {
   CharacterProgression,
   SkillDefinition,
   SkillGroupDefinition,
-  SkillSpecialization
+  SkillSpecialization,
 } from "@glantri/domain";
 import { getSkillNonRelationshipBaseLevel } from "./deriveSkillRelationships";
 
@@ -11,26 +11,21 @@ const LITERACY_SKILL_ID = "literacy";
 interface SkillSelectionContentShape {
   skills: SkillDefinition[];
   skillGroups?: SkillGroupDefinition[];
+  specializations?: SkillSpecialization[];
 }
 
 function getSkillDependencies(skill: SkillDefinition): SkillDefinition["dependencies"] {
-  const strongestDependencyBySkillId = new Map<
-    string,
-    SkillDefinition["dependencies"][number]
-  >();
+  const strongestDependencyBySkillId = new Map<string, SkillDefinition["dependencies"][number]>();
   const strengthPriority = {
     helpful: 0,
     recommended: 1,
-    required: 2
+    required: 2,
   } as const;
 
   for (const dependency of skill.dependencies) {
     const existing = strongestDependencyBySkillId.get(dependency.skillId);
 
-    if (
-      !existing ||
-      strengthPriority[dependency.strength] > strengthPriority[existing.strength]
-    ) {
+    if (!existing || strengthPriority[dependency.strength] > strengthPriority[existing.strength]) {
       strongestDependencyBySkillId.set(dependency.skillId, dependency);
     }
   }
@@ -83,15 +78,12 @@ export interface EvaluateSkillSelectionInput {
 
 function getSkillDefinitionById(
   content: SkillSelectionContentShape,
-  skillId: string
+  skillId: string,
 ): SkillDefinition | undefined {
   return content.skills.find((skill) => skill.id === skillId);
 }
 
-function getPurchasedSkillLevel(
-  progression: CharacterProgression,
-  skillId: string
-): number {
+function getPurchasedSkillLevel(progression: CharacterProgression, skillId: string): number {
   return progression.skills
     .filter((skill) => skill.skillId === skillId)
     .reduce((highest, skill) => Math.max(highest, skill.ranks ?? 0), 0);
@@ -118,7 +110,7 @@ function createEmptyEvaluation(): SkillSelectionEvaluationResult {
     advisories: [],
     blockingReasons: [],
     isAllowed: true,
-    warnings: []
+    warnings: [],
   };
 }
 
@@ -150,19 +142,19 @@ function createDependencyMessage(input: {
       return {
         code: "missing-required-dependency",
         message: `${input.targetSkill.name} requires ${dependencyName}.`,
-        skillId: input.dependency.skillId
+        skillId: input.dependency.skillId,
       };
     case "recommended":
       return {
         code: "missing-recommended-dependency",
         message: `${input.targetSkill.name} recommends ${dependencyName}.`,
-        skillId: input.dependency.skillId
+        skillId: input.dependency.skillId,
       };
     case "helpful":
       return {
         code: "missing-helpful-dependency",
         message: `${dependencyName} is helpful for ${input.targetSkill.name}.`,
-        skillId: input.dependency.skillId
+        skillId: input.dependency.skillId,
       };
   }
 }
@@ -180,7 +172,7 @@ function evaluateSkillDependencies(input: {
       ? getEffectiveSkillLevel({
           content: input.content,
           progression: input.progression,
-          skill: dependencySkill
+          skill: dependencySkill,
         })
       : getPurchasedSkillLevel(input.progression, dependency.skillId);
 
@@ -191,7 +183,7 @@ function evaluateSkillDependencies(input: {
     const message = createDependencyMessage({
       content: input.content,
       dependency,
-      targetSkill: input.skill
+      targetSkill: input.skill,
     });
 
     if (dependency.strength === "required") {
@@ -230,7 +222,7 @@ function evaluateLiteracyRequirement(input: {
         getEffectiveSkillLevel({
           content: input.content,
           progression: input.progression,
-          skill: literacySkill
+          skill: literacySkill,
         }) > 0
       );
     })()
@@ -239,7 +231,7 @@ function evaluateLiteracyRequirement(input: {
   }
 
   const hasExplicitLiteracyDependency = getSkillDependencies(input.skill).some(
-    (dependency) => dependency.skillId === LITERACY_SKILL_ID
+    (dependency) => dependency.skillId === LITERACY_SKILL_ID,
   );
 
   if (hasExplicitLiteracyDependency) {
@@ -253,11 +245,11 @@ function evaluateLiteracyRequirement(input: {
         {
           code: "missing-required-literacy",
           message: `${input.skill.name} requires Literacy.`,
-          skillId: LITERACY_SKILL_ID
-        }
+          skillId: LITERACY_SKILL_ID,
+        },
       ],
       isAllowed: false,
-      warnings: []
+      warnings: [],
     };
   }
 
@@ -269,9 +261,9 @@ function evaluateLiteracyRequirement(input: {
       {
         code: "missing-recommended-literacy",
         message: `${input.skill.name} recommends Literacy.`,
-        skillId: LITERACY_SKILL_ID
-      }
-    ]
+        skillId: LITERACY_SKILL_ID,
+      },
+    ],
   };
 }
 
@@ -295,18 +287,18 @@ function evaluateSkillSpecializationBridge(input: {
         {
           code: "missing-specialization-bridge-parent-skill",
           message: `${input.skill.name} requires ${bridge.parentSkillId}.`,
-          skillId: bridge.parentSkillId
-        }
+          skillId: bridge.parentSkillId,
+        },
       ],
       isAllowed: false,
-      warnings: []
+      warnings: [],
     };
   }
 
   const parentBaseLevel = getNonDerivedSkillBaseLevel({
     content: input.content,
     progression: input.progression,
-    skill: parentSkill
+    skill: parentSkill,
   });
 
   if (parentBaseLevel <= 0) {
@@ -316,11 +308,11 @@ function evaluateSkillSpecializationBridge(input: {
         {
           code: "missing-specialization-bridge-parent-skill",
           message: `${input.skill.name} requires ${parentSkill.name}.`,
-          skillId: parentSkill.id
-        }
+          skillId: parentSkill.id,
+        },
       ],
       isAllowed: false,
-      warnings: []
+      warnings: [],
     };
   }
 
@@ -333,11 +325,11 @@ function evaluateSkillSpecializationBridge(input: {
           currentLevel: parentBaseLevel,
           message: `${input.skill.name} requires ${parentSkill.name} level ${bridge.threshold} or higher (current ${parentBaseLevel}).`,
           requiredLevel: bridge.threshold,
-          skillId: parentSkill.id
-        }
+          skillId: parentSkill.id,
+        },
       ],
       isAllowed: false,
-      warnings: []
+      warnings: [],
     };
   }
 
@@ -350,8 +342,12 @@ function evaluateSpecializationGate(input: {
   specialization: SkillSpecialization;
 }): SkillSelectionEvaluationResult {
   const parentSkill = getSkillDefinitionById(input.content, input.specialization.skillId);
+  const parentSpecialization = input.content.specializations?.find(
+    (candidate) => candidate.id === input.specialization.skillId,
+  );
+  const parent = parentSkill ?? parentSpecialization;
 
-  if (!parentSkill) {
+  if (!parent || parent.id === input.specialization.id) {
     return {
       advisories: [],
       blockingReasons: [
@@ -359,15 +355,19 @@ function evaluateSpecializationGate(input: {
           code: "invalid-specialization-parent-skill",
           message: `${input.specialization.name} does not have a valid parent skill.`,
           skillId: input.specialization.skillId,
-          specializationId: input.specialization.id
-        }
+          specializationId: input.specialization.id,
+        },
       ],
       isAllowed: false,
-      warnings: []
+      warnings: [],
     };
   }
 
-  if (!input.specialization.specializationBridge && !parentSkill.allowsSpecializations) {
+  if (
+    parentSkill &&
+    !input.specialization.specializationBridge &&
+    !parentSkill.allowsSpecializations
+  ) {
     return {
       advisories: [],
       blockingReasons: [
@@ -375,19 +375,25 @@ function evaluateSpecializationGate(input: {
           code: "specialization-parent-disallows-specializations",
           message: `${parentSkill.name} does not allow specializations like ${input.specialization.name}.`,
           skillId: parentSkill.id,
-          specializationId: input.specialization.id
-        }
+          specializationId: input.specialization.id,
+        },
       ],
       isAllowed: false,
-      warnings: []
+      warnings: [],
     };
   }
 
-  const parentLevel = getNonDerivedSkillBaseLevel({
-    content: input.content,
-    progression: input.progression,
-    skill: parentSkill
-  });
+  // A nested Specialization checks its immediate parent's acquired ranks. Root Skill
+  // ranks and relationship-granted ranks cannot stand in for owning that parent.
+  const parentLevel = parentSkill
+    ? getNonDerivedSkillBaseLevel({
+        content: input.content,
+        progression: input.progression,
+        skill: parentSkill,
+      })
+    : input.progression.specializations
+        .filter((candidate) => candidate.specializationId === parent.id)
+        .reduce((highest, candidate) => Math.max(highest, candidate.secondaryRanks), 0);
 
   if (parentLevel <= 0) {
     return {
@@ -395,13 +401,13 @@ function evaluateSpecializationGate(input: {
       blockingReasons: [
         {
           code: "missing-specialization-parent-skill",
-          message: `${input.specialization.name} requires ${parentSkill.name}.`,
-          skillId: parentSkill.id,
-          specializationId: input.specialization.id
-        }
+          message: `${input.specialization.name} requires ${parent.name}.`,
+          skillId: parent.id,
+          specializationId: input.specialization.id,
+        },
       ],
       isAllowed: false,
-      warnings: []
+      warnings: [],
     };
   }
 
@@ -412,14 +418,14 @@ function evaluateSpecializationGate(input: {
         {
           code: "specialization-parent-skill-too-low",
           currentLevel: parentLevel,
-          message: `${input.specialization.name} requires ${parentSkill.name} level ${input.specialization.minimumParentLevel} or higher (current ${parentLevel}).`,
+          message: `${input.specialization.name} requires ${parent.name} level ${input.specialization.minimumParentLevel} or higher (current ${parentLevel}).`,
           requiredLevel: input.specialization.minimumParentLevel,
-          skillId: parentSkill.id,
-          specializationId: input.specialization.id
-        }
+          skillId: parent.id,
+          specializationId: input.specialization.id,
+        },
       ],
       isAllowed: false,
-      warnings: []
+      warnings: [],
     };
   }
 
@@ -427,36 +433,36 @@ function evaluateSpecializationGate(input: {
     advisories: [],
     blockingReasons: [],
     isAllowed: true,
-    warnings: []
+    warnings: [],
   };
 }
 
 export function evaluateSkillSelection(
-  input: EvaluateSkillSelectionInput
+  input: EvaluateSkillSelectionInput,
 ): SkillSelectionEvaluationResult {
   if (input.target.targetType === "skill") {
     return mergeEvaluations(
       evaluateSkillDependencies({
         content: input.content,
         progression: input.progression,
-        skill: input.target.skill
+        skill: input.target.skill,
       }),
       evaluateSkillSpecializationBridge({
         content: input.content,
         progression: input.progression,
-        skill: input.target.skill
+        skill: input.target.skill,
       }),
       evaluateLiteracyRequirement({
         content: input.content,
         progression: input.progression,
-        skill: input.target.skill
-      })
+        skill: input.target.skill,
+      }),
     );
   }
 
   return evaluateSpecializationGate({
     content: input.content,
     progression: input.progression,
-    specialization: input.target.specialization
+    specialization: input.target.specialization,
   });
 }

@@ -7,16 +7,13 @@ import {
   buildChargenSelectableSkillSummary,
   syncChargenLanguageSkillRows,
   syncChargenMotherTongueSkillRow,
-  syncChargenSelectionSkillRows
+  syncChargenSelectionSkillRows,
 } from "../selectionStructure";
-import {
-  getProfessionById,
-  recalculateProgression
-} from "./_helpers";
+import { getProfessionById, recalculateProgression } from "./_helpers";
 import {
   type ChargenRuleSetInput,
   type ReviewChargenDraftInput,
-  reviewChargenDraft
+  reviewChargenDraft,
 } from "./review";
 
 export interface FinalizeChargenDraftInput extends ReviewChargenDraftInput {
@@ -33,15 +30,13 @@ function getRuleSetParameters(ruleSet?: ChargenRuleSetInput): Partial<ChargenRul
   return ruleSet?.parameters ?? {};
 }
 
-export function finalizeChargenDraft(
-  input: FinalizeChargenDraftInput
-): FinalizeChargenDraftResult {
+export function finalizeChargenDraft(input: FinalizeChargenDraftInput): FinalizeChargenDraftResult {
   const review = reviewChargenDraft(input);
 
   if (!review.canFinalize || !input.profile) {
     return {
       errors: review.errors,
-      warnings: review.warnings
+      warnings: review.warnings,
     };
   }
 
@@ -49,49 +44,65 @@ export function finalizeChargenDraft(
   progression = recalculateProgression(
     syncChargenSelectionSkillRows({
       content: input.content,
-      progression
-    })
+      progression,
+    }),
   );
   progression = recalculateProgression(
     syncChargenLanguageSkillRows({
       civilizationId: input.civilizationId,
       content: input.content,
       progression,
-      societyId: input.societyId
-    })
+      societyId: input.societyId,
+    }),
   );
   progression = recalculateProgression(
     syncChargenMotherTongueSkillRow({
       civilizationId: input.civilizationId,
       content: input.content,
       educationLevel: review.draftView.education.theoreticalSkillCount,
-      progression
-    })
+      progression,
+    }),
   );
   progression.educationPoints = review.draftView.education.theoreticalSkillCount;
   const languageSummary = buildChargenLanguageSelectionSummary({
     civilizationId: input.civilizationId,
     content: input.content,
     progression,
-    societyId: input.societyId
+    societyId: input.societyId,
   });
   const selectableSkillSummary = buildChargenSelectableSkillSummary({
     content: input.content,
     professionId: input.professionId,
     progression,
     societyId: input.societyId,
-    societyLevel: input.societyLevel
+    societyLevel: input.societyLevel,
   });
   progression.chargenSelections = {
     selectedLanguageIds: languageSummary.selectedLanguageIds,
     selectedSkillIds: selectableSkillSummary.selectedSkillIds,
-    selectedGroupSlots: progression.chargenSelections?.selectedGroupSlots ?? []
+    selectedGroupSlots: progression.chargenSelections?.selectedGroupSlots ?? [],
   };
+  const catalogue = input.content.chargenCatalogue;
+  const retainedSkillIds = new Set(progression.skills.map(({ skillId }) => skillId));
+  const retainedSpecializationIds = new Set(
+    progression.specializations.map(({ specializationId }) => specializationId),
+  );
+  const relationshipContent = catalogue
+    ? {
+        ...input.content,
+        skills: input.content.skills.filter(
+          ({ id }) => catalogue.skillIds.includes(id) || retainedSkillIds.has(id),
+        ),
+        specializations: input.content.specializations.filter(
+          ({ id }) => catalogue.specializationIds.includes(id) || retainedSpecializationIds.has(id),
+        ),
+      }
+    : input.content;
   progression = recalculateProgression(
     applyRelationshipMinimumGrants({
-      content: input.content,
-      progression
-    })
+      content: relationshipContent,
+      progression,
+    }),
   );
 
   const profession = getProfessionById(input.content, input.professionId);
@@ -104,18 +115,16 @@ export function finalizeChargenDraft(
       id: input.ruleSet?.id,
       name: input.ruleSet?.name?.trim() || "Legacy default",
       ordinarySkillPoints: ruleSetPolicy.primaryPoolTotal,
-      statRollCount: ruleSetPolicy.displayedRollCount
+      statRollCount: ruleSetPolicy.displayedRollCount,
     },
     equipment: {
-      items: []
+      items: [],
     },
     id:
       globalThis.crypto && "randomUUID" in globalThis.crypto
         ? globalThis.crypto.randomUUID()
         : `character-${Date.now()}`,
-    name:
-      input.name?.trim() ||
-      `${profession?.name ?? "Character"} ${input.profile.label}`.trim(),
+    name: input.name?.trim() || `${profession?.name ?? "Character"} ${input.profile.label}`.trim(),
     profile: input.profile,
     professionId: input.professionId,
     progression,
@@ -123,16 +132,16 @@ export function finalizeChargenDraft(
       availablePoints: 0,
       checks: [],
       history: [],
-      pendingAttempts: []
+      pendingAttempts: [],
     },
     socialClass: input.socialClass,
     societyId: input.societyId,
-    societyLevel: input.societyLevel
+    societyLevel: input.societyLevel,
   };
 
   return {
     build,
     errors: [],
-    warnings: review.warnings
+    warnings: review.warnings,
   };
 }

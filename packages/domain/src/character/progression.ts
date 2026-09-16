@@ -4,7 +4,9 @@ import {
   normalizePlayerFacingSkillCategoryId,
   normalizeSkillGroupId,
   normalizeSkillGroupIds,
-  playerFacingSkillCategoryIdSchema
+  targetRuntimeSkillDefinitionSchema,
+  targetRuntimeSpecializationSchema,
+  playerFacingSkillCategoryIdSchema,
 } from "../content/skills";
 
 const chargenModeSchema = z.enum(["standard"]);
@@ -21,14 +23,14 @@ const characterChargenGroupSlotSelectionSchema = z.preprocess(
 
     return {
       ...candidate,
-      groupId: normalizeSkillGroupId(candidate.groupId) ?? candidate.groupId
+      groupId: normalizeSkillGroupId(candidate.groupId) ?? candidate.groupId,
     };
   },
   z.object({
     groupId: z.string().min(1),
     selectedSkillIds: chargenSelectionIdsSchema,
-    slotId: z.string().min(1)
-  })
+    slotId: z.string().min(1),
+  }),
 );
 
 export const characterSkillGroupSchema = z.preprocess(
@@ -41,7 +43,7 @@ export const characterSkillGroupSchema = z.preprocess(
 
     return {
       ...candidate,
-      groupId: normalizeSkillGroupId(candidate.groupId) ?? candidate.groupId
+      groupId: normalizeSkillGroupId(candidate.groupId) ?? candidate.groupId,
     };
   },
   z.object({
@@ -50,8 +52,8 @@ export const characterSkillGroupSchema = z.preprocess(
     primaryRanks: z.number().int().nonnegative().default(0),
     secondaryRanks: z.number().int().nonnegative().default(0),
     ranks: z.number().int().nonnegative().default(0),
-    gms: z.number().int().default(0)
-  })
+    gms: z.number().int().default(0),
+  }),
 );
 
 const LEGACY_LEADERSHIP_CATEGORY_BY_SKILL_ID: Record<string, string> = {
@@ -61,7 +63,7 @@ const LEGACY_LEADERSHIP_CATEGORY_BY_SKILL_ID: Record<string, string> = {
   social_perception: "social",
   tactics: "military",
   teamster: "fieldcraft",
-  teamstering: "fieldcraft"
+  teamstering: "fieldcraft",
 };
 
 function normalizeCharacterSkillCategoryInput(input: unknown): unknown {
@@ -80,25 +82,28 @@ function normalizeCharacterSkillCategoryInput(input: unknown): unknown {
       ? candidate.groupIds
       : candidate.groupId !== undefined
         ? [candidate.groupId]
-        : undefined
+        : undefined,
   );
   const normalizedGroupId = normalizeSkillGroupId(candidate.groupId) ?? normalizedGroupIds[0];
   const normalizedCandidate = {
     ...candidate,
     groupId: normalizedGroupId ?? candidate.groupId,
-    groupIds: normalizedGroupIds.length > 0 ? normalizedGroupIds : undefined
+    groupIds: normalizedGroupIds.length > 0 ? normalizedGroupIds : undefined,
   };
   const categoryId =
     typeof candidate.categoryId === "string" && candidate.categoryId.length > 0
       ? candidate.categoryId
       : undefined;
-  const normalizedCategoryKey = categoryId?.trim().toLowerCase().replace(/[\s_]+/g, "-");
+  const normalizedCategoryKey = categoryId
+    ?.trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-");
   const normalizedCategoryId = normalizePlayerFacingSkillCategoryId(categoryId);
 
   if (normalizedCategoryId) {
     return {
       ...normalizedCandidate,
-      categoryId: normalizedCategoryId
+      categoryId: normalizedCategoryId,
     };
   }
 
@@ -108,7 +113,7 @@ function normalizeCharacterSkillCategoryInput(input: unknown): unknown {
 
   const inferredCategoryId = inferPlayerFacingSkillCategoryIdFromGroupIds({
     groupId: normalizedGroupId,
-    groupIds: normalizedGroupIds
+    groupIds: normalizedGroupIds,
   });
   const skillCategoryId =
     typeof candidate.skillId === "string"
@@ -118,13 +123,11 @@ function normalizeCharacterSkillCategoryInput(input: unknown): unknown {
   return {
     ...normalizedCandidate,
     categoryId:
-      inferredCategoryId === "special-access"
-        ? skillCategoryId ?? "social"
-        : inferredCategoryId
+      inferredCategoryId === "special-access" ? (skillCategoryId ?? "social") : inferredCategoryId,
   };
 }
 
-export const characterSkillSchema = z.preprocess(
+const legacyCharacterSkillSchema = z.preprocess(
   normalizeCharacterSkillCategoryInput,
   z.object({
     category: skillCategorySchema.default("ordinary"),
@@ -142,54 +145,98 @@ export const characterSkillSchema = z.preprocess(
         "explicit",
         "melee-cross-training",
         "specialization-bridge-child",
-        "specialization-bridge-parent"
+        "specialization-bridge-parent",
       ])
       .optional(),
     secondaryRanks: z.number().int().nonnegative().default(0),
     skillId: z.string().min(1),
     ranks: z.number().int().nonnegative().default(0),
     level: z.number().int().default(0),
-    sourceTag: characterSkillSourceSchema.optional()
-  })
+    sourceTag: characterSkillSourceSchema.optional(),
+    targetDefinition: z.never().optional(),
+  }),
 );
 
-export const characterSpecializationSchema = z.object({
-  relationshipGrantedRanks: z.number().int().nonnegative().optional(),
-  relationshipGrantSourceName: z.string().min(1).optional(),
-  relationshipGrantSourceSkillId: z.string().min(1).optional(),
-  relationshipGrantSourceType: z
-    .enum([
-      "explicit",
-      "melee-cross-training",
-      "specialization-bridge-child",
-      "specialization-bridge-parent"
-    ])
-    .optional(),
-  specializationId: z.string().min(1),
-  skillId: z.string().min(1),
-  secondaryRanks: z.number().int().nonnegative().default(0),
-  ranks: z.number().int().nonnegative().default(0),
-  level: z.number().int().default(0)
-});
+const targetCharacterSkillSchema = legacyCharacterSkillSchema
+  .innerType()
+  .extend({
+    groupId: z.string().min(1).optional(),
+    targetDefinition: targetRuntimeSkillDefinitionSchema,
+  })
+  .superRefine((row, ctx) => {
+    if (row.skillId !== row.targetDefinition.id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["skillId"],
+        message: "Target identity must match the saved Skill.",
+      });
+    }
+    if (row.groupId !== row.targetDefinition.groupId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["groupId"],
+        message: "Saved target Group must match its explicit definition.",
+      });
+    }
+  });
+
+export const characterSkillSchema = z.union([
+  targetCharacterSkillSchema,
+  legacyCharacterSkillSchema,
+]);
+
+export const characterSpecializationSchema = z
+  .object({
+    targetDefinition: targetRuntimeSpecializationSchema.optional(),
+    relationshipGrantedRanks: z.number().int().nonnegative().optional(),
+    relationshipGrantSourceName: z.string().min(1).optional(),
+    relationshipGrantSourceSkillId: z.string().min(1).optional(),
+    relationshipGrantSourceType: z
+      .enum([
+        "explicit",
+        "melee-cross-training",
+        "specialization-bridge-child",
+        "specialization-bridge-parent",
+      ])
+      .optional(),
+    specializationId: z.string().min(1),
+    skillId: z.string().min(1),
+    secondaryRanks: z.number().int().nonnegative().default(0),
+    ranks: z.number().int().nonnegative().default(0),
+    level: z.number().int().default(0),
+  })
+  .superRefine((row, ctx) => {
+    if (
+      row.targetDefinition &&
+      (row.specializationId !== row.targetDefinition.id ||
+        row.skillId !== row.targetDefinition.skillId)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["targetDefinition"],
+        message: "Saved target Specialization identity and immediate parent must match.",
+      });
+    }
+  });
 
 export const characterChargenSelectionsSchema = z.object({
   selectedLanguageIds: chargenSelectionIdsSchema,
   selectedSkillIds: chargenSelectionIdsSchema,
-  selectedGroupSlots: z.array(characterChargenGroupSlotSelectionSchema).default([])
+  selectedGroupSlots: z.array(characterChargenGroupSlotSelectionSchema).default([]),
 });
 
 export const progressionTargetTypeSchema = z.enum([
   "stat",
   "skill",
   "skillGroup",
-  "specialization"
+  "specialization",
 ]);
 export const progressionCheckStatusSchema = z.enum(["requested", "approved"]);
 
 const progressionTargetBaseSchema = z.object({
   targetId: z.string().min(1),
   targetLabel: z.string().min(1),
-  targetType: progressionTargetTypeSchema
+  targetType: progressionTargetTypeSchema,
 });
 
 export const characterProgressionCheckSchema = progressionTargetBaseSchema.extend({
@@ -199,7 +246,7 @@ export const characterProgressionCheckSchema = progressionTargetBaseSchema.exten
   notes: z.string().optional(),
   provisional: z.boolean().optional(),
   requestedBy: z.string().min(1).optional(),
-  status: progressionCheckStatusSchema.default("approved")
+  status: progressionCheckStatusSchema.default("approved"),
 });
 
 export const characterProgressionPendingAttemptSchema = progressionTargetBaseSchema.extend({
@@ -207,7 +254,7 @@ export const characterProgressionPendingAttemptSchema = progressionTargetBaseSch
   cost: z.number().int().nonnegative(),
   id: z.string().min(1),
   purchasedAt: z.string().min(1),
-  purchasedBy: z.string().min(1).optional()
+  purchasedBy: z.string().min(1).optional(),
 });
 
 export const characterProgressionHistoryEntrySchema = progressionTargetBaseSchema.extend({
@@ -220,14 +267,14 @@ export const characterProgressionHistoryEntrySchema = progressionTargetBaseSchem
   rollD20: z.number().int().min(1).max(20),
   rollTotal: z.number().int().nonnegative(),
   success: z.boolean(),
-  threshold: z.number()
+  threshold: z.number(),
 });
 
 export const characterProgressionStateSchema = z.object({
   availablePoints: z.number().int().nonnegative().default(0),
   checks: z.array(characterProgressionCheckSchema).default([]),
   history: z.array(characterProgressionHistoryEntrySchema).default([]),
-  pendingAttempts: z.array(characterProgressionPendingAttemptSchema).default([])
+  pendingAttempts: z.array(characterProgressionPendingAttemptSchema).default([]),
 });
 
 export const characterProgressionSchema = z.object({
@@ -242,7 +289,7 @@ export const characterProgressionSchema = z.object({
   skills: z.array(characterSkillSchema).default([]),
   specializations: z.array(characterSpecializationSchema).default([]),
   educationPoints: z.number().int().nonnegative().default(0),
-  chargenSelections: characterChargenSelectionsSchema.optional()
+  chargenSelections: characterChargenSelectionsSchema.optional(),
 });
 
 export type CharacterSkillGroup = z.infer<typeof characterSkillGroupSchema>;
@@ -265,7 +312,7 @@ export type CharacterProgressionHistoryEntry = z.infer<
 export type CharacterProgressionState = z.infer<typeof characterProgressionStateSchema>;
 
 export function normalizeCharacterSkillLanguageName(
-  languageName: string | undefined
+  languageName: string | undefined,
 ): string | undefined {
   const normalized = languageName?.trim();
 
@@ -281,7 +328,7 @@ export function normalizeCharacterSkillLanguageName(
 }
 
 export function getCharacterSkillKey(
-  skill: Pick<CharacterSkill, "skillId" | "languageName">
+  skill: Pick<CharacterSkill, "skillId" | "languageName">,
 ): string {
   const normalizedLanguageName = normalizeCharacterSkillLanguageName(skill.languageName);
   return normalizedLanguageName
@@ -291,7 +338,49 @@ export function getCharacterSkillKey(
 
 export function isSameCharacterSkill(
   left: Pick<CharacterSkill, "skillId" | "languageName">,
-  right: Pick<CharacterSkill, "skillId" | "languageName">
+  right: Pick<CharacterSkill, "skillId" | "languageName">,
 ): boolean {
   return getCharacterSkillKey(left) === getCharacterSkillKey(right);
+}
+
+export function validateTargetProgressionMetadata(
+  progression: CharacterProgression,
+  trustedSkills: readonly import("../content/skills").SkillDefinition[],
+  trustedSpecializations: readonly import("../content/skills").SkillSpecialization[],
+): string[] {
+  const errors: string[] = [];
+  for (const row of progression.skills) {
+    if (!row.targetDefinition) continue;
+    const approved = trustedSkills.find(
+      (definition) => definition.id === row.skillId && "catalogueSource" in definition,
+    );
+    const parsed = targetRuntimeSkillDefinitionSchema.safeParse(row.targetDefinition);
+    if (
+      !approved ||
+      !parsed.success ||
+      JSON.stringify(parsed.data) !== JSON.stringify(approved) ||
+      row.groupId !== approved.groupId ||
+      (row.groupIds ?? []).some((id) => !approved.groupIds.includes(id))
+    ) {
+      errors.push(`Skill ${row.skillId} does not match the approved target definition.`);
+    }
+  }
+  for (const row of progression.specializations) {
+    if (!row.targetDefinition) continue;
+    const approved = trustedSpecializations.find(
+      (definition) => definition.id === row.specializationId && "catalogueSource" in definition,
+    );
+    const parsed = targetRuntimeSpecializationSchema.safeParse(row.targetDefinition);
+    if (
+      !approved ||
+      !parsed.success ||
+      JSON.stringify(parsed.data) !== JSON.stringify(approved) ||
+      row.skillId !== approved.skillId
+    ) {
+      errors.push(
+        `Specialization ${row.specializationId} does not match the approved target definition.`,
+      );
+    }
+  }
+  return errors;
 }

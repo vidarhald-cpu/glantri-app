@@ -1,18 +1,14 @@
 import type { CSSProperties } from "react";
-import type {
-  CanonicalContent
-} from "@glantri/content";
+import type { CanonicalContent } from "@glantri/content";
 import type {
   CharacterProgression,
   GlantriCharacteristicKey,
   ProfessionDefinition,
   RolledCharacterProfile,
   SkillDefinition,
-  SocietyLevelAccess
+  SocietyLevelAccess,
 } from "@glantri/domain";
-import {
-  getCharacterSkillKey
-} from "@glantri/domain";
+import { getCharacterSkillKey } from "@glantri/domain";
 import { formatDerivedSkillSourceLabel } from "@/lib/characters/derivedSkillLabels";
 import {
   buildChargenDraftView,
@@ -24,11 +20,11 @@ import {
   getSecondaryPurchaseCostForSpecialization,
   getChargenSkillContributionForGroup,
   spendSecondaryPoint,
-  type RolledProfileSummary
+  type RolledProfileSummary,
 } from "@glantri/rules-engine";
 import type {
   PlayerFacingSkillBucketDefinition,
-  ProfessionBrowseItem
+  ProfessionBrowseItem,
 } from "@/lib/chargen/chargenBrowse";
 import type { AuthUser } from "@glantri/auth";
 
@@ -131,7 +127,7 @@ export function getRowActionFeedbackKey(targetId: string, targetType: RowActionT
 
 export function getAllowedProfessions(
   professions: ProfessionDefinition[],
-  societyLevel: SocietyLevelAccess | undefined
+  societyLevel: SocietyLevelAccess | undefined,
 ): ProfessionDefinition[] {
   if (!societyLevel) {
     return [];
@@ -144,7 +140,9 @@ export function sortSkills(skills: SkillDefinition[]): SkillDefinition[] {
   return [...skills].sort((left, right) => left.sortOrder - right.sortOrder);
 }
 
-export function sortSkillGroups(groups: CanonicalContent["skillGroups"]): CanonicalContent["skillGroups"] {
+export function sortSkillGroups(
+  groups: CanonicalContent["skillGroups"],
+): CanonicalContent["skillGroups"] {
   return [...groups].sort((left, right) => left.sortOrder - right.sortOrder);
 }
 
@@ -156,29 +154,26 @@ export function getSkillDisplayGroupId(input: {
 }): string | undefined {
   const purchasedSkill =
     input.draftView.skills.find(
-      (candidate) => candidate.skillId === input.skill.id && candidate.sourceTag === "mother-tongue"
+      (candidate) =>
+        candidate.skillId === input.skill.id && candidate.sourceTag === "mother-tongue",
     ) ??
     input.draftView.skills.find(
-      (candidate) => candidate.skillId === input.skill.id && candidate.languageName
+      (candidate) => candidate.skillId === input.skill.id && candidate.languageName,
     ) ??
     input.draftView.skills.find((candidate) => candidate.skillId === input.skill.id);
 
-  const canonicalVisibleGroupIds = [
-    ...(input.skill.groupIds ?? []),
-    input.skill.groupId
-  ]
+  const canonicalVisibleGroupIds = [...(input.skill.groupIds ?? []), input.skill.groupId]
     .filter((groupId): groupId is string => Boolean(groupId))
     .filter((groupId) => input.skillAccess.normalSkillGroupIds.includes(groupId));
 
   for (const canonicalVisibleGroupId of canonicalVisibleGroupIds) {
     const canonicalVisibleGroup = input.content.skillGroups.find(
-      (group) => group.id === canonicalVisibleGroupId
+      (group) => group.id === canonicalVisibleGroupId,
     );
-    const requiresMaterializedMembership =
-      (canonicalVisibleGroup?.selectionSlots?.length ?? 0) > 0;
+    const requiresMaterializedMembership = (canonicalVisibleGroup?.selectionSlots?.length ?? 0) > 0;
     const isFixedGroupMembership =
       canonicalVisibleGroup?.skillMemberships?.some(
-        (membership) => membership.skillId === input.skill.id
+        (membership) => membership.skillId === input.skill.id,
       ) ?? false;
 
     if (!requiresMaterializedMembership || isFixedGroupMembership) {
@@ -190,7 +185,10 @@ export function getSkillDisplayGroupId(input: {
     }
   }
 
-  if (purchasedSkill?.contributingGroupId && input.skillAccess.normalSkillIds.includes(input.skill.id)) {
+  if (
+    purchasedSkill?.contributingGroupId &&
+    input.skillAccess.normalSkillIds.includes(input.skill.id)
+  ) {
     return purchasedSkill.contributingGroupId;
   }
 
@@ -202,9 +200,7 @@ export function getGroupSlotCandidateSkillIds(input: {
     candidateSkillIds: string[];
   }>;
 }): Set<string> {
-  return new Set(
-    input.selectionSlots.flatMap((slot) => slot.candidateSkillIds)
-  );
+  return new Set(input.selectionSlots.flatMap((slot) => slot.candidateSkillIds));
 }
 
 export function getSkillDisplayName(input: {
@@ -298,25 +294,25 @@ export function getSpecializationPurchaseState(input: {
 } {
   if (!input.skillAllocationContext) {
     return {
-      canAllocate: false
+      canAllocate: false,
     };
   }
 
   const result = spendSecondaryPoint({
     ...input.skillAllocationContext,
     targetId: input.specializationId,
-    targetType: "specialization"
+    targetType: "specialization",
   });
 
   if (result.error) {
     return {
       canAllocate: false,
-      previewMessage: formatActionError(result.error) ?? result.error
+      previewMessage: formatActionError(result.error) ?? result.error,
     };
   }
 
   const specializationDefinition = input.skillAllocationContext.content.specializations.find(
-    (specialization) => specialization.id === input.specializationId
+    (specialization) => specialization.id === input.specializationId,
   );
 
   return {
@@ -324,9 +320,9 @@ export function getSpecializationPurchaseState(input: {
     nextCost: specializationDefinition
       ? getSecondaryPurchaseCostForSpecialization(
           input.skillAllocationContext.progression,
-          specializationDefinition
+          specializationDefinition,
         )
-      : undefined
+      : undefined,
   };
 }
 
@@ -350,7 +346,17 @@ export function formatSocietyBandLabels(society: SocietyOption): string {
     .join(" • ");
 }
 
-export function getSkillTierLabel(skill: Pick<SkillDefinition, "category">): string {
+export function getSkillTierLabel(
+  skill: Pick<SkillDefinition, "category"> & {
+    competencyType?: "base-skill" | "spoken-language" | "written-tradition";
+  },
+): string {
+  if (skill.competencyType)
+    return {
+      "base-skill": "Skill",
+      "spoken-language": "Spoken Language",
+      "written-tradition": "Written Tradition",
+    }[skill.competencyType];
   return skill.category === "ordinary" ? "Primary" : "Secondary";
 }
 
@@ -376,7 +382,7 @@ export function getBadgeStyle(input?: { muted?: boolean }): CSSProperties {
     borderRadius: 999,
     color: "#4a4f45",
     fontSize: "0.75rem",
-    padding: "0.15rem 0.5rem"
+    padding: "0.15rem 0.5rem",
   };
 }
 
@@ -410,7 +416,7 @@ export function getRuleStatusItems(input: {
       message: reason.message,
       requiredLevel: reason.requiredLevel,
       skillId: reason.skillId,
-      tone: "blocked" as const
+      tone: "blocked" as const,
     })),
     ...input.warnings.map((warning) => ({
       code: warning.code,
@@ -418,7 +424,7 @@ export function getRuleStatusItems(input: {
       message: warning.message,
       requiredLevel: warning.requiredLevel,
       skillId: warning.skillId,
-      tone: "warning" as const
+      tone: "warning" as const,
     })),
     ...input.advisories.map((advisory) => ({
       code: advisory.code,
@@ -426,8 +432,8 @@ export function getRuleStatusItems(input: {
       message: advisory.message,
       requiredLevel: advisory.requiredLevel,
       skillId: advisory.skillId,
-      tone: "advisory" as const
-    }))
+      tone: "advisory" as const,
+    })),
   ];
 }
 
@@ -447,11 +453,7 @@ export function dedupeRuleStatusItems(items: RuleStatusItem[]): RuleStatusItem[]
 }
 
 export function normalizeRuleMessageMeaning(message: string): string {
-  return message
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/[.]+$/g, "")
-    .toLowerCase();
+  return message.trim().replace(/\s+/g, " ").replace(/[.]+$/g, "").toLowerCase();
 }
 
 export function suppressBridgeOverlapStatusItems(input: {
@@ -470,7 +472,7 @@ export function suppressBridgeOverlapStatusItems(input: {
     return ![
       "missing-required-dependency",
       "missing-recommended-dependency",
-      "missing-helpful-dependency"
+      "missing-helpful-dependency",
     ].includes(item.code ?? "");
   });
 }
@@ -485,7 +487,7 @@ export function getSkillRowMessages(input: {
 } {
   const statusItems = suppressBridgeOverlapStatusItems({
     bridgeParentSkillId: input.skill.specializationBridge?.parentSkillId,
-    items: dedupeRuleStatusItems(getRuleStatusItems(input.evaluation))
+    items: dedupeRuleStatusItems(getRuleStatusItems(input.evaluation)),
   });
   const feedback = input.persistedRowFeedback;
 
@@ -495,7 +497,7 @@ export function getSkillRowMessages(input: {
 
   if (
     statusItems.some(
-      (item) => normalizeRuleMessageMeaning(item.message) === normalizeRuleMessageMeaning(feedback)
+      (item) => normalizeRuleMessageMeaning(item.message) === normalizeRuleMessageMeaning(feedback),
     )
   ) {
     return { statusItems };
@@ -503,7 +505,7 @@ export function getSkillRowMessages(input: {
 
   return {
     feedback,
-    statusItems
+    statusItems,
   };
 }
 
@@ -528,7 +530,7 @@ export function getSpecializationRowMessages(input: {
 
   if (
     statusItems.some(
-      (item) => normalizeRuleMessageMeaning(item.message) === normalizeRuleMessageMeaning(feedback)
+      (item) => normalizeRuleMessageMeaning(item.message) === normalizeRuleMessageMeaning(feedback),
     )
   ) {
     return { statusItems };
@@ -536,7 +538,7 @@ export function getSpecializationRowMessages(input: {
 
   return {
     feedback,
-    statusItems
+    statusItems,
   };
 }
 
@@ -575,7 +577,7 @@ export function buildSocietyOptions(societyLevels: SocietyLevelAccess[]): Societ
   for (const societyLevel of societyLevels) {
     if (!UNIVERSAL_SOCIAL_BANDS.includes(societyLevel.societyLevel as SocialBand)) {
       throw new Error(
-        `Society "${societyLevel.societyName}" (${societyLevel.societyId}) uses unsupported social band ${societyLevel.societyLevel}.`
+        `Society "${societyLevel.societyName}" (${societyLevel.societyId}) uses unsupported social band ${societyLevel.societyLevel}.`,
       );
     }
 
@@ -585,7 +587,7 @@ export function buildSocietyOptions(societyLevels: SocietyLevelAccess[]): Societ
     if (existing) {
       if (existing.socialBands[band]) {
         throw new Error(
-          `Duplicate social band row for society "${societyLevel.societyName}" (${societyLevel.societyId}), band ${band}.`
+          `Duplicate social band row for society "${societyLevel.societyName}" (${societyLevel.societyId}), band ${band}.`,
         );
       }
 
@@ -599,8 +601,8 @@ export function buildSocietyOptions(societyLevels: SocietyLevelAccess[]): Societ
       name: societyLevel.societyName,
       notes: societyLevel.notes,
       socialBands: {
-        [band]: societyLevel
-      }
+        [band]: societyLevel,
+      },
     });
   }
 
@@ -609,7 +611,7 @@ export function buildSocietyOptions(societyLevels: SocietyLevelAccess[]): Societ
 
     if (missingBands.length > 0) {
       throw new Error(
-        `Society "${society.name}" (${society.id}) is missing social band(s): ${missingBands.join(", ")}.`
+        `Society "${society.name}" (${society.id}) is missing social band(s): ${missingBands.join(", ")}.`,
       );
     }
   }
@@ -635,18 +637,17 @@ export function buildCivilizationOptions(content: CanonicalContent): Civilizatio
       period: civilization.period,
       shortDescription: civilization.shortDescription,
       spokenLanguageName: civilization.spokenLanguageName,
-      writtenLanguageName: civilization.writtenLanguageName ?? undefined
+      writtenLanguageName: civilization.writtenLanguageName ?? undefined,
     }))
     .sort(
       (left, right) =>
-        left.linkedSocietyLevel - right.linkedSocietyLevel ||
-        left.name.localeCompare(right.name)
+        left.linkedSocietyLevel - right.linkedSocietyLevel || left.name.localeCompare(right.name),
     );
 }
 
 export function compareRolledProfileCards(
   left: RolledProfileCardModel,
-  right: RolledProfileCardModel
+  right: RolledProfileCardModel,
 ): number {
   if (left.summary.totalCharacteristicSum !== right.summary.totalCharacteristicSum) {
     return right.summary.totalCharacteristicSum - left.summary.totalCharacteristicSum;
@@ -661,7 +662,7 @@ export function compareRolledProfileCards(
 
 export function getSkillLinkedStatAverage(
   profile: RolledCharacterProfile | undefined,
-  skill: SkillDefinition
+  skill: SkillDefinition,
 ): number {
   const resolvedStats = getResolvedProfileStats(profile);
 
@@ -671,7 +672,7 @@ export function getSkillLinkedStatAverage(
 
   const total = skill.linkedStats.reduce(
     (sum, stat) => sum + (resolvedStats[stat as GlantriCharacteristicKey] ?? 0),
-    0
+    0,
   );
 
   return Math.floor(total / skill.linkedStats.length);
@@ -686,18 +687,18 @@ export function getSkillAllocationMetrics(input: {
 }): SkillAllocationMetrics {
   const skillView = input.targetLanguageName
     ? input.draftView.skills.find(
-        (item) =>
-          item.skillId === input.skill.id && item.languageName === input.targetLanguageName
+        (item) => item.skillId === input.skill.id && item.languageName === input.targetLanguageName,
       )
-    : input.draftView.skills.find(
-        (item) => item.skillId === input.skill.id && item.sourceTag === "mother-tongue"
+    : (input.draftView.skills.find(
+        (item) => item.skillId === input.skill.id && item.sourceTag === "mother-tongue",
       ) ??
       input.draftView.skills.find((item) => item.skillId === input.skill.id && item.languageName) ??
-      input.draftView.skills.find((item) => item.skillId === input.skill.id);
+      input.draftView.skills.find((item) => item.skillId === input.skill.id));
   const groupXp = skillView?.groupLevel ?? 0;
   const grantedXp = skillView?.relationshipGrantedSkillLevel ?? 0;
   const skillXp = skillView?.specificSkillLevel ?? 0;
-  const avgStats = skillView?.linkedStatAverage ?? getSkillLinkedStatAverage(input.profile, input.skill);
+  const avgStats =
+    skillView?.linkedStatAverage ?? getSkillLinkedStatAverage(input.profile, input.skill);
   const totalXp = groupXp + skillXp + grantedXp;
 
   return {
@@ -709,7 +710,7 @@ export function getSkillAllocationMetrics(input: {
     ordinaryXp: skillView?.primaryRanks ?? 0,
     skillXp,
     totalSkillLevel: avgStats + totalXp,
-    totalXp
+    totalXp,
   };
 }
 
@@ -727,7 +728,7 @@ export function getGroupScopedSkillAllocationMetrics(input: {
     content: input.content,
     groupId: input.groupId,
     progression: input.progression,
-    skill: input.skill
+    skill: input.skill,
   });
   const totalXp = groupXp + metrics.skillXp + metrics.grantedXp;
 
@@ -735,7 +736,7 @@ export function getGroupScopedSkillAllocationMetrics(input: {
     ...metrics,
     groupXp,
     totalSkillLevel: metrics.avgStats + totalXp,
-    totalXp
+    totalXp,
   };
 }
 
@@ -756,35 +757,35 @@ export function buildConcreteLanguageBrowseRows(input: {
     .map((language) => {
       const skillView =
         input.draftView.skills.find(
-          (item) => item.skillId === languageSkill.id && item.languageName === language.name
+          (item) => item.skillId === languageSkill.id && item.languageName === language.name,
         ) ??
         input.draftView.skills.find(
           (item) =>
             item.skillId === languageSkill.id &&
             item.sourceTag === "mother-tongue" &&
-            item.languageName === language.name
+            item.languageName === language.name,
         );
       const rowKey = getCharacterSkillKey({
         languageName: language.name,
-        skillId: languageSkill.id
+        skillId: languageSkill.id,
       });
 
       return {
         grantedSourceLabel: formatDerivedSkillSourceLabel({
           sourceSkillName: skillView?.relationshipSourceSkillName,
-          sourceType: skillView?.relationshipSourceType
+          sourceType: skillView?.relationshipSourceType,
         }),
         displayName: getSkillDisplayName({
           languageName: language.name,
-          skill: languageSkill
+          skill: languageSkill,
         }),
         evaluation: evaluateSkillSelection({
           content: input.content,
           progression: input.progression,
           target: {
             skill: languageSkill,
-            targetType: "skill"
-          }
+            targetType: "skill",
+          },
         }),
         isNormalAccess: false,
         metrics: getSkillAllocationMetrics({
@@ -792,13 +793,13 @@ export function buildConcreteLanguageBrowseRows(input: {
           draftView: input.draftView,
           profile: input.profile,
           skill: languageSkill,
-          targetLanguageName: language.name
+          targetLanguageName: language.name,
         }),
         rowKey,
         skill: languageSkill,
         sourceLabels: [],
         sourceTag: skillView?.sourceTag,
-        targetLanguageName: language.name
+        targetLanguageName: language.name,
       } satisfies SkillBrowseRow;
     });
 }
