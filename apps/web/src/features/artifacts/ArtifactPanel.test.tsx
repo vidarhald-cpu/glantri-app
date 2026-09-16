@@ -9,6 +9,11 @@ import { ApiRequestError } from "@/lib/api/apiClient";
 
 import { ArtifactPanel } from "./ArtifactPanel";
 
+vi.mock("@/lib/api/artifactClient", async (loadOriginal) => ({
+  ...(await loadOriginal()),
+  listArtifactImports: vi.fn().mockResolvedValue([]),
+}));
+
 const mocks = vi.hoisted(() => ({
   deleteArtifact: vi.fn(),
   loadArtifacts: vi.fn(),

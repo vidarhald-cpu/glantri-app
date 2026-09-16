@@ -559,7 +559,8 @@ export class BlackboardService {
       const available = Boolean(link && candidate);
       const sourceStatus = !available
         ? "source_unavailable"
-        : candidateMatchesSnapshot(candidate!, revision)
+        : candidateMatchesSnapshot(candidate!, revision) &&
+            (!candidate?.revisionCreatedAt || candidate.revisionCreatedAt <= revision.changedAt)
           ? "unchanged"
           : "source_changed";
       return blackboardCommonEntrySchema.parse({

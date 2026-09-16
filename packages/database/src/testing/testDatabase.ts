@@ -47,6 +47,10 @@ export async function resetTestDatabase(prisma: PrismaClient): Promise<void> {
   await prisma.characterEquipmentItem.deleteMany({});
   await prisma.characterStorageLocation.deleteMany({});
   await prisma.scenario.deleteMany({});
+  await prisma.campaignAsset.updateMany({ data: { currentRevisionId: null } });
+  await prisma.artifactSourceMapping.deleteMany({});
+  await prisma.artifactRevision.deleteMany({});
+  await prisma.artifactImportSession.deleteMany({});
   await prisma.campaignAsset.deleteMany({});
   await prisma.reusableEntity.deleteMany({});
   await prisma.campaign.deleteMany({});

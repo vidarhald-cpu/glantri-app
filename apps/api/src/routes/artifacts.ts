@@ -25,12 +25,12 @@ const ABSENCE = { error: "Artifact not found." } as const;
 const STORAGE_UNAVAILABLE = { error: "Artifact storage is temporarily unavailable." } as const;
 const ARTIFACT_MULTIPART_LIMIT_BYTES = 25 * 1024 * 1024 + 1;
 
-function routeId(request: FastifyRequest, key: string): string {
+export function routeId(request: FastifyRequest, key: string): string {
   const params = request.params as Record<string, unknown>;
   return typeof params[key] === "string" && params[key] ? (params[key] as string) : "";
 }
 
-async function requirePrivateUser(request: FastifyRequest, reply: FastifyReply) {
+export async function requirePrivateUser(request: FastifyRequest, reply: FastifyReply) {
   const user = await getAuthenticatedUser(request);
   if (!user) {
     await reply.code(404).send(ABSENCE);
@@ -39,7 +39,7 @@ async function requirePrivateUser(request: FastifyRequest, reply: FastifyReply) 
   return user;
 }
 
-function requireMutationDefense(request: FastifyRequest, reply: FastifyReply): boolean {
+export function requireMutationDefense(request: FastifyRequest, reply: FastifyReply): boolean {
   const expectedOrigin = process.env.WEB_ORIGIN ?? "http://localhost:3000";
   if (
     request.headers.origin !== expectedOrigin ||
@@ -51,7 +51,7 @@ function requireMutationDefense(request: FastifyRequest, reply: FastifyReply): b
   return true;
 }
 
-function sendError(request: FastifyRequest, reply: FastifyReply, error: unknown) {
+export function sendError(request: FastifyRequest, reply: FastifyReply, error: unknown) {
   if (error instanceof ArtifactNotFoundError) return reply.code(404).send(ABSENCE);
   if (error instanceof ArtifactConflictError) return reply.code(409).send({ error: error.message });
   if (error instanceof ArtifactLifecycleError || error instanceof ArtifactUploadValidationError) {
@@ -95,6 +95,58 @@ export const artifactRoutes: FastifyPluginAsync = async (app) => {
     // allowing multipart truncation to look like a valid exactly-25-MiB file.
     limits: { files: 1, fileSize: ARTIFACT_MULTIPART_LIMIT_BYTES, fields: 1, parts: 2 },
   });
+
+  app.get("/campaigns/:campaignId/artifacts/:artifactId/history", async (request, reply) => {
+    const user = await requirePrivateUser(request, reply);
+    if (!user) return;
+    try {
+      return {
+        revisions: await getArtifactService().history(
+          routeId(request, "campaignId"),
+          routeId(request, "artifactId"),
+          user.id,
+        ),
+        usages: await getArtifactService().usages(
+          routeId(request, "campaignId"),
+          routeId(request, "artifactId"),
+          user.id,
+        ),
+      };
+    } catch (error) {
+      return sendError(request, reply, error);
+    }
+  });
+  app.get(
+    "/campaigns/:campaignId/artifacts/:artifactId/revisions/:revisionId/content",
+    async (request, reply) => {
+      const user = await requirePrivateUser(request, reply);
+      if (!user) return;
+      if (!runtime.enabled) return reply.code(503).send(STORAGE_UNAVAILABLE);
+      try {
+        const result = await getArtifactService().readRevision(
+          routeId(request, "campaignId"),
+          routeId(request, "artifactId"),
+          routeId(request, "revisionId"),
+          user.id,
+        );
+        reply
+          .header("cache-control", "private, no-store")
+          .header("x-content-type-options", "nosniff")
+          .header("content-security-policy", "sandbox; default-src 'none'")
+          .header("content-type", result.mediaType)
+          .header("content-length", String(result.body.byteSize))
+          .header(
+            "content-disposition",
+            result.mediaType === "application/pdf"
+              ? 'attachment; filename="artifact.pdf"'
+              : "inline",
+          );
+        return reply.send(Readable.from(result.body.content));
+      } catch (error) {
+        return sendError(request, reply, error);
+      }
+    },
+  );
 
   app.get("/campaigns/:campaignId/artifacts/blackboard-candidates", async (request, reply) => {
     const user = await requirePrivateUser(request, reply);

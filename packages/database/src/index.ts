@@ -16,3 +16,4 @@ export * from "./services/combatStateReadService";
 export * from "./services/combatItemInteractionService";
 export * from "./services/encounterService";
 export * from "./services/scenarioService";
+export { ArtifactImportService } from "./services/artifactImportService";
