@@ -1,3 +1,4 @@
+import { assertApprovedTargetProgression } from "@glantri/content";
 import {
   getCharacterSkillKey,
   getSkillGroupIds,
@@ -148,6 +149,7 @@ export function buildCharacterSheetSkillRows(input: {
   label: string;
   rows: CharacterSheetSkillRow[];
 }> {
+  assertApprovedTargetProgression(input.build.progression);
   const savedTargets = input.build.progression.skills.flatMap((row) =>
     row.targetDefinition ? [row.targetDefinition] : [],
   );

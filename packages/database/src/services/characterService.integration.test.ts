@@ -1,5 +1,6 @@
+import { getApprovedTargetSkillDefinition } from "@glantri/content";
 import { beforeEach, describe, expect, it } from "vitest";
-import { characterBuildSchema, targetRuntimeSkillDefinitionSchema } from "@glantri/domain";
+import { characterBuildSchema } from "@glantri/domain";
 
 import { createPrismaCharacterRepository } from "../repositories/characterRepository";
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
@@ -40,14 +41,7 @@ if (!process.env.DATABASE_URL_TEST) {
       });
       const seed = await createTestCharacter(prisma!, owner.id);
       const original = await service.getCharacterById(seed.id);
-      const targetDefinition = targetRuntimeSkillDefinitionSchema.parse({
-        id: "skill:surgery",
-        name: "Surgery",
-        catalogueSource: "full-target-competencies",
-        competencyType: "base-skill",
-        linkedStats: ["int", "dex"],
-        category: "secondary",
-      });
+      const targetDefinition = getApprovedTargetSkillDefinition("skill:surgery")!;
       const build = characterBuildSchema.parse({
         ...original!.build,
         id: "issue168-persisted-target",

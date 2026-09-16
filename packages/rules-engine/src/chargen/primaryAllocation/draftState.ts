@@ -606,6 +606,7 @@ export function spendPrimaryPoint(input: SpendPrimaryPointInput): SpendPointResu
     };
   }
 
+  if ("catalogueSource" in skillDefinition) skill.category = "ordinary";
   skill.primaryRanks += 1;
   skill.ranks = skill.grantedRanks + skill.primaryRanks + skill.secondaryRanks;
   progression.primaryPoolSpent += cost;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { defaultCanonicalContent } from "@glantri/content";
+import { getApprovedTargetDefinitions, defaultCanonicalContent } from "@glantri/content";
 import { fullSkillCatalogueProposal } from "@glantri/content/full-skill-catalogue-proposal";
 import {
   buildChargenSkillAccessSummary,
@@ -14,6 +14,9 @@ import {
   createChargenProgression,
   removeChargenPoint,
   spendSecondaryPoint,
+  spendPrimaryPoint,
+  validateCharacterBuild,
+  removePrimaryPoint,
   resolveEffectiveProfessionPackage,
 } from "@glantri/rules-engine";
 
@@ -335,10 +338,48 @@ describe("target competency Chargen projection", () => {
       await drafts.createFromCharacter(loaded!);
       const retained = await drafts.get(build.id);
       expect(retained?.build).toEqual(build);
+      expect(validateCharacterBuild({ build }).valid).toBe(false);
+      const trusted = getApprovedTargetDefinitions();
+      expect(
+        validateCharacterBuild({
+          build,
+          availableSkills: trusted.skills,
+          availableSpecializations: trusted.specializations,
+        }).valid,
+      ).toBe(true);
+      const forged = structuredClone(build);
+      forged.progression.skills[0].targetDefinition!.linkedStats = ["str", "str"];
+      expect(
+        validateCharacterBuild({
+          build: forged,
+          availableSkills: trusted.skills,
+          availableSpecializations: trusted.specializations,
+        }).valid,
+      ).toBe(false);
+      await expect(characters.save({ build: forged })).rejects.toThrow("approved target");
+      await expect(
+        drafts.save({
+          id: build.id,
+          characterId: build.id,
+          build: forged,
+          advancementPointsSpent: 0,
+          advancementPointsTotal: 0,
+        }),
+      ).rejects.toThrow("approved target");
+      await localDb.localCharacters.put({ ...loaded!, build: forged });
+      await expect(characters.get(build.id)).rejects.toThrow("approved target");
+      await localDb.localCharacters.put(loaded!);
+      await localDb.characterDrafts.put({ ...retained!, build: forged });
+      await expect(drafts.get(build.id)).rejects.toThrow("approved target");
+      await localDb.characterDrafts.put(retained!);
+
       const sheetSummary = buildCharacterSheetSummary({
         build: retained!.build,
         content: legacyContent,
       });
+      expect(() =>
+        buildCharacterSheetSkillRows({ build: forged, content: legacyContent, sheetSummary }),
+      ).toThrow("approved target");
       const rows = buildCharacterSheetSkillRows({
         build: retained!.build,
         content: legacyContent,
@@ -576,6 +617,19 @@ describe("target competency Chargen projection", () => {
     ).toBe(1);
     const bought = allocateChargenPoint({ ...input, ...ordinary, content });
     expect(bought.spentCost).toBe(2);
+    const primary = spendPrimaryPoint({ ...input, ...ordinary, content });
+    expect(primary.error).toBeUndefined();
+    expect(primary.spentCost).toBe(2);
+    const refunded = removePrimaryPoint({
+      ...input,
+      ...ordinary,
+      content,
+      progression: primary.progression,
+    });
+    expect(refunded.error).toBeUndefined();
+    expect(refunded.spentCost).toBe(2);
+    expect(refunded.progression.primaryPoolSpent).toBe(0);
+
     expect(
       removeChargenPoint({ ...input, ...ordinary, content, progression: bought.progression })
         .spentCost,

@@ -342,3 +342,45 @@ export function isSameCharacterSkill(
 ): boolean {
   return getCharacterSkillKey(left) === getCharacterSkillKey(right);
 }
+
+export function validateTargetProgressionMetadata(
+  progression: CharacterProgression,
+  trustedSkills: readonly import("../content/skills").SkillDefinition[],
+  trustedSpecializations: readonly import("../content/skills").SkillSpecialization[],
+): string[] {
+  const errors: string[] = [];
+  for (const row of progression.skills) {
+    if (!row.targetDefinition) continue;
+    const approved = trustedSkills.find(
+      (definition) => definition.id === row.skillId && "catalogueSource" in definition,
+    );
+    const parsed = targetRuntimeSkillDefinitionSchema.safeParse(row.targetDefinition);
+    if (
+      !approved ||
+      !parsed.success ||
+      JSON.stringify(parsed.data) !== JSON.stringify(approved) ||
+      row.groupId !== approved.groupId ||
+      (row.groupIds ?? []).some((id) => !approved.groupIds.includes(id))
+    ) {
+      errors.push(`Skill ${row.skillId} does not match the approved target definition.`);
+    }
+  }
+  for (const row of progression.specializations) {
+    if (!row.targetDefinition) continue;
+    const approved = trustedSpecializations.find(
+      (definition) => definition.id === row.specializationId && "catalogueSource" in definition,
+    );
+    const parsed = targetRuntimeSpecializationSchema.safeParse(row.targetDefinition);
+    if (
+      !approved ||
+      !parsed.success ||
+      JSON.stringify(parsed.data) !== JSON.stringify(approved) ||
+      row.skillId !== approved.skillId
+    ) {
+      errors.push(
+        `Specialization ${row.specializationId} does not match the approved target definition.`,
+      );
+    }
+  }
+  return errors;
+}

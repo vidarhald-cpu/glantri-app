@@ -1,3 +1,4 @@
+import { assertApprovedTargetProgression } from "@glantri/content";
 import { characterBuildSchema, type CharacterBuild, type CharacterRecord } from "@glantri/domain";
 import type { PrismaClient } from "@prisma/client";
 
@@ -49,6 +50,8 @@ function mapCharacterRecord(character: {
   } | null;
   updatedAt: Date;
 }): CharacterRecord {
+  const build = characterBuildSchema.parse(character.build);
+  assertApprovedTargetProgression(build.progression);
   const retainedEnvelope = character.currentRetainedRevision?.versionEnvelopeJson as
     | {
         contentRelease?: { digest?: string; id?: string };
@@ -59,7 +62,7 @@ function mapCharacterRecord(character: {
     | { calculationDigest?: string }
     | undefined;
   return {
-    build: characterBuildSchema.parse(character.build),
+    build,
     createdAt: character.createdAt.toISOString(),
     id: character.id,
     level: character.level,
@@ -125,6 +128,7 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
 
   return {
     async createOwned(input) {
+      assertApprovedTargetProgression(characterBuildSchema.parse(input.build).progression);
       const character = await prisma.character.create({
         data: {
           build: input.build,
@@ -322,6 +326,7 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
       return characters.map(mapCharacterRecord);
     },
     async updateVersioned(input) {
+      assertApprovedTargetProgression(characterBuildSchema.parse(input.build).progression);
       const result = await prisma.character.updateMany({
         data: {
           build: input.build,
