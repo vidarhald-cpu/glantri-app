@@ -173,7 +173,7 @@ describe.skipIf(!enabled)("approved target metadata API/PG boundary", () => {
         url: `/characters/${build.id}`,
         headers: { cookie },
       });
-      expect(corruptRead.statusCode).toBe(500);
+      expect(corruptRead.statusCode).toBe(400);
       expect(corruptRead.body).not.toContain("targetDefinition");
     } finally {
       await app.close();
