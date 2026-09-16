@@ -183,6 +183,7 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("@glantri/database", () => ({
+  ArtifactImportService: vi.fn(() => ({})),
   CampaignCharacterAlreadyRosteredError: mocks.CampaignCharacterAlreadyRosteredError,
   CampaignCharacterRosterCandidateNotFoundError:
     mocks.CampaignCharacterRosterCandidateNotFoundError,

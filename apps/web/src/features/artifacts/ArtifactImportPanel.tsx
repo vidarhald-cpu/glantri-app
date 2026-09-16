@@ -205,6 +205,7 @@ export function ArtifactImportPanel({
     [busy, setBusy] = useState(false),
     [history, setHistory] = useState<Awaited<ReturnType<typeof listArtifactImports>>>([]);
   const pending = useRef(false);
+  const manifestRead = useRef(0);
   const refreshHistory = () => listArtifactImports(campaignId).then(setHistory);
   useEffect(() => {
     void listArtifactImports(campaignId)
@@ -227,15 +228,19 @@ export function ArtifactImportPanel({
             disabled={busy}
             onChange={async (event) => {
               const file = event.target.files?.[0];
+              const read = ++manifestRead.current;
+              setManifest(undefined);
+              setFiles({});
+              setPreview(undefined);
+              setError(undefined);
               if (!file) return;
               try {
                 if (file.size > 1024 * 1024) throw new Error("Manifest exceeds 1 MiB.");
-                setManifest(artifactPackageSchema.parse(JSON.parse(await file.text())));
-                setFiles({});
-                setPreview(undefined);
-                setError(undefined);
+                const next = artifactPackageSchema.parse(JSON.parse(await file.text()));
+                if (read === manifestRead.current) setManifest(next);
               } catch {
-                setError("Choose a valid Artifact package manifest, no larger than 1 MiB.");
+                if (read === manifestRead.current)
+                  setError("Choose a valid Artifact package manifest, no larger than 1 MiB.");
               }
             }}
             style={{ maxWidth: "100%" }}
@@ -250,7 +255,14 @@ export function ArtifactImportPanel({
               disabled={busy}
               onChange={(event) => {
                 const file = event.target.files?.[0];
-                if (file) setFiles({ ...files, [resource.id]: file });
+                setPreview(undefined);
+                setError(undefined);
+                setFiles((current) => {
+                  const next = { ...current };
+                  if (file) next[resource.id] = file;
+                  else delete next[resource.id];
+                  return next;
+                });
               }}
               style={{ maxWidth: "100%" }}
             />
@@ -264,6 +276,7 @@ export function ArtifactImportPanel({
             if (!manifest || pending.current) return;
             pending.current = true;
             setBusy(true);
+            setPreview(undefined);
             setError(undefined);
             try {
               setPreview(await stageArtifactPackage(campaignId, manifest, files));

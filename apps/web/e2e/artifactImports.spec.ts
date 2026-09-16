@@ -268,4 +268,137 @@ test.describe("AM1 Artifact library and import", () => {
     await expect(review.getByRole("status")).toContainText("Accepted: 1");
     await page.screenshot({ path: test.info().outputPath("am1-recovery-360.png"), fullPage: true });
   });
+  test("invalidates approved updates when files or manifests change and accepts only freshly reviewed bytes", async ({
+    page,
+  }) => {
+    test.skip(
+      process.env.CI === "true" && process.env.ARTIFACT_E2E_STORAGE_ENABLED !== "1",
+      "Requires owned private Artifact storage.",
+    );
+    const response = await page.request.post(`${API}/campaigns`, {
+      data: { name: `AM1 approval binding ${Date.now()}`, status: "active" },
+    });
+    expect(response.status()).toBe(200);
+    const campaignId = (await response.json()).campaign.id;
+    const original = fs.readFileSync(
+      path.resolve(__dirname, "../public/images/GrinulGrimbrew.jpeg"),
+    );
+    const revise = (text: string) =>
+      Buffer.concat([
+        original.subarray(0, original.length - 2),
+        Buffer.from(text),
+        original.subarray(original.length - 2),
+      ]);
+    const first = revise("revision one"),
+      replacement = revise("revision two");
+    const manifest = (bytes: Buffer, version: string) => ({
+      schemaVersion: 1,
+      producer: "approval-binding",
+      packageId: "portrait",
+      version,
+      title: "Approval binding",
+      resources: [
+        {
+          id: "media",
+          mediaType: "image/jpeg",
+          sha256: createHash("sha256").update(bytes).digest("hex"),
+        },
+      ],
+      objects: [
+        {
+          id: "portrait",
+          sourceId: "captain",
+          type: "Artifact",
+          resourceId: "media",
+          metadata: { title: "Binding captain", artifactKind: "portrait", altText: "Captain" },
+        },
+      ],
+    });
+    const staged = await page.request.post(`${API}/campaigns/${campaignId}/artifact-imports`, {
+      headers,
+      multipart: {
+        manifest: JSON.stringify(manifest(original, "1")),
+        media: { name: "original.jpg", mimeType: "image/jpeg", buffer: original },
+      },
+    });
+    expect(staged.status()).toBe(201);
+    const initial = (await staged.json()).preview;
+    const accepted = await page.request.post(
+      `${API}/campaigns/${campaignId}/artifact-imports/${initial.id}/accept`,
+      { headers, data: { previewToken: initial.previewToken, approvedUpdates: [] } },
+    );
+    expect(accepted.status()).toBe(200);
+    const artifactId = (await accepted.json()).preview.result.portrait;
+    const current = async () =>
+      (
+        await page.request.get(`${API}/campaigns/${campaignId}/artifacts/${artifactId}/content`)
+      ).body();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${WEB}/campaigns/${campaignId}?tab=campaign`);
+    const panel = page.getByRole("region", { name: "Artifact library", exact: true });
+    await panel.getByText("Import Artifact package", { exact: true }).click();
+    const chooseManifest = async (bytes: Buffer, version: string) =>
+      panel.getByLabel("Package manifest").setInputFiles({
+        name: "package.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify(manifest(bytes, version))),
+      });
+    const chooseResource = async (bytes: Buffer) =>
+      panel
+        .getByLabel("Resource: media")
+        .setInputFiles({ name: "revision.jpg", mimeType: "image/jpeg", buffer: bytes });
+    const validate = panel.getByRole("button", { name: "Validate and preview package" });
+    const review = panel.getByRole("region", { name: "Artifact import review" });
+    const approve = review.getByLabel(/Approve updating Binding captain/);
+    const accept = review.getByRole("button", { name: "Accept selected Artifacts" });
+    await chooseManifest(first, "2");
+    await chooseResource(first);
+    await validate.click();
+    await approve.check();
+    await expect(accept).toBeEnabled();
+    await chooseResource(replacement);
+    await expect(review).toHaveCount(0);
+    expect(await current()).toEqual(original);
+    await validate.click();
+    await expect(panel.getByRole("alert")).toBeVisible();
+    await expect(review).toHaveCount(0);
+    expect(await current()).toEqual(original);
+    await chooseManifest(replacement, "3");
+    await chooseResource(replacement);
+    await validate.click();
+    await expect(approve).not.toBeChecked();
+    await expect(accept).toBeDisabled();
+    await approve.check();
+    await panel.getByLabel("Package manifest").setInputFiles({
+      name: "invalid.json",
+      mimeType: "application/json",
+      buffer: Buffer.from("invalid"),
+    });
+    await expect(review).toHaveCount(0);
+    await expect(validate).toBeDisabled();
+    await expect(panel.getByRole("alert")).toContainText("Choose a valid Artifact package");
+    expect(await current()).toEqual(original);
+    await chooseManifest(replacement, "3");
+    await chooseResource(replacement);
+    await validate.click();
+    await expect(approve).not.toBeChecked();
+    await expect(accept).toBeDisabled();
+    await approve.check();
+    await panel.getByLabel("Resource: media").setInputFiles([]);
+    await expect(review).toHaveCount(0);
+    await expect(validate).toBeDisabled();
+    await chooseResource(replacement);
+    await validate.click();
+    await expect(approve).not.toBeChecked();
+    await expect(accept).toBeDisabled();
+    await approve.check();
+    await accept.click();
+    await expect(review.getByRole("status")).toContainText("Accepted: 1");
+    expect(await current()).toEqual(replacement);
+    expect(await current()).not.toEqual(first);
+    await page.screenshot({
+      path: test.info().outputPath("am1-fresh-approval-390.png"),
+      fullPage: true,
+    });
+  });
 });
