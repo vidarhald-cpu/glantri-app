@@ -195,3 +195,105 @@ export async function fetchArtifactBlob(campaignId: string, artifactId: string):
   if (!response.ok) await parseResponse(response);
   return response.blob();
 }
+
+export interface ArtifactHistory {
+  revisions: Array<{
+    id: string;
+    number: number;
+    mediaType: string;
+    byteSize: number;
+    note: string | null;
+    createdAt: string;
+    originalFilename: string | null;
+  }>;
+  usages: {
+    references: Array<{ state: string; scenario: { id: string; name: string } }>;
+    maps: Array<{ id: string; name: string }>;
+    links: Array<{ entryId: string; revisionNumber: number; title: string; current: boolean }>;
+  };
+}
+export function loadArtifactHistory(campaignId: string, artifactId: string) {
+  return sendJson<ArtifactHistory>(`/campaigns/${campaignId}/artifacts/${artifactId}/history`, {
+    method: "GET",
+  });
+}
+export function artifactRevisionUrl(campaignId: string, artifactId: string, revisionId: string) {
+  return `${API_BASE_URL}/campaigns/${campaignId}/artifacts/${artifactId}/revisions/${encodeURIComponent(revisionId)}/content`;
+}
+export function artifactImportResourceUrl(campaignId: string, id: string, resourceId: string) {
+  return `${API_BASE_URL}/campaigns/${campaignId}/artifact-imports/${id}/resources/${encodeURIComponent(resourceId)}`;
+}
+export async function stageArtifactPackage(
+  campaignId: string,
+  manifest: import("@glantri/domain").ArtifactPackage,
+  files: Record<string, File>,
+) {
+  const form = new FormData();
+  form.append("manifest", JSON.stringify(manifest));
+  for (const resource of manifest.resources) {
+    const file = files[resource.id];
+    if (!file) throw new Error("Choose every declared resource before uploading.");
+    form.append(resource.id, file, file.name);
+  }
+  const response = await fetch(`${API_BASE_URL}/campaigns/${campaignId}/artifact-imports`, {
+    method: "POST",
+    credentials: "include",
+    headers: mutationHeaders,
+    body: form,
+  });
+  return (
+    await parseResponse<{ preview: import("@glantri/domain").ArtifactImportPreview }>(response)
+  ).preview;
+}
+export async function reviewArtifactImport(campaignId: string, id: string, selected: string[]) {
+  return (
+    await sendJson<{ preview: import("@glantri/domain").ArtifactImportPreview }>(
+      `/campaigns/${campaignId}/artifact-imports/${id}/preview`,
+      { method: "POST", headers: mutationHeaders, body: JSON.stringify({ selected }) },
+    )
+  ).preview;
+}
+export async function acceptArtifactImport(
+  campaignId: string,
+  preview: import("@glantri/domain").ArtifactImportPreview,
+  approvedUpdates: string[],
+) {
+  return (
+    await sendJson<{ preview: import("@glantri/domain").ArtifactImportPreview }>(
+      `/campaigns/${campaignId}/artifact-imports/${preview.id}/accept`,
+      {
+        method: "POST",
+        headers: mutationHeaders,
+        body: JSON.stringify({ previewToken: preview.previewToken, approvedUpdates }),
+      },
+    )
+  ).preview;
+}
+export async function loadArtifactImport(campaignId: string, id: string) {
+  return (
+    await sendJson<{ preview: import("@glantri/domain").ArtifactImportPreview }>(
+      `/campaigns/${campaignId}/artifact-imports/${id}`,
+      { method: "GET" },
+    )
+  ).preview;
+}
+export async function listArtifactImports(campaignId: string) {
+  return (
+    await sendJson<{
+      imports: Array<{
+        id: string;
+        title: string;
+        state: string;
+        createdAt: string;
+        error?: string;
+        cleanupPending: boolean;
+      }>;
+    }>(`/campaigns/${campaignId}/artifact-imports`, { method: "GET" })
+  ).imports;
+}
+export async function cleanupArtifactImport(campaignId: string, id: string) {
+  return sendJson<{ cleanupPending: boolean }>(
+    `/campaigns/${campaignId}/artifact-imports/${id}/cleanup`,
+    { method: "POST", headers: mutationHeaders, body: "{}" },
+  );
+}

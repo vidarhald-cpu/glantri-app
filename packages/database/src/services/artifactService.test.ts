@@ -14,6 +14,7 @@ function artifact(overrides: Partial<ArtifactRecord> = {}): ArtifactRecord {
     byteSize: 12n,
     campaignId: "campaign-1",
     createdAt: now,
+    currentRevisionId: null,
     description: "Private map",
     id: "artifact-1",
     lifecycleState: "active",

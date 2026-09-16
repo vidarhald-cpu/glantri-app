@@ -463,40 +463,9 @@ export class ArtifactService {
     userId: string;
   }): Promise<ArtifactGmDto> {
     await this.requireOwningGm(input.campaignId, input.userId);
-    let artifact;
-    try {
-      artifact = await this.repository.tombstone({
-        actorUserId: input.userId,
-        artifactId: input.artifactId,
-        campaignId: input.campaignId,
-        expectedVersion: input.expectedVersion,
-      });
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("withdrawn")) {
-        throw new ArtifactLifecycleError(error.message);
-      }
-      throw error;
-    }
-    if (!artifact) throw new ArtifactConflictError();
-
-    if (artifact.storageKey && artifact.storageProvider !== "legacy") {
-      let pending = false;
-      try {
-        if (artifact.storageProvider !== this.store.provider)
-          throw new ArtifactStorageUnavailableError();
-        await this.store.delete(artifact.storageKey);
-      } catch {
-        pending = true;
-      }
-      await this.repository.recordCleanup({
-        actorUserId: input.userId,
-        artifactId: artifact.id,
-        campaignId: artifact.campaignId,
-        pending,
-      });
-      artifact = (await this.repository.get(input.campaignId, input.artifactId)) ?? artifact;
-    }
-    return toGmDto(artifact);
+    throw new ArtifactLifecycleError(
+      "Retire this Artifact to preserve its history and existing uses.",
+    );
   }
 
   async retryCleanup(input: {
@@ -506,7 +475,12 @@ export class ArtifactService {
   }): Promise<ArtifactGmDto> {
     await this.requireOwningGm(input.campaignId, input.userId);
     let artifact = await this.repository.get(input.campaignId, input.artifactId);
-    if (!artifact || !artifact.storageDeletePending || !artifact.storageKey) {
+    if (
+      !artifact ||
+      !["failed", "deleted"].includes(artifact.storageState) ||
+      !artifact.storageDeletePending ||
+      !artifact.storageKey
+    ) {
       throw new ArtifactNotFoundError();
     }
     if (artifact.storageProvider === "legacy") throw new ArtifactNotFoundError();
@@ -529,6 +503,47 @@ export class ArtifactService {
     artifact = (await this.repository.get(input.campaignId, input.artifactId)) ?? artifact;
     if (pending) throw new ArtifactStorageUnavailableError("Artifact cleanup is still pending.");
     return toGmDto(artifact);
+  }
+
+  async history(campaignId: string, artifactId: string, userId: string) {
+    const artifact = await this.getForGm(campaignId, artifactId, userId);
+    if (artifact.lifecycle === "deleted") throw new ArtifactNotFoundError();
+    return (await this.repository.history(campaignId, artifactId)).map((row) => ({
+      id: row.id,
+      number: row.number,
+      mediaType: row.mediaType,
+      byteSize: Number(row.byteSize),
+      note: row.note,
+      createdAt: row.createdAt.toISOString(),
+      originalFilename: row.originalFilename,
+    }));
+  }
+
+  async usages(campaignId: string, artifactId: string, userId: string) {
+    await this.getForGm(campaignId, artifactId, userId);
+    return this.repository.usages(campaignId, artifactId);
+  }
+
+  async readRevision(campaignId: string, artifactId: string, revisionId: string, userId: string) {
+    const artifact = await this.getForGm(campaignId, artifactId, userId);
+    if (artifact.lifecycle === "deleted") throw new ArtifactNotFoundError();
+    const revision = (await this.repository.history(campaignId, artifactId)).find(
+      (x) => x.id === revisionId,
+    );
+    if (!revision) throw new ArtifactNotFoundError();
+    if (revision.storageProvider !== this.store.provider)
+      throw new ArtifactStorageUnavailableError();
+    const stat = await this.store.stat(revision.storageKey);
+    if (
+      !stat ||
+      stat.byteSize !== Number(revision.byteSize) ||
+      stat.sha256Digest !== revision.sha256Digest
+    )
+      throw new ArtifactStorageUnavailableError();
+    return {
+      mediaType: revision.mediaType,
+      body: await this.store.read({ key: revision.storageKey }),
+    };
   }
 
   async listAudit(campaignId: string, artifactId: string, userId: string) {

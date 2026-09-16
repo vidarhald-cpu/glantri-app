@@ -6,7 +6,7 @@
 - Functional areas: Campaign and narrative encounters; Platform storage and API; Campaign presentation
 - Related issues/PRs: #350, #341, #318, #342, #340, #333
 - Supersedes: direct `CampaignAsset.storageUrl` creation and rendering as an application content path
-- Superseded by:
+- Superseded in revision/lifecycle/import scope by: [AM1 Artifact packages and library](../../architecture/artifact-package-format.md), approved #119 / implementation #203.
 
 ## Context
 
@@ -30,7 +30,7 @@ An authorized content read verifies both stored length and the full SHA-256 dige
 
 Player/common projections contain only safe identity, kind, deliberately shared title/description/alt text, and media type. They exclude storage provider/key/URL, legacy URL, original filename, digest, creator, provenance URI, audit, and hidden counts. Scenario publication snapshots its title/caption/alt presentation. Later metadata edits do not rewrite the snapshot.
 
-Lifecycle is `active | archived | deleted`; storage state is `pending | ready | failed | legacy_reference | deleted`; audience is `gm_private | campaign | scenario`. Metadata uses a positive optimistic version. Archive prevents new publication while preserving existing references. Delete requires Campaign and Scenario publication withdrawal, tombstones access immediately, and retries private object cleanup safely. An immutable GM-only audit records upload, metadata, audience, Scenario reference, lifecycle, deletion, and cleanup transitions without bytes or locators.
+Lifecycle is `active | archived | deleted`; storage state is `pending | ready | failed | legacy_reference | deleted`; audience is `gm_private | campaign | scenario`. Metadata uses a positive optimistic version. Archive prevents new publication while preserving existing references. AM1 supersedes ordinary accepted-content deletion with retirement; the DELETE service rejects deletion. Historical tombstones and failed/unaccepted staging retain bounded retryable cleanup. Immutable revisions and the current pointer preserve the stable Artifact identity. An immutable GM-only audit records upload, metadata, audience, Scenario reference, lifecycle, deletion, and cleanup transitions without bytes or locators.
 
 Campaign publication and Scenario-reference publication are independent access channels. The persisted audience is the compatibility projection of their combined state: `campaign` while Campaign publication remains, otherwise `scenario` while any Scenario reference remains published, otherwise `gm_private`. Reference mutations reserve the Artifact metadata version transactionally, then recompute the projection from the persisted reference facts. Withdrawing one channel therefore cannot revoke the other, including stale or concurrent mutations.
 
@@ -48,7 +48,7 @@ Visual Artifacts require non-empty safe alt text before either player channel ca
 
 One additive migration adds Artifact metadata, audit, and Scenario reference facts while preserving the table name, IDs, required legacy columns, existing enum values, and Scenario map relations. New rows use a non-public `artifact-internal:<id>` compatibility locator in the legacy required column; it is never serialized or resolved. Application rollback disables new routes/UI while additive data and private objects remain. Ordinary rollback does not drop Artifact data.
 
-Blackboard may later consume only active, ready, Campaign-visible safe map/image candidate DTOs. It receives no locator or hidden totals and owns no storage behavior. Character-sensitive grants, Player uploads, cross-Campaign libraries, generation providers, public sharing, transforms, search, and production Azure provisioning remain separate decisions.
+Blackboard selects only active, ready, Campaign-visible safe map/image candidates; existing authorized links continue resolving retired Artifacts. It receives no locator or hidden totals and owns no storage behavior. Character-sensitive grants, Player uploads, cross-Campaign libraries, generation providers, public sharing, transforms, and production Azure provisioning remain separate decisions.
 
 ## Integration and verification
 

@@ -614,6 +614,10 @@ model CampaignAsset {
   mappedScenarios Scenario[]     @relation("ScenarioMapAsset")
   artifactReferences ScenarioArtifactReference[]
   auditEvents ArtifactAuditEvent[]
+  currentRevisionId String? @unique
+  currentRevision ArtifactRevision? @relation("ArtifactCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: Restrict)
+  revisions ArtifactRevision[] @relation("ArtifactRevisions")
+  sourceMappings ArtifactSourceMapping[]
 
   @@unique([campaignId, id])
   @@index([campaignId])
@@ -865,4 +869,51 @@ model ScenarioEventLog {
   @@index([scenarioId, sequence])
   @@index([participantId])
   @@index([actorUserId])
+}
+
+model ArtifactRevision {
+  id String @id @default(cuid())
+  artifactId String
+  artifact CampaignAsset @relation("ArtifactRevisions", fields: [artifactId], references: [id], onDelete: Restrict)
+  currentFor CampaignAsset? @relation("ArtifactCurrentRevision")
+  number Int
+  storageProvider String
+  storageKey String
+  mediaType String
+  byteSize BigInt
+  sha256Digest String
+  originalFilename String?
+  note String?
+  actorUserId String
+  createdAt DateTime @default(now())
+  @@unique([artifactId, number])
+}
+
+model ArtifactImportSession {
+  id String @id @default(cuid())
+  campaignId String
+  actorUserId String
+  state String @default("uploading")
+  manifestJson Json
+  resourcesJson Json @default("[]")
+  previewJson Json?
+  previewToken String?
+  resultJson Json?
+  error String?
+  cleanupPending Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([campaignId, actorUserId, createdAt])
+}
+
+model ArtifactSourceMapping {
+  campaignId String
+  producer String
+  packageId String
+  sourceId String
+  artifactId String
+  artifact CampaignAsset @relation(fields: [campaignId, artifactId], references: [campaignId, id], onDelete: Restrict)
+  fingerprint String
+  importId String
+  @@id([campaignId, producer, packageId, sourceId])
 }

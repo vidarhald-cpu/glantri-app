@@ -313,7 +313,7 @@ if (!prisma) {
       ).rejects.toThrow("not found");
     });
 
-    it("enforces same-Campaign Scenario references, optimistic versions, snapshots, and delete-after-withdraw", async () => {
+    it("enforces same-Campaign Scenario references, optimistic versions, snapshots, and retirement without deletion", async () => {
       const gm = await createTestUser(prisma, { roles: ["game_master"] });
       const campaign = await createTestCampaign(prisma, gm.id, { status: "active" });
       const otherCampaign = await createTestCampaign(prisma, gm.id, { status: "active" });
@@ -451,17 +451,19 @@ if (!prisma) {
         scenarioId: scenario.id,
         userId: gm.id,
       });
-      const deleted = await service.delete({
-        artifactId: artifact.id,
-        campaignId: campaign.id,
-        expectedVersion: withdrawn.artifact.metadataVersion,
-        userId: gm.id,
-      });
-      expect(deleted).toMatchObject({ lifecycle: "deleted", storageState: "deleted" });
-      expect(store.objects.size).toBe(0);
+      await expect(
+        service.delete({
+          artifactId: artifact.id,
+          campaignId: campaign.id,
+          expectedVersion: withdrawn.artifact.metadataVersion,
+          userId: gm.id,
+        }),
+      ).rejects.toBeInstanceOf(ArtifactLifecycleError);
+      expect(store.objects.size).toBe(1);
+      expect(await service.history(campaign.id, artifact.id, gm.id)).toHaveLength(1);
     });
 
-    it("tombstones access before a failed delete and retries cleanup idempotently", async () => {
+    it("retains bounded cleanup for historical tombstones only", async () => {
       const gm = await createTestUser(prisma, { roles: ["game_master"] });
       const campaign = await createTestCampaign(prisma, gm.id, { status: "active" });
       const store = new MemoryStore();
@@ -474,14 +476,16 @@ if (!prisma) {
         userId: gm.id,
       });
 
-      store.failDelete = true;
-      const deleted = await service.delete({
-        artifactId: artifact.id,
-        campaignId: campaign.id,
-        expectedVersion: artifact.metadataVersion,
-        userId: gm.id,
+      // Model a tombstone created before AM1; no ordinary AM1 delete is invoked.
+      await prisma.campaignAsset.update({
+        where: { id: artifact.id },
+        data: { currentRevisionId: null },
       });
-      expect(deleted).toMatchObject({ cleanupRequired: true, lifecycle: "deleted" });
+      await prisma.artifactRevision.deleteMany({ where: { artifactId: artifact.id } });
+      await prisma.campaignAsset.update({
+        where: { id: artifact.id },
+        data: { lifecycleState: "deleted", storageState: "deleted", storageDeletePending: true },
+      });
       await expect(
         service.readContent({ artifactId: artifact.id, campaignId: campaign.id, userId: gm.id }),
       ).rejects.toThrow("not found");

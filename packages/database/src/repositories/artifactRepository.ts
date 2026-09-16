@@ -10,6 +10,7 @@ const artifactSelect = {
   audience: true,
   byteSize: true,
   campaignId: true,
+  currentRevisionId: true,
   createdAt: true,
   description: true,
   id: true,
@@ -118,6 +119,25 @@ export class ArtifactRepository {
         select: artifactSelect,
         where: { id: input.artifactId },
       });
+      if (!artifact.storageKey) throw new Error("Missing stored representation.");
+      const revision = await tx.artifactRevision.create({
+        data: {
+          artifactId: artifact.id,
+          number: 1,
+          storageProvider: artifact.storageProvider,
+          storageKey: artifact.storageKey,
+          mediaType: input.mediaType,
+          byteSize: BigInt(input.byteSize),
+          sha256Digest: input.sha256Digest,
+          originalFilename: artifact.originalFilename,
+          actorUserId: input.actorUserId,
+        },
+      });
+      await tx.campaignAsset.update({
+        where: { id: artifact.id },
+        data: { currentRevisionId: revision.id },
+      });
+      artifact.currentRevisionId = revision.id;
       await this.appendAudit(tx, {
         action: "upload",
         actorUserId: input.actorUserId,
@@ -612,9 +632,10 @@ export class ArtifactRepository {
   async getBlackboardCandidate(
     campaignId: string,
     artifactId: string,
-  ): Promise<ArtifactBlackboardCandidate | null> {
+  ): Promise<(ArtifactBlackboardCandidate & { revisionCreatedAt?: Date }) | null> {
     const rows = await this.client.$queryRaw<
       Array<{
+        revisionCreatedAt?: Date;
         altText: string;
         artifactKind: "map" | "image";
         id: string;
@@ -623,6 +644,7 @@ export class ArtifactRepository {
       }>
     >(Prisma.sql`
       SELECT
+        (SELECT r."createdAt" FROM "ArtifactRevision" r WHERE r."id" = "CampaignAsset"."currentRevisionId") AS "revisionCreatedAt",
         "id",
         "artifactKind",
         "title",
@@ -633,13 +655,61 @@ export class ArtifactRepository {
         AND "id" = ${artifactId}
         AND "artifactKind" IN ('map', 'image')
         AND "audience" = 'campaign'
-        AND "lifecycleState" = 'active'
+        AND "lifecycleState" IN ('active', 'archived')
         AND "storageState" = 'ready'
         AND "mediaTypeDetected" IN ('image/png', 'image/jpeg', 'image/webp')
         AND "altText" IS NOT NULL
         AND char_length(btrim("altText")) BETWEEN 1 AND 1000
     `);
     return rows[0] ?? null;
+  }
+
+  async history(campaignId: string, artifactId: string) {
+    return this.client.artifactRevision.findMany({
+      where: { artifactId, artifact: { campaignId } },
+      orderBy: { number: "desc" },
+    });
+  }
+
+  async usages(campaignId: string, artifactId: string) {
+    const [references, maps, links] = await Promise.all([
+      this.client.scenarioArtifactReference.findMany({
+        where: { campaignId, artifactId },
+        select: { state: true, scenario: { select: { id: true, name: true } } },
+      }),
+      this.client.scenario.findMany({
+        where: { campaignId, mapAssetId: artifactId },
+        select: { id: true, name: true },
+      }),
+      this.client.campaignBlackboardArtifactSourceLink.findMany({
+        where: { campaignId, artifactId },
+      }),
+    ]);
+    const entries = await this.client.campaignBlackboardEntry.findMany({
+      where: { campaignId, id: { in: links.map((link) => link.entryId) } },
+      select: { id: true, currentRevisionNumber: true, state: true },
+    });
+    const revisions = await this.client.campaignBlackboardEntryRevision.findMany({
+      where: { campaignId, entryId: { in: links.map((link) => link.entryId) } },
+      select: { entryId: true, revisionNumber: true, title: true },
+    });
+    return {
+      references,
+      maps,
+      links: links.map((link) => ({
+        ...link,
+        title:
+          revisions.find(
+            (r) => r.entryId === link.entryId && r.revisionNumber === link.revisionNumber,
+          )?.title ?? "Blackboard entry",
+        current: entries.some(
+          (entry) =>
+            entry.id === link.entryId &&
+            entry.currentRevisionNumber === link.revisionNumber &&
+            entry.state !== "withdrawn",
+        ),
+      })),
+    };
   }
 
   private async appendAudit(
