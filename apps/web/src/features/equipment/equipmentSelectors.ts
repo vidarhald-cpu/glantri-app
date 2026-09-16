@@ -1,5 +1,6 @@
 ﻿import {
   isWithYouLocation,
+  resolveEffectiveItemTemplate,
   getItemAccessTier,
   getLocationAvailabilitySortOrder,
   isEncounterAccessible,
@@ -29,25 +30,25 @@ export function isCarriedInventoryLocation(
 
 export function getActualInventoryEncumbrance(
   item: EquipmentItem,
-  template: EquipmentTemplate,
+  template: EquipmentTemplate | undefined,
   characterSize?: number | null,
 ): number {
-  if (template.category === "armor") {
+  if (template?.category === "armor") {
     return (
       calculateWorkbookArmorEncumbrance({
         characterSize: characterSize ?? null,
         item,
         template,
       }) ??
-      (template.baseEncumbrance *
+      template.baseEncumbrance *
         item.quantity *
         getMaterialFactor(item.material) *
-        getQualityFactor(item.quality))
+        getQualityFactor(item.quality)
     );
   }
 
   return (
-    template.baseEncumbrance *
+    (template?.baseEncumbrance ?? item.physicalBaseEncumbrance ?? 0) *
     item.quantity *
     getMaterialFactor(item.material) *
     getQualityFactor(item.quality)
@@ -58,9 +59,7 @@ export function getCharacterEquipmentItems(
   state: EquipmentFeatureState,
   characterId: string,
 ): EquipmentItem[] {
-  return Object.values(state.itemsById).filter(
-    (item) => item.characterId === characterId,
-  );
+  return Object.values(state.itemsById).filter((item) => item.characterId === characterId);
 }
 
 export function getCharacterWeaponItems(
@@ -85,18 +84,14 @@ export function getCharacterArmorItems(
   state: EquipmentFeatureState,
   characterId: string,
 ): EquipmentItem[] {
-  return getCharacterEquipmentItems(state, characterId).filter(
-    (item) => item.category === "armor",
-  );
+  return getCharacterEquipmentItems(state, characterId).filter((item) => item.category === "armor");
 }
 
 export function getCharacterGearItems(
   state: EquipmentFeatureState,
   characterId: string,
 ): EquipmentItem[] {
-  return getCharacterEquipmentItems(state, characterId).filter(
-    (item) => item.category === "gear",
-  );
+  return getCharacterEquipmentItems(state, characterId).filter((item) => item.category === "gear");
 }
 
 export function getCharacterValuableItems(
@@ -119,9 +114,16 @@ export function getCharacterLocations(
 
 export function getEquipmentTemplateById(
   state: EquipmentFeatureState,
-  templateId: string,
+  templateId: string | null,
 ): EquipmentTemplate | undefined {
-  return state.templates.templatesById[templateId];
+  return templateId === null ? undefined : state.templates.templatesById[templateId];
+}
+
+export function getEffectiveEquipmentTemplate(
+  state: EquipmentFeatureState,
+  item: Pick<EquipmentItem, "templateId" | "mechanicalOverrides">,
+): EquipmentTemplate | undefined {
+  return resolveEffectiveItemTemplate(item, state.templates.templatesById);
 }
 
 export function getInventoryRows(
@@ -133,17 +135,9 @@ export function getInventoryRows(
   const rows: InventoryRow[] = [];
 
   for (const item of items) {
-    const template = getEquipmentTemplateById(state, item.templateId);
-    if (!template) {
-      continue;
-    }
-
+    const template = getEffectiveEquipmentTemplate(state, item);
     const location = state.locationsById[item.storageAssignment.locationId];
-    const actualEncumbrance = getActualInventoryEncumbrance(
-      item,
-      template,
-      characterSize,
-    );
+    const actualEncumbrance = getActualInventoryEncumbrance(item, template, characterSize);
     const effectiveEncumbrance = getInventoryEffectiveEncumbranceForItem(
       state,
       item,
@@ -153,8 +147,10 @@ export function getInventoryRows(
     rows.push({
       itemId: item.id,
       displayName: item.displayName ?? null,
-      templateName: template.name,
-      category: item.category,
+      templateName:
+        template?.name ??
+        (item.templateId === null ? "Descriptive-only item" : "Unavailable Template"),
+      category: item.category ?? "descriptive",
       locationName: location?.name ?? "Unknown",
       carryMode: item.storageAssignment.carryMode,
       material: item.material,
@@ -167,15 +163,15 @@ export function getInventoryRows(
   }
 
   return rows.sort((a, b) => {
-      if (a.locationName !== b.locationName) {
-        return a.locationName.localeCompare(b.locationName);
-      }
-      if (a.templateName !== b.templateName) {
-        return a.templateName.localeCompare(b.templateName);
-      }
+    if (a.locationName !== b.locationName) {
+      return a.locationName.localeCompare(b.locationName);
+    }
+    if (a.templateName !== b.templateName) {
+      return a.templateName.localeCompare(b.templateName);
+    }
 
-      return (a.displayName ?? "").localeCompare(b.displayName ?? "");
-    });
+    return (a.displayName ?? "").localeCompare(b.displayName ?? "");
+  });
 }
 
 export function getWithYouLocations(
@@ -316,8 +312,7 @@ export function getItemsGroupedForInventoryPage(
       description: "Items currently worn, on person, or in backpack.",
       groups: buildGroups(
         (location) =>
-          location.availabilityClass === "with_you" &&
-          isCarriedInventoryLocation(location),
+          location.availabilityClass === "with_you" && isCarriedInventoryLocation(location),
       ),
     },
     {
@@ -326,8 +321,7 @@ export function getItemsGroupedForInventoryPage(
       description: "Items currently travelling with the character.",
       groups: buildGroups(
         (location) =>
-          location.availabilityClass === "with_you" &&
-          !isCarriedInventoryLocation(location),
+          location.availabilityClass === "with_you" && !isCarriedInventoryLocation(location),
       ),
     },
     {
@@ -406,8 +400,8 @@ export function getInventoryEffectiveEncumbranceForItem(
   item: EquipmentItem,
   characterSize?: number | null,
 ): number | null {
-  const template = getEquipmentTemplateById(state, item.templateId);
-  if (!template) {
+  const template = getEffectiveEquipmentTemplate(state, item);
+  if (!template && item.templateId !== null) {
     return null;
   }
 
@@ -416,7 +410,7 @@ export function getInventoryEffectiveEncumbranceForItem(
     return null;
   }
 
-  if (template.category === "armor") {
+  if (template?.category === "armor") {
     return (
       calculateWorkbookArmorEncumbrance({
         characterSize: characterSize ?? null,
@@ -453,12 +447,9 @@ export function getPersonalEncumbranceSummary(
   };
 }
 
-export function getStoredItems(
-  state: EquipmentFeatureState,
-  characterId: string,
-): EquipmentItem[] {
-  return getCharacterEquipmentItems(state, characterId).filter(
-    (item) => isStoredCarryMode(item.storageAssignment.carryMode),
+export function getStoredItems(state: EquipmentFeatureState, characterId: string): EquipmentItem[] {
+  return getCharacterEquipmentItems(state, characterId).filter((item) =>
+    isStoredCarryMode(item.storageAssignment.carryMode),
   );
 }
 
@@ -502,14 +493,11 @@ export function getEncounterAccessibleCoinQuantity(
   state: EquipmentFeatureState,
   characterId: string,
 ): number {
-  return getEncounterAccessibleValuableItems(state, characterId).reduce(
-    (total, item) => {
-      const template = getEquipmentTemplateById(state, item.templateId);
-      const isCoins = template?.subtype === "coins";
-      return isCoins ? total + item.quantity : total;
-    },
-    0,
-  );
+  return getEncounterAccessibleValuableItems(state, characterId).reduce((total, item) => {
+    const template = getEffectiveEquipmentTemplate(state, item);
+    const isCoins = template?.subtype === "coins";
+    return isCoins ? total + item.quantity : total;
+  }, 0);
 }
 
 export function getPersonalEncumbranceTotal(
@@ -527,12 +515,12 @@ export function getMountEncumbranceTotal(
   return getCharacterEquipmentItems(state, characterId)
     .filter((item) => item.storageAssignment.carryMode === "mount")
     .reduce((total, item) => {
-      const template = getEquipmentTemplateById(state, item.templateId);
-      if (!template) {
-        return total;
-      }
-
-      return total + template.baseEncumbrance;
+      const template = getEffectiveEquipmentTemplate(state, item);
+      return (
+        total +
+        (template?.baseEncumbrance ??
+          (item.templateId === null ? (item.physicalBaseEncumbrance ?? 0) : 0))
+      );
     }, 0);
 }
 
@@ -549,9 +537,7 @@ export function getWornArmor(
 ): EquipmentItem | undefined {
   const loadout = getActiveLoadout(state, characterId);
 
-  return loadout?.wornArmorItemId
-    ? state.itemsById[loadout.wornArmorItemId]
-    : undefined;
+  return loadout?.wornArmorItemId ? state.itemsById[loadout.wornArmorItemId] : undefined;
 }
 
 export function getReadyShield(
@@ -560,9 +546,7 @@ export function getReadyShield(
 ): EquipmentItem | undefined {
   const loadout = getActiveLoadout(state, characterId);
 
-  return loadout?.readyShieldItemId
-    ? state.itemsById[loadout.readyShieldItemId]
-    : undefined;
+  return loadout?.readyShieldItemId ? state.itemsById[loadout.readyShieldItemId] : undefined;
 }
 
 export function getLoadoutEquipment(

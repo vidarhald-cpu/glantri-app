@@ -428,7 +428,9 @@ export function getScenarioCombatEquipmentStatus(input: {
   const scenarioReadyIds = getReadyEquipmentItemIds(scenarioState, scenarioCharacterId);
   const missingMetadata = scenarioReadyIds.some((itemId) => {
     const item = scenarioState.itemsById[itemId];
-    return !item || !scenarioState.templates.templatesById[item.templateId];
+    return (
+      !item || (item.templateId !== null && !scenarioState.templates.templatesById[item.templateId])
+    );
   });
   if (missingMetadata) {
     return {
@@ -473,6 +475,7 @@ export function resolveScenarioCombatEquipmentState(input: {
 
   const templatesById = { ...scenarioState.templates.templatesById };
   for (const item of Object.values(scenarioState.itemsById)) {
+    if (item.templateId === null) continue;
     const resolvedTemplate = resolvedState.templates.templatesById[item.templateId];
     if (resolvedTemplate) {
       templatesById[item.templateId] = resolvedTemplate;

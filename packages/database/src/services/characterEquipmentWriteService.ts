@@ -14,6 +14,8 @@ import {
   type QualityType,
   type StorageLocation,
   type StorageLocationType,
+  resolveEffectiveItemTemplate,
+  type ItemMechanicalOverride,
   CharacterLoadoutSchema,
   CanonicalEquipmentItemSchema,
   EquipmentItemSchema,
@@ -50,7 +52,7 @@ export interface SampleCharacterEquipment {
 }
 
 interface AddCharacterEquipmentItemInput {
-  templateId: string;
+  templateId: string | null;
   quantity: number;
   material?: MaterialType;
   quality?: QualityType;
@@ -127,7 +129,9 @@ export interface CreateCampaignEquipmentItemInput {
   holderCharacterId?: string | null;
   itemFacts: EquipmentItemFactsV1;
   notes?: string | null;
-  templateId: string;
+  templateId: string | null;
+  mechanicalOverrides?: ItemMechanicalOverride[];
+  physicalBaseEncumbrance?: number | null;
 }
 
 export interface UpdateCampaignEquipmentItemAuthoringInput {
@@ -136,6 +140,10 @@ export interface UpdateCampaignEquipmentItemAuthoringInput {
   itemFacts: EquipmentItemFactsV1;
   itemId: string;
   notes?: string | null;
+  mechanicalOverrides?: ItemMechanicalOverride[];
+  physicalBaseEncumbrance?: number | null;
+  expectedItemRevision: string;
+  quantity?: number;
 }
 
 export interface TransferCampaignEquipmentItemInput {
@@ -147,6 +155,7 @@ export interface TransferCampaignEquipmentItemInput {
   targetCharacterId: string;
   targetExpectedRevision?: number;
   targetStorageLocationId?: string;
+  expectedItemRevision?: string;
 }
 
 export interface AssignCampaignEquipmentItemInput {
@@ -155,6 +164,7 @@ export interface AssignCampaignEquipmentItemInput {
   itemId: string;
   targetCharacterId: string;
   targetExpectedRevision: number;
+  expectedItemRevision?: string;
 }
 
 export interface UnassignCampaignEquipmentItemInput {
@@ -163,6 +173,7 @@ export interface UnassignCampaignEquipmentItemInput {
   itemId: string;
   sourceCharacterId: string;
   sourceExpectedRevision: number;
+  expectedItemRevision?: string;
 }
 
 function assertItemBelongsToCharacter(
@@ -254,8 +265,9 @@ export class CharacterEquipmentWriteService {
   async createCampaignEquipmentItem(
     input: CreateCampaignEquipmentItemInput,
   ): Promise<CanonicalEquipmentItem> {
-    const template = equipmentTemplatesById[input.templateId];
-    if (!template) {
+    const template =
+      input.templateId === null ? undefined : equipmentTemplatesById[input.templateId];
+    if (input.templateId !== null && (!template || template.selectableForNewItems === false)) {
       throw new Error("Equipment template not found.");
     }
 
@@ -263,7 +275,12 @@ export class CharacterEquipmentWriteService {
     if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new Error("quantity must be a positive whole number");
     }
-    if (!supportsEquipmentQuantity(template) && quantity !== 1) {
+    if (
+      (!template ||
+        !supportsEquipmentQuantity(template) ||
+        template.specificityTypeDefault === "specific") &&
+      quantity !== 1
+    ) {
       throw new Error("Only stackable items can have quantity greater than one.");
     }
 
@@ -280,13 +297,16 @@ export class CharacterEquipmentWriteService {
     }
 
     const durabilityMax =
-      template.category === "weapon"
+      template?.category === "weapon"
         ? (template.durabilityProfile?.maxDurabilityDefault ?? null)
         : null;
     const item = CanonicalEquipmentItemSchema.parse({
       acquiredFrom: null,
       campaignContextId: input.campaignId,
-      category: template.category,
+      category: template?.category ?? null,
+      itemKind: template ? "template_backed" : "descriptive_only",
+      mechanicalOverrides: input.mechanicalOverrides ?? [],
+      physicalBaseEncumbrance: input.physicalBaseEncumbrance ?? null,
       characterId: input.holderCharacterId ?? null,
       conditionState: "intact",
       displayName: input.displayName?.trim() || null,
@@ -297,21 +317,24 @@ export class CharacterEquipmentWriteService {
       id: buildCampaignEquipmentItemId(input.campaignId),
       isEquipped: false,
       isFavorite: null,
-      isStackable: supportsEquipmentQuantity(template),
+      isStackable: template
+        ? supportsEquipmentQuantity(template) && template.specificityTypeDefault !== "specific"
+        : false,
       itemFacts: input.itemFacts,
-      material: template.defaultMaterial,
+      material: template?.defaultMaterial ?? "other",
       notes: input.notes?.trim() || null,
       previousStorageAssignment: null,
       quality: "standard",
       quantity,
-      specificityType: template.specificityTypeDefault,
+      specificityType: template?.specificityTypeDefault ?? "specific",
       statusTags: null,
       storageAssignment,
-      templateId: template.id,
+      templateId: template?.id ?? null,
       valueOverride: null,
     });
 
-    projectEquipmentItem(item, template);
+    resolveEffectiveItemTemplate(item, equipmentTemplatesById);
+    if (template) projectEquipmentItem(item, template);
     if (item.holderCharacterId) {
       const aggregate = await this.repository.getCharacterEquipmentAggregateState(
         item.holderCharacterId,
@@ -348,18 +371,35 @@ export class CharacterEquipmentWriteService {
       throw new Error("Campaign item not found.");
     }
 
-    const template = equipmentTemplatesById[existing.templateId];
-    if (!template) {
-      throw new Error("Equipment template not found.");
-    }
+    const template =
+      existing.templateId === null ? undefined : equipmentTemplatesById[existing.templateId];
+    if (existing.revision !== input.expectedItemRevision) throw new StaleEquipmentTransferError();
+    if (
+      input.quantity !== undefined &&
+      (!Number.isInteger(input.quantity) ||
+        input.quantity <= 0 ||
+        ((!template ||
+          !supportsEquipmentQuantity(template) ||
+          !existing.isStackable ||
+          existing.specificityType === "specific") &&
+          input.quantity !== 1))
+    )
+      throw new Error("Enter a supported positive whole-number quantity.");
 
     const updated = CanonicalEquipmentItemSchema.parse({
       ...existing,
       displayName: input.displayName?.trim() || null,
       itemFacts: input.itemFacts,
+      mechanicalOverrides: input.mechanicalOverrides ?? existing.mechanicalOverrides,
+      physicalBaseEncumbrance:
+        input.physicalBaseEncumbrance === undefined
+          ? existing.physicalBaseEncumbrance
+          : input.physicalBaseEncumbrance,
+      quantity: input.quantity ?? existing.quantity,
       notes: input.notes?.trim() || null,
     });
-    projectEquipmentItem(updated, template);
+    resolveEffectiveItemTemplate(updated, equipmentTemplatesById);
+    if (template) projectEquipmentItem(updated, template);
 
     return this.repository.updateCampaignEquipmentItemAuthoring(updated);
   }
@@ -398,6 +438,7 @@ export class CharacterEquipmentWriteService {
     }
 
     return this.repository.transferCampaignEquipmentItem({
+      expectedItemRevision: input.expectedItemRevision,
       campaignId: input.campaignId,
       evidence: input.evidence,
       itemId: input.itemId,
@@ -423,6 +464,7 @@ export class CharacterEquipmentWriteService {
       throw new Error("The receiving Character has no valid storage for this assignment.");
     }
     return this.repository.acquireUnheldCampaignEquipmentItem({
+      expectedItemRevision: input.expectedItemRevision,
       campaignId: input.campaignId,
       evidence: input.evidence,
       expectedTargetRevision: input.targetExpectedRevision,
@@ -446,6 +488,7 @@ export class CharacterEquipmentWriteService {
       throw new Error("Campaign Item unassignment is not available.");
     }
     return this.repository.releaseHeldCampaignEquipmentItem({
+      expectedItemRevision: input.expectedItemRevision,
       campaignId: input.campaignId,
       evidence: input.evidence,
       expectedSourceRevision: input.sourceExpectedRevision,
@@ -635,7 +678,8 @@ export class CharacterEquipmentWriteService {
       );
     }
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
-    const template = equipmentTemplatesById[input.templateId];
+    const template =
+      input.templateId === null ? undefined : equipmentTemplatesById[input.templateId];
 
     if (!template) {
       throw new Error("Equipment template not found.");
@@ -1019,7 +1063,7 @@ export class CharacterEquipmentWriteService {
         )
       : undefined;
     const missileTemplate = missileWeapon
-      ? equipmentTemplatesById[missileWeapon.templateId]
+      ? resolveEffectiveItemTemplate(missileWeapon, equipmentTemplatesById)
       : undefined;
     const missileProfile =
       missileTemplate?.category === "weapon" ? missileTemplate.missileProfile : undefined;
@@ -1031,7 +1075,7 @@ export class CharacterEquipmentWriteService {
         snapshot.items.find((candidate) => candidate.id === itemId),
         characterId,
       );
-      const ammoTemplate = equipmentTemplatesById[item.templateId];
+      const ammoTemplate = resolveEffectiveItemTemplate(item, equipmentTemplatesById);
       const ammoProfile =
         ammoTemplate?.category === "gear" ? ammoTemplate.ammunitionProfile : undefined;
       if (!ammoProfile || ammoProfile.family !== missileProfile?.ammoFamily) {

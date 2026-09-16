@@ -6,6 +6,7 @@ import {
 } from "@glantri/content";
 import {
   AnyEquipmentTemplateSchema,
+  resolveEffectiveItemTemplate,
   CharacterLoadoutSchema,
   EquipmentItemSchema,
   StorageLocationSchema,
@@ -81,7 +82,9 @@ function getItemTemplate(input: {
 }): EquipmentTemplate | null | undefined {
   if (!input.itemId) return null;
   const item = input.itemsById.get(input.itemId);
-  return item ? input.templatesById.get(item.templateId) : undefined;
+  return item
+    ? resolveEffectiveItemTemplate(item, Object.fromEntries(input.templatesById))
+    : undefined;
 }
 
 /**
@@ -138,7 +141,9 @@ export function resolveCanonicalParticipantCalculationContext(
     parse: (value) => StorageLocationSchema.safeParse(value),
     values: locationsValue,
   });
-  const requiredTemplateIds = new Set(parsedItems.values.map((item) => item.templateId));
+  const requiredTemplateIds = new Set(
+    parsedItems.values.flatMap((item) => (item.templateId === null ? [] : [item.templateId])),
+  );
   const requiredTemplateValues = Object.fromEntries(
     [...requiredTemplateIds].flatMap((templateId) =>
       templateValues[templateId] === undefined ? [] : [[templateId, templateValues[templateId]]],

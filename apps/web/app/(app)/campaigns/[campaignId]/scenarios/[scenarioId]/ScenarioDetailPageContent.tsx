@@ -1100,7 +1100,9 @@ export default function ScenarioDetailPageContent({
               .map((item) => ({
                 label: `Item: ${
                   item.displayName ||
-                  campaignEquipment.templatesById[item.templateId]?.name ||
+                  (item.templateId === null
+                    ? undefined
+                    : campaignEquipment.templatesById[item.templateId]?.name) ||
                   "Item"
                 }`,
                 sourceId: item.id,

@@ -40,7 +40,7 @@ import {
   getEncounterAccessibleCoinQuantity,
   getEncounterAccessibleGearItems,
   getEncounterAccessibleValuableItems,
-  getEquipmentTemplateById,
+  getEffectiveEquipmentTemplate,
   getLoadoutEquipment,
   getPersonalEncumbranceSummary,
   getStoredItems,
@@ -188,7 +188,7 @@ function getTemplateName(state: EquipmentFeatureState, item: EquipmentItem | und
     return "None";
   }
 
-  return getEquipmentTemplateById(state, item.templateId)?.name ?? "Unknown item";
+  return getEffectiveEquipmentTemplate(state, item)?.name ?? "Unknown item";
 }
 
 function getItemLabel(state: EquipmentFeatureState, item: EquipmentItem | undefined): string {
@@ -347,7 +347,7 @@ function getMountEncumbranceTotal(state: EquipmentFeatureState, characterId: str
       (item) => item.characterId === characterId && item.storageAssignment.carryMode === "mount",
     )
     .reduce((total, item) => {
-      const template = getEquipmentTemplateById(state, item.templateId);
+      const template = getEffectiveEquipmentTemplate(state, item);
       if (!template) {
         return total;
       }
@@ -1040,19 +1040,19 @@ export function deriveCombatStateSnapshot(
   const missileItem = "missile" in loadout ? loadout.missile : undefined;
 
   const armorTemplate = armorItem
-    ? asArmorTemplate(getEquipmentTemplateById(state, armorItem.templateId))
+    ? asArmorTemplate(getEffectiveEquipmentTemplate(state, armorItem))
     : null;
   const shieldTemplate = shieldItem
-    ? asShieldTemplate(getEquipmentTemplateById(state, shieldItem.templateId))
+    ? asShieldTemplate(getEffectiveEquipmentTemplate(state, shieldItem))
     : null;
   const primaryWeaponTemplate = primaryItem
-    ? asWeaponTemplate(getEquipmentTemplateById(state, primaryItem.templateId))
+    ? asWeaponTemplate(getEffectiveEquipmentTemplate(state, primaryItem))
     : null;
   const secondaryWeaponTemplate = secondaryItem
-    ? asWeaponTemplate(getEquipmentTemplateById(state, secondaryItem.templateId))
+    ? asWeaponTemplate(getEffectiveEquipmentTemplate(state, secondaryItem))
     : null;
   const missileWeaponTemplate = missileItem
-    ? asWeaponTemplate(getEquipmentTemplateById(state, missileItem.templateId))
+    ? asWeaponTemplate(getEffectiveEquipmentTemplate(state, missileItem))
     : null;
 
   const gripSummary = getGripSummary({
@@ -1136,7 +1136,7 @@ export function deriveCombatStateSnapshot(
     : undefined;
   const throwingWeaponTemplate =
     throwingWeaponItem?.category === "weapon"
-      ? asWeaponTemplate(getEquipmentTemplateById(state, throwingWeaponItem.templateId))
+      ? asWeaponTemplate(getEffectiveEquipmentTemplate(state, throwingWeaponItem))
       : null;
 
   if (throwingWeaponItem && throwingWeaponTemplate) {

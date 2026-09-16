@@ -56,6 +56,10 @@ function projectItemsForViewer(
     return [
       {
         ...item,
+        mechanicalOverrides:
+          viewer?.kind === "holder"
+            ? item.mechanicalOverrides?.filter((entry) => entry.visibility === "revealed")
+            : [],
         itemFacts:
           viewer?.kind === "holder"
             ? revealableEquipmentItemFacts(item.itemFacts)

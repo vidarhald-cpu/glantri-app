@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import {
   CharacterEquipmentReadModelService,
+  CampaignService,
   CharacterEquipmentWriteService,
   StaleCharacterEquipmentAggregateError,
 } from "@glantri/database";
@@ -31,10 +32,19 @@ export const equipmentItemRoutes: FastifyPluginAsync = async (app) => {
       const viewer = await requireAccessibleCharacter(user, id);
       await equipmentWriteService.ensureCharacterEquipmentInitialized(id);
 
+      const managementCampaigns =
+        viewer.kind === "gm"
+          ? (await new CampaignService().listCampaignsByCharacterRosterAccess(id))
+              .filter((campaign) => campaign.gmUserId === user.id)
+              .map(({ id, name }) => ({ id, name }))
+          : [];
       return {
-        state: toEquipmentFeatureState(
-          await equipmentReadModelService.getCharacterEquipmentState(id, viewer),
-        ),
+        state: {
+          ...toEquipmentFeatureState(
+            await equipmentReadModelService.getCharacterEquipmentState(id, viewer),
+          ),
+          managementCampaigns,
+        },
       };
     } catch (error) {
       return handleRouteError(

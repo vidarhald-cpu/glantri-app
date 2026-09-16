@@ -3,6 +3,8 @@ import { isDeepStrictEqual } from "node:util";
 import { equipmentTemplatesById } from "@glantri/content";
 import {
   isScenarioLiveInteractive,
+  isSupportedAmmunitionTemplate,
+  resolveEffectiveItemTemplate,
   projectCombatItemInteractionRecipients,
   revealableEquipmentItemFacts,
   resolveWeaponDisarmMismatch,
@@ -55,14 +57,14 @@ export interface CombatItemParticipantContext {
 }
 
 export interface CombatItemInteractionOption {
-  category: string;
+  category: string | null;
   id: string;
   label: string;
   operations: CombatItemInteractionOperation[];
   playerVisible: boolean;
   revision: string;
   state: CombatItemInteractionState;
-  templateId: string;
+  templateId: string | null;
   weaponDisarm?: {
     capability: "none" | "trap";
     controlRating: number;
@@ -269,7 +271,9 @@ function payloadMatchesResolution(
 function itemLabel(record: CombatItemInteractionRecord): string {
   return (
     record.item.displayName?.trim() ||
-    equipmentTemplatesById[record.item.templateId]?.name ||
+    (record.item.templateId === null
+      ? undefined
+      : equipmentTemplatesById[record.item.templateId]?.name) ||
     "Item"
   );
 }
@@ -431,7 +435,7 @@ function toOption(
     throw new Error("Canonical Item revision is unavailable.");
   }
   const state = itemState(record);
-  const template = equipmentTemplatesById[record.item.templateId];
+  const template = resolveEffectiveItemTemplate(record.item, equipmentTemplatesById);
   const weaponDisarm =
     record.item.category === "weapon" && template?.category === "weapon"
       ? (() => {
@@ -465,7 +469,17 @@ function toOptionForViewer(
   viewer: CombatItemInteractionViewer,
 ): CombatItemInteractionOption {
   return toOption(
-    record,
+    viewer.kind === "gm"
+      ? record
+      : {
+          ...record,
+          item: {
+            ...record.item,
+            mechanicalOverrides: record.item.mechanicalOverrides?.filter(
+              (entry) => entry.visibility === "revealed",
+            ),
+          },
+        },
     viewer.kind === "gm"
       ? record.item.itemFacts
       : revealableEquipmentItemFacts(record.item.itemFacts),
@@ -705,7 +719,9 @@ export class CombatItemInteractionService {
     const targetWeapon = toOption(targetRecord);
     if (
       acting.category !== "weapon" ||
+      !acting.templateId ||
       targetWeapon.category !== "weapon" ||
+      !targetWeapon.templateId ||
       acting.weaponDisarm?.capability !== "trap" ||
       !targetWeapon.weaponDisarm
     ) {
@@ -971,6 +987,10 @@ export class CombatItemInteractionService {
             ) {
               throw new CombatItemUnavailableError();
             }
+            const ammoTemplate =
+              ammo.templateId === null ? undefined : equipmentTemplatesById[ammo.templateId];
+            if (!ammoTemplate || !isSupportedAmmunitionTemplate(ammoTemplate))
+              throw new CombatItemUnavailableError();
             const quantityAfter = ammo.quantity - 1;
             const ammoAfter = await transaction.characterEquipmentItem.update({
               data: {

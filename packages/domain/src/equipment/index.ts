@@ -5,3 +5,4 @@ export * from "./validation";
 export * from "./weapon";
 export * from "./itemFacts";
 export * from "./quantity";
+export * from "./itemOverrides";

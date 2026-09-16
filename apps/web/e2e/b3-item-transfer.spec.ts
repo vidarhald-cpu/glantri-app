@@ -65,15 +65,18 @@ test.describe("B3 canonical item transfer", () => {
     page,
   }) => {
     const { b2CampaignId, characterId, nonHolderCharacterId } = loadTestState();
-    const itemName = `B3 Silverston ${b2CampaignId}`;
-    const hiddenTrait = `B3 hidden lineage ${b2CampaignId}`;
-    const revealedTrait = `B3 revealed maker mark ${b2CampaignId}`;
+    const runId = Date.now();
+    const itemName = `${runId} B3 Silverston ${b2CampaignId}`;
+    const hiddenTrait = `${runId} B3 hidden lineage ${b2CampaignId}`;
+    const revealedTrait = `${runId} B3 revealed maker mark ${b2CampaignId}`;
 
     await page.request.get(`${API_URL}/characters/${characterId}/equipment`);
     await page.request.get(`${API_URL}/characters/${nonHolderCharacterId}/equipment`);
     await page.goto(`/campaigns/${b2CampaignId}?tab=items`);
     await page.getByRole("button", { name: "Create item" }).click();
-    await page.getByLabel("Template").selectOption("weapon-template-rapier");
+    await page
+      .getByRole("combobox", { name: "Template", exact: true })
+      .selectOption("weapon-template-rapier");
     await page.getByLabel("Item name (optional)").fill(itemName);
     await page.getByLabel("Description (optional)").fill("The same storied blade changes hands.");
     await page.getByLabel("Initial assignment").selectOption(characterId);
@@ -115,7 +118,7 @@ test.describe("B3 canonical item transfer", () => {
     const equippedState = (await equipResponse.json()) as {
       state: {
         activeLoadoutByCharacterId: Record<string, { activePrimaryWeaponItemId: string | null }>;
-        itemsById: Record<string, { isEquipped: boolean }>;
+        itemsById: Record<string, { isEquipped: boolean; revision: string }>;
         revision: number;
       };
     };
@@ -144,6 +147,8 @@ test.describe("B3 canonical item transfer", () => {
     expect(unrelatedBefore.status()).toBe(404);
     expect(await unrelatedBefore.text()).not.toContain(hiddenTrait);
 
+    // Load the new Item revision after the separate holder session equipped it.
+    await page.reload();
     const itemCard = page.locator("article").filter({ hasText: itemName });
     await itemCard.getByRole("button", { name: "Transfer item" }).click();
     await expect(page.getByRole("heading", { name: `Transfer ${itemName}` })).toBeFocused();
@@ -232,6 +237,7 @@ test.describe("B3 canonical item transfer", () => {
         data: {
           campaignId: b2CampaignId,
           expectedRevision: equippedState.state.revision,
+          expectedItemRevision: equippedState.state.itemsById[itemId]!.revision,
           targetCharacterId: nonHolderCharacterId,
           targetExpectedRevision: targetBeforeState.state.revision,
         },

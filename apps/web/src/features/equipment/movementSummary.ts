@@ -1,7 +1,4 @@
-import {
-  type EquipmentTemplate,
-  type ShieldTemplate,
-} from "@glantri/domain";
+import { type EquipmentTemplate, type ShieldTemplate } from "@glantri/domain";
 import {
   calculateWorkbookBaseMove,
   calculateWorkbookCarryCapacity,
@@ -12,7 +9,7 @@ import {
 } from "@glantri/rules-engine";
 
 import {
-  getEquipmentTemplateById,
+  getEffectiveEquipmentTemplate,
   getLoadoutEquipment,
   getPersonalEncumbranceSummary,
 } from "./equipmentSelectors";
@@ -96,7 +93,7 @@ export function buildWorkbookMovementSummary(input: {
 
   const loadout = getLoadoutEquipment(input.state, input.characterId);
   const readyShieldTemplate = loadout.shield
-    ? asShieldTemplate(getEquipmentTemplateById(input.state, loadout.shield.templateId))
+    ? asShieldTemplate(getEffectiveEquipmentTemplate(input.state, loadout.shield))
     : null;
   const shieldMovementModifier = readyShieldTemplate?.movementModifier ?? 0;
   const movementModifier = calculateWorkbookMovementModifier({

@@ -41,7 +41,7 @@ export const combatMovementBurdenSnapshotSchema = z.object({
       z.object({
         effectiveEncumbrance: z.number().nonnegative(),
         itemId: idSchema,
-        templateId: idSchema,
+        templateId: idSchema.nullable(),
       }),
     )
     .default([]),

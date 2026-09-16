@@ -1,3 +1,4 @@
+import { resolveEffectiveItemTemplate } from "@glantri/domain";
 import {
   buildCombatDefenseSnapshotId,
   combatDefenseSnapshotSchema,
@@ -173,7 +174,9 @@ export function resolveCanonicalParryBaseForDefenseSnapshot(input: {
         : source.kind === "shield"
           ? context.loadout?.readyShieldItemId
           : context.loadout?.activeSecondaryWeaponItemId;
-    const template = context.templatesById.get(source.templateId);
+    const template = item
+      ? resolveEffectiveItemTemplate(item, Object.fromEntries(context.templatesById))
+      : undefined;
     if (
       expectedLoadoutItemId !== source.itemId ||
       !item ||

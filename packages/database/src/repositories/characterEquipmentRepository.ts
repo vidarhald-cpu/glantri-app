@@ -3,6 +3,8 @@ import {
   CanonicalEquipmentItemSchema,
   EquipmentItemSchema,
   EquipmentItemFactsV1Schema,
+  ItemMechanicalOverridesSchema,
+  isSupportedAmmunitionTemplate,
   StorageLocationSchema,
   type CharacterLoadout as DomainCharacterLoadout,
   type AssignedEquipmentItem,
@@ -11,7 +13,7 @@ import {
   type ItemStorageAssignment,
   type StorageLocation,
 } from "@glantri/domain";
-import { createDefaultEquipmentLocations } from "@glantri/content";
+import { createDefaultEquipmentLocations, equipmentTemplatesById } from "@glantri/content";
 import { Prisma, PrismaClient } from "@prisma/client";
 
 import { prisma as defaultPrisma } from "../client";
@@ -54,10 +56,35 @@ function serializeItemFacts(value: CanonicalEquipmentItem["itemFacts"]): Prisma.
   return EquipmentItemFactsV1Schema.parse(value) as unknown as Prisma.InputJsonValue;
 }
 
+function preserveStoredItemFacts(
+  value: CanonicalEquipmentItem["itemFacts"],
+  stored: unknown,
+): Prisma.InputJsonValue {
+  const parsed = EquipmentItemFactsV1Schema.parse(value);
+  const old =
+    stored && typeof stored === "object" && !Array.isArray(stored)
+      ? (stored as Record<string, unknown>)
+      : {};
+  const result: Record<string, unknown> = { ...old, ...parsed };
+  for (const key of [
+    "activeMechanics",
+    "templateOverrides",
+    "descriptiveTraits",
+    "unsupportedCapabilities",
+  ] as const) {
+    const previous = Array.isArray(old[key]) ? (old[key] as Array<Record<string, unknown>>) : [];
+    result[key] = parsed[key].map((fact) => ({
+      ...previous.find((entry) => entry?.id === fact.id),
+      ...fact,
+    }));
+  }
+  return result as Prisma.InputJsonValue;
+}
+
 function mapCanonicalEquipmentItem(record: {
   acquiredFrom: string | null;
   campaignContextId: string | null;
-  category: string;
+  category: string | null;
   holderCharacterId: string | null;
   conditionState: string;
   displayName: string | null;
@@ -79,10 +106,19 @@ function mapCanonicalEquipmentItem(record: {
   quantity: number;
   specificityType: string;
   statusTagsJson: unknown;
-  templateId: string;
+  templateId: string | null;
+  mechanicalOverridesJson?: unknown;
+  physicalBaseEncumbrance?: number | null;
   valueOverride: number | null;
   updatedAt: Date;
 }): CanonicalEquipmentItem {
+  if (
+    record.quantity === 0 &&
+    (!record.templateId ||
+      !equipmentTemplatesById[record.templateId] ||
+      !isSupportedAmmunitionTemplate(equipmentTemplatesById[record.templateId]))
+  )
+    throw new Error("Only supported exhausted ammunition may have zero quantity.");
   return CanonicalEquipmentItemSchema.parse({
     acquiredFrom: record.acquiredFrom,
     campaignContextId: record.campaignContextId,
@@ -122,6 +158,9 @@ function mapCanonicalEquipmentItem(record: {
           }
         : null,
     templateId: record.templateId,
+    itemKind: record.templateId === null ? "descriptive_only" : "template_backed",
+    mechanicalOverrides: ItemMechanicalOverridesSchema.parse(record.mechanicalOverridesJson ?? []),
+    physicalBaseEncumbrance: record.physicalBaseEncumbrance ?? null,
     valueOverride: record.valueOverride,
   });
 }
@@ -218,6 +257,7 @@ export interface CharacterEquipmentRepository {
     campaignId: string;
     evidence?: EquipmentTransitionEvidence;
     expectedTargetRevision?: number;
+    expectedItemRevision?: string;
     itemId: string;
     targetCharacterId: string;
     targetStorageAssignment: ItemStorageAssignment;
@@ -226,6 +266,7 @@ export interface CharacterEquipmentRepository {
     campaignId: string;
     evidence?: EquipmentTransitionEvidence;
     expectedSourceRevision?: number;
+    expectedItemRevision?: string;
     itemId: string;
     sourceCharacterId: string;
   }): Promise<CanonicalEquipmentItem>;
@@ -356,6 +397,7 @@ export interface TransferCampaignEquipmentItemInput {
   targetCharacterId: string;
   targetExpectedRevision?: number;
   targetStorageAssignment: ItemStorageAssignment;
+  expectedItemRevision?: string;
 }
 
 export interface EquipmentTransitionEvidence {
@@ -576,6 +618,10 @@ export function createPrismaCharacterEquipmentRepository(
           isFavorite: item.isFavorite ?? null,
           isStackable: item.isStackable,
           itemFactsJson: serializeItemFacts(item.itemFacts),
+          mechanicalOverridesJson: ItemMechanicalOverridesSchema.parse(
+            item.mechanicalOverrides ?? [],
+          ) as Prisma.InputJsonValue,
+          physicalBaseEncumbrance: item.physicalBaseEncumbrance ?? null,
           locationId: item.storageAssignment.locationId,
           carryMode: item.storageAssignment.carryMode,
           previousLocationId: item.previousStorageAssignment?.locationId ?? null,
@@ -610,6 +656,10 @@ export function createPrismaCharacterEquipmentRepository(
           isFavorite: item.isFavorite ?? null,
           isStackable: item.isStackable,
           itemFactsJson: serializeItemFacts(item.itemFacts),
+          mechanicalOverridesJson: ItemMechanicalOverridesSchema.parse(
+            item.mechanicalOverrides ?? [],
+          ) as Prisma.InputJsonValue,
+          physicalBaseEncumbrance: item.physicalBaseEncumbrance ?? null,
           locationId: item.storageAssignment?.locationId ?? null,
           carryMode: item.storageAssignment?.carryMode ?? null,
           previousLocationId: item.previousStorageAssignment?.locationId ?? null,
@@ -628,28 +678,69 @@ export function createPrismaCharacterEquipmentRepository(
       return mapCanonicalEquipmentItem(created);
     },
     async updateCampaignEquipmentItemAuthoring(item) {
-      const result = await prisma.characterEquipmentItem.updateMany({
-        data: {
-          displayName: item.displayName ?? null,
-          itemFactsJson: serializeItemFacts(item.itemFacts),
-          notes: item.notes ?? null,
-        },
-        where: {
-          campaignContextId: item.campaignContextId,
-          id: item.id,
-        },
-      });
-
-      if (result.count === 0) {
-        throw new Error("Campaign item not found.");
+      if (!item.revision) throw new StaleEquipmentTransferError();
+      const persist = async (transaction: Prisma.TransactionClient) => {
+        // Match the transfer lock order: holder aggregate, then the Item.
+        if (item.holderCharacterId) {
+          await transaction.characterEquipmentAggregate.upsert({
+            create: { characterId: item.holderCharacterId },
+            update: {},
+            where: { characterId: item.holderCharacterId },
+          });
+          await transaction.$queryRaw(
+            Prisma.sql`SELECT "characterId" FROM "CharacterEquipmentAggregate" WHERE "characterId" = ${item.holderCharacterId} FOR UPDATE`,
+          );
+        }
+        await transaction.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "CharacterEquipmentItem" WHERE "id" = ${item.id} FOR UPDATE`,
+        );
+        const stored = await transaction.characterEquipmentItem.findUnique({
+          where: { id: item.id },
+        });
+        if (!stored || stored.updatedAt.toISOString() !== item.revision)
+          throw new StaleEquipmentTransferError();
+        const result = await transaction.characterEquipmentItem.updateMany({
+          data: {
+            displayName: item.displayName ?? null,
+            itemFactsJson: preserveStoredItemFacts(item.itemFacts, stored.itemFactsJson),
+            mechanicalOverridesJson: ItemMechanicalOverridesSchema.parse(
+              item.mechanicalOverrides ?? [],
+            ) as Prisma.InputJsonValue,
+            physicalBaseEncumbrance: item.physicalBaseEncumbrance ?? null,
+            notes: item.notes ?? null,
+            quantity: item.quantity,
+          },
+          where: {
+            campaignContextId: item.campaignContextId,
+            id: item.id,
+            holderCharacterId: item.holderCharacterId,
+            updatedAt: new Date(item.revision!),
+          },
+        });
+        if (result.count !== 1) throw new StaleEquipmentTransferError();
+        if (item.holderCharacterId)
+          await transaction.characterEquipmentAggregate.update({
+            data: { revision: { increment: 1 } },
+            where: { characterId: item.holderCharacterId },
+          });
+        return mapCanonicalEquipmentItem(
+          await transaction.characterEquipmentItem.findUniqueOrThrow({ where: { id: item.id } }),
+        );
+      };
+      try {
+        return transactionClient
+          ? await persist(transactionClient)
+          : await prisma.$transaction(persist, {
+              isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            });
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          (error.code === "P2034" || (error.code === "P2010" && error.meta?.code === "40001"))
+        )
+          throw new StaleEquipmentTransferError();
+        throw error;
       }
-
-      const updated = await prisma.characterEquipmentItem.findUnique({ where: { id: item.id } });
-      if (!updated) {
-        throw new Error("Campaign item not found after update.");
-      }
-
-      return mapCanonicalEquipmentItem(updated);
     },
     async transferCampaignEquipmentItem(input) {
       const persist = async (transaction: Prisma.TransactionClient) => {
@@ -683,6 +774,11 @@ export function createPrismaCharacterEquipmentRepository(
         const current = await transaction.characterEquipmentItem.findUnique({
           where: { id: input.itemId },
         });
+        if (
+          input.expectedItemRevision !== undefined &&
+          current?.updatedAt.toISOString() !== input.expectedItemRevision
+        )
+          throw new StaleEquipmentTransferError();
 
         if (!current || current.campaignContextId !== input.campaignId) {
           throw new Error("Campaign item not found.");
@@ -910,6 +1006,11 @@ export function createPrismaCharacterEquipmentRepository(
           where: { id: input.itemId },
         });
         if (
+          input.expectedItemRevision !== undefined &&
+          current?.updatedAt.toISOString() !== input.expectedItemRevision
+        )
+          throw new StaleEquipmentTransferError();
+        if (
           !current ||
           current.campaignContextId !== input.campaignId ||
           current.holderCharacterId !== null
@@ -1030,6 +1131,11 @@ export function createPrismaCharacterEquipmentRepository(
         const current = await transaction.characterEquipmentItem.findUnique({
           where: { id: input.itemId },
         });
+        if (
+          input.expectedItemRevision !== undefined &&
+          current?.updatedAt.toISOString() !== input.expectedItemRevision
+        )
+          throw new StaleEquipmentTransferError();
         if (
           !current ||
           current.campaignContextId !== input.campaignId ||
@@ -1260,7 +1366,7 @@ export function createPrismaCharacterEquipmentRepository(
           if (current.holderCharacterId !== input.ownerCharacterId || !current.locationId) {
             throw new CombatItemUnavailableError();
           }
-          if (!(["weapon", "shield", "armor"] as string[]).includes(current.category)) {
+          if (!(["weapon", "shield", "armor"] as string[]).includes(current.category ?? "")) {
             throw new Error("This Item does not have a supported ready or equip state.");
           }
           const equippedLocation = await findSystemLocation(
@@ -1525,6 +1631,7 @@ export function createPrismaCharacterEquipmentRepository(
       return transactionClient ? restore(transactionClient) : prisma.$transaction(restore);
     },
     async updateCharacterEquipmentItem(item) {
+      const stored = await prisma.characterEquipmentItem.findUnique({ where: { id: item.id } });
       const result = await prisma.characterEquipmentItem.updateMany({
         data: {
           acquiredFrom: item.acquiredFrom ?? null,
@@ -1545,7 +1652,11 @@ export function createPrismaCharacterEquipmentRepository(
           notes: item.notes ?? null,
           quality: item.quality,
           quantity: item.quantity,
-          itemFactsJson: serializeItemFacts(item.itemFacts),
+          itemFactsJson: preserveStoredItemFacts(item.itemFacts, stored?.itemFactsJson),
+          mechanicalOverridesJson: ItemMechanicalOverridesSchema.parse(
+            item.mechanicalOverrides ?? [],
+          ) as Prisma.InputJsonValue,
+          physicalBaseEncumbrance: item.physicalBaseEncumbrance ?? null,
           specificityType: item.specificityType,
           statusTagsJson: serializeJsonArray(item.statusTags),
           templateId: item.templateId,
@@ -1624,6 +1735,26 @@ export function createPrismaCharacterEquipmentRepository(
       const uniqueReferencedItemIds = [...new Set(referencedItemIds)];
 
       const persist = async (transaction: Prisma.TransactionClient) => {
+        const previous = await transaction.characterLoadout.findUnique({
+          where: { id: loadout.id },
+        });
+        const previousIds = previous
+          ? [
+              previous.wornArmorItemId,
+              previous.readyShieldItemId,
+              previous.activePrimaryWeaponItemId,
+              previous.activeSecondaryWeaponItemId,
+              previous.activeMissileWeaponItemId,
+              ...previous.activeAmmoItemIds,
+              ...(parseStringArrayOrNull(previous.quickAccessItemIdsJson) ?? []),
+            ].filter((id): id is string => Boolean(id))
+          : [];
+        const affectedIds = [...new Set([...previousIds, ...uniqueReferencedItemIds])].sort();
+        if (affectedIds.length)
+          await transaction.$queryRaw(
+            Prisma.sql`SELECT "id" FROM "CharacterEquipmentItem" WHERE "id" IN (${Prisma.join(affectedIds)}) ORDER BY "id" FOR UPDATE`,
+          );
+
         if (uniqueReferencedItemIds.length > 0) {
           await transaction.$queryRaw(
             Prisma.sql`SELECT "id" FROM "CharacterEquipmentItem" WHERE "id" IN (${Prisma.join(uniqueReferencedItemIds)}) FOR UPDATE`,
@@ -1639,7 +1770,7 @@ export function createPrismaCharacterEquipmentRepository(
           }
         }
 
-        return transaction.characterLoadout.upsert({
+        const saved = await transaction.characterLoadout.upsert({
           create: {
             activeAmmoItemIds: loadout.activeAmmoItemIds,
             activeMissileWeaponItemId: loadout.activeMissileWeaponItemId ?? null,
@@ -1670,6 +1801,12 @@ export function createPrismaCharacterEquipmentRepository(
             id: loadout.id,
           },
         });
+        if (affectedIds.length)
+          await transaction.characterEquipmentItem.updateMany({
+            data: { updatedAt: new Date() },
+            where: { id: { in: affectedIds }, holderCharacterId: loadout.characterId },
+          });
+        return saved;
       };
       const upserted = transactionClient
         ? await persist(transactionClient)

@@ -1,3 +1,4 @@
+import { resolveEffectiveItemTemplate } from "@glantri/domain/equipment";
 import {
   applyCombatActionGeneratedModifiers,
   buildReactiveAttackPhase2InitiativeModifierEntry,
@@ -88,7 +89,9 @@ function getActiveWeaponTemplates(input: {
   return activeWeaponItemIds
     .map((itemId) => {
       const item = equipmentState.itemsById[itemId];
-      const template = item ? equipmentState.templates.templatesById[item.templateId] : undefined;
+      const template = item
+        ? resolveEffectiveItemTemplate(item, equipmentState.templates.templatesById ?? {})
+        : undefined;
 
       return isWeaponTemplate(template) ? template : undefined;
     })

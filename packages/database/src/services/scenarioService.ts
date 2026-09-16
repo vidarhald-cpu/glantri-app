@@ -337,7 +337,8 @@ export class ScenarioService {
       if (reference.sourceKind === "campaign_item") {
         const item = equipment.itemsById[reference.sourceId];
         if (!item || item.campaignContextId !== input.scenario.campaignId) return [];
-        const template = equipment.templatesById[item.templateId];
+        const template =
+          item.templateId === null ? undefined : equipment.templatesById[item.templateId];
         return [
           {
             canPickUp: !item.holderCharacterId,
@@ -474,6 +475,7 @@ export class ScenarioService {
 
     const equipmentState = await this.equipmentService.getCharacterEquipmentState(
       input.characterId,
+      { kind: "gm" },
     );
     const snapshotState = createParticipantSnapshotFromCharacter({
       build: character.build,
@@ -554,6 +556,7 @@ export class ScenarioService {
 
     const equipmentState = await this.equipmentService.getCharacterEquipmentState(
       participant.characterId,
+      { kind: "gm" },
     );
     const refreshed = createParticipantSnapshotFromCharacter({
       build: character.build,

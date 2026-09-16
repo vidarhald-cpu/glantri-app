@@ -1,5 +1,7 @@
 "use client";
 
+import { resolveEffectiveItemTemplate } from "@glantri/domain/equipment";
+
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -953,7 +955,7 @@ function getActiveWeaponTemplatesForScenarioParticipant(
     .map((itemId) => {
       const item = equipmentStateCandidate.itemsById[itemId];
       const template = item
-        ? equipmentStateCandidate.templates.templatesById[item.templateId]
+        ? resolveEffectiveItemTemplate(item, equipmentStateCandidate.templates.templatesById ?? {})
         : undefined;
 
       return template?.category === "weapon" ? template : undefined;
@@ -3630,7 +3632,10 @@ export default function ScenarioPlayerCombatPageContent({
       .map((itemId) => controlledEquipmentState?.itemsById[itemId])
       .find((item) => {
         const template = item
-          ? controlledEquipmentState?.templates.templatesById[item.templateId]
+          ? resolveEffectiveItemTemplate(
+              item,
+              controlledEquipmentState?.templates.templatesById ?? {},
+            )
           : undefined;
         return (
           item &&

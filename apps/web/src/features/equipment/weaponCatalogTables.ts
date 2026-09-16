@@ -1,3 +1,4 @@
+import { resolveEffectiveItemTemplate } from "@glantri/domain/equipment";
 import {
   getEffectiveEncumbrance,
   type EquipmentItem,
@@ -108,8 +109,10 @@ function formatRange(value: string | null | undefined): string {
 }
 
 function getThrownMode(template: WeaponTemplate): WeaponAttackMode | null {
-  return getAttackMode(template, "mode-3")
-    ?? (template.handlingClass === "thrown" ? getAttackMode(template, "mode-1") : null);
+  return (
+    getAttackMode(template, "mode-3") ??
+    (template.handlingClass === "thrown" ? getAttackMode(template, "mode-1") : null)
+  );
 }
 
 function buildPrimaryModeCells(mode: WeaponAttackMode | null, template: WeaponTemplate): string[] {
@@ -157,11 +160,11 @@ function buildModeCapabilityCells(template: WeaponTemplate): string[] {
 
   return [
     main ? label(main) : "—",
-    modes.length > 0 ? modes.map((mode) => `${mode.order ?? "legacy"}: ${label(mode)}`).join("; ") : "—",
     modes.length > 0
-      ? modes
-          .map((mode) => `${label(mode)}: ${mode.canonicalMeleeMode ?? "non-melee"}`)
-          .join("; ")
+      ? modes.map((mode) => `${mode.order ?? "legacy"}: ${label(mode)}`).join("; ")
+      : "—",
+    modes.length > 0
+      ? modes.map((mode) => `${label(mode)}: ${mode.canonicalMeleeMode ?? "non-melee"}`).join("; ")
       : "—",
     modes.some((mode) => mode.allowsRepeatedRoundAttack === true)
       ? modes
@@ -188,7 +191,10 @@ export function getCharacterWeaponCatalogRows(input: {
   return input.items
     .filter((item) => item.characterId === input.characterId && item.category === "weapon")
     .map((item) => {
-      const template = input.state.templates.templatesById[item.templateId];
+      const template = resolveEffectiveItemTemplate(
+        item,
+        input.state.templates.templatesById ?? {},
+      );
       return template?.category === "weapon"
         ? {
             label: item.displayName ?? template.name,
@@ -244,10 +250,16 @@ export function getAdminWeaponCatalogRows(input: {
         encumbrance: formatEncumbranceDisplay(getEffectiveEncumbrance(syntheticItem, template)),
       };
     })
-    .sort((left, right) => left.template.weaponSkill.localeCompare(right.template.weaponSkill) || left.label.localeCompare(right.label));
+    .sort(
+      (left, right) =>
+        left.template.weaponSkill.localeCompare(right.template.weaponSkill) ||
+        left.label.localeCompare(right.label),
+    );
 }
 
-export function buildMeleeWeaponCatalogTable(rows: WeaponCatalogOptionRow[]): WeaponCatalogTableModel {
+export function buildMeleeWeaponCatalogTable(
+  rows: WeaponCatalogOptionRow[],
+): WeaponCatalogTableModel {
   return {
     columns: [...CANONICAL_MELEE_WEAPON_TABLE_COLUMNS],
     rows: rows
@@ -275,7 +287,9 @@ export function buildMeleeWeaponCatalogTable(rows: WeaponCatalogOptionRow[]): We
   };
 }
 
-export function buildMissileWeaponCatalogTable(rows: WeaponCatalogOptionRow[]): WeaponCatalogTableModel {
+export function buildMissileWeaponCatalogTable(
+  rows: WeaponCatalogOptionRow[],
+): WeaponCatalogTableModel {
   return {
     columns: [...CANONICAL_MISSILE_WEAPON_TABLE_COLUMNS],
     rows: rows

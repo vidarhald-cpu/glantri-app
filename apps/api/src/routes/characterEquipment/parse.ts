@@ -53,6 +53,7 @@ export function parseMoveItemBody(body: unknown) {
 
 export function parseTransferItemBody(body: unknown): {
   campaignId: string;
+  expectedItemRevision: string;
   sourceExpectedRevision: number;
   targetCharacterId: string;
   targetExpectedRevision: number;
@@ -80,7 +81,15 @@ export function parseTransferItemBody(body: unknown): {
     throw new Error("Choose valid storage for the receiving Character.");
   }
 
+  const expectedItemRevision =
+    "expectedItemRevision" in body ? body.expectedItemRevision : undefined;
+  if (
+    typeof expectedItemRevision !== "string" ||
+    !Number.isFinite(Date.parse(expectedItemRevision))
+  )
+    throw new Error("Reload the Item before transferring it.");
   return {
+    expectedItemRevision,
     campaignId,
     sourceExpectedRevision: parseExpectedEquipmentRevision(body),
     targetExpectedRevision: (() => {

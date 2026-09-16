@@ -1,3 +1,4 @@
+import { getItemOverrideChoices, itemOverrideKey } from "@glantri/domain/equipment";
 import type {
   CanonicalEquipmentItem,
   EquipmentTemplate,
@@ -28,11 +29,14 @@ function signed(value: number): string {
 }
 
 export function buildItemPresentationSections(
-  item: Pick<CanonicalEquipmentItem, "id"> & { itemFacts?: CanonicalEquipmentItem["itemFacts"] },
-  template: EquipmentTemplate,
+  item: Pick<CanonicalEquipmentItem, "id"> & {
+    itemFacts?: CanonicalEquipmentItem["itemFacts"];
+    mechanicalOverrides?: CanonicalEquipmentItem["mechanicalOverrides"];
+  },
+  template: EquipmentTemplate | undefined,
 ): ItemPresentationSection[] {
   if (!item.itemFacts) return [];
-  const standardInitiative = template.category === "weapon" ? template.initiative : undefined;
+  const standardInitiative = template?.category === "weapon" ? template.initiative : undefined;
   const templateOverrideEntries = item.itemFacts.templateOverrides.flatMap((override) => {
     switch (override.kind) {
       case "weapon_initiative_override":
@@ -64,7 +68,19 @@ export function buildItemPresentationSections(
 
   return [
     {
-      entries: templateOverrideEntries,
+      entries: [
+        ...templateOverrideEntries,
+        ...(item.mechanicalOverrides ?? []).map((entry) => {
+          const choice = (template ? getItemOverrideChoices(template) : []).find(
+            (candidate) => itemOverrideKey(candidate.entry) === itemOverrideKey(entry),
+          );
+          return {
+            label: `${choice?.label ?? "Equipment input"}: ${entry.value}`,
+            detail: `Template: ${choice?.templateValue ?? "unavailable"} · Item override: ${entry.value} · Effective: ${entry.value}`,
+            visibility: entry.visibility,
+          };
+        }),
+      ],
       id: "template_differences",
       title: "Differences from standard",
     },

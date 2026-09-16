@@ -63,3 +63,41 @@ export function revealableEquipmentItemFacts(facts: EquipmentItemFactsV1): Equip
     version: 1,
   };
 }
+
+/** Sanitize a captured equipment snapshot before it reaches its controlling player. */
+export function revealableEquipmentState(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const state = value as Record<string, unknown>;
+  const items = state.itemsById;
+  if (!items || typeof items !== "object" || Array.isArray(items))
+    return { ...state, itemsById: {} };
+  return {
+    ...state,
+    itemsById: Object.fromEntries(
+      Object.entries(items).flatMap(([id, raw]) => {
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+        const item = raw as Record<string, unknown>;
+        const facts = item.itemFacts as EquipmentItemFactsV1 | undefined;
+        return [
+          [
+            id,
+            {
+              ...item,
+              mechanicalOverrides: Array.isArray(item.mechanicalOverrides)
+                ? item.mechanicalOverrides.filter(
+                    (entry) =>
+                      entry && typeof entry === "object" && entry.visibility === "revealed",
+                  )
+                : [],
+              itemFacts:
+                facts?.version === 1
+                  ? revealableEquipmentItemFacts(facts)
+                  : createEmptyEquipmentItemFacts(),
+              specialProperties: null,
+            },
+          ],
+        ];
+      }),
+    ),
+  };
+}

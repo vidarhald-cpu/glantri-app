@@ -1,15 +1,18 @@
-import { getAccessTier, isWithYouLocation, type EquipmentItem, type EquipmentTemplate } from "@glantri/domain";
+import { resolveEffectiveItemTemplate } from "@glantri/domain/equipment";
+import {
+  getAccessTier,
+  isWithYouLocation,
+  type EquipmentItem,
+  type EquipmentTemplate,
+} from "@glantri/domain";
 
 import type { EquipmentFeatureState } from "./types";
 
-const PISTOL_TEMPLATE_IDS = new Set([
-  "weapon-template-pistol",
-  "weapon-template-cartridge-pistol",
-]);
+const PISTOL_TEMPLATE_IDS = new Set(["weapon-template-pistol", "weapon-template-cartridge-pistol"]);
 
 function getItemName(input: {
   displayName?: string | null;
-  templateId?: string;
+  templateId?: string | null;
   templateName?: string;
 }): string {
   if (!input.templateId) {
@@ -19,11 +22,11 @@ function getItemName(input: {
   return input.displayName ?? input.templateName ?? "Unknown item";
 }
 
-function buildOptionLabel(input: {
-  item: EquipmentItem;
-  state: EquipmentFeatureState;
-}): string {
-  const template = input.state.templates.templatesById[input.item.templateId];
+function buildOptionLabel(input: { item: EquipmentItem; state: EquipmentFeatureState }): string {
+  const template = resolveEffectiveItemTemplate(
+    input.item,
+    input.state.templates.templatesById ?? {},
+  );
 
   return `${getItemName({
     displayName: input.item.displayName,
@@ -32,10 +35,7 @@ function buildOptionLabel(input: {
   })}${getAccessTier(input.item.storageAssignment.carryMode) === "slow" ? " (Backpack / slow)" : ""}`;
 }
 
-function isSelectableWeaponItem(
-  item: EquipmentItem,
-  state: EquipmentFeatureState,
-): boolean {
+function isSelectableWeaponItem(item: EquipmentItem, state: EquipmentFeatureState): boolean {
   if (item.category !== "weapon") {
     return false;
   }
@@ -60,9 +60,7 @@ function hasDerivedThrownAttackMode(
   return template.attackModes?.some((mode) => mode.id === "mode-3") === true;
 }
 
-export function isLoadoutMeleeWeaponTemplate(
-  template: EquipmentTemplate | undefined,
-): boolean {
+export function isLoadoutMeleeWeaponTemplate(template: EquipmentTemplate | undefined): boolean {
   return (
     isWeaponTemplate(template) &&
     template.handlingClass !== "missile" &&
@@ -70,9 +68,7 @@ export function isLoadoutMeleeWeaponTemplate(
   );
 }
 
-export function isLoadoutMissileWeaponTemplate(
-  template: EquipmentTemplate | undefined,
-): boolean {
+export function isLoadoutMissileWeaponTemplate(template: EquipmentTemplate | undefined): boolean {
   if (!isWeaponTemplate(template) || template.handlingClass !== "missile") {
     return false;
   }
@@ -80,15 +76,10 @@ export function isLoadoutMissileWeaponTemplate(
   return template.weaponClass === "bow" || PISTOL_TEMPLATE_IDS.has(template.id);
 }
 
-export function hasLoadoutThrownWeaponStats(
-  template: EquipmentTemplate | undefined,
-): boolean {
+export function hasLoadoutThrownWeaponStats(template: EquipmentTemplate | undefined): boolean {
   return (
     isWeaponTemplate(template) &&
-    (
-      template.handlingClass === "thrown" ||
-      hasDerivedThrownAttackMode(template)
-    )
+    (template.handlingClass === "thrown" || hasDerivedThrownAttackMode(template))
   );
 }
 
@@ -102,7 +93,9 @@ export function isValidLoadoutThrowingWeaponItem(input: {
 
   return (
     isSelectableWeaponItem(input.item, input.state) &&
-    hasLoadoutThrownWeaponStats(input.state.templates.templatesById[input.item.templateId])
+    hasLoadoutThrownWeaponStats(
+      resolveEffectiveItemTemplate(input.item, input.state.templates.templatesById ?? {}),
+    )
   );
 }
 
@@ -114,7 +107,11 @@ function buildFilteredWeaponOptions(input: {
   return Object.values(input.state.itemsById)
     .filter((item) => item.characterId === input.characterId && item.category === "weapon")
     .filter((item) => isSelectableWeaponItem(item, input.state))
-    .filter((item) => input.predicate(input.state.templates.templatesById[item.templateId]))
+    .filter((item) =>
+      input.predicate(
+        resolveEffectiveItemTemplate(item, input.state.templates.templatesById ?? {}),
+      ),
+    )
     .map((item) => ({
       id: item.id,
       label: buildOptionLabel({
