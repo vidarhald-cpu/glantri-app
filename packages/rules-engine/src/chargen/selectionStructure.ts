@@ -29,7 +29,7 @@ import { resolveEffectiveProfessionPackage } from "../professions/resolveEffecti
 */
 
 interface ChargenSelectionContentShape {
-  chargenCatalogue?: { skillIds: readonly string[] };
+  chargenCatalogue?: { skillIds: readonly string[]; professionIds?: readonly string[] };
   civilizations?: CivilizationDefinition[];
   languages?: LanguageDefinition[];
   professionFamilies: ProfessionFamilyDefinition[];
@@ -365,14 +365,21 @@ export function buildChargenSelectableSkillSummary(input: {
     content: input.content,
     subtypeId: input.professionId,
   });
-  const societyAccess = getSocietyAccess(input.content, input.societyLevel, input.societyId);
+  const societyAccess = input.content.chargenCatalogue?.professionIds
+    ? undefined
+    : getSocietyAccess(input.content, input.societyLevel, input.societyId);
   const allowedGroupIds = uniqueIds(
-    societyAccess?.skillGroupIds.filter((groupId) =>
-      [
-        ...professionPackage.core.finalEffectiveGroupIds,
-        ...professionPackage.favored.finalEffectiveGroupIds,
-      ].includes(groupId),
-    ) ?? [],
+    input.content.chargenCatalogue?.professionIds
+      ? [
+          ...professionPackage.core.finalEffectiveGroupIds,
+          ...professionPackage.favored.finalEffectiveGroupIds,
+        ]
+      : (societyAccess?.skillGroupIds.filter((groupId) =>
+          [
+            ...professionPackage.core.finalEffectiveGroupIds,
+            ...professionPackage.favored.finalEffectiveGroupIds,
+          ].includes(groupId),
+        ) ?? []),
   );
   const normalSkillIds = uniqueIds([
     ...input.content.skills
@@ -381,10 +388,15 @@ export function buildChargenSelectableSkillSummary(input: {
       )
       .map((skill) => skill.id),
     ...(societyAccess?.skillIds ?? []),
-    ...getAccessibleFoundationalSkillIdsForSocietyBand(input.content.societyBandSkillAccess ?? [], {
-      socialBand: input.societyLevel,
-      societyId: input.societyId ?? "",
-    }),
+    ...(input.content.chargenCatalogue?.professionIds
+      ? []
+      : getAccessibleFoundationalSkillIdsForSocietyBand(
+          input.content.societyBandSkillAccess ?? [],
+          {
+            socialBand: input.societyLevel,
+            societyId: input.societyId ?? "",
+          },
+        )),
     ...professionPackage.core.finalEffectiveSkillIds,
     ...professionPackage.favored.finalEffectiveSkillIds,
   ]);

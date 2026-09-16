@@ -1,3 +1,4 @@
+import { validateTargetChargenBuild } from "../validateTargetChargenBuild";
 import type { CharacterBuild, ChargenRuleSetParameters } from "@glantri/domain";
 
 import { applyRelationshipMinimumGrants } from "../../skills/deriveSkillRelationships";
@@ -127,6 +128,16 @@ export function finalizeChargenDraft(input: FinalizeChargenDraftInput): Finalize
     name: input.name?.trim() || `${profession?.name ?? "Character"} ${input.profile.label}`.trim(),
     profile: input.profile,
     professionId: input.professionId,
+    targetChargen:
+      input.content.chargenCatalogue?.professionSourceDigest && profession
+        ? {
+            familyId: profession.familyId,
+            trackId: profession.id === profession.familyId ? undefined : profession.id,
+            professionName: profession.name,
+            sourceDigest: input.content.chargenCatalogue.professionSourceDigest,
+            groupSourceDigest: input.content.chargenCatalogue.groupSourceDigest!,
+          }
+        : undefined,
     progression,
     progressionState: {
       availablePoints: 0,
@@ -134,11 +145,14 @@ export function finalizeChargenDraft(input: FinalizeChargenDraftInput): Finalize
       history: [],
       pendingAttempts: [],
     },
+    civilizationId: input.civilizationId,
     socialClass: input.socialClass,
     societyId: input.societyId,
     societyLevel: input.societyLevel,
   };
 
+  const targetErrors = validateTargetChargenBuild(build, input.content);
+  if (targetErrors.length) return { errors: targetErrors, warnings: review.warnings };
   return {
     build,
     errors: [],

@@ -3,7 +3,7 @@ import type {
   ProfessionFamilyDefinition,
   ProfessionSkillMap,
   SkillDefinition,
-  SkillGroupDefinition
+  SkillGroupDefinition,
 } from "@glantri/domain";
 import { getSkillGroupIds } from "@glantri/domain";
 
@@ -22,6 +22,7 @@ export interface EffectiveProfessionPackageTierResult {
   finalEffectiveReachableSkillIds: string[];
   finalEffectiveReachableSkillCount: number;
   finalEffectiveSkillIds: string[];
+  finalEffectiveSpecializationIds: string[];
   inheritedFamilyGroupIds: string[];
   inheritedFamilySkillIds: string[];
   reachableSkillIdsThroughGroups: string[];
@@ -54,12 +55,18 @@ function uniqueIds(ids: Iterable<string>): string[] {
 
 function sortGroupIds(content: ProfessionResolverContentShape, groupIds: string[]): string[] {
   const orderByGroupId = new Map(
-    content.skillGroups.map((group, index) => [group.id, [group.sortOrder, index] as const])
+    content.skillGroups.map((group, index) => [group.id, [group.sortOrder, index] as const]),
   );
 
   return [...groupIds].sort((left, right) => {
-    const leftOrder = orderByGroupId.get(left) ?? [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER];
-    const rightOrder = orderByGroupId.get(right) ?? [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER];
+    const leftOrder = orderByGroupId.get(left) ?? [
+      Number.MAX_SAFE_INTEGER,
+      Number.MAX_SAFE_INTEGER,
+    ];
+    const rightOrder = orderByGroupId.get(right) ?? [
+      Number.MAX_SAFE_INTEGER,
+      Number.MAX_SAFE_INTEGER,
+    ];
 
     if (leftOrder[0] !== rightOrder[0]) {
       return leftOrder[0] - rightOrder[0];
@@ -75,12 +82,18 @@ function sortGroupIds(content: ProfessionResolverContentShape, groupIds: string[
 
 function sortSkillIds(content: ProfessionResolverContentShape, skillIds: string[]): string[] {
   const orderBySkillId = new Map(
-    content.skills.map((skill, index) => [skill.id, [skill.sortOrder, index] as const])
+    content.skills.map((skill, index) => [skill.id, [skill.sortOrder, index] as const]),
   );
 
   return [...skillIds].sort((left, right) => {
-    const leftOrder = orderBySkillId.get(left) ?? [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER];
-    const rightOrder = orderBySkillId.get(right) ?? [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER];
+    const leftOrder = orderBySkillId.get(left) ?? [
+      Number.MAX_SAFE_INTEGER,
+      Number.MAX_SAFE_INTEGER,
+    ];
+    const rightOrder = orderBySkillId.get(right) ?? [
+      Number.MAX_SAFE_INTEGER,
+      Number.MAX_SAFE_INTEGER,
+    ];
 
     if (leftOrder[0] !== rightOrder[0]) {
       return leftOrder[0] - rightOrder[0];
@@ -96,13 +109,14 @@ function sortSkillIds(content: ProfessionResolverContentShape, skillIds: string[
 
 function resolveFamily(
   input: ResolveEffectiveProfessionPackageInput,
-  subtype: ProfessionDefinition | undefined
+  subtype: ProfessionDefinition | undefined,
 ): ProfessionFamilyDefinition {
   if (typeof input.family === "object") {
     return input.family;
   }
 
-  const familyId = input.familyId ?? (typeof input.family === "string" ? input.family : subtype?.familyId);
+  const familyId =
+    input.familyId ?? (typeof input.family === "string" ? input.family : subtype?.familyId);
 
   if (familyId) {
     const family = input.content.professionFamilies.find((candidate) => candidate.id === familyId);
@@ -115,7 +129,7 @@ function resolveFamily(
       return {
         description: undefined,
         id: familyId,
-        name: subtype.familyId === familyId ? subtype.name : familyId
+        name: subtype.familyId === familyId ? subtype.name : familyId,
       };
     }
   }
@@ -124,13 +138,14 @@ function resolveFamily(
 }
 
 function resolveSubtype(
-  input: ResolveEffectiveProfessionPackageInput
+  input: ResolveEffectiveProfessionPackageInput,
 ): ProfessionDefinition | undefined {
   if (typeof input.subtype === "object") {
     return input.subtype;
   }
 
-  const subtypeId = input.subtypeId ?? (typeof input.subtype === "string" ? input.subtype : undefined);
+  const subtypeId =
+    input.subtypeId ?? (typeof input.subtype === "string" ? input.subtype : undefined);
 
   if (!subtypeId) {
     return undefined;
@@ -155,20 +170,20 @@ function getTierGrants(input: {
     (grant) =>
       grant.scope === "family" &&
       grant.professionId === input.family.id &&
-      grant.isCore === input.isCore
+      grant.isCore === input.isCore,
   );
   const subtypeGrants = input.subtype
     ? input.professionSkills.filter(
         (grant) =>
           grant.scope === "profession" &&
           grant.professionId === input.subtype?.id &&
-          grant.isCore === input.isCore
+          grant.isCore === input.isCore,
       )
     : [];
 
   return {
     familyGrants,
-    subtypeGrants
+    subtypeGrants,
   };
 }
 
@@ -177,7 +192,7 @@ function collectGroupIds(grants: ProfessionSkillMap[]): string[] {
     grants
       .filter((grant) => grant.grantType === "group" && grant.skillGroupId)
       .map((grant) => grant.skillGroupId ?? "")
-      .filter((groupId) => groupId.length > 0)
+      .filter((groupId) => groupId.length > 0),
   );
 }
 
@@ -186,7 +201,7 @@ function collectSkillIds(grants: ProfessionSkillMap[]): string[] {
     grants
       .filter((grant) => grant.grantType !== "group" && grant.skillId)
       .map((grant) => grant.skillId ?? "")
-      .filter((skillId) => skillId.length > 0)
+      .filter((skillId) => skillId.length > 0),
   );
 }
 
@@ -200,7 +215,7 @@ function resolveTier(input: {
     family: input.family,
     isCore: input.isCore,
     professionSkills: input.content.professionSkills,
-    subtype: input.subtype
+    subtype: input.subtype,
   });
   const inheritedFamilyGroupIds = sortGroupIds(input.content, collectGroupIds(familyGrants));
   const inheritedFamilySkillIds = sortSkillIds(input.content, collectSkillIds(familyGrants));
@@ -208,33 +223,33 @@ function resolveTier(input: {
   const subtypeAddedSkillIds = sortSkillIds(input.content, collectSkillIds(subtypeGrants));
   const finalEffectiveGroupIds = sortGroupIds(
     input.content,
-    uniqueIds([...inheritedFamilyGroupIds, ...subtypeAddedGroupIds])
+    uniqueIds([...inheritedFamilyGroupIds, ...subtypeAddedGroupIds]),
   );
   const finalEffectiveSkillIds = sortSkillIds(
     input.content,
-    uniqueIds([...inheritedFamilySkillIds, ...subtypeAddedSkillIds])
+    uniqueIds([...inheritedFamilySkillIds, ...subtypeAddedSkillIds]),
   );
   const reachableSkillIdsThroughGroups = sortSkillIds(
     input.content,
     uniqueIds(
       input.content.skills
         .filter((skill) =>
-          getSkillGroupIds(skill).some((groupId) => finalEffectiveGroupIds.includes(groupId))
+          getSkillGroupIds(skill).some((groupId) => finalEffectiveGroupIds.includes(groupId)),
         )
-        .map((skill) => skill.id)
-    )
+        .map((skill) => skill.id),
+    ),
   );
   const directSkillsCoveredByGroups = sortSkillIds(
     input.content,
-    finalEffectiveSkillIds.filter((skillId) => reachableSkillIdsThroughGroups.includes(skillId))
+    finalEffectiveSkillIds.filter((skillId) => reachableSkillIdsThroughGroups.includes(skillId)),
   );
   const directOnlySkillIds = sortSkillIds(
     input.content,
-    finalEffectiveSkillIds.filter((skillId) => !reachableSkillIdsThroughGroups.includes(skillId))
+    finalEffectiveSkillIds.filter((skillId) => !reachableSkillIdsThroughGroups.includes(skillId)),
   );
   const finalEffectiveReachableSkillIds = sortSkillIds(
     input.content,
-    uniqueIds([...reachableSkillIdsThroughGroups, ...directOnlySkillIds])
+    uniqueIds([...reachableSkillIdsThroughGroups, ...directOnlySkillIds]),
   );
 
   return {
@@ -244,37 +259,43 @@ function resolveTier(input: {
     finalEffectiveReachableSkillCount: finalEffectiveReachableSkillIds.length,
     finalEffectiveReachableSkillIds,
     finalEffectiveSkillIds,
+    finalEffectiveSpecializationIds: uniqueIds([
+      ...[...familyGrants, ...subtypeGrants].flatMap((g) =>
+        g.specializationId ? [g.specializationId] : [],
+      ),
+      ...input.content.skillGroups
+        .filter((g) => finalEffectiveGroupIds.includes(g.id))
+        .flatMap((g) => g.specializationIds ?? []),
+    ]),
     inheritedFamilyGroupIds,
     inheritedFamilySkillIds,
     reachableSkillIdsThroughGroups,
     subtypeAddedGroupIds,
-    subtypeAddedSkillIds
+    subtypeAddedSkillIds,
   };
 }
 
 export function resolveEffectiveProfessionPackage(
-  input: ResolveEffectiveProfessionPackageInput
+  input: ResolveEffectiveProfessionPackageInput,
 ): EffectiveProfessionPackageResolverResult {
   const subtype = resolveSubtype(input);
   const family = resolveFamily(input, subtype);
 
   if (subtype && subtype.familyId !== family.id) {
-    throw new Error(
-      `Profession subtype "${subtype.id}" does not belong to family "${family.id}".`
-    );
+    throw new Error(`Profession subtype "${subtype.id}" does not belong to family "${family.id}".`);
   }
 
   const core = resolveTier({
     content: input.content,
     family,
     isCore: true,
-    subtype
+    subtype,
   });
   const favored = resolveTier({
     content: input.content,
     family,
     isCore: false,
-    subtype
+    subtype,
   });
 
   return {
@@ -284,7 +305,7 @@ export function resolveEffectiveProfessionPackage(
     subtype,
     summary: {
       totalEffectiveCoreReachableSkills: core.finalEffectiveReachableSkillCount,
-      totalEffectiveFavoredReachableSkills: favored.finalEffectiveReachableSkillCount
-    }
+      totalEffectiveFavoredReachableSkills: favored.finalEffectiveReachableSkillCount,
+    },
   };
 }

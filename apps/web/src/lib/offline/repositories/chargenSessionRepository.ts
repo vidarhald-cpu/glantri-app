@@ -1,3 +1,4 @@
+import type { ChargenStatAdjustmentState } from "@glantri/rules-engine";
 import type { CharacterProgression, RolledCharacterProfile } from "@glantri/domain";
 
 import { localDb, type ChargenSessionDraft } from "../glantriDexie";
@@ -5,6 +6,10 @@ import { localDb, type ChargenSessionDraft } from "../glantriDexie";
 export interface SaveChargenSessionInput {
   id: string;
   progression: CharacterProgression;
+  rolledProfiles?: RolledCharacterProfile[];
+  profileAdjustments?: Record<string, ChargenStatAdjustmentState>;
+  characterName?: string;
+  selectedCivilizationId?: string;
   selectedProfessionId?: string;
   selectedProfile?: RolledCharacterProfile;
   selectedSocialClass?: string;
@@ -24,13 +29,17 @@ export class ChargenSessionRepository {
     const record: ChargenSessionDraft = {
       createdAt: existing?.createdAt ?? now,
       id: input.id,
+      rolledProfiles: input.rolledProfiles,
+      profileAdjustments: input.profileAdjustments,
+      characterName: input.characterName,
+      selectedCivilizationId: input.selectedCivilizationId,
       progression: input.progression,
       selectedProfessionId: input.selectedProfessionId,
       selectedProfile: input.selectedProfile,
       selectedSocialClass: input.selectedSocialClass,
       selectedSocietyId: input.selectedSocietyId,
       selectedSocietyLevel: input.selectedSocietyLevel,
-      updatedAt: now
+      updatedAt: now,
     };
 
     await localDb.chargenSessions.put(record);

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   defaultCanonicalContent,
+  withTargetLearningGroupsAndProfessions,
   type CanonicalContent,
   validateCanonicalContent,
 } from "@glantri/content";
@@ -65,6 +66,7 @@ import {
   saveCharacterToServer,
 } from "@/lib/api/localServiceClient";
 import { loadCanonicalContentFromServer } from "@/lib/api/contentClient";
+import type { ChargenSessionDraft } from "@/lib/offline/glantriDexie";
 import { ChargenSessionRepository } from "@/lib/offline/repositories/chargenSessionRepository";
 import { ContentCacheRepository } from "@/lib/offline/repositories/contentCacheRepository";
 import { LocalCharacterRepository } from "@/lib/offline/repositories/localCharacterRepository";
@@ -116,6 +118,7 @@ export function useChargenWizardState() {
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [feedback, setFeedback] = useState<string[]>([]);
   const [hasStartedChargen, setHasStartedChargen] = useState(false);
+  const [historicalDraft, setHistoricalDraft] = useState<ChargenSessionDraft>();
   const [hydrated, setHydrated] = useState(false);
   const [profileAdjustments, setProfileAdjustments] = useState<
     Record<string, ChargenStatAdjustmentState>
@@ -148,7 +151,7 @@ export function useChargenWizardState() {
   const [buildDecreaseStat, setBuildDecreaseStat] = useState<GlantriCharacteristicKey>("dex");
 
   const content: CanonicalContent = useMemo(
-    () => buildTargetRuntimeContent(contentSource),
+    () => withTargetLearningGroupsAndProfessions(buildTargetRuntimeContent(contentSource)),
     [contentSource],
   );
   const selectedRolledProfile = selectedProfileId
@@ -211,7 +214,9 @@ export function useChargenWizardState() {
   // Target acquisitions use the separate explicit unbound/general source context.
   const activeSocietyId = selectedSocietyId;
   const activeSocialBand = selectedSocietyBand;
-  const availableProfessions = getAllowedProfessions(content.professions, selectedSocietyAccess);
+  const availableProfessions = content.chargenCatalogue?.professionIds
+    ? content.professions
+    : getAllowedProfessions(content.professions, selectedSocietyAccess);
   const selectedProfession = availableProfessions.find((item) => item.id === selectedProfessionId);
   const sortedSkillGroups = sortSkillGroups(content.skillGroups);
   const playerFacingSkillBucketDefinitions = getPlayerFacingSkillBucketDefinitions();
@@ -528,10 +533,12 @@ export function useChargenWizardState() {
     }))
     .filter((section) => section.directRows.length > 0 || section.groups.length > 0);
   const coreProfessionSections = normalAccessSections.filter(
-    (section) => section.definition.id !== "special-access",
+    (section) => section.definition.id !== "special-access" || section.groups.length > 0,
   );
   const specialAccessSection =
-    normalAccessSections.find((section) => section.definition.id === "special-access") ?? null;
+    normalAccessSections.find(
+      (section) => section.definition.id === "special-access" && section.groups.length === 0,
+    ) ?? null;
   const defaultExpandedAllocationSections = useMemo(
     () => [
       ...(coreProfessionSections.length > 0 ? ["core-profession-skills"] : []),
@@ -635,10 +642,11 @@ export function useChargenWizardState() {
     let cancelled = false;
 
     async function hydrate() {
-      const [cachedContent, sessionUser, activeRuleSet] = await Promise.all([
+      const [cachedContent, sessionUser, activeRuleSet, savedDraft] = await Promise.all([
         contentCacheRepository.get(CONTENT_CACHE_KEY),
         getCurrentSessionUser().catch(() => null),
         loadActiveChargenRuleSet().catch(() => DEFAULT_CHARGEN_RULE_SET),
+        chargenSessionRepository.get(SESSION_ID),
       ]);
 
       if (cancelled) {
@@ -661,6 +669,27 @@ export function useChargenWizardState() {
         primaryPoolTotal: activeRuleSet.ordinarySkillPoints,
       }));
 
+      const activeCatalogue = withTargetLearningGroupsAndProfessions(
+        buildTargetRuntimeContent(createTargetCompetencyChargenSource(startingContent)),
+      ).chargenCatalogue;
+      const isHistoricalDraft =
+        savedDraft &&
+        ((savedDraft.selectedProfessionId &&
+          !activeCatalogue?.professionIds?.includes(savedDraft.selectedProfessionId)) ||
+          savedDraft.progression.skillGroups.some(
+            (g) => !activeCatalogue?.groupIds?.includes(g.groupId),
+          ));
+      if (isHistoricalDraft) setHistoricalDraft(savedDraft);
+      if (savedDraft?.selectedProfile && !isHistoricalDraft) {
+        setCharacterName(savedDraft.characterName ?? "");
+        setSelectedCivilizationId(savedDraft.selectedCivilizationId);
+        setRolledProfiles(savedDraft.rolledProfiles ?? [savedDraft.selectedProfile]);
+        setProfileAdjustments(savedDraft.profileAdjustments ?? {});
+        setSelectedProfileId(savedDraft.selectedProfile.id);
+        setSelectedProfessionId(savedDraft.selectedProfessionId);
+        setProgression(savedDraft.progression);
+        setHasStartedChargen(true);
+      }
       setHydrated(true);
 
       try {
@@ -774,13 +803,17 @@ export function useChargenWizardState() {
   }, [selectedRolledProfile]);
 
   useEffect(() => {
-    if (!hydrated) {
+    if (!hydrated || historicalDraft) {
       return;
     }
 
     chargenSessionRepository
       .save({
         id: SESSION_ID,
+        characterName,
+        rolledProfiles,
+        profileAdjustments,
+        selectedCivilizationId,
         progression,
         selectedProfessionId,
         selectedProfile,
@@ -792,6 +825,11 @@ export function useChargenWizardState() {
         console.error(error);
       });
   }, [
+    historicalDraft,
+    rolledProfiles,
+    profileAdjustments,
+    characterName,
+    selectedCivilizationId,
     hasStartedChargen,
     hydrated,
     progression,
@@ -1580,6 +1618,7 @@ export function useChargenWizardState() {
   }
 
   return {
+    historicalDraft,
     activeProfessionPreviewId,
     availableProfessions,
     availableProfessionCards,

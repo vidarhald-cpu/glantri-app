@@ -172,7 +172,9 @@ export function buildCharacterSheetSkillRows(input: {
           const groupView = input.sheetSummary.draftView.groups.find(
             (group) => group.groupId === groupId,
           );
-          const groupDefinition = input.content.skillGroups.find((group) => group.id === groupId);
+          const groupDefinition =
+            input.build.progression.skillGroups.find((group) => group.groupId === groupId)
+              ?.targetDefinition ?? input.content.skillGroups.find((group) => group.id === groupId);
 
           if (!groupView || groupView.groupLevel <= 0) {
             return null;

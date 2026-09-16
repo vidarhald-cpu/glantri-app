@@ -162,27 +162,14 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       return [];
     }
 
-    return [...contentState.skillGroups]
-      .sort((left, right) => left.sortOrder - right.sortOrder)
-      .map((group) => {
-        const groupView = sheetSummary.draftView.groups.find((item) => item.groupId === group.id);
-        if (!groupView || groupView.groupLevel <= 0) {
-          return null;
-        }
-
-        return {
-          groupLevel: groupView.groupLevel,
-          name: group.name,
-        };
-      })
-      .filter(
-        (
-          group,
-        ): group is {
-          groupLevel: number;
-          name: string;
-        } => group !== null,
-      );
+    return [...sheetSummary.draftView.groups]
+      .filter((group) => group.groupLevel > 0)
+      .sort(
+        (left, right) =>
+          (contentState.skillGroups.find((g) => g.id === left.groupId)?.sortOrder ?? 999) -
+          (contentState.skillGroups.find((g) => g.id === right.groupId)?.sortOrder ?? 999),
+      )
+      .map((group) => ({ groupLevel: group.groupLevel, name: group.name }));
   }, [contentState, sheetSummary]);
 
   async function persistBuild(nextBuild: CharacterBuild, successMessage: string) {

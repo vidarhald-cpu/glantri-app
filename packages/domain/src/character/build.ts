@@ -28,6 +28,16 @@ export const characterBuildSchema = z.object({
     (value) => normalizeProfessionId(value) ?? value,
     z.string().min(1).optional(),
   ),
+  targetChargen: z
+    .object({
+      familyId: z.string().min(1),
+      trackId: z.string().min(1).optional(),
+      professionName: z.string().min(1),
+      sourceDigest: z.string().min(1),
+      groupSourceDigest: z.string().min(1),
+    })
+    .optional(),
+  civilizationId: z.string().min(1).optional(),
   socialClass: z.string().min(1).optional(),
   societyId: z.string().min(1).optional(),
   societyLevel: z.number().int().nonnegative().optional(),

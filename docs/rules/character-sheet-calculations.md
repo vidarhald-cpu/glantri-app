@@ -305,3 +305,11 @@ Education = base education
 - Combat/loadout formulas are documented separately.
 - Character Detail and the loadout panel may still use different combat derivation paths.
 - Remaining points combine ordinary and flexible remaining pools.
+
+## Target Learning Groups and Professions — combined #206 capability
+
+New target Chargen uses the approved 59-group graph and 84 Profession families. A selected explicit track preserves its family and concrete identity; other family opportunities form an additive access menu. Profession selection supplies no ranks, XP or points. Contextual #113 restrictions and legacy Society/Social Band availability are not applied to these unbound choices.
+
+An accessible Learning Group costs `max(1, floor(sum(base-member ordinary costs) * 0.6))` per purchase. The nine explicit Specialization memberships are excluded from that sum and group contribution: they provide access only, with separate initial 4 / increase 2 costs and immediate-parent eligibility. Flexible funding does not authorize an otherwise inaccessible group. Overlapping groups still use the existing best-contribution calculation for one competency identity.
+
+Target builds retain family/track/source identity and approved group definitions for later display. Historical builds retain their actual identities, levels and recorded expenditure; this change performs no migration or retroactive repricing. Server validation resolves the approved catalogue and rejects forged membership, family/track or purchase-price claims.

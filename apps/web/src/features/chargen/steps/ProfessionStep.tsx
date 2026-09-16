@@ -1,3 +1,4 @@
+import { TargetPackageDetails } from "../components/TargetPackageDetails";
 import { getBadgeStyle, formatPreviewList } from "../chargenWizardHelpers";
 import type { useChargenWizardState } from "../useChargenWizardState";
 
@@ -38,20 +39,20 @@ export function ProfessionStep({
   setShowProfessionChooser,
   showProfessionChooser,
   toggleProfessionPreview,
-  visibleProfessionCards
+  visibleProfessionCards,
 }: ProfessionStepProps) {
   return (
     <section
       style={{
         display: "grid",
         gap: "0.75rem",
-        opacity: selectedSocietyAccess ? 1 : 0.6
+        opacity: selectedSocietyAccess ? 1 : 0.6,
       }}
     >
       <h2 style={{ margin: 0 }}>5. Choose profession</h2>
       <div style={{ fontSize: "0.95rem" }}>
-        Pick a profession subtype, then review the included profession packages. Favored package
-        preview shows likely reach, not a direct grant by itself.
+        Choose a Profession or its explicit track. Inspect its training opportunities before
+        selecting; purchases use your existing points.
       </div>
       <div style={{ display: "grid", gap: "0.75rem" }}>
         {availableProfessions.length > 0 ? (
@@ -64,7 +65,7 @@ export function ProfessionStep({
                   borderRadius: 12,
                   display: "grid",
                   gap: "0.75rem",
-                  padding: "1rem"
+                  padding: "1rem",
                 }}
               >
                 <div
@@ -72,33 +73,43 @@ export function ProfessionStep({
                     alignItems: "start",
                     display: "grid",
                     gap: "0.75rem",
-                    gridTemplateColumns: "minmax(0, 1fr) auto"
+                    gridTemplateColumns: "minmax(0, 1fr) auto",
                   }}
                 >
                   <div style={{ display: "grid", gap: "0.35rem" }}>
-                    <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                    <div
+                      style={{
+                        alignItems: "center",
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "0.5rem",
+                      }}
+                    >
                       <strong>{selectedProfessionCard.subtypeName}</strong>
                       <span style={getBadgeStyle()}>{selectedProfessionCard.familyName}</span>
                     </div>
                     <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
                       {selectedProfessionCard.description ??
                         selectedProfessionCard.familyDescription ??
-                        "No notes yet."}
+                        ""}
                     </div>
                   </div>
                   <button onClick={() => setShowProfessionChooser(true)} type="button">
                     Change profession
                   </button>
                 </div>
+                <TargetPackageDetails professionId={selectedProfessionCard.id} />
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                   <span style={getBadgeStyle({ muted: true })}>
                     Core reach {selectedProfessionCard.summary.totalEffectiveCoreReachableSkills}
                   </span>
                   <span style={getBadgeStyle({ muted: true })}>
-                    Favored reach {selectedProfessionCard.summary.totalEffectiveFavoredReachableSkills}
+                    Favored reach{" "}
+                    {selectedProfessionCard.summary.totalEffectiveFavoredReachableSkills}
                   </span>
                   <span style={getBadgeStyle({ muted: true })}>
-                    Included training packages {selectedProfessionCard.normalAccessGroupNames.length}
+                    Included training packages{" "}
+                    {selectedProfessionCard.normalAccessGroupNames.length}
                   </span>
                   {selectedProfessionCard.hasLiteracyFoundation ? (
                     <span style={getBadgeStyle()}>Literacy matters here</span>
@@ -133,8 +144,8 @@ export function ProfessionStep({
                     borderRadius: 12,
                     display: "grid",
                     gap: "0.75rem",
-                    gridTemplateColumns: "minmax(220px, 1fr) minmax(220px, 280px)",
-                    padding: "1rem"
+                    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
+                    padding: "1rem",
                   }}
                 >
                   <label style={{ display: "grid", gap: "0.35rem" }}>
@@ -175,7 +186,7 @@ export function ProfessionStep({
                           borderRadius: 12,
                           display: "grid",
                           gap: "0.75rem",
-                          padding: "1rem"
+                          padding: "1rem",
                         }}
                       >
                         <div
@@ -183,7 +194,7 @@ export function ProfessionStep({
                             alignItems: "start",
                             display: "grid",
                             gap: "0.75rem",
-                            gridTemplateColumns: "minmax(0, 1fr) auto"
+                            gridTemplateColumns: "minmax(0, 1fr) auto",
                           }}
                         >
                           <div style={{ display: "grid", gap: "0.45rem" }}>
@@ -193,7 +204,7 @@ export function ProfessionStep({
                                 cursor: selectedSociety ? "pointer" : "not-allowed",
                                 display: "flex",
                                 flexWrap: "wrap",
-                                gap: "0.75rem"
+                                gap: "0.75rem",
                               }}
                             >
                               <input
@@ -210,17 +221,19 @@ export function ProfessionStep({
                               ) : null}
                             </label>
                             <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                              {profession.description ?? profession.familyDescription ?? "No notes yet."}
+                              {profession.description ?? profession.familyDescription ?? ""}
                             </div>
                             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                               <span style={getBadgeStyle({ muted: true })}>
                                 Core reach {profession.summary.totalEffectiveCoreReachableSkills}
                               </span>
                               <span style={getBadgeStyle({ muted: true })}>
-                                Favored reach {profession.summary.totalEffectiveFavoredReachableSkills}
+                                Favored reach{" "}
+                                {profession.summary.totalEffectiveFavoredReachableSkills}
                               </span>
                               <span style={getBadgeStyle({ muted: true })}>
-                                Included training packages {profession.normalAccessGroupNames.length}
+                                Included training packages{" "}
+                                {profession.normalAccessGroupNames.length}
                               </span>
                               {profession.hasLiteracyFoundation ? (
                                 <span style={getBadgeStyle()}>Literacy matters here</span>
@@ -244,21 +257,23 @@ export function ProfessionStep({
                               borderRadius: 10,
                               display: "grid",
                               gap: "0.75rem",
-                              padding: "1rem"
+                              padding: "1rem",
                             }}
                           >
                             <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                              <TargetPackageDetails professionId={profession.id} />
                               Skill areas organize the allocation view. Inside each area, you may
                               have included training packages, and those packages open into the
                               actual skills you can raise.
                             </div>
                             <div style={{ display: "grid", gap: "0.35rem" }}>
                               <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-                                <strong>Included profession package</strong>
-                                <span style={getBadgeStyle()}>Direct grant</span>
+                                <strong>Profession access</strong>
+                                <span style={getBadgeStyle()}>No automatic grants</span>
                               </div>
                               <div>
-                                Included training packages: {formatPreviewList(profession.coreGroupNames)}
+                                Included training packages:{" "}
+                                {formatPreviewList(profession.coreGroupNames)}
                               </div>
                               <div>
                                 Actual reachable skills (
@@ -272,7 +287,8 @@ export function ProfessionStep({
                                 <span style={getBadgeStyle({ muted: true })}>Preview only</span>
                               </div>
                               <div>
-                                Included training packages: {formatPreviewList(profession.favoredGroupNames)}
+                                Included training packages:{" "}
+                                {formatPreviewList(profession.favoredGroupNames)}
                               </div>
                               <div>
                                 Actual reachable skills (
@@ -282,21 +298,26 @@ export function ProfessionStep({
                             </div>
                             <div style={{ display: "grid", gap: "0.35rem" }}>
                               <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-                                <strong>Normal-access skill areas in this society</strong>
+                                <strong>Available skill areas</strong>
                                 <span style={getBadgeStyle({ muted: true })}>Allocation view</span>
                               </div>
                               <div>
-                                Buckets include: {formatPreviewList(profession.normalAccessGroupNames)}
+                                Buckets include:{" "}
+                                {formatPreviewList(profession.normalAccessGroupNames)}
                               </div>
                             </div>
                             {profession.hasLiteracyFoundation ? (
                               <div style={{ display: "grid", gap: "0.35rem" }}>
-                                <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                                <div
+                                  style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}
+                                >
                                   <strong>Literacy foundation</strong>
                                   <span style={getBadgeStyle()}>Important</span>
                                 </div>
                                 <div>
-                                  This profession path reaches {profession.literacyGatedReachableSkillCount} literacy-linked skill
+                                  This profession path reaches{" "}
+                                  {profession.literacyGatedReachableSkillCount} literacy-linked
+                                  skill
                                   {profession.literacyGatedReachableSkillCount === 1 ? "" : "s"}.
                                 </div>
                               </div>
@@ -312,7 +333,7 @@ export function ProfessionStep({
                       background: "#f6f5ef",
                       border: "1px solid #d9ddd8",
                       borderRadius: 12,
-                      padding: "1rem"
+                      padding: "1rem",
                     }}
                   >
                     No professions match the current family filter and search text.
@@ -327,7 +348,7 @@ export function ProfessionStep({
               background: "#f6f5ef",
               border: "1px solid #d9ddd8",
               borderRadius: 12,
-              padding: "1rem"
+              padding: "1rem",
             }}
           >
             Select a rolled profile and civilization first.

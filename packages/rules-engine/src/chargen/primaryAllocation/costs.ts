@@ -63,7 +63,10 @@ export function getActiveGroupSkillCost(input: {
   }
 
   const skillsById = new Map(
-    (input.content.compatibilityContent ?? input.content).skills.map((skill) => [skill.id, skill]),
+    (input.content.chargenCatalogue?.groupIds?.includes(input.groupId)
+      ? input.content
+      : (input.content.compatibilityContent ?? input.content)
+    ).skills.map((skill) => [skill.id, skill]),
   );
   const fixedGroupSkillIds = (group.skillMemberships ?? []).map((membership) => membership.skillId);
   const hasSelectionSlots = (group.selectionSlots?.length ?? 0) > 0;
@@ -97,7 +100,12 @@ export function getActiveGroupSkillCost(input: {
   const totalIndividualCost = [...activeSkillIds].reduce((total, skillId) => {
     const skill = skillsById.get(skillId);
 
-    return skill ? total + getSkillSpendCost(skill) : total;
+    return skill
+      ? total +
+          ("catalogueSource" in skill
+            ? getSkillSpendCost(skill, "ordinary")
+            : getSkillSpendCost(skill))
+      : total;
   }, 0);
 
   if (totalIndividualCost <= 0) {

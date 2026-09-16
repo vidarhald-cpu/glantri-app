@@ -393,6 +393,11 @@ export function allocateChargenPoint(input: AllocateChargenPointInput): SpendPoi
     }
 
     const group = ensureGroupExists(progression, input.targetId);
+    if (input.content.chargenCatalogue?.groupIds?.includes(input.targetId)) {
+      group.targetDefinition = structuredClone(
+        input.content.skillGroups.find((g) => g.id === input.targetId)!,
+      );
+    }
 
     if (pool === "primary") {
       group.primaryRanks += 1;
@@ -528,6 +533,11 @@ export function spendPrimaryPoint(input: SpendPrimaryPointInput): SpendPointResu
     }
 
     const group = ensureGroupExists(progression, input.targetId);
+    if (input.content.chargenCatalogue?.groupIds?.includes(input.targetId)) {
+      group.targetDefinition = structuredClone(
+        input.content.skillGroups.find((g) => g.id === input.targetId)!,
+      );
+    }
     const cost = groupCost.cost;
 
     if (progression.primaryPoolSpent + cost > progression.primaryPoolTotal) {

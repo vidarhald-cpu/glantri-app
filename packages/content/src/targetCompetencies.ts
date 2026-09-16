@@ -1,3 +1,4 @@
+import { withTargetLearningGroupsAndProfessions } from "./targetProfessions";
 import { validateTargetProgressionMetadata } from "@glantri/domain";
 import { defaultCanonicalContent } from "./seeds/defaultContent";
 import type { CharacterProgression } from "@glantri/domain";
@@ -366,16 +367,33 @@ export function getApprovedTargetSpecializationDefinition(id: string) {
   return definition ? structuredClone(definition) : undefined;
 }
 export function getTargetProgressionValidationErrors(progression: CharacterProgression): string[] {
-  return validateTargetProgressionMetadata(
+  const errors = validateTargetProgressionMetadata(
     progression,
-    trustedContent().skills,
+    [
+      ...trustedContent().skills,
+      ...withTargetLearningGroupsAndProfessions(trustedContent()).skills,
+    ],
     trustedContent().specializations,
   );
+  const groups = withTargetLearningGroupsAndProfessions(trustedContent()).skillGroups;
+  for (const row of progression.skillGroups) {
+    if (
+      row.targetDefinition &&
+      JSON.stringify(row.targetDefinition) !==
+        JSON.stringify(groups.find((g) => g.id === row.groupId))
+    )
+      errors.push(`Learning Group ${row.groupId} does not match the approved target definition.`);
+  }
+  return errors;
 }
 export function getApprovedTargetDefinitions() {
   const content = trustedContent();
   return {
-    skills: structuredClone(content.skills.filter((skill) => "catalogueSource" in skill)),
+    skills: structuredClone(
+      [...content.skills, ...withTargetLearningGroupsAndProfessions(content).skills].filter(
+        (skill) => "catalogueSource" in skill,
+      ),
+    ),
     specializations: structuredClone(
       content.specializations.filter((spec) => "catalogueSource" in spec),
     ),
@@ -384,4 +402,8 @@ export function getApprovedTargetDefinitions() {
 export function assertApprovedTargetProgression(progression: CharacterProgression): void {
   const errors = getTargetProgressionValidationErrors(progression);
   if (errors.length) throw new Error(errors.join(" "));
+}
+
+export function getApprovedTargetChargenContent(): CanonicalContent {
+  return withTargetLearningGroupsAndProfessions(trustedContent());
 }

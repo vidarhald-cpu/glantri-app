@@ -265,6 +265,8 @@ export const skillGroupDefinitionSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   skillMemberships: z.array(skillGroupSkillMembershipSchema).optional(),
+  /** Explicit access only; excluded from group price and group XP. */
+  specializationIds: z.array(idSchema).optional(),
   selectionSlots: z.array(skillGroupSelectionSlotSchema).optional(),
   sortOrder: z.number().int().default(0),
 });
