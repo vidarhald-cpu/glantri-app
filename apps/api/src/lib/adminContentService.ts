@@ -5,6 +5,7 @@ import {
   pilotSkillContentReleaseProposalInput,
   projectSkillContentReleaseForReference,
   validateCanonicalContent,
+  targetLearningGroupCatalogue,
 } from "@glantri/content";
 import { fullSkillCatalogueProposal } from "@glantri/content/full-skill-catalogue-proposal";
 import { ContentService } from "@glantri/database";
@@ -89,6 +90,7 @@ export class CanonicalContentService {
       candidate: buildCandidateSkillReferenceSnapshot(),
       canonical: null,
       fullCatalogue: fullSkillCatalogueProposal,
+      targetLearningGroups: targetLearningGroupCatalogue,
     };
   }
 

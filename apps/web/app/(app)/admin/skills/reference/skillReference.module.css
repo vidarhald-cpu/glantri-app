@@ -195,7 +195,8 @@
   font-size: 0.88rem;
   font-weight: 700;
 }
-.filters input {
+.filters input,
+.filters select {
   background: rgba(255, 252, 245, 0.92);
   border: 1px solid rgba(85, 73, 48, 0.16);
   border-radius: 14px;
@@ -437,4 +438,24 @@
     border-radius: 14px;
     overflow-wrap: anywhere;
   }
+}
+
+.groupMembers {
+  display: grid;
+  gap: 1rem;
+  padding-left: 1.25rem;
+}
+
+.groupMembers p {
+  margin: 0.35rem 0;
+}
+
+.provenanceDisclosure {
+  overflow-wrap: anywhere;
+}
+
+.filters select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }

@@ -273,6 +273,57 @@ export interface AdminSkillReferenceResponse {
   candidate: AdminSkillReferenceSnapshot | null;
   canonical: AdminSkillReferenceSnapshot | null;
   fullCatalogue?: AdminFullSkillCatalogueProposal;
+  targetLearningGroups?: TargetLearningGroupCatalogue;
+}
+
+/** Approved reference content. This contract does not activate acquisition. */
+export interface TargetLearningGroup {
+  id: string;
+  name: string;
+  shortDescription: string;
+  description: string;
+  equipment?: string;
+  boundaries: readonly string[];
+  members: readonly {
+    competencyId: string;
+    name: string;
+    kind: "base-skill" | "specialization";
+    parentId?: string;
+    practice: string;
+    sourceStatus: string;
+  }[];
+  provenance: {
+    annotation: string;
+    sourcePath: string;
+    sourceSha256: string;
+    startLine: number;
+    endLine: number;
+  };
+}
+
+export interface TargetLearningGroupCatalogue {
+  schemaVersion: "target-learning-groups/v1";
+  status: "approved-reference";
+  groups: readonly TargetLearningGroup[];
+  grouplessBaseSkillIds: readonly string[];
+  pilotLearningGroups: readonly {
+    id: string;
+    name: string;
+    skillIds: readonly string[];
+    skillNames: readonly string[];
+  }[];
+  sources: readonly { path: string; sha256: string; byteSize: number }[];
+  manifest: {
+    groups: number;
+    baseMemberships: number;
+    specializationMemberships: number;
+    totalMemberships: number;
+    groupedBaseSkills: number;
+    grouplessBaseSkills: number;
+    pilotGroups: number;
+    pilotLinks: number;
+    digest: `sha256:${string}`;
+  };
 }
 
 export type AdminFullSkillCatalogueCompetencyType =

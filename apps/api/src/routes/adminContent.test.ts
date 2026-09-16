@@ -74,6 +74,10 @@ describe("admin content reference route", () => {
         contentVersion: "pilot-skills-content/2.0.0-candidate.4",
         status: "proposal",
       },
+      targetLearningGroups: {
+        status: "approved-reference",
+        manifest: { groups: 59, totalMemberships: 160 },
+      },
       fullCatalogue: {
         manifest: { competencies: 172 },
         status: "proposal",
