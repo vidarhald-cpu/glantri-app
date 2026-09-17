@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "target-critical-catalogue-v1.schema.json",
+  "title": "Glantri target Critical catalogue V1 entry",
+  "type": "object",
+  "required": [
+    "catalogue_version",
+    "key",
+    "family",
+    "location_scope",
+    "result_index",
+    "authoring_band",
+    "outcome_name",
+    "player_prose",
+    "gm_prose",
+    "structured_disposition",
+    "source_trace"
+  ],
+  "properties": {
+    "catalogue_version": {
+      "const": "target-critical-catalogue-v1"
+    },
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z_]+\\|[a-z_]+\\|(0[1-9]|1[0-6])$"
+    },
+    "family": {
+      "enum": [
+        "sharp",
+        "blunt",
+        "pointed_weapons",
+        "arrows_bolts",
+        "teeth_claws",
+        "firearms",
+        "falling_crushing",
+        "fire_energy"
+      ]
+    },
+    "location_scope": {
+      "enum": ["head", "arm", "chest", "abdomen", "upper_leg", "lower_leg", "whole_body"]
+    },
+    "result_index": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 16
+    },
+    "authoring_band": {
+      "enum": ["minor", "moderate", "serious", "severe", "catastrophic", "fatal"]
+    },
+    "outcome_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "player_prose": {
+      "type": "string",
+      "minLength": 1
+    },
+    "gm_prose": {
+      "type": "string",
+      "minLength": 1
+    },
+    "structured_disposition": {
+      "type": "object",
+      "required": [
+        "consequences",
+        "treatment_interactions",
+        "mechanics_must_not_be_inferred_from_prose"
+      ],
+      "properties": {
+        "consequences": {
+          "type": "array",
+          "minItems": 1
+        },
+        "treatment_interactions": {
+          "type": "array"
+        },
+        "mechanics_must_not_be_inferred_from_prose": {
+          "const": true
+        }
+      }
+    },
+    "source_trace": {
+      "type": "object"
+    }
+  }
+}
