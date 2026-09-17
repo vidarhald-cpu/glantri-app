@@ -1,8 +1,11 @@
 # Combat Round End & Review V1
 
-Status: Product Owner approved architecture; documentation only, implementation not authorized  
-Date: 2026-09-17  
-Portfolio: #116 Combat Actions / Turn Flow / Review  
+Status: Product Owner approved architecture; documentation only, implementation not authorized
+
+Date: 2026-09-17
+
+Portfolio: #116 Combat Actions / Turn Flow / Review
+
 Authority: Product Owner decision, “Record Combat Round End & Review V1”.
 
 ## 1. Canonical round lifecycle
