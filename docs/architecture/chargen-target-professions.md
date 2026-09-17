@@ -1,5 +1,12 @@
 # Chargen Slice 4 — Target Profession Consumption
 
+**Post-integration product guidance:** the
+[Chargen and Competency Experience Product Contract](../product/chargen-competency-experience-contract.md)
+records the later playtest requirement that every Profession provide a
+recognizable, useful competency package and requires an 84-family depth audit
+before a numeric coverage target is approved. It does not reopen the integrated
+target model or authorize catalogue changes.
+
 ## 1. Status and scope
 
 **Current execution:** issue #206 implements Learning Groups and Professions together after integrated Slice 2. The combined milestone below and the current #206 PO rulings supersede earlier sequential activation and speculative legacy-completion wording. Independent acceptance and integration remain separate gates.
