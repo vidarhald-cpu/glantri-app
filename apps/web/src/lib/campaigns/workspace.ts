@@ -12,6 +12,7 @@ import { isUserAssignedToEffectiveEncounter } from "./encounterParticipantFallba
 export type CampaignWorkspaceTabId =
   | "campaign"
   | "blackboard"
+  | "maps"
   | "items"
   | "scenario"
   | "encounter"
@@ -42,6 +43,7 @@ export interface CampaignWorkspaceHrefInput {
   campaignId: string;
   encounterId?: string | null;
   entryId?: string | null;
+  mapId?: string | null;
   participantId?: string | null;
   scenarioId?: string | null;
   tab?: CampaignWorkspaceTabId | null;
@@ -50,6 +52,7 @@ export interface CampaignWorkspaceHrefInput {
 const orderedTabs: CampaignWorkspaceTab[] = [
   { id: "campaign", label: "Campaign" },
   { id: "blackboard", label: "Blackboard" },
+  { id: "maps", label: "Maps" },
   { id: "items", label: "Items" },
   { id: "scenario", label: "Scenario" },
   { id: "encounter", label: "Encounter" },
@@ -81,6 +84,10 @@ export function buildCampaignWorkspaceHref(input: CampaignWorkspaceHrefInput): s
 
   if (input.entryId) {
     searchParams.set("entryId", input.entryId);
+  }
+
+  if (input.mapId) {
+    searchParams.set("mapId", input.mapId);
   }
 
   if (input.blackboardQuery) {
@@ -138,6 +145,8 @@ function resolveRequestedCampaignWorkspaceTab(input: {
       return "campaign";
     case "blackboard":
       return "blackboard";
+    case "maps":
+      return "maps";
     case "items":
       return input.canAccessGmEncounter ? "items" : fallbackTab;
     case "scenario":

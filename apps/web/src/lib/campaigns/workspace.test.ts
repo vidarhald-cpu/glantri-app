@@ -125,6 +125,7 @@ describe("campaign workspace", () => {
       [
         "campaign",
         "blackboard",
+        "maps",
         "items",
         "scenario",
         "encounter",
@@ -141,6 +142,7 @@ describe("campaign workspace", () => {
     ).toEqual([
       "campaign",
       "blackboard",
+      "maps",
       "scenario",
       "encounter",
       "skill-rolls",
@@ -162,6 +164,28 @@ describe("campaign workspace", () => {
         }).activeTab,
       ).toBe("blackboard");
     }
+  });
+
+  it("opens reload-safe Maps for both GM and player access", () => {
+    for (const canAccessGmEncounter of [true, false]) {
+      expect(
+        resolveCampaignWorkspaceState({
+          activeCampaignId: "camp-1",
+          canAccessGmEncounter,
+          encounters: [],
+          requestedTab: "maps",
+          scenarios: [],
+        }).activeTab,
+      ).toBe("maps");
+    }
+
+    expect(
+      buildCampaignWorkspaceHref({
+        campaignId: "camp-1",
+        mapId: "map-opaque",
+        tab: "maps",
+      }),
+    ).toBe("/campaigns/camp-1?tab=maps&mapId=map-opaque");
   });
 
   it("builds stable Blackboard entry links with reload-safe search filters", () => {

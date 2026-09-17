@@ -672,13 +672,17 @@ export class ArtifactRepository {
   }
 
   async usages(campaignId: string, artifactId: string) {
-    const [references, maps, links] = await Promise.all([
+    const [references, maps, workspaceMaps, links] = await Promise.all([
       this.client.scenarioArtifactReference.findMany({
         where: { campaignId, artifactId },
         select: { state: true, scenario: { select: { id: true, name: true } } },
       }),
       this.client.scenario.findMany({
         where: { campaignId, mapAssetId: artifactId },
+        select: { id: true, name: true },
+      }),
+      this.client.campaignMap.findMany({
+        where: { backgroundArtifactId: artifactId, campaignId },
         select: { id: true, name: true },
       }),
       this.client.campaignBlackboardArtifactSourceLink.findMany({
@@ -696,6 +700,7 @@ export class ArtifactRepository {
     return {
       references,
       maps,
+      workspaceMaps,
       links: links.map((link) => ({
         ...link,
         title:

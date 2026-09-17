@@ -68,6 +68,9 @@ export function ArtifactDetails({
             {history.usages.maps.map((row) => (
               <p key={row.id}>Scenario map: {row.name}</p>
             ))}
+            {history.usages.workspaceMaps.map((row) => (
+              <p key={row.id}>Map Workspace background: {row.name}</p>
+            ))}
             {history.usages.links.map((row) => (
               <p key={`${row.entryId}-${row.revisionNumber}`}>
                 Blackboard: {row.title} · {row.current ? "Current use" : "Historical use"} ·
@@ -76,6 +79,7 @@ export function ArtifactDetails({
             ))}
             {!history.usages.references.length &&
             !history.usages.maps.length &&
+            !history.usages.workspaceMaps.length &&
             !history.usages.links.length ? (
               <p>No recorded uses.</p>
             ) : null}

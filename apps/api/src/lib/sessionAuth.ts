@@ -38,7 +38,7 @@ export function applyLocalCors(app: FastifyInstance): void {
       reply.header("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
       reply.header(
         "access-control-allow-headers",
-        "content-type,x-glantri-artifact-mutation,x-glantri-blackboard-mutation,x-glantri-combat-command,x-glantri-combat-correlation-id,x-glantri-combat-response",
+        "content-type,x-glantri-artifact-mutation,x-glantri-blackboard-mutation,x-glantri-map-mutation,x-glantri-combat-command,x-glantri-combat-correlation-id,x-glantri-combat-response",
       );
       reply.header("vary", "origin");
     }
