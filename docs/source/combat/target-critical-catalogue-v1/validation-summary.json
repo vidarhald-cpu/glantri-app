@@ -1,0 +1,57 @@
+{
+  "catalogue_version": "target-critical-catalogue-v1",
+  "workbook_sha256": "47cde37df62c8bafd94535d194cc476b5ae6a366271e18ad94e3e1e62c41f09f",
+  "catalogue_entries": 608,
+  "unique_keys": 608,
+  "approved_combinations_only": true,
+  "families": {
+    "sharp": 96,
+    "blunt": 96,
+    "teeth_claws": 96,
+    "arrows_bolts": 96,
+    "firearms": 96,
+    "falling_crushing": 16,
+    "fire_energy": 16,
+    "pointed_weapons": 96
+  },
+  "locations": {
+    "arm": 96,
+    "head": 96,
+    "chest": 96,
+    "abdomen": 96,
+    "upper_leg": 96,
+    "lower_leg": 96,
+    "whole_body": 32
+  },
+  "bands": {
+    "minor": 114,
+    "moderate": 114,
+    "serious": 114,
+    "severe": 114,
+    "catastrophic": 88,
+    "fatal": 64
+  },
+  "entries_with_outcome_name": 608,
+  "entries_with_player_prose": 608,
+  "entries_with_gm_prose": 608,
+  "entries_with_structured_consequences": 608,
+  "source_effect_rows": 2179,
+  "source_dispositions": 2179,
+  "unique_disposition_effect_keys": 2179,
+  "source_effects_referenced_by_target_or_explicitly_retired": 2179,
+  "unresolved_dispositions": 0,
+  "distribution_bleed_rate_scope": "periodic_loss consequences with semantic bleed only",
+  "distribution_bleed_rate_spot_checks": {
+    "fire_energy": {
+      "min": null,
+      "median": null,
+      "max": null
+    },
+    "whole_body_median": "5/12",
+    "moderate_max": "1/6",
+    "serious_max": "1/4"
+  },
+  "catalogue_sha256": "39b9af69bb1452c947197be76dbb609564dc37925f70826f8da7c8268f7c5759",
+  "source_dispositions_sha256": "ac554ef96a59e09df4bd6995e88ed4636f364ee95ccd05f41feaf28f3705051f",
+  "distribution_sha256": "bef8d2c18808f0fed0ce66cd0aa1deaeb81821ceebba3bafd695ff8628b1b139"
+}
