@@ -3,6 +3,7 @@
 Starter monorepo for the Glantri RPG app.
 
 ## Stack
+
 - pnpm workspaces
 - Turborepo
 - TypeScript
@@ -13,6 +14,7 @@ Starter monorepo for the Glantri RPG app.
 - Docker Postgres
 
 ## Packages
+
 - apps/web
 - packages/database
 - packages/domain
@@ -23,4 +25,11 @@ Starter monorepo for the Glantri RPG app.
 - packages/config
 
 ## Principle
+
 Anything that changes combat outcomes must live in `packages/rules-engine`.
+
+## Local playtest
+
+Use the [standing local playtest operator guide](docs/local-playtest.md) for the
+persistent Product Owner runtime. Builder and QA worktrees use the separate
+[disposable database workflow](docs/dev-database.md).

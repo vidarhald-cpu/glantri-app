@@ -4,6 +4,7 @@ import {
   formatDatabaseTarget,
   isProtectedSharedDatabase,
   parseDatabaseTarget,
+  validatePlaytestDatabaseEnvironment,
   validateTaskDatabaseEnvironment,
   validateTestDatabaseTarget,
 } from "./databaseTargetSafety";
@@ -80,5 +81,33 @@ describe("database target safety", () => {
     expect(() => validateTestDatabaseTarget(url, url)).toThrow(
       "must not point at the same database",
     );
+  });
+
+  it("accepts only the named standing playtest database target", () => {
+    expect(
+      validatePlaytestDatabaseEnvironment({
+        DATABASE_URL: "postgresql://postgres:private-password@127.0.0.1:5433/glantri_playtest",
+        GLANTRI_DB_MODE: "playtest",
+      }),
+    ).toEqual({
+      database: {
+        database: "glantri_playtest",
+        host: "127.0.0.1",
+        port: "5433",
+      },
+    });
+
+    expect(() =>
+      validatePlaytestDatabaseEnvironment({
+        DATABASE_URL: "postgresql://postgres:x@localhost:5432/glantri",
+        GLANTRI_DB_MODE: "playtest",
+      }),
+    ).toThrow("Standing playtest DATABASE_URL must target");
+    expect(() =>
+      validatePlaytestDatabaseEnvironment({
+        DATABASE_URL: "postgresql://postgres:x@127.0.0.1:5433/glantri_playtest",
+        GLANTRI_DB_MODE: "task",
+      }),
+    ).toThrow('GLANTRI_DB_MODE must be exactly "playtest"');
   });
 });

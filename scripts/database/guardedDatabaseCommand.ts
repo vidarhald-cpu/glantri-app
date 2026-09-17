@@ -7,6 +7,7 @@ import {
   formatDatabaseTarget,
   isProtectedSharedDatabase,
   parseDatabaseTarget,
+  validatePlaytestDatabaseEnvironment,
 } from "../../packages/database/src/databaseTargetSafety";
 import {
   readTaskDatabaseEnvironmentFile,
@@ -137,6 +138,21 @@ function printWorktreePreflight(
   );
 }
 
+function playtestEnvironment(): NodeJS.ProcessEnv {
+  if (isLinkedWorktree()) {
+    fail(
+      "Standing playtest migrations are disabled in linked worktrees. Run playtest controls only from the primary checkout.",
+    );
+  }
+
+  const environment = loadPrimaryEnvironment();
+  const { database } = validatePlaytestDatabaseEnvironment(environment);
+  console.log(
+    `Database preflight: action=deploy owner=protected-standing-playtest ${formatDatabaseTarget(database)}`,
+  );
+  return environment;
+}
+
 function guardedEnvironment(action: string): NodeJS.ProcessEnv {
   if (isLinkedWorktree()) {
     const { environment, validated } = loadWorktreeEnvironment();
@@ -226,6 +242,14 @@ function main(): void {
       });
       return;
     }
+    case "playtest-deploy": {
+      const environment = playtestEnvironment();
+      run("pnpm", ["exec", "prisma", "migrate", "deploy"], {
+        cwd: databasePackageDir,
+        env: environment,
+      });
+      return;
+    }
     case "reset": {
       requireConfirmation();
       const environment = guardedEnvironment("reset");
@@ -246,7 +270,7 @@ function main(): void {
       return;
     }
     default:
-      fail("Expected one of: up, down, migrate, backup, reset, seed, dev.");
+      fail("Expected one of: up, down, migrate, playtest-deploy, backup, reset, seed, dev.");
   }
 }
 
