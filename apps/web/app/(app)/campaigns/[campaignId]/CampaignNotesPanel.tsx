@@ -7,6 +7,7 @@ import type { CampaignNote, CampaignNoteReference } from "@glantri/domain";
 import { ApiRequestError } from "@/lib/api/apiClient";
 import {
   createCampaignNoteOnServer,
+  getCurrentCampaignNoteFromMutationConflict,
   setCampaignNoteStatusOnServer,
   updateCampaignNoteOnServer,
 } from "@/lib/api/campaignClient";
@@ -39,6 +40,7 @@ export function CampaignNotesPanel({
   const [editingId, setEditingId] = useState<string>();
   const [editingContent, setEditingContent] = useState("");
   const [editingReference, setEditingReference] = useState("");
+  const [conflictCurrentNote, setConflictCurrentNote] = useState<CampaignNote>();
   const referenceByKey = useMemo(
     () => new Map(references.map((entry) => [referenceKey(entry), entry])),
     [references],
@@ -49,6 +51,7 @@ export function CampaignNotesPanel({
     setError(undefined);
     try {
       const note = await action();
+      setConflictCurrentNote(undefined);
       onNotesChanged(
         notes.some((entry) => entry.id === note.id)
           ? notes.map((entry) => (entry.id === note.id ? note : entry))
@@ -57,7 +60,18 @@ export function CampaignNotesPanel({
       return note;
     } catch (caughtError) {
       if (isAuthorizationLoss(caughtError)) onAuthorizationLoss();
-      setError(caughtError instanceof Error ? caughtError.message : "Unable to save this Note.");
+      const currentNote = getCurrentCampaignNoteFromMutationConflict(caughtError);
+      if (currentNote) {
+        setConflictCurrentNote(currentNote);
+        onNotesChanged(notes.map((entry) => (entry.id === currentNote.id ? currentNote : entry)));
+        setError(
+          editingId === currentNote.id
+            ? "This Note changed elsewhere. The current saved Note is shown below; your attempted edit remains in the editor for deliberate review."
+            : "This Note changed elsewhere. The latest saved Note is now shown; review it before trying that status change again.",
+        );
+      } else {
+        setError(caughtError instanceof Error ? caughtError.message : "Unable to save this Note.");
+      }
       return undefined;
     } finally {
       setSaving(false);
@@ -78,11 +92,12 @@ export function CampaignNotesPanel({
     }
   }
 
-  async function saveEdit(noteId: string) {
+  async function saveEdit(noteId: string, expectedRevision: string) {
     const note = await runMutation(() =>
       updateCampaignNoteOnServer({
         campaignId,
         content: editingContent,
+        expectedRevision,
         noteId,
         reference: editingReference ? referenceByKey.get(editingReference) : undefined,
       }),
@@ -174,10 +189,22 @@ export function CampaignNotesPanel({
                         </option>
                       ))}
                     </select>
+                    {conflictCurrentNote?.id === note.id ? (
+                      <div aria-label="Current saved Note" role="status">
+                        <strong>Current saved Note</strong>
+                        <div>{conflictCurrentNote.content}</div>
+                        <small>
+                          {conflictCurrentNote.status === "open" ? "Open" : "Resolved"}
+                          {conflictCurrentNote.reference
+                            ? ` · ${conflictCurrentNote.reference.label}`
+                            : ""}
+                        </small>
+                      </div>
+                    ) : null}
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                       <button
                         disabled={saving || !editingContent.trim()}
-                        onClick={() => void saveEdit(note.id)}
+                        onClick={() => void saveEdit(note.id, note.updatedAt)}
                         type="button"
                       >
                         Save Note
@@ -198,6 +225,7 @@ export function CampaignNotesPanel({
                       <button
                         onClick={() => {
                           setEditingId(note.id);
+                          setConflictCurrentNote(undefined);
                           setEditingContent(note.content);
                           setEditingReference(note.reference ? referenceKey(note.reference) : "");
                         }}
@@ -211,6 +239,7 @@ export function CampaignNotesPanel({
                           void runMutation(() =>
                             setCampaignNoteStatusOnServer({
                               campaignId,
+                              expectedRevision: note.updatedAt,
                               noteId: note.id,
                               status: note.status === "open" ? "resolved" : "open",
                             }),

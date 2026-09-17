@@ -2,6 +2,7 @@ import type { FastifyPluginAsync, FastifyReply } from "fastify";
 
 import {
   CampaignManagementService,
+  CampaignNoteConflictError,
   CampaignNoteNotFoundError,
   CampaignNoteReferenceError,
   CampaignService,
@@ -23,6 +24,13 @@ function parseOptionalReference(value: unknown): CampaignNoteReference | undefin
 }
 
 function sendNoteError(reply: FastifyReply, error: unknown) {
+  if (error instanceof CampaignNoteConflictError) {
+    return reply.code(409).send({
+      code: "campaign_note_revision_conflict",
+      currentNote: error.currentNote,
+      error: error.message,
+    });
+  }
   if (error instanceof CampaignNoteNotFoundError) {
     return reply.code(404).send({ error: "Campaign note not found." });
   }
@@ -90,6 +98,7 @@ export const campaignManagementRoutes: FastifyPluginAsync = async (app) => {
         actorUserId: access.user.id,
         campaignId: access.campaignId,
         content: parseRequiredString(body, "content"),
+        expectedRevision: parseRequiredString(body, "expectedRevision"),
         noteId,
         reference: body.reference == null ? null : parseOptionalReference(body.reference),
       });
@@ -108,6 +117,7 @@ export const campaignManagementRoutes: FastifyPluginAsync = async (app) => {
       const note = await campaignManagementService.setNoteStatus({
         actorUserId: access.user.id,
         campaignId: access.campaignId,
+        expectedRevision: parseRequiredString(body, "expectedRevision"),
         noteId,
         status: campaignNoteStatusSchema.parse(body.status),
       });

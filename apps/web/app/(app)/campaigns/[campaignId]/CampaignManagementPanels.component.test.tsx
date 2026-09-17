@@ -7,12 +7,16 @@ import type { CampaignNote, CampaignWorkspaceOverview } from "@glantri/domain";
 
 const mocks = vi.hoisted(() => ({
   createCampaignNoteOnServer: vi.fn(),
+  getCurrentCampaignNoteFromMutationConflict: vi.fn(
+    (error: unknown) => (error as { currentNote?: CampaignNote } | undefined)?.currentNote,
+  ),
   setCampaignNoteStatusOnServer: vi.fn(),
   updateCampaignNoteOnServer: vi.fn(),
 }));
 
 vi.mock("@/lib/api/campaignClient", () => ({
   createCampaignNoteOnServer: mocks.createCampaignNoteOnServer,
+  getCurrentCampaignNoteFromMutationConflict: mocks.getCurrentCampaignNoteFromMutationConflict,
   setCampaignNoteStatusOnServer: mocks.setCampaignNoteStatusOnServer,
   updateCampaignNoteOnServer: mocks.updateCampaignNoteOnServer,
 }));
@@ -132,8 +136,8 @@ const overview: CampaignWorkspaceOverview = {
   ],
 };
 
-function NotesHarness() {
-  const [notes, setNotes] = useState<CampaignNote[]>([]);
+function NotesHarness({ initialNotes = [] }: { initialNotes?: CampaignNote[] }) {
+  const [notes, setNotes] = useState<CampaignNote[]>(initialNotes);
   return (
     <CampaignNotesPanel
       campaignId="campaign-1"
@@ -173,6 +177,8 @@ describe("Campaign management panels", () => {
 
   it("creates, edits, resolves, and reopens a typed private note", async () => {
     const user = userEvent.setup();
+    const editedAt = "2026-09-17T08:01:00.000Z";
+    const resolvedAt = "2026-09-17T08:02:00.000Z";
     mocks.createCampaignNoteOnServer.mockResolvedValue(
       note({ reference: { id: "scenario-live", label: "Western Gate", type: "scenario" } }),
     );
@@ -180,11 +186,12 @@ describe("Campaign management panels", () => {
       note({
         content: "Question the sentry before dawn.",
         reference: { id: "scenario-live", label: "Western Gate", type: "scenario" },
+        updatedAt: editedAt,
       }),
     );
     mocks.setCampaignNoteStatusOnServer
-      .mockResolvedValueOnce(note({ status: "resolved" }))
-      .mockResolvedValueOnce(note({ status: "open" }));
+      .mockResolvedValueOnce(note({ status: "resolved", updatedAt: resolvedAt }))
+      .mockResolvedValueOnce(note({ status: "open", updatedAt: "2026-09-17T08:03:00.000Z" }));
     render(<NotesHarness />);
 
     await user.type(
@@ -216,8 +223,54 @@ describe("Campaign management panels", () => {
     await waitFor(() => expect(screen.getByText("Open")).toBeInTheDocument());
     expect(mocks.setCampaignNoteStatusOnServer).toHaveBeenNthCalledWith(2, {
       campaignId: "campaign-1",
+      expectedRevision: resolvedAt,
       noteId: "note-1",
       status: "open",
+    });
+  });
+
+  it("shows the current server Note after a conflict while preserving the attempted edit", async () => {
+    const user = userEvent.setup();
+    const currentServerNote = note({
+      content: "Accepted edit from A",
+      updatedAt: "2026-09-17T08:01:00.000Z",
+    });
+    mocks.updateCampaignNoteOnServer
+      .mockRejectedValueOnce({ currentNote: currentServerNote })
+      .mockResolvedValueOnce(
+        note({ content: "Reviewed edit from B", updatedAt: "2026-09-17T08:02:00.000Z" }),
+      );
+    render(<NotesHarness initialNotes={[note()]} />);
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    const editor = screen.getByRole("textbox", { name: "Edit Note Question the sentry." });
+    await user.clear(editor);
+    await user.type(editor, "Reviewed edit from B");
+    await user.click(screen.getByRole("button", { name: "Save Note" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("changed elsewhere");
+    expect(screen.getByRole("textbox", { name: "Edit Note Accepted edit from A" })).toHaveValue(
+      "Reviewed edit from B",
+    );
+    expect(screen.getByRole("status", { name: "Current saved Note" })).toHaveTextContent(
+      "Accepted edit from A",
+    );
+    expect(mocks.updateCampaignNoteOnServer).toHaveBeenNthCalledWith(1, {
+      campaignId: "campaign-1",
+      content: "Reviewed edit from B",
+      expectedRevision: now,
+      noteId: "note-1",
+      reference: undefined,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Save Note" }));
+    await screen.findByText("Reviewed edit from B");
+    expect(mocks.updateCampaignNoteOnServer).toHaveBeenNthCalledWith(2, {
+      campaignId: "campaign-1",
+      content: "Reviewed edit from B",
+      expectedRevision: currentServerNote.updatedAt,
+      noteId: "note-1",
+      reference: undefined,
     });
   });
 });

@@ -1,5 +1,6 @@
 import {
   campaignNoteReferenceSchema,
+  campaignNoteRevisionSchema,
   campaignNoteSchema,
   campaignNoteStatusSchema,
   campaignWorkspaceOverviewSchema,
@@ -30,6 +31,13 @@ export class CampaignNoteReferenceError extends Error {
   constructor() {
     super("Campaign note reference is not available in this Campaign.");
     this.name = "CampaignNoteReferenceError";
+  }
+}
+
+export class CampaignNoteConflictError extends Error {
+  constructor(public readonly currentNote: CampaignNote) {
+    super("Campaign note changed. Review the current Note before saving again.");
+    this.name = "CampaignNoteConflictError";
   }
 }
 
@@ -220,30 +228,46 @@ export class CampaignManagementService {
     actorUserId: string;
     campaignId: string;
     content: string;
+    expectedRevision: string;
     noteId: string;
     reference?: CampaignNoteReference | null;
   }): Promise<CampaignNote> {
-    await this.requireNote(input.campaignId, input.noteId);
+    const note = await this.requireNote(input.campaignId, input.noteId);
     const content = campaignNoteSchema.shape.content.parse(input.content);
+    const expectedRevision = campaignNoteRevisionSchema.parse(input.expectedRevision);
+    if (note.updatedAt !== expectedRevision) throw new CampaignNoteConflictError(note);
     const reference = await this.validateReference(input.campaignId, input.reference);
-    return this.notes.update({
+    const updated = await this.notes.update({
       actorUserId: input.actorUserId,
       content,
+      expectedRevision,
       noteId: input.noteId,
       reference,
     });
+    if (updated) return updated;
+    throw new CampaignNoteConflictError(await this.requireNote(input.campaignId, input.noteId));
   }
 
   async setNoteStatus(input: {
     actorUserId: string;
     campaignId: string;
+    expectedRevision: string;
     noteId: string;
     status: CampaignNoteStatus;
   }): Promise<CampaignNote> {
     const note = await this.requireNote(input.campaignId, input.noteId);
+    const expectedRevision = campaignNoteRevisionSchema.parse(input.expectedRevision);
+    if (note.updatedAt !== expectedRevision) throw new CampaignNoteConflictError(note);
     const status = campaignNoteStatusSchema.parse(input.status);
     if (note.status === status) return note;
-    return this.notes.update({ actorUserId: input.actorUserId, noteId: input.noteId, status });
+    const updated = await this.notes.update({
+      actorUserId: input.actorUserId,
+      expectedRevision,
+      noteId: input.noteId,
+      status,
+    });
+    if (updated) return updated;
+    throw new CampaignNoteConflictError(await this.requireNote(input.campaignId, input.noteId));
   }
 
   private async requireNote(campaignId: string, noteId: string): Promise<CampaignNote> {

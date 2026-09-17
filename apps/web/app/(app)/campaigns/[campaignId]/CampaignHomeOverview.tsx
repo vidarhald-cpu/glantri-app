@@ -35,7 +35,7 @@ export function CampaignHomeOverview({ overview }: { overview: CampaignWorkspace
 
   return (
     <section aria-label="Campaign home" style={{ display: "grid", gap: "1rem" }}>
-      <section style={{ ...cardStyle, background: "#f6f5ef" }}>
+      <section aria-label="Current play" style={{ ...cardStyle, background: "#f6f5ef" }}>
         <h2 style={{ margin: 0 }}>Current play</h2>
         {overview.currentContexts.length === 0 ? (
           <p style={{ margin: 0 }}>

@@ -7,6 +7,7 @@ const idSchema = z.string().min(1);
 const timestampSchema = z.string().min(1);
 
 export const campaignNoteStatusSchema = z.enum(["open", "resolved"]);
+export const campaignNoteRevisionSchema = z.string().datetime();
 export const campaignNoteReferenceTypeSchema = z.enum([
   "campaign",
   "scenario",

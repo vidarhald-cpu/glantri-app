@@ -274,12 +274,11 @@ test.describe("Lost Seal Scenario happy path", () => {
     const gmEncounterHref = `/campaigns/${campaign.campaign.id}?tab=encounter&scenarioId=${scenario.scenario.id}&encounterId=${courtyard.encounter.id}`;
     const gmCombatHref = `/campaigns/${campaign.campaign.id}?tab=combat&scenarioId=${scenario.scenario.id}&encounterId=${courtyard.encounter.id}`;
     await page.goto(gmCampaignHref);
-    const gmLivePlay = page.getByRole("region", { name: "Live play" });
-    await expect(gmLivePlay).toContainText("Continue the live Scenario");
-    await expect(gmLivePlay.getByText("Lost Seal", { exact: true })).toBeVisible();
-    await expect(gmLivePlay.getByText("Seal Library Investigation")).toBeVisible();
-    await expect(gmLivePlay.getByText("Courtyard Ambush")).toBeVisible();
-    await gmLivePlay.locator(`a[href="${gmScenarioHref}"]`).click();
+    const gmCurrentPlay = page.getByRole("region", { name: "Current play" });
+    await expect(gmCurrentPlay.getByText("Lost Seal", { exact: true })).toBeVisible();
+    await expect(gmCurrentPlay.getByText("Seal Library Investigation")).toBeVisible();
+    await expect(gmCurrentPlay.getByText("Courtyard Ambush")).toBeVisible();
+    await gmCurrentPlay.locator(`a[href="${gmScenarioHref}"]`).click();
     await expect(page).toHaveURL(gmScenarioHref);
     await expect(page.getByRole("navigation", { name: "Live play context" })).toContainText(
       "Lost Seal",
@@ -333,12 +332,9 @@ test.describe("Lost Seal Scenario happy path", () => {
     );
     await page.setViewportSize({ height: 844, width: 390 });
     await page.goto(gmCampaignHref);
-    await expect(page.getByRole("region", { name: "Live play" })).toContainText(
-      "Choose the live Scenario",
-    );
-    await expect(
-      page.getByRole("region", { name: "Live play" }).getByText("Council Watch", { exact: true }),
-    ).toBeVisible();
+    const mobileCurrentPlay = page.getByRole("region", { name: "Current play" });
+    await expect(mobileCurrentPlay.getByText("Lost Seal", { exact: true })).toBeVisible();
+    await expect(mobileCurrentPlay.getByText("Council Watch", { exact: true })).toBeVisible();
     await page.setViewportSize({ height: 900, width: 1280 });
 
     const overlap = await createEncounter({
@@ -705,8 +701,8 @@ test.describe("Lost Seal Scenario happy path", () => {
     await completeScenario(scenario.scenario.id);
     await completeScenario(alternateScenario.scenario.id);
     await page.goto(gmCampaignHref);
-    await expect(page.getByRole("region", { name: "Live play" })).toContainText(
-      "No live Scenario is currently available",
+    await expect(page.getByRole("region", { name: "Current play" })).toContainText(
+      "No active or paused Scenario",
     );
     await expect(page.getByRole("heading", { name: "Scenarios" })).toBeVisible();
     await expect(page.getByText("Closed · history", { exact: true })).toHaveCount(2);

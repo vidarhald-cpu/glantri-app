@@ -81,6 +81,12 @@ const mocks = vi.hoisted(() => {
       this.name = "CampaignCharacterRosterCandidateNotFoundError";
     }
   }
+  class CampaignNoteConflictError extends Error {
+    constructor(readonly currentNote: unknown) {
+      super("Campaign note changed. Review the current Note before saving again.");
+      this.name = "CampaignNoteConflictError";
+    }
+  }
   class CampaignNoteNotFoundError extends Error {}
   class CampaignNoteReferenceError extends Error {}
 
@@ -178,6 +184,7 @@ const mocks = vi.hoisted(() => {
     adminUser,
     CampaignCharacterAlreadyRosteredError,
     CampaignCharacterRosterCandidateNotFoundError,
+    CampaignNoteConflictError,
     CampaignNoteNotFoundError,
     CampaignNoteReferenceError,
     campaignManagementService,
@@ -201,6 +208,7 @@ vi.mock("@glantri/database", () => ({
     mocks.CampaignCharacterRosterCandidateNotFoundError,
   CampaignService: vi.fn(() => mocks.campaignService),
   CampaignManagementService: vi.fn(() => mocks.campaignManagementService),
+  CampaignNoteConflictError: mocks.CampaignNoteConflictError,
   CampaignNoteNotFoundError: mocks.CampaignNoteNotFoundError,
   CampaignNoteReferenceError: mocks.CampaignNoteReferenceError,
   CharacterEquipmentReadModelService: vi.fn(() => mocks.characterEquipmentReadModelService),
@@ -4850,6 +4858,76 @@ describe("scenarios route contract", () => {
       campaignId: "campaign-1",
       content: note.content,
       reference,
+    });
+  });
+
+  it("submits the exact expected revision when editing a private Campaign note", async () => {
+    const campaign = { gmUserId: "gm-1", id: "campaign-1", name: "Border Trouble" };
+    const note = {
+      campaignId: campaign.id,
+      content: "Accepted edit",
+      id: "note-1",
+      updatedAt: "2026-09-17T09:00:00.000Z",
+    };
+    mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
+    mocks.campaignManagementService.updateNote.mockResolvedValue(note);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PUT",
+      payload: {
+        content: note.content,
+        expectedRevision: "2026-09-17T08:00:00.000Z",
+        reference: null,
+      },
+      url: "/campaigns/campaign-1/notes/note-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ note });
+    expect(mocks.campaignManagementService.updateNote).toHaveBeenCalledWith({
+      actorUserId: "gm-1",
+      campaignId: "campaign-1",
+      content: note.content,
+      expectedRevision: "2026-09-17T08:00:00.000Z",
+      noteId: "note-1",
+      reference: null,
+    });
+  });
+
+  it("returns the current private Note on a stale revision conflict", async () => {
+    const campaign = { gmUserId: "gm-1", id: "campaign-1", name: "Border Trouble" };
+    const currentNote = {
+      campaignId: campaign.id,
+      content: "Accepted edit from A",
+      id: "note-1",
+      updatedAt: "2026-09-17T09:00:00.000Z",
+    };
+    mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
+    mocks.campaignManagementService.updateNote.mockRejectedValue(
+      new mocks.CampaignNoteConflictError(currentNote),
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PUT",
+      payload: {
+        content: "Stale edit from B",
+        expectedRevision: "2026-09-17T08:00:00.000Z",
+        reference: null,
+      },
+      url: "/campaigns/campaign-1/notes/note-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      code: "campaign_note_revision_conflict",
+      currentNote,
+      error: "Campaign note changed. Review the current Note before saving again.",
     });
   });
 

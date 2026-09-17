@@ -11,7 +11,11 @@ import {
   CampaignCharacterRosterCandidateNotFoundError,
   CampaignService,
 } from "./campaignService";
-import { CampaignManagementService, CampaignNoteReferenceError } from "./campaignManagementService";
+import {
+  CampaignManagementService,
+  CampaignNoteConflictError,
+  CampaignNoteReferenceError,
+} from "./campaignManagementService";
 import { CharacterService } from "./characterService";
 import { EncounterService } from "./encounterService";
 import { ScenarioService } from "./scenarioService";
@@ -103,6 +107,7 @@ if (!process.env.DATABASE_URL_TEST) {
         actorUserId: gm.id,
         campaignId: campaign.id,
         content: "Question the sentry before dawn.",
+        expectedRevision: created.updatedAt,
         noteId: created.id,
         reference: null,
       });
@@ -115,6 +120,7 @@ if (!process.env.DATABASE_URL_TEST) {
       const resolved = await service.setNoteStatus({
         actorUserId: gm.id,
         campaignId: campaign.id,
+        expectedRevision: edited.updatedAt,
         noteId: created.id,
         status: "resolved",
       });
@@ -124,6 +130,7 @@ if (!process.env.DATABASE_URL_TEST) {
       const reopened = await service.setNoteStatus({
         actorUserId: gm.id,
         campaignId: campaign.id,
+        expectedRevision: resolved.updatedAt,
         noteId: created.id,
         status: "open",
       });
@@ -142,6 +149,68 @@ if (!process.env.DATABASE_URL_TEST) {
       await expect(
         prisma!.campaignNote.count({ where: { campaignId: campaign.id } }),
       ).resolves.toBe(1);
+    });
+
+    it("rejects a stale Note edit without overwrite and accepts a refreshed retry", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const scenarioRepository = createPrismaScenarioRepository(prisma!);
+      const campaignService = new CampaignService(scenarioRepository);
+      const noteRepository = createPrismaCampaignNoteRepository(prisma!);
+      const service = new CampaignManagementService(
+        noteRepository,
+        campaignService,
+        new ScenarioService(scenarioRepository),
+        new EncounterService(createPrismaEncounterRepository(prisma!), scenarioRepository),
+      );
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Concurrent Notes",
+      });
+      const sharedSnapshot = await service.createNote({
+        actorUserId: gm.id,
+        campaignId: campaign.id,
+        content: "Original plan",
+      });
+
+      const clientA = await service.updateNote({
+        actorUserId: gm.id,
+        campaignId: campaign.id,
+        content: "Accepted plan from A",
+        expectedRevision: sharedSnapshot.updatedAt,
+        noteId: sharedSnapshot.id,
+      });
+
+      let staleConflict: unknown;
+      try {
+        await service.updateNote({
+          actorUserId: gm.id,
+          campaignId: campaign.id,
+          content: "Stale overwrite from B",
+          expectedRevision: sharedSnapshot.updatedAt,
+          noteId: sharedSnapshot.id,
+        });
+      } catch (error) {
+        staleConflict = error;
+      }
+      expect(staleConflict).toBeInstanceOf(CampaignNoteConflictError);
+      expect((staleConflict as CampaignNoteConflictError).currentNote).toMatchObject({
+        content: "Accepted plan from A",
+        updatedAt: clientA.updatedAt,
+      });
+      await expect(noteRepository.getById(sharedSnapshot.id)).resolves.toMatchObject({
+        content: "Accepted plan from A",
+        updatedAt: clientA.updatedAt,
+      });
+
+      const refreshedClientB = await service.updateNote({
+        actorUserId: gm.id,
+        campaignId: campaign.id,
+        content: "Reviewed plan from B",
+        expectedRevision: clientA.updatedAt,
+        noteId: sharedSnapshot.id,
+      });
+      expect(refreshedClientB.content).toBe("Reviewed plan from B");
+      expect(refreshedClientB.updatedAt).not.toBe(clientA.updatedAt);
     });
 
     it("only returns campaigns belonging to the requesting GM", async () => {

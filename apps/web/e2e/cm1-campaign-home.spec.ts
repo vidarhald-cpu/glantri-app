@@ -45,12 +45,14 @@ test.describe("CM1 Campaign home and private notes", () => {
 
     await page.setViewportSize({ height: 844, width: 390 });
     await page.goto(`/campaigns/${campaign.campaign.id}`);
-    await expect(page.getByRole("heading", { name: "Current play" })).toBeVisible();
-    await expect(page.getByText(liveName, { exact: true })).toBeVisible();
-    await expect(page.getByText(pausedName, { exact: true })).toBeVisible();
+    const currentPlay = page.getByRole("region", { name: "Current play" });
+    await expect(currentPlay.getByText(liveName, { exact: true })).toBeVisible();
+    await expect(currentPlay.getByText(pausedName, { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Private GM Notes" })).toBeVisible();
     await expect(page.getByText(noteContent, { exact: true })).toBeVisible();
-    await expect(page.getByText(liveName, { exact: true }).locator("..")).toContainText("Live");
+    await expect(currentPlay.getByText(liveName, { exact: true }).locator("..")).toContainText(
+      "Live",
+    );
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
@@ -61,18 +63,23 @@ test.describe("CM1 Campaign home and private notes", () => {
     await expect(page.getByText(noteContent, { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "Resolve" }).click();
-    await expect(page.getByText("Resolved", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reopen" })).toBeVisible();
     await page.reload();
     await expect(page.getByText(noteContent, { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Reopen" })).toBeVisible();
     await page.getByRole("button", { name: "Reopen" }).click();
-    await expect(page.getByText("Open", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Resolve" })).toBeVisible();
 
     await page.setViewportSize({ height: 900, width: 1280 });
     await page.reload();
-    await expect(page.getByText(liveName, { exact: true })).toBeVisible();
-    await expect(page.getByText(pausedName, { exact: true })).toBeVisible();
-    await expect(page.getByText(noteContent, { exact: true })).toBeVisible();
+    const desktopCurrentPlay = page.getByRole("region", { name: "Current play" });
+    await expect(desktopCurrentPlay.getByText(liveName, { exact: true })).toBeVisible();
+    await expect(desktopCurrentPlay.getByText(pausedName, { exact: true })).toBeVisible();
+    await expect(
+      page
+        .getByRole("region", { name: "Private GM Notes" })
+        .getByText(noteContent, { exact: true }),
+    ).toBeVisible();
 
     const unrelated = await browser.newContext({ storageState: "e2e/.auth/unrelated.json" });
     const denied = await unrelated.request.get(

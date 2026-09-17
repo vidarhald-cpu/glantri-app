@@ -57,10 +57,11 @@ export interface CampaignNoteRepository {
   update(input: {
     actorUserId: string;
     content?: string;
+    expectedRevision: string;
     noteId: string;
     reference?: CampaignNoteReference | null;
     status?: CampaignNoteStatus;
-  }): Promise<CampaignNote>;
+  }): Promise<CampaignNote | null>;
 }
 
 export function createPrismaCampaignNoteRepository(
@@ -94,6 +95,8 @@ export function createPrismaCampaignNoteRepository(
       return records.map(mapCampaignNote);
     },
     async update(input) {
+      const expectedUpdatedAt = new Date(input.expectedRevision);
+      const nextUpdatedAt = new Date(Math.max(Date.now(), expectedUpdatedAt.getTime() + 1));
       const statusData =
         input.status === undefined
           ? {}
@@ -116,15 +119,18 @@ export function createPrismaCampaignNoteRepository(
               referenceLabelSnapshot: input.reference?.label ?? null,
               referenceType: input.reference?.type ?? null,
             };
-      const record = await client.campaignNote.update({
+      const updated = await client.campaignNote.updateManyAndReturn({
         data: {
           ...(input.content === undefined ? {} : { content: input.content }),
           ...referenceData,
           ...statusData,
+          updatedAt: nextUpdatedAt,
           updatedByUserId: input.actorUserId,
         },
-        where: { id: input.noteId },
+        where: { id: input.noteId, updatedAt: expectedUpdatedAt },
       });
+      const record = updated[0];
+      if (!record) return null;
 
       return mapCampaignNote(record);
     },
