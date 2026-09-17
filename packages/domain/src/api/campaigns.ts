@@ -6,9 +6,11 @@ import type { EncounterStatus } from "../encounter/session";
 export const campaignCharacterRosterCandidateSchema = z
   .object({
     alreadyRostered: z.boolean(),
+    currentElsewhere: z.boolean().optional(),
     id: z.string().min(1),
     name: z.string().min(1),
     ownerLabel: z.string().min(1),
+    membershipState: z.enum(["current", "former", "none"]).optional(),
   })
   .strict();
 

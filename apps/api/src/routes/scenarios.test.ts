@@ -81,6 +81,8 @@ const mocks = vi.hoisted(() => {
       this.name = "CampaignCharacterRosterCandidateNotFoundError";
     }
   }
+  class CampaignNoteNotFoundError extends Error {}
+  class CampaignNoteReferenceError extends Error {}
 
   const adminUser = {
     email: "gm@example.test",
@@ -100,6 +102,7 @@ const mocks = vi.hoisted(() => {
     getCampaignById: vi.fn(),
     getReusableEntityById: vi.fn(),
     listCampaignRosterEntries: vi.fn(),
+    listCampaignRosterHistoryEntries: vi.fn(),
     listCampaignCharacterRosterCandidates: vi.fn(),
     listCampaignsByCharacterRosterAccess: vi.fn(),
     listCampaignsByGameMaster: vi.fn(),
@@ -107,6 +110,12 @@ const mocks = vi.hoisted(() => {
     listCampaignsByUserAccess: vi.fn(),
     listPlayerCampaignCharacters: vi.fn(),
     removeCampaignRosterEntryBySource: vi.fn(),
+  };
+  const campaignManagementService = {
+    createNote: vi.fn(),
+    getOverview: vi.fn(),
+    setNoteStatus: vi.fn(),
+    updateNote: vi.fn(),
   };
   const characterService = {
     getCharacterById: vi.fn(),
@@ -169,6 +178,9 @@ const mocks = vi.hoisted(() => {
     adminUser,
     CampaignCharacterAlreadyRosteredError,
     CampaignCharacterRosterCandidateNotFoundError,
+    CampaignNoteNotFoundError,
+    CampaignNoteReferenceError,
+    campaignManagementService,
     campaignService,
     characterEquipmentReadModelService,
     characterService,
@@ -188,6 +200,9 @@ vi.mock("@glantri/database", () => ({
   CampaignCharacterRosterCandidateNotFoundError:
     mocks.CampaignCharacterRosterCandidateNotFoundError,
   CampaignService: vi.fn(() => mocks.campaignService),
+  CampaignManagementService: vi.fn(() => mocks.campaignManagementService),
+  CampaignNoteNotFoundError: mocks.CampaignNoteNotFoundError,
+  CampaignNoteReferenceError: mocks.CampaignNoteReferenceError,
   CharacterEquipmentReadModelService: vi.fn(() => mocks.characterEquipmentReadModelService),
   CharacterService: vi.fn(() => mocks.characterService),
   CombatItemInteractionService: vi.fn(() => mocks.combatItemInteractionService),
@@ -4730,19 +4745,8 @@ describe("scenarios route contract", () => {
     });
   });
 
-  it("activates a draft Campaign through the campaign activation endpoint for a permitted admin", async () => {
-    const campaign = {
-      createdAt: "2026-05-09T12:00:00.000Z",
-      description: "Campaign prelaunch.",
-      gmUserId: "gm-1",
-      id: "campaign-1",
-      name: "Border Trouble",
-      settings: { allowPlayerSelfJoin: false, defaultVisibility: "hidden" },
-      slug: "border-trouble",
-      status: "active",
-      updatedAt: "2026-05-09T12:00:00.000Z",
-    };
-    mocks.campaignService.activateCampaign.mockResolvedValue(campaign);
+  it("does not let an unrelated admin activate another GM's draft Campaign", async () => {
+    mocks.campaignService.activateCampaign.mockRejectedValue(new Error("Campaign not found."));
     mocks.requireAdminUser.mockResolvedValue({
       ...mocks.adminUser,
       id: "admin-1",
@@ -4757,13 +4761,127 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ campaign });
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Campaign not found." });
     expect(mocks.campaignService.activateCampaign).toHaveBeenCalledWith({
       actorIsAdmin: true,
       actorUserId: "admin-1",
       campaignId: "campaign-1",
     });
+  });
+
+  it("returns the private Campaign workspace only to its owning GM", async () => {
+    const overview = {
+      campaign: { gmUserId: "gm-1", id: "campaign-1", name: "Border Trouble" },
+      currentContexts: [],
+      notes: [{ content: "Secret plan", id: "note-1" }],
+      npcs: [],
+      recentActivity: [],
+      references: [],
+      roster: [],
+    };
+    mocks.campaignService.getCampaignById.mockResolvedValue(overview.campaign);
+    mocks.campaignManagementService.getOverview.mockResolvedValue(overview);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/campaigns/campaign-1/workspace-overview",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ overview });
+    expect(mocks.campaignManagementService.getOverview).toHaveBeenCalledWith("campaign-1");
+  });
+
+  it("returns a non-disclosing not-found response to an unrelated admin", async () => {
+    mocks.requireAdminUser.mockResolvedValue({
+      email: "admin@example.test",
+      id: "admin-1",
+      roles: ["admin"],
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-owner",
+      id: "campaign-1",
+      name: "Private Campaign",
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/campaigns/campaign-1/workspace-overview",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Campaign not found." });
+    expect(JSON.stringify(response.json())).not.toContain("Private Campaign");
+    expect(mocks.campaignManagementService.getOverview).not.toHaveBeenCalled();
+  });
+
+  it("creates a private Campaign note with a validated typed reference", async () => {
+    const campaign = { gmUserId: "gm-1", id: "campaign-1", name: "Border Trouble" };
+    const reference = { id: "scenario-1", label: "Bridge Ambush", type: "scenario" };
+    const note = {
+      campaignId: campaign.id,
+      content: "Question the sentry",
+      id: "note-1",
+      reference,
+    };
+    mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
+    mocks.campaignManagementService.createNote.mockResolvedValue(note);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: { content: note.content, reference },
+      url: "/campaigns/campaign-1/notes",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ note });
+    expect(mocks.campaignManagementService.createNote).toHaveBeenCalledWith({
+      actorUserId: "gm-1",
+      campaignId: "campaign-1",
+      content: note.content,
+      reference,
+    });
+  });
+
+  it("returns a safe validation error for a foreign Campaign note reference", async () => {
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+    });
+    mocks.campaignManagementService.createNote.mockRejectedValue(
+      new mocks.CampaignNoteReferenceError(
+        "Campaign note reference is not available in this Campaign.",
+      ),
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        content: "Private",
+        reference: { id: "foreign-scenario", label: "Foreign", type: "scenario" },
+      },
+      url: "/campaigns/campaign-1/notes",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "Campaign note reference is not available in this Campaign.",
+    });
+    expect(JSON.stringify(response.json())).not.toContain("foreign-scenario");
   });
 
   it("prevents draft activation when campaign is no longer draft", async () => {
@@ -5060,13 +5178,17 @@ describe("scenarios route contract", () => {
     const characters = [
       {
         alreadyRostered: false,
+        currentElsewhere: false,
         id: "character-1",
+        membershipState: "none",
         name: "Ari",
         ownerLabel: "You",
       },
       {
         alreadyRostered: true,
+        currentElsewhere: false,
         id: "character-2",
+        membershipState: "current",
         name: "Bryn",
         ownerLabel: "Player Two",
       },
@@ -5091,7 +5213,9 @@ describe("scenarios route contract", () => {
     expect(response.json()).toEqual({ characters });
     expect(Object.keys(response.json().characters[0]).sort()).toEqual([
       "alreadyRostered",
+      "currentElsewhere",
       "id",
+      "membershipState",
       "name",
       "ownerLabel",
     ]);
@@ -5225,19 +5349,11 @@ describe("scenarios route contract", () => {
     }
   });
 
-  it("preserves admin authority for a campaign-valid reusable NPC roster link", async () => {
+  it("does not let an unrelated admin link a private Campaign NPC", async () => {
     const adminUser = {
       email: "admin@example.test",
       id: "admin-1",
       roles: ["admin"],
-    };
-    const rosterEntry = {
-      campaignId: "campaign-1",
-      category: "npc",
-      id: "roster-1",
-      labelSnapshot: "Private NPC",
-      sourceId: "entity-1",
-      sourceType: "reusableEntity",
     };
     mocks.requireAdminUser.mockResolvedValue(adminUser);
     mocks.campaignService.getCampaignById.mockResolvedValue({
@@ -5246,7 +5362,6 @@ describe("scenarios route contract", () => {
       name: "Owner Campaign",
       status: "active",
     });
-    mocks.campaignService.addCampaignRosterEntry.mockResolvedValue(rosterEntry);
     const app = await buildScenarioTestApp();
 
     const response = await app.inject({
@@ -5261,17 +5376,9 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
-    expect(response.json()).toEqual({ rosterEntry });
-    expect(mocks.campaignService.addCampaignRosterEntry).toHaveBeenCalledWith(
-      expect.objectContaining({
-        actorIsAdmin: true,
-        actorUserId: "admin-1",
-        campaignId: "campaign-1",
-        sourceId: "entity-1",
-        sourceType: "reusableEntity",
-      }),
-    );
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Campaign not found." });
+    expect(mocks.campaignService.addCampaignRosterEntry).not.toHaveBeenCalled();
   });
 
   it("lists live roster-eligible scenarios for a character without campaign self-join", async () => {
@@ -5655,7 +5762,7 @@ describe("scenarios route contract", () => {
   it.each([
     { id: "gm-1", roles: ["game_master"] },
     { id: "admin-1", roles: ["admin"] },
-  ])("rejects out-of-roster Scenario admission for $roles", async (user) => {
+  ])("rejects unauthorized or out-of-roster Scenario admission for $roles", async (user) => {
     mocks.requireAuthenticatedUser.mockResolvedValue({
       email: `${user.id}@example.test`,
       ...user,
@@ -5688,10 +5795,15 @@ describe("scenarios route contract", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(403);
-    expect(response.json()).toEqual({
-      error: "This character is not currently assigned to a campaign.",
-    });
+    if (user.roles.includes("admin")) {
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({ error: "Scenario not found." });
+    } else {
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toEqual({
+        error: "This character is not currently assigned to a campaign.",
+      });
+    }
     expect(mocks.scenarioService.addCharacterParticipant).not.toHaveBeenCalled();
   });
 

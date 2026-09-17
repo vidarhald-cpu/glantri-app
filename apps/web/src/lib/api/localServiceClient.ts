@@ -62,6 +62,7 @@ export {
   loadCampaignRoster,
   loadCampaignScenarioRelationships,
   loadCampaignScenarios,
+  loadCampaignWorkspaceOverview,
   loadCampaigns,
   loadTemplates,
   removeCampaignRosterEntryOnServer,

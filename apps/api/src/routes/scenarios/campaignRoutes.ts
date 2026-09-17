@@ -487,7 +487,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const roster = await campaignService.listCampaignRosterEntries(campaignId);
+      const roster = await campaignService.listCampaignRosterHistoryEntries(campaignId);
 
       return { roster };
     } catch (error) {
@@ -506,7 +506,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
       const campaign = await campaignService.getCampaignById(campaignId);
 
-      if (!campaign || (campaign.gmUserId !== user.id && !user.roles.includes("admin"))) {
+      if (!campaign || campaign.gmUserId !== user.id) {
         return reply.code(404).send({
           error: "Campaign not found.",
         });
@@ -534,7 +534,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
       const campaign = await campaignService.getCampaignById(campaignId);
 
-      if (!campaign || (campaign.gmUserId !== user.id && !user.roles.includes("admin"))) {
+      if (!campaign || campaign.gmUserId !== user.id) {
         return reply.code(404).send({
           error: "Campaign not found.",
         });
@@ -788,7 +788,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
       const campaign = await campaignService.getCampaignById(campaignId);
 
-      if (!campaign || (campaign.gmUserId !== user.id && !user.roles.includes("admin"))) {
+      if (!campaign || campaign.gmUserId !== user.id) {
         return reply.code(404).send({
           error: "Campaign not found.",
         });

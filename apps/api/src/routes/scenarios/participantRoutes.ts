@@ -140,7 +140,7 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
       const characterId = parseRequiredString(body, "characterId");
       const isGameMaster = user.roles.includes("game_master") || user.roles.includes("admin");
 
-      if (isGameMaster && !user.roles.includes("admin") && campaign.gmUserId !== user.id) {
+      if (isGameMaster && campaign.gmUserId !== user.id) {
         return reply.code(404).send({
           error: "Scenario not found.",
         });
@@ -228,12 +228,10 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
 
       const body = parseBodyObject(request.body, "Entity participant payload");
       const entityId = parseOptionalString(body, "entityId");
-      const isAdmin = user.roles.includes("admin");
-
       if (entityId) {
         const entity = await campaignService.getReusableEntityById(entityId);
 
-        if (!entity || (!isAdmin && entity.gmUserId !== user.id)) {
+        if (!entity || entity.gmUserId !== user.id) {
           return reply.code(404).send({ error: "Reusable entity not found." });
         }
 
@@ -278,7 +276,7 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         displayOrder: parseOptionalInteger(body, "displayOrder"),
         entityId,
         entityInput,
-        expectedGmUserId: isAdmin ? undefined : user.id,
+        expectedGmUserId: user.id,
         factionId: parseOptionalNullableString(body, "factionId"),
         isTemporary: parseOptionalBoolean(body, "isTemporary"),
         joinSource:

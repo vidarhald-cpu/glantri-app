@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   loadCampaignRoster: vi.fn(),
   loadCampaignScenarioRelationships: vi.fn(),
   loadCampaignScenarios: vi.fn(),
+  loadCampaignWorkspaceOverview: vi.fn(),
   loadTemplates: vi.fn(),
   removeCampaignRosterEntryOnServer: vi.fn(),
   updateCampaignAssetVisibilityOnServer: vi.fn(),
@@ -40,6 +41,7 @@ vi.mock("@/lib/api/localServiceClient", () => ({
   loadCampaignRoster: mocks.loadCampaignRoster,
   loadCampaignScenarioRelationships: mocks.loadCampaignScenarioRelationships,
   loadCampaignScenarios: mocks.loadCampaignScenarios,
+  loadCampaignWorkspaceOverview: mocks.loadCampaignWorkspaceOverview,
   loadTemplates: mocks.loadTemplates,
   removeCampaignRosterEntryOnServer: mocks.removeCampaignRosterEntryOnServer,
   updateCampaignAssetVisibilityOnServer: mocks.updateCampaignAssetVisibilityOnServer,
@@ -94,6 +96,15 @@ describe("CampaignDetailPageContent roster membership interaction", () => {
     mocks.loadCampaignScenarioRelationships.mockResolvedValue([]);
     mocks.loadCampaigns.mockResolvedValue([campaign]);
     mocks.loadCampaignCharacterRosterCandidates.mockResolvedValue([character]);
+    mocks.loadCampaignWorkspaceOverview.mockResolvedValue({
+      campaign,
+      currentContexts: [],
+      notes: [],
+      npcs: [],
+      recentActivity: [],
+      references: [{ id: campaign.id, label: campaign.name, type: "campaign" }],
+      roster: [rosterEntry],
+    });
     mocks.removeCampaignRosterEntryOnServer.mockResolvedValue(undefined);
   });
 

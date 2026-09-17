@@ -1,6 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createPrismaCharacterRepository } from "../repositories/characterRepository";
+import { createPrismaCampaignNoteRepository } from "../repositories/campaignNoteRepository";
+import { createPrismaEncounterRepository } from "../repositories/encounterRepository";
 import { createPrismaScenarioRepository } from "../repositories/scenarioRepository";
 import { createTestCharacter, createTestUser } from "../testing/factories";
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
@@ -9,7 +11,10 @@ import {
   CampaignCharacterRosterCandidateNotFoundError,
   CampaignService,
 } from "./campaignService";
+import { CampaignManagementService, CampaignNoteReferenceError } from "./campaignManagementService";
 import { CharacterService } from "./characterService";
+import { EncounterService } from "./encounterService";
+import { ScenarioService } from "./scenarioService";
 
 const prisma = getTestPrismaClient();
 
@@ -43,6 +48,100 @@ if (!process.env.DATABASE_URL_TEST) {
       const list = await service.listCampaignsByGameMaster(gm.id);
       expect(list).toHaveLength(1);
       expect(list[0]?.id).toBe(campaign.id);
+    });
+
+    it("persists private note edits and reversible resolution with Campaign-scoped references", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const otherGm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const repository = createPrismaScenarioRepository(prisma!);
+      const campaignService = new CampaignService(repository);
+      const scenarioService = new ScenarioService(repository);
+      const encounterService = new EncounterService(
+        createPrismaEncounterRepository(prisma!),
+        repository,
+      );
+      const service = new CampaignManagementService(
+        createPrismaCampaignNoteRepository(prisma!),
+        campaignService,
+        scenarioService,
+        encounterService,
+      );
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Private Notes",
+      });
+      const scenario = await scenarioService.createScenario({
+        campaignId: campaign.id,
+        name: "Western Gate",
+      });
+      const foreignCampaign = await campaignService.createCampaign({
+        gmUserId: otherGm.id,
+        name: "Foreign Campaign",
+      });
+      const foreignScenario = await scenarioService.createScenario({
+        campaignId: foreignCampaign.id,
+        name: "Foreign Scenario",
+      });
+
+      const created = await service.createNote({
+        actorUserId: gm.id,
+        campaignId: campaign.id,
+        content: "Question the sentry.",
+        reference: {
+          id: scenario.id,
+          label: "Client label is not authoritative",
+          type: "scenario",
+        },
+      });
+      expect(created).toMatchObject({
+        content: "Question the sentry.",
+        reference: { id: scenario.id, label: scenario.name, type: "scenario" },
+        status: "open",
+      });
+
+      const edited = await service.updateNote({
+        actorUserId: gm.id,
+        campaignId: campaign.id,
+        content: "Question the sentry before dawn.",
+        noteId: created.id,
+        reference: null,
+      });
+      expect(edited).toMatchObject({
+        content: "Question the sentry before dawn.",
+        status: "open",
+      });
+      expect(edited.reference).toBeUndefined();
+
+      const resolved = await service.setNoteStatus({
+        actorUserId: gm.id,
+        campaignId: campaign.id,
+        noteId: created.id,
+        status: "resolved",
+      });
+      expect(resolved).toMatchObject({ resolvedByUserId: gm.id, status: "resolved" });
+      expect(resolved.resolvedAt).toBeDefined();
+
+      const reopened = await service.setNoteStatus({
+        actorUserId: gm.id,
+        campaignId: campaign.id,
+        noteId: created.id,
+        status: "open",
+      });
+      expect(reopened.status).toBe("open");
+      expect(reopened.resolvedAt).toBeUndefined();
+      expect(reopened.resolvedByUserId).toBeUndefined();
+
+      await expect(
+        service.createNote({
+          actorUserId: gm.id,
+          campaignId: campaign.id,
+          content: "Do not cross campaigns.",
+          reference: { id: foreignScenario.id, label: foreignScenario.name, type: "scenario" },
+        }),
+      ).rejects.toBeInstanceOf(CampaignNoteReferenceError);
+      await expect(
+        prisma!.campaignNote.count({ where: { campaignId: campaign.id } }),
+      ).resolves.toBe(1);
     });
 
     it("only returns campaigns belonging to the requesting GM", async () => {
@@ -87,13 +186,17 @@ if (!process.env.DATABASE_URL_TEST) {
       ).resolves.toEqual([
         {
           alreadyRostered: false,
+          currentElsewhere: false,
           id: ownCharacter.id,
+          membershipState: "none",
           name: ownCharacter.name,
           ownerLabel: "You",
         },
         {
           alreadyRostered: false,
+          currentElsewhere: false,
           id: otherCharacter.id,
+          membershipState: "none",
           name: otherCharacter.name,
           ownerLabel: "Player One",
         },
@@ -124,7 +227,9 @@ if (!process.env.DATABASE_URL_TEST) {
         }),
       ).resolves.toContainEqual({
         alreadyRostered: true,
+        currentElsewhere: false,
         id: otherCharacter.id,
+        membershipState: "current",
         name: otherCharacter.name,
         ownerLabel: "Player One",
       });
@@ -217,7 +322,7 @@ if (!process.env.DATABASE_URL_TEST) {
       ).resolves.toHaveLength(1);
     });
 
-    it("atomically enforces one active Campaign and permits leave or GM removal before rejoining", async () => {
+    it("atomically enforces one current Campaign while preserving former relationships", async () => {
       const gmA = await createTestUser(prisma!, { roles: ["game_master"] });
       const gmB = await createTestUser(prisma!, { roles: ["game_master"] });
       const owner = await createTestUser(prisma!);
@@ -250,8 +355,27 @@ if (!process.env.DATABASE_URL_TEST) {
         campaignId: campaignA.id,
         rosterEntryId: first.id,
       });
+      await expect(service.listCampaignRosterEntries(campaignA.id)).resolves.toEqual([]);
+      await expect(service.listCampaignRosterHistoryEntries(campaignA.id)).resolves.toEqual([
+        expect.objectContaining({ id: first.id, membershipState: "former" }),
+      ]);
       const second = await add(campaignB.id, gmB.id);
       expect(second.campaignId).toBe(campaignB.id);
+      await expect(add(campaignA.id, gmA.id)).rejects.toMatchObject({
+        activeCampaignId: campaignB.id,
+      });
+      await expect(
+        service.listCampaignCharacterRosterCandidates({
+          actorUserId: gmA.id,
+          campaignId: campaignA.id,
+        }),
+      ).resolves.toContainEqual(
+        expect.objectContaining({
+          currentElsewhere: true,
+          id: character.id,
+          membershipState: "former",
+        }),
+      );
 
       await service.leaveCampaign({
         campaignId: campaignB.id,
@@ -267,6 +391,15 @@ if (!process.env.DATABASE_URL_TEST) {
       await expect(
         prisma!.campaignRosterEntry.count({
           where: { sourceId: character.id, sourceType: "character" },
+        }),
+      ).resolves.toBe(2);
+      await expect(
+        prisma!.campaignRosterEntry.count({
+          where: {
+            membershipState: "current",
+            sourceId: character.id,
+            sourceType: "character",
+          },
         }),
       ).resolves.toBe(1);
     });
@@ -342,20 +475,17 @@ if (!process.env.DATABASE_URL_TEST) {
       ).rejects.toThrow("Reusable entity not found.");
       await expect(service.listCampaignRosterEntries(foreignCampaign.id)).resolves.toEqual([]);
 
-      const adminEntry = await service.addCampaignRosterEntry({
-        actorIsAdmin: true,
-        actorUserId: admin.id,
-        campaignId: ownerCampaign.id,
-        category: "npc",
-        createdByUserId: admin.id,
-        sourceId: created.entity.id,
-        sourceType: "reusableEntity",
-      });
-      expect(adminEntry).toMatchObject({
-        campaignId: ownerCampaign.id,
-        labelSnapshot: created.entity.name,
-        sourceId: created.entity.id,
-      });
+      await expect(
+        service.addCampaignRosterEntry({
+          actorIsAdmin: true,
+          actorUserId: admin.id,
+          campaignId: ownerCampaign.id,
+          category: "npc",
+          createdByUserId: admin.id,
+          sourceId: created.entity.id,
+          sourceType: "reusableEntity",
+        }),
+      ).rejects.toThrow("Reusable entity not found.");
 
       await service.removeCampaignRosterEntryBySource({
         campaignId: ownerCampaign.id,

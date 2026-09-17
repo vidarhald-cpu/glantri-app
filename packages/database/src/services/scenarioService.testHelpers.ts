@@ -9,7 +9,10 @@ import type {
   ScenarioRelationship,
 } from "@glantri/domain";
 
-import type { ScenarioRepository } from "../repositories/scenarioRepository";
+import {
+  CampaignRosterPersistenceConflictError,
+  type ScenarioRepository,
+} from "../repositories/scenarioRepository";
 
 const baseBuild: CharacterBuild = {
   equipment: { items: [] },
@@ -306,7 +309,30 @@ export function createScenarioRepositoryStub() {
       );
 
       if (existing) {
+        const currentElsewhere = rosterEntries.find(
+          (entry) =>
+            input.sourceType === "character" &&
+            entry.sourceType === "character" &&
+            entry.sourceId === input.sourceId &&
+            entry.campaignId !== input.campaignId &&
+            (entry.membershipState ?? "current") === "current",
+        );
+        if (currentElsewhere) {
+          throw new CampaignRosterPersistenceConflictError(currentElsewhere.campaignId);
+        }
+        existing.membershipState = "current";
         return existing;
+      }
+
+      const currentElsewhere = rosterEntries.find(
+        (entry) =>
+          input.sourceType === "character" &&
+          entry.sourceType === "character" &&
+          entry.sourceId === input.sourceId &&
+          (entry.membershipState ?? "current") === "current",
+      );
+      if (currentElsewhere) {
+        throw new CampaignRosterPersistenceConflictError(currentElsewhere.campaignId);
       }
 
       const now = "2026-04-21T00:00:00.000Z";
@@ -317,6 +343,7 @@ export function createScenarioRepositoryStub() {
         createdByUserId: input.createdByUserId ?? undefined,
         id: `roster-${rosterEntries.length + 1}`,
         labelSnapshot: input.labelSnapshot ?? undefined,
+        membershipState: "current",
         notes: input.notes ?? undefined,
         sourceId: input.sourceId,
         sourceType: input.sourceType,
@@ -324,6 +351,12 @@ export function createScenarioRepositoryStub() {
       };
       rosterEntries.push(rosterEntry);
       return rosterEntry;
+    },
+    updateCampaignRosterMembershipState: async (input) => {
+      const entry = rosterEntries.find((candidate) => candidate.id === input.entryId);
+      if (!entry) throw new Error("Campaign roster entry not found.");
+      entry.membershipState = input.membershipState;
+      return entry;
     },
     deleteCampaignRosterEntry: async (entryId) => {
       const index = rosterEntries.findIndex((entry) => entry.id === entryId);
@@ -350,7 +383,16 @@ export function createScenarioRepositoryStub() {
     getCampaignRosterEntryById: async (entryId) =>
       rosterEntries.find((entry) => entry.id === entryId) ?? null,
     listCampaignRosterEntries: async (campaignId) =>
+      rosterEntries.filter(
+        (entry) =>
+          entry.campaignId === campaignId && (entry.membershipState ?? "current") === "current",
+      ),
+    listCampaignRosterHistoryEntries: async (campaignId) =>
       rosterEntries.filter((entry) => entry.campaignId === campaignId),
+    listCharacterRosterHistoryEntries: async (characterId) =>
+      rosterEntries.filter(
+        (entry) => entry.sourceType === "character" && entry.sourceId === characterId,
+      ),
     createScenarioRelationship: async (input) => {
       const now = "2026-04-21T00:00:00.000Z";
       const relationship: ScenarioRelationship = {

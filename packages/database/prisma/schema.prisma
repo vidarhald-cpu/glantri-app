@@ -158,6 +158,25 @@ enum CampaignRosterCategory {
   template
 }
 
+enum CampaignRosterMembershipState {
+  current
+  former
+}
+
+enum CampaignNoteStatus {
+  open
+  resolved
+}
+
+enum CampaignNoteReferenceType {
+  campaign
+  scenario
+  encounter
+  character
+  npc
+  artifact
+}
+
 model Character {
   id               String                    @id @default(cuid())
   name             String
@@ -482,6 +501,7 @@ model Campaign {
   artifactReferences ScenarioArtifactReference[]
   equipmentItems CharacterEquipmentItem[]
   gmUser      User            @relation(fields: [gmUserId], references: [id], onDelete: Cascade)
+  notes        CampaignNote[]
   rosterEntries CampaignRosterEntry[]
   scenarioRelationships ScenarioRelationship[]
   scenarios   Scenario[]
@@ -674,6 +694,7 @@ model CampaignRosterEntry {
   sourceType      CampaignRosterSourceType
   sourceId        String
   category        CampaignRosterCategory
+  membershipState CampaignRosterMembershipState @default(current)
   labelSnapshot   String?
   notes           String?
   createdByUserId String?
@@ -684,6 +705,26 @@ model CampaignRosterEntry {
   @@index([campaignId])
   @@index([sourceType, sourceId])
   @@unique([campaignId, sourceType, sourceId])
+}
+
+model CampaignNote {
+  id                     String                     @id @default(cuid())
+  campaignId             String
+  content                String
+  status                 CampaignNoteStatus         @default(open)
+  referenceType          CampaignNoteReferenceType?
+  referenceId            String?
+  referenceLabelSnapshot String?
+  createdByUserId        String
+  updatedByUserId        String
+  resolvedByUserId       String?
+  resolvedAt             DateTime?
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+  campaign               Campaign                   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, status, updatedAt])
+  @@index([campaignId, referenceType, referenceId])
 }
 
 model CampaignBlackboardEntry {

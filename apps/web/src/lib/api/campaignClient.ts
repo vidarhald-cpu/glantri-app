@@ -3,9 +3,13 @@ import type {
   Campaign,
   CampaignAsset,
   CampaignCharacterRosterCandidate,
+  CampaignNote,
+  CampaignNoteReference,
+  CampaignNoteStatus,
   CampaignRosterCategory,
   CampaignRosterEntry,
   CampaignRosterSourceType,
+  CampaignWorkspaceOverview,
   ReusableEntity,
   Scenario,
   ScenarioRelationship,
@@ -201,6 +205,59 @@ export async function loadCampaignRoster(campaignId: string): Promise<CampaignRo
   );
 
   return payload.roster;
+}
+
+export async function loadCampaignWorkspaceOverview(
+  campaignId: string,
+): Promise<CampaignWorkspaceOverview> {
+  const payload = await sendJson<{ overview: CampaignWorkspaceOverview }>(
+    `/campaigns/${campaignId}/workspace-overview`,
+    { method: "GET" },
+  );
+  return payload.overview;
+}
+
+export async function createCampaignNoteOnServer(input: {
+  campaignId: string;
+  content: string;
+  reference?: CampaignNoteReference;
+}): Promise<CampaignNote> {
+  const payload = await sendJson<{ note: CampaignNote }>(`/campaigns/${input.campaignId}/notes`, {
+    body: JSON.stringify({ content: input.content, reference: input.reference }),
+    method: "POST",
+  });
+  return payload.note;
+}
+
+export async function updateCampaignNoteOnServer(input: {
+  campaignId: string;
+  content: string;
+  noteId: string;
+  reference?: CampaignNoteReference;
+}): Promise<CampaignNote> {
+  const payload = await sendJson<{ note: CampaignNote }>(
+    `/campaigns/${input.campaignId}/notes/${input.noteId}`,
+    {
+      body: JSON.stringify({ content: input.content, reference: input.reference ?? null }),
+      method: "PUT",
+    },
+  );
+  return payload.note;
+}
+
+export async function setCampaignNoteStatusOnServer(input: {
+  campaignId: string;
+  noteId: string;
+  status: CampaignNoteStatus;
+}): Promise<CampaignNote> {
+  const payload = await sendJson<{ note: CampaignNote }>(
+    `/campaigns/${input.campaignId}/notes/${input.noteId}/status`,
+    {
+      body: JSON.stringify({ status: input.status }),
+      method: "POST",
+    },
+  );
+  return payload.note;
 }
 
 export async function loadCampaignCharacterRosterCandidates(

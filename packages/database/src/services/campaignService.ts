@@ -172,33 +172,55 @@ export class CampaignService {
     return this.repository.listCampaignRosterEntries(campaignId);
   }
 
+  async listCampaignRosterHistoryEntries(campaignId: string): Promise<CampaignRosterEntry[]> {
+    return this.repository.listCampaignRosterHistoryEntries(campaignId);
+  }
+
   async listCampaignCharacterRosterCandidates(input: {
     actorUserId: string;
     campaignId: string;
   }): Promise<CampaignCharacterRosterCandidate[]> {
     const [characters, rosterEntries] = await Promise.all([
       this.characterService.listCharacters(),
-      this.repository.listCampaignRosterEntries(input.campaignId),
+      this.repository.listCampaignRosterHistoryEntries(input.campaignId),
     ]);
-    const rosteredCharacterIds = new Set(
+    const rosterEntryByCharacterId = new Map(
       rosterEntries
         .filter((entry) => entry.sourceType === "character")
-        .map((entry) => entry.sourceId),
+        .map((entry) => [entry.sourceId, entry]),
+    );
+    const histories = await Promise.all(
+      characters.map((character) =>
+        this.repository.listCharacterRosterHistoryEntries(character.id),
+      ),
     );
 
     return characters
       .filter(isEligibleCampaignCharacterRosterCandidate)
-      .map((character) =>
-        campaignCharacterRosterCandidateSchema.parse({
-          alreadyRostered: rosteredCharacterIds.has(character.id),
+      .map((character, index) => {
+        const selectedMembership = rosterEntryByCharacterId.get(character.id);
+        const currentElsewhere = (histories[index] ?? []).some(
+          (entry) =>
+            entry.campaignId !== input.campaignId &&
+            (entry.membershipState ?? "current") === "current",
+        );
+
+        return campaignCharacterRosterCandidateSchema.parse({
+          alreadyRostered:
+            selectedMembership != null &&
+            (selectedMembership.membershipState ?? "current") === "current",
+          currentElsewhere,
           id: character.id,
+          membershipState: selectedMembership
+            ? (selectedMembership.membershipState ?? "current")
+            : "none",
           name: character.name,
           ownerLabel: buildCampaignCharacterOwnerLabel({
             actorUserId: input.actorUserId,
             character,
           }),
-        }),
-      )
+        });
+      })
       .sort((left, right) => left.name.localeCompare(right.name));
   }
 
@@ -246,6 +268,16 @@ export class CampaignService {
       throw new Error("Campaign roster entry not found.");
     }
 
+    if (entry.sourceType === "character") {
+      if ((entry.membershipState ?? "current") === "current") {
+        await this.repository.updateCampaignRosterMembershipState({
+          entryId: entry.id,
+          membershipState: "former",
+        });
+      }
+      return;
+    }
+
     await this.repository.deleteCampaignRosterEntry(input.rosterEntryId);
   }
 
@@ -254,6 +286,26 @@ export class CampaignService {
     sourceId: string;
     sourceType: CampaignRosterSourceType;
   }): Promise<{ removed: boolean }> {
+    const entry = (await this.repository.listCampaignRosterHistoryEntries(input.campaignId)).find(
+      (candidate) =>
+        candidate.sourceId === input.sourceId && candidate.sourceType === input.sourceType,
+    );
+
+    if (!entry) {
+      return { removed: false };
+    }
+
+    if (entry.sourceType === "character") {
+      if ((entry.membershipState ?? "current") === "former") {
+        return { removed: false };
+      }
+      await this.repository.updateCampaignRosterMembershipState({
+        entryId: entry.id,
+        membershipState: "former",
+      });
+      return { removed: true };
+    }
+
     const removedCount = await this.repository.deleteCampaignRosterEntryBySource(input);
 
     return {
@@ -393,7 +445,7 @@ export class CampaignService {
   }): Promise<Campaign> {
     const campaign = await this.repository.getCampaignById(input.campaignId);
 
-    if (!campaign || (!input.actorIsAdmin && campaign.gmUserId !== input.actorUserId)) {
+    if (!campaign || campaign.gmUserId !== input.actorUserId) {
       throw new Error("Campaign not found.");
     }
 
@@ -453,7 +505,7 @@ export class CampaignService {
       const isOwnedRequest =
         campaign?.gmUserId === input.actorUserId && entity.gmUserId === input.actorUserId;
 
-      if (!campaign || (!input.actorIsAdmin && !isOwnedRequest)) {
+      if (!campaign || !isOwnedRequest) {
         throw new Error("Reusable entity not found.");
       }
 
