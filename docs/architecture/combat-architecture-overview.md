@@ -12,6 +12,13 @@ architecture are tracked in
 this overview must not be read as evidence that every legacy path is already
 conformant.
 
+## Approved Round End and Review contract
+
+[Combat Round End & Review V1](./combat-round-end-review.md) controls the approved
+round boundary, visible effects/checkpoints, CE scheduling and chronological GM
+review. It is approved architecture awaiting separate implementation authority;
+its listed factual/rule reconciliation items remain open.
+
 ## 1. Design goals
 
 The combat engine is designed around five primary goals:
