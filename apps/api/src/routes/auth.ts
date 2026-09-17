@@ -3,7 +3,7 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   authRoleSchema,
   credentialLoginInputSchema,
-  credentialRegisterInputSchema
+  credentialRegisterInputSchema,
 } from "@glantri/auth";
 import { AuthService } from "@glantri/database";
 
@@ -13,7 +13,7 @@ import {
   getAuthenticatedUser,
   getSessionTokenFromRequest,
   requireAuthenticatedUser,
-  requireStrictAdminUser
+  requireStrictAdminUser,
 } from "../lib/sessionAuth";
 
 const authService = new AuthService();
@@ -25,13 +25,13 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     return {
       canBootstrapGameMaster,
-      user
+      user,
     };
   });
 
   app.get("/bootstrap-status", async () => {
     return {
-      canBootstrapGameMaster: await authService.canBootstrapGameMaster()
+      canBootstrapGameMaster: await authService.canBootstrapGameMaster(),
     };
   });
 
@@ -41,7 +41,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     if (existingUser) {
       return reply.code(409).send({
-        error: "A user with that email already exists."
+        error: "A user with that email already exists.",
       });
     }
 
@@ -51,17 +51,25 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     reply.header("set-cookie", buildSessionCookie(token, session.expiresAt));
 
     return {
-      user
+      user,
     };
   });
 
   app.post("/login", async (request, reply) => {
-    const input = credentialLoginInputSchema.parse(request.body);
+    const parsedInput = credentialLoginInputSchema.safeParse(request.body);
+
+    if (!parsedInput.success) {
+      return reply.code(400).send({
+        error: "Enter a valid email address and password.",
+      });
+    }
+
+    const input = parsedInput.data;
     const user = await authService.loginWithCredentials(input);
 
     if (!user) {
       return reply.code(401).send({
-        error: "Invalid email or password."
+        error: "Invalid email or password.",
       });
     }
 
@@ -69,7 +77,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     reply.header("set-cookie", buildSessionCookie(token, session.expiresAt));
 
     return {
-      user
+      user,
     };
   });
 
@@ -83,7 +91,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     reply.header("set-cookie", buildExpiredSessionCookie());
 
     return {
-      ok: true
+      ok: true,
     };
   });
 
@@ -97,7 +105,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const users = await authService.listUsers();
 
     return {
-      users
+      users,
     };
   });
 
@@ -114,7 +122,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     if (!targetUserId) {
       return reply.code(400).send({
-        error: "User id is required."
+        error: "User id is required.",
       });
     }
 
@@ -122,12 +130,12 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     if (!updatedUser) {
       return reply.code(404).send({
-        error: "User not found."
+        error: "User not found.",
       });
     }
 
     return {
-      user: updatedUser
+      user: updatedUser,
     };
   });
 
@@ -142,13 +150,13 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     if (!updatedUser) {
       return reply.code(403).send({
-        error: "Bootstrap GM claim is no longer available."
+        error: "Bootstrap GM claim is no longer available.",
       });
     }
 
     return {
       canBootstrapGameMaster: false,
-      user: updatedUser
+      user: updatedUser,
     };
   });
 };

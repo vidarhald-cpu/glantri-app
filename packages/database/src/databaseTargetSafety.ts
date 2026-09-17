@@ -4,6 +4,11 @@ export const PROTECTED_SHARED_DATABASE = {
   port: "5432",
 } as const;
 
+export const PROTECTED_PLAYTEST_DATABASE = {
+  database: "glantri_playtest",
+  port: "5433",
+} as const;
+
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "[::1]", "localhost"]);
 
 export interface DatabaseTarget {
@@ -27,6 +32,10 @@ export interface ValidatedTaskDatabaseEnvironment {
   owner: string;
   task: string;
   test: DatabaseTarget;
+}
+
+export interface ValidatedPlaytestDatabaseEnvironment {
+  database: DatabaseTarget;
 }
 
 function decodeDatabaseName(url: URL): string {
@@ -73,6 +82,29 @@ export function isProtectedSharedDatabase(target: DatabaseTarget): boolean {
     target.port === PROTECTED_SHARED_DATABASE.port &&
     target.database === PROTECTED_SHARED_DATABASE.database
   );
+}
+
+export function validatePlaytestDatabaseEnvironment(environment: {
+  DATABASE_URL?: string;
+  GLANTRI_DB_MODE?: string;
+}): ValidatedPlaytestDatabaseEnvironment {
+  if (environment.GLANTRI_DB_MODE !== "playtest") {
+    throw new Error('GLANTRI_DB_MODE must be exactly "playtest" for the standing runtime.');
+  }
+
+  const database = parseDatabaseTarget("DATABASE_URL", environment.DATABASE_URL);
+
+  if (
+    !LOOPBACK_HOSTS.has(database.host) ||
+    database.port !== PROTECTED_PLAYTEST_DATABASE.port ||
+    database.database !== PROTECTED_PLAYTEST_DATABASE.database
+  ) {
+    throw new Error(
+      `Standing playtest DATABASE_URL must target loopback port ${PROTECTED_PLAYTEST_DATABASE.port}/${PROTECTED_PLAYTEST_DATABASE.database}; received ${formatDatabaseTarget(database)}.`,
+    );
+  }
+
+  return { database };
 }
 
 function ownerDatabasePrefix(owner: string): string {
