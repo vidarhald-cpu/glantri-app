@@ -1,8 +1,8 @@
 # Chargen and Competency Experience Product Contract
 
-**Status:** Product Owner approved  
-**Date:** 2026-09-17  
-**Portfolio:** [#114 Chargen](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/114), [#110 Skills / Learning Groups / Professions](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/110)  
+**Status:** Product Owner approved\
+**Date:** 2026-09-17\
+**Portfolio:** [#114 Chargen](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/114), [#110 Skills / Learning Groups / Professions](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/110)\
 **Related content authority:** [#113 Profession Provenance / Availability](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/113)
 
 This contract records playtest-derived product decisions for repeatable Character
