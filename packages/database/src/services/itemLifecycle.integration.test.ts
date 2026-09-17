@@ -33,6 +33,144 @@ describe.skipIf(!process.env.DATABASE_URL_TEST)("persistent GM Item lifecycle", 
     const pcRevision = (await repository.getCharacterEquipmentAggregateState(pc.id)).revision;
     return { gm, campaign, npc, pc, repository, service, evidence, npcRevision, pcRevision };
   }
+  it("rejects retired Templates at every new-Item service entry without persistence changes", async () => {
+    const f = await fixture();
+    const state = await f.repository.getCharacterEquipmentAggregateState(f.pc.id);
+    const person = state.locations.find((location) => location.type === "person_system")!;
+    const existing = await f.service.addCharacterEquipmentItem(
+      f.pc.id,
+      {
+        templateId: "weapon-template-dagger",
+        quantity: 1,
+        initialLocationId: person.id,
+        initialCarryMode: "on_person",
+      },
+      state.revision,
+    );
+    const template = equipmentTemplatesById[existing.templateId!];
+    const previous = template.selectableForNewItems;
+    const snapshot = async () => ({
+      items: await prisma!.characterEquipmentItem.findMany({ orderBy: { id: "asc" } }),
+      aggregates: await prisma!.characterEquipmentAggregate.findMany({
+        orderBy: { characterId: "asc" },
+      }),
+      locations: await f.repository.getCharacterStorageLocations(f.npc.id),
+      loadouts: await f.repository.getCharacterLoadouts(f.npc.id),
+    });
+    const before = await snapshot();
+    template.selectableForNewItems = false;
+    try {
+      const calls = [
+        () =>
+          f.service.createCampaignEquipmentItem({
+            campaignId: f.campaign.id,
+            templateId: template.id,
+            itemFacts: createEmptyEquipmentItemFacts(),
+          }),
+        () =>
+          f.service.addCharacterEquipmentItem(
+            f.npc.id,
+            {
+              templateId: template.id,
+              quantity: 1,
+              initialLocationId: `${f.npc.id}:loc-person`,
+              initialCarryMode: "on_person",
+            },
+            f.npcRevision,
+          ),
+        () => f.service.createCharacterEquipmentItem({ ...existing, id: "retired-new-item" }),
+        () =>
+          f.service.bootstrapSampleCharacterEquipment(f.npc.id, {
+            sampleCharacterId: f.pc.id,
+            sampleLocations: [],
+            sampleEquipmentItems: [existing],
+            sampleActiveLoadout: state.loadouts[0]!,
+          }),
+      ];
+      for (const create of calls) {
+        await expect(create()).rejects.toThrow("Equipment template not found.");
+        expect(await snapshot()).toEqual(before);
+      }
+    } finally {
+      if (previous === undefined) delete template.selectableForNewItems;
+      else template.selectableForNewItems = previous;
+    }
+  });
+
+  it("retains retired-template Item resolution, authoring, movement and equipment", async () => {
+    const f = await fixture();
+    const state = await f.repository.getCharacterEquipmentAggregateState(f.pc.id);
+    const person = state.locations.find((location) => location.type === "person_system")!;
+    const existing = await f.service.addCharacterEquipmentItem(
+      f.pc.id,
+      {
+        templateId: "weapon-template-dagger",
+        quantity: 1,
+        initialLocationId: person.id,
+        initialCarryMode: "on_person",
+      },
+      state.revision,
+    );
+    const campaignItem = await f.service.createCampaignEquipmentItem({
+      campaignId: f.campaign.id,
+      templateId: existing.templateId,
+      itemFacts: createEmptyEquipmentItemFacts(),
+    });
+    const template = equipmentTemplatesById[existing.templateId!];
+    const previous = template.selectableForNewItems;
+    template.selectableForNewItems = false;
+    try {
+      const revision = async () =>
+        (await f.repository.getCharacterEquipmentAggregateState(f.pc.id)).revision;
+      await f.service.updateCharacterEquipmentMetadata(
+        f.pc.id,
+        existing.id,
+        { conditionState: "intact", displayName: "Retained dagger" },
+        await revision(),
+      );
+      const pack = state.locations.find((location) => location.type === "backpack_system")!;
+      await f.service.moveCharacterEquipmentItem(
+        f.pc.id,
+        existing.id,
+        pack.id,
+        "backpack",
+        await revision(),
+      );
+      await f.service.moveCharacterEquipmentItem(
+        f.pc.id,
+        existing.id,
+        person.id,
+        "on_person",
+        await revision(),
+      );
+      await f.service.setCharacterActiveWeapon(f.pc.id, "primary", existing.id, await revision());
+      const reopened = (await f.repository.getCanonicalEquipmentItemById(existing.id))!;
+      expect(reopened).toMatchObject({
+        id: existing.id,
+        templateId: template.id,
+        displayName: "Retained dagger",
+      });
+      expect(resolveEffectiveItemTemplate(reopened, equipmentTemplatesById)).toBe(template);
+      expect(
+        (await f.repository.getCharacterEquipmentAggregateState(f.pc.id)).loadouts[0]
+          .activePrimaryWeaponItemId,
+      ).toBe(existing.id);
+      expect(
+        await f.service.updateCampaignEquipmentItemAuthoring({
+          campaignId: f.campaign.id,
+          itemId: campaignItem.id,
+          expectedItemRevision: campaignItem.revision!,
+          displayName: "Retained Campaign dagger",
+          itemFacts: campaignItem.itemFacts,
+        }),
+      ).toMatchObject({ id: campaignItem.id, templateId: template.id });
+      expect(await prisma!.characterEquipmentItem.count()).toBe(2);
+    } finally {
+      if (previous === undefined) delete template.selectableForNewItems;
+      else template.selectableForNewItems = previous;
+    }
+  });
+
   it("persists one descriptive Item through NPC assignment, transfer, movement and rediscovery", async () => {
     const f = await fixture();
     const letter = await f.service.createCampaignEquipmentItem({

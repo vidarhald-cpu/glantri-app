@@ -71,6 +71,12 @@ interface UpdateCharacterEquipmentMetadataInput {
 
 type LoadoutSelectionKind = "armor" | "shield" | "primary" | "secondary" | "missile";
 
+function assertTemplateAllowsNewItems(templateId: string | null): void {
+  if (templateId !== null && equipmentTemplatesById[templateId]?.selectableForNewItems === false) {
+    throw new Error("Equipment template not found.");
+  }
+}
+
 function indexById<T extends { id: string }>(items: T[]): Record<string, T> {
   return Object.fromEntries(items.map((item) => [item.id, item]));
 }
@@ -265,9 +271,10 @@ export class CharacterEquipmentWriteService {
   async createCampaignEquipmentItem(
     input: CreateCampaignEquipmentItemInput,
   ): Promise<CanonicalEquipmentItem> {
+    assertTemplateAllowsNewItems(input.templateId);
     const template =
       input.templateId === null ? undefined : equipmentTemplatesById[input.templateId];
-    if (input.templateId !== null && (!template || template.selectableForNewItems === false)) {
+    if (input.templateId !== null && !template) {
       throw new Error("Equipment template not found.");
     }
 
@@ -641,6 +648,7 @@ export class CharacterEquipmentWriteService {
     expectedRevision?: number,
   ): Promise<AssignedEquipmentItem> {
     const canonicalItem = CanonicalEquipmentItemSchema.parse(input);
+    assertTemplateAllowsNewItems(canonicalItem.templateId);
     if (!canonicalItem.holderCharacterId || !canonicalItem.storageAssignment) {
       throw new Error("This pilot workflow requires a Character holder and valid holder location.");
     }
@@ -672,6 +680,7 @@ export class CharacterEquipmentWriteService {
     input: AddCharacterEquipmentItemInput,
     expectedRevision?: number,
   ): Promise<AssignedEquipmentItem> {
+    assertTemplateAllowsNewItems(input.templateId);
     if (expectedRevision !== undefined) {
       return this.mutateAggregate(characterId, expectedRevision, (service) =>
         service.addCharacterEquipmentItem(characterId, input),
@@ -1121,6 +1130,9 @@ export class CharacterEquipmentWriteService {
       overwrite?: boolean;
     },
   ): Promise<void> {
+    for (const item of sampleEquipment.sampleEquipmentItems) {
+      assertTemplateAllowsNewItems(item.templateId);
+    }
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
     const hasCustomLocations = snapshot.locations.some(
       (location) => !location.type.endsWith("_system"),
