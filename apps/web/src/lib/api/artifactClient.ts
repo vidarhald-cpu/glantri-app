@@ -209,6 +209,7 @@ export interface ArtifactHistory {
   usages: {
     references: Array<{ state: string; scenario: { id: string; name: string } }>;
     maps: Array<{ id: string; name: string }>;
+    workspaceMaps: Array<{ id: string; name: string }>;
     links: Array<{ entryId: string; revisionNumber: number; title: string; current: boolean }>;
   };
 }

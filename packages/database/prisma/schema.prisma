@@ -177,6 +177,39 @@ enum CampaignNoteReferenceType {
   artifact
 }
 
+enum CampaignMapRole {
+  world_region
+  area
+  tactical
+}
+
+enum CampaignMapAccess {
+  gm_only
+  players
+}
+
+enum CampaignMapLayerVisibility {
+  gm_only
+  player_visible
+}
+
+enum CampaignMapMarkerKind {
+  annotation
+  entity_reference
+  map_link
+}
+
+enum CampaignMapMarkerVisibility {
+  inherit
+  gm_only
+  player_visible
+}
+
+enum CampaignMapEntityReferenceType {
+  character
+  reusable_entity
+}
+
 model Character {
   id               String                    @id @default(cuid())
   name             String
@@ -501,10 +534,77 @@ model Campaign {
   artifactReferences ScenarioArtifactReference[]
   equipmentItems CharacterEquipmentItem[]
   gmUser      User            @relation(fields: [gmUserId], references: [id], onDelete: Cascade)
+  maps        CampaignMap[]
   notes        CampaignNote[]
   rosterEntries CampaignRosterEntry[]
   scenarioRelationships ScenarioRelationship[]
   scenarios   Scenario[]
+}
+
+model CampaignMap {
+  id                   String             @id @default(cuid())
+  campaignId           String
+  name                 String
+  description          String             @default("")
+  role                 CampaignMapRole
+  access               CampaignMapAccess  @default(gm_only)
+  backgroundArtifactId String?
+  version              Int                @default(1)
+  createdByUserId      String
+  updatedByUserId      String
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  campaign             Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  layers               CampaignMapLayer[]
+  markers              CampaignMapMarker[]
+
+  @@unique([campaignId, id])
+  @@index([campaignId, updatedAt])
+  @@index([campaignId, backgroundArtifactId])
+}
+
+model CampaignMapLayer {
+  id         String                     @id
+  mapId      String
+  name       String
+  sortOrder  Int
+  visibility CampaignMapLayerVisibility @default(gm_only)
+  createdAt  DateTime                   @default(now())
+  updatedAt  DateTime                   @updatedAt
+  map        CampaignMap                @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  markers    CampaignMapMarker[]
+
+  @@unique([mapId, id])
+  @@unique([mapId, sortOrder])
+  @@index([mapId, sortOrder])
+}
+
+model CampaignMapMarker {
+  id                  String                         @id
+  campaignId          String
+  mapId               String
+  layerId             String
+  kind                CampaignMapMarkerKind
+  label               String
+  description         String                         @default("")
+  presentation        String                         @default("pin")
+  x                   Float
+  y                   Float
+  sortOrder           Int
+  visibility          CampaignMapMarkerVisibility    @default(inherit)
+  entityReferenceType CampaignMapEntityReferenceType?
+  entityReferenceId   String?
+  entityLabelSnapshot String?
+  destinationMapId    String?
+  createdAt           DateTime                       @default(now())
+  updatedAt           DateTime                       @updatedAt
+  map                 CampaignMap                    @relation(fields: [campaignId, mapId], references: [campaignId, id], onDelete: Cascade)
+  layer               CampaignMapLayer               @relation(fields: [mapId, layerId], references: [mapId, id], onDelete: Cascade)
+
+  @@unique([layerId, sortOrder])
+  @@index([mapId, layerId, sortOrder])
+  @@index([campaignId, destinationMapId])
+  @@index([entityReferenceType, entityReferenceId])
 }
 
 model Scenario {

@@ -61,6 +61,7 @@ import { pollGmCombatSnapshot } from "@/lib/campaigns/gmCombatRefresh";
 import CampaignItemsWorkspace from "@/features/equipment/campaign-items/CampaignItemsWorkspace";
 import { ArtifactPanel } from "@/features/artifacts";
 import { BlackboardWorkspace } from "@/features/blackboard";
+import { MapWorkspace } from "@/features/maps";
 
 interface CampaignWorkspaceShellProps {
   campaignId: string;
@@ -696,6 +697,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       blackboardQuery?: string | null;
       encounterId?: string | null;
       entryId?: string | null;
+      mapId?: string | null;
       participantId?: string | null;
       scenarioId?: string | null;
       tab?: CampaignWorkspaceTabId | null;
@@ -728,6 +730,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
 
       for (const [key, value] of [
         ["entryId", partial.entryId],
+        ["mapId", partial.mapId],
         ["blackboardQuery", partial.blackboardQuery],
         ["blackboardCategory", partial.blackboardCategory],
         ["blackboardPinned", partial.blackboardPinned],
@@ -743,12 +746,25 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         campaignId,
         encounterId: nextParams.get("encounterId"),
         entryId: nextParams.get("entryId"),
+        mapId: nextParams.get("mapId"),
         participantId: nextParams.get("participantId"),
         scenarioId: nextParams.get("scenarioId"),
         tab: (nextParams.get("tab") as CampaignWorkspaceTabId | null) ?? undefined,
       });
     },
     [campaignId, searchParamString],
+  );
+
+  const handleMapRouteChange = useCallback(
+    (mapId?: string, history: "push" | "replace" = "replace") => {
+      const href = buildWorkspaceHref({ mapId: mapId ?? null, tab: "maps" });
+      const currentHref = searchParamString ? `${pathname}?${searchParamString}` : pathname;
+      if (href !== currentHref) {
+        if (history === "push") router.push(href);
+        else router.replace(href);
+      }
+    },
+    [buildWorkspaceHref, pathname, router, searchParamString],
   );
 
   function selectInspectableParticipant(input: {
@@ -1051,6 +1067,15 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
             createRequested={searchParams.get("itemCreate") === "1"}
           />
         ) : null
+      ) : null}
+
+      {!workspaceLoadError && accessMode !== "none" && workspaceState.activeTab === "maps" ? (
+        <MapWorkspace
+          campaignId={campaignId}
+          initialMapId={searchParams.get("mapId") ?? undefined}
+          isGameMaster={canAccessGmEncounter}
+          onMapRouteChange={handleMapRouteChange}
+        />
       ) : null}
 
       {!workspaceLoadError && accessMode !== "none" && workspaceState.activeTab === "blackboard" ? (

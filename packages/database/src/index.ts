@@ -7,6 +7,7 @@ export * from "./artifacts/artifactBinaryStore";
 export * from "./artifacts/artifactUploadValidation";
 export * from "./services/campaignService";
 export * from "./services/campaignManagementService";
+export * from "./services/mapService";
 export * from "./services/characterService";
 export * from "./services/retainedCharacterService";
 export * from "./services/chargenRuleSetService";
