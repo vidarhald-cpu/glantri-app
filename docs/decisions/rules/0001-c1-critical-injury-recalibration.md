@@ -5,7 +5,10 @@
 - Product owner: Vidar Hald
 - Related issues/PRs: recovered GitHub #393; Forgejo #5; follow-up Forgejo #4 (#392)
 - Supersedes: pre-#393 calibration and prose assumptions for the 34 accepted C1 representative fixtures
-- Superseded by: none
+- Superseded by: [decision 0005](./0005-critical-effect-semantics-and-timing.md) for the future
+  target meaning of Stunned and Dazed, effect-source stacking, fixed-round durations, future
+  Bleed/Health cadence, and source-specific treatment; the accepted 34-fixture calibration remains
+  historical/current implementation evidence pending separately authorized reconciliation
 
 ## Question
 
@@ -32,6 +35,11 @@ The former architecture/control-plane conversation and the read-only #393 design
 The pre-#393 fixtures frequently used extreme Stun, global action locks, automatic unconsciousness, and future-turn instructions as severity shorthand even when the concrete injury did not make those consequences unavoidable. Some internal-Bleed rates were too fast relative to comparable external wounds. The earlier Fire/Energy rates were internally inverted under three-second rounds, and burn/shock loss does not fit the existing Bleed lifecycle.
 
 The 34-fixture rewrite was a content/design outcome. Canonical fixture code, generated data, workbook data, and runtime behavior have not yet been updated to implement it.
+
+> **Successor boundary:** [Decision 0005](./0005-critical-effect-semantics-and-timing.md)
+> defines the approved future effect model. Its Stunned/Dazed semantics supersede the variable Stun
+> ladder below for future catalogue authoring. The older rows remain historical/current evidence and
+> are not automatically renamed, remapped, or migrated by either documentation decision.
 
 ## Ruling
 

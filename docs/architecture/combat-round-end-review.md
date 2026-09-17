@@ -213,7 +213,8 @@ These factual/rule-integration items remain unresolved; they do not reopen the
 approved Round End workflow:
 
 1. Exact current Health/Bleed trigger, cadence and consequence rules.
-2. Exact current Stun lifecycle(s).
+2. Audit and reconcile exact current Stun lifecycle(s) against the approved Stunned/Dazed target in
+   [rule decision 0005](../decisions/rules/0005-critical-effect-semantics-and-timing.md).
 3. Exact Observe Opponent 3/6/10 progression/boundary behavior.
 4. Exact continuing Combat Task timer/check behavior.
 5. CE Panic 5–10 interval-selection mechanism if not already canonical.
@@ -244,3 +245,7 @@ fixed-duration semantics or separate due-roll processing from Review approved
 here. Likewise current presentation/task mappings do not authorize scheduled CE
 rerolls in Round End. This contract controls future Round End & Review V1;
 implementation equivalence has not been claimed or audited by this publication.
+
+The shared Critical-effect semantics that consume this lifecycle are recorded in
+[rule decision 0005](../decisions/rules/0005-critical-effect-semantics-and-timing.md). That successor
+does not alter the Round End ordering defined here and authorizes no runtime change.

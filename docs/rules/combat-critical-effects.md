@@ -9,6 +9,14 @@ commit.
 > delta described below. The other 29 #387 representative fixtures retain their existing runtime and
 > review behavior. Fire/Energy and other non-Bleed `periodic_loss` remain non-executable.
 
+> **Approved target-rule boundary:**
+> [Decision 0005](../decisions/rules/0005-critical-effect-semantics-and-timing.md) supersedes the
+> future use of Stun as a variable numeric family. The target has Stunned as General `-4`, Dazed as
+> General `-2`, source-preserving additive stacking, complete-subsequent-round duration semantics,
+> and source-specific future Bleed/Health/treatment behavior. This page continues to document current
+> runtime and historical C1 behavior; the new decision authorizes no runtime, fixture, or migration
+> change.
+
 The exact five-key post-#393 recovery is frozen as
 [the implementation payload](../recovery/2026-09-06-c1-five-key-post-393-payloads.json), with its
 [per-key pre/post comparison](../recovery/2026-09-06-c1-five-key-freeze-and-staging.md). The resulting
