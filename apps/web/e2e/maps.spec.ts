@@ -140,6 +140,28 @@ test.describe("Map Workspace V1", () => {
 
     await page.setViewportSize({ height: 900, width: 1280 });
     await page.reload();
+    const gmLinkMarker = page.getByRole("button", { name: "City road, open linked Map" });
+    await expect(gmLinkMarker).toBeVisible();
+
+    await gmLinkMarker.focus();
+    await page.keyboard.press("Enter");
+    await expect(gmLinkMarker).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByLabel("Marker label")).toHaveValue("City road");
+
+    const keyboardLinkAction = page.getByRole("button", { name: "Open linked Map", exact: true });
+    await keyboardLinkAction.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(new RegExp(`mapId=${mapB.id}`));
+    await expect(page.getByText(`Old City ${suffix}`, { exact: true }).first()).toBeVisible();
+
+    await page.goBack();
+    await expect(page).toHaveURL(new RegExp(`mapId=${mapA.id}`));
+    await expect(page.getByRole("button", { name: "City road, open linked Map" })).toBeVisible();
+
+    await page.getByRole("button", { name: "City road, open linked Map" }).dblclick();
+    await expect(page).toHaveURL(new RegExp(`mapId=${mapB.id}`));
+    await page.goBack();
+    await expect(page).toHaveURL(new RegExp(`mapId=${mapA.id}`));
     await expect(page.getByRole("button", { name: "City road, open linked Map" })).toBeVisible();
 
     const player = await browser.newContext({ storageState: "e2e/.auth/player.json" });
@@ -152,6 +174,9 @@ test.describe("Map Workspace V1", () => {
     await playerPage.getByRole("button", { name: "City road, open linked Map" }).click();
     await expect(playerPage).toHaveURL(new RegExp(`mapId=${mapB.id}`));
     await expect(playerPage.getByText(`Old City ${suffix}`, { exact: true }).first()).toBeVisible();
+    await playerPage.goBack();
+    await expect(playerPage).toHaveURL(new RegExp(`mapId=${mapA.id}`));
+    await expect(playerPage.getByText("Known roads", { exact: true })).toBeVisible();
     await player.close();
 
     const unrelated = await browser.newContext({ storageState: "e2e/.auth/unrelated.json" });

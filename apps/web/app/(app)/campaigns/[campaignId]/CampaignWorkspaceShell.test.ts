@@ -18,6 +18,14 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("isGameMaster={canAccessGmEncounter}");
   });
 
+  it("pushes explicit linked-Map navigation while replacing ordinary Map route sync", () => {
+    const source = readSource();
+
+    expect(source).toContain('history: "push" | "replace" = "replace"');
+    expect(source).toContain('if (history === "push") router.push(href);');
+    expect(source).toContain("else router.replace(href);");
+  });
+
   it("renders the real GM campaign Items workspace without changing global navigation", () => {
     const source = readSource();
 

@@ -32,6 +32,12 @@ const summary = {
   updatedAt: "2026-09-17T10:00:00.000Z",
 };
 
+const destinationSummary = {
+  ...summary,
+  id: "map-2",
+  name: "Old City",
+};
+
 const gmMap = {
   access: "players" as const,
   backgroundArtifactId: null,
@@ -70,11 +76,34 @@ const gmMap = {
   version: 2,
 };
 
+const linkedGmMap = {
+  ...gmMap,
+  layers: [
+    {
+      ...gmMap.layers[0],
+      markers: [
+        {
+          ...gmMap.layers[0].markers[0],
+          destinationMapId: "map-2",
+          id: "link-1",
+          kind: "map_link" as const,
+          label: "City road",
+          presentation: "↗",
+        },
+      ],
+    },
+  ],
+};
+
 describe("MapWorkspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.list.mockResolvedValue({ maps: [summary], mode: "gm" });
-    mocks.options.mockResolvedValue({ artifacts: [], entities: [], maps: [summary] });
+    mocks.options.mockResolvedValue({
+      artifacts: [],
+      entities: [],
+      maps: [summary, destinationSummary],
+    });
     mocks.load.mockResolvedValue({ map: gmMap, mode: "gm" });
     mocks.save.mockResolvedValue({ ...gmMap, version: 3 });
   });
@@ -137,8 +166,48 @@ describe("MapWorkspace", () => {
     expect(screen.getByText("Old ruin")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save Map" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("New Map name")).not.toBeInTheDocument();
+    await waitFor(() => expect(routeChange).toHaveBeenCalledWith("map-1", "replace"));
     await userEvent.click(screen.getByRole("button", { name: "City road, open linked Map" }));
     await waitFor(() => expect(mocks.load).toHaveBeenCalledWith("campaign-1", "map-2"));
+    await waitFor(() => expect(routeChange).toHaveBeenLastCalledWith("map-2", "push"));
+  });
+
+  it("keeps GM keyboard selection distinct from linked-Map navigation", async () => {
+    const routeChange = vi.fn();
+    mocks.list.mockResolvedValue({ maps: [summary, destinationSummary], mode: "gm" });
+    mocks.load.mockImplementation((_campaignId: string, mapId: string) =>
+      Promise.resolve({
+        map:
+          mapId === "map-2" ? { ...gmMap, id: "map-2", layers: [], name: "Old City" } : linkedGmMap,
+        mode: "gm",
+      }),
+    );
+
+    render(
+      <MapWorkspace
+        campaignId="campaign-1"
+        initialMapId="map-1"
+        isGameMaster
+        onMapRouteChange={routeChange}
+      />,
+    );
+
+    const marker = await screen.findByRole("button", {
+      name: "City road, open linked Map",
+    });
+    marker.focus();
+    await userEvent.keyboard("{Enter}");
+
+    expect(marker).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Marker label")).toHaveValue("City road");
+    expect(routeChange).not.toHaveBeenCalledWith("map-2", "push");
+
+    const openLink = screen.getByRole("button", { name: "Open linked Map" });
+    openLink.focus();
+    await userEvent.keyboard("{Enter}");
+
+    await waitFor(() => expect(mocks.load).toHaveBeenCalledWith("campaign-1", "map-2"));
+    await waitFor(() => expect(routeChange).toHaveBeenLastCalledWith("map-2", "push"));
   });
 
   it("supports keyboard-accessible normalized reposition and one optimistic aggregate save", async () => {

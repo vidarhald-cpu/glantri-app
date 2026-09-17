@@ -756,10 +756,13 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   );
 
   const handleMapRouteChange = useCallback(
-    (mapId?: string) => {
+    (mapId?: string, history: "push" | "replace" = "replace") => {
       const href = buildWorkspaceHref({ mapId: mapId ?? null, tab: "maps" });
       const currentHref = searchParamString ? `${pathname}?${searchParamString}` : pathname;
-      if (href !== currentHref) router.replace(href);
+      if (href !== currentHref) {
+        if (history === "push") router.push(href);
+        else router.replace(href);
+      }
     },
     [buildWorkspaceHref, pathname, router, searchParamString],
   );

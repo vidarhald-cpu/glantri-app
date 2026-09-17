@@ -78,6 +78,8 @@ interface MapCanvasProps {
   selectedMarkerId?: string;
 }
 
+type MapRouteHistory = "push" | "replace";
+
 function MapCanvas({
   campaignId,
   isGameMaster,
@@ -149,6 +151,7 @@ function MapCanvas({
           return (
             <button
               aria-label={`${marker.label}${isLink ? ", open linked Map" : ""}`}
+              aria-pressed={isGameMaster ? marker.id === selectedMarkerId : undefined}
               key={marker.id}
               onClick={(event) => {
                 event.stopPropagation();
@@ -192,7 +195,7 @@ export function MapWorkspace({
   campaignId: string;
   initialMapId?: string;
   isGameMaster: boolean;
-  onMapRouteChange: (mapId?: string) => void;
+  onMapRouteChange: (mapId?: string, history?: MapRouteHistory) => void;
 }) {
   const [maps, setMaps] = useState<CampaignMapSummary[]>([]);
   const [selectedMapId, setSelectedMapId] = useState<string | undefined>(initialMapId);
@@ -213,7 +216,7 @@ export function MapWorkspace({
   }, [campaignId]);
 
   const openMap = useCallback(
-    async (mapId: string) => {
+    async (mapId: string, history: MapRouteHistory = "replace") => {
       setLoading(true);
       setError(undefined);
       try {
@@ -222,7 +225,7 @@ export function MapWorkspace({
         setDraft(result.mode === "gm" ? cloneGmMap(result.map) : undefined);
         setSelectedMapId(mapId);
         setSelectedMarkerId(undefined);
-        onMapRouteChange(mapId);
+        onMapRouteChange(mapId, history);
       } catch (caught) {
         setLoadedMap(undefined);
         setDraft(undefined);
@@ -514,7 +517,7 @@ export function MapWorkspace({
             campaignId={campaignId}
             isGameMaster={Boolean(draft)}
             map={displayMap}
-            onNavigate={(mapId) => void openMap(mapId)}
+            onNavigate={(mapId) => void openMap(mapId, "push")}
             onReposition={(x, y) => {
               if (selectedMarkerId)
                 updateMarker(selectedMarkerId, (marker) => ({ ...marker, x, y }));
@@ -687,6 +690,7 @@ export function MapWorkspace({
                     draft={draft}
                     marker={selectedMarker.marker}
                     onChange={(next) => updateMarker(selectedMarker.marker.id, () => next)}
+                    onNavigate={(mapId) => void openMap(mapId, "push")}
                     onMoveLayer={(layerId) => {
                       const marker = selectedMarker.marker;
                       setDraft({
@@ -770,6 +774,7 @@ function MarkerEditor({
   draft,
   marker,
   onChange,
+  onNavigate,
   onMoveLayer,
   onRemove,
   options,
@@ -778,6 +783,7 @@ function MarkerEditor({
   draft: CampaignMapGmDto;
   marker: CampaignMapGmMarker;
   onChange: (marker: CampaignMapGmMarker) => void;
+  onNavigate: (mapId: string) => void;
   onMoveLayer: (layerId: string) => void;
   onRemove: () => void;
   options?: CampaignMapAuthoringOptions;
@@ -887,22 +893,33 @@ function MarkerEditor({
         </label>
       ) : null}
       {marker.kind === "map_link" ? (
-        <label style={fieldStyle}>
-          Destination Map
-          <select
-            onChange={(event) =>
-              onChange({ ...marker, destinationMapId: event.target.value || null })
-            }
-            value={marker.destinationMapId ?? ""}
+        <>
+          <label style={fieldStyle}>
+            Destination Map
+            <select
+              onChange={(event) =>
+                onChange({ ...marker, destinationMapId: event.target.value || null })
+              }
+              value={marker.destinationMapId ?? ""}
+            >
+              <option value="">Choose…</option>
+              {options?.maps.map((map) => (
+                <option key={map.id} value={map.id}>
+                  {map.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            disabled={!marker.destinationMapId}
+            onClick={() => {
+              if (marker.destinationMapId) onNavigate(marker.destinationMapId);
+            }}
+            type="button"
           >
-            <option value="">Choose…</option>
-            {options?.maps.map((map) => (
-              <option key={map.id} value={map.id}>
-                {map.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            Open linked Map
+          </button>
+        </>
       ) : null}
       <div style={{ display: "grid", gap: "0.5rem", gridTemplateColumns: "1fr 1fr" }}>
         <label style={fieldStyle}>
