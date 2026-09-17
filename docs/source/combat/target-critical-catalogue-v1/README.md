@@ -29,7 +29,9 @@ Source workbook:
   2,179 historical effect rows.
 - `interaction-ledger.jsonl` records cross-source stacking, timing, treatment, conditional, and
   exception behavior using catalogue consequences that actually exist.
-- `distribution.csv` contains catalogue-wide result incidence by family, location, and band.
+- `distribution.csv` contains catalogue-wide result incidence by family, location, and band. Its
+  Bleed-rate columns include only `periodic_loss` consequences whose semantic is `bleed`; non-Bleed
+  Fire/Energy loss remains separate target content.
 - `distribution-report.md` explains the distribution review and normalization.
 - `canonical-examples.md` provides future implementation/QA fixture authority.
 - `unresolved-items.md` distinguishes catalogue completeness from external activation boundaries.

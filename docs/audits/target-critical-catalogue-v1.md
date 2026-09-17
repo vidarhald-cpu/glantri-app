@@ -132,13 +132,18 @@ Average diagnostic burden rises monotonically across bands: `2.66`, `5.15`, `7.9
 `16.72`, `17.17`. The report explains family/location outliers and the exact-rate calibration; no
 quota was used.
 
+The three Bleed-rate distribution columns are derived only from consequences whose semantic is
+`bleed`. Fire/Energy therefore has no Bleed-rate statistics; the whole-body median is `5/12`, the
+Moderate maximum is `1/6`, and the Serious maximum is `1/4 HP/round`. The Fire/Energy `1/4`, `1/3`,
+and `1/2 HP/round` loss rates remain separate, non-Bleed, non-runtime target content.
+
 ## Payload integrity
 
 | File                        | SHA-256                                                            |
 | --------------------------- | ------------------------------------------------------------------ |
 | `catalogue.jsonl`           | `39b9af69bb1452c947197be76dbb609564dc37925f70826f8da7c8268f7c5759` |
 | `source-dispositions.jsonl` | `ac554ef96a59e09df4bd6995e88ed4636f364ee95ccd05f41feaf28f3705051f` |
-| `distribution.csv`          | `df22871649c643609b436c009e3e0dfedf9b2bc299fc2450227a44bff33c1e54` |
+| `distribution.csv`          | `bef8d2c18808f0fed0ce66cd0aa1deaeb81821ceebba3bafd695ff8628b1b139` |
 
 `validation-summary.json` is the machine-readable count and hash record.
 

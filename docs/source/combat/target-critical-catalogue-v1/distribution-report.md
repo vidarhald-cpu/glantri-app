@@ -60,6 +60,11 @@ and no death timer is represented as ordinary Bleed.
 - Lower-leg 15–16 cap: external `1/2`, internal `1/3 HP/round`.
 - Catalogue median among Bleed-bearing results: `1/2 HP/round`.
 
+The `bleed_rate_min`, `bleed_rate_median`, and `bleed_rate_max` columns are calculated only from
+`periodic_loss` consequences whose semantic is `bleed`. Accordingly, Fire/Energy has blank Bleed-rate
+fields, the whole-body median is `5/12`, the Moderate maximum is `1/6`, and the Serious maximum is
+`1/4 HP/round`.
+
 The rate ladder preserves external/internal distinction and anatomy while removing legacy extreme
 dice-per-round tails. Every source starts after one complete subsequent round and retains independent
 treatment state.

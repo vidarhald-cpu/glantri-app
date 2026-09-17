@@ -156,11 +156,11 @@ when their structured condition matches.
 
 The approved non-Bleed content rates are:
 
-| Key          |       Rate | First accrual | End event      |
-| ------------ | ---------: | ------------- | -------------- | ----------------------------------- | ------------------------------------ |
-| `fire_energy | whole_body | 06`           | `1/4 HP/round` | after one complete subsequent round | flames extinguished                  |
-| `fire_energy | whole_body | 09`           | `1/3 HP/round` | after one complete subsequent round | cooling and burn-shock stabilisation |
-| `fire_energy | whole_body | 10`           | `1/2 HP/round` | after one complete subsequent round | airway and circulatory stabilisation |
+| Key                           |           Rate | First accrual                       | End event                            |
+| ----------------------------- | -------------: | ----------------------------------- | ------------------------------------ |
+| `fire_energy\|whole_body\|06` | `1/4 HP/round` | after one complete subsequent round | flames extinguished                  |
+| `fire_energy\|whole_body\|09` | `1/3 HP/round` | after one complete subsequent round | cooling and burn-shock stabilisation |
+| `fire_energy\|whole_body\|10` | `1/2 HP/round` | after one complete subsequent round | airway and circulatory stabilisation |
 
 These are target content only. No current executable non-Bleed periodic loss is authorized.
 
