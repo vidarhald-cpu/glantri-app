@@ -12,7 +12,10 @@ assistant message `7a609190-547b-48ee-a415-419a8701531d`, approved for durable
 transcription on 2026-09-15. The latest explicit Product Owner clarification
 permits **zero or more** required Skill rolls and **zero or more** required Stat
 rolls in section 5.2, superseding the source's “one or more” wording. This is an
-approved specification, not a claim of implemented mechanics.
+approved specification, not a claim of implemented mechanics. The Product Owner's
+2026-09-17 Combat Declaration UX ruling further controls the single player-facing
+declaration surface, Perform Task adjudication boundary, secondary-action details,
+movement fields, and adjacent Item-location dependency recorded below.
 
 ## 1. Core principle
 
@@ -23,6 +26,21 @@ It does **not** assert that the plan is feasible, legal in the current physical 
 Players declare their intentions without seeing the other players' declarations. This permits effectively simultaneous declaration of intent while giving the GM the information needed to resolve the round.
 
 The application should assist declaration through sensible defaults and pre-population, but should avoid enforcing combinations that require a complete simulation of the physical situation.
+
+Player Combat has one declaration system:
+
+> **Primary Action + Secondary Action + Movement**
+
+Relative position, movement direction, facing, and action-specific details are
+structured parts of those three dimensions. There must not be a parallel
+player-facing `Actions and tasks`, generic-action, or similar declaration workflow.
+Players record intent here; the GM adjudicates it through the established Combat
+workflow.
+
+The current standalone player panel that combines `Items in this Combat`, generic
+action/task declaration, Skill or Perception selection, Difficulty, and timing is a
+known nonconforming surface. It is not part of the target declaration architecture.
+Removing or replacing it requires separately authorized implementation.
 
 For example:
 
@@ -100,6 +118,20 @@ The declaration must contain a description of what the character is attempting.
 
 Perform Task uses the shared **Combat Task** structure defined below.
 
+`Perform Task` is selected through the ordinary Primary Action selector. It must not
+open or depend on a separate generic-task declaration panel.
+
+The player describes the intended task. The player does not select the authoritative
+Skill, Difficulty, success or failure, timing, or mechanical outcome. The GM later
+adjudicates the declaration through the normal Combat workflow and may:
+
+- select or attach an appropriate Skill or roll;
+- set Difficulty;
+- attach timing or round requirements where appropriate; and
+- determine what the attempt reveals or changes.
+
+The player-facing declaration must not require the player to make those GM decisions.
+
 ### 3.4 Break Off Combat
 
 `Break Off Combat` is a specific combat manoeuvre, not simply backward movement.
@@ -121,6 +153,7 @@ Secondary Action choices are:
 - **Pass**
 - **Observe**
 - **Shout / Talk**
+- **Equip / Unequip**
 - **Small Action**
 
 A secondary action is attempted alongside the character's primary action.
@@ -146,17 +179,37 @@ Observe is distinct from general perception/searching.
 
 The character attempts meaningful communication during the combat round.
 
-The UI may provide a specification/comment field where useful.
+Its declaration context should expose:
 
-### 4.4 Small Action
+- a structured utterance-type selector; and
+- a short text field containing what the character says.
+
+This is a declaration aid, not a separate communications subsystem. The exact
+utterance-type vocabulary is not yet approved and must not be invented during
+implementation.
+
+### 4.4 Equip / Unequip
+
+`Equip / Unequip` records an intended equipment manipulation in a short text field.
+Examples include:
+
+- drawing or sheathing a weapon;
+- dropping a weapon or shield;
+- picking up an Item; and
+- switching equipment.
+
+The declaration does not change authoritative equipment state. During adjudication,
+the GM may apply the equipment change through the ordinary controls, determine that
+it cannot be completed as declared, or decide that the circumstances make it a task
+requiring a roll or Difficulty. This declaration contract does not create bespoke
+mechanical resolution for individual equipment manipulations.
+
+### 4.5 Small Action
 
 A Small Action is a limited activity that the character attempts while continuing to perform their primary action.
 
 Examples include:
 
-- picking up an item;
-- moving or manipulating an item;
-- drawing or sheathing a weapon;
 - holding onto a rope;
 - pushing a door closed;
 - similar minor physical activity.
@@ -196,6 +249,9 @@ A Combat Task should support at least:
 - optional additional comment.
 
 The action panel should expose the task description directly. Task specification should not depend solely on a general-purpose combat comment field.
+
+These are declaration facts. Required Skill or Stat rolls, Difficulty, authoritative
+timing, progress, success, failure, and mechanical outcome remain GM-controlled.
 
 ### 5.2 GM-controlled resolution information
 
@@ -293,13 +349,13 @@ Movement Direction records the absolute direction in which the character intends
 Choices are:
 
 - Forward
-- Forward-right
+- Forward/right
 - Right
-- Back-right
+- Backward/right
 - Backward
-- Back-left
+- Backward/left
 - Left
-- Forward-left
+- Forward/left
 - None / blank
 
 Relative-position intentions and absolute movement direction may be declared together.
@@ -311,6 +367,10 @@ For example, a character may declare:
 > Adjust distance toward an opponent + move forward-right.
 
 Whether that movement actually reduces the distance depends on the situation.
+
+Player-facing movement declaration does not include generic `How` or `Expected time`
+fields. Such fields require a separate approved game rule. The declaration UI does
+not reject movement merely because the current situation may make it impossible.
 
 ---
 
@@ -339,7 +399,44 @@ A character may therefore:
 
 ---
 
-## 9. Defaults and declaration carry-forward
+## 9. Item ownership and location dependency
+
+Combat consumes ordinary Character and Encounter Item state. It does not create a
+third `Items in Combat` ownership or location model.
+
+An Item given to a Character enters that Character's ordinary inventory and should
+normally default to being on the character's person. Receipt must not create a
+special Combat questionnaire or player reconciliation workflow. Equipping, wielding,
+dropping, and similar changes use ordinary Character/Combat controls and GM
+adjudication.
+
+Items physically present in an Encounter belong to the Encounter context. The GM may
+see Encounter Items, while players may see only Encounter Items visible to them.
+
+The controlling cross-domain contracts remain:
+
+- [Canonical Field Equipment v1 authority](../decisions/architecture/0004-canonical-field-equipment-v1.md)
+  for durable Item identity, Character inventory, Scenario projection, pickup,
+  transfer, drop, and authoritative mutation; and
+- [Campaign, Scenario, and Encounter workflows](../product/campaign-scenario-encounter-workflows.md)
+  for Encounter ownership, visibility, and the single Player Combat surface.
+
+This declaration document records only how Combat refers to those states. It does not
+implement or redefine Item persistence or equipment mechanics.
+
+### 9.1 Existing cross-domain wording to reconcile
+
+The current Field Equipment and Scenario workflow documents describe an unheld
+Campaign-context Item that is made available in a Scenario. The later Product Owner
+ruling above states that an Item physically present in an Encounter belongs to that
+Encounter context. Future Equipment/Encounter activation must reconcile those two
+descriptions without creating a separate Combat Item identity or ownership system.
+This documentation task records the conflict and the later target rule; it does not
+choose a persistence representation or migration.
+
+---
+
+## 10. Defaults and declaration carry-forward
 
 Combat selectors must **not start blank every round by default**.
 
@@ -369,7 +466,7 @@ It is a suggested continuation of intent, not an automatic declaration.
 
 The same behaviour applies to PCs and GM-controlled NPCs.
 
-### 9.1 Persistent tasks
+### 10.1 Persistent tasks
 
 An ongoing Combat Task is not merely copied as a new task.
 
@@ -382,7 +479,7 @@ Its existing identity and state continue across rounds, including:
 
 The new declaration allows the character to continue the ongoing task or abandon/change it.
 
-### 9.2 Invalid or stale previous choices
+### 10.2 Invalid or stale previous choices
 
 The application must not silently substitute another choice.
 
@@ -390,7 +487,7 @@ For example, if the previous target is no longer valid, it must not automaticall
 
 The old choice may be displayed as unavailable or require correction.
 
-### 9.3 Action-based defaults
+### 10.3 Action-based defaults
 
 When no previous declaration provides an appropriate value, selecting an action may pre-populate sensible related choices.
 
@@ -404,7 +501,7 @@ These are suggestions only. The player may override them.
 
 ---
 
-## 10. Declaration versus resolution
+## 11. Declaration versus resolution
 
 The declaration UI should remain permissive.
 
@@ -428,7 +525,7 @@ This separation is intentional.
 
 ---
 
-## 11. Perception and visibility — deferred
+## 12. Perception and visibility — deferred
 
 General perception/searching may later use the Combat Task mechanism.
 

@@ -52,6 +52,8 @@ does not change the current runtime or the historical C1 evidence recorded above
 
 ## Maintainer Indexes
 
+- [Combat Declarations](./combat-declarations.md) — approved player/GM declaration
+  choices, structured intent, movement, and adjudication boundary.
 - [Combat Action Rule Inventory](./combat-action-rule-inventory.md) — source extraction,
   classification, implementation status, and unresolved Combat reconciliation.
 - [Source Mapping](./source-mapping.md) — checked-in source files and their mapped app structures.
