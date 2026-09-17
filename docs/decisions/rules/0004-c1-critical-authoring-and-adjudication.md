@@ -6,7 +6,7 @@
 - Related issues: Forgejo #51; recovered Forgejo #3–#6; former GitHub #391–#394
 - Complements: [decision 0001](./0001-c1-critical-injury-recalibration.md)
 - Supersedes: ambiguous pre-recovery C1 atom and GM-review assumptions
-- Superseded by: none
+- Superseded by: [decision 0005](./0005-critical-effect-semantics-and-timing.md) for named Stunned/Dazed values, additive source stacking, fixed-round duration semantics, future Bleed/Health cadence, and source-specific treatment dependencies; all other authority remains in force
 
 ## Question
 
@@ -25,6 +25,12 @@ Forgejo #51 are frozen separately in
 
 This is a documentation and recovery ruling. It does not change runtime behavior, schemas,
 databases, fixtures, adapters, or Combat Manager.
+
+> **Successor boundary:** [Decision 0005](./0005-critical-effect-semantics-and-timing.md)
+> defines the approved target effect model. In particular, Stunned is now one named General `-4`
+> effect, Dazed is a separate General `-2` effect, and future fixed durations do not consume the
+> creation round. The older C1 rules below remain historical/current implementation evidence until
+> separately authorized reconciliation; they do not override the successor target.
 
 ## Canonical authoring model
 
@@ -64,6 +70,10 @@ the action's canonical dependency metadata.
 
 ## Exact GM adjudication authority
 
+The following authority describes the accepted historical/current C1 payload. Decision 0005
+supersedes its variable-Stun choice for future catalogue authoring; no current payload is changed by
+this documentation update.
+
 For one proposed Critical instance, the GM may:
 
 - suppress a `modifier` Stun atom;
@@ -92,7 +102,7 @@ audit facts. An unchanged canonical proposal emits no override telemetry. A pros
 mechanical override telemetry. Player-safe projections show accepted current consequences, not
 suppressed atoms or private reasons.
 
-## Stun contract
+## Historical C1 Stun contract — target superseded
 
 Numeric Stun has exactly four permitted values: `-1`, `-2`, `-4`, and `-8`. One Stun atom projects
 the same value to all three channels:
@@ -104,6 +114,10 @@ the same value to all three channels:
 Separate Stun sources add. There is no generic cap. Each source retains identity, duration, onset,
 and independent resolution. Numeric Stun is not unconsciousness and does not manufacture collapse,
 no-action, parry-only, or function loss. Those require their own typed conditions or operations.
+
+This section records the existing C1 contract only. Decision 0005 supersedes it for future target
+authoring: Stunned is General `-4`, Dazed is General `-2`, and any other historical numeric row must
+be reconciled deliberately rather than retaining the Stunned name automatically.
 
 ## Ordinary Bleed contract
 

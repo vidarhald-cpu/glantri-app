@@ -44,6 +44,12 @@ GM-adjudication contract is
 [decision 0004](../decisions/rules/0004-c1-critical-authoring-and-adjudication.md); its exact five-key
 payload is non-executable recovery evidence until separately authorized implementation work lands.
 
+The approved future Critical and shared-effect target is
+[decision 0005](../decisions/rules/0005-critical-effect-semantics-and-timing.md). It defines
+Stunned/Dazed, source-preserving stacking, canonical complete-round duration, C1-style future Bleed,
+source-specific treatment, and the full-catalogue structure. It is documentation authority only and
+does not change the current runtime or the historical C1 evidence recorded above.
+
 ## Maintainer Indexes
 
 - [Combat Action Rule Inventory](./combat-action-rule-inventory.md) — source extraction,
