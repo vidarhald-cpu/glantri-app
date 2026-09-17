@@ -997,12 +997,6 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       accessMode !== "none" &&
       workspaceState.activeTab === "campaign" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
-          <LivePlayPanel
-            buildWorkspaceHref={buildWorkspaceHref}
-            canAccessGmEncounter={canAccessGmEncounter}
-            encounters={encounterSummaries}
-            scenarios={liveScenarios}
-          />
           {canAccessGmEncounter ? (
             <CampaignDetailPageContent
               campaignId={campaignId}
@@ -1011,6 +1005,12 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
             />
           ) : (
             <section style={{ display: "grid", gap: "1rem" }}>
+              <LivePlayPanel
+                buildWorkspaceHref={buildWorkspaceHref}
+                canAccessGmEncounter={canAccessGmEncounter}
+                encounters={encounterSummaries}
+                scenarios={liveScenarios}
+              />
               <section style={panelStyle}>
                 <h2 style={{ margin: 0 }}>{accessibleCampaign?.name ?? "Campaign"}</h2>
                 <div>

@@ -26,7 +26,8 @@ describe("CampaignDetailPageContent roster UI", () => {
     const source = readCampaignDetailSource();
 
     expect(source).toContain("Roster membership filter");
-    expect(source).toContain("Members");
+    expect(source).toContain("Current / prominent");
+    expect(source).toContain("Former PCs");
     expect(source).toContain("Other campaigns");
     expect(source).toContain("Roster type filter");
     expect(source).toContain("All types");
@@ -37,7 +38,7 @@ describe("CampaignDetailPageContent roster UI", () => {
     expect(source).toContain("All professions");
     expect(source).toContain("All skill groups");
     expect(source).toContain("Search roster candidates");
-    expect(source).toMatch(/>\s*Member\s*<\/th>/);
+    expect(source).toMatch(/>\s*Current\s*<\/th>/);
     expect(source).toMatch(/>\s*Name\s*<\/th>/);
     expect(source).toMatch(/>\s*Type\s*<\/th>/);
     expect(source).toMatch(/>\s*Civilization\s*<\/th>/);
@@ -90,11 +91,12 @@ describe("CampaignDetailPageContent roster UI", () => {
     expect(source).toContain(">Action</th>");
   });
 
-  it("shows closed Scenario history while omitting archived Scenarios from the ordinary list", () => {
+  it("supports explicit closed and archived Scenario history filters", () => {
     const source = readCampaignDetailSource();
 
-    expect(source).toContain('scenario.status !== "archived"');
     expect(source).toContain('scenario.status === "completed"');
     expect(source).toContain("Closed · history");
+    expect(source).toContain('<option value="archived">Archived</option>');
+    expect(source).toContain("filteredScenarios.map");
   });
 });

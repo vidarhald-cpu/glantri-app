@@ -1,18 +1,23 @@
-import type {
-  AccessibleCampaignRecord,
-  Campaign,
-  CampaignAsset,
-  CampaignCharacterRosterCandidate,
-  CampaignRosterCategory,
-  CampaignRosterEntry,
-  CampaignRosterSourceType,
-  ReusableEntity,
-  Scenario,
-  ScenarioRelationship,
-  PlayerCampaignHomeRecord,
+import {
+  campaignNoteSchema,
+  type AccessibleCampaignRecord,
+  type Campaign,
+  type CampaignAsset,
+  type CampaignCharacterRosterCandidate,
+  type CampaignNote,
+  type CampaignNoteReference,
+  type CampaignNoteStatus,
+  type CampaignRosterCategory,
+  type CampaignRosterEntry,
+  type CampaignRosterSourceType,
+  type CampaignWorkspaceOverview,
+  type ReusableEntity,
+  type Scenario,
+  type ScenarioRelationship,
+  type PlayerCampaignHomeRecord,
 } from "@glantri/domain";
 
-import { sendJson } from "./apiClient";
+import { ApiRequestError, sendJson } from "./apiClient";
 
 export type { AccessibleCampaignRecord };
 
@@ -201,6 +206,74 @@ export async function loadCampaignRoster(campaignId: string): Promise<CampaignRo
   );
 
   return payload.roster;
+}
+
+export async function loadCampaignWorkspaceOverview(
+  campaignId: string,
+): Promise<CampaignWorkspaceOverview> {
+  const payload = await sendJson<{ overview: CampaignWorkspaceOverview }>(
+    `/campaigns/${campaignId}/workspace-overview`,
+    { method: "GET" },
+  );
+  return payload.overview;
+}
+
+export async function createCampaignNoteOnServer(input: {
+  campaignId: string;
+  content: string;
+  reference?: CampaignNoteReference;
+}): Promise<CampaignNote> {
+  const payload = await sendJson<{ note: CampaignNote }>(`/campaigns/${input.campaignId}/notes`, {
+    body: JSON.stringify({ content: input.content, reference: input.reference }),
+    method: "POST",
+  });
+  return payload.note;
+}
+
+export async function updateCampaignNoteOnServer(input: {
+  campaignId: string;
+  content: string;
+  expectedRevision: string;
+  noteId: string;
+  reference?: CampaignNoteReference;
+}): Promise<CampaignNote> {
+  const payload = await sendJson<{ note: CampaignNote }>(
+    `/campaigns/${input.campaignId}/notes/${input.noteId}`,
+    {
+      body: JSON.stringify({
+        content: input.content,
+        expectedRevision: input.expectedRevision,
+        reference: input.reference ?? null,
+      }),
+      method: "PUT",
+    },
+  );
+  return payload.note;
+}
+
+export async function setCampaignNoteStatusOnServer(input: {
+  campaignId: string;
+  expectedRevision: string;
+  noteId: string;
+  status: CampaignNoteStatus;
+}): Promise<CampaignNote> {
+  const payload = await sendJson<{ note: CampaignNote }>(
+    `/campaigns/${input.campaignId}/notes/${input.noteId}/status`,
+    {
+      body: JSON.stringify({ expectedRevision: input.expectedRevision, status: input.status }),
+      method: "POST",
+    },
+  );
+  return payload.note;
+}
+
+export function getCurrentCampaignNoteFromMutationConflict(
+  error: unknown,
+): CampaignNote | undefined {
+  if (!(error instanceof ApiRequestError) || error.status !== 409) return undefined;
+  const currentNote = (error.payload as { currentNote?: unknown } | undefined)?.currentNote;
+  const parsed = campaignNoteSchema.safeParse(currentNote);
+  return parsed.success ? parsed.data : undefined;
 }
 
 export async function loadCampaignCharacterRosterCandidates(

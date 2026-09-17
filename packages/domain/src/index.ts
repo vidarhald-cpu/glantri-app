@@ -8,6 +8,7 @@ export * from "./character/progression";
 export * from "./character/statLayers";
 export * from "./character/retainedCharacter";
 export * from "./campaign/scenario";
+export * from "./campaign/campaignManagement";
 export * from "./campaign/artifact";
 export * from "./campaign/blackboard";
 export * from "./campaign/scenarioSession";

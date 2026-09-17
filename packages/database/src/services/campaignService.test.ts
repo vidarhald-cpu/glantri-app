@@ -168,7 +168,7 @@ describe("CampaignService activation", () => {
     expect(next.status).toBe("active");
   });
 
-  it("lets a permitted admin activate a draft Campaign", async () => {
+  it("does not let an unrelated admin activate another GM's draft Campaign", async () => {
     const { campaigns, repository } = createScenarioRepositoryStub();
     const draftCampaign = {
       ...makeCampaign({
@@ -183,13 +183,14 @@ describe("CampaignService activation", () => {
       campaignId === draftCampaign.id ? draftCampaign : null;
     const service = new CampaignService(repository);
 
-    const next = await service.activateCampaign({
-      actorIsAdmin: true,
-      actorUserId: "admin-1",
-      campaignId: draftCampaign.id,
-    });
-
-    expect(next.status).toBe("active");
+    await expect(
+      service.activateCampaign({
+        actorIsAdmin: true,
+        actorUserId: "admin-1",
+        campaignId: draftCampaign.id,
+      }),
+    ).rejects.toThrow("Campaign not found.");
+    expect(draftCampaign.status).toBe("draft");
   });
 
   it("prevents non-managing users from changing campaign status", async () => {
@@ -347,20 +348,26 @@ describe("CampaignService campaign roster", () => {
     expect(candidates).toEqual([
       {
         alreadyRostered: false,
+        currentElsewhere: false,
         id: "character-1",
+        membershipState: "none",
         name: "Ari",
         ownerLabel: "You",
       },
       {
         alreadyRostered: true,
+        currentElsewhere: false,
         id: "character-2",
+        membershipState: "current",
         name: "Bryn",
         ownerLabel: "Player Two",
       },
     ]);
     expect(Object.keys(candidates[0] ?? {}).sort()).toEqual([
       "alreadyRostered",
+      "currentElsewhere",
       "id",
+      "membershipState",
       "name",
       "ownerLabel",
     ]);
@@ -560,7 +567,7 @@ describe("CampaignService campaign roster", () => {
     expect(rosterEntries).toEqual([]);
   });
 
-  it("allows the owning GM and an admin to link a campaign-bound reusable NPC", async () => {
+  it("allows the owning GM but not an unrelated admin to link a campaign-bound reusable NPC", async () => {
     const { repository, rosterEntries } = createScenarioRepositoryStub();
     const campaign = makeCampaign({ gmUserId: "gm-owner", id: "campaign-a" });
     const privateNpc: ReusableEntity = {
@@ -586,17 +593,18 @@ describe("CampaignService campaign roster", () => {
       sourceId: privateNpc.id,
       sourceType: "reusableEntity",
     });
-    const adminEntry = await service.addCampaignRosterEntry({
-      actorIsAdmin: true,
-      actorUserId: "admin-1",
-      campaignId: campaign.id,
-      category: "npc",
-      sourceId: privateNpc.id,
-      sourceType: "reusableEntity",
-    });
+    await expect(
+      service.addCampaignRosterEntry({
+        actorIsAdmin: true,
+        actorUserId: "admin-1",
+        campaignId: campaign.id,
+        category: "npc",
+        sourceId: privateNpc.id,
+        sourceType: "reusableEntity",
+      }),
+    ).rejects.toThrow("Reusable entity not found.");
 
     expect(ownerEntry.labelSnapshot).toBe(privateNpc.name);
-    expect(adminEntry.id).toBe(ownerEntry.id);
     expect(rosterEntries).toEqual([ownerEntry]);
   });
 
@@ -678,7 +686,7 @@ describe("CampaignService campaign roster", () => {
     expect(rosterEntries).toHaveLength(0);
   });
 
-  it("keeps roster membership scoped to each campaign/source pair", async () => {
+  it("keeps one current membership while preserving a former Campaign relationship", async () => {
     const { repository, rosterEntries } = createScenarioRepositoryStub();
     const characters = new Map([
       ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })],
@@ -699,6 +707,10 @@ describe("CampaignService campaign roster", () => {
       sourceId: "character-1",
       sourceType: "character",
     });
+    await service.removeCampaignRosterEntry({
+      campaignId: "campaign-1",
+      rosterEntryId: campaignOneEntry.id,
+    });
     const campaignTwoEntry = await service.addCampaignRosterEntry({
       campaignId: "campaign-2",
       category: "pc",
@@ -709,12 +721,22 @@ describe("CampaignService campaign roster", () => {
     expect(campaignOneDuplicate.id).toBe(campaignOneEntry.id);
     expect(campaignTwoEntry.id).not.toBe(campaignOneEntry.id);
     expect(rosterEntries).toHaveLength(2);
-    await expect(service.listCampaignRosterEntries("campaign-1")).resolves.toEqual([
-      campaignOneEntry,
+    expect(rosterEntries[0]?.membershipState).toBe("former");
+    await expect(service.listCampaignRosterEntries("campaign-1")).resolves.toEqual([]);
+    await expect(service.listCampaignRosterHistoryEntries("campaign-1")).resolves.toEqual([
+      expect.objectContaining({ id: campaignOneEntry.id, membershipState: "former" }),
     ]);
     await expect(service.listCampaignRosterEntries("campaign-2")).resolves.toEqual([
       campaignTwoEntry,
     ]);
+    await expect(
+      service.addCampaignRosterEntry({
+        campaignId: "campaign-1",
+        category: "pc",
+        sourceId: "character-1",
+        sourceType: "character",
+      }),
+    ).rejects.toMatchObject({ activeCampaignId: "campaign-2" });
   });
 
   it("removes roster membership by campaign source identity", async () => {
@@ -764,8 +786,13 @@ describe("CampaignService campaign roster", () => {
       }),
     ).resolves.toEqual({ removed: true });
 
-    expect(rosterEntries).toHaveLength(1);
-    expect(rosterEntries[0]?.sourceType).toBe("template");
+    expect(rosterEntries).toHaveLength(2);
+    expect(rosterEntries.find((entry) => entry.sourceType === "character")?.membershipState).toBe(
+      "former",
+    );
+    await expect(service.listCampaignRosterEntries("campaign-1")).resolves.toEqual([
+      expect.objectContaining({ sourceType: "template" }),
+    ]);
 
     await expect(
       service.removeCampaignRosterEntryBySource({
@@ -782,7 +809,12 @@ describe("CampaignService campaign roster", () => {
       }),
     ).resolves.toEqual({ removed: false });
 
-    expect(rosterEntries).toHaveLength(0);
+    expect(rosterEntries).toHaveLength(1);
+    expect(rosterEntries[0]).toMatchObject({
+      membershipState: "former",
+      sourceId: "character-1",
+      sourceType: "character",
+    });
     expect(characters.get("character-1")?.name).toBe("Ari");
     expect(reusableEntities.get("template-1")?.name).toBe("Bandit Template");
   });
@@ -802,7 +834,7 @@ describe("CampaignService campaign roster", () => {
     expect(rosterEntries).toHaveLength(0);
   });
 
-  it("removes only roster links and leaves source characters and templates available", async () => {
+  it("preserves former PC history while removing NPC/template prominence links", async () => {
     const { repository, rosterEntries } = createScenarioRepositoryStub();
     const characters = new Map([
       ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })],
@@ -850,7 +882,13 @@ describe("CampaignService campaign roster", () => {
       rosterEntryId: templateEntry.id,
     });
 
-    expect(rosterEntries).toHaveLength(0);
+    expect(rosterEntries).toHaveLength(1);
+    expect(rosterEntries[0]).toMatchObject({
+      membershipState: "former",
+      sourceId: "character-1",
+      sourceType: "character",
+    });
+    await expect(service.listCampaignRosterEntries("campaign-1")).resolves.toEqual([]);
     expect(characters.get("character-1")?.name).toBe("Ari");
     expect(reusableEntities.get("template-1")?.name).toBe("Bandit Template");
 

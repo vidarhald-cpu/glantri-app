@@ -78,7 +78,9 @@ test.describe("campaign workspace", () => {
 
     await page.goto(`/campaigns/${testState.campaignId}`);
 
-    await expect(page.getByText("Smoke Test Campaign")).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.getByRole("heading", { name: "Smoke Test Campaign", exact: true }),
+    ).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText("Smoke Test Scenario", { exact: true })).toBeVisible({
       timeout: 10_000,
     });
@@ -123,13 +125,17 @@ test.describe("campaign workspace", () => {
 
     expect(otherPlayerCharacter).toEqual({
       alreadyRostered: false,
+      currentElsewhere: false,
       id: candidateCharacterId,
+      membershipState: "none",
       name: candidateCharacterName,
       ownerLabel: "Smoke Non-holder",
     });
     expect(Object.keys(otherPlayerCharacter ?? {}).sort()).toEqual([
       "alreadyRostered",
+      "currentElsewhere",
       "id",
+      "membershipState",
       "name",
       "ownerLabel",
     ]);

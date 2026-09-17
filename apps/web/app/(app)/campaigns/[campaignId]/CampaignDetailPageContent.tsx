@@ -7,6 +7,7 @@ import { defaultCanonicalContent } from "@glantri/content";
 import type {
   Campaign,
   CampaignCharacterRosterCandidate,
+  CampaignWorkspaceOverview,
   CampaignRosterEntry,
   ReusableEntity,
   Scenario,
@@ -24,12 +25,16 @@ import {
   loadCampaignRoster,
   loadCampaignScenarioRelationships,
   loadCampaignScenarios,
+  loadCampaignWorkspaceOverview,
   loadTemplates,
   removeCampaignRosterEntryOnServer,
 } from "@/lib/api/localServiceClient";
 import { getCampaignActorMetadata } from "@/lib/campaigns/campaignActors";
 import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 import { ArtifactPanel } from "@/features/artifacts";
+import { ApiRequestError } from "@/lib/api/apiClient";
+import { CampaignHomeOverview } from "./CampaignHomeOverview";
+import { CampaignNotesPanel } from "./CampaignNotesPanel";
 
 interface CampaignDetailPageContentProps {
   campaignId: string;
@@ -37,13 +42,13 @@ interface CampaignDetailPageContentProps {
   onWorkspaceScenariosChanged?: (scenarios: Scenario[]) => void;
 }
 
-type RosterMembershipFilter = "all" | "inCampaign" | "otherCampaigns";
+type RosterMembershipFilter = "all" | "current" | "former" | "otherCampaigns" | "available";
 type RosterTypeFilter = "all" | "pcs" | "npcs" | "templates" | "monsters" | "other";
 
 interface RosterCandidate {
   category: CampaignRosterEntry["category"];
   civilizationLabel: string;
-  membership: "inCampaign" | "otherCampaigns" | "available";
+  membership: Exclude<RosterMembershipFilter, "all">;
   professionLabel: string;
   skillGroups: string[];
   typeFilter: RosterTypeFilter;
@@ -190,6 +195,7 @@ export default function CampaignDetailPageContent({
   onWorkspaceScenariosChanged,
 }: CampaignDetailPageContentProps) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [overview, setOverview] = useState<CampaignWorkspaceOverview | null>(null);
   const [characters, setCharacters] = useState<CampaignCharacterRosterCandidate[]>([]);
   const [entities, setEntities] = useState<ReusableEntity[]>([]);
   const [error, setError] = useState<string>();
@@ -206,6 +212,10 @@ export default function CampaignDetailPageContent({
   const [rosterSearch, setRosterSearch] = useState("");
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [scenarioRelationships, setScenarioRelationships] = useState<ScenarioRelationship[]>([]);
+  const [scenarioSearch, setScenarioSearch] = useState("");
+  const [scenarioStatusFilter, setScenarioStatusFilter] = useState<"all" | Scenario["status"]>(
+    "all",
+  );
   const [templates, setTemplates] = useState<ReusableEntity[]>([]);
 
   const [scenarioName, setScenarioName] = useState("");
@@ -236,12 +246,19 @@ export default function CampaignDetailPageContent({
     const characterCandidates = characters.map((character): RosterCandidate => {
       const sourceKey = buildRosterSourceKey("character", character.id);
       const rosterEntry = rosterBySourceKey.get(sourceKey);
-      const member = character.alreadyRostered || Boolean(rosterEntry);
+      const membershipState = rosterEntry?.membershipState ?? character.membershipState ?? "none";
+      const member = membershipState === "current" || character.alreadyRostered;
 
       return {
         category: "pc",
         civilizationLabel: "—",
-        membership: member ? "inCampaign" : "available",
+        membership: member
+          ? "current"
+          : membershipState === "former"
+            ? "former"
+            : character.currentElsewhere
+              ? "otherCampaigns"
+              : "available",
         professionLabel: "—",
         skillGroups: [],
         typeFilter: "pcs",
@@ -269,7 +286,7 @@ export default function CampaignDetailPageContent({
           category: "npc",
           civilizationLabel: getCivilizationDisplayName(snapshotMetadata.civilizationLabel),
           membership: rosterEntry
-            ? "inCampaign"
+            ? "current"
             : otherRosterSourceKeys.has(sourceKey)
               ? "otherCampaigns"
               : "available",
@@ -296,7 +313,7 @@ export default function CampaignDetailPageContent({
         category: "template",
         civilizationLabel: getCivilizationDisplayName(snapshotMetadata.civilizationLabel),
         membership: rosterEntry
-          ? "inCampaign"
+          ? "current"
           : otherRosterSourceKeys.has(sourceKey)
             ? "otherCampaigns"
             : "available",
@@ -407,21 +424,39 @@ export default function CampaignDetailPageContent({
       ),
     [scenarios],
   );
-  const visibleScenarios = useMemo(
+  const continuationScenarios = useMemo(
     () => orderedScenarios.filter((scenario) => scenario.status !== "archived"),
     [orderedScenarios],
   );
+  const filteredScenarios = useMemo(() => {
+    const search = scenarioSearch.trim().toLowerCase();
+    return orderedScenarios.filter(
+      (scenario) =>
+        (scenarioStatusFilter === "all" || scenario.status === scenarioStatusFilter) &&
+        (!search ||
+          scenario.name.toLowerCase().includes(search) ||
+          scenario.description.toLowerCase().includes(search)),
+    );
+  }, [orderedScenarios, scenarioSearch, scenarioStatusFilter]);
 
   async function refreshPage() {
-    const [nextCampaign, nextScenarios, nextEntities, nextTemplates, nextRoster, nextCharacters] =
-      await Promise.all([
-        loadCampaignById(campaignId),
-        loadCampaignScenarios(campaignId),
-        loadCampaignEntities(campaignId),
-        loadTemplates(),
-        loadCampaignRoster(campaignId),
-        loadCampaignCharacterRosterCandidates(campaignId),
-      ]);
+    const [
+      nextCampaign,
+      nextScenarios,
+      nextEntities,
+      nextTemplates,
+      nextRoster,
+      nextCharacters,
+      nextOverview,
+    ] = await Promise.all([
+      loadCampaignById(campaignId),
+      loadCampaignScenarios(campaignId),
+      loadCampaignEntities(campaignId),
+      loadTemplates(),
+      loadCampaignRoster(campaignId),
+      loadCampaignCharacterRosterCandidates(campaignId),
+      loadCampaignWorkspaceOverview(campaignId),
+    ]);
     const nextScenarioRelationships = await loadCampaignScenarioRelationships(campaignId).catch(
       () => [],
     );
@@ -435,6 +470,7 @@ export default function CampaignDetailPageContent({
       .catch(() => nextRoster);
 
     setCampaign(nextCampaign);
+    setOverview(nextOverview);
     setScenarios(nextScenarios);
     setScenarioRelationships(nextScenarioRelationships);
     onWorkspaceScenariosChanged?.(nextScenarios);
@@ -452,6 +488,12 @@ export default function CampaignDetailPageContent({
   useEffect(() => {
     refreshPage()
       .catch((caughtError) => {
+        if (
+          caughtError instanceof ApiRequestError &&
+          [401, 403, 404].includes(caughtError.status)
+        ) {
+          clearPrivateCampaignState();
+        }
         setError(caughtError instanceof Error ? caughtError.message : "Unable to load campaign.");
       })
       .finally(() => setLoading(false));
@@ -507,7 +549,11 @@ export default function CampaignDetailPageContent({
           sourceType: candidate.sourceType,
         });
 
-        setFeedback(`Linked ${entry.labelSnapshot ?? candidate.name} to the campaign roster.`);
+        setFeedback(
+          candidate.sourceType === "character"
+            ? `Marked ${entry.labelSnapshot ?? candidate.name} as a current PC.`
+            : `Marked ${entry.labelSnapshot ?? candidate.name} as Campaign-relevant.`,
+        );
         setRoster((current) =>
           current.some((rosterEntry) => rosterEntry.id === entry.id)
             ? current
@@ -541,7 +587,11 @@ export default function CampaignDetailPageContent({
           sourceType: removalSource.sourceType,
         });
 
-        setFeedback(`Removed ${candidate.name} from the campaign roster.`);
+        setFeedback(
+          candidate.sourceType === "character"
+            ? `Marked ${candidate.name} as a former PC. Campaign history is unchanged.`
+            : `Removed ${candidate.name} from the prominent Campaign roster.`,
+        );
         setRoster((current) =>
           removeRosterSourceFromList(current, {
             campaignId,
@@ -563,6 +613,15 @@ export default function CampaignDetailPageContent({
         caughtError instanceof Error ? caughtError.message : "Unable to update campaign roster.",
       );
     }
+  }
+
+  function clearPrivateCampaignState() {
+    setOverview(null);
+    setRoster([]);
+    setAllRosterEntries([]);
+    setCharacters([]);
+    setEntities([]);
+    setCampaign(null);
   }
 
   function getContinuationLabel(scenarioId: string): string {
@@ -634,6 +693,19 @@ export default function CampaignDetailPageContent({
       {error ? <div>{error}</div> : null}
       {feedback ? <div>{feedback}</div> : null}
 
+      {overview ? <CampaignHomeOverview overview={overview} /> : null}
+      {overview ? (
+        <CampaignNotesPanel
+          campaignId={campaignId}
+          notes={overview.notes}
+          onAuthorizationLoss={clearPrivateCampaignState}
+          onNotesChanged={(notes) =>
+            setOverview((current) => (current ? { ...current, notes } : current))
+          }
+          references={overview.references}
+        />
+      ) : null}
+
       <section
         style={{
           border: "1px solid #d9ddd8",
@@ -660,8 +732,10 @@ export default function CampaignDetailPageContent({
             value={rosterMembershipFilter}
           >
             <option value="all">All</option>
-            <option value="inCampaign">Members</option>
+            <option value="current">Current / prominent</option>
+            <option value="former">Former PCs</option>
             <option value="otherCampaigns">Other campaigns</option>
+            <option value="available">Available</option>
           </select>
           <select
             aria-label="Roster type filter"
@@ -733,7 +807,7 @@ export default function CampaignDetailPageContent({
                       top: 0,
                     }}
                   >
-                    Member
+                    Current
                   </th>
                   <th
                     style={{
@@ -841,7 +915,7 @@ export default function CampaignDetailPageContent({
           value={continuesFromScenarioId}
         >
           <option value="">No previous scenario</option>
-          {visibleScenarios.map((scenario) => (
+          {continuationScenarios.map((scenario) => (
             <option key={scenario.id} value={scenario.id}>
               Continues from {scenario.name}
             </option>
@@ -862,7 +936,30 @@ export default function CampaignDetailPageContent({
             encounters that belong to that session.
           </p>
         ) : null}
-        {visibleScenarios.length > 0 ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+          <input
+            aria-label="Search Scenarios"
+            onChange={(event) => setScenarioSearch(event.target.value)}
+            placeholder="Search Scenarios"
+            type="search"
+            value={scenarioSearch}
+          />
+          <select
+            aria-label="Scenario lifecycle filter"
+            onChange={(event) =>
+              setScenarioStatusFilter(event.target.value as "all" | Scenario["status"])
+            }
+            value={scenarioStatusFilter}
+          >
+            <option value="all">All lifecycle states</option>
+            <option value="draft">Draft</option>
+            <option value="live">Active</option>
+            <option value="paused">Paused</option>
+            <option value="completed">Closed</option>
+            <option value="archived">Archived</option>
+          </select>
+        </div>
+        {filteredScenarios.length > 0 ? (
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", minWidth: 680, width: "100%" }}>
               <thead>
@@ -874,7 +971,7 @@ export default function CampaignDetailPageContent({
                 </tr>
               </thead>
               <tbody>
-                {visibleScenarios.map((scenario) => (
+                {filteredScenarios.map((scenario) => (
                   <tr key={scenario.id} style={{ borderBottom: "1px solid #eee8dc" }}>
                     <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
                       <div>
@@ -909,7 +1006,7 @@ export default function CampaignDetailPageContent({
             </table>
           </div>
         ) : (
-          <div>No scenarios yet.</div>
+          <div>No Scenarios match the current filters.</div>
         )}
       </section>
 

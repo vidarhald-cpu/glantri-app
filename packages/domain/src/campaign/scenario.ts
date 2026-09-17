@@ -57,6 +57,7 @@ export const campaignAssetTypeSchema = z.enum(["map", "image", "document", "hand
 export const reusableEntityKindSchema = z.enum(["npc", "monster", "animal"]);
 export const campaignRosterSourceTypeSchema = z.enum(["character", "reusableEntity", "template"]);
 export const campaignRosterCategorySchema = z.enum(["pc", "npc", "template"]);
+export const campaignRosterMembershipStateSchema = z.enum(["current", "former"]);
 
 export const campaignSettingsSchema = z.object({
   allowPlayerSelfJoin: z.boolean().default(false),
@@ -372,6 +373,7 @@ export const campaignRosterEntrySchema = z.object({
   createdByUserId: idSchema.optional(),
   id: idSchema,
   labelSnapshot: z.string().optional(),
+  membershipState: campaignRosterMembershipStateSchema.optional(),
   notes: z.string().optional(),
   sourceId: idSchema,
   sourceType: campaignRosterSourceTypeSchema,
@@ -481,6 +483,7 @@ export type CampaignAssetType = z.infer<typeof campaignAssetTypeSchema>;
 export type ReusableEntityKind = z.infer<typeof reusableEntityKindSchema>;
 export type CampaignRosterSourceType = z.infer<typeof campaignRosterSourceTypeSchema>;
 export type CampaignRosterCategory = z.infer<typeof campaignRosterCategorySchema>;
+export type CampaignRosterMembershipState = z.infer<typeof campaignRosterMembershipStateSchema>;
 export type CampaignSettings = z.infer<typeof campaignSettingsSchema>;
 export type Campaign = z.infer<typeof campaignSchema>;
 export type ScenarioLiveState = z.infer<typeof scenarioLiveStateSchema>;

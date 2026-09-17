@@ -15,6 +15,7 @@ import {
   type Campaign,
   type CampaignAsset,
   type CampaignRosterEntry,
+  type CampaignRosterMembershipState,
   type CampaignSettings,
   type CampaignRosterCategory,
   type CampaignRosterSourceType,
@@ -270,6 +271,7 @@ function mapCampaignRosterEntry(record: {
   createdByUserId: string | null;
   id: string;
   labelSnapshot: string | null;
+  membershipState: string;
   notes: string | null;
   sourceId: string;
   sourceType: string;
@@ -282,6 +284,7 @@ function mapCampaignRosterEntry(record: {
     createdByUserId: record.createdByUserId ?? undefined,
     id: record.id,
     labelSnapshot: record.labelSnapshot ?? undefined,
+    membershipState: record.membershipState,
     notes: record.notes ?? undefined,
     sourceId: record.sourceId,
     sourceType: record.sourceType,
@@ -461,6 +464,10 @@ export interface ScenarioRepository {
     sourceId: string;
     sourceType: CampaignRosterSourceType;
   }): Promise<CampaignRosterEntry>;
+  updateCampaignRosterMembershipState(input: {
+    entryId: string;
+    membershipState: CampaignRosterMembershipState;
+  }): Promise<CampaignRosterEntry>;
   deleteCampaignRosterEntry(entryId: string): Promise<void>;
   deleteCampaignRosterEntryBySource(input: {
     campaignId: string;
@@ -469,6 +476,8 @@ export interface ScenarioRepository {
   }): Promise<number>;
   getCampaignRosterEntryById(entryId: string): Promise<CampaignRosterEntry | null>;
   listCampaignRosterEntries(campaignId: string): Promise<CampaignRosterEntry[]>;
+  listCampaignRosterHistoryEntries(campaignId: string): Promise<CampaignRosterEntry[]>;
+  listCharacterRosterHistoryEntries(characterId: string): Promise<CampaignRosterEntry[]>;
   createScenarioRelationship(input: {
     campaignId: string;
     fromScenarioId: string;
@@ -562,6 +571,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
         where: {
           rosterEntries: {
             some: {
+              membershipState: "current",
               sourceId: characterId,
               sourceType: "character",
             },
@@ -1345,11 +1355,26 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
         },
       });
 
-      if (existing) {
+      if (existing?.membershipState === "current") {
         return mapCampaignRosterEntry(existing);
       }
 
       try {
+        if (existing) {
+          const restored = await prisma.campaignRosterEntry.update({
+            data: {
+              category: input.category,
+              createdByUserId: input.createdByUserId ?? existing.createdByUserId,
+              labelSnapshot: input.labelSnapshot ?? existing.labelSnapshot,
+              membershipState: "current",
+              notes: input.notes ?? existing.notes,
+            },
+            where: { id: existing.id },
+          });
+
+          return mapCampaignRosterEntry(restored);
+        }
+
         const record = await prisma.campaignRosterEntry.create({
           data: {
             campaignId: input.campaignId,
@@ -1370,7 +1395,11 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
           error.code === "P2002"
         ) {
           const activeMembership = await prisma.campaignRosterEntry.findFirst({
-            where: { sourceId: input.sourceId, sourceType: "character" },
+            where: {
+              membershipState: "current",
+              sourceId: input.sourceId,
+              sourceType: "character",
+            },
           });
           if (activeMembership && activeMembership.campaignId !== input.campaignId) {
             throw new CampaignRosterPersistenceConflictError(activeMembership.campaignId);
@@ -1392,6 +1421,14 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
 
         return mapCampaignRosterEntry(canonical);
       }
+    },
+    async updateCampaignRosterMembershipState(input) {
+      const record = await prisma.campaignRosterEntry.update({
+        data: { membershipState: input.membershipState },
+        where: { id: input.entryId },
+      });
+
+      return mapCampaignRosterEntry(record);
     },
     async deleteCampaignRosterEntry(entryId) {
       await prisma.campaignRosterEntry.delete({
@@ -1419,7 +1456,23 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
     async listCampaignRosterEntries(campaignId) {
       const records = await prisma.campaignRosterEntry.findMany({
         orderBy: { createdAt: "desc" },
+        where: { campaignId, membershipState: "current" },
+      });
+
+      return records.map(mapCampaignRosterEntry);
+    },
+    async listCampaignRosterHistoryEntries(campaignId) {
+      const records = await prisma.campaignRosterEntry.findMany({
+        orderBy: [{ membershipState: "asc" }, { createdAt: "desc" }],
         where: { campaignId },
+      });
+
+      return records.map(mapCampaignRosterEntry);
+    },
+    async listCharacterRosterHistoryEntries(characterId) {
+      const records = await prisma.campaignRosterEntry.findMany({
+        orderBy: { updatedAt: "desc" },
+        where: { sourceId: characterId, sourceType: "character" },
       });
 
       return records.map(mapCampaignRosterEntry);
