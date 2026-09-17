@@ -17,6 +17,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@glantri/database", () => ({
+  CampaignService: class {
+    async listCampaignsByCharacterRosterAccess() {
+      return [{ id: "campaign-1", name: "Campaign", gmUserId: "user-1" }];
+    }
+  },
   CharacterEquipmentReadModelService: class {
     getCharacterEquipmentState = mocks.getState;
   },

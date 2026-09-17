@@ -51,6 +51,7 @@ const assignedItem = {
   displayName: "Silverston",
   holderCharacterId: "character-1",
   id: "item-silverston",
+  revision: "2026-09-16T00:00:00.000Z",
   isStackable: false,
   itemFacts: {
     activeMechanics: [],
@@ -297,6 +298,7 @@ describe("CampaignItemsWorkspace", () => {
       expect(mocks.transfer).toHaveBeenCalledWith({
         campaignId: "campaign-1",
         itemId: "item-silverston",
+        expectedItemRevision: "2026-09-16T00:00:00.000Z",
         sourceExpectedRevision: 4,
         sourceCharacterId: "character-1",
         targetCharacterId: "character-2",
@@ -334,6 +336,7 @@ describe("CampaignItemsWorkspace", () => {
       expect(mocks.assign).toHaveBeenCalledWith({
         campaignId: "campaign-1",
         itemId: "item-silverston",
+        expectedItemRevision: "2026-09-16T00:00:00.000Z",
         targetCharacterId: "character-2",
         targetExpectedRevision: 4,
       }),
@@ -346,6 +349,7 @@ describe("CampaignItemsWorkspace", () => {
       expect(mocks.unassign).toHaveBeenCalledWith({
         campaignId: "campaign-1",
         itemId: "item-silverston",
+        expectedItemRevision: "2026-09-16T00:00:00.000Z",
         sourceCharacterId: "character-1",
         sourceExpectedRevision: 4,
       }),

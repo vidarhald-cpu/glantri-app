@@ -34,8 +34,8 @@ function repositoryStub() {
       return { result: await input.mutation(repository), revision: input.expectedRevision + 1 };
     },
     async createCampaignEquipmentItem(item) {
-      items.set(item.id, clone(item));
-      return clone(item);
+      items.set(item.id, clone({ ...item, revision: item.revision ?? "2026-09-16T00:00:00.000Z" }));
+      return clone({ ...item, revision: item.revision ?? "2026-09-16T00:00:00.000Z" });
     },
     async createCharacterEquipmentItem() {
       throw new Error("Unexpected Character item create.");
@@ -70,8 +70,8 @@ function repositoryStub() {
     async removeCharacterEquipmentItem() {},
     async removeCharacterStorageLocation() {},
     async updateCampaignEquipmentItemAuthoring(item) {
-      items.set(item.id, clone(item));
-      return clone(item);
+      items.set(item.id, clone({ ...item, revision: item.revision ?? "2026-09-16T00:00:00.000Z" }));
+      return clone({ ...item, revision: item.revision ?? "2026-09-16T00:00:00.000Z" });
     },
     async transferCampaignEquipmentItem(input) {
       throw new Error(`Unexpected campaign item transfer: ${input.itemId}`);
@@ -150,6 +150,7 @@ describe("campaign equipment services", () => {
     });
 
     const edited = await write.updateCampaignEquipmentItemAuthoring({
+      expectedItemRevision: "2026-09-16T00:00:00.000Z",
       campaignId: "campaign-1",
       displayName: "Silverston",
       itemFacts: {
@@ -197,6 +198,7 @@ describe("campaign equipment services", () => {
     ];
 
     await write.updateCampaignEquipmentItemAuthoring({
+      expectedItemRevision: "2026-09-16T00:00:00.000Z",
       campaignId: "campaign-1",
       displayName: "Disarming rapier",
       itemFacts: { ...created.itemFacts, templateOverrides: disarmOverrides },
@@ -207,6 +209,7 @@ describe("campaign equipment services", () => {
     expect(added.itemFacts.templateOverrides).toEqual(disarmOverrides);
 
     await write.updateCampaignEquipmentItemAuthoring({
+      expectedItemRevision: "2026-09-16T00:00:00.000Z",
       campaignId: "campaign-1",
       displayName: "Renamed disarming rapier",
       itemFacts: added.itemFacts,
@@ -217,6 +220,7 @@ describe("campaign equipment services", () => {
     expect(preserved.itemFacts.templateOverrides).toEqual(disarmOverrides);
 
     await write.updateCampaignEquipmentItemAuthoring({
+      expectedItemRevision: "2026-09-16T00:00:00.000Z",
       campaignId: "campaign-1",
       itemFacts: { ...preserved.itemFacts, templateOverrides: [] },
       itemId: created.id,

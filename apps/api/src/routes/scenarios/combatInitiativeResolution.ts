@@ -6,6 +6,8 @@ import {
 } from "@glantri/content";
 import {
   AnyEquipmentTemplateSchema,
+  EquipmentItemSchema,
+  resolveEffectiveItemTemplate,
   characterBuildSchema,
   type CombatRoundAttackOpportunity,
   type CombatRoundPhase,
@@ -66,10 +68,20 @@ export function resolveCanonicalCombatInitiativeBase(input: {
       )[opportunity.weaponTemplateId]
     : undefined;
   const parsedTemplate = AnyEquipmentTemplateSchema.safeParse(templateValue);
-  const template =
+  const baseTemplate =
     parsedTemplate.success && parsedTemplate.data.category === "weapon"
       ? (parsedTemplate.data as WeaponTemplate)
       : undefined;
+  const sourceItemId = opportunity?.weaponInstanceId ?? opportunity?.weaponSourceId;
+  const rawItems = isRecord(state?.itemsById) ? state.itemsById : {};
+  const sourceItem = EquipmentItemSchema.safeParse(
+    sourceItemId ? rawItems[sourceItemId] : undefined,
+  );
+  const effective =
+    baseTemplate && sourceItem.success
+      ? resolveEffectiveItemTemplate(sourceItem.data, { [baseTemplate.id]: baseTemplate })
+      : baseTemplate;
+  const template = effective?.category === "weapon" ? effective : undefined;
   if (!template) missingFacts.add("initiative_weapon_template");
 
   if (missingFacts.size > 0 || !template) {

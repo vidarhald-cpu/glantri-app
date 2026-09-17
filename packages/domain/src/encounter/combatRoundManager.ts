@@ -1,3 +1,4 @@
+import { resolveEffectiveItemTemplate } from "../equipment/itemOverrides";
 import { z } from "zod";
 
 import { COMBAT_ROUND_STEPS, combatRoundStepSchema, type CombatRoundStep } from "./combatRoundStep";
@@ -468,7 +469,16 @@ export function buildCombatRoundDamageArmorCoverageFromEquipmentState(input: {
     ...(input.fallbackTemplatesById ?? {}),
     ...getCombatRoundEquipmentTemplatesById(input.equipmentState),
   };
-  const armorTemplate = armorItem?.templateId ? templatesById[armorItem.templateId] : undefined;
+  const armorTemplate = armorItem?.templateId
+    ? resolveEffectiveItemTemplate(
+        { templateId: armorItem.templateId, mechanicalOverrides: armorItem.mechanicalOverrides },
+        Object.fromEntries(
+          Object.entries(templatesById).filter(
+            (entry): entry is [string, EquipmentTemplate] => entry[1] !== undefined,
+          ),
+        ),
+      )
+    : undefined;
 
   if (!isCombatRoundArmorTemplate(armorTemplate)) {
     return combatRoundDamageArmorCoverageSchema.parse({});

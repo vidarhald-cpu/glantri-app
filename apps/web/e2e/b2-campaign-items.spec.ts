@@ -60,9 +60,10 @@ test.describe("B2 campaign item authoring and reveal", () => {
     page,
   }) => {
     const { b2CampaignId, characterId } = loadTestState();
-    const itemName = `B2 Silverston sword ${b2CampaignId}`;
-    const assignmentItemName = `B2 assignment dagger ${b2CampaignId}`;
-    const hiddenTrait = `B2 hidden Silverston engraving ${b2CampaignId}`;
+    const runId = Date.now();
+    const itemName = `${runId} B2 Silverston sword ${b2CampaignId}`;
+    const assignmentItemName = `${runId} B2 assignment dagger ${b2CampaignId}`;
+    const hiddenTrait = `${runId} B2 hidden Silverston engraving ${b2CampaignId}`;
     await page.goto(`/campaigns/${b2CampaignId}?tab=items`);
     await expect(page.getByRole("heading", { name: "Campaign items" })).toBeVisible();
 
@@ -147,16 +148,21 @@ test.describe("B2 campaign item authoring and reveal", () => {
     await page.getByRole("button", { name: "Create item" }).click();
 
     await expect(page.getByText(itemName, { exact: true })).toBeVisible();
-    await expect(page.getByText("Recorded initiative 1 (standard 2)")).toBeVisible();
-    await expect(page.getByText("Recorded final attack OB +1")).toBeVisible();
+    const authoredCard = page.locator("article").filter({ hasText: itemName });
+    await expect(authoredCard.getByText("Recorded initiative 1 (standard 2)")).toBeVisible();
+    await expect(authoredCard.getByText("Recorded final attack OB +1")).toBeVisible();
     await expect(
-      page.getByText("Recorded for reference only. The app does not apply it to initiative."),
+      authoredCard.getByText(
+        "Recorded for reference only. The app does not apply it to initiative.",
+      ),
     ).toBeVisible();
     await expect(
-      page.getByText("Recorded for reference only. The app does not apply it to attack OB."),
+      authoredCard.getByText(
+        "Recorded for reference only. The app does not apply it to attack OB.",
+      ),
     ).toBeVisible();
     await expect(
-      page.getByText("Recorded capabilities — not calculated or tracked by the app"),
+      authoredCard.getByText("Recorded capabilities — not calculated or tracked by the app"),
     ).toBeVisible();
 
     const gmPayload = await (
@@ -273,13 +279,19 @@ test.describe("B2 campaign item authoring and reveal", () => {
     const afterPayload = await (await afterPayloadPromise).text();
     expect(afterPayload).toContain(hiddenTrait);
     await expect(playerPage.getByText(hiddenTrait)).toBeVisible();
-    await expect(playerPage.getByText("Recorded initiative 1 (standard 2)")).toBeVisible();
-    await expect(playerPage.getByText("Recorded final attack OB +1")).toBeVisible();
+    const playerFacts = playerPage.getByRole("row", {
+      name: `Details for ${itemName}`,
+      exact: true,
+    });
+    await expect(playerFacts.getByText("Recorded initiative 1 (standard 2)")).toBeVisible();
+    await expect(playerFacts.getByText("Recorded final attack OB +1")).toBeVisible();
     await expect(
-      playerPage.getByText("Recorded for reference only. The app does not apply it to initiative."),
+      playerFacts.getByText(
+        "Recorded for reference only. The app does not apply it to initiative.",
+      ),
     ).toBeVisible();
     await expect(
-      playerPage.getByText("Recorded for reference only. The app does not apply it to attack OB."),
+      playerFacts.getByText("Recorded for reference only. The app does not apply it to attack OB."),
     ).toBeVisible();
 
     await playerPage.getByLabel("Template").selectOption("weapon-template-dagger");

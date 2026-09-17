@@ -147,7 +147,11 @@ describe("campaign item routes", () => {
     const read = await app.inject({ method: "GET", url: "/campaigns/campaign-1/items" });
     const assign = await app.inject({
       method: "POST",
-      payload: { expectedRevision: 0, targetCharacterId: "character-1" },
+      payload: {
+        expectedItemRevision: "2026-09-16T00:00:00.000Z",
+        expectedRevision: 0,
+        targetCharacterId: "character-1",
+      },
       url: "/campaigns/campaign-1/items/private-item/assign",
     });
 
@@ -202,6 +206,23 @@ describe("campaign item routes", () => {
     await app.close();
   });
 
+  it.each([
+    { kind: "input", property: "finalAttackOb", value: 99 },
+    { kind: "input", property: "name", value: 99 },
+    { kind: "input", property: "baseEncumbrance", value: 1, templateId: "injected" },
+  ])("rejects unknown or structural override input before writing", async (override) => {
+    const routeServices = services();
+    const app = await appWith(routeServices);
+    const response = await app.inject({
+      method: "POST",
+      url: "/campaigns/campaign-1/items",
+      payload: { templateId: "weapon-template-dagger", mechanicalOverrides: [override] },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(routeServices.writeService.createCampaignEquipmentItem).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it("forwards ammunition quantity and defaults omitted quantity to one", async () => {
     const routeServices = services();
     const app = await appWith(routeServices);
@@ -240,7 +261,11 @@ describe("campaign item routes", () => {
     const app = await appWith(routeServices);
     const assigned = await app.inject({
       method: "POST",
-      payload: { expectedRevision: 3, targetCharacterId: "character-1" },
+      payload: {
+        expectedItemRevision: "2026-09-16T00:00:00.000Z",
+        expectedRevision: 3,
+        targetCharacterId: "character-1",
+      },
       url: "/campaigns/campaign-1/items/item-1/assign",
     });
     expect(assigned.statusCode).toBe(200);
@@ -248,13 +273,18 @@ describe("campaign item routes", () => {
       campaignId: "campaign-1",
       evidence: { actorAuthority: "campaign_gm", actorUserId: "gm-1" },
       itemId: "item-1",
+      expectedItemRevision: "2026-09-16T00:00:00.000Z",
       targetCharacterId: "character-1",
       targetExpectedRevision: 3,
     });
 
     const unassigned = await app.inject({
       method: "POST",
-      payload: { expectedRevision: 4, sourceCharacterId: "character-1" },
+      payload: {
+        expectedItemRevision: "2026-09-16T00:00:00.000Z",
+        expectedRevision: 4,
+        sourceCharacterId: "character-1",
+      },
       url: "/campaigns/campaign-1/items/item-1/unassign",
     });
     expect(unassigned.statusCode).toBe(200);
@@ -262,6 +292,7 @@ describe("campaign item routes", () => {
       campaignId: "campaign-1",
       evidence: { actorAuthority: "campaign_gm", actorUserId: "gm-1" },
       itemId: "item-1",
+      expectedItemRevision: "2026-09-16T00:00:00.000Z",
       sourceCharacterId: "character-1",
       sourceExpectedRevision: 4,
     });
@@ -274,6 +305,7 @@ describe("campaign item routes", () => {
     const response = await app.inject({
       method: "PATCH",
       payload: {
+        expectedItemRevision: "2026-09-16T00:00:00.000Z",
         facts: {
           descriptiveTraits: [
             { category: "engraving", id: "mark", text: "Revealed", visibility: "revealed" },
@@ -293,7 +325,11 @@ describe("campaign item routes", () => {
         descriptiveTraits: [expect.objectContaining({ visibility: "revealed" })],
       }),
       itemId: "item-1",
+      expectedItemRevision: "2026-09-16T00:00:00.000Z",
       notes: null,
+      mechanicalOverrides: undefined,
+      physicalBaseEncumbrance: undefined,
+      quantity: undefined,
     });
     expect(
       routeServices.writeService.updateCampaignEquipmentItemAuthoring,

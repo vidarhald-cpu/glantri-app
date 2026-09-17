@@ -1,3 +1,4 @@
+import type { ItemMechanicalOverride } from "./itemOverrides";
 export type EquipmentCategory = "weapon" | "shield" | "armor" | "gear" | "valuables";
 
 export type SpecificityType = "generic" | "specific";
@@ -89,6 +90,7 @@ export type WeaponDisarmGripClass = "one_handed" | "two_handed";
 
 export interface EquipmentTemplateBase {
   id: string;
+  selectableForNewItems?: boolean;
   category: EquipmentCategory;
   name: string;
   subtype?: string;
@@ -475,8 +477,11 @@ export interface EquipmentItem<
   /** @deprecated Compatibility view, always derived from holderCharacterId. */
   characterId: THolderCharacterId;
   campaignContextId?: string | null;
-  templateId: string;
-  category: EquipmentCategory;
+  templateId: string | null;
+  category: EquipmentCategory | null;
+  itemKind?: "template_backed" | "descriptive_only";
+  mechanicalOverrides?: ItemMechanicalOverride[];
+  physicalBaseEncumbrance?: number | null;
   displayName?: string | null;
   specificityType: SpecificityType;
   quantity: number;
@@ -502,23 +507,30 @@ export interface EquipmentItem<
   statusTags?: string[] | null;
 }
 
+/** Canonical binding is discriminated; historical input may omit itemKind. */
+export type EquipmentItemBinding =
+  | { itemKind: "template_backed"; templateId: string; category: EquipmentCategory }
+  | { itemKind: "descriptive_only"; templateId: null; category: null };
+
 export type CanonicalEquipmentItem = Omit<
   EquipmentItem<string | null, ItemStorageAssignment | null>,
-  "campaignContextId" | "holderCharacterId" | "itemFacts"
-> & {
-  campaignContextId: string | null;
-  holderCharacterId: string | null;
-  itemFacts: EquipmentItemFactsV1;
-};
+  "campaignContextId" | "holderCharacterId" | "itemFacts" | "itemKind" | "templateId" | "category"
+> &
+  EquipmentItemBinding & {
+    campaignContextId: string | null;
+    holderCharacterId: string | null;
+    itemFacts: EquipmentItemFactsV1;
+  };
 
 export type AssignedEquipmentItem = Omit<
   EquipmentItem<string, ItemStorageAssignment>,
-  "campaignContextId" | "holderCharacterId" | "itemFacts"
-> & {
-  campaignContextId: string | null;
-  holderCharacterId: string;
-  itemFacts: EquipmentItemFactsV1;
-};
+  "campaignContextId" | "holderCharacterId" | "itemFacts" | "itemKind" | "templateId" | "category"
+> &
+  EquipmentItemBinding & {
+    campaignContextId: string | null;
+    holderCharacterId: string;
+    itemFacts: EquipmentItemFactsV1;
+  };
 
 export interface StorageLocation {
   id: string;

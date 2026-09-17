@@ -8,7 +8,7 @@ export function validateEquipmentItem(item: CanonicalEquipmentItem): string[] {
     errors.push("characterId must be derived from holderCharacterId");
   }
 
-  if (!item.templateId) {
+  if (item.templateId === null && item.category !== null) {
     errors.push("templateId is required");
   }
 
@@ -20,7 +20,10 @@ export function validateEquipmentItem(item: CanonicalEquipmentItem): string[] {
     errors.push("storageAssignment.locationId is required");
   }
 
-  if (item.quantity <= 0) {
+  if (
+    item.quantity < 0 ||
+    (item.quantity === 0 && (item.category !== "gear" || !item.isStackable))
+  ) {
     errors.push("quantity must be greater than zero");
   }
 

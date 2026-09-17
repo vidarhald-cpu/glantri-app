@@ -1,5 +1,6 @@
 import type {
   CanonicalEquipmentItem,
+  ItemMechanicalOverride,
   CarryMode,
   DescriptiveItemTraitCategory,
   EquipmentTemplate,
@@ -83,14 +84,18 @@ export async function createCampaignItemOnServer(input: {
   description?: string | null;
   displayName?: string | null;
   facts: CampaignItemFactDraft;
+  mechanicalOverrides?: ItemMechanicalOverride[];
+  physicalBaseEncumbrance?: number | null;
   holderCharacterId?: string | null;
-  templateId: string;
+  templateId: string | null;
 }): Promise<CampaignItemsResponse> {
   return sendJson<CampaignItemsResponse>(`/campaigns/${input.campaignId}/items`, {
     body: JSON.stringify({
       description: input.description ?? null,
       displayName: input.displayName ?? null,
       facts: input.facts,
+      mechanicalOverrides: input.mechanicalOverrides,
+      physicalBaseEncumbrance: input.physicalBaseEncumbrance,
       quantity: input.quantity ?? 1,
       holderCharacterId: input.holderCharacterId ?? null,
       templateId: input.templateId,
@@ -100,17 +105,25 @@ export async function createCampaignItemOnServer(input: {
 }
 
 export async function updateCampaignItemOnServer(input: {
+  quantity?: number;
   campaignId: string;
   description?: string | null;
   displayName?: string | null;
   facts: CampaignItemFactDraft;
+  mechanicalOverrides?: ItemMechanicalOverride[];
+  physicalBaseEncumbrance?: number | null;
   itemId: string;
+  expectedItemRevision: string;
 }): Promise<CampaignItemsResponse> {
   return sendJson<CampaignItemsResponse>(`/campaigns/${input.campaignId}/items/${input.itemId}`, {
     body: JSON.stringify({
+      expectedItemRevision: input.expectedItemRevision,
+      quantity: input.quantity,
       description: input.description ?? null,
       displayName: input.displayName ?? null,
       facts: input.facts,
+      mechanicalOverrides: input.mechanicalOverrides,
+      physicalBaseEncumbrance: input.physicalBaseEncumbrance,
     }),
     method: "PATCH",
   });
@@ -119,6 +132,7 @@ export async function updateCampaignItemOnServer(input: {
 export async function transferCampaignItemOnServer(input: {
   campaignId: string;
   itemId: string;
+  expectedItemRevision: string;
   sourceCharacterId: string;
   targetCharacterId: string;
   sourceExpectedRevision: number;
@@ -128,6 +142,7 @@ export async function transferCampaignItemOnServer(input: {
     `/characters/${input.sourceCharacterId}/equipment/items/${input.itemId}/transfer`,
     {
       body: JSON.stringify({
+        expectedItemRevision: input.expectedItemRevision,
         campaignId: input.campaignId,
         expectedRevision: input.sourceExpectedRevision,
         targetCharacterId: input.targetCharacterId,
@@ -141,6 +156,7 @@ export async function transferCampaignItemOnServer(input: {
 export async function assignCampaignItemOnServer(input: {
   campaignId: string;
   itemId: string;
+  expectedItemRevision: string;
   targetCharacterId: string;
   targetExpectedRevision: number;
 }): Promise<CampaignItemsResponse> {
@@ -148,6 +164,7 @@ export async function assignCampaignItemOnServer(input: {
     `/campaigns/${input.campaignId}/items/${input.itemId}/assign`,
     {
       body: JSON.stringify({
+        expectedItemRevision: input.expectedItemRevision,
         expectedRevision: input.targetExpectedRevision,
         targetCharacterId: input.targetCharacterId,
       }),
@@ -159,6 +176,7 @@ export async function assignCampaignItemOnServer(input: {
 export async function unassignCampaignItemOnServer(input: {
   campaignId: string;
   itemId: string;
+  expectedItemRevision: string;
   sourceCharacterId: string;
   sourceExpectedRevision: number;
 }): Promise<CampaignItemsResponse> {
@@ -166,6 +184,7 @@ export async function unassignCampaignItemOnServer(input: {
     `/campaigns/${input.campaignId}/items/${input.itemId}/unassign`,
     {
       body: JSON.stringify({
+        expectedItemRevision: input.expectedItemRevision,
         expectedRevision: input.sourceExpectedRevision,
         sourceCharacterId: input.sourceCharacterId,
       }),

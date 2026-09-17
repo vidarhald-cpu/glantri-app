@@ -7,9 +7,12 @@ export function ItemFactsPresentation({
   showVisibility = false,
   template,
 }: {
-  item: Pick<CanonicalEquipmentItem, "id"> & { itemFacts?: CanonicalEquipmentItem["itemFacts"] };
+  item: Pick<CanonicalEquipmentItem, "id"> & {
+    itemFacts?: CanonicalEquipmentItem["itemFacts"];
+    mechanicalOverrides?: CanonicalEquipmentItem["mechanicalOverrides"];
+  };
   showVisibility?: boolean;
-  template: EquipmentTemplate;
+  template?: EquipmentTemplate;
 }) {
   const sections = buildItemPresentationSections(item, template);
   if (sections.length === 0) return null;

@@ -1,4 +1,10 @@
-import type { ArmorTemplate, EquipmentItem, EquipmentTemplate, ShieldTemplate, WeaponTemplate } from "@glantri/domain";
+import type {
+  ArmorTemplate,
+  EquipmentItem,
+  EquipmentTemplate,
+  ShieldTemplate,
+  WeaponTemplate,
+} from "@glantri/domain";
 import type { CombatAllocationState, CombatStateCharacterInputs } from "@glantri/rules-engine";
 
 import {
@@ -7,7 +13,7 @@ import {
   type DerivedCombatValue,
 } from "./combatStateDerivation";
 import { buildCharacterArmorSummary } from "./armorSummary";
-import { getEquipmentTemplateById, getLoadoutEquipment } from "./equipmentSelectors";
+import { getEffectiveEquipmentTemplate, getLoadoutEquipment } from "./equipmentSelectors";
 import type { EquipmentFeatureState } from "./types";
 
 export type CombatStateValue = string | number;
@@ -71,17 +77,17 @@ function getCombinedClassLabel(input: {
   const loadout = getLoadoutEquipment(input.state, input.characterId);
   const primaryTemplate = asWeaponTemplate(
     "primary" in loadout && loadout.primary
-      ? getEquipmentTemplateById(input.state, loadout.primary.templateId)
+      ? getEffectiveEquipmentTemplate(input.state, loadout.primary)
       : undefined,
   );
   const shieldTemplate = asShieldTemplate(
     "shield" in loadout && loadout.shield
-      ? getEquipmentTemplateById(input.state, loadout.shield.templateId)
+      ? getEffectiveEquipmentTemplate(input.state, loadout.shield)
       : undefined,
   );
   const secondaryTemplate = asWeaponTemplate(
     "secondary" in loadout && loadout.secondary
-      ? getEquipmentTemplateById(input.state, loadout.secondary.templateId)
+      ? getEffectiveEquipmentTemplate(input.state, loadout.secondary)
       : undefined,
   );
 
@@ -140,7 +146,7 @@ export function buildCombatStatePanelModel(
   const armorItem: EquipmentItem | null =
     "armor" in loadout && loadout.armor ? loadout.armor : null;
   const armorTemplate = armorItem
-    ? asArmorTemplate(getEquipmentTemplateById(state, armorItem.templateId))
+    ? asArmorTemplate(getEffectiveEquipmentTemplate(state, armorItem))
     : null;
   const armorSummary = buildCharacterArmorSummary({
     characterSize: characterInputs?.size ?? null,
@@ -182,10 +188,13 @@ export function buildCombatStatePanelModel(
     ],
     rows: sortedWeaponRows.map((row) => [
       row.modeLabel,
-      row.slotLabel === "Combined" && combinedClassLabel ? combinedClassLabel : row.currentItemLabel,
+      row.slotLabel === "Combined" && combinedClassLabel
+        ? combinedClassLabel
+        : row.currentItemLabel,
       getWeaponModeValue(
         row.slotLabel === "Brawling"
-          ? sortedWeaponRows.find((candidate) => candidate.slotLabel === "Punch")?.initiative ?? row.initiative
+          ? (sortedWeaponRows.find((candidate) => candidate.slotLabel === "Punch")?.initiative ??
+              row.initiative)
           : row.initiative,
       ),
       getWeaponModeValue(row.slotLabel === "Brawling" ? "Grapple" : row.attack1),
@@ -219,16 +228,20 @@ export function buildCombatStatePanelModel(
       label: "Enc/count/lvl",
       value: `${getIntegerStyleDisplayValue(snapshot.personalEncumbrance)} / ${snapshot.personalItemCount} / ${snapshot.encumbranceLevel}`,
     },
-    { label: "Mov/mod", value: `${snapshot.movementSummary} / ${snapshot.movementModifierSummary}` },
+    {
+      label: "Mov/mod",
+      value: `${snapshot.movementSummary} / ${snapshot.movementModifierSummary}`,
+    },
   ];
-  const armorRows: CombatStateDetailRow[] = armorItem && armorSummary
-    ? [
-        { label: "Armor", value: armorTemplate?.name ?? "Unknown item" },
-        { label: "General armor", value: armorSummary.generalArmorWithType },
-        { label: "AA modifier", value: armorSummary.aaModifier ?? "—" },
-        { label: "Perception modifier", value: armorSummary.perceptionModifier ?? "—" },
-      ]
-    : [{ label: "Armor", value: "No armor is currently worn." }];
+  const armorRows: CombatStateDetailRow[] =
+    armorItem && armorSummary
+      ? [
+          { label: "Armor", value: armorTemplate?.name ?? "Unknown item" },
+          { label: "General armor", value: armorSummary.generalArmorWithType },
+          { label: "AA modifier", value: armorSummary.aaModifier ?? "—" },
+          { label: "Perception modifier", value: armorSummary.perceptionModifier ?? "—" },
+        ]
+      : [{ label: "Armor", value: "No armor is currently worn." }];
   const armorTable: CombatStateTableModel | undefined = armorSummary
     ? {
         title: "Armor coverage",

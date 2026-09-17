@@ -63,7 +63,7 @@ function capturedFingerprint(participant: ScenarioParticipant): string | undefin
 async function currentEquipmentState(client: DatabaseClient, characterId: string) {
   return new CharacterEquipmentReadModelService(
     createPrismaCharacterEquipmentRepository(client),
-  ).getCharacterEquipmentState(characterId);
+  ).getCharacterEquipmentState(characterId, { kind: "gm" });
 }
 
 export async function resolveScenarioEquipmentStatus(input: {

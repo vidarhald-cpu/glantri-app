@@ -1,3 +1,4 @@
+import { revealableEquipmentState } from "../equipment/itemFacts";
 import { z } from "zod";
 
 import { characterBuildSchema, type CharacterBuild } from "../character/build";
@@ -919,7 +920,7 @@ export function buildScenarioPlayerProjection(input: {
           conditionCount: controlledParticipant.state.conditions.length,
           currentHp: controlledParticipant.state.health.currentHp,
           displayName: controlledParticipant.snapshot.displayName,
-          equipmentState: controlledParticipant.snapshot.equipmentState,
+          equipmentState: revealableEquipmentState(controlledParticipant.snapshot.equipmentState),
           factionId: controlledParticipant.factionId,
           id: controlledParticipant.id,
           maxHp: controlledParticipant.state.health.maxHp,

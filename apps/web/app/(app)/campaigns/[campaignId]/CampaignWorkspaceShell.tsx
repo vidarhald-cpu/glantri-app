@@ -1044,7 +1044,12 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
 
       {!workspaceLoadError && accessMode !== "none" && workspaceState.activeTab === "items" ? (
         canAccessGmEncounter ? (
-          <CampaignItemsWorkspace campaignId={campaignId} />
+          <CampaignItemsWorkspace
+            campaignId={campaignId}
+            initialHolderCharacterId={searchParams.get("itemHolder") ?? undefined}
+            initialItemId={searchParams.get("itemId") ?? undefined}
+            createRequested={searchParams.get("itemCreate") === "1"}
+          />
         ) : null
       ) : null}
 

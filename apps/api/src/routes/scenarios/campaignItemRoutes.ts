@@ -14,6 +14,7 @@ import {
   EquipmentItemFactsV1Schema,
   EquipmentTemplateOverrideFactSchema,
   ItemFactVisibilitySchema,
+  ItemMechanicalOverridesSchema,
   type EquipmentItemFactsV1,
 } from "@glantri/domain/equipment";
 
@@ -52,6 +53,14 @@ function integerValue(body: Body, key: string): number {
   if (typeof value !== "number" || !Number.isInteger(value)) {
     throw new Error(`${key} must be a whole number.`);
   }
+  return value;
+}
+
+function physicalBaseEncumbrance(body: Body): number | null | undefined {
+  const value = body.physicalBaseEncumbrance;
+  if (value == null) return value as null | undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0)
+    throw new Error("Physical base ENC must be a nonnegative number.");
   return value;
 }
 
@@ -226,7 +235,9 @@ export function createCampaignItemRoutes(
           itemFacts: parseCampaignItemFacts(body.facts ?? {}),
           notes: optionalText(body, "description"),
           quantity: body.quantity === undefined ? 1 : integerValue(body, "quantity"),
-          templateId: requiredText(body, "templateId"),
+          templateId: body.templateId === null ? null : requiredText(body, "templateId"),
+          mechanicalOverrides: ItemMechanicalOverridesSchema.parse(body.mechanicalOverrides ?? []),
+          physicalBaseEncumbrance: physicalBaseEncumbrance(body) ?? null,
         });
 
         return {
@@ -256,6 +267,7 @@ export function createCampaignItemRoutes(
           campaignId,
           evidence: { actorAuthority: "campaign_gm", actorUserId: user.id },
           itemId,
+          expectedItemRevision: requiredText(body, "expectedItemRevision"),
           targetCharacterId,
           targetExpectedRevision: expectedRevision(body),
         });
@@ -297,6 +309,7 @@ export function createCampaignItemRoutes(
           campaignId,
           evidence: { actorAuthority: "campaign_gm", actorUserId: user.id },
           itemId,
+          expectedItemRevision: requiredText(body, "expectedItemRevision"),
           sourceCharacterId,
           sourceExpectedRevision: expectedRevision(body),
         });
@@ -336,7 +349,14 @@ export function createCampaignItemRoutes(
           displayName: optionalText(body, "displayName"),
           itemFacts: parseCampaignItemFacts(body.facts ?? {}),
           itemId,
+          expectedItemRevision: requiredText(body, "expectedItemRevision"),
           notes: optionalText(body, "description"),
+          mechanicalOverrides:
+            body.mechanicalOverrides === undefined
+              ? undefined
+              : ItemMechanicalOverridesSchema.parse(body.mechanicalOverrides),
+          physicalBaseEncumbrance: physicalBaseEncumbrance(body),
+          quantity: body.quantity === undefined ? undefined : integerValue(body, "quantity"),
         });
 
         return {
@@ -344,7 +364,14 @@ export function createCampaignItemRoutes(
           state: await current.readService.getCampaignEquipmentState(campaignId),
         };
       } catch (error) {
-        return handleRouteError(error, reply);
+        return handleRouteError(
+          error instanceof StaleEquipmentTransferError
+            ? new ConflictError(
+                "This item changed. Your draft has not been saved. Reload and review it before trying again.",
+              )
+            : error,
+          reply,
+        );
       }
     });
   };

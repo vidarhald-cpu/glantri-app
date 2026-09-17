@@ -1,3 +1,4 @@
+import { resolveEffectiveItemTemplate } from "./itemOverrides";
 import type {
   AccessTier,
   CanonicalMeleeMode,
@@ -20,28 +21,25 @@ const SYSTEM_LOCATION_TYPES: StorageLocationType[] = [
   "mount_system",
 ];
 
-export function isSystemLocation(
-  location: Pick<StorageLocation, "type">,
-): boolean {
+export function isSystemLocation(location: Pick<StorageLocation, "type">): boolean {
   return SYSTEM_LOCATION_TYPES.includes(location.type);
 }
 
-export function isWithYouLocation(
-  location: Pick<StorageLocation, "availabilityClass">,
-): boolean {
+export function isWithYouLocation(location: Pick<StorageLocation, "availabilityClass">): boolean {
   return location.availabilityClass === "with_you";
 }
 
-export function isElsewhereLocation(
-  location: Pick<StorageLocation, "availabilityClass">,
-): boolean {
+export function isElsewhereLocation(location: Pick<StorageLocation, "availabilityClass">): boolean {
   return location.availabilityClass === "elsewhere";
 }
 
 export function isRemoteStorage(
   location: Pick<StorageLocation, "availabilityClass" | "type" | "isAccessibleInEncounter">,
 ): boolean {
-  return isElsewhereLocation(location) || (!isSystemLocation(location) && !location.isAccessibleInEncounter);
+  return (
+    isElsewhereLocation(location) ||
+    (!isSystemLocation(location) && !location.isAccessibleInEncounter)
+  );
 }
 
 export function isEncounterAccessible(
@@ -51,11 +49,7 @@ export function isEncounterAccessible(
 }
 
 export function isPersonalCarryMode(carryMode: CarryMode): boolean {
-  return (
-    carryMode === "equipped" ||
-    carryMode === "on_person" ||
-    carryMode === "backpack"
-  );
+  return carryMode === "equipped" || carryMode === "on_person" || carryMode === "backpack";
 }
 
 export function isStoredCarryMode(carryMode: CarryMode): boolean {
@@ -76,9 +70,7 @@ export function getLocationSortOrder(
   return getLocationSortOrderWithinAvailability(location);
 }
 
-function getLocationSortOrderWithinAvailability(
-  location: Pick<StorageLocation, "type">,
-): number {
+function getLocationSortOrderWithinAvailability(location: Pick<StorageLocation, "type">): number {
   switch (location.type) {
     case "equipped_system":
       return 0;
@@ -147,14 +139,17 @@ export function getCarryFactor(carryMode: CarryMode): number {
 
 export function getEffectiveEncumbrance(
   item: EquipmentItem,
-  template: EquipmentTemplate,
+  template: EquipmentTemplate | undefined,
 ): number {
   if (item.encumbranceOverride != null) {
     return item.encumbranceOverride;
   }
 
   return (
-    template.baseEncumbrance *
+    (template
+      ? (resolveEffectiveItemTemplate(item, { [template.id]: template })?.baseEncumbrance ??
+        template.baseEncumbrance)
+      : (item.physicalBaseEncumbrance ?? 0)) *
     item.quantity *
     getMaterialFactor(item.material) *
     getQualityFactor(item.quality) *

@@ -11,6 +11,7 @@ import type {
 } from "@glantri/domain";
 
 export interface EquipmentFeatureState {
+  managementCampaigns?: Array<{ id: string; name: string }>;
   templates: {
     templatesById: Record<string, EquipmentTemplate>;
   };

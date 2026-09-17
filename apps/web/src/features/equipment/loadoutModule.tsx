@@ -11,23 +11,28 @@ import {
   defaultCombatAllocationState,
   lookupWorkbookPercentageAdjustment,
   lookupWorkbookSkillInitiativeModifier,
-  type WorkbookRawModifier
+  type WorkbookRawModifier,
 } from "@glantri/rules-engine";
 
 import { buildCharacterArmorSummary, getWorkbookCharacterSize } from "./armorSummary";
 import { deriveCombatStateSnapshot } from "./combatStateDerivation";
 import { buildLoadoutCombatStatsTable } from "./loadoutCombatStats";
-import { buildLoadoutMeleeWeaponOptions, buildLoadoutMissileWeaponOptions, buildLoadoutThrowingWeaponOptions } from "./loadoutWeaponOptions";
+import {
+  buildLoadoutMeleeWeaponOptions,
+  buildLoadoutMissileWeaponOptions,
+  buildLoadoutThrowingWeaponOptions,
+} from "./loadoutWeaponOptions";
 import {
   getCharacterArmorItems,
   getCharacterShieldItems,
   getEquipmentTemplateById,
-  getLoadoutEquipment
+  getEffectiveEquipmentTemplate,
+  getLoadoutEquipment,
 } from "./equipmentSelectors";
 import {
   buildCombatStatePanelModel,
   type CombatStateDetailRow,
-  type CombatStateTableModel
+  type CombatStateTableModel,
 } from "./combatStatePanel";
 import { CombatStatePanel } from "./components/CombatStatePanel";
 import type { EquipmentFeatureState } from "./types";
@@ -41,7 +46,7 @@ type LoadoutFieldId = "armor" | "missile" | "primary" | "secondary" | "shield" |
 const ENCOMBRANCE_SKILL_TYPE_ORDER: EncumbranceDependentSkillType[] = [
   "combat",
   "covert",
-  "physical"
+  "physical",
 ];
 
 export type EquipmentLoadoutModuleMode = "editable" | "readonly";
@@ -69,7 +74,7 @@ export interface EquipmentLoadoutModuleModel {
 
 function getItemName(input: {
   displayName?: string | null;
-  templateId?: string;
+  templateId?: string | null;
   templateName?: string;
 }): string {
   if (!input.templateId) {
@@ -88,7 +93,7 @@ function buildSelectableItemOptions(input: {
       carryMode: CarryMode;
       locationId: string;
     };
-    templateId: string;
+    templateId: string | null;
   }>;
   state: EquipmentFeatureState;
 }) {
@@ -99,8 +104,8 @@ function buildSelectableItemOptions(input: {
       label: `${getItemName({
         displayName: item.displayName,
         templateId: item.templateId,
-        templateName: getEquipmentTemplateById(input.state, item.templateId)?.name
-      })}${getAccessTier(item.storageAssignment.carryMode) === "slow" ? " (Backpack / slow)" : ""}`
+        templateName: getEffectiveEquipmentTemplate(input.state, item)?.name,
+      })}${getAccessTier(item.storageAssignment.carryMode) === "slow" ? " (Backpack / slow)" : ""}`,
     }))
     .sort((left, right) => left.label.localeCompare(right.label));
 }
@@ -109,7 +114,7 @@ function getLoadoutFieldValueLabel(input: {
   fallbackLabel?: string;
   item?: {
     displayName?: string | null;
-    templateId?: string;
+    templateId?: string | null;
   } | null;
   options: EquipmentLoadoutFieldOption[];
   value: string;
@@ -127,7 +132,7 @@ function getLoadoutFieldValueLabel(input: {
     getItemName({
       displayName: input.item?.displayName,
       templateId: input.item?.templateId,
-      templateName: input.fallbackLabel
+      templateName: input.fallbackLabel,
     }) || "None"
   );
 }
@@ -200,16 +205,16 @@ function applyWorkbookRawModifiersToSkillValue(input: {
   baseTotal: number;
   rawModifiers: WorkbookRawModifier[];
 }): number | null {
-  return calculateWorkbookPercentageAdjustmentTrace({
-    baseValue: input.baseTotal,
-    rawModifiers: input.rawModifiers,
-  })?.finalValue ?? null;
+  return (
+    calculateWorkbookPercentageAdjustmentTrace({
+      baseValue: input.baseTotal,
+      rawModifiers: input.rawModifiers,
+    })?.finalValue ?? null
+  );
 }
 
 function getLiveSkillRawModifiers(liveObSkillRaw: number): WorkbookRawModifier[] {
-  return liveObSkillRaw === 0
-    ? []
-    : [{ label: "OB/Skill", value: liveObSkillRaw }];
+  return liveObSkillRaw === 0 ? [] : [{ label: "OB/Skill", value: liveObSkillRaw }];
 }
 
 function getWorkbookLiveSkillTotal(input: {
@@ -266,7 +271,7 @@ function getWorkbookSkillInitiative(input: {
 
 function getRoundedLinkedStatAverage(
   adjustedStats: Record<string, number>,
-  linkedStats: string[]
+  linkedStats: string[],
 ): number | null {
   if (linkedStats.length === 0) {
     return null;
@@ -295,7 +300,8 @@ function getWorkbookArmorAdjustedPerception(input: {
     return null;
   }
 
-  const basePerception = Math.round((intValue + powValue + lckValue) / 3) + input.perceptionAdjustedXp;
+  const basePerception =
+    Math.round((intValue + powValue + lckValue) / 3) + input.perceptionAdjustedXp;
   const modifier = input.armorPerceptionModifier ?? 0;
   const adjustment = lookupWorkbookPercentageAdjustment(basePerception, Math.abs(modifier));
   if (adjustment == null) {
@@ -315,7 +321,9 @@ function ControlSection(input: {
     styles.controlSection,
     input.compact && styles.controlSectionCompact,
     input.sticky && styles.controlSectionSticky,
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <section className={className}>
@@ -345,9 +353,7 @@ function EditableField(input: {
           </option>
         ))}
       </select>
-      {input.field.error ? (
-        <span className={styles.fieldError}>{input.field.error}</span>
-      ) : null}
+      {input.field.error ? <span className={styles.fieldError}>{input.field.error}</span> : null}
     </label>
   );
 }
@@ -380,7 +386,8 @@ function TableSection(input: { table: CombatStateTableModel }) {
               <tr
                 key={`${row[0]}-${rowIndex}`}
                 style={{
-                  borderBottom: rowIndex === input.table.rows.length - 1 ? "none" : "1px solid #e6e6df"
+                  borderBottom:
+                    rowIndex === input.table.rows.length - 1 ? "none" : "1px solid #e6e6df",
                 }}
               >
                 {row.map((cell, cellIndex) => (
@@ -416,7 +423,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
       armorSummary: null,
       combatStatePanelModel: null,
       encumbranceSkillsTable: null,
-      fields: []
+      fields: [],
     };
   }
 
@@ -437,46 +444,46 @@ export function buildEquipmentLoadoutModuleModel(input: {
     : combatAllocationInputs;
   const sheetSummary = buildCharacterSheetSummary({
     build: input.characterContext.record.build,
-    content: input.characterContext.content
+    content: input.characterContext.content,
   });
   const characterCombatInputs = buildCombatStateCharacterInputs(sheetSummary);
   const loadout = getLoadoutEquipment(input.state, input.characterId);
   const meleeWeaponOptions = buildLoadoutMeleeWeaponOptions({
     characterId: input.characterId,
-    state: input.state
+    state: input.state,
   });
   const missileWeaponOptions = buildLoadoutMissileWeaponOptions({
     characterId: input.characterId,
-    state: input.state
+    state: input.state,
   });
   const armorOptions = buildSelectableItemOptions({
     items: getCharacterArmorItems(input.state, input.characterId).filter((item) => {
       const location = input.state?.locationsById[item.storageAssignment.locationId];
       return location ? isWithYouLocation(location) : false;
     }),
-    state: input.state
+    state: input.state,
   });
   const shieldOptions = buildSelectableItemOptions({
     items: getCharacterShieldItems(input.state, input.characterId).filter((item) => {
       const location = input.state?.locationsById[item.storageAssignment.locationId];
       return location ? isWithYouLocation(location) : false;
     }),
-    state: input.state
+    state: input.state,
   });
   const combatSnapshot = deriveCombatStateSnapshot(
     input.state,
     input.characterId,
     characterCombatInputs,
-    effectiveCombatAllocationInputs
+    effectiveCombatAllocationInputs,
   );
   const throwingWeaponOptions = buildLoadoutThrowingWeaponOptions({
     characterId: input.characterId,
-    state: input.state
+    state: input.state,
   });
   const wornArmorSummary =
     "armor" in loadout && loadout.armor
       ? (() => {
-          const armorTemplate = getEquipmentTemplateById(input.state, loadout.armor.templateId);
+          const armorTemplate = getEffectiveEquipmentTemplate(input.state, loadout.armor);
           if (armorTemplate?.category !== "armor") {
             return null;
           }
@@ -484,22 +491,21 @@ export function buildEquipmentLoadoutModuleModel(input: {
           return buildCharacterArmorSummary({
             characterSize: getWorkbookCharacterSize(input.characterContext.record.build),
             item: loadout.armor,
-            template: armorTemplate
+            template: armorTemplate,
           });
         })()
       : null;
   const perceptionSkill = input.characterContext.content.skills.find(
-    (skill) => skill.name.toLowerCase() === "perception"
+    (skill) => skill.name.toLowerCase() === "perception",
   );
-  const perceptionAdjustedXp =
-    perceptionSkill
-      ? sheetSummary.draftView.skills.find((skill) => skill.skillId === perceptionSkill.id)
-          ?.effectiveSkillNumber ?? -3
-      : -3;
+  const perceptionAdjustedXp = perceptionSkill
+    ? (sheetSummary.draftView.skills.find((skill) => skill.skillId === perceptionSkill.id)
+        ?.effectiveSkillNumber ?? -3)
+    : -3;
   const workbookPerceptionValue = getWorkbookArmorAdjustedPerception({
     adjustedStats: sheetSummary.adjustedStats,
     armorPerceptionModifier: wornArmorSummary?.perceptionModifier ?? 0,
-    perceptionAdjustedXp
+    perceptionAdjustedXp,
   });
 
   const baseModel = buildCombatStatePanelModel(
@@ -507,30 +513,30 @@ export function buildEquipmentLoadoutModuleModel(input: {
     input.characterId,
     characterCombatInputs,
     effectiveCombatAllocationInputs,
-    input.throwingWeaponItemId || null
+    input.throwingWeaponItemId || null,
   );
   const statsRows: CombatStateDetailRow[] = [
     {
       label: "Max HP",
-      value: calculateCharacterGeneralHitpoints(input.characterContext.record.build)
+      value: calculateCharacterGeneralHitpoints(input.characterContext.record.build),
     },
     {
       label: "GMR",
       value:
         sheetSummary.adjustedStats.pow != null && sheetSummary.adjustedStats.lck != null
           ? sheetSummary.adjustedStats.pow + sheetSummary.adjustedStats.lck - 3
-          : "—"
+          : "—",
     },
     {
       label: "Distraction lvl",
-      value: input.characterContext.record.build.profile.distractionLevel ?? "—"
-    }
+      value: input.characterContext.record.build.profile.distractionLevel ?? "—",
+    },
   ];
   const statsTable = buildLoadoutCombatStatsTable({
     adjustedStats: sheetSummary.adjustedStats,
     draftSkills: sheetSummary.draftView.skills,
     skills: input.characterContext.content.skills,
-    workbookPerceptionValue
+    workbookPerceptionValue,
   });
   const combatStatePanelModel = {
     ...baseModel,
@@ -553,14 +559,14 @@ export function buildEquipmentLoadoutModuleModel(input: {
     .map((skillDefinition) => {
       const skillType = getEncumbranceDependentSkillType({
         groupIds: skillDefinition.groupIds,
-        skillGroups: input.characterContext!.content.skillGroups
+        skillGroups: input.characterContext!.content.skillGroups,
       });
       if (!skillType) {
         return null;
       }
 
       const skillView = sheetSummary.draftView.skills.find(
-        (skill) => skill.skillId === skillDefinition.id
+        (skill) => skill.skillId === skillDefinition.id,
       );
       if (!skillView || skillView.effectiveSkillNumber <= 0) {
         return null;
@@ -568,7 +574,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
 
       const statAverage = getRoundedLinkedStatAverage(
         sheetSummary.adjustedStats,
-        skillDefinition.linkedStats
+        skillDefinition.linkedStats,
       );
       const baseTotal =
         skillDefinition.name.toLowerCase() === "perception"
@@ -576,7 +582,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
           : getWorkbookSkillBaseTotal({
               adjustedStats: sheetSummary.adjustedStats,
               adjustedXp: skillView.effectiveSkillNumber,
-              linkedStats: skillDefinition.linkedStats
+              linkedStats: skillDefinition.linkedStats,
             });
       const skillLevel =
         baseTotal == null
@@ -598,11 +604,11 @@ export function buildEquipmentLoadoutModuleModel(input: {
               })
             : getWorkbookSkillEncumberedTotal({
                 baseTotal,
-                movementModifier
+                movementModifier,
               });
       const initiative = getWorkbookSkillInitiative({
         adjustedXp: skillView.effectiveSkillNumber,
-        dexterityGm: characterCombatInputs.dexterityGm
+        dexterityGm: characterCombatInputs.dexterityGm,
       });
 
       return {
@@ -613,10 +619,10 @@ export function buildEquipmentLoadoutModuleModel(input: {
           statAverage ?? "—",
           skillView.effectiveSkillNumber,
           skillLevel ?? "—",
-          encumbered ?? "—"
+          encumbered ?? "—",
         ],
         skillType,
-        sortOrder: skillDefinition.sortOrder
+        sortOrder: skillDefinition.sortOrder,
       };
     })
     .filter((row): row is NonNullable<typeof row> => row !== null)
@@ -625,7 +631,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
         ENCOMBRANCE_SKILL_TYPE_ORDER.indexOf(left.skillType) -
           ENCOMBRANCE_SKILL_TYPE_ORDER.indexOf(right.skillType) ||
         left.sortOrder - right.sortOrder ||
-        String(left.row[0]).localeCompare(String(right.row[0]))
+        String(left.row[0]).localeCompare(String(right.row[0])),
     )
     .map((entry) => entry.row);
 
@@ -634,7 +640,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
       ? {
           title: "Encumbrance dependent skills",
           columns: ["Skill", "Initiative", "Stat average", "XP", "Skill level", "Encumbered"],
-          rows: encumbranceRows
+          rows: encumbranceRows,
         }
       : null;
 
@@ -644,80 +650,80 @@ export function buildEquipmentLoadoutModuleModel(input: {
       id: "primary",
       label: "Primary weapon",
       options: meleeWeaponOptions,
-      value: "primary" in loadout ? loadout.primary?.id ?? "" : "",
+      value: "primary" in loadout ? (loadout.primary?.id ?? "") : "",
       valueLabel: getLoadoutFieldValueLabel({
         fallbackLabel:
           "primary" in loadout && loadout.primary
-            ? getEquipmentTemplateById(input.state, loadout.primary.templateId)?.name
+            ? getEffectiveEquipmentTemplate(input.state, loadout.primary)?.name
             : undefined,
         item: "primary" in loadout ? loadout.primary : undefined,
         options: meleeWeaponOptions,
-        value: "primary" in loadout ? loadout.primary?.id ?? "" : ""
-      })
+        value: "primary" in loadout ? (loadout.primary?.id ?? "") : "",
+      }),
     },
     {
       error: input.errors?.shield,
       id: "shield",
       label: "Shield",
       options: shieldOptions,
-      value: "shield" in loadout ? loadout.shield?.id ?? "" : "",
+      value: "shield" in loadout ? (loadout.shield?.id ?? "") : "",
       valueLabel: getLoadoutFieldValueLabel({
         fallbackLabel:
           "shield" in loadout && loadout.shield
-            ? getEquipmentTemplateById(input.state, loadout.shield.templateId)?.name
+            ? getEffectiveEquipmentTemplate(input.state, loadout.shield)?.name
             : undefined,
         item: "shield" in loadout ? loadout.shield : undefined,
         options: shieldOptions,
-        value: "shield" in loadout ? loadout.shield?.id ?? "" : ""
-      })
+        value: "shield" in loadout ? (loadout.shield?.id ?? "") : "",
+      }),
     },
     {
       error: input.errors?.armor,
       id: "armor",
       label: "Armor",
       options: armorOptions,
-      value: "armor" in loadout ? loadout.armor?.id ?? "" : "",
+      value: "armor" in loadout ? (loadout.armor?.id ?? "") : "",
       valueLabel: getLoadoutFieldValueLabel({
         fallbackLabel:
           "armor" in loadout && loadout.armor
-            ? getEquipmentTemplateById(input.state, loadout.armor.templateId)?.name
+            ? getEffectiveEquipmentTemplate(input.state, loadout.armor)?.name
             : undefined,
         item: "armor" in loadout ? loadout.armor : undefined,
         options: armorOptions,
-        value: "armor" in loadout ? loadout.armor?.id ?? "" : ""
-      })
+        value: "armor" in loadout ? (loadout.armor?.id ?? "") : "",
+      }),
     },
     {
       error: input.errors?.secondary,
       id: "secondary",
       label: "Second hand weapon",
       options: meleeWeaponOptions,
-      value: "secondary" in loadout ? loadout.secondary?.id ?? "" : "",
+      value: "secondary" in loadout ? (loadout.secondary?.id ?? "") : "",
       valueLabel: getLoadoutFieldValueLabel({
         fallbackLabel:
           "secondary" in loadout && loadout.secondary
-            ? getEquipmentTemplateById(input.state, loadout.secondary.templateId)?.name
+            ? getEffectiveEquipmentTemplate(input.state, loadout.secondary)?.name
             : undefined,
         item: "secondary" in loadout ? loadout.secondary : undefined,
         options: meleeWeaponOptions,
-        value: "secondary" in loadout ? loadout.secondary?.id ?? "" : ""
-      })
+        value: "secondary" in loadout ? (loadout.secondary?.id ?? "") : "",
+      }),
     },
     {
       error: input.errors?.missile,
       id: "missile",
       label: "Missile weapon",
       options: missileWeaponOptions,
-      value: "missile" in loadout ? loadout.missile?.id ?? "" : "",
+      value: "missile" in loadout ? (loadout.missile?.id ?? "") : "",
       valueLabel: getLoadoutFieldValueLabel({
         fallbackLabel:
           "missile" in loadout && loadout.missile
-            ? getEquipmentTemplateById(input.state, loadout.missile.templateId)?.name
+            ? getEffectiveEquipmentTemplate(input.state, loadout.missile)?.name
             : undefined,
         item: "missile" in loadout ? loadout.missile : undefined,
         options: missileWeaponOptions,
-        value: "missile" in loadout ? loadout.missile?.id ?? "" : ""
-      })
+        value: "missile" in loadout ? (loadout.missile?.id ?? "") : "",
+      }),
     },
     {
       id: "throwing",
@@ -729,7 +735,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
           input.throwingWeaponItemId != null && input.throwingWeaponItemId.length > 0
             ? getEquipmentTemplateById(
                 input.state,
-                input.state.itemsById[input.throwingWeaponItemId]?.templateId ?? ""
+                input.state.itemsById[input.throwingWeaponItemId]?.templateId ?? "",
               )?.name
             : undefined,
         item:
@@ -737,16 +743,16 @@ export function buildEquipmentLoadoutModuleModel(input: {
             ? input.state.itemsById[input.throwingWeaponItemId]
             : undefined,
         options: throwingWeaponOptions,
-        value: input.throwingWeaponItemId ?? ""
-      })
-    }
+        value: input.throwingWeaponItemId ?? "",
+      }),
+    },
   ];
 
   return {
     armorSummary: wornArmorSummary,
     combatStatePanelModel,
     encumbranceSkillsTable,
-    fields
+    fields,
   };
 }
 
@@ -776,7 +782,7 @@ export function EquipmentLoadoutModule(input: {
                 />
               ) : (
                 <ReadonlyField key={field.id} field={field} />
-              )
+              ),
             )}
           </div>
         </ControlSection>

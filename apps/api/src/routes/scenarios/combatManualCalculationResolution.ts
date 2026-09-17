@@ -1,3 +1,4 @@
+import { resolveEffectiveItemTemplate } from "@glantri/domain";
 import {
   AnyEquipmentTemplateSchema,
   type ArmorTemplate,
@@ -296,7 +297,9 @@ export function resolveCanonicalWeaponParryBase(input: {
   const item = context.itemsById.get(input.weaponItemId);
   const isPrimary = context.loadout?.activePrimaryWeaponItemId === input.weaponItemId;
   const isSecondary = context.loadout?.activeSecondaryWeaponItemId === input.weaponItemId;
-  const template = context.templatesById.get(input.expectedTemplateId);
+  const template = item
+    ? resolveEffectiveItemTemplate(item, Object.fromEntries(context.templatesById))
+    : undefined;
   if (
     !item ||
     (!isPrimary && !isSecondary) ||

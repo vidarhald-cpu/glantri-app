@@ -59,6 +59,7 @@ describe("campaign item transfer route", () => {
       method: "POST",
       payload: {
         campaignId: "campaign-1",
+        expectedItemRevision: "2026-09-16T00:00:00.000Z",
         expectedRevision: 0,
         targetCharacterId: "character-2",
         targetExpectedRevision: 0,
@@ -71,6 +72,7 @@ describe("campaign item transfer route", () => {
       campaignId: "campaign-1",
       evidence: { actorAuthority: "campaign_gm", actorUserId: "gm-1" },
       itemId: "item-1",
+      expectedItemRevision: "2026-09-16T00:00:00.000Z",
       sourceExpectedRevision: 0,
       sourceCharacterId: "character-1",
       targetCharacterId: "character-2",
@@ -94,6 +96,7 @@ describe("campaign item transfer route", () => {
       method: "POST",
       payload: {
         campaignId: "campaign-1",
+        expectedItemRevision: "2026-09-16T00:00:00.000Z",
         expectedRevision: 0,
         targetCharacterId: "character-2",
         targetExpectedRevision: 0,
@@ -119,6 +122,7 @@ describe("campaign item transfer route", () => {
       method: "POST",
       payload: {
         campaignId: "campaign-1",
+        expectedItemRevision: "2026-09-16T00:00:00.000Z",
         expectedRevision: 0,
         targetCharacterId: "character-2",
         targetExpectedRevision: 0,
@@ -143,6 +147,7 @@ describe("campaign item transfer route", () => {
       method: "POST",
       payload: {
         campaignId: "campaign-1",
+        expectedItemRevision: "2026-09-16T00:00:00.000Z",
         expectedRevision: 0,
         targetCharacterId: "character-2",
         targetExpectedRevision: 0,
@@ -159,6 +164,7 @@ describe("campaign item transfer route", () => {
       method: "POST",
       payload: {
         campaignId: "campaign-1",
+        expectedItemRevision: "2026-09-16T00:00:00.000Z",
         expectedRevision: 0,
         targetCharacterId: "character-other",
         targetExpectedRevision: 0,
@@ -177,6 +183,7 @@ describe("campaign item transfer route", () => {
       method: "POST",
       payload: {
         campaignId: "campaign-1",
+        expectedItemRevision: "2026-09-16T00:00:00.000Z",
         expectedRevision: 0,
         targetCharacterId: 42,
         targetExpectedRevision: 0,
@@ -193,6 +200,7 @@ describe("campaign item transfer route", () => {
       method: "POST",
       payload: {
         campaignId: "campaign-1",
+        expectedItemRevision: "2026-09-16T00:00:00.000Z",
         expectedRevision: 0,
         targetCharacterId: "character-2",
         targetExpectedRevision: 0,

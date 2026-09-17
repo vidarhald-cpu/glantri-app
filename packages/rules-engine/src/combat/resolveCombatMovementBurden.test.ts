@@ -127,6 +127,38 @@ function resolve(input: {
 }
 
 describe("resolveCombatMovementBurden", () => {
+  it("resolves two Items from one Template independently without changing the registry", () => {
+    const template = gearTemplate(10);
+    const original = JSON.stringify(template);
+    const a = item({ id: "inherits", templateId: template.id });
+    const b = {
+      ...item({ id: "overrides", templateId: template.id }),
+      mechanicalOverrides: [
+        {
+          kind: "input" as const,
+          property: "baseEncumbrance" as const,
+          value: 0,
+          visibility: "gm_only" as const,
+        },
+      ],
+    };
+    const result = resolveCombatMovementBurden({
+      characterId,
+      characteristics: { constitution: 11, size: 13, strength: 17 },
+      equipmentLoadoutRevision: "revision",
+      participantId: "participant",
+      sourceSnapshotId: "snapshot",
+      equipmentState: {
+        activeLoadout: loadout(),
+        items: [a, b],
+        locationsById: { [personLocation.id]: personLocation },
+        templatesById: { [template.id]: template },
+      },
+    });
+    expect(result.totalEffectiveCarriedEncumbrance).toBe(10);
+    expect(JSON.stringify(template)).toBe(original);
+  });
+
   it("matches Themistogenes Calculations L39:S42 cached source values", () => {
     expect(
       resolve({

@@ -10,6 +10,7 @@ import {
   type EquipmentTemplate,
   type StorageLocation,
   getEffectiveEncumbrance,
+  resolveEffectiveItemTemplate,
   isPersonalCarryMode,
 } from "@glantri/domain";
 
@@ -137,13 +138,13 @@ export function resolveCombatMovementBurden(
     }
     if (!CARRIED_LOCATION_TYPES.has(location.type)) continue;
 
-    const template = equipmentState.templatesById[item.templateId];
-    if (!template) {
+    const template = resolveEffectiveItemTemplate(item, equipmentState.templatesById);
+    if (!template && item.templateId !== null) {
       missingFacts.add("equipment_template");
       continue;
     }
     const effectiveEncumbrance =
-      template.category === "armor"
+      template?.category === "armor"
         ? calculateArmorEffectiveEncumbrance({ characterSize, item, template })
         : getEffectiveEncumbrance(item, template);
     totalEffectiveCarriedEncumbrance += effectiveEncumbrance;
@@ -170,7 +171,10 @@ export function resolveCombatMovementBurden(
       missingFacts.add("equipment_item");
       missingFacts.add("shield");
     } else {
-      const readyShieldTemplate = equipmentState.templatesById[readyShield.templateId];
+      const readyShieldTemplate = resolveEffectiveItemTemplate(
+        readyShield,
+        equipmentState.templatesById,
+      );
       if (
         !readyShieldTemplate ||
         readyShieldTemplate.category !== "shield" ||

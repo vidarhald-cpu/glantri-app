@@ -627,7 +627,7 @@ if (!process.env.DATABASE_URL_TEST) {
             roundNumber: 1,
             scenarioId: current.scenario.id,
             session,
-            templateId: current.item.templateId,
+            templateId: current.item.templateId!,
           }),
         ).rejects.toBeInstanceOf(CombatItemUnavailableError);
       }
@@ -688,7 +688,7 @@ if (!process.env.DATABASE_URL_TEST) {
             roundNumber: 1,
             scenarioId: current.scenario.id,
             session,
-            templateId: current.item.templateId,
+            templateId: current.item.templateId!,
           }),
         ).rejects.toThrow(`injected-thrown-${boundary}`);
 
@@ -746,7 +746,7 @@ if (!process.env.DATABASE_URL_TEST) {
         roundNumber: 1,
         scenarioId: current.scenario.id,
         session,
-        templateId: current.item.templateId,
+        templateId: current.item.templateId!,
       });
 
       expect(committed.item.item).toMatchObject({
@@ -791,7 +791,7 @@ if (!process.env.DATABASE_URL_TEST) {
           roundNumber: 1,
           scenarioId: current.scenario.id,
           session,
-          templateId: current.item.templateId,
+          templateId: current.item.templateId!,
         }),
       ).rejects.toBeInstanceOf(Error);
       expect(await prisma!.characterEquipmentItem.count({ where: { id: current.item.id } })).toBe(
@@ -866,7 +866,7 @@ if (!process.env.DATABASE_URL_TEST) {
       );
     });
 
-    it("atomically consumes exact missile ammunition and restores it on exact undo", async () => {
+    it("persists final-shot exhaustion, rejects another shot after reload, and restores exact ammunition on undo", async () => {
       const current = await fixture("missile-ammo");
       const equipmentService = new CharacterEquipmentWriteService(current.itemRepository);
       const createdAmmo = await equipmentService.createCampaignEquipmentItem({
@@ -882,15 +882,16 @@ if (!process.env.DATABASE_URL_TEST) {
         templateId: "gear-template-arrows",
       });
       await prisma!.characterEquipmentItem.update({
-        data: { isStackable: true, quantity: 2 },
+        data: { isStackable: true, quantity: 1 },
         where: { id: createdAmmo.id },
       });
-      const ammo = (await current.itemRepository.getCanonicalEquipmentItemById(createdAmmo.id))!;
+      let ammo = (await current.itemRepository.getCanonicalEquipmentItemById(createdAmmo.id))!;
       const loadout = (await current.itemRepository.getCharacterLoadouts(current.character.id))[0]!;
       await current.itemRepository.upsertCharacterLoadout({
         ...loadout,
         activeAmmoItemIds: [ammo.id],
       });
+      ammo = (await current.itemRepository.getCanonicalEquipmentItemById(createdAmmo.id))!;
       await current.scenarioService.refreshCharacterParticipantEquipmentSnapshot({
         participantId: current.scenarioParticipants[0]!.id,
         scenarioId: current.scenario.id,
@@ -940,7 +941,7 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(
         (await prisma!.characterEquipmentItem.findUniqueOrThrow({ where: { id: ammo.id } }))
           .quantity,
-      ).toBe(1);
+      ).toBe(0);
       const replay = await service.commitMissileWeaponAttack({
         actorUserId: current.gm.id,
         ammoItemId: ammo.id,
@@ -958,7 +959,48 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(
         (await prisma!.characterEquipmentItem.findUniqueOrThrow({ where: { id: ammo.id } }))
           .quantity,
-      ).toBe(1);
+      ).toBe(0);
+      const reloadedAmmo = (await current.itemRepository.getCanonicalEquipmentItemById(ammo.id))!;
+      expect(reloadedAmmo.quantity).toBe(0);
+      await expect(
+        service.commitMissileWeaponAttack({
+          actorUserId: current.gm.id,
+          ammoItemId: ammo.id,
+          ammoItemRevision: reloadedAmmo.revision!,
+          campaignId: current.campaign.id,
+          commandId: "second-empty-shot",
+          encounterId: current.encounterId,
+          expectedEncounterRevision: committed.encounter.updatedAt,
+          ownerCharacterId: current.character.id,
+          roundNumber: 1,
+          scenarioId: current.scenario.id,
+          session: encounterSessionSchema.parse({
+            ...committed.encounter,
+            updatedAt: "2026-08-16T10:04:30.000Z",
+            combatRoundState: {
+              ...committed.encounter.combatRoundState!,
+              commands: [
+                ...committed.encounter.combatRoundState!.commands,
+                {
+                  ...session.combatRoundState!.commands.find(
+                    (command) => command.id === commandId,
+                  )!,
+                  id: "second-empty-shot",
+                  facts: {
+                    previousMissileReadiness: {
+                      ammoItemId: ammo.id,
+                      ammoItemRevision: reloadedAmmo.revision,
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+        }),
+      ).rejects.toThrow();
+      expect((await current.itemRepository.getCanonicalEquipmentItemById(ammo.id))!.quantity).toBe(
+        0,
+      );
       const restoredSession = encounterSessionSchema.parse({
         ...committed.encounter,
         combatRoundState: {
@@ -982,7 +1024,7 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(
         (await prisma!.characterEquipmentItem.findUniqueOrThrow({ where: { id: ammo.id } }))
           .quantity,
-      ).toBe(2);
+      ).toBe(1);
     });
 
     it("atomically disarms the exact Item with rollback, idempotent retry, and exact undo", async () => {

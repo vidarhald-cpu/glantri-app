@@ -73,11 +73,12 @@ function formatLabel(value: string): string {
 function hasPresentedItemFacts(item?: EquipmentItem): boolean {
   const facts = item?.itemFacts;
   return Boolean(
-    facts &&
-    (facts.templateOverrides.length > 0 ||
-      facts.activeMechanics.length > 0 ||
-      facts.descriptiveTraits.length > 0 ||
-      facts.unsupportedCapabilities.length > 0),
+    item?.mechanicalOverrides?.length ||
+    (facts &&
+      (facts.templateOverrides.length > 0 ||
+        facts.activeMechanics.length > 0 ||
+        facts.descriptiveTraits.length > 0 ||
+        facts.unsupportedCapabilities.length > 0)),
   );
 }
 
@@ -663,6 +664,15 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1080 }}>
       <div style={{ display: "grid", gap: "0.35rem" }}>
         <h1 style={{ margin: 0 }}>Inventory by location - {characterName}</h1>
+        {state?.managementCampaigns?.map((campaign) => (
+          <div key={campaign.id}>
+            <Link
+              href={`/campaigns/${campaign.id}?tab=items&itemCreate=1&itemHolder=${encodeURIComponent(id)}`}
+            >
+              Create Campaign Item for {characterName} · {campaign.name}
+            </Link>
+          </div>
+        ))}
       </div>
 
       {recoveryRequired ? (
@@ -1263,6 +1273,18 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                                         {state?.itemsById[row.itemId]?.campaignContextId ? (
                                           <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
                                             Item details are managed by the GM in Campaign Items.
+                                            {state?.managementCampaigns?.some(
+                                              (campaign) =>
+                                                campaign.id ===
+                                                state.itemsById[row.itemId]?.campaignContextId,
+                                            ) ? (
+                                              <Link
+                                                href={`/campaigns/${state.itemsById[row.itemId]?.campaignContextId}?tab=items&itemId=${encodeURIComponent(row.itemId)}&itemHolder=${encodeURIComponent(id)}`}
+                                              >
+                                                {" "}
+                                                Open this Item
+                                              </Link>
+                                            ) : null}
                                           </div>
                                         ) : null}
                                         {rowErrors[row.itemId] ? (
@@ -1274,11 +1296,10 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                                     </td>
                                   </tr>
                                   {hasPresentedItemFacts(state!.itemsById[row.itemId]) &&
-                                  state!.templates.templatesById[
-                                    state!.itemsById[row.itemId]!.templateId
-                                  ] &&
                                   state!.itemsById[row.itemId] ? (
-                                    <tr>
+                                    <tr
+                                      aria-label={`Details for ${row.displayName || row.templateName}`}
+                                    >
                                       <td
                                         colSpan={11}
                                         style={{ ...tableCellStyle, background: "#fbfaf6" }}
@@ -1287,7 +1308,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                                           item={state!.itemsById[row.itemId]!}
                                           template={
                                             state!.templates.templatesById[
-                                              state!.itemsById[row.itemId]!.templateId
+                                              state!.itemsById[row.itemId]!.templateId ?? ""
                                             ]!
                                           }
                                         />

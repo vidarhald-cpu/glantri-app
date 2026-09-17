@@ -391,8 +391,10 @@ model CharacterEquipmentItem {
   id                    String             @id
   holderCharacterId     String?
   campaignContextId     String?
-  templateId            String
-  category              EquipmentCategory
+  templateId            String?
+  category              EquipmentCategory?
+  mechanicalOverridesJson Json?
+  physicalBaseEncumbrance Float?
   displayName           String?
   specificityType       SpecificityType
   quantity              Int

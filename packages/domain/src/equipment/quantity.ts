@@ -2,10 +2,17 @@ import type { EquipmentTemplate } from "./types";
 
 /** Only existing valuables and explicitly supported ammunition accept authored quantities. */
 export function supportsEquipmentQuantity(template: EquipmentTemplate): boolean {
-  return template.category === "valuables" || isSupportedAmmunitionTemplate(template);
+  return (
+    template.specificityTypeDefault === "generic" &&
+    (template.category === "valuables" || isSupportedAmmunitionTemplate(template))
+  );
 }
 
 export function isSupportedAmmunitionTemplate(template: EquipmentTemplate): boolean {
   const family = "ammunitionProfile" in template ? template.ammunitionProfile?.family : undefined;
-  return family === "arrow" || family === "crossbow_bolt" || family === "sling_projectile";
+  return (
+    (family === "arrow" || family === "crossbow_bolt" || family === "sling_projectile") &&
+    "ammunitionProfile" in template &&
+    template.ammunitionProfile?.quantityPerShot === 1
+  );
 }

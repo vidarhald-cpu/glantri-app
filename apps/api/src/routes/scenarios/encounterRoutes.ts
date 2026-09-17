@@ -1,3 +1,4 @@
+import { resolveEffectiveItemTemplate } from "@glantri/domain";
 export { buildPlayerSafeCombatScopeForUser } from "@glantri/domain";
 
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
@@ -3451,15 +3452,15 @@ function getEquipmentItemTemplate(input: {
       ? weaponTemplates.find((candidate) => candidate.id === templateId)
       : undefined;
 
-  if (isWeaponTemplateLike(template) && isWeaponTemplateLike(contentTemplate)) {
-    return {
-      ...template,
-      attackModes: contentTemplate.attackModes ?? template.attackModes,
-    };
-  }
-
-  if (isWeaponTemplateLike(template)) return template;
-  return isWeaponTemplateLike(contentTemplate) ? contentTemplate : undefined;
+  const base = isWeaponTemplateLike(template)
+    ? isWeaponTemplateLike(contentTemplate)
+      ? { ...template, attackModes: contentTemplate.attackModes ?? template.attackModes }
+      : template
+    : contentTemplate;
+  const parsed = EquipmentItemSchema.safeParse(item);
+  const effective =
+    base && parsed.success ? resolveEffectiveItemTemplate(parsed.data, { [base.id]: base }) : base;
+  return effective?.category === "weapon" ? effective : undefined;
 }
 
 function resolveDeclaredWeaponSource(input: {
@@ -15653,8 +15654,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         const templatesById = equipmentState.templatesById;
         const ammoTemplate = AnyEquipmentTemplateSchema.safeParse(
           ammoItem.success
-            ? (templatesById?.[ammoItem.data.templateId] ??
-                equipmentTemplatesById[ammoItem.data.templateId])
+            ? resolveEffectiveItemTemplate(ammoItem.data, {
+                ...equipmentTemplatesById,
+                ...templatesById,
+              })
             : undefined,
         );
         const loadout = CharacterLoadoutSchema.safeParse(

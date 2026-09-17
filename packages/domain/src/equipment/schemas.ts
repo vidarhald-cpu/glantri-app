@@ -1,3 +1,5 @@
+import type { EquipmentItemBinding } from "./types";
+import { ItemMechanicalOverridesSchema } from "./itemOverrides";
 import { z } from "zod";
 
 import { createEmptyEquipmentItemFacts, migrateLegacySpecialProperties } from "./itemFacts";
@@ -221,6 +223,7 @@ export const ItemStorageAssignmentSchema = z.object({
 });
 
 export const EquipmentTemplateSchema = z.object({
+  selectableForNewItems: z.boolean().optional(),
   id: z.string(),
   category: EquipmentCategorySchema,
   name: z.string(),
@@ -531,7 +534,10 @@ const CanonicalEquipmentItemObjectSchema = z
   .object({
     acquiredFrom: z.string().nullable().optional(),
     campaignContextId: z.string().nullable().default(null),
-    category: EquipmentCategorySchema,
+    category: EquipmentCategorySchema.nullable(),
+    itemKind: z.enum(["template_backed", "descriptive_only"]).optional(),
+    mechanicalOverrides: ItemMechanicalOverridesSchema.optional(),
+    physicalBaseEncumbrance: z.number().finite().nonnegative().nullable().optional(),
     characterId: z.string().nullable(),
     conditionState: ItemConditionStateSchema,
     displayName: z.string().nullable().optional(),
@@ -548,16 +554,54 @@ const CanonicalEquipmentItemObjectSchema = z
     notes: z.string().nullable().optional(),
     previousStorageAssignment: ItemStorageAssignmentSchema.nullable().optional(),
     quality: QualityTypeSchema,
-    quantity: z.number().positive(),
+    quantity: z.number().int().nonnegative(),
     revision: z.string().datetime().optional(),
     specialProperties: z.null().optional(),
     specificityType: SpecificityTypeSchema,
     statusTags: z.array(z.string()).nullable().optional(),
     storageAssignment: ItemStorageAssignmentSchema.nullable(),
-    templateId: z.string(),
+    templateId: z.string().min(1).nullable(),
     valueOverride: z.number().nonnegative().nullable().optional(),
   })
   .superRefine((item, ctx) => {
+    if (item.templateId === null) {
+      if (
+        item.category !== null ||
+        item.itemKind === "template_backed" ||
+        item.mechanicalOverrides?.length ||
+        item.quantity !== 1 ||
+        item.isStackable ||
+        !item.displayName?.trim() ||
+        item.itemFacts.activeMechanics.length ||
+        item.itemFacts.templateOverrides.length
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Descriptive-only items require a name and no Equipment mechanics.",
+          path: ["templateId"],
+        });
+      }
+    } else if (
+      item.category === null ||
+      item.itemKind === "descriptive_only" ||
+      item.physicalBaseEncumbrance != null
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Template-backed items require their Equipment category.",
+        path: ["category"],
+      });
+    }
+    if (
+      item.quantity === 0 &&
+      (item.category !== "gear" || !item.isStackable || item.specificityType !== "generic")
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Only exhausted ammunition may have zero quantity.",
+        path: ["quantity"],
+      });
+    }
     if (item.characterId !== item.holderCharacterId) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -565,7 +609,14 @@ const CanonicalEquipmentItemObjectSchema = z
         path: ["characterId"],
       });
     }
-  });
+  })
+  .transform(
+    (item) =>
+      ({
+        ...item,
+        itemKind: item.templateId === null ? "descriptive_only" : "template_backed",
+      }) as typeof item & EquipmentItemBinding,
+  );
 
 export const CanonicalEquipmentItemSchema = z.preprocess(
   normalizeEquipmentItemInput,

@@ -1,5 +1,7 @@
 "use client";
 
+import { resolveEffectiveItemTemplate } from "@glantri/domain/equipment";
+
 import {
   forwardRef,
   Profiler,
@@ -554,7 +556,9 @@ function buildCombatDefenseReviewSourceOptions(input: {
   return sourceIds.flatMap(({ itemId, slot }) => {
     if (!itemId) return [];
     const item = state.itemsById[itemId];
-    const template = item ? state.templates.templatesById[item.templateId] : undefined;
+    const template = item
+      ? resolveEffectiveItemTemplate(item, state.templates.templatesById ?? {})
+      : undefined;
     if (!item || !template || (template.category !== "weapon" && template.category !== "shield")) {
       return [];
     }
@@ -2699,7 +2703,7 @@ function getActiveWeaponTemplatesForScenarioParticipant(
     .map((itemId) => {
       const item = equipmentStateCandidate.itemsById[itemId];
       const template = item
-        ? equipmentStateCandidate.templates.templatesById[item.templateId]
+        ? resolveEffectiveItemTemplate(item, equipmentStateCandidate.templates.templatesById ?? {})
         : undefined;
 
       return template?.category === "weapon" ? template : undefined;
@@ -10633,7 +10637,10 @@ export default function CombatRoundManagerPanel({
       .map((itemId) => inspectorEquipmentState?.itemsById[itemId])
       .find((item) => {
         const template = item
-          ? inspectorEquipmentState?.templates.templatesById[item.templateId]
+          ? resolveEffectiveItemTemplate(
+              item,
+              inspectorEquipmentState?.templates.templatesById ?? {},
+            )
           : undefined;
         return (
           item &&
