@@ -1,6 +1,7 @@
 export const appNavigationLinks = [
   { href: "/", label: "Home" },
   { href: "/chargen", label: "Chargen" },
+  { href: "/skills", label: "Skills" },
   { href: "/characters/resume", label: "Characters" },
   { href: "/templates", label: "Templates" },
   { href: "/campaigns", label: "Campaigns" },
