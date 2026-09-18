@@ -27,12 +27,19 @@ test.describe("AM1 Artifact library and import", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${WEB}/campaigns/${campaignId}?tab=campaign`);
     const panel = page.getByRole("region", { name: "Artifact library", exact: true });
-    await panel
-      .getByLabel("File", { exact: true })
+    const ordinaryUpload = panel.getByRole("region", { name: "Upload Artifacts" });
+    await ordinaryUpload
+      .getByLabel("Files", { exact: true })
       .setInputFiles({ name: "portrait.jpeg", mimeType: "image/jpeg", buffer: bytes });
-    await panel.getByLabel("Title", { exact: true }).fill("Captain original");
-    await panel.getByLabel("Alt text for visual content", { exact: true }).fill("A captain");
-    await panel.getByRole("button", { name: /Upload/, exact: false }).click();
+    await ordinaryUpload.getByLabel("Title for portrait.jpeg").fill("Captain original");
+    await ordinaryUpload.getByLabel("Alt text for portrait.jpeg (optional)").fill("A captain");
+    await ordinaryUpload.getByRole("button", { name: "Validate and preview" }).click();
+    const ordinaryReview = ordinaryUpload.getByRole("region", {
+      name: "Artifact import review",
+    });
+    await expect(ordinaryReview.getByText(/^Create/)).toBeVisible();
+    await ordinaryReview.getByRole("button", { name: "Accept selected Artifacts" }).click();
+    await expect(ordinaryReview.getByRole("status")).toContainText("Accepted: 1");
     await expect(panel.getByText("Captain original", { exact: true }).first()).toBeVisible();
     let list = (await (await page.request.get(`${API}/campaigns/${campaignId}/artifacts`)).json())
       .artifacts;
@@ -155,6 +162,68 @@ test.describe("AM1 Artifact library and import", () => {
     list = (await (await page.request.get(`${API}/campaigns/${campaignId}/artifacts`)).json())
       .artifacts;
     expect(list).toHaveLength(3);
+  });
+  test("reviews and atomically accepts multiple loose files without an archive", async ({
+    page,
+  }) => {
+    test.skip(
+      process.env.CI === "true" && process.env.ARTIFACT_E2E_STORAGE_ENABLED !== "1",
+      "Requires the explicitly owned private Artifact storage run.",
+    );
+    const campaignResponse = await page.request.post(`${API}/campaigns`, {
+      data: { name: `Ordinary multi-file ${Date.now()}`, status: "active" },
+    });
+    expect(campaignResponse.status()).toBe(200);
+    const campaignId = (await campaignResponse.json()).campaign.id;
+    const bytes = fs.readFileSync(path.resolve(__dirname, "../public/images/GrinulGrimbrew.jpeg"));
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${WEB}/campaigns/${campaignId}?tab=campaign`);
+    const panel = page.getByRole("region", { name: "Artifact library", exact: true });
+    const upload = panel.getByRole("region", { name: "Upload Artifacts" });
+
+    await upload.getByLabel("Files", { exact: true }).setInputFiles({
+      name: "first-portrait.jpeg",
+      mimeType: "image/jpeg",
+      buffer: bytes,
+    });
+    await expect(upload.getByLabel("Title for first-portrait.jpeg")).toHaveValue("first portrait");
+    await upload.getByRole("button", { name: "Validate and preview" }).click();
+    let review = upload.getByRole("region", { name: "Artifact import review" });
+    await review.getByRole("button", { name: "Accept selected Artifacts" }).click();
+    await expect(review.getByRole("status")).toContainText("Accepted: 1");
+
+    await upload.getByLabel("Files", { exact: true }).setInputFiles([
+      { name: "same-bytes-map.jpeg", mimeType: "image/jpeg", buffer: bytes },
+      { name: "same-bytes-handout.jpeg", mimeType: "image/jpeg", buffer: bytes },
+    ]);
+    await upload.getByLabel("Kind for same-bytes-map.jpeg").selectOption("map");
+    await upload.getByLabel("Kind for same-bytes-handout.jpeg").selectOption("handout");
+    await expect(upload.getByLabel("Alt text for same-bytes-map.jpeg (optional)")).toHaveValue("");
+    await upload.getByRole("button", { name: "Validate and preview" }).click();
+    review = upload.getByRole("region", { name: "Artifact import review" });
+    await expect(review.getByText("2 Artifact uploads", { exact: true })).toBeVisible();
+    await expect(review.getByText(/matches existing Artifact/)).toHaveCount(2);
+    await expect(review.getByText(/^Create/)).toHaveCount(2);
+    await review.getByRole("button", { name: "Accept selected Artifacts" }).click();
+    await expect(review.getByRole("status")).toContainText("Accepted: 2");
+
+    const artifacts = (
+      await (await page.request.get(`${API}/campaigns/${campaignId}/artifacts`)).json()
+    ).artifacts;
+    expect(artifacts).toHaveLength(3);
+    expect(new Set(artifacts.map((artifact: { id: string }) => artifact.id)).size).toBe(3);
+    expect(
+      artifacts.every(
+        (artifact: { altText?: string; audience: string; provenanceKind: string }) =>
+          artifact.audience === "gm_private" &&
+          artifact.provenanceKind === "user_upload" &&
+          artifact.altText === undefined,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: test.info().outputPath("ordinary-multi-file-review-390.png"),
+      fullPage: true,
+    });
   });
   test("recovers from missing staged storage and stale update approval without partial acceptance", async ({
     page,

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,7 +22,6 @@ const mocks = vi.hoisted(() => ({
   setArtifactAudience: vi.fn(),
   setArtifactLifecycle: vi.fn(),
   updateArtifactMetadata: vi.fn(),
-  uploadArtifact: vi.fn(),
 }));
 
 vi.mock("@/lib/api/localServiceClient", async (loadOriginal) => ({
@@ -35,7 +34,6 @@ vi.mock("@/lib/api/localServiceClient", async (loadOriginal) => ({
   setArtifactAudience: mocks.setArtifactAudience,
   setArtifactLifecycle: mocks.setArtifactLifecycle,
   updateArtifactMetadata: mocks.updateArtifactMetadata,
-  uploadArtifact: mocks.uploadArtifact,
 }));
 
 const managedArtifact = {
@@ -114,22 +112,13 @@ describe("ArtifactPanel", () => {
     expect(screen.queryByRole("link", { name: /pdf/i })).not.toBeInTheDocument();
   });
 
-  it("validates uploads client-side and reports streaming progress", async () => {
-    const user = userEvent.setup();
-    mocks.uploadArtifact.mockImplementation(async (input) => {
-      input.onProgress?.(65);
-      return managedArtifact;
-    });
+  it("offers the shared staged flow for one or many files and preserves Advanced package import", async () => {
     render(<ArtifactPanel campaignId="campaign-1" scenarios={[]} />);
     await screen.findByText("Northern pass");
-    await user.type(screen.getByLabelText("Title"), "New map");
-    const file = new File([Buffer.from("89504e470d0a1a0a", "hex")], "map.png", {
-      type: "image/png",
-    });
-    fireEvent.change(screen.getByLabelText("File"), { target: { files: [file] } });
-    await user.click(screen.getByRole("button", { name: "Upload privately" }));
-    await waitFor(() => expect(mocks.uploadArtifact).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText(/uploaded privately/i)).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Upload Artifacts" })).toBeVisible();
+    expect(screen.getByLabelText("Files")).toHaveAttribute("multiple");
+    expect(screen.getByText("Import Artifact package")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Upload privately" })).toBeNull();
   });
 
   it("refreshes instead of restoring stale publication state", async () => {

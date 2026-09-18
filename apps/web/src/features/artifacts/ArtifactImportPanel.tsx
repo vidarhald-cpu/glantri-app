@@ -130,6 +130,11 @@ export function ArtifactImportReview({
           {item.reasons.map((reason) => (
             <p key={reason}>{reason}</p>
           ))}
+          {(item.warnings ?? []).map((warning) => (
+            <p key={warning} role="note">
+              {warning}
+            </p>
+          ))}
           {item.resourceId && preview.state === "review" ? (
             <a
               href={artifactImportResourceUrl(campaignId, preview.id, item.resourceId)}
