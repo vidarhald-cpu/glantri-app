@@ -276,7 +276,10 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs a sustained specialist
+  navigation route and teaching tradition; occasional boat travel is
+  insufficient.
 
 <a id="profession-p11"></a>
 
@@ -306,7 +309,9 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs an enduring role with
+  responsibility for a working crew and voyage; no standing navy is presumed.
 
 <a id="profession-p12"></a>
 
@@ -715,8 +720,13 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S02
-- S03
+- **Pastoral clan / nomadic warrior:** Conditional. This Society Level 2 context
+  is below the profession's ordinary structural floor. It needs a continuing,
+  differentiated military-supply role; carrying supplies alone is insufficient.
+- **Early agrarian chiefdom / proto-state:** Conditional. This Society Level 2
+  context is below the profession's ordinary structural floor. It needs a
+  continuing, differentiated military-supply role; carrying supplies alone is
+  insufficient.
 
 <a id="profession-p27"></a>
 
@@ -746,8 +756,13 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S04
-- S05
+- **Bronze Age palace state:** Conditional. This Society Level 3 context is below
+  the profession's ordinary structural floor. Campaign activity does not by
+  itself establish a separate, reproducibly trained planning occupation.
+- **Temple-state / early literate agrarian state:** Conditional. This Society
+  Level 3 context is below the profession's ordinary structural floor. Campaign
+  activity does not by itself establish a separate, reproducibly trained
+  planning occupation.
 
 <a id="profession-p28"></a>
 
@@ -829,7 +844,9 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs evidence for the complete
+  clinical practice, not merely healing beliefs or first aid.
 
 <a id="profession-p31"></a>
 
@@ -859,7 +876,9 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs a reproducible, complete
+  operative teaching tradition; isolated early operations are insufficient.
 
 <a id="profession-p32"></a>
 
@@ -915,7 +934,10 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs evidence for the complete
+  specialist birth-care practice; the existence of childbirth alone does not
+  establish it.
 
 <a id="profession-p34"></a>
 
@@ -971,7 +993,9 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs evidence for the complete
+  Pharmacy practice; plant gathering remains a separate route.
 
 <a id="profession-p36"></a>
 
@@ -1079,7 +1103,10 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs a differentiated whole
+  timber craft and suitable materials; cutting wood or building a shelter is
+  insufficient.
 
 <a id="profession-p40"></a>
 
@@ -1109,7 +1136,10 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs a sustained, complete
+  timber-vessel construction tradition; an improvised floating object is
+  insufficient.
 
 <a id="profession-p41"></a>
 
@@ -1165,7 +1195,10 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs suitable materials and a
+  sustained fibre-to-cloth tradition that teaches both complete competences;
+  using string is insufficient.
 
 <a id="profession-p43"></a>
 
@@ -1195,7 +1228,9 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs a reproducible, complete
+  clothing craft; wearing or patching garments is insufficient.
 
 <a id="profession-p44"></a>
 
@@ -1225,7 +1260,9 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs a sustained material
+  craft with repeatable instruction; possession of hides is insufficient.
 
 <a id="profession-p45"></a>
 
@@ -1255,7 +1292,9 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs recurring ceramic
+  production and instruction; a single fired object is insufficient.
 
 <a id="profession-p46"></a>
 
@@ -1311,7 +1350,9 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs a differentiated,
+  recurring extraction practice; collecting loose material is insufficient.
 
 <a id="profession-p48"></a>
 
@@ -1601,7 +1642,10 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S03
+- **Early agrarian chiefdom / proto-state:** Conditional. This Society Level 2
+  context is below the profession's ordinary structural floor. It needs a
+  complete, recurring office-and-account practice; oral or non-modern records
+  are not disqualified solely by their form.
 
 <a id="profession-p59"></a>
 
@@ -1761,7 +1805,10 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. Oral learning can exist without a
+  separate occupation; a sustained, recognizable teaching responsibility must
+  still be established.
 
 <a id="profession-p65"></a>
 
@@ -1817,7 +1864,9 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs sustained intercommunity
+  language service; written translation also needs an actual Written Tradition.
 
 <a id="profession-p67"></a>
 
@@ -1847,7 +1896,9 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs maintained,
+  differentiated historical study, which may be oral rather than archival.
 
 <a id="profession-p68"></a>
 
@@ -1929,8 +1980,13 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S02
-- S03
+- **Pastoral clan / nomadic warrior:** Conditional. This Society Level 2 context
+  is below the profession's ordinary structural floor. It needs differentiated,
+  reproducible celestial study; awareness of stars or seasons is insufficient.
+- **Early agrarian chiefdom / proto-state:** Conditional. This Society Level 2
+  context is below the profession's ordinary structural floor. It needs
+  differentiated, reproducible celestial study; awareness of stars or seasons
+  is insufficient.
 
 <a id="profession-p71"></a>
 
@@ -1986,7 +2042,9 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs natural study sustained
+  as a differentiated role, though that study may be oral and field-based.
 
 <a id="profession-p73"></a>
 
@@ -2224,7 +2282,9 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This context needs trained physical
+  performance sustained as a recognizable role; participation in play or hard
+  work does not establish the full practice.
 
 <a id="profession-p82"></a>
 
@@ -2254,7 +2314,10 @@ and exceptions](./gaps-and-exceptions.md).
 
 **Structural/context cautions.**
 
-- S01
+- **Forager / ritual-tribal:** Conditional. This Society Level 1 context is below
+  the profession's ordinary structural floor. It needs a sustained, recognized
+  weapon-instruction role; being a competent fighter is insufficient, and the
+  swashbuckling route is not projected into this society.
 
 <a id="profession-p83"></a>
 

@@ -54,7 +54,7 @@ This is the only approved Profession whose defining competency package has an
 explicitly unbound core outside the 203 exact opportunities. It must not be
 presented as universal literacy.
 
-### S01 Common-Folk protection route
+### Forager / ritual-tribal Common-Folk protection route
 
 The Forager / ritual-tribal Arch Society still needs a credible Common-Folk
 communal or civilian protection-and-fighting route. Guard, Watcher and Escort
