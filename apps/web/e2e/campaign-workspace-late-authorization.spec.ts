@@ -99,7 +99,7 @@ test.describe("Campaign workspace late authorization denial", () => {
     );
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect(
-      page.getByText("We couldn't refresh live play. Try again or reload the page."),
+      page.getByText("We couldn't refresh the Campaign context. Try again or reload the page."),
     ).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Private GM notes" })).toHaveValue(privateNote);
 
