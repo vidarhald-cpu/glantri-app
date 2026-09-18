@@ -288,6 +288,46 @@ function findCombatCommand(encounter: EncounterSession, commandId: string) {
   return undefined;
 }
 
+function encounterHasItem(encounter: EncounterSession, itemId: string): boolean {
+  return (encounter.itemReferences ?? []).some((reference) => reference.itemId === itemId);
+}
+
+function itemEncounterVisibility(
+  item: Pick<CombatThrownWeaponAttackUndo["itemBefore"], "statusTags">,
+): "players" | "gm_only" {
+  const tags = (item.statusTags ?? []).map((tag) => tag.trim().toLowerCase());
+  return tags.includes("hidden") || tags.includes("unrevealed") ? "gm_only" : "players";
+}
+
+function associateEncounterItem(
+  encounter: EncounterSession,
+  itemId: string,
+  visibility: "players" | "gm_only",
+): EncounterSession {
+  return {
+    ...encounter,
+    itemReferencesVersion: 1,
+    itemReferences: [
+      ...(encounter.itemReferences ?? []).filter((reference) => reference.itemId !== itemId),
+      { itemId, visibility },
+    ],
+  };
+}
+
+function dissociateEncounterItems(
+  encounter: EncounterSession,
+  itemIds: readonly string[],
+): EncounterSession {
+  const removed = new Set(itemIds);
+  return {
+    ...encounter,
+    itemReferencesVersion: 1,
+    itemReferences: (encounter.itemReferences ?? []).filter(
+      (reference) => !removed.has(reference.itemId),
+    ),
+  };
+}
+
 function attachThrownWeaponUndo(
   encounter: EncounterSession,
   commandId: string,
@@ -497,12 +537,34 @@ export class CombatItemInteractionService {
 
   async getOptions(input: {
     campaignId: string;
+    encounterSession?: EncounterSession;
     encounterId: string;
     participants: readonly CombatItemParticipantContext[];
     viewer: CombatItemInteractionViewer;
   }): Promise<CombatItemInteractionOptions> {
-    await this.assertEncounterScenarioEquipmentCurrent(input.encounterId);
+    const persistedEncounter = await this.assertEncounterScenarioEquipmentCurrent(
+      input.encounterId,
+    );
+    const encounter = input.encounterSession ?? persistedEncounter;
     const records = await this.repository.getCombatItemInteractionRecords(input.campaignId);
+    const references = new Map(
+      (encounter?.itemReferences ?? []).map((reference) => [
+        reference.itemId,
+        reference.visibility,
+      ]),
+    );
+    const projectedRecords = records.map((record) => {
+      const canonicalVisibility = references.get(record.item.id);
+      return canonicalVisibility
+        ? {
+            ...record,
+            hidden: canonicalVisibility === "gm_only",
+            presentEncounterId: input.encounterId,
+          }
+        : encounter?.itemReferencesVersion === 1
+          ? { ...record, presentEncounterId: undefined }
+          : record;
+    });
     const visibleActors = input.participants.filter(
       (participant) =>
         input.viewer.kind === "gm" ||
@@ -520,7 +582,7 @@ export class CombatItemInteractionService {
       }
       return {
         characterId: participant.characterId,
-        items: records
+        items: projectedRecords
           .filter(
             (record) =>
               record.availableInEncounter &&
@@ -532,7 +594,7 @@ export class CombatItemInteractionService {
         participantId: participant.participantId,
       };
     });
-    const presentItems = records
+    const presentItems = projectedRecords
       .filter(
         (record) =>
           record.presentEncounterId === input.encounterId &&
@@ -550,7 +612,7 @@ export class CombatItemInteractionService {
         (participant): CombatItemInteractionActorOptions => ({
           characterId: participant.characterId,
           items: participant.characterId
-            ? records
+            ? projectedRecords
                 .filter(
                   (record) =>
                     record.availableInEncounter &&
@@ -853,7 +915,11 @@ export class CombatItemInteractionService {
               ownerCharacterId: input.ownerCharacterId,
               version: 1,
             };
-            const session = attachThrownWeaponUndo(input.session, input.commandId, undo);
+            const session = associateEncounterItem(
+              attachThrownWeaponUndo(input.session, input.commandId, undo),
+              input.itemId,
+              itemEncounterVisibility(itemBefore),
+            );
             const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
               maxTransactionAttempts: 1,
             }).updateCombatEncounter({
@@ -1190,7 +1256,11 @@ export class CombatItemInteractionService {
               ownerCharacterId: input.ownerCharacterId,
               version: 1,
             };
-            const session = attachDisarmItemUndo(input.session, input.commandId, undo);
+            const session = associateEncounterItem(
+              attachDisarmItemUndo(input.session, input.commandId, undo),
+              itemBefore.id,
+              itemEncounterVisibility(itemBefore),
+            );
             const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
               maxTransactionAttempts: 1,
             }).updateCombatEncounter({
@@ -1288,6 +1358,7 @@ export class CombatItemInteractionService {
         for (const { undo } of input.undos) {
           await repository.restoreCombatThrownWeaponAttack({
             campaignId: input.campaignId,
+            presentInEncounter: encounterHasItem(persistedEncounter, undo.itemBefore.id),
             undo,
           });
         }
@@ -1300,7 +1371,10 @@ export class CombatItemInteractionService {
           expectedRevision: input.expectedEncounterRevision,
           participantStateUpdates: input.participantStateUpdates,
           scenarioId: input.scenarioId,
-          session: input.session,
+          session: dissociateEncounterItems(
+            input.session,
+            input.undos.map(({ undo }) => undo.itemBefore.id),
+          ),
         });
         await reconcileScenarioEquipmentForCharacters({
           characterIds: input.undos.map(({ undo }) => undo.ownerCharacterId),
@@ -1387,6 +1461,7 @@ export class CombatItemInteractionService {
         for (const { undo } of input.undos) {
           await repository.restoreCombatThrownWeaponAttack({
             campaignId: input.campaignId,
+            presentInEncounter: encounterHasItem(persistedEncounter, undo.itemBefore.id),
             undo,
           });
         }
@@ -1399,7 +1474,10 @@ export class CombatItemInteractionService {
           expectedRevision: input.expectedEncounterRevision,
           participantStateUpdates: input.participantStateUpdates,
           scenarioId: input.scenarioId,
-          session: input.session,
+          session: dissociateEncounterItems(
+            input.session,
+            input.undos.map(({ undo }) => undo.itemBefore.id),
+          ),
         });
         await reconcileScenarioEquipmentForCharacters({
           characterIds: input.undos.map(({ undo }) => undo.ownerCharacterId),
@@ -1645,6 +1723,10 @@ export class CombatItemInteractionService {
               );
             }
 
+            const presentInEncounter = encounterHasItem(
+              persistedEncounter,
+              input.interaction.itemId,
+            );
             const item = await createPrismaCharacterEquipmentRepository(
               transaction,
             ).applyCombatItemInteraction({
@@ -1655,6 +1737,7 @@ export class CombatItemInteractionService {
               itemId: input.interaction.itemId,
               operation: input.interaction.operation,
               ownerCharacterId: input.ownerCharacterId,
+              presentInEncounter,
               recipientCharacterId: input.recipientCharacterId,
             });
             await reconcileScenarioEquipmentForCharacters({
@@ -1666,6 +1749,16 @@ export class CombatItemInteractionService {
             });
             await this.transactionBoundaryHook?.("item");
 
+            const nextSession =
+              input.interaction.operation === "drop"
+                ? associateEncounterItem(
+                    input.encounterSession,
+                    input.interaction.itemId,
+                    input.interaction.visibleToParticipantIds.length > 0 ? "players" : "gm_only",
+                  )
+                : input.interaction.operation === "pickup"
+                  ? dissociateEncounterItems(input.encounterSession, [input.interaction.itemId])
+                  : input.encounterSession;
             const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
               maxTransactionAttempts: 1,
             }).updateCombatEncounter({
@@ -1673,7 +1766,7 @@ export class CombatItemInteractionService {
               encounterId: input.encounterId,
               expectedRevision: input.expectedEncounterRevision,
               scenarioId: input.scenarioId,
-              session: input.encounterSession,
+              session: nextSession,
             });
             await this.transactionBoundaryHook?.("encounter");
 
@@ -1745,16 +1838,30 @@ export class CombatItemInteractionService {
     );
   }
 
-  private async assertEncounterScenarioEquipmentCurrent(encounterId: string): Promise<void> {
-    const encounter = await this.client.encounter.findUnique({
+  private async assertEncounterScenarioEquipmentCurrent(
+    encounterId: string,
+  ): Promise<EncounterSession | undefined> {
+    const metadata = await this.client.encounter.findUnique({
       select: { scenarioId: true },
       where: { id: encounterId },
     });
-    if (!encounter?.scenarioId) throw new CombatItemUnavailableError();
+    if (!metadata?.scenarioId) throw new CombatItemUnavailableError();
     await assertScenarioEquipmentCurrent({
       client: this.client,
-      scenarioId: encounter.scenarioId,
+      scenarioId: metadata.scenarioId,
     });
+    try {
+      return (
+        await createPrismaCombatStateReadRepository(this.client).getFullEncounterById(encounterId)
+      )?.encounter;
+    } catch (error) {
+      // Lightweight unit repositories predating split Combat persistence have
+      // no full Encounter row. Their records exercise the legacy tag path.
+      if (error instanceof CombatPersistenceError && error.code === "unsupported_storage_mode") {
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   private async assertScenarioAllowsCombatMutation(

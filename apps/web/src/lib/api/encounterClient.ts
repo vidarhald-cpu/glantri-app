@@ -157,6 +157,25 @@ export async function loadEncounterById(encounterId: string): Promise<EncounterS
   return payload.encounter;
 }
 
+export interface EncounterItemProjection {
+  itemId: string;
+  label: string;
+  revision?: string;
+  visibility: "players" | "gm_only";
+}
+
+export interface EncounterItemsProjection {
+  availableItems: EncounterItemProjection[];
+  items: EncounterItemProjection[];
+}
+
+export async function loadEncounterItems(encounterId: string): Promise<EncounterItemsProjection> {
+  return sendJson<EncounterItemsProjection>(`/encounters/${encounterId}/items`, {
+    cache: "no-store",
+    method: "GET",
+  });
+}
+
 export async function loadEncounterRevision(
   encounterId: string,
 ): Promise<EncounterSessionRevision> {

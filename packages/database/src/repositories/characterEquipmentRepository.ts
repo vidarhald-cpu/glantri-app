@@ -351,6 +351,8 @@ export interface ApplyCombatItemInteractionInput {
   itemId: string;
   operation: CombatItemInteractionOperation;
   ownerCharacterId: string;
+  /** Canonical Encounter association; legacy status tags remain read-compatible. */
+  presentInEncounter?: boolean;
   recipientCharacterId?: string;
 }
 
@@ -371,6 +373,8 @@ export interface CombatThrownWeaponAttackUndo {
 
 export interface RestoreCombatThrownWeaponAttackInput {
   campaignId: string;
+  /** Canonical Encounter association; legacy status tags remain read-compatible. */
+  presentInEncounter?: boolean;
   undo: CombatThrownWeaponAttackUndo;
 }
 
@@ -1358,8 +1362,12 @@ export function createPrismaCharacterEquipmentRepository(
         let isEquipped = current.isEquipped;
         let previousLocationId = current.previousLocationId;
         let previousCarryMode = current.previousCarryMode;
-        let nextTags = storedTags.filter(
-          (tag) => tag !== presentTag && !tag.startsWith(COMBAT_ITEM_APPLIED_PREFIX),
+        // Any canonical interaction cleans up the retired internal presence
+        // markers. Encounter presence now lives on Encounter.itemReferences.
+        const nextTags = storedTags.filter(
+          (tag) =>
+            !tag.startsWith(COMBAT_ITEM_PRESENT_PREFIX) &&
+            !tag.startsWith(COMBAT_ITEM_APPLIED_PREFIX),
         );
 
         if (input.operation === "draw") {
@@ -1469,12 +1477,8 @@ export function createPrismaCharacterEquipmentRepository(
           isEquipped = false;
           previousLocationId = null;
           previousCarryMode = null;
-          nextTags = [
-            ...nextTags.filter((tag) => !tag.startsWith(COMBAT_ITEM_PRESENT_PREFIX)),
-            presentTag,
-          ];
         } else if (input.operation === "pickup") {
-          if (current.holderCharacterId !== null || !isPresentHere) {
+          if (current.holderCharacterId !== null || !(input.presentInEncounter || isPresentHere)) {
             throw new CombatItemUnavailableError();
           }
           const personLocation = await findSystemLocation(input.ownerCharacterId, "person_system");
@@ -1504,7 +1508,10 @@ export function createPrismaCharacterEquipmentRepository(
           previousLocationId = null;
           previousCarryMode = null;
         } else if (input.operation === "use") {
-          if (current.holderCharacterId !== input.ownerCharacterId && !isPresentHere) {
+          if (
+            current.holderCharacterId !== input.ownerCharacterId &&
+            !(input.presentInEncounter || isPresentHere)
+          ) {
             throw new CombatItemUnavailableError();
           }
         }
@@ -1545,7 +1552,10 @@ export function createPrismaCharacterEquipmentRepository(
           current.campaignContextId !== input.campaignId ||
           current.updatedAt.toISOString() !== undo.itemAfterRevision ||
           current.holderCharacterId !== null ||
-          !currentTags.includes(`${COMBAT_ITEM_PRESENT_PREFIX}${undo.encounterId}`)
+          !(
+            input.presentInEncounter ||
+            currentTags.includes(`${COMBAT_ITEM_PRESENT_PREFIX}${undo.encounterId}`)
+          )
         ) {
           throw new CombatItemRevisionError();
         }

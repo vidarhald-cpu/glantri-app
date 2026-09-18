@@ -7,6 +7,7 @@ import type { CombatGenericAction, EncounterSession, ScenarioParticipant } from 
 
 import {
   loadCombatItemInteractionOptions,
+  loadEncounterItems,
   updateCombatItemInteractionOnServer,
   updateGenericCombatActionOnServer,
 } from "@/lib/api/localServiceClient";
@@ -14,6 +15,8 @@ import { GenericCombatActionPanel } from "./GenericCombatActionPanel";
 
 vi.mock("@/lib/api/localServiceClient", () => ({
   loadCombatItemInteractionOptions: vi.fn(() => new Promise(() => undefined)),
+  loadEncounterItems: vi.fn(() => new Promise(() => undefined)),
+  updateEncounterOnServer: vi.fn(),
   updateCombatItemInteractionOnServer: vi.fn(),
   updateGenericCombatActionOnServer: vi.fn(),
 }));
@@ -86,6 +89,7 @@ describe("GenericCombatActionPanel", () => {
     vi.mocked(updateCombatItemInteractionOnServer).mockResolvedValue(encounter);
     vi.mocked(updateGenericCombatActionOnServer).mockReset();
     vi.mocked(updateGenericCombatActionOnServer).mockResolvedValue(encounter);
+    vi.mocked(loadEncounterItems).mockImplementation(() => new Promise(() => undefined));
   });
 
   it.each(["initial", "same value", "fallback"])(
@@ -182,8 +186,8 @@ describe("GenericCombatActionPanel", () => {
     expect(updateCombatItemInteractionOnServer).not.toHaveBeenCalled();
   });
 
-  // Preservation intent: player Item submission keeps pending history without generic or GM controls.
-  it("keeps a submitted player Item pending and readable at narrow width without generic controls", async () => {
+  // Player Item history remains readable after the dedicated questionnaire is removed.
+  it("keeps submitted Item history readable without the player Item questionnaire", async () => {
     vi.mocked(loadCombatItemInteractionOptions).mockResolvedValue({
       actors: [
         {
@@ -216,11 +220,7 @@ describe("GenericCombatActionPanel", () => {
       scenarioParticipants: [scenarioParticipant],
       showGenericDeclarationControls: false,
     };
-    const { rerender } = render(<GenericCombatActionPanel encounter={encounter} {...props} />);
-
-    fireEvent.click(await screen.findByRole("button", { name: "Silver dagger: Drop" }));
-    await waitFor(() => expect(onEncounterUpdated).toHaveBeenCalledWith(submittedEncounter));
-    rerender(<GenericCombatActionPanel encounter={submittedEncounter} {...props} />);
+    render(<GenericCombatActionPanel encounter={submittedEncounter} {...props} />);
 
     const panel = screen.getByRole("region", { name: "Items and task history" });
     expect(panel.getAttribute("style")).toContain("max-width: calc(100vw - 3rem)");
@@ -235,6 +235,9 @@ describe("GenericCombatActionPanel", () => {
     expect(screen.queryByLabelText("What do you intend to do?")).toBeNull();
     expect(screen.queryByRole("button", { name: "Declare generic action" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Review action" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Silver dagger: Drop" })).toBeNull();
+    expect(loadCombatItemInteractionOptions).not.toHaveBeenCalled();
+    expect(onEncounterUpdated).not.toHaveBeenCalled();
   });
 
   it("declares the Survey preset with canonical Perception and a visible numeric Difficulty", async () => {

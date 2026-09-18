@@ -1088,7 +1088,7 @@ if (!process.env.DATABASE_URL_TEST) {
           expect.objectContaining({
             availableInEncounter: true,
             item: expect.objectContaining({ id: item.id }),
-            presentEncounterId: "encounter-1",
+            presentEncounterId: undefined,
           }),
         ]),
       );
@@ -1101,6 +1101,7 @@ if (!process.env.DATABASE_URL_TEST) {
         itemId: item.id,
         operation: "pickup",
         ownerCharacterId: second.id,
+        presentInEncounter: true,
       });
       expect(pickedUp.item).toMatchObject({
         holderCharacterId: second.id,

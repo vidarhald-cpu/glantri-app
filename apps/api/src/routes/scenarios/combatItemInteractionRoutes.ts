@@ -245,6 +245,7 @@ export function createCombatItemInteractionRoutes(
         try {
           const options = await services().itemService.getOptions({
             campaignId: currentContext.access.campaignId,
+            encounterSession: currentContext.encounter,
             encounterId: currentContext.encounterId,
             participants: currentContext.participants,
             viewer:
