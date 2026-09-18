@@ -48,12 +48,27 @@ describe("ScenarioPlayerCombatPageContent", () => {
     const panel = source.indexOf("<GenericCombatActionPanel");
 
     expect(panel).toBeGreaterThan(-1);
-    expect(source.slice(Math.max(0, panel - 140), panel)).toContain(
-      "isGameMaster && encounterSession && selectedRoundParticipant",
-    );
+    expect(source.slice(Math.max(0, panel - 180), panel)).toContain("isGameMaster ? (");
     expect(source).toContain("declarationIntent={declarationIntent}");
     expect(source).toContain("onDeclarationIntentChange={(intent) => {");
     expect(source).toContain("setDeclarationIntent(intent)");
+  });
+
+  it("keeps the established player Combat Item controls beside the GM-only task panel", () => {
+    const source = readSource();
+    const gmPanel = source.indexOf("<GenericCombatActionPanel");
+    const playerItemPanel = source.indexOf("<CombatItemInteractionPanel", gmPanel);
+
+    expect(source).toContain(
+      'import { CombatItemInteractionPanel } from "@/features/combat-generic-actions/CombatItemInteractionPanel";',
+    );
+    expect(gmPanel).toBeGreaterThan(-1);
+    expect(playerItemPanel).toBeGreaterThan(gmPanel);
+    expect(source.slice(gmPanel, playerItemPanel)).toContain(") : (");
+    expect(source.slice(playerItemPanel, playerItemPanel + 360)).toContain("isGm={false}");
+    expect(source.slice(playerItemPanel, playerItemPanel + 360)).toContain(
+      "participantId={selectedRoundParticipant.participantId}",
+    );
   });
 
   it("uses canonical board positioning for Current task and tracker-local keyboard navigation", () => {

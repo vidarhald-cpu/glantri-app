@@ -10127,6 +10127,101 @@ describe("scenarios route contract", () => {
     });
   });
 
+  it.each([
+    {
+      actionId: "perform_task",
+      expectedError: "Describe the task the character intends to perform.",
+      label: "Perform Task without intent",
+    },
+    {
+      actionId: "perform_task",
+      expectedError: "Describe the task the character intends to perform.",
+      intent: { primaryAction: { actionId: "perform_task" }, relativePositions: [] },
+      label: "Perform Task without a description",
+    },
+    {
+      actionId: "pass",
+      expectedError: "Choose how the character speaks and enter the short utterance.",
+      label: "Talk / Shout without intent",
+      secondaryActionId: "talk_shout",
+    },
+    {
+      actionId: "pass",
+      expectedError: "Choose how the character speaks and enter the short utterance.",
+      intent: {
+        primaryAction: { actionId: "pass" },
+        relativePositions: [],
+        secondaryAction: { actionId: "talk_shout", utteranceType: "speak" },
+      },
+      label: "Talk / Shout without an utterance",
+      secondaryActionId: "talk_shout",
+    },
+    {
+      actionId: "pass",
+      expectedError: "Describe the intended equipment change.",
+      label: "Equip / Unequip without intent",
+      secondaryActionId: "equip_unequip",
+    },
+    {
+      actionId: "pass",
+      expectedError: "Describe the intended equipment change.",
+      intent: {
+        primaryAction: { actionId: "pass" },
+        relativePositions: [],
+        secondaryAction: { actionId: "equip_unequip" },
+      },
+      label: "Equip / Unequip without a description",
+      secondaryActionId: "equip_unequip",
+    },
+    {
+      actionId: "pass",
+      expectedError: "Describe the Small Action the character intends to attempt.",
+      label: "Small Action without intent",
+      secondaryActionId: "small_action",
+    },
+    {
+      actionId: "pass",
+      expectedError: "Describe the Small Action the character intends to attempt.",
+      intent: {
+        primaryAction: { actionId: "pass" },
+        relativePositions: [],
+        secondaryAction: { actionId: "small_action" },
+      },
+      label: "Small Action without a description",
+      secondaryActionId: "small_action",
+    },
+  ])("rejects $label at the direct declaration API boundary", async (testCase) => {
+    setupCombatDeclarationRoute({
+      encounter: { participants: makeTwoCombatEncounterParticipants() },
+      participants: [
+        makeCombatScenarioParticipant({ id: "participant-1" }),
+        makeCombatScenarioParticipant({
+          controlledByUserId: "other-player",
+          id: "participant-2",
+        }),
+      ],
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: testCase.actionId,
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        ...(testCase.intent ? { intent: testCase.intent } : {}),
+        movementId: "hold",
+        scenarioParticipantId: "participant-1",
+        secondaryActionId: testCase.secondaryActionId,
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(400);
+    expect(response.json()).toMatchObject({ error: testCase.expectedError });
+    expect(mocks.encounterService.commitCombatParticipantStateMutation).not.toHaveBeenCalled();
+  });
+
   it("persists the complete declaration intent and materializes player tasks for GM adjudication", async () => {
     setupCombatDeclarationRoute({
       encounter: { participants: makeTwoCombatEncounterParticipants() },

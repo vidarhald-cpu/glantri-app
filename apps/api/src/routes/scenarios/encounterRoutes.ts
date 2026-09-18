@@ -2383,6 +2383,18 @@ function normalizeCombatDeclarationIntentForRequest(input: {
   roundState: CombatRoundState;
   secondaryActionId?: string;
 }): CombatDeclarationIntent | undefined {
+  if (input.actionId === "perform_task" && !input.intent?.primaryAction) {
+    throw new Error("Describe the task the character intends to perform.");
+  }
+  if (input.secondaryActionId === "talk_shout" && !input.intent?.secondaryAction) {
+    throw new Error("Choose how the character speaks and enter the short utterance.");
+  }
+  if (input.secondaryActionId === "equip_unequip" && !input.intent?.secondaryAction) {
+    throw new Error("Describe the intended equipment change.");
+  }
+  if (input.secondaryActionId === "small_action" && !input.intent?.secondaryAction) {
+    throw new Error("Describe the Small Action the character intends to attempt.");
+  }
   if (!input.intent) return undefined;
   if (input.intent.primaryAction?.actionId !== input.actionId) {
     throw new Error("Primary declaration intent does not match the selected action.");

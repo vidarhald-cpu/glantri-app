@@ -122,6 +122,7 @@ import {
   FeintSkillPreview,
 } from "@/features/player-combat/FeintSkillPreview";
 import { GenericCombatActionPanel } from "@/features/combat-generic-actions/GenericCombatActionPanel";
+import { CombatItemInteractionPanel } from "@/features/combat-generic-actions/CombatItemInteractionPanel";
 import {
   buildCombatParticipantCandidates,
   type CombatParticipantRosterEntry,
@@ -5130,18 +5131,30 @@ export default function ScenarioPlayerCombatPageContent({
         </section>
       ) : null}
 
-      {isGameMaster && encounterSession && selectedRoundParticipant ? (
-        <GenericCombatActionPanel
-          encounter={encounterSession}
-          isGm={isGameMaster}
-          key={`${encounterSession.id}:${projectionCacheKey}`}
-          onEncounterUpdated={(nextEncounter) => {
-            acceptEncounterSession(nextEncounter);
-          }}
-          participantId={selectedRoundParticipant.participantId}
-          scenarioParticipants={selectableParticipants}
-          skills={content?.skills}
-        />
+      {encounterSession && selectedRoundParticipant ? (
+        isGameMaster ? (
+          <GenericCombatActionPanel
+            encounter={encounterSession}
+            isGm
+            key={`${encounterSession.id}:${projectionCacheKey}`}
+            onEncounterUpdated={(nextEncounter) => {
+              acceptEncounterSession(nextEncounter);
+            }}
+            participantId={selectedRoundParticipant.participantId}
+            scenarioParticipants={selectableParticipants}
+            skills={content?.skills}
+          />
+        ) : (
+          <CombatItemInteractionPanel
+            encounter={encounterSession}
+            isGm={false}
+            key={`${encounterSession.id}:${projectionCacheKey}`}
+            onEncounterUpdated={(nextEncounter) => {
+              acceptEncounterSession(nextEncounter);
+            }}
+            participantId={selectedRoundParticipant.participantId}
+          />
+        )
       ) : null}
 
       {historyInspection ? (
