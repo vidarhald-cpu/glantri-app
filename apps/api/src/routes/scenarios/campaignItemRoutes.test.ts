@@ -77,7 +77,10 @@ describe("campaign item fact parsing", () => {
         templateOverrides: overrides,
         unsupportedCapabilities: [],
       }).templateOverrides,
-    ).toEqual(overrides);
+    ).toEqual([
+      expect.objectContaining({ active: false, id: "capability" }),
+      expect.objectContaining({ active: true, id: "control" }),
+    ]);
     expect(
       parseCampaignItemFacts({
         descriptiveTraits: [],
@@ -85,6 +88,141 @@ describe("campaign item fact parsing", () => {
         unsupportedCapabilities: [],
       }).templateOverrides,
     ).toEqual([]);
+  });
+
+  it("accepts the closed typed characteristic contract and explicit inactive state", () => {
+    const facts = parseCampaignItemFacts({
+      characteristics: [
+        {
+          active: false,
+          id: "slash-ob",
+          kind: "attack_mode_ob_delta",
+          scope: { attackModeId: "slash", kind: "attack_mode" },
+          unit: "ob_points",
+          value: 2,
+          visibility: "revealed",
+        },
+      ],
+      descriptiveTraits: [],
+      finalAttackObDelta: {
+        active: false,
+        id: "late-ob",
+        provenance: { source: "legacy_item_fact", sourceTemplateVersion: "v1" },
+        value: 1,
+        visibility: "revealed",
+      },
+      unsupportedCapabilities: [],
+    });
+
+    expect(facts.characteristics).toEqual([
+      expect.objectContaining({ active: false, id: "slash-ob" }),
+    ]);
+    expect(facts.activeMechanics).toEqual([
+      expect.objectContaining({
+        active: false,
+        id: "late-ob",
+        provenance: { source: "legacy_item_fact", sourceTemplateVersion: "v1" },
+      }),
+    ]);
+  });
+
+  it("rejects typed characteristic identity collisions within and across every fact collection", () => {
+    const duplicateId = "duplicate-fact-id";
+    const characteristic = {
+      id: duplicateId,
+      kind: "attack_mode_ob_delta",
+      provenance: { source: "api-parser-test", sourceTemplateVersion: "v1" },
+      scope: { attackModeId: "slash", kind: "attack_mode" },
+      unit: "ob_points",
+      value: 2,
+      visibility: "revealed",
+    };
+    const collisions = [
+      {
+        characteristics: [
+          characteristic,
+          { ...characteristic, kind: "attack_mode_dmb_delta", unit: "dmb_points" },
+        ],
+      },
+      {
+        characteristics: [characteristic],
+        descriptiveTraits: [{ category: "other", id: duplicateId, text: "same identity" }],
+      },
+      {
+        characteristics: [characteristic],
+        finalAttackObDelta: { id: duplicateId, value: 1, visibility: "revealed" },
+      },
+      {
+        characteristics: [characteristic],
+        initiativeOverride: { id: duplicateId, value: 1, visibility: "revealed" },
+      },
+      {
+        characteristics: [characteristic],
+        unsupportedCapabilities: [
+          { id: duplicateId, name: "Unknown effect", rulesText: "Not yet modeled" },
+        ],
+      },
+    ];
+
+    for (const collision of collisions) {
+      expect(() => parseCampaignItemFacts(collision)).toThrow("Item fact IDs must be unique");
+    }
+  });
+
+  it("preserves unique typed identity and provenance deterministically", () => {
+    const input = {
+      characteristics: [
+        {
+          active: false,
+          id: "slash-ob",
+          kind: "attack_mode_ob_delta",
+          provenance: {
+            source: "api-parser-test",
+            sourceTemplateId: "weapon-template-fencing-sword",
+            sourceTemplateVersion: "v1",
+          },
+          scope: { attackModeId: "slash", kind: "attack_mode" },
+          unit: "ob_points",
+          value: 2,
+          visibility: "revealed",
+        },
+      ],
+      descriptiveTraits: [
+        { category: "provenance", id: "maker-history", text: "Forged at Highforge" },
+      ],
+      finalAttackObDelta: {
+        id: "late-ob",
+        provenance: { source: "api-parser-test", sourceTemplateVersion: "v1" },
+        value: 1,
+        visibility: "revealed",
+      },
+      initiativeOverride: {
+        id: "legacy-initiative",
+        provenance: {
+          source: "legacy-item-fact",
+          sourceTemplateId: "weapon-template-fencing-sword",
+          sourceTemplateValue: 2,
+        },
+        value: 1,
+        visibility: "revealed",
+      },
+      unsupportedCapabilities: [
+        { id: "unknown-effect", name: "Unknown effect", rulesText: "Not yet modeled" },
+      ],
+    };
+
+    const first = parseCampaignItemFacts(input);
+    const second = parseCampaignItemFacts(input);
+
+    expect(second).toEqual(first);
+    expect(first.characteristics?.[0]).toMatchObject({
+      id: "slash-ob",
+      provenance: {
+        source: "api-parser-test",
+        sourceTemplateId: "weapon-template-fencing-sword",
+        sourceTemplateVersion: "v1",
+      },
+    });
   });
 });
 

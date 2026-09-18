@@ -169,6 +169,7 @@ describe("CharacterEquipmentReadModelService viewer projection", () => {
 
     expect(compatibility.itemsById["item-1"]?.itemFacts).toEqual({
       activeMechanics: [],
+      characteristics: [],
       descriptiveTraits: [],
       templateOverrides: [],
       unsupportedCapabilities: [],
