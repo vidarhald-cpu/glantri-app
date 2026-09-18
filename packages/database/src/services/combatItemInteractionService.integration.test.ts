@@ -571,6 +571,11 @@ if (!process.env.DATABASE_URL_TEST) {
               sourceKind: "campaign_item",
               visibility: "players",
             }),
+            expect.objectContaining({
+              sourceId: legacyItem.id,
+              sourceKind: "campaign_item",
+              visibility: "gm_only",
+            }),
           ]),
         },
       });

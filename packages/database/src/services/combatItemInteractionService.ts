@@ -413,6 +413,27 @@ async function reconcileScenarioCampaignItemAvailability(input: {
   });
 }
 
+async function reconcileLegacyScenarioCampaignItemAvailability(input: {
+  client: Prisma.TransactionClient;
+  encounterId: string;
+  excludedItemIds?: readonly string[];
+  legacyReferences: readonly EncounterItemReference[];
+  scenarioId: string;
+}): Promise<void> {
+  const excludedItemIds = new Set(input.excludedItemIds);
+  for (const reference of input.legacyReferences) {
+    if (excludedItemIds.has(reference.itemId)) continue;
+    await reconcileScenarioCampaignItemAvailability({
+      available: true,
+      client: input.client,
+      encounterId: input.encounterId,
+      itemId: reference.itemId,
+      scenarioId: input.scenarioId,
+      visibility: reference.visibility,
+    });
+  }
+}
+
 function attachThrownWeaponUndo(
   encounter: EncounterSession,
   commandId: string,
@@ -1001,6 +1022,12 @@ export class CombatItemInteractionService {
               scenarioId: input.scenarioId,
               visibility: itemEncounterVisibility(itemBefore),
             });
+            await reconcileLegacyScenarioCampaignItemAvailability({
+              client: transaction,
+              encounterId: input.encounterId,
+              legacyReferences,
+              scenarioId: input.scenarioId,
+            });
             await this.transactionBoundaryHook?.("item");
             if (!item.item.revision) {
               throw new CombatItemUnavailableError();
@@ -1359,6 +1386,12 @@ export class CombatItemInteractionService {
               scenarioId: input.scenarioId,
               visibility: itemEncounterVisibility(itemBefore),
             });
+            await reconcileLegacyScenarioCampaignItemAvailability({
+              client: transaction,
+              encounterId: input.encounterId,
+              legacyReferences,
+              scenarioId: input.scenarioId,
+            });
             await this.transactionBoundaryHook?.("item");
             if (!item.item.revision) throw new CombatItemUnavailableError();
             const undo: CombatThrownWeaponAttackUndo = {
@@ -1491,6 +1524,13 @@ export class CombatItemInteractionService {
             visibility: itemEncounterVisibility(undo.itemBefore),
           });
         }
+        await reconcileLegacyScenarioCampaignItemAvailability({
+          client: transaction,
+          encounterId: input.encounterId,
+          excludedItemIds: input.undos.map(({ undo }) => undo.itemBefore.id),
+          legacyReferences,
+          scenarioId: input.scenarioId,
+        });
         await this.transactionBoundaryHook?.("item");
         const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
           maxTransactionAttempts: 1,
@@ -1609,6 +1649,13 @@ export class CombatItemInteractionService {
             visibility: itemEncounterVisibility(undo.itemBefore),
           });
         }
+        await reconcileLegacyScenarioCampaignItemAvailability({
+          client: transaction,
+          encounterId: input.encounterId,
+          excludedItemIds: input.undos.map(({ undo }) => undo.itemBefore.id),
+          legacyReferences,
+          scenarioId: input.scenarioId,
+        });
         await this.transactionBoundaryHook?.("item");
         const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
           maxTransactionAttempts: 1,
@@ -1911,6 +1958,14 @@ export class CombatItemInteractionService {
                   input.interaction.visibleToParticipantIds.length > 0 ? "players" : "gm_only",
               });
             }
+            await reconcileLegacyScenarioCampaignItemAvailability({
+              client: transaction,
+              encounterId: input.encounterId,
+              excludedItemIds:
+                input.interaction.operation === "pickup" ? [input.interaction.itemId] : [],
+              legacyReferences,
+              scenarioId: input.scenarioId,
+            });
             await this.transactionBoundaryHook?.("item");
 
             const nextSession =

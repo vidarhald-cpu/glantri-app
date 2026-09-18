@@ -8169,12 +8169,15 @@ describe("scenarios route contract", () => {
     });
   });
 
-  it("allows GM visibility updates for a freshly dropped Scenario-authorized Item", async () => {
+  it("allows GM visibility updates after mixed legacy and fresh Item materialization", async () => {
     const existingEncounter = {
       campaignId: "campaign-1",
       createdAt: "2026-01-01T00:00:00.000Z",
       id: "encounter-1",
-      itemReferences: [{ itemId: "item-dropped", visibility: "players" as const }],
+      itemReferences: [
+        { itemId: "item-legacy", visibility: "gm_only" as const },
+        { itemId: "item-dropped", visibility: "players" as const },
+      ],
       itemReferencesVersion: 1 as const,
       scenarioId: "scenario-1",
       status: "active" as const,
@@ -8183,7 +8186,10 @@ describe("scenarios route contract", () => {
     };
     const bodySession = {
       ...existingEncounter,
-      itemReferences: [{ itemId: "item-dropped", visibility: "gm_only" as const }],
+      itemReferences: [
+        { itemId: "item-legacy", visibility: "gm_only" as const },
+        { itemId: "item-dropped", visibility: "gm_only" as const },
+      ],
     };
     mocks.encounterService.getEncounterById.mockResolvedValue(existingEncounter);
     mocks.scenarioService.getScenarioById.mockResolvedValue({
@@ -8200,6 +8206,13 @@ describe("scenarios route contract", () => {
               sourceKind: "campaign_item",
               visibility: "players",
             },
+            {
+              addedAt: "2026-01-01T00:00:00.000Z",
+              id: "combat-item:encounter-1:item-legacy",
+              sourceId: "item-legacy",
+              sourceKind: "campaign_item",
+              visibility: "gm_only",
+            },
           ],
         },
       },
@@ -8214,6 +8227,12 @@ describe("scenarios route contract", () => {
     });
     mocks.characterEquipmentReadModelService.getCampaignEquipmentState.mockResolvedValue({
       itemsById: {
+        "item-legacy": {
+          holderCharacterId: null,
+          id: "item-legacy",
+          revision: "2026-01-01T00:00:00.500Z",
+          templateId: "weapon-template-dagger",
+        },
         "item-dropped": {
           holderCharacterId: null,
           id: "item-dropped",
@@ -8248,7 +8267,10 @@ describe("scenarios route contract", () => {
       },
       scenarioId: "scenario-1",
       session: expect.objectContaining({
-        itemReferences: [{ itemId: "item-dropped", visibility: "gm_only" }],
+        itemReferences: [
+          { itemId: "item-legacy", visibility: "gm_only" },
+          { itemId: "item-dropped", visibility: "gm_only" },
+        ],
         itemReferencesVersion: 1,
       }),
     });
