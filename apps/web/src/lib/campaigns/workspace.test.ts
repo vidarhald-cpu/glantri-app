@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import type { EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
 
 import {
+  buildCampaignEncounterHref,
+  buildCampaignScenarioHref,
+  buildCampaignTaskHref,
   buildCampaignWorkspaceHref,
   buildCampaignWorkspaceTabs,
   resolveCampaignWorkspaceState,
@@ -84,6 +87,22 @@ function scenarioParticipant(input: {
 }
 
 describe("campaign workspace", () => {
+  it("builds canonical Campaign task, Scenario, and Encounter links", () => {
+    expect(buildCampaignTaskHref({ campaignId: "camp-1", section: "membership" })).toBe(
+      "/campaigns/camp-1#campaign-membership",
+    );
+    expect(buildCampaignScenarioHref({ campaignId: "camp-1", scenarioId: "scn-1" })).toBe(
+      "/campaigns/camp-1/scenarios/scn-1",
+    );
+    expect(
+      buildCampaignEncounterHref({
+        campaignId: "camp-1",
+        encounterId: "enc-1",
+        scenarioId: "scn-1",
+      }),
+    ).toBe("/campaigns/camp-1/scenarios/scn-1/encounters/enc-1");
+  });
+
   it("uses the player-assignment fact carried by compact encounter summaries", () => {
     const state = resolveCampaignWorkspaceState({
       activeCampaignId: "camp-1",

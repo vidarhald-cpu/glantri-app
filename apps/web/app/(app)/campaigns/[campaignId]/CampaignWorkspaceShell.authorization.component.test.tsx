@@ -138,7 +138,9 @@ describe("Campaign workspace focus-refresh authorization", () => {
     render(<CampaignWorkspaceShell campaignId="campaign-1" />);
 
     await screen.findByText("The steward moved the seal after midnight.");
-    expect(screen.getByRole("navigation", { name: "Live play context" })).toBeVisible();
+    expect(
+      screen.getByRole("navigation", { name: "Scenario and Encounter context" }),
+    ).toBeVisible();
 
     act(() => window.dispatchEvent(new Event("focus")));
 
@@ -146,7 +148,9 @@ describe("Campaign workspace focus-refresh authorization", () => {
     expect(
       screen.queryByText("The steward moved the seal after midnight."),
     ).not.toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "Live play context" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("navigation", { name: "Scenario and Encounter context" }),
+    ).not.toBeInTheDocument();
     expect(mocks.setCurrentUser).toHaveBeenCalledWith(null);
     expect(mocks.replace).toHaveBeenCalledWith("/campaigns");
     await waitFor(() => {
@@ -171,9 +175,13 @@ describe("Campaign workspace focus-refresh authorization", () => {
     await screen.findByText("The steward moved the seal after midnight.");
     act(() => window.dispatchEvent(new Event("focus")));
 
-    await screen.findByText("We couldn't refresh live play. Try again or reload the page.");
+    await screen.findByText(
+      "We couldn't refresh the Campaign context. Try again or reload the page.",
+    );
     expect(screen.getByText("The steward moved the seal after midnight.")).toBeVisible();
-    expect(screen.getByRole("navigation", { name: "Live play context" })).toBeVisible();
+    expect(
+      screen.getByRole("navigation", { name: "Scenario and Encounter context" }),
+    ).toBeVisible();
     expect(mocks.setCurrentUser).not.toHaveBeenCalled();
     expect(mocks.replace).not.toHaveBeenCalledWith("/campaigns");
   });
@@ -193,7 +201,9 @@ describe("Campaign workspace focus-refresh authorization", () => {
 
     act(() => window.dispatchEvent(new Event("focus")));
 
-    await screen.findByText("We couldn't refresh live play. Try again or reload the page.");
+    await screen.findByText(
+      "We couldn't refresh the Campaign context. Try again or reload the page.",
+    );
     expect(screen.getByText("The steward moved the seal after midnight.")).toBeVisible();
 
     await act(async () => {
@@ -205,7 +215,9 @@ describe("Campaign workspace focus-refresh authorization", () => {
     expect(
       screen.queryByText("The steward moved the seal after midnight."),
     ).not.toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "Live play context" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("navigation", { name: "Scenario and Encounter context" }),
+    ).not.toBeInTheDocument();
     expect(mocks.setCurrentUser).toHaveBeenCalledWith(null);
     expect(mocks.replace).toHaveBeenCalledWith("/campaigns");
     await waitFor(() => {
@@ -234,7 +246,9 @@ describe("Campaign workspace focus-refresh authorization", () => {
     expect(
       screen.queryByText("The steward moved the seal after midnight."),
     ).not.toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "Live play context" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("navigation", { name: "Scenario and Encounter context" }),
+    ).not.toBeInTheDocument();
     expect(mocks.setCurrentUser).not.toHaveBeenCalled();
     expect(mocks.replace).toHaveBeenCalledWith("/campaigns/campaign-1?tab=campaign");
     await waitFor(() => {

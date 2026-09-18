@@ -53,18 +53,18 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("buildGmCharacterWorkspaceCandidates");
   });
 
-  it("renders a role-appropriate live-play chooser and useful empty states", () => {
+  it("renders role-appropriate current Scenario context and useful empty states", () => {
     const source = readSource();
 
-    expect(source).toContain('aria-label="Live play"');
-    expect(source).toContain("Choose the live Scenario you want to continue.");
-    expect(source).toContain("Continue the live Scenario and its active Encounters.");
+    expect(source).toContain('aria-label="Current Scenario and Encounter"');
+    expect(source).toContain("Choose the current Scenario you want to continue.");
+    expect(source).toContain("Continue the current Scenario and its active Encounters.");
     expect(source).toContain("Open Scenario");
     expect(source).toContain("Open Encounter");
     expect(source).toContain("Open Combat");
     expect(source).toContain('tab: canAccessGmEncounter ? "combat" : "player-combat"');
     expect(source).toContain('tab: "scenario"');
-    expect(source).toContain("No live Scenario is currently available.");
+    expect(source).toContain("No active Scenario is currently available.");
     expect(source).toContain("Campaign Home and completed history remain");
     expect(source).toContain("No encounter is currently available.");
     expect(source).toContain("No skill rolls are currently available.");
@@ -78,15 +78,29 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toMatch(/canAccessGmEncounter[\s\S]*?<ArtifactPanel campaignId=\{campaignId\}/);
   });
 
-  it("keeps the selected live Scenario and Encounter visible across workspace tabs", () => {
+  it("keeps the selected Scenario and Encounter linked through canonical object routes", () => {
     const source = readSource();
 
-    expect(source).toContain('aria-label="Live play context"');
+    expect(source).toContain('aria-label="Scenario and Encounter context"');
     expect(source).toContain("{activeScenario.name}");
     expect(source).toContain("{activeEncounterSummary.title}");
-    expect(source).toContain("isLiveCampaignScenario(activeScenario)");
+    expect(source).toContain("buildCampaignScenarioHref");
+    expect(source).toContain("buildCampaignEncounterHref");
     expect(source).toContain("encounterId: activeEncounterSummary.id");
     expect(source).toContain("scenarioId: activeScenario.id");
+  });
+
+  it("uses a task-oriented Campaign shell and keeps runtime tools contextual", () => {
+    const source = readSource();
+
+    expect(source).toContain('aria-label="Campaign tasks"');
+    expect(source).toContain('label: "Membership"');
+    expect(source).toContain('label: "Scenarios"');
+    expect(source).toContain('label: "Campaign history"');
+    expect(source).toContain('label: "Create material"');
+    expect(source).toContain('label: "Notes & material"');
+    expect(source).toContain('aria-label="Scenario and Encounter tools"');
+    expect(source).not.toContain('aria-label="Live play context"');
   });
 
   it("separates completed Scenario history and omits archives from ordinary selection", () => {
@@ -189,7 +203,7 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("initial || workspaceContextRequestIdRef.current !== requestId");
     expect(source).toContain('setAccessMode("none")');
     expect(source).toContain(
-      'setError("We couldn\'t refresh live play. Try again or reload the page.")',
+      'setError("We couldn\'t refresh the Campaign context. Try again or reload the page.")',
     );
     expect(source).toContain(
       'setAccessMode(canManageCampaignWorkspace(currentUser) ? "gm" : "player")',

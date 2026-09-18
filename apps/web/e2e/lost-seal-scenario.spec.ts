@@ -270,29 +270,33 @@ test.describe("Lost Seal Scenario happy path", () => {
     expect(starts.map((response) => response.status())).toEqual([200, 200]);
 
     const gmCampaignHref = `/campaigns/${campaign.campaign.id}?tab=campaign`;
+    const gmScenarioCanonicalHref = `/campaigns/${campaign.campaign.id}/scenarios/${scenario.scenario.id}`;
+    const gmEncounterCanonicalHref = `${gmScenarioCanonicalHref}/encounters/${courtyard.encounter.id}`;
     const gmScenarioHref = `/campaigns/${campaign.campaign.id}?tab=scenario&scenarioId=${scenario.scenario.id}`;
     const gmEncounterHref = `/campaigns/${campaign.campaign.id}?tab=encounter&scenarioId=${scenario.scenario.id}&encounterId=${courtyard.encounter.id}`;
     const gmCombatHref = `/campaigns/${campaign.campaign.id}?tab=combat&scenarioId=${scenario.scenario.id}&encounterId=${courtyard.encounter.id}`;
     await page.goto(gmCampaignHref);
-    const gmCurrentPlay = page.getByRole("region", { name: "Current play" });
+    const gmCurrentPlay = page.getByRole("region", { name: "Current Scenario and Encounter" });
     await expect(gmCurrentPlay.getByText("Lost Seal", { exact: true })).toBeVisible();
     await expect(gmCurrentPlay.getByText("Seal Library Investigation")).toBeVisible();
     await expect(gmCurrentPlay.getByText("Courtyard Ambush")).toBeVisible();
-    await gmCurrentPlay.locator(`a[href="${gmScenarioHref}"]`).click();
+    await gmCurrentPlay.locator(`a[href="${gmScenarioCanonicalHref}"]`).click();
     await expect(page).toHaveURL(gmScenarioHref);
-    await expect(page.getByRole("navigation", { name: "Live play context" })).toContainText(
-      "Lost Seal",
-    );
+    await expect(
+      page.getByRole("navigation", { name: "Scenario and Encounter context" }),
+    ).toContainText("Lost Seal");
 
     await page.goto(gmCampaignHref);
-    await page.locator(`a[href="${gmEncounterHref}"]`).click();
+    await page.locator(`a[href="${gmEncounterCanonicalHref}"]`).click();
     await expect(page).toHaveURL(gmEncounterHref);
     await page.getByRole("link", { name: "Combat", exact: true }).click();
     await expect(page).toHaveURL(gmCombatHref);
-    const gmLiveContext = page.getByRole("navigation", { name: "Live play context" });
+    const gmLiveContext = page.getByRole("navigation", {
+      name: "Scenario and Encounter context",
+    });
     await expect(gmLiveContext.getByRole("link", { name: "Courtyard Ambush" })).toHaveAttribute(
       "href",
-      gmEncounterHref,
+      gmEncounterCanonicalHref,
     );
     await page.reload();
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
@@ -301,22 +305,24 @@ test.describe("Lost Seal Scenario happy path", () => {
     await expect(page).toHaveURL(gmEncounterHref);
 
     const playerCampaignHref = `/campaigns/${campaign.campaign.id}?tab=campaign`;
-    const playerEncounterHref = `/campaigns/${campaign.campaign.id}?tab=encounter&scenarioId=${scenario.scenario.id}&encounterId=${library.encounter.id}`;
+    const playerEncounterCanonicalHref = `/campaigns/${campaign.campaign.id}/scenarios/${scenario.scenario.id}/encounters/${library.encounter.id}`;
     const playerLiveCombatHref = `/campaigns/${campaign.campaign.id}?tab=player-combat&scenarioId=${scenario.scenario.id}&encounterId=${library.encounter.id}`;
     await playerAPage.goto(playerCampaignHref);
-    const playerLivePlay = playerAPage.getByRole("region", { name: "Live play" });
+    const playerLivePlay = playerAPage.getByRole("region", {
+      name: "Current Scenario and Encounter",
+    });
     await expect(playerLivePlay.getByText("Lost Seal", { exact: true })).toBeVisible();
     await expect(playerLivePlay.getByText("Seal Library Investigation")).toBeVisible();
     await expect(playerLivePlay.getByText("Courtyard Ambush")).toHaveCount(0);
     await expect(playerLivePlay.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
-    await expect(playerLivePlay.locator(`a[href="${playerEncounterHref}"]`)).toBeVisible();
+    await expect(playerLivePlay.locator(`a[href="${playerEncounterCanonicalHref}"]`)).toBeVisible();
     await expect(playerLivePlay.locator(`a[href="${playerLiveCombatHref}"]`)).toBeVisible();
     await playerAPage.setViewportSize({ height: 844, width: 390 });
     await playerAPage.reload();
     await expect(playerAPage).toHaveURL(playerCampaignHref);
-    await expect(playerAPage.getByRole("region", { name: "Live play" })).toContainText(
-      "Seal Library Investigation",
-    );
+    await expect(
+      playerAPage.getByRole("region", { name: "Current Scenario and Encounter" }),
+    ).toContainText("Seal Library Investigation");
     await playerAPage.goto(
       `/campaigns/${campaign.campaign.id}/scenarios/${scenario.scenario.id}/player`,
     );
@@ -332,7 +338,9 @@ test.describe("Lost Seal Scenario happy path", () => {
     );
     await page.setViewportSize({ height: 844, width: 390 });
     await page.goto(gmCampaignHref);
-    const mobileCurrentPlay = page.getByRole("region", { name: "Current play" });
+    const mobileCurrentPlay = page.getByRole("region", {
+      name: "Current Scenario and Encounter",
+    });
     await expect(mobileCurrentPlay.getByText("Lost Seal", { exact: true })).toBeVisible();
     await expect(mobileCurrentPlay.getByText("Council Watch", { exact: true })).toBeVisible();
     await page.setViewportSize({ height: 900, width: 1280 });
@@ -701,9 +709,9 @@ test.describe("Lost Seal Scenario happy path", () => {
     await completeScenario(scenario.scenario.id);
     await completeScenario(alternateScenario.scenario.id);
     await page.goto(gmCampaignHref);
-    await expect(page.getByRole("region", { name: "Current play" })).toContainText(
-      "No active or paused Scenario",
-    );
+    await expect(
+      page.getByRole("region", { name: "Current Scenario and Encounter" }),
+    ).toContainText("No active or paused Scenario");
     await expect(page.getByRole("heading", { name: "Scenarios" })).toBeVisible();
     await expect(page.getByText("Closed · history", { exact: true })).toHaveCount(2);
 
@@ -728,7 +736,9 @@ test.describe("Lost Seal Scenario happy path", () => {
       page.getByText("Sign in to see your Campaigns and continue playing."),
     ).toBeVisible();
     await expect(page.getByRole("heading", { name: "Private GM notes" })).toHaveCount(0);
-    await expect(page.getByRole("navigation", { name: "Live play context" })).toHaveCount(0);
+    await expect(
+      page.getByRole("navigation", { name: "Scenario and Encounter context" }),
+    ).toHaveCount(0);
 
     await Promise.all([
       playerAContext.close(),

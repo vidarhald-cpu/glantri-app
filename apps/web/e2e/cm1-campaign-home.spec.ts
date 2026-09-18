@@ -45,9 +45,22 @@ test.describe("CM1 Campaign home and private notes", () => {
 
     await page.setViewportSize({ height: 844, width: 390 });
     await page.goto(`/campaigns/${campaign.campaign.id}`);
-    const currentPlay = page.getByRole("region", { name: "Current play" });
+    const currentPlay = page.getByRole("region", { name: "Current Scenario and Encounter" });
+    const campaignTasks = page.getByRole("navigation", { name: "Campaign tasks" });
     await expect(currentPlay.getByText(liveName, { exact: true })).toBeVisible();
     await expect(currentPlay.getByText(pausedName, { exact: true })).toBeVisible();
+    await expect(campaignTasks.getByRole("link", { name: "Membership" })).toBeVisible();
+    await expect(campaignTasks.getByRole("link", { name: "Scenarios" })).toBeVisible();
+    await expect(campaignTasks.getByRole("link", { name: "Campaign history" })).toBeVisible();
+    await expect(campaignTasks.getByRole("link", { name: "Create material" })).toBeVisible();
+    await expect(campaignTasks.getByRole("link", { name: "Notes & material" })).toBeVisible();
+    await expect(campaignTasks.getByRole("link", { name: "Combat" })).toHaveCount(0);
+    await expect(
+      currentPlay.locator(
+        `a[href="/campaigns/${campaign.campaign.id}/scenarios/${live.scenario.id}"]`,
+      ),
+    ).toBeVisible();
+    await expect(page.locator("#campaign-history")).not.toHaveAttribute("open", "");
     await expect(page.getByRole("heading", { name: "Private GM Notes" })).toBeVisible();
     await expect(page.getByText(noteContent, { exact: true })).toBeVisible();
     await expect(currentPlay.getByText(liveName, { exact: true }).locator("..")).toContainText(
@@ -72,7 +85,9 @@ test.describe("CM1 Campaign home and private notes", () => {
 
     await page.setViewportSize({ height: 900, width: 1280 });
     await page.reload();
-    const desktopCurrentPlay = page.getByRole("region", { name: "Current play" });
+    const desktopCurrentPlay = page.getByRole("region", {
+      name: "Current Scenario and Encounter",
+    });
     await expect(desktopCurrentPlay.getByText(liveName, { exact: true })).toBeVisible();
     await expect(desktopCurrentPlay.getByText(pausedName, { exact: true })).toBeVisible();
     await expect(

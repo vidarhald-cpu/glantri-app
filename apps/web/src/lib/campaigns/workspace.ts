@@ -49,6 +49,36 @@ export interface CampaignWorkspaceHrefInput {
   tab?: CampaignWorkspaceTabId | null;
 }
 
+export type CampaignTaskSectionId =
+  | "overview"
+  | "membership"
+  | "scenarios"
+  | "history"
+  | "create-material"
+  | "material";
+
+export function buildCampaignTaskHref(input: {
+  campaignId: string;
+  section: CampaignTaskSectionId;
+}): string {
+  return `${buildCampaignWorkspaceHref({ campaignId: input.campaignId })}#campaign-${input.section}`;
+}
+
+export function buildCampaignScenarioHref(input: {
+  campaignId: string;
+  scenarioId: string;
+}): string {
+  return `/campaigns/${encodeURIComponent(input.campaignId)}/scenarios/${encodeURIComponent(input.scenarioId)}`;
+}
+
+export function buildCampaignEncounterHref(input: {
+  campaignId: string;
+  encounterId: string;
+  scenarioId: string;
+}): string {
+  return `${buildCampaignScenarioHref(input)}/encounters/${encodeURIComponent(input.encounterId)}`;
+}
+
 const orderedTabs: CampaignWorkspaceTab[] = [
   { id: "campaign", label: "Campaign" },
   { id: "blackboard", label: "Blackboard" },

@@ -59,7 +59,9 @@ test.describe("Campaign workspace late authorization denial", () => {
           ),
       )
       .toContain(privateNote);
-    await expect(page.getByRole("navigation", { name: "Live play context" })).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "Scenario and Encounter context" }),
+    ).toBeVisible();
 
     await page.route(
       `${API_URL}/campaigns/${campaign.campaign.id}/scenarios`,
@@ -111,7 +113,9 @@ test.describe("Campaign workspace late authorization denial", () => {
     ).toBeVisible();
     await expect(page.getByText(privateNote)).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Private GM notes" })).toHaveCount(0);
-    await expect(page.getByRole("navigation", { name: "Live play context" })).toHaveCount(0);
+    await expect(
+      page.getByRole("navigation", { name: "Scenario and Encounter context" }),
+    ).toHaveCount(0);
 
     const rememberedSelectionKeys = [
       "glantri.remembered-selection.campaign-id",

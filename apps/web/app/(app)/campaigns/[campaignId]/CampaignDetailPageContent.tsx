@@ -30,7 +30,7 @@ import {
   removeCampaignRosterEntryOnServer,
 } from "@/lib/api/localServiceClient";
 import { getCampaignActorMetadata } from "@/lib/campaigns/campaignActors";
-import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
+import { buildCampaignScenarioHref, buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 import { ArtifactPanel } from "@/features/artifacts";
 import { ApiRequestError } from "@/lib/api/apiClient";
 import { CampaignHomeOverview } from "./CampaignHomeOverview";
@@ -694,6 +694,58 @@ export default function CampaignDetailPageContent({
       {feedback ? <div>{feedback}</div> : null}
 
       {overview ? <CampaignHomeOverview overview={overview} /> : null}
+      <div
+        style={{
+          display: "grid",
+          gap: "1rem",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+        }}
+      >
+        <section
+          id="campaign-create-material"
+          style={{
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            display: "grid",
+            gap: "0.65rem",
+            padding: "1rem",
+          }}
+        >
+          <h2 style={{ margin: 0 }}>Create material</h2>
+          <p style={{ margin: 0 }}>
+            Start in the domain that owns the new material. Items and Artifacts keep their own
+            identity and lifecycle.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+            <Link href={`${buildCampaignWorkspaceHref({ campaignId, tab: "items" })}&itemCreate=1`}>
+              Create item
+            </Link>
+            <Link href="#campaign-artifacts">Upload Artifacts</Link>
+          </div>
+        </section>
+
+        <section
+          id="campaign-material"
+          style={{
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            display: "grid",
+            gap: "0.65rem",
+            padding: "1rem",
+          }}
+        >
+          <h2 style={{ margin: 0 }}>Notes, Items &amp; Artifacts</h2>
+          <p style={{ margin: 0 }}>
+            Use the Campaign to find related material, then manage each object in its established
+            home.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+            <Link href="#campaign-notes">Notes</Link>
+            <Link href={buildCampaignWorkspaceHref({ campaignId, tab: "items" })}>Items</Link>
+            <Link href="#campaign-artifacts">Artifacts</Link>
+          </div>
+        </section>
+      </div>
       {overview ? (
         <CampaignNotesPanel
           campaignId={campaignId}
@@ -707,6 +759,7 @@ export default function CampaignDetailPageContent({
       ) : null}
 
       <section
+        id="campaign-membership"
         style={{
           border: "1px solid #d9ddd8",
           borderRadius: 12,
@@ -890,6 +943,7 @@ export default function CampaignDetailPageContent({
       </section>
 
       <section
+        id="campaign-create-scenario"
         style={{
           border: "1px solid #d9ddd8",
           borderRadius: 12,
@@ -928,7 +982,7 @@ export default function CampaignDetailPageContent({
         </div>
       </section>
 
-      <section style={{ display: "grid", gap: "0.75rem" }}>
+      <section id="campaign-scenarios" style={{ display: "grid", gap: "0.75rem" }}>
         <h2 style={{ margin: 0 }}>Scenarios</h2>
         {!embedded ? (
           <p style={{ margin: 0 }}>
@@ -991,10 +1045,9 @@ export default function CampaignDetailPageContent({
                     </td>
                     <td style={{ padding: "0.6rem 0" }}>
                       <Link
-                        href={buildCampaignWorkspaceHref({
+                        href={buildCampaignScenarioHref({
                           campaignId,
                           scenarioId: scenario.id,
-                          tab: "scenario",
                         })}
                       >
                         Open
@@ -1010,7 +1063,9 @@ export default function CampaignDetailPageContent({
         )}
       </section>
 
-      <ArtifactPanel campaignId={campaignId} scenarios={scenarios} />
+      <div id="campaign-artifacts">
+        <ArtifactPanel campaignId={campaignId} scenarios={scenarios} />
+      </div>
     </section>
   );
 }

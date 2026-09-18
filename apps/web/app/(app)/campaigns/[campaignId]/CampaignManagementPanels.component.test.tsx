@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -158,6 +158,9 @@ describe("Campaign management panels", () => {
   it("shows every live or paused context without inventing a single current pointer", () => {
     render(<CampaignHomeOverview overview={overview} />);
 
+    const currentContext = screen.getByRole("region", {
+      name: "Current Scenario and Encounter",
+    });
     expect(screen.getByText("Western Gate")).toBeInTheDocument();
     expect(screen.getByText("Council Chamber")).toBeInTheDocument();
     expect(screen.getByText(/Gate Skirmish.*Combat active/)).toBeInTheDocument();
@@ -170,6 +173,18 @@ describe("Campaign management panels", () => {
     expect(screen.getByText("Captain Harl")).toBeInTheDocument();
     expect(screen.getByText("NPCs from Campaign history (1)")).toBeInTheDocument();
     expect(screen.getByText("The gate confrontation began.")).toBeInTheDocument();
+    expect(
+      within(currentContext)
+        .getAllByRole("link", { name: "Open Scenario" })
+        .find(
+          (link) => link.getAttribute("href") === "/campaigns/campaign-1/scenarios/scenario-live",
+        ),
+    ).toBeDefined();
+    expect(within(currentContext).getByRole("link", { name: "Open Encounter" })).toHaveAttribute(
+      "href",
+      "/campaigns/campaign-1/scenarios/scenario-live/encounters/encounter-1",
+    );
+    expect(screen.getByText("Campaign history").closest("details")).not.toHaveAttribute("open");
     expect(screen.getByRole("region", { name: "Campaign home" })).toHaveStyle({
       display: "grid",
     });
