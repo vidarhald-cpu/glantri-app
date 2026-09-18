@@ -51,6 +51,13 @@ export default function ChargenWizard() {
           This historical draft is preserved for reading. Its identities and recorded spending have
           not been converted to the target catalogue.
         </p>
+        <StartStep
+          onStartNew={() => void state.handleStartChargen()}
+          savedDraft={{
+            description: draft.characterName || draft.selectedProfile?.label || "Unnamed draft",
+            kind: "historical",
+          }}
+        />
       </section>
     );
   }
@@ -71,8 +78,24 @@ export default function ChargenWizard() {
 
       <FeedbackPanel messages={state.feedback} />
 
-      {!state.hasStartedChargen ? (
-        <StartStep onStart={() => void state.handleStartChargen()} />
+      {!state.hydrated ? <div role="status">Loading Chargen…</div> : null}
+
+      {state.hydrated && !state.hasStartedChargen ? (
+        <StartStep
+          onResume={state.resumableDraft ? state.handleResumeChargen : undefined}
+          onStartNew={() => void state.handleStartChargen()}
+          savedDraft={
+            state.resumableDraft
+              ? {
+                  description:
+                    state.resumableDraft.characterName ||
+                    state.resumableDraft.selectedProfile?.label ||
+                    "Unnamed draft",
+                  kind: "current",
+                }
+              : undefined
+          }
+        />
       ) : null}
 
       {state.hasStartedChargen ? (
