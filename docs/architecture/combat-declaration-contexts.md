@@ -8,6 +8,12 @@ A combat declaration has three independently owned selections:
 2. the secondary action and its secondary-action context;
 3. movement and its movement intent.
 
+These are the three parts of the one player-facing declaration system. Relative
+position, movement direction, facing, and action-specific fields are contexts within
+that system; they do not authorize a parallel generic-action or task workflow. The
+canonical product rules are recorded in
+[Combat Declarations](../rules/combat-declarations.md).
+
 Targets belong to the action that uses them. A primary attack target, an Offensive Parry prepared
 opponent, and an Observe Opponent target are distinct canonical facts. Changing one must not
 retarget another. Current targeted secondary-action support is deliberately narrow:
@@ -33,30 +39,35 @@ Observe Opponent. Existing combinations exposed before this slice retain their e
 
 The compatibility table does not create tasks or implement a secondary action's later mechanics.
 
-## Future movement split
+## Movement contexts
 
-Current movement behavior remains unchanged, but future declarations need to distinguish two
-orthogonal concepts.
+Movement intent distinguishes two orthogonal concepts.
 
 Relative movement describes intent relative to a participant or engagement:
 
-- maintain, close, or increase distance;
-- follow or disengage;
-- circle or flank.
+- keep distance to a specified person;
+- adjust distance to a specified target; and
+- hold formation.
 
 Its context may carry a related participant ID, desired distance, or relative intent.
 
-Absolute movement describes intent in encounter space:
+Absolute movement uses the approved eight-direction vocabulary:
 
-- remain in place;
-- move toward a location;
-- retreat in a direction;
-- move to cover;
-- cross terrain.
+- forward;
+- forward/right;
+- right;
+- backward/right;
+- backward;
+- backward/left;
+- left; and
+- forward/left.
 
-Its context may carry a location, zone, coordinate, path, distance allowance, and terrain
-constraints.
+It may also be left blank. Facing is independently declared with the same directional
+vocabulary.
 
-A future declaration may contain both relative and absolute movement. This document reserves that
-distinction only; it does not change the current movement dropdown, distance process, terrain
-validation, or combat formulas.
+A declaration may contain both relative and absolute movement. They may conflict, and
+the declaration remains permissible because feasibility is decided during resolution
+or GM adjudication. Generic `How` and `Expected time` fields are not part of the
+approved player declaration. Coordinates, paths, terrain constraints, and movement
+feasibility require separately approved rules rather than being inferred from this
+context model.
