@@ -19,6 +19,14 @@ round boundary, visible effects/checkpoints, CE scheduling and chronological GM
 review. It is approved architecture awaiting separate implementation authority;
 its listed factual/rule reconciliation items remain open.
 
+## Approved declaration contract
+
+[Combat Declarations](../rules/combat-declarations.md) controls the single
+player-facing Primary Action + Secondary Action + Movement declaration model and its
+intent/adjudication boundary. The narrower
+[declaration-context contract](./combat-declaration-contexts.md) records ownership of
+action-specific targets and movement contexts.
+
 ## 1. Design goals
 
 The combat engine is designed around five primary goals:
@@ -571,6 +579,10 @@ No future work should weaken the invariants in this document.
 
 ## 18. Detailed contracts
 
+- [Combat declaration rules](../rules/combat-declarations.md) — approved actions,
+  secondary actions, movement intent, and the declaration/adjudication boundary
+- [combat-declaration-contexts.md](./combat-declaration-contexts.md) — ownership of
+  declaration targets and movement contexts
 - [combat-canonical-conformance-audit.md](./combat-canonical-conformance-audit.md)
 - [combat-presentation-guidelines.md](./combat-presentation-guidelines.md) —
   normative guidance for presenting canonical combat facts
