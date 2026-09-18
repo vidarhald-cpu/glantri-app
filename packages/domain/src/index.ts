@@ -45,6 +45,7 @@ export * from "./encounter/combatStepEventSchema";
 export * from "./encounter/combatDistance";
 export * from "./encounter/combatDeterministicTransitions";
 export * from "./encounter/combatMovementIntent";
+export * from "./encounter/combatDeclarationIntent";
 export * from "./encounter/combatMovementBurden";
 export * from "./encounter/combatOffensiveParry";
 export * from "./encounter/combatEffects";

@@ -9,6 +9,7 @@ import {
   canonicalCombatModifierLifecycleTransitionSchema,
 } from "../encounter/combatModifierLifecycle";
 import { movementIntentSchema } from "../encounter/combatMovementIntent";
+import { combatDeclarationIntentSchema } from "../encounter/combatDeclarationIntent";
 import { hitLocationTargetSchema } from "../encounter/hitLocation";
 
 const idSchema = z.string().min(1);
@@ -258,6 +259,7 @@ export const scenarioParticipantStateSchema = z.object({
     lastDeclaredRoundNumber: z.number().int().positive().optional(),
     lastDeclaredSecondaryActionId: idSchema.optional(),
     lastDeclarationNotes: z.string().optional(),
+    lastDeclarationIntent: combatDeclarationIntentSchema.optional(),
     lastMovementIntent: movementIntentSchema.optional(),
     stance: z.string().min(1).optional(),
   }),
@@ -680,9 +682,8 @@ export function hasScenarioParticipantCombatDeclarationForEncounterRound(input: 
   const combat = input.participant?.state.combat;
 
   return Boolean(
-    combat?.lastDeclaredActionId &&
-    combat.lastDeclaredEncounterId === input.encounterId &&
-    combat.lastDeclaredRoundNumber === input.roundNumber,
+    combat?.lastDeclaredEncounterId === input.encounterId &&
+    combat?.lastDeclaredRoundNumber === input.roundNumber,
   );
 }
 

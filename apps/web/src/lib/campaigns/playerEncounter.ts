@@ -27,6 +27,11 @@ export type PlayerEncounterActionId =
   | "disarm"
   | "break_off_engagement"
   | "move_only"
+  | "pass"
+  | "perform_task"
+  | "talk_shout"
+  | "equip_unequip"
+  | "small_action"
   | "other";
 
 export type PlayerEncounterMovementId =
@@ -88,6 +93,8 @@ const ALL_PLAYER_ENCOUNTER_ACTION_OPTIONS: PlayerEncounterOption<PlayerEncounter
   { label: "Parry - Disarm", value: "parry_disarm" },
   { label: "Disarm", value: "disarm" },
   { label: "Break Off Engagement", value: "break_off_engagement" },
+  { label: "Pass", value: "pass" },
+  { label: "Perform Task", value: "perform_task" },
   { label: "Move only", value: "move_only" },
   { label: "Other", value: "other" },
 ];
@@ -101,6 +108,10 @@ const ALL_PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS: PlayerEncounterOption<Playe
     { label: "Adjust Distance-Attack", value: "adjust_range_attack" },
     { label: "Counterattack", value: "counterattack" },
     { label: getCombatDeclarationActionLabel("observe_opponent"), value: "observe_opponent" },
+    { label: "Pass", value: "pass" },
+    { label: "Talk / Shout", value: "talk_shout" },
+    { label: "Equip / Unequip", value: "equip_unequip" },
+    { label: "Small Action", value: "small_action" },
     { label: "Offensive Parry", value: "offensive_parry" },
     { label: "Parry - Disarm", value: "parry_disarm" },
     { label: "Disarm", value: "disarm" },

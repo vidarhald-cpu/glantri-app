@@ -16,6 +16,7 @@ import {
 
 import type {
   CombatRoundDeclaration,
+  CombatDeclarationIntent,
   CombatDefenseSnapshot,
   CombatNpcDeclarationProposal,
   CombatProgressionBoundaryKind,
@@ -277,6 +278,7 @@ import {
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
   formatScenarioCombatEquipmentDiagnostic,
+  getCombatDeclarationAttackModeUnavailableMessage,
   getScenarioCombatEquipmentStatus,
   isEquipmentFeatureState,
   resolveCombatFeintDeclarationRequestTarget,
@@ -491,6 +493,7 @@ interface CombatInspectorDeclarationDraft {
   actionId: PlayerEncounterActionId | "";
   additionalActionNotes: string;
   combatContext: ScenarioParticipantCombatContext;
+  declarationIntent: CombatDeclarationIntent;
   disarmSelection: CombatDisarmDeclarationSelection;
   movementId: PlayerEncounterMovementId | "";
   movementIntent: MovementIntent;
@@ -643,13 +646,10 @@ function buildInspectorPhaseContexts(
   declaration?: CombatRoundDeclaration,
   scope?: { encounterId?: string; roundNumber?: number },
 ): CombatInspectorPhaseContextDrafts {
-  const scopedCombat = hasScenarioParticipantCombatDeclarationForEncounterRound({
-    encounterId: scope?.encounterId,
-    participant,
-    roundNumber: scope?.roundNumber,
-  })
-    ? participant?.state.combat
-    : undefined;
+  const scopedCombat =
+    scope?.encounterId && participant?.state.combat.lastDeclaredEncounterId === scope.encounterId
+      ? participant.state.combat
+      : undefined;
   const fallbackContext = mergeCombatContextWithCurrentModifierBuckets({
     baseContext: declaration?.combatContext ?? scopedCombat?.combatContext,
     currentContext: declaration
@@ -742,13 +742,10 @@ function buildDeclarationDraft(
   declaration?: CombatRoundDeclaration,
   scope?: { encounterId?: string; roundNumber?: number },
 ): CombatInspectorDeclarationDraft {
-  const scopedCombat = hasScenarioParticipantCombatDeclarationForEncounterRound({
-    encounterId: scope?.encounterId,
-    participant,
-    roundNumber: scope?.roundNumber,
-  })
-    ? participant?.state.combat
-    : undefined;
+  const scopedCombat =
+    scope?.encounterId && participant?.state.combat.lastDeclaredEncounterId === scope.encounterId
+      ? participant.state.combat
+      : undefined;
 
   return {
     actionId: isPlayerEncounterActionId(declaration?.actionId)
@@ -764,6 +761,36 @@ function buildDeclarationDraft(
         ? (declaration.combatContext ?? scopedCombat?.combatContext)
         : scopedCombat?.combatContext,
     }),
+    declarationIntent: declaration?.intent ??
+      scopedCombat?.lastDeclarationIntent ?? {
+        primaryAction: declaration?.actionId
+          ? { actionId: declaration.actionId }
+          : scopedCombat?.lastDeclaredActionId
+            ? { actionId: scopedCombat.lastDeclaredActionId }
+            : undefined,
+        relativePositions: (
+          declaration?.movementIntent?.distancePreferences ??
+          scopedCombat?.lastMovementIntent?.distancePreferences ??
+          []
+        ).map((preference) =>
+          preference.operation === "maintain"
+            ? {
+                desiredDistance: preference.desiredDistance,
+                kind: "keep_distance" as const,
+                targetParticipantId: preference.targetParticipantId,
+              }
+            : {
+                desiredDistance: preference.desiredDistance,
+                kind: "adjust_distance" as const,
+                targetParticipantId: preference.targetParticipantId,
+              },
+        ),
+        secondaryAction: declaration?.secondaryActionId
+          ? { actionId: declaration.secondaryActionId }
+          : scopedCombat?.lastDeclaredSecondaryActionId
+            ? { actionId: scopedCombat.lastDeclaredSecondaryActionId }
+            : undefined,
+      },
     disarmSelection: {
       actingItemId: declaration?.disarm?.actingWeapon.itemId ?? "",
       phase: declaration?.disarm?.phase ?? "phase1",
@@ -845,6 +872,7 @@ function buildInspectorDisplayDraft(input: {
       (input.snapshot.declarationSummary?.actionId as PlayerEncounterActionId | undefined) ?? "",
     additionalActionNotes: input.snapshot.declarationSummary?.additionalActionNotes ?? "",
     combatContext: createEmptyPlayerEncounterCombatContext(),
+    declarationIntent: input.snapshot.declarationSummary?.intent ?? input.draft.declarationIntent,
     disarmSelection: input.draft.disarmSelection,
     movementId:
       (input.snapshot.declarationSummary?.movementId as PlayerEncounterMovementId | undefined) ??
@@ -891,6 +919,7 @@ function hasCombatRoundDeclarationAction(declaration?: CombatRoundDeclaration): 
     declaration?.secondaryActionId ||
     declaration?.movementId ||
     declaration?.movementIntent ||
+    declaration?.intent ||
     declaration?.additionalActionNotes ||
     declaration?.combatContext ||
     declaration?.phaseContexts,
@@ -8868,6 +8897,7 @@ export default function CombatRoundManagerPanel({
           adjustDistance: roundParticipant.declaration?.adjustDistance,
           actionLabel: draft.actionId ? getPlayerEncounterActionLabel(draft.actionId) : undefined,
           additionalActionNotes: draft.additionalActionNotes || undefined,
+          intent: draft.declarationIntent,
           feint:
             roundParticipant.declaration?.actionId === "feint_attack" &&
             roundParticipant.declaration.feint
@@ -9265,7 +9295,7 @@ export default function CombatRoundManagerPanel({
     setInspectorDrafts((current) => ({
       ...current,
       [inspectorDraftKey]: {
-        ...inspectorDraft,
+        ...(current[inspectorDraftKey] ?? inspectorDraft),
         ...patch,
       },
     }));
@@ -9471,9 +9501,13 @@ export default function CombatRoundManagerPanel({
       setSaveError("Use the selected trapping weapon as the attack source for that phase.");
       return;
     }
-    const attackModeUnavailableMessage = Object.values(inspectorPhaseLoadoutSummaries).find(
-      (summary) => summary.attackModeUnavailableMessage,
-    )?.attackModeUnavailableMessage;
+    const attackModeUnavailableMessage = getCombatDeclarationAttackModeUnavailableMessage({
+      actionId: inspectorDraft.actionId || undefined,
+      disarmPhase: disarmMethod === "proactive" ? inspectorDraft.disarmSelection.phase : undefined,
+      feintMethod: inspectorDraft.feintMethod,
+      phaseLoadoutSummaries: inspectorPhaseLoadoutSummaries,
+      secondaryActionId: inspectorDraft.secondaryActionId || undefined,
+    });
     if (!isModifierReview && attackModeUnavailableMessage) {
       setSaveError(attackModeUnavailableMessage);
       return;
@@ -9594,6 +9628,7 @@ export default function CombatRoundManagerPanel({
             : undefined,
         movementId: inspectorDraft.movementId || undefined,
         movementIntent: inspectorDraft.movementIntent,
+        intent: inspectorDraft.declarationIntent,
         phaseContexts: requestPhaseContexts,
         phaseAttackSources: declarationAttackSelection.phaseAttackSources,
         phaseWeaponNames: {
@@ -12252,6 +12287,7 @@ export default function CombatRoundManagerPanel({
                         }
                         additionalActionNotes={inspectorDisplayDraft.additionalActionNotes}
                         declarationRecorded
+                        declarationIntent={inspectorHistoricalDeclarationSummary?.intent}
                         distancePreferences={inspectorDisplayDistancePreferenceOptions.map(
                           (preference) => ({
                             desiredDistance: preference.defaultDistance,
@@ -12265,6 +12301,25 @@ export default function CombatRoundManagerPanel({
                             ? getPlayerEncounterMovementLabel(inspectorDisplayDraft.movementId)
                             : undefined)
                         }
+                        relativePositionLabels={inspectorHistoricalDeclarationSummary?.intent?.relativePositions.map(
+                          (position) => {
+                            if (position.kind === "hold_formation") {
+                              return `Hold formation · ${position.formation}`;
+                            }
+                            const targetLabel = inspectorDisplayDistancePreferenceOptions.find(
+                              (option) => option.id === position.targetParticipantId,
+                            )?.displayName;
+                            const kindLabel =
+                              position.kind === "keep_distance"
+                                ? "Keep distance"
+                                : "Adjust distance";
+                            return `${kindLabel} · ${targetLabel ?? "Unavailable participant"}${
+                              position.desiredDistance === undefined
+                                ? ""
+                                : ` · Distance ${position.desiredDistance}`
+                            }`;
+                          },
+                        )}
                         roundNumber={selectedRoundNumber}
                         secondaryActionLabel={
                           inspectorHistoricalDeclarationSummary?.secondaryActionLabel ??
@@ -12286,6 +12341,7 @@ export default function CombatRoundManagerPanel({
                             inspectorCombatExperienceRequired
                           }
                           declarationRecorded={Boolean(inspector.participant?.declaration)}
+                          declarationIntent={inspectorDisplayDraft.declarationIntent}
                           distancePreferenceOptions={inspectorDisplayDistancePreferenceOptions}
                           movementId={inspectorDisplayDraft.movementId}
                           movementIntent={inspectorDisplayDraft.movementIntent}
@@ -12299,6 +12355,9 @@ export default function CombatRoundManagerPanel({
                           }
                           onAdditionalActionNotesChange={(additionalActionNotes) =>
                             updateInspectorDraft({ additionalActionNotes })
+                          }
+                          onDeclarationIntentChange={(declarationIntent) =>
+                            updateInspectorDraft({ declarationIntent })
                           }
                           onMovementChange={(movementId) => updateInspectorDraft({ movementId })}
                           onMovementIntentChange={(movementIntent) =>

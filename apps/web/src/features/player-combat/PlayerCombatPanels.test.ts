@@ -66,18 +66,21 @@ describe("PlayerCombatPanels", () => {
     expect(source.indexOf('label: "Initiative"')).toBeLessThan(source.indexOf('label: "Skill/OB"'));
   });
 
-  it("renders structured distance preference movement controls instead of placeholder-only options", () => {
+  it("renders the approved relative-position, movement, and facing declaration controls", () => {
     const source = readSource();
 
-    expect(source).toContain("Change distance to participant");
-    expect(source).toContain("Move in environment");
+    expect(source).toContain("Relative position");
+    expect(source).toContain("Keep distance");
+    expect(source).toContain("Adjust distance");
+    expect(source).toContain("Hold formation");
+    expect(source).toContain("Movement and facing");
+    expect(source).toContain("Movement direction");
+    expect(source).toContain("directionOptions");
     expect(source).toContain("distancePreferenceOptions");
-    expect(source).toContain("No preference");
-    expect(source).toContain("Maintain · Distance");
-    expect(source).toContain("Close · Distance");
-    expect(source).toContain("Open · Distance");
-    expect(source).toContain("Retreat · Distance");
+    expect(source).toContain("onDeclarationIntentChange");
     expect(source).toContain("onMovementIntentChange");
+    expect(source).not.toContain(">How<");
+    expect(source).not.toContain("Expected time");
     expect(source).not.toContain("PLAYER_ENCOUNTER_MOVEMENT_OPTIONS.map");
   });
 

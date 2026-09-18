@@ -9539,7 +9539,7 @@ describe("scenarios route contract", () => {
     ["player", mocks.playerUser],
     ["GM proxy", mocks.adminUser],
   ] as const)(
-    "rejects forged generic movement on a distance-owning maneuver for %s with zero mutation",
+    "rejects an unavailable relative target for %s without restoring declaration-time feasibility gating",
     async (_viewer, user) => {
       setupCombatDeclarationRoute({ user });
       const app = await buildScenarioTestApp();
@@ -9567,7 +9567,10 @@ describe("scenarios route contract", () => {
 
       expect(response.statusCode).toBe(400);
       expect(response.json()).toEqual({
-        error: "The selected movement is not compatible with the selected primary action.",
+        error:
+          _viewer === "player"
+            ? "Distance preference target is unavailable."
+            : "Distance preference target is not part of this combat round.",
       });
       expect(response.body).not.toContain("hidden-opponent");
       expect(mocks.encounterService.commitCombatParticipantStateMutation).not.toHaveBeenCalled();
@@ -10121,6 +10124,284 @@ describe("scenarios route contract", () => {
         },
       ],
       mode: "set_distance_preferences",
+    });
+  });
+
+  it.each([
+    {
+      actionId: "perform_task",
+      expectedError: "Describe the task the character intends to perform.",
+      label: "Perform Task without intent",
+    },
+    {
+      actionId: "perform_task",
+      expectedError: "Describe the task the character intends to perform.",
+      intent: { primaryAction: { actionId: "perform_task" }, relativePositions: [] },
+      label: "Perform Task without a description",
+    },
+    {
+      actionId: "pass",
+      expectedError: "Choose how the character speaks and enter the short utterance.",
+      label: "Talk / Shout without intent",
+      secondaryActionId: "talk_shout",
+    },
+    {
+      actionId: "pass",
+      expectedError: "Choose how the character speaks and enter the short utterance.",
+      intent: {
+        primaryAction: { actionId: "pass" },
+        relativePositions: [],
+        secondaryAction: { actionId: "talk_shout", utteranceType: "speak" },
+      },
+      label: "Talk / Shout without an utterance",
+      secondaryActionId: "talk_shout",
+    },
+    {
+      actionId: "pass",
+      expectedError: "Describe the intended equipment change.",
+      label: "Equip / Unequip without intent",
+      secondaryActionId: "equip_unequip",
+    },
+    {
+      actionId: "pass",
+      expectedError: "Describe the intended equipment change.",
+      intent: {
+        primaryAction: { actionId: "pass" },
+        relativePositions: [],
+        secondaryAction: { actionId: "equip_unequip" },
+      },
+      label: "Equip / Unequip without a description",
+      secondaryActionId: "equip_unequip",
+    },
+    {
+      actionId: "pass",
+      expectedError: "Describe the Small Action the character intends to attempt.",
+      label: "Small Action without intent",
+      secondaryActionId: "small_action",
+    },
+    {
+      actionId: "pass",
+      expectedError: "Describe the Small Action the character intends to attempt.",
+      intent: {
+        primaryAction: { actionId: "pass" },
+        relativePositions: [],
+        secondaryAction: { actionId: "small_action" },
+      },
+      label: "Small Action without a description",
+      secondaryActionId: "small_action",
+    },
+  ])("rejects $label at the direct declaration API boundary", async (testCase) => {
+    setupCombatDeclarationRoute({
+      encounter: { participants: makeTwoCombatEncounterParticipants() },
+      participants: [
+        makeCombatScenarioParticipant({ id: "participant-1" }),
+        makeCombatScenarioParticipant({
+          controlledByUserId: "other-player",
+          id: "participant-2",
+        }),
+      ],
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: testCase.actionId,
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        ...(testCase.intent ? { intent: testCase.intent } : {}),
+        movementId: "hold",
+        scenarioParticipantId: "participant-1",
+        secondaryActionId: testCase.secondaryActionId,
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(400);
+    expect(response.json()).toMatchObject({ error: testCase.expectedError });
+    expect(mocks.encounterService.commitCombatParticipantStateMutation).not.toHaveBeenCalled();
+  });
+
+  it("persists the complete declaration intent and materializes player tasks for GM adjudication", async () => {
+    setupCombatDeclarationRoute({
+      encounter: { participants: makeTwoCombatEncounterParticipants() },
+      participants: [
+        makeCombatScenarioParticipant({ id: "participant-1" }),
+        makeCombatScenarioParticipant({
+          controlledByUserId: "other-player",
+          id: "participant-2",
+        }),
+      ],
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "perform_task",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        intent: {
+          facing: "backward_left",
+          movementDirection: "forward_right",
+          primaryAction: {
+            actionId: "perform_task",
+            description: "Bar the gate.",
+          },
+          relativePositions: [
+            {
+              desiredDistance: 2,
+              intendedSpeed: "carefully",
+              kind: "adjust_distance",
+              targetParticipantId: "participant-2",
+            },
+            { formation: "Shield line around Mira", kind: "hold_formation" },
+          ],
+          secondaryAction: {
+            actionId: "small_action",
+            description: "Kick the loose torch aside.",
+          },
+        },
+        movementId: "step",
+        scenarioParticipantId: "participant-1",
+        secondaryActionId: "small_action",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    const declaration = updatedEncounter.combatRoundState.participants[0].declaration;
+    expect(declaration.intent).toEqual({
+      facing: "backward_left",
+      movementDirection: "forward_right",
+      primaryAction: {
+        actionId: "perform_task",
+        description: "Bar the gate.",
+        taskId: "round:1:participant:encounter-participant-1:declaration:perform_task",
+      },
+      relativePositions: [
+        {
+          desiredDistance: 2,
+          intendedSpeed: "carefully",
+          kind: "adjust_distance",
+          targetParticipantId: "encounter-participant-2",
+        },
+        { formation: "Shield line around Mira", kind: "hold_formation" },
+      ],
+      secondaryAction: {
+        actionId: "small_action",
+        description: "Kick the loose torch aside.",
+        taskId: "round:1:participant:encounter-participant-1:declaration:small_action",
+      },
+    });
+    expect(updatedEncounter.combatRoundState.genericActions).toMatchObject([
+      {
+        declarationKind: "perform_task",
+        duration: { kind: "gm_decided" },
+        intent: "Bar the gate.",
+        ownerParticipantId: "encounter-participant-1",
+        status: "declared",
+      },
+      {
+        declarationKind: "small_action",
+        duration: { kind: "gm_decided" },
+        intent: "Kick the loose torch aside.",
+        ownerParticipantId: "encounter-participant-1",
+        status: "declared",
+      },
+    ]);
+    expect(
+      updatedEncounter.combatRoundState.genericActions.every(
+        (action: { rollRequest?: unknown }) => action.rollRequest === undefined,
+      ),
+    ).toBe(true);
+    expect(
+      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state.combat
+        .lastDeclarationIntent,
+    ).toEqual(declaration.intent);
+  });
+
+  it("continues the participant's nonterminal Combat Task with the same ID across rounds", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const encounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const persistentTaskId = "round:1:participant:encounter-participant-1:declaration:perform_task";
+    encounter.currentRound = 2;
+    encounter.combatRoundState = combatRoundStateSchema.parse({
+      ...initializeCombatRoundState({ encounter }),
+      genericActions: declareCombatGenericAction({
+        action: {
+          createdAt: "2026-09-18T08:00:00.000Z",
+          declarationKind: "perform_task",
+          duration: { kind: "gm_decided" },
+          id: persistentTaskId,
+          intent: "Bar the gate.",
+          ownerParticipantId: "encounter-participant-1",
+        },
+        actions: [],
+      }),
+      roundNumber: 2,
+    });
+    const owner = makeCombatScenarioParticipant({
+      id: "participant-1",
+    }) as unknown as ScenarioParticipant;
+    owner.state = {
+      ...owner.state,
+      combat: {
+        ...owner.state.combat,
+        lastDeclarationIntent: {
+          primaryAction: {
+            actionId: "perform_task",
+            description: "Bar the gate.",
+            taskId: persistentTaskId,
+          },
+          relativePositions: [],
+        },
+      },
+    };
+    setupCombatDeclarationRoute({
+      encounter,
+      participants: [
+        owner,
+        makeCombatScenarioParticipant({
+          controlledByUserId: "other-player",
+          id: "participant-2",
+        }),
+      ],
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "perform_task",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        intent: {
+          primaryAction: {
+            actionId: "perform_task",
+            description: "Bar the gate and brace it with the cart.",
+          },
+          relativePositions: [],
+        },
+        movementId: "hold",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.genericActions).toHaveLength(1);
+    expect(updatedEncounter.combatRoundState.genericActions[0]).toMatchObject({
+      id: persistentTaskId,
+      intent: "Bar the gate and brace it with the cart.",
+      status: "declared",
+    });
+    expect(updatedEncounter.combatRoundState.participants[0].declaration.intent).toMatchObject({
+      primaryAction: { taskId: persistentTaskId },
     });
   });
 

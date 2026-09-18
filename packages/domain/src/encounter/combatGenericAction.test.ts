@@ -9,6 +9,7 @@ import {
   projectCombatGenericActionsForPlayer,
   reviewCombatGenericAction,
   recordCombatGenericActionRoll,
+  updateCombatGenericActionIntent,
   type CombatGenericAction,
   type CombatGenericActionRollRequest,
 } from "./combatGenericAction";
@@ -142,6 +143,42 @@ describe("generic Combat actions", () => {
       status: "completed",
     });
     expect(finished[0]?.rollResult).toBeUndefined();
+  });
+
+  it("updates a declared task description without replacing GM adjudication state", () => {
+    const reviewed = reviewCombatGenericAction({
+      actionId: "task-1",
+      actions: declareCombatGenericAction({
+        action: {
+          createdAt: at,
+          declarationKind: "perform_task",
+          duration: { kind: "gm_decided" },
+          id: "task-1",
+          intent: "Bar the gate.",
+          ownerParticipantId: "hero",
+        },
+        actions: [],
+      }),
+      duration: { kind: "rounds", rounds: 3 },
+      reviewedAt: at,
+      rollRequest: skillRoll,
+    });
+    const updated = updateCombatGenericActionIntent({
+      actionId: "task-1",
+      actions: reviewed,
+      intent: "Bar the gate and brace it with the cart.",
+      updatedAt: "2026-08-14T18:01:00.000Z",
+    });
+
+    expect(updated[0]).toMatchObject({
+      declarationKind: "perform_task",
+      duration: { kind: "rounds", rounds: 3 },
+      id: "task-1",
+      intent: "Bar the gate and brace it with the cart.",
+      progress: { completedRounds: 0, totalRounds: 3 },
+      rollRequest: skillRoll,
+      status: "reviewed",
+    });
   });
 
   it("progresses a fixed multi-round task once per accepted round and preserves interruption", () => {
