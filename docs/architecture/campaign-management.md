@@ -2,13 +2,16 @@
 
 **Product Owner approval:** Approved 2026-09-15.
 
+**V1 implementation:** Integrated through [#213 CM1 — Campaign Workspace & Current Context](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/213).\
+**Successor:** [Campaign Management V2](./campaign-management-v2.md), tracked in [#227](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/227), supersedes the V1 presentation and workspace-organization assumptions it identifies while preserving this accepted V1 history and its domain invariants.
+
 **Provenance:** PO-approved Campaign Management durable product and architecture contract supplied for [#120](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/120); documentation publication authorized in [#194](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/194). Source attachment: `940ace6e-63b7-4a27-a5c9-05eb6679f38b/pasted-text.txt`; SHA-256: `768d3e992e6eec19a2189f5fd363cf41b2f60c1445dee9c8462c961a8eeb444c`.
 
 ## 1. Status and scope
 
 **Portfolio area:** #120 Campaign Management\
-**Status:** Future-product architecture; conceptually Ready\
-**Implementation status:** Not yet activated\
+**Status:** Accepted V1 product architecture\
+**Implementation status:** Integrated\
 **Relationship to #112 Persistent Play:** Successor product lane after the relevant Persistent Play milestone
 
 Campaign Management defines how the GM organizes, understands, navigates, and maintains an ongoing Campaign.
