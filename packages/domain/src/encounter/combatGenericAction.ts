@@ -131,6 +131,7 @@ export const combatGenericActionSchema = z.object({
   awarenessContext: z.object({ kind: z.literal("survey") }).optional(),
   createdAt: z.string().datetime(),
   createdByUserId: idSchema.optional(),
+  declarationKind: z.enum(["perform_task", "small_action"]).optional(),
   duration: combatGenericActionDurationSchema,
   id: idSchema,
   intent: z.string().trim().min(1).max(2000),
@@ -214,6 +215,23 @@ export function declareCombatGenericAction(input: {
     status: "declared",
   });
   return [...input.actions, action];
+}
+
+export function updateCombatGenericActionIntent(input: {
+  actionId: string;
+  actions: readonly CombatGenericAction[];
+  intent: string;
+  updatedAt: string;
+}): CombatGenericAction[] {
+  const current = requireAction(input.actions, input.actionId);
+  if (current.intent === input.intent.trim()) return [...input.actions];
+
+  const next = combatGenericActionSchema.parse({
+    ...current,
+    intent: input.intent,
+    lastUpdatedAt: input.updatedAt,
+  });
+  return replaceAction(input.actions, next);
 }
 
 export function reviewCombatGenericAction(input: {

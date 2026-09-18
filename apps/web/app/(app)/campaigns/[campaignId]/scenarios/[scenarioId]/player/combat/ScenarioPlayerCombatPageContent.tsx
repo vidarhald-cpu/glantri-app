@@ -16,6 +16,7 @@ import {
   type CombatRoundCombatExperienceResult,
   type CombatRoundAttackRollResult,
   type CombatRoundDeclaration,
+  type CombatDeclarationIntent,
   type CombatRoundInitiativeRank,
   type CombatRoundParryResolution,
   type CombatRoundPhase,
@@ -48,7 +49,6 @@ import {
   getPlayerCombatCurrentRollAction,
   getParticipantCombatExperienceSkillTotalLookup,
   getWeaponPreferredDistances,
-  hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
   lookupCombatCriticalModifier,
   resolveEncounterParticipantByRollParticipantId,
@@ -134,6 +134,7 @@ import {
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
   formatScenarioCombatEquipmentDiagnostic,
+  getCombatDeclarationAttackModeUnavailableMessage,
   getScenarioCombatEquipmentStatus,
   isEquipmentFeatureState,
   resolveCombatFeintDeclarationRequestTarget,
@@ -860,6 +861,7 @@ interface PlayerCombatDeclarationDraft {
   actionId: PlayerEncounterActionId | "";
   additionalActionNotes: string;
   combatContext: ScenarioParticipantCombatContext;
+  declarationIntent: CombatDeclarationIntent;
   movementId: PlayerEncounterMovementId | "";
   movementIntent: MovementIntent;
   phaseContexts: PlayerCombatPhaseContextDrafts;
@@ -878,13 +880,11 @@ function buildPlayerCombatPhaseContexts(input: {
   participant?: ScenarioParticipant | null;
   roundNumber?: number;
 }): PlayerCombatPhaseContextDrafts {
-  const scopedCombat = hasScenarioParticipantCombatDeclarationForEncounterRound({
-    encounterId: input.encounterId,
-    participant: input.participant ?? undefined,
-    roundNumber: input.roundNumber,
-  })
-    ? input.participant?.state.combat
-    : undefined;
+  const scopedCombat =
+    input.encounterId &&
+    input.participant?.state.combat.lastDeclaredEncounterId === input.encounterId
+      ? input.participant.state.combat
+      : undefined;
   const fallbackContext = mergeCombatContextWithCurrentModifierBuckets({
     baseContext:
       input.declaration?.combatContext ??
@@ -911,6 +911,7 @@ function hasCombatRoundDeclarationAction(
     declaration?.secondaryActionId ||
     declaration?.movementId ||
     declaration?.movementIntent ||
+    declaration?.intent ||
     declaration?.additionalActionNotes ||
     declaration?.combatContext ||
     declaration?.phaseContexts,
@@ -921,6 +922,30 @@ function createDefaultMovementIntent(): MovementIntent {
   return {
     distancePreferences: [],
     mode: "hold_position",
+  };
+}
+
+function buildDeclarationIntentFromLegacy(input: {
+  actionId?: string;
+  movementIntent?: MovementIntent;
+  secondaryActionId?: string;
+}): CombatDeclarationIntent {
+  return {
+    primaryAction: input.actionId ? { actionId: input.actionId } : undefined,
+    relativePositions: (input.movementIntent?.distancePreferences ?? []).map((preference) =>
+      preference.operation === "maintain"
+        ? {
+            desiredDistance: preference.desiredDistance,
+            kind: "keep_distance" as const,
+            targetParticipantId: preference.targetParticipantId,
+          }
+        : {
+            desiredDistance: preference.desiredDistance,
+            kind: "adjust_distance" as const,
+            targetParticipantId: preference.targetParticipantId,
+          },
+    ),
+    secondaryAction: input.secondaryActionId ? { actionId: input.secondaryActionId } : undefined,
   };
 }
 
@@ -988,13 +1013,10 @@ function buildPlayerCombatDeclarationDraft(input: {
   roundNumber?: number;
 }): PlayerCombatDeclarationDraft {
   const { declaration, participant } = input;
-  const scopedCombat = hasScenarioParticipantCombatDeclarationForEncounterRound({
-    encounterId: input.encounterId,
-    participant: participant ?? undefined,
-    roundNumber: input.roundNumber,
-  })
-    ? participant?.state.combat
-    : undefined;
+  const scopedCombat =
+    input.encounterId && participant?.state.combat.lastDeclaredEncounterId === input.encounterId
+      ? participant.state.combat
+      : undefined;
 
   return {
     actionId: isPlayerEncounterActionId(declaration?.actionId)
@@ -1011,6 +1033,15 @@ function buildPlayerCombatDeclarationDraft(input: {
         createEmptyPlayerEncounterCombatContext(),
       currentContext: scopedCombat?.combatContext,
     }),
+    declarationIntent:
+      declaration?.intent ??
+      scopedCombat?.lastDeclarationIntent ??
+      buildDeclarationIntentFromLegacy({
+        actionId: declaration?.actionId ?? scopedCombat?.lastDeclaredActionId,
+        movementIntent: declaration?.movementIntent ?? scopedCombat?.lastMovementIntent,
+        secondaryActionId:
+          declaration?.secondaryActionId ?? scopedCombat?.lastDeclaredSecondaryActionId,
+      }),
     movementId: (declaration?.movementId ??
       scopedCombat?.lastDeclaredMovementId ??
       "hold") as PlayerEncounterMovementId,
@@ -1182,6 +1213,9 @@ export default function ScenarioPlayerCombatPageContent({
   const [selectedMovementIntent, setSelectedMovementIntent] = useState<MovementIntent>(
     createDefaultMovementIntent(),
   );
+  const [declarationIntent, setDeclarationIntent] = useState<CombatDeclarationIntent>({
+    relativePositions: [],
+  });
   const [additionalActionNotes, setAdditionalActionNotes] = useState("");
   const [combatContextDraft, setCombatContextDraft] = useState<ScenarioParticipantCombatContext>(
     createEmptyPlayerEncounterCombatContext(),
@@ -2159,6 +2193,7 @@ export default function ScenarioPlayerCombatPageContent({
       setSecondaryActionContext(undefined);
       setSelectedMovementId("hold");
       setSelectedMovementIntent(createDefaultMovementIntent());
+      setDeclarationIntent({ relativePositions: [] });
       setAdditionalActionNotes("");
       setCombatContextDraft(createEmptyPlayerEncounterCombatContext());
       setPhaseCombatContextDrafts({
@@ -2196,6 +2231,7 @@ export default function ScenarioPlayerCombatPageContent({
     setSecondaryActionContext(nextDraft.secondaryActionContext);
     setSelectedMovementId(nextDraft.movementId);
     setSelectedMovementIntent(nextDraft.movementIntent);
+    setDeclarationIntent(nextDraft.declarationIntent);
     setAdditionalActionNotes(nextDraft.additionalActionNotes);
     setFeintMethod(selectedRoundDeclaration?.feint?.method ?? "movement");
     setCombatContextDraft(nextDraft.combatContext);
@@ -2858,9 +2894,13 @@ export default function ScenarioPlayerCombatPageContent({
       setError("Use the selected trapping weapon as the attack source for that phase.");
       return;
     }
-    const attackModeUnavailableMessage = Object.values(phaseCombatLoadoutSummaries).find(
-      (summary) => summary.attackModeUnavailableMessage,
-    )?.attackModeUnavailableMessage;
+    const attackModeUnavailableMessage = getCombatDeclarationAttackModeUnavailableMessage({
+      actionId: selectedActionId || undefined,
+      disarmPhase: disarmMethod === "proactive" ? disarmSelection.phase : undefined,
+      feintMethod,
+      phaseLoadoutSummaries: phaseCombatLoadoutSummaries,
+      secondaryActionId: selectedSecondaryActionId || undefined,
+    });
     if (attackModeUnavailableMessage) {
       setError(attackModeUnavailableMessage);
       return;
@@ -2944,6 +2984,7 @@ export default function ScenarioPlayerCombatPageContent({
             : undefined,
         movementId: selectedMovementId || undefined,
         movementIntent: selectedMovementIntent,
+        intent: declarationIntent,
         phaseContexts: requestPhaseContexts,
         phaseAttackSources: declarationAttackSelection.phaseAttackSources,
         phaseWeaponNames: {
@@ -4399,6 +4440,9 @@ export default function ScenarioPlayerCombatPageContent({
   const hasMeaningfulDeclaration =
     Boolean(selectedActionId) ||
     Boolean(selectedSecondaryActionId) ||
+    declarationIntent.relativePositions.length > 0 ||
+    Boolean(declarationIntent.movementDirection) ||
+    Boolean(declarationIntent.facing) ||
     additionalActionNotes.trim().length > 0;
   const currentInitiativePhase =
     currentCombatStep === "initiative_phase_1"
@@ -5086,7 +5130,7 @@ export default function ScenarioPlayerCombatPageContent({
         </section>
       ) : null}
 
-      {encounterSession && selectedRoundParticipant ? (
+      {isGameMaster && encounterSession && selectedRoundParticipant ? (
         <GenericCombatActionPanel
           encounter={encounterSession}
           isGm={isGameMaster}
@@ -5120,6 +5164,7 @@ export default function ScenarioPlayerCombatPageContent({
               additionalActionNotes={additionalActionNotes}
               controlsDisabled={declarationControlsDisabled}
               declarationRecorded={selectedParticipantStoredDeclarationThisRound}
+              declarationIntent={declarationIntent}
               distancePreferenceOptions={distancePreferenceOptions}
               movementId={selectedMovementId}
               movementIntent={selectedMovementIntent}
@@ -5133,6 +5178,10 @@ export default function ScenarioPlayerCombatPageContent({
               onAdditionalActionNotesChange={(notes) => {
                 markCombatDeclarationDraftDirty();
                 setAdditionalActionNotes(notes);
+              }}
+              onDeclarationIntentChange={(intent) => {
+                markCombatDeclarationDraftDirty();
+                setDeclarationIntent(intent);
               }}
               onMovementChange={(movementId) => {
                 markCombatDeclarationDraftDirty();

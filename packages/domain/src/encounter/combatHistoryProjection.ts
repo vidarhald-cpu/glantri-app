@@ -175,6 +175,7 @@ export interface ProjectedCombatHistorySnapshot {
       actionId?: string;
       actionLabel?: string;
       additionalActionNotes?: string;
+      intent?: NonNullable<CombatRoundStepSnapshot["declarationSummary"]>["intent"];
       movementId?: string;
       movementIntent?: NonNullable<CombatRoundStepSnapshot["declarationSummary"]>["movementIntent"];
       movementLabel?: string;
@@ -937,6 +938,7 @@ function projectSnapshot(input: {
       ? {
           actionId: declarationOutcome.actionId,
           additionalActionNotes: archivedDeclaration?.additionalActionNotes,
+          intent: archivedDeclaration?.intent,
           movementId:
             typeof declarationOutcome.movementId === "string"
               ? declarationOutcome.movementId
@@ -978,6 +980,19 @@ function projectSnapshot(input: {
             actionId: declarationSummary?.actionId,
             actionLabel: declarationSummary?.actionLabel,
             additionalActionNotes: declarationSummary?.additionalActionNotes,
+            intent: declarationSummary?.intent
+              ? {
+                  ...declarationSummary.intent,
+                  relativePositions: declarationSummary.intent.relativePositions.filter(
+                    (position) =>
+                      position.kind === "hold_formation" ||
+                      isVisible({
+                        participantId: position.targetParticipantId,
+                        viewer: input.viewer,
+                      }),
+                  ),
+                }
+              : undefined,
             movementId: declarationSummary?.movementId,
             movementIntent: declarationSummary?.movementIntent
               ? {

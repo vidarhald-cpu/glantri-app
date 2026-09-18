@@ -43,6 +43,19 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain('? "Resume current task"');
   });
 
+  it("keeps the generic task adjudication panel GM-only on the ordinary player surface", () => {
+    const source = readSource();
+    const panel = source.indexOf("<GenericCombatActionPanel");
+
+    expect(panel).toBeGreaterThan(-1);
+    expect(source.slice(Math.max(0, panel - 140), panel)).toContain(
+      "isGameMaster && encounterSession && selectedRoundParticipant",
+    );
+    expect(source).toContain("declarationIntent={declarationIntent}");
+    expect(source).toContain("onDeclarationIntentChange={(intent) => {");
+    expect(source).toContain("setDeclarationIntent(intent)");
+  });
+
   it("uses canonical board positioning for Current task and tracker-local keyboard navigation", () => {
     const source = readSource();
 
@@ -407,7 +420,6 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("getEncounterScenarioParticipantIds");
     expect(source).toContain("playerPerspectiveVisibleParticipants");
     expect(source).toContain("visibleParticipantIds");
-    expect(source).toContain("hasScenarioParticipantCombatDeclarationForEncounterRound");
     expect(source).toContain(
       "selectedParticipant.state.combat.lastDeclaredEncounterId === encounterId",
     );

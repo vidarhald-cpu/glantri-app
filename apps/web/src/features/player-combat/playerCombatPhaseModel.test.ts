@@ -7,6 +7,7 @@ import {
   buildCanonicalCombatTargetOptions,
   buildCombatAttackSourceRef,
   buildCombatDeclarationAttackSelection,
+  getCombatDeclarationAttackModeUnavailableMessage,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
@@ -716,6 +717,27 @@ describe("player combat phase model", () => {
         phaseLoadoutSummaries: summaries,
       }).phaseAttackSources,
     ).toEqual({});
+  });
+
+  it("ignores unavailable attack modes when the declaration has no attack phase", () => {
+    const phaseLoadoutSummaries = {
+      phase1: { attackModeUnavailableMessage: "Phase 1 has no legal attack mode." },
+      phase2: { attackModeUnavailableMessage: "Phase 2 has no legal attack mode." },
+    };
+
+    expect(
+      getCombatDeclarationAttackModeUnavailableMessage({
+        actionId: "pass",
+        phaseLoadoutSummaries,
+        secondaryActionId: "equip_unequip",
+      }),
+    ).toBeUndefined();
+    expect(
+      getCombatDeclarationAttackModeUnavailableMessage({
+        actionId: "attack_parry",
+        phaseLoadoutSummaries,
+      }),
+    ).toBe("Phase 1 has no legal attack mode.");
   });
 
   it("retains the committed loadout slot when an enriched row uses an item alias", () => {

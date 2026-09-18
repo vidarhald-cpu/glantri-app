@@ -97,26 +97,36 @@ describe("playerEncounter", () => {
       "parry_disarm",
       "disarm",
       "break_off_engagement",
+      "pass",
+      "perform_task",
       "move_only",
     ]);
     expect(PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS.map((option) => option.value)).toEqual([
       "observe_opponent",
+      "pass",
+      "talk_shout",
+      "equip_unequip",
+      "small_action",
     ]);
   });
 
   it("adapts canonical compatibility in both selector directions", () => {
     expect(getPlayerEncounterSecondaryActionOptions("").map((option) => option.value)).toEqual([
       "observe_opponent",
+      "pass",
+      "talk_shout",
+      "equip_unequip",
+      "small_action",
     ]);
     expect(
       getPlayerEncounterSecondaryActionOptions("attack_parry").map((option) => option.value),
-    ).toEqual([]);
+    ).toEqual(["pass", "talk_shout", "equip_unequip", "small_action"]);
     expect(getPlayerEncounterSecondaryActionOptions("parry").map((option) => option.value)).toEqual(
-      ["observe_opponent"],
+      ["observe_opponent", "pass", "talk_shout", "equip_unequip", "small_action"],
     );
     expect(
       getPlayerEncounterPrimaryActionOptions("observe_opponent").map((option) => option.value),
-    ).toEqual(["parry"]);
+    ).toEqual(["parry", "pass"]);
   });
 
   it("presents incomplete, incompatible, and stale unsupported selections precisely", () => {

@@ -50,6 +50,7 @@ import {
   activateCombatGenericAction,
   combatGenericActionDurationSchema,
   declareCombatGenericAction,
+  updateCombatGenericActionIntent,
   finishCombatGenericAction,
   buildCombatRoundAttackRollResult,
   buildCanonicalCombatModifierReviewFromDraft,
@@ -234,6 +235,7 @@ import {
   getWeaponPreferredDistances,
   isDistanceGeneratedObSkillModifier,
   movementIntentSchema,
+  combatDeclarationIntentSchema,
   normalizeMovementIntent,
   normalizeCombatModifierRowsForEncounter,
   projectCombatHistory,
@@ -269,6 +271,7 @@ import {
   type CombatGenericActionDuration,
   type CombatGenericActionReference,
   type CombatGenericActionRollRequest,
+  type CombatDeclarationIntent,
   type CombatNpcDeclarationProposal,
   type CombatNpcDeclarationSourceStatus,
   type ParticipantCombatExperienceSkillTotalLookup,
@@ -1537,6 +1540,7 @@ function parseCombatDeclarationBody(body: unknown): ParsedCombatTaskCommandIdent
   actionId?: string;
   additionalActionNotes?: string;
   combatContext: ReturnType<typeof scenarioParticipantCombatContextSchema.parse>;
+  intent?: CombatDeclarationIntent;
   movementId?: string;
   movementIntent?: MovementIntent;
   expectedParticipantRevision?: string;
@@ -1586,6 +1590,8 @@ function parseCombatDeclarationBody(body: unknown): ParsedCombatTaskCommandIdent
     additionalActionNotes:
       typeof value.additionalActionNotes === "string" ? value.additionalActionNotes : undefined,
     combatContext: scenarioParticipantCombatContextSchema.parse(value.combatContext ?? {}),
+    intent:
+      value.intent === undefined ? undefined : combatDeclarationIntentSchema.parse(value.intent),
     ...taskIdentity,
     movementId: parseOptionalDeclarationString(value.movementId),
     movementIntent: normalizeMovementIntent(value.movementIntent),
@@ -2257,22 +2263,6 @@ function normalizeCombatDeclarationMovementIntent(input: {
       throw new Error(playerUnavailableTargetMessage);
     }
 
-    const currentDistance = getDistanceEdgeBetweenParticipantAliases({
-      participantA: input.encounterParticipant,
-      participantB: targetEncounterParticipant,
-      state: input.roundState.distanceState,
-    })?.distance;
-    const operationMatchesDistance =
-      !preference.operation ||
-      (currentDistance !== undefined &&
-        ((preference.operation === "maintain" && preference.desiredDistance === currentDistance) ||
-          (preference.operation === "close" && preference.desiredDistance < currentDistance) ||
-          ((preference.operation === "open" || preference.operation === "retreat") &&
-            preference.desiredDistance > currentDistance)));
-    if (!operationMatchesDistance) {
-      throw new Error("Relative movement no longer matches the current participant distance.");
-    }
-
     preferencesByTargetParticipantId.set(
       targetRoundParticipant.participantId,
       movementIntentSchema.parse({
@@ -2291,6 +2281,180 @@ function normalizeCombatDeclarationMovementIntent(input: {
     distancePreferences: [...preferencesByTargetParticipantId.values()],
     mode: "set_distance_preferences",
   });
+}
+
+function materializeCombatDeclarationTasks(input: {
+  createdAt: string;
+  createdByUserId: string;
+  intent?: CombatDeclarationIntent;
+  ownerParticipantId: string;
+  previousIntent?: CombatDeclarationIntent;
+  roundNumber: number;
+  state: CombatRoundState;
+}): { genericActions: CombatRoundState["genericActions"]; intent?: CombatDeclarationIntent } {
+  if (!input.intent) {
+    return { genericActions: input.state.genericActions };
+  }
+
+  let genericActions = input.state.genericActions;
+  const declarationId = buildCombatRoundDeclarationId({
+    participantId: input.ownerParticipantId,
+    roundNumber: input.roundNumber,
+  });
+
+  const materializeTask = (
+    slot: "primaryAction" | "secondaryAction",
+    declarationKind: "perform_task" | "small_action",
+  ) => {
+    const selection = input.intent?.[slot];
+    if (!selection || selection.actionId !== declarationKind) return selection;
+    const description = selection.description?.trim();
+    if (!description) {
+      throw new Error(
+        declarationKind === "perform_task"
+          ? "Describe the task the character intends to perform."
+          : "Describe the Small Action the character intends to attempt.",
+      );
+    }
+    const previousSelection = input.previousIntent?.[slot];
+    const requestedTaskId =
+      selection.taskId ??
+      (previousSelection?.actionId === declarationKind ? previousSelection.taskId : undefined);
+    const requestedExisting = requestedTaskId
+      ? genericActions.find((action) => action.id === requestedTaskId)
+      : undefined;
+    if (
+      requestedExisting &&
+      (requestedExisting.ownerParticipantId !== input.ownerParticipantId ||
+        (requestedExisting.declarationKind &&
+          requestedExisting.declarationKind !== declarationKind))
+    ) {
+      throw new Error("The selected Combat Task is not available to this participant.");
+    }
+    const existing =
+      requestedExisting &&
+      !new Set(["completed", "interrupted", "cancelled"]).has(requestedExisting.status)
+        ? requestedExisting
+        : undefined;
+    const taskId = existing?.id ?? `${declarationId}:${declarationKind}`;
+    if (existing) {
+      genericActions = updateCombatGenericActionIntent({
+        actionId: taskId,
+        actions: genericActions,
+        intent: description,
+        updatedAt: input.createdAt,
+      });
+    } else {
+      genericActions = declareCombatGenericAction({
+        action: {
+          createdAt: input.createdAt,
+          createdByUserId: input.createdByUserId,
+          declarationKind,
+          duration: { kind: "gm_decided" },
+          id: taskId,
+          intent: description,
+          ownerParticipantId: input.ownerParticipantId,
+        },
+        actions: genericActions,
+      });
+    }
+    return { ...selection, description, taskId };
+  };
+
+  const primaryAction = materializeTask("primaryAction", "perform_task");
+  const secondaryAction = materializeTask("secondaryAction", "small_action");
+
+  return {
+    genericActions,
+    intent: combatDeclarationIntentSchema.parse({
+      ...input.intent,
+      primaryAction,
+      secondaryAction,
+    }),
+  };
+}
+
+function normalizeCombatDeclarationIntentForRequest(input: {
+  actionId?: string;
+  encounter: EncounterSession;
+  encounterParticipant: EncounterSession["participants"][number];
+  gmAuthorizedOperation: boolean;
+  intent?: CombatDeclarationIntent;
+  roundState: CombatRoundState;
+  secondaryActionId?: string;
+}): CombatDeclarationIntent | undefined {
+  if (!input.intent) return undefined;
+  if (input.intent.primaryAction?.actionId !== input.actionId) {
+    throw new Error("Primary declaration intent does not match the selected action.");
+  }
+  if (input.intent.secondaryAction?.actionId !== input.secondaryActionId) {
+    throw new Error("Secondary declaration intent does not match the selected action.");
+  }
+
+  const primary = input.intent.primaryAction;
+  const secondary = input.intent.secondaryAction;
+  if (primary?.actionId === "perform_task" && !primary.description?.trim()) {
+    throw new Error("Describe the task the character intends to perform.");
+  }
+  if (secondary?.actionId === "talk_shout") {
+    if (!secondary.utteranceType || !secondary.utteranceText?.trim()) {
+      throw new Error("Choose how the character speaks and enter the short utterance.");
+    }
+  }
+  if (
+    (secondary?.actionId === "equip_unequip" || secondary?.actionId === "small_action") &&
+    !secondary.description?.trim()
+  ) {
+    throw new Error(
+      secondary.actionId === "equip_unequip"
+        ? "Describe the intended equipment change."
+        : "Describe the Small Action the character intends to attempt.",
+    );
+  }
+
+  const hasVisibilityRows = Object.keys(input.encounter.roleplayState?.visibility ?? {}).length > 0;
+  const playerUnavailableTargetMessage = "Relative-position target is unavailable.";
+  const relativePositions = input.intent.relativePositions.map((position) => {
+    if (position.kind === "hold_formation") return position;
+    const targetRoundParticipant = findCombatRoundParticipantByAlias({
+      id: position.targetParticipantId,
+      state: input.roundState,
+    });
+    if (!targetRoundParticipant) {
+      throw new Error(
+        input.gmAuthorizedOperation
+          ? "Relative-position target is not part of this combat round."
+          : playerUnavailableTargetMessage,
+      );
+    }
+    if (targetRoundParticipant.participantId === input.encounterParticipant.id) {
+      throw new Error("Relative-position target must be another participant.");
+    }
+    const targetEncounterParticipant = input.encounter.participants.find((participant) =>
+      participantAliasesInclude({ id: targetRoundParticipant.participantId, participant }),
+    );
+    if (!targetEncounterParticipant) {
+      throw new Error(
+        input.gmAuthorizedOperation
+          ? "Relative-position target is not assigned to this encounter."
+          : playerUnavailableTargetMessage,
+      );
+    }
+    if (
+      !input.gmAuthorizedOperation &&
+      hasVisibilityRows &&
+      !hasCombatDistanceVisibility({
+        target: targetEncounterParticipant,
+        viewer: input.encounterParticipant,
+        visibility: input.encounter.roleplayState?.visibility,
+      })
+    ) {
+      throw new Error(playerUnavailableTargetMessage);
+    }
+    return { ...position, targetParticipantId: targetRoundParticipant.participantId };
+  });
+
+  return combatDeclarationIntentSchema.parse({ ...input.intent, relativePositions });
 }
 
 function parseParticipantCommandBody(
@@ -3188,6 +3352,7 @@ function clearScenarioParticipantCombatDeclaration(
       lastDeclaredMovementId: undefined,
       lastDeclaredRoundNumber: undefined,
       lastDeclaredSecondaryActionId: undefined,
+      lastDeclarationIntent: undefined,
       lastDeclarationNotes: undefined,
     },
   };
@@ -4781,6 +4946,7 @@ function prepareAcceptedNpcDeclarationProposal(input: {
         lastDeclaredMovementId: source.movementId,
         lastDeclaredRoundNumber: input.state.roundNumber,
         lastDeclaredSecondaryActionId: source.secondaryActionId,
+        lastDeclarationIntent: undefined,
         lastDeclarationNotes: source.additionalActionNotes,
         lastMovementIntent: movementIntent,
       },
@@ -6570,6 +6736,7 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
                       ? {
                           ...participant.declaration,
                           additionalActionNotes: undefined,
+                          intent: undefined,
                           movementIntent: undefined,
                           secondaryActions:
                             participant.declaration.secondaryActionId === "observe_opponent"
@@ -8046,6 +8213,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounter,
         scenarioParticipants,
       });
+      const submittedDeclarationIntent = normalizeCombatDeclarationIntentForRequest({
+        actionId: body.actionId,
+        encounter,
+        encounterParticipant,
+        gmAuthorizedOperation,
+        intent: body.intent,
+        roundState,
+        secondaryActionId: body.secondaryActionId,
+      });
       const reviewedRoundParticipant = roundState.participants.find(
         (participant) => participant.participantId === encounterParticipant.id,
       );
@@ -8904,6 +9080,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const submittedAt = new Date().toISOString();
+      const declarationTasks = materializeCombatDeclarationTasks({
+        createdAt: submittedAt,
+        createdByUserId: user.id,
+        intent: submittedDeclarationIntent,
+        ownerParticipantId: encounterParticipant.id,
+        previousIntent: scenarioParticipant.state.combat.lastDeclarationIntent,
+        roundNumber: roundState.roundNumber,
+        state: roundState,
+      });
+      const roundStateWithDeclarationTasks = {
+        ...roundState,
+        genericActions: declarationTasks.genericActions,
+      };
       const lifecycleSequence =
         roundState.events.reduce((highest, event) => Math.max(highest, event.sequence), -1) + 1;
       const attackPhaseDefensivePenalties = attackOpportunities
@@ -8969,6 +9158,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           lastDeclaredMovementId: body.movementId,
           lastDeclaredRoundNumber: roundState.roundNumber,
           lastDeclaredSecondaryActionId: body.secondaryActionId,
+          lastDeclarationIntent: declarationTasks.intent,
           lastDeclarationNotes: body.additionalActionNotes,
           lastMovementIntent: submittedMovementIntent,
         },
@@ -8990,6 +9180,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           combatContext: submittedCombatContext,
           disarm: declarationDisarm,
           feint: declarationFeint,
+          intent: declarationTasks.intent,
           movementId: body.movementId,
           movementIntent: submittedMovementIntent,
           phaseContexts: declarationPhaseContexts,
@@ -9003,7 +9194,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           submittedByUserId: user.id,
         },
         participantId: encounterParticipant.id,
-        state: roundState,
+        state: roundStateWithDeclarationTasks,
         submittedBy: gmAuthorizedOperation ? "gm" : "player",
       });
       const environmentalMovement = submittedMovementIntent?.environmentalMovement;
@@ -18834,6 +19025,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                         lastDeclaredMovementId: restoredDeclaration.movementId,
                         lastDeclaredRoundNumber: restoredDeclaration.roundNumber,
                         lastDeclaredSecondaryActionId: restoredDeclaration.secondaryActionId,
+                        lastDeclarationIntent: restoredDeclaration.intent,
                         lastDeclarationNotes: restoredDeclaration.additionalActionNotes,
                         lastMovementIntent: restoredDeclaration.movementIntent,
                       },

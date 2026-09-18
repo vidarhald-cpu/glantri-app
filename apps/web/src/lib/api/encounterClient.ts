@@ -8,6 +8,7 @@ import {
   type EncounterSessionSummary,
   CombatAttackSourceRef,
   CombatDefenseSnapshot,
+  CombatDeclarationIntent,
   CombatHistoryProjection,
   CombatGenericActionDuration,
   CombatItemInteractionOperation,
@@ -256,6 +257,7 @@ export async function submitCombatDeclarationOnServer(input: {
   expectedParticipantRevision?: string;
   movementId?: string;
   movementIntent?: MovementIntent;
+  intent?: CombatDeclarationIntent;
   phaseContexts?: CombatRoundPhaseContexts;
   phaseAttackSources?: Partial<Record<"phase1" | "phase2", CombatAttackSourceRef>>;
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
@@ -301,6 +303,7 @@ export async function submitCombatDeclarationOnServer(input: {
         disarm: input.disarm,
         movementId: input.movementId,
         movementIntent: input.movementIntent,
+        intent: input.intent,
         phaseContexts: input.phaseContexts,
         phaseAttackSources: input.phaseAttackSources,
         phaseWeaponNames: input.phaseWeaponNames,

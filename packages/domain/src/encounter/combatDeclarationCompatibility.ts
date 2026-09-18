@@ -8,6 +8,8 @@ export const COMBAT_PRIMARY_ACTION_IDS = [
   "offensive_parry",
   "parry",
   "break_off_engagement",
+  "pass",
+  "perform_task",
   "parry_disarm",
   "disarm",
   "other",
@@ -21,6 +23,10 @@ export const COMBAT_SECONDARY_ACTION_IDS = [
   "adjust_range_attack",
   "counterattack",
   "observe_opponent",
+  "pass",
+  "talk_shout",
+  "equip_unequip",
+  "small_action",
   "offensive_parry",
   "parry_disarm",
   "disarm",
@@ -51,11 +57,21 @@ const AVAILABLE_PRIMARY_ACTION_IDS = new Set<string>([
   "offensive_parry",
   "parry",
   "break_off_engagement",
+  "pass",
+  "perform_task",
   "parry_disarm",
   "disarm",
 ]);
 
 const UNAVAILABLE_PRIMARY_ACTION_IDS = new Set<string>(["counterattack"]);
+
+const AVAILABLE_SECONDARY_ACTION_IDS = new Set<string>([
+  "observe_opponent",
+  "pass",
+  "talk_shout",
+  "equip_unequip",
+  "small_action",
+]);
 
 export const COMBAT_DECLARATION_CAPABILITIES: readonly CombatDeclarationCapability[] = [
   ...COMBAT_PRIMARY_ACTION_IDS.map(
@@ -73,7 +89,7 @@ export const COMBAT_DECLARATION_CAPABILITIES: readonly CombatDeclarationCapabili
     (actionId): CombatDeclarationCapability => ({
       actionId,
       kind: "secondary",
-      status: actionId === "observe_opponent" ? "available" : "legacy_only",
+      status: AVAILABLE_SECONDARY_ACTION_IDS.has(actionId) ? "available" : "legacy_only",
     }),
   ),
   {
@@ -164,26 +180,21 @@ const CURRENT_MOVEMENT_KINDS = [
   "set_distance_preferences",
   "move_in_environment",
 ] as const;
-const MOVEMENT_OWNING_PRIMARY_ACTION_IDS = new Set<string>([
-  "adjust_range_attack",
-  "offensive_parry",
-  "parry",
-  "break_off_engagement",
-  "parry_disarm",
-  "disarm",
-]);
-
 export const COMBAT_DECLARATION_COMPATIBILITY_RULES: readonly CombatDeclarationCompatibilityRule[] =
   [
     ...COMBAT_PRIMARY_ACTION_IDS.map((primaryAction) => ({
-      allowedMovementKinds: MOVEMENT_OWNING_PRIMARY_ACTION_IDS.has(primaryAction)
-        ? (["hold_position"] as const)
-        : CURRENT_MOVEMENT_KINDS,
+      allowedMovementKinds: CURRENT_MOVEMENT_KINDS,
       compatibleSecondaryActions: [
         ...(isCombatDeclarationActionAvailable({ actionId: primaryAction, kind: "primary" })
-          ? ([{ actionId: "open", requiredContexts: [] }] as const)
+          ? ([
+              { actionId: "open", requiredContexts: [] },
+              { actionId: "pass", requiredContexts: [] },
+              { actionId: "talk_shout", requiredContexts: [] },
+              { actionId: "equip_unequip", requiredContexts: [] },
+              { actionId: "small_action", requiredContexts: [] },
+            ] as const)
           : []),
-        ...(primaryAction === "parry"
+        ...(primaryAction === "parry" || primaryAction === "pass"
           ? ([
               {
                 actionId: "observe_opponent",
@@ -196,7 +207,12 @@ export const COMBAT_DECLARATION_COMPATIBILITY_RULES: readonly CombatDeclarationC
     })),
     {
       allowedMovementKinds: CURRENT_MOVEMENT_KINDS,
-      compatibleSecondaryActions: [],
+      compatibleSecondaryActions: [
+        { actionId: "pass", requiredContexts: [] },
+        { actionId: "talk_shout", requiredContexts: [] },
+        { actionId: "equip_unequip", requiredContexts: [] },
+        { actionId: "small_action", requiredContexts: [] },
+      ],
       primaryAction: "move_only",
     },
   ];
