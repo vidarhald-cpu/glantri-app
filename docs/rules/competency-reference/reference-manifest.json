@@ -19,7 +19,9 @@
     "societyLevels": 6,
     "socialBands": 4,
     "archSocieties": 11,
-    "unresolvedContextRecords": 140
+    "unresolvedContextRecords": 140,
+    "canonicalChoiceSlotGroups": 7,
+    "validProfessionPaths": 99
   },
   "coverage": {
     "baseSkillsWithLearningGroup": 90,
@@ -27,7 +29,8 @@
     "baseSkillsWithProfessionRoute": 130,
     "specializationsWithProfessionRoute": 25,
     "spokenLanguagesWithExactGenericProfessionRoute": 0,
-    "writtenTraditionsWithExactGenericProfessionRoute": 0
+    "writtenTraditionsWithExactGenericProfessionRoute": 0,
+    "targetLearningGroupChoiceSlots": 0
   },
   "sourceDigests": {
     "completeSkillSourceSha256": "0bedd313d7d49b3cf4846008b75bf126cf956a985f8d1cc9dcab1ef9446b8376",
@@ -40,7 +43,7 @@
     "completeSkillProposal": "sha256:6b317d712fff4fc345e72f89bd167c1e9166c9e3d555256a4a6f98229bebb3c9",
     "targetLearningGroups": "sha256:33bb6b661fd59558b5b6eff0711e259a5614a34e8f341a83f883c1704b2451d9",
     "targetProfessions": "sha256:11fb66385c82db84ca1097ee8be63638d5bf64470795e100f8eb93040e648a48",
-    "professionLearningGroupSkillReference": "sha256:00dc86843b3d98ccc3c3a3fe7295225368dbadbea5ce0712708c36c970ca9301"
+    "professionLearningGroupSkillReference": "sha256:d05e74b5090b5f9ddb69871fc40cccd20746c3e2d8b764d4ac98e320cdbb65be"
   },
   "referenceFiles": {
     "professionLearningGroupSkillMarkdown": "docs/rules/competency-reference/profession-learning-group-skills.md",

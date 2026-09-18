@@ -2,100 +2,141 @@
 
 This reference expands the approved 84 Profession families through their 59 Learning Groups into the actual 131 base Skills. It preserves all routes when several Learning Groups lead to the same Skill. Specializations are shown separately and never counted as base Skills.
 
-A Profession row is the union of its approved family opportunities across explicit branches and tracks. It is a catalogue comparison envelope, not the package bought by one Character. Profession and Learning Group access creates training opportunities; it grants no competency automatically. Explicit track boundaries and the two approved mutually exclusive group pairs remain controlling.
+**Possible Skill reach** is the family-wide union of every valid alternative. **Effective package breadth** is calculated separately for each valid single-Character path: one explicit track where tracks exist, and one side of each mutually exclusive Learning Group pair. The possible-reach union must never be read as one Character package.
+
+Profession and Learning Group access creates training opportunities; it grants no competency automatically. The Product Owner's current authoring target is approximately 10 effective base Skills for an ordinary Profession. This is a review target rather than a quota: Society Levels 1–2 may legitimately be narrower, specialist Professions may be coherent below it, and no rigid Society-Level thresholds are approved.
 
 All routes below are part of the general, unbound reference. Their Setting, Society Level, Social Band, Arch-Society, institution, equipment, and other contextual availability remains unresolved unless separately stated. A Specialization route never waives immediate-parent eligibility.
 
 The [machine-readable equivalent](./profession-learning-group-skills.json) preserves stable identities, every route, track scope, source lines, overlaps, and diagnostics. See also the [Profession catalogue](./professions.md), [Learning Groups](./learning-groups.md), [Skills](./skills.md), and [availability gaps](./gaps-and-exceptions.md).
 
+## Breadth summary
+
+The 84 families produce 99 valid single-Character paths after separating explicit tracks and mutually exclusive routes. Effective path breadth ranges from 0 to 17 base Skills, with median 3. 7 families have at least one path at or above the approximate 10-Skill authoring target; 4 have every path at or above it; 77 have every current path below it. These counts trigger content review but do not by themselves prove a defect.
+
+Possible-reach family unions range from 0 to 18 base Skills, with median 2. The difference between union reach and effective path breadth is material for track-bearing military Professions and the two explicit exclusive-pair families.
+
+## Choice-slot reconciliation
+
+The current legacy-compatibility catalogue defines seven required choice-slot Learning Groups. A slot contributes only the selected candidates: unselected candidates are possible reach, not fixed membership and not part of one Character's effective breadth. The approved 59-group target catalogue contains no choice-slot field, explicitly defines exact membership with no optional or hidden choices, and the target runtime projection creates all 59 groups from fixed member lists. Consequently, none of these seven slot structures is represented in the target catalogue or in its Profession paths. The target catalogue's exact fixed curricula are approved, but the source does not record a separate decision reconciling the displaced general choice routes.
+
+| Canonical group           | Fixed base Skills                                                                               | Required choice | Candidate pool                                                                                                                        | Target-catalogue result                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------- | ----------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Basic Melee Training      | Dodge<br>Parry<br>Brawling                                                                      | Choose 1        | 1-h edged<br>1-h conc./axe<br>Polearms<br>Lance<br>2-h edged<br>2-h conc./axe                                                         | Slot omitted.<br>1-h edged: G08, F30, F31, F32, F36<br>1-h conc./axe: F35, F36<br>Polearms: F31<br>Lance: F32<br>2-h edged: F37<br>2-h conc./axe: F37                                                                                                                                                                                                                      |
+| Advanced Melee Training   | Dodge<br>Parry<br>Brawling                                                                      | Choose 3        | 1-h edged<br>1-h conc./axe<br>Polearms<br>Lance<br>2-h edged<br>2-h conc./axe                                                         | Slot omitted.<br>1-h edged: G08, F30, F31, F32, F36<br>1-h conc./axe: F35, F36<br>Polearms: F31<br>Lance: F32<br>2-h edged: F37<br>2-h conc./axe: F37                                                                                                                                                                                                                      |
+| Basic Missile Training    | Perception<br>Concentration<br>Weapon Maintenance                                               | Choose 1        | Throwing<br>Sling<br>Bow<br>Crossbow                                                                                                  | Slot omitted.<br>Throwing: F31<br>Sling: groupless<br>Bow: F38, F41<br>Crossbow: F39                                                                                                                                                                                                                                                                                       |
+| Advanced Missile Training | Perception<br>Concentration<br>Weapon Maintenance<br>Battlefield Awareness<br>Combat Experience | Choose 3        | Throwing<br>Sling<br>Bow<br>Crossbow                                                                                                  | Slot omitted.<br>Throwing: F31<br>Sling: groupless<br>Bow: F38, F41<br>Crossbow: F39                                                                                                                                                                                                                                                                                       |
+| Craft Specialty           | None                                                                                            | Choose 1        | Pottery<br>Weaving<br>Leatherworking<br>Carpentry<br>Tailoring<br>Baking<br>Brewing<br>Stoneworking<br>Smithing<br>Weapon Maintenance | Slot omitted.<br>Pottery: F21<br>Weaving: F02<br>Leatherworking: groupless<br>Carpentry: F03, F27<br>Tailoring: groupless<br>Baking → Baking (provenance only): groupless<br>Brewing → Brewing (provenance only): groupless<br>Stoneworking → Masonry (provenance only): groupless<br>Smithing → Smithing (provenance only): G13, F24, F25, F26<br>Weapon Maintenance: F25 |
+| Advanced Craft Specialty  | None                                                                                            | Choose 1        | Pottery<br>Weaving<br>Leatherworking<br>Carpentry<br>Tailoring<br>Baking<br>Brewing<br>Stoneworking<br>Smithing<br>Weapon Maintenance | Slot omitted.<br>Pottery: F21<br>Weaving: F02<br>Leatherworking: groupless<br>Carpentry: F03, F27<br>Tailoring: groupless<br>Baking → Baking (provenance only): groupless<br>Brewing → Brewing (provenance only): groupless<br>Stoneworking → Masonry (provenance only): groupless<br>Smithing → Smithing (provenance only): G13, F24, F25, F26<br>Weapon Maintenance: F25 |
+| Construction Specialty    | None                                                                                            | Choose 2        | Stoneworking<br>Carpentry<br>Smithing<br>Mechanics                                                                                    | Slot omitted.<br>Stoneworking → Masonry (provenance only): groupless<br>Carpentry: F03, F27<br>Smithing → Smithing (provenance only): G13, F24, F25, F26<br>Mechanics: F27                                                                                                                                                                                                 |
+
+Every observed executable group has exactly one slot and every observed slot is required. The schema supports multiple slots and `required: false`, but neither occurs in current data. A fixed member marked with relevance `optional` is still a fixed member; relevance metadata does not turn it into a selectable candidate. Runtime resolution filters unknown candidates, deduplicates selections, caps them at `chooseCount`, and blocks finalization when a required slot lacks enough valid distinct choices.
+
+One implementation inconsistency remains outside this documentation task: the preliminary cost check counts stored candidate IDs before deduplication, while finalization requires distinct normalized choices. The reference therefore uses distinct candidates as the controlling valid-path interpretation.
+
+The live code therefore contains two different states: the current legacy-compatibility catalogue still carries these seven executable slot definitions, while the approved target projection used for the 59-group/84-Profession Chargen model replaces the Skill Group roster with fixed-member target groups. This report treats the slot definitions as recovered canonical evidence and the missing target translation as an unresolved structural discontinuity for Product Owner review, not as a broken target foreign key.
+
+Evidence: [default canonical content](../../../packages/content/src/data/canonicalContent.json), [seed slot definitions](../../../packages/content/scripts/generateRepoLocalGlantriSeed.mjs), [target Learning Group contract](../../../packages/shared/src/contracts/adminContent.ts), [target-group parser](../../../packages/content/src/skillContentPlatform/targetLearningGroups.ts), and the recovered [training-group import](../../../data/import/glantri_content_pack_full_2026-03-30_norm7/training_groups.csv).
+
+### Source and data inconsistencies retained
+
+- **Advanced Melee Training:** recovered import says “choose two related melee attack skills”; current canonical content says “choose three melee weapon skills”. current executable canonical content and regression tests use choose 3; older import retained as conflicting provenance.
+- **Advanced Missile Training:** recovered import says “choose one main missile skill and one secondary missile or fallback skill”; current canonical content says “choose three missile weapon skills”. current executable canonical content and regression tests use choose 3; older import retained as conflicting provenance.
+- **Advanced Craft Specialty:** recovered import says “no row in recovered training_groups.csv”; current canonical content says “choose one craft specialty”. commit a6e1d5be deliberately changed choose 2 to choose 1 and updated tests; the current group description still incorrectly says two chosen specialties.
+- **Field Soldiering:** recovered import says “Choose one attack skill in addition to Dodge, Perception, and Battlefield Awareness.” The candidate set is not specified in the recovered import; descriptive wording implies a choice, but the import has no structured required flag. no selection slot was materialized; commit 626cd8fe later retired/merged Field Soldiering, and it is not one of the 59 target Learning Groups.
+
+### `2-h edged` regression result
+
+`2-h edged` remains a candidate in Basic Melee Training (choose 1) and Advanced Melee Training (choose 3) in the current legacy-compatibility catalogue. In the approved 59-group target catalogue it appears only in **F37 — Two-handed military weapon practice**, where it is a fixed member alongside `2-h conc./axe`, Dodge, Parry, and Brawling. F37 is currently exposed only through P22 Soldier's **Two-handed detachment without formation duties** and **Two-handed detachment with one-handed sidearms and formation duties** tracks. The general basic/advanced melee choice route was not carried into the target catalogue, and no one-to-one legacy-to-target group crosswalk was approved. This report preserves that structural discontinuity for review instead of flattening the candidate pool.
+
 ## All-Profession comparison
 
-| Profession                                                                                               | Learning Groups                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | # Learning Groups | Direct Skills                              | All distinct learnable base Skills                                                                                                                                                                                                                                          | # distinct base Skills |
-| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------: | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------: |
-| [Actor and Dancer](#profession-map-actor-and-dancer)                                                     | [Dramatic acting and dance practice](./learning-groups.md#group-f18)                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 1 | Acting<br>Dance                            | Acting<br>Dance                                                                                                                                                                                                                                                             |                      2 |
-| [Alchemist](#profession-map-alchemist)                                                                   | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Alchemy                                    | Alchemy                                                                                                                                                                                                                                                                     |                      1 |
-| [Animal Trainer and Falconer](#profession-map-animal-trainer-and-falconer)                               | [Falconry apprenticeship](./learning-groups.md#group-f07)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |                 1 | Animal Handling                            | Animal Handling<br>Hunting                                                                                                                                                                                                                                                  |                      2 |
-| [Armorer](#profession-map-armorer)                                                                       | [Forged-metal armor workshop](./learning-groups.md#group-f26)                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |                 1 | Armoring                                   | Armoring<br>Smithing                                                                                                                                                                                                                                                        |                      2 |
-| [Astrologer](#profession-map-astrologer)                                                                 | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Astrology                                  | Astrology                                                                                                                                                                                                                                                                   |                      1 |
-| [Astronomer](#profession-map-astronomer)                                                                 | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Astronomy                                  | Astronomy                                                                                                                                                                                                                                                                   |                      1 |
-| [Athlete and Physical Performer](#profession-map-athlete-and-physical-performer)                         | [Running and athletic field practice](./learning-groups.md#group-f04)                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |                 1 | None                                       | Athletics<br>Running                                                                                                                                                                                                                                                        |                      2 |
-| [Banker and Credit Practitioner](#profession-map-banker-and-credit-practitioner)                         | [Credit-house accounts and obligations](./learning-groups.md#group-f12)                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |                 1 | None                                       | Banking & Credit<br>Bookkeeping                                                                                                                                                                                                                                             |                      2 |
-| [Birth Attendant and Midwife](#profession-map-birth-attendant-and-midwife)                               | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | None                                       | None                                                                                                                                                                                                                                                                        |                      0 |
-| [Brewer](#profession-map-brewer)                                                                         | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Brewing                                    | Brewing                                                                                                                                                                                                                                                                     |                      1 |
-| [Building Designer](#profession-map-building-designer)                                                   | [Building design and site surveying](./learning-groups.md#group-f28)                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 1 | None                                       | Architecture<br>Surveying                                                                                                                                                                                                                                                   |                      2 |
-| [Campaign Planner](#profession-map-campaign-planner)                                                     | [Unit coordination and command practice](./learning-groups.md#group-g09)                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |                 1 | Campaign Strategy                          | Battle Tactics<br>Campaign Strategy<br>Leadership<br>Military Command                                                                                                                                                                                                       |                      4 |
-| [Carpenter](#profession-map-carpenter)                                                                   | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Carpentry                                  | Carpentry                                                                                                                                                                                                                                                                   |                      1 |
-| [Clerk and Steward](#profession-map-clerk-and-steward)                                                   | [Records-office practice](./learning-groups.md#group-g11)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |                 1 | None                                       | Administration<br>Bookkeeping                                                                                                                                                                                                                                               |                      2 |
-| [Confidence Trickster](#profession-map-confidence-trickster)                                             | [Impersonation and distraction practice](./learning-groups.md#group-g16)                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |                 1 | None                                       | Deception<br>Disguise                                                                                                                                                                                                                                                       |                      2 |
-| [Cook](#profession-map-cook)                                                                             | [Seasonal kitchen and preservation practice](./learning-groups.md#group-f22)                                                                                                                                                                                                                                                                                                                                                                                                                                                             |                 1 | Cooking                                    | Cooking                                                                                                                                                                                                                                                                     |                      1 |
-| [Courier and Messenger](#profession-map-courier-and-messenger)                                           | [Running and athletic field practice](./learning-groups.md#group-f04)<br>[Mounted travel and animal care](./learning-groups.md#group-g05)<br>[Field travel and camp practice](./learning-groups.md#group-g04)                                                                                                                                                                                                                                                                                                                            |                 3 | None                                       | Animal Handling<br>Athletics<br>Riding<br>Running<br>Survival<br>Wayfinding<br>Weather Lore                                                                                                                                                                                 |                      7 |
-| [Distiller](#profession-map-distiller)                                                                   | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Distilling                                 | Distilling                                                                                                                                                                                                                                                                  |                      1 |
-| [Diver and Water Worker](#profession-map-diver-and-water-worker)                                         | [Working a boat](./learning-groups.md#group-g06)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |                 1 | Swimming                                   | Seamanship<br>Swimming                                                                                                                                                                                                                                                      |                      2 |
-| [Diviner](#profession-map-diviner)                                                                       | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Divination                                 | Divination                                                                                                                                                                                                                                                                  |                      1 |
-| [Document Forger](#profession-map-document-forger)                                                       | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Document & Credential Forgery              | Document & Credential Forgery                                                                                                                                                                                                                                               |                      1 |
-| [Driver and Teamster](#profession-map-driver-and-teamster)                                               | [Draught-team and vehicle practice](./learning-groups.md#group-f06)<br>[Field travel and camp practice](./learning-groups.md#group-g04)                                                                                                                                                                                                                                                                                                                                                                                                  |                 2 | None                                       | Animal Handling<br>Cart Driving<br>Survival<br>Wayfinding<br>Weather Lore                                                                                                                                                                                                   |                      5 |
-| [Enforcer](#profession-map-enforcer)                                                                     | [Guard and rough-fighting drill](./learning-groups.md#group-f35)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |                 1 | Intimidation<br>Underworld                 | 1-h conc./axe<br>Brawling<br>Dodge<br>Intimidation<br>Parry<br>Underworld                                                                                                                                                                                                   |                      6 |
-| [Envoy](#profession-map-envoy)                                                                           | [Council and mediation practice](./learning-groups.md#group-g10)<br>[Mounted travel and animal care](./learning-groups.md#group-g05)                                                                                                                                                                                                                                                                                                                                                                                                     |                 2 | None                                       | Animal Handling<br>Bargaining<br>Customs<br>Insight<br>Oratory<br>Riding                                                                                                                                                                                                    |                      6 |
-| [Farmer](#profession-map-farmer)                                                                         | [Mixed crop-and-stock household practice](./learning-groups.md#group-f08)                                                                                                                                                                                                                                                                                                                                                                                                                                                                |                 1 | Farming                                    | Animal Husbandry<br>Farming                                                                                                                                                                                                                                                 |                      2 |
-| [Field and Caravan Guide](#profession-map-field-and-caravan-guide)                                       | [Field travel and camp practice](./learning-groups.md#group-g04)<br>[Mounted travel and animal care](./learning-groups.md#group-g05)<br>[Draught-team and vehicle practice](./learning-groups.md#group-f06)<br>[One-handed edged close-combat practice](./learning-groups.md#group-g08)                                                                                                                                                                                                                                                  |                 4 | None                                       | 1-h edged<br>Animal Handling<br>Cart Driving<br>Dodge<br>Parry<br>Riding<br>Survival<br>Wayfinding<br>Weather Lore                                                                                                                                                          |                      9 |
-| [Fisher](#profession-map-fisher)                                                                         | [Fishing-boat apprenticeship](./learning-groups.md#group-f10)                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |                 1 | Fishing                                    | Fishing<br>Seamanship                                                                                                                                                                                                                                                       |                      2 |
-| [Gambler](#profession-map-gambler)                                                                       | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Gambling                                   | Gambling                                                                                                                                                                                                                                                                    |                      1 |
-| [Geographer](#profession-map-geographer)                                                                 | [Field surveying and map production](./learning-groups.md#group-f01)                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 1 | Geography                                  | Cartography<br>Geography<br>Surveying                                                                                                                                                                                                                                       |                      3 |
-| [Guard, Watcher and Escort](#profession-map-guard-watcher-and-escort)                                    | [Guard and rough-fighting drill](./learning-groups.md#group-f35)<br>[One-handed edged close-combat practice](./learning-groups.md#group-g08)<br>[Field travel and camp practice](./learning-groups.md#group-g04)<br>[Swashbuckling fencing instruction](./learning-groups.md#group-f30)                                                                                                                                                                                                                                                  |                 4 | None                                       | 1-h conc./axe<br>1-h edged<br>Brawling<br>Dodge<br>Parry<br>Survival<br>Wayfinding<br>Weather Lore                                                                                                                                                                          |                      8 |
-| [Herald](#profession-map-herald)                                                                         | [Speech and memory practice](./learning-groups.md#group-f14)<br>[Lineage investigation apprenticeship](./learning-groups.md#group-f16)                                                                                                                                                                                                                                                                                                                                                                                                   |                 2 | Heraldry                                   | Heraldry<br>Mnemonics<br>Oratory<br>Research                                                                                                                                                                                                                                |                      4 |
-| [Herbalist and Remedy Maker](#profession-map-herbalist-and-remedy-maker)                                 | [Plant and remedy preparation](./learning-groups.md#group-g02)<br>[Distilling remedy workshop](./learning-groups.md#group-f23)                                                                                                                                                                                                                                                                                                                                                                                                           |                 2 | None                                       | Distilling<br>Pharmacy<br>Plant Lore                                                                                                                                                                                                                                        |                      3 |
-| [Herd Keeper](#profession-map-herd-keeper)                                                               | [Pastoral stockkeeping apprenticeship](./learning-groups.md#group-f05)<br>[Mounted travel and animal care](./learning-groups.md#group-g05)                                                                                                                                                                                                                                                                                                                                                                                               |                 2 | Sling                                      | Animal Handling<br>Animal Husbandry<br>Herding<br>Riding<br>Sling                                                                                                                                                                                                           |                      5 |
-| [Historian and Genealogist](#profession-map-historian-and-genealogist)                                   | [Historical text investigation](./learning-groups.md#group-f15)<br>[Lineage investigation apprenticeship](./learning-groups.md#group-f16)                                                                                                                                                                                                                                                                                                                                                                                                |                 2 | History                                    | History<br>Palaeography & Decipherment<br>Research                                                                                                                                                                                                                          |                      3 |
-| [Hunter and Trapper](#profession-map-hunter-and-trapper)                                                 | [Tracking and hunting practice](./learning-groups.md#group-g03)<br>[Trapline and trail practice](./learning-groups.md#group-f34)<br>[Field travel and camp practice](./learning-groups.md#group-g04)<br>[Longbow hunting apprenticeship](./learning-groups.md#group-f41)                                                                                                                                                                                                                                                                 |                 4 | Bow                                        | Bow<br>Hunting<br>Perception<br>Stealth<br>Survival<br>Tracking<br>Trapping<br>Wayfinding<br>Weather Lore                                                                                                                                                                   |                      9 |
-| [Investigator and Intelligence Agent](#profession-map-investigator-and-intelligence-agent)               | [Interview and evidence practice](./learning-groups.md#group-g17)<br>[Local contacts and information gathering](./learning-groups.md#group-g14)<br>[Impersonation and distraction practice](./learning-groups.md#group-g16)                                                                                                                                                                                                                                                                                                              |                 3 | None                                       | Deception<br>Disguise<br>Insight<br>Interrogation<br>Perception<br>Research<br>Streetwise                                                                                                                                                                                   |                      7 |
-| [Leatherworker](#profession-map-leatherworker)                                                           | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Leatherwork                                | Leatherwork                                                                                                                                                                                                                                                                 |                      1 |
-| [Legal Practitioner and Advocate](#profession-map-legal-practitioner-and-advocate)                       | [Legal study and pleading practice](./learning-groups.md#group-f13)                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |                 1 | Law                                        | Law<br>Oratory                                                                                                                                                                                                                                                              |                      2 |
-| [Local Informant](#profession-map-local-informant)                                                       | [Local contacts and information gathering](./learning-groups.md#group-g14)                                                                                                                                                                                                                                                                                                                                                                                                                                                               |                 1 | Underworld                                 | Insight<br>Streetwise<br>Underworld                                                                                                                                                                                                                                         |                      3 |
-| [Locksmith](#profession-map-locksmith)                                                                   | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Locksmithing                               | Locksmithing                                                                                                                                                                                                                                                                |                      1 |
-| [Mason](#profession-map-mason)                                                                           | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Masonry                                    | Masonry                                                                                                                                                                                                                                                                     |                      1 |
-| [Mathematical Practitioner](#profession-map-mathematical-practitioner)                                   | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Mathematics                                | Mathematics                                                                                                                                                                                                                                                                 |                      1 |
-| [Mediator and Community Convenor](#profession-map-mediator-and-community-convenor)                       | [Council and mediation practice](./learning-groups.md#group-g10)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |                 1 | None                                       | Bargaining<br>Customs<br>Insight<br>Oratory                                                                                                                                                                                                                                 |                      4 |
-| [Military Commander](#profession-map-military-commander)                                                 | [Unit coordination and command practice](./learning-groups.md#group-g09)<br>[One-handed arms and formation drill](./learning-groups.md#group-f36)<br>[Mounted travel and animal care](./learning-groups.md#group-g05)<br>[Mounted lance and troop drill](./learning-groups.md#group-f32)<br>[Guard and rough-fighting drill](./learning-groups.md#group-f35)                                                                                                                                                                             |                 5 | Battlefield Awareness                      | 1-h conc./axe<br>1-h edged<br>Animal Handling<br>Battle Tactics<br>Battlefield Awareness<br>Brawling<br>Dodge<br>Formation Fighting<br>Lance<br>Leadership<br>Military Command<br>Mounted Combat<br>Parry<br>Riding                                                         |                     14 |
-| [Military Quartermaster](#profession-map-military-quartermaster)                                         | [Records-office practice](./learning-groups.md#group-g11)<br>[Draught-team and vehicle practice](./learning-groups.md#group-f06)<br>[One-handed arms and formation drill](./learning-groups.md#group-f36)                                                                                                                                                                                                                                                                                                                                |                 3 | Military Logistics                         | 1-h conc./axe<br>1-h edged<br>Administration<br>Animal Handling<br>Bookkeeping<br>Brawling<br>Cart Driving<br>Dodge<br>Formation Fighting<br>Military Logistics<br>Parry                                                                                                    |                     11 |
-| [Military Scout](#profession-map-military-scout)                                                         | [Concealed field reconnaissance practice](./learning-groups.md#group-f33)<br>[Field travel and camp practice](./learning-groups.md#group-g04)<br>[One-handed arms and formation drill](./learning-groups.md#group-f36)<br>[Mounted travel and animal care](./learning-groups.md#group-g05)<br>[Mounted lance and troop drill](./learning-groups.md#group-f32)<br>[Guard and rough-fighting drill](./learning-groups.md#group-f35)                                                                                                        |                 6 | Battlefield Awareness                      | 1-h conc./axe<br>1-h edged<br>Animal Handling<br>Battlefield Awareness<br>Brawling<br>Camouflage<br>Dodge<br>Formation Fighting<br>Lance<br>Military Reconnaissance<br>Mounted Combat<br>Parry<br>Perception<br>Riding<br>Stealth<br>Survival<br>Wayfinding<br>Weather Lore |                     18 |
-| [Millwright and Mechanician](#profession-map-millwright-and-mechanician)                                 | [Timber millwright apprenticeship](./learning-groups.md#group-f27)                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |                 1 | None                                       | Carpentry<br>Mechanics                                                                                                                                                                                                                                                      |                      2 |
-| [Miner and Quarry Worker](#profession-map-miner-and-quarry-worker)                                       | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Mining                                     | Mining                                                                                                                                                                                                                                                                      |                      1 |
-| [Mounted Soldier and Lancer](#profession-map-mounted-soldier-and-lancer)                                 | [Mounted travel and animal care](./learning-groups.md#group-g05)<br>[Mounted lance and troop drill](./learning-groups.md#group-f32)                                                                                                                                                                                                                                                                                                                                                                                                      |                 2 | Combat Experience<br>Battlefield Awareness | 1-h edged<br>Animal Handling<br>Battlefield Awareness<br>Brawling<br>Combat Experience<br>Dodge<br>Formation Fighting<br>Lance<br>Mounted Combat<br>Parry<br>Riding                                                                                                         |                     11 |
-| [Musician and Singer](#profession-map-musician-and-singer)                                               | [Self-accompanied song practice](./learning-groups.md#group-f17)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |                 1 | Music<br>Singing                           | Music<br>Singing                                                                                                                                                                                                                                                            |                      2 |
-| [Naturalist](#profession-map-naturalist)                                                                 | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Animal Lore<br>Plant Lore                  | Animal Lore<br>Plant Lore                                                                                                                                                                                                                                                   |                      2 |
-| [Navigator and Pilot](#profession-map-navigator-and-pilot)                                               | [Passage navigation](./learning-groups.md#group-g07)<br>[Working a boat](./learning-groups.md#group-g06)<br>[Charted open-water navigation practice](./learning-groups.md#group-f11)                                                                                                                                                                                                                                                                                                                                                     |                 3 | None                                       | Celestial Navigation<br>Chart Navigation<br>Dead Reckoning<br>Pilotage<br>Seamanship<br>Wayfinding                                                                                                                                                                          |                      6 |
-| [Nurse and Patient Attendant](#profession-map-nurse-and-patient-attendant)                               | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Nursing                                    | Nursing                                                                                                                                                                                                                                                                     |                      1 |
-| [Philosopher](#profession-map-philosopher)                                                               | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Philosophy                                 | Philosophy                                                                                                                                                                                                                                                                  |                      1 |
-| [Physician](#profession-map-physician)                                                                   | [Patient care](./learning-groups.md#group-g01)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |                 1 | None                                       | First Aid<br>Medicine<br>Nursing                                                                                                                                                                                                                                            |                      3 |
-| [Political Agent and Council Representative](#profession-map-political-agent-and-council-representative) | [Council and mediation practice](./learning-groups.md#group-g10)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |                 1 | Politics                                   | Bargaining<br>Customs<br>Insight<br>Oratory<br>Politics                                                                                                                                                                                                                     |                      5 |
-| [Potter](#profession-map-potter)                                                                         | [Modelled ceramic workshop](./learning-groups.md#group-f21)                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |                 1 | Pottery                                    | Pottery<br>Sculpture                                                                                                                                                                                                                                                        |                      2 |
-| [Religious Practitioner](#profession-map-religious-practitioner)                                         | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Religion<br>Meditation                     | Meditation<br>Religion                                                                                                                                                                                                                                                      |                      2 |
-| [Sailmaker](#profession-map-sailmaker)                                                                   | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Sailmaking                                 | Sailmaking                                                                                                                                                                                                                                                                  |                      1 |
-| [Sailor and Boat Worker](#profession-map-sailor-and-boat-worker)                                         | [Working a boat](./learning-groups.md#group-g06)<br>[Rigged-vessel deck apprenticeship](./learning-groups.md#group-f09)<br>[One-handed edged close-combat practice](./learning-groups.md#group-g08)<br>[Guard and rough-fighting drill](./learning-groups.md#group-f35)                                                                                                                                                                                                                                                                  |                 4 | None                                       | 1-h conc./axe<br>1-h edged<br>Brawling<br>Dodge<br>Parry<br>Ropework<br>Seamanship                                                                                                                                                                                          |                      7 |
-| [Scribe and Copyist](#profession-map-scribe-and-copyist)                                                 | [Records-office practice](./learning-groups.md#group-g11)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |                 1 | None                                       | Administration<br>Bookkeeping                                                                                                                                                                                                                                               |                      2 |
-| [Shipbuilder](#profession-map-shipbuilder)                                                               | [Timber vessel construction](./learning-groups.md#group-f03)                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |                 1 | None                                       | Carpentry<br>Shipbuilding                                                                                                                                                                                                                                                   |                      2 |
-| [Shipmaster](#profession-map-shipmaster)                                                                 | [Working a boat](./learning-groups.md#group-g06)<br>[Passage navigation](./learning-groups.md#group-g07)<br>[Trading practice](./learning-groups.md#group-g12)<br>[One-handed edged close-combat practice](./learning-groups.md#group-g08)                                                                                                                                                                                                                                                                                               |                 4 | Leadership                                 | 1-h edged<br>Appraisal<br>Bargaining<br>Dead Reckoning<br>Dodge<br>Leadership<br>Parry<br>Pilotage<br>Seamanship<br>Trade<br>Wayfinding                                                                                                                                     |                     11 |
-| [Siege Engine Crew Specialist](#profession-map-siege-engine-crew-specialist)                             | [Military crossbow and formation practice](./learning-groups.md#group-f39)<br>[One-handed arms and formation drill](./learning-groups.md#group-f36)                                                                                                                                                                                                                                                                                                                                                                                      |                 2 | Siege Engine Operation                     | 1-h conc./axe<br>1-h edged<br>Brawling<br>Crossbow<br>Dodge<br>Formation Fighting<br>Parry<br>Siege Engine Operation                                                                                                                                                        |                      8 |
-| [Siege Engineer](#profession-map-siege-engineer)                                                         | [Timber millwright apprenticeship](./learning-groups.md#group-f27)<br>[Building design and site surveying](./learning-groups.md#group-f28)                                                                                                                                                                                                                                                                                                                                                                                               |                 2 | Siege Engineering                          | Architecture<br>Carpentry<br>Mechanics<br>Siege Engineering<br>Surveying                                                                                                                                                                                                    |                      5 |
-| [Smelter](#profession-map-smelter)                                                                       | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Smelting                                   | Smelting                                                                                                                                                                                                                                                                    |                      1 |
-| [Smith and Weaponsmith](#profession-map-smith-and-weaponsmith)                                           | [Metalworking apprenticeship](./learning-groups.md#group-g13)<br>[Ironmaking and forge apprenticeship](./learning-groups.md#group-f24)<br>[Weapon-forge and servicing apprenticeship](./learning-groups.md#group-f25)                                                                                                                                                                                                                                                                                                                    |                 3 | None                                       | Smelting<br>Smithing<br>Weapon Maintenance                                                                                                                                                                                                                                  |                      3 |
-| [Smuggler and Illicit Trader](#profession-map-smuggler-and-illicit-trader)                               | [Trading practice](./learning-groups.md#group-g12)<br>[Working a boat](./learning-groups.md#group-g06)<br>[Field travel and camp practice](./learning-groups.md#group-g04)                                                                                                                                                                                                                                                                                                                                                               |                 3 | Conceal Object<br>Underworld               | Appraisal<br>Bargaining<br>Conceal Object<br>Seamanship<br>Survival<br>Trade<br>Underworld<br>Wayfinding<br>Weather Lore                                                                                                                                                    |                      9 |
-| [Soldier](#profession-map-soldier)                                                                       | [Guard and rough-fighting drill](./learning-groups.md#group-f35)<br>[One-handed arms and formation drill](./learning-groups.md#group-f36)<br>[Spear, sidearm and throwing formation drill](./learning-groups.md#group-f31)<br>[Two-handed military weapon practice](./learning-groups.md#group-f37)<br>[Military bow and formation practice](./learning-groups.md#group-f38)<br>[Military crossbow and formation practice](./learning-groups.md#group-f39)<br>[Military firearms and formation practice](./learning-groups.md#group-f40) |                 7 | Combat Experience<br>Battlefield Awareness | 1-h conc./axe<br>1-h edged<br>2-h conc./axe<br>2-h edged<br>Battlefield Awareness<br>Bow<br>Brawling<br>Combat Experience<br>Crossbow<br>Dodge<br>Firearms<br>Formation Fighting<br>Parry<br>Polearms<br>Throwing                                                           |                     15 |
-| [Spinner and Weaver](#profession-map-spinner-and-weaver)                                                 | [Fibre-to-cloth workshop practice](./learning-groups.md#group-f02)                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |                 1 | None                                       | Fibre Working<br>Weaving                                                                                                                                                                                                                                                    |                      2 |
-| [Storyteller and Poet](#profession-map-storyteller-and-poet)                                             | [Oral narrative composition and performance](./learning-groups.md#group-f19)                                                                                                                                                                                                                                                                                                                                                                                                                                                             |                 1 | Poetry & Literary Composition              | Poetry & Literary Composition<br>Storytelling                                                                                                                                                                                                                               |                      2 |
-| [Surgeon](#profession-map-surgeon)                                                                       | [Operative care practice](./learning-groups.md#group-g18)<br>[Field surgical apprenticeship](./learning-groups.md#group-f29)<br>[Patient care](./learning-groups.md#group-g01)                                                                                                                                                                                                                                                                                                                                                           |                 3 | None                                       | First Aid<br>Medicine<br>Nursing<br>Surgery                                                                                                                                                                                                                                 |                      4 |
-| [Surveyor and Mapmaker](#profession-map-surveyor-and-mapmaker)                                           | [Field surveying and map production](./learning-groups.md#group-f01)                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 1 | None                                       | Cartography<br>Surveying                                                                                                                                                                                                                                                    |                      2 |
-| [Tailor](#profession-map-tailor)                                                                         | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Tailoring                                  | Tailoring                                                                                                                                                                                                                                                                   |                      1 |
-| [Teacher](#profession-map-teacher)                                                                       | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Teaching                                   | Teaching                                                                                                                                                                                                                                                                    |                      1 |
-| [Thief](#profession-map-thief)                                                                           | [Covert entry practice](./learning-groups.md#group-g15)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |                 1 | Sleight of Hand                            | Lockpicking<br>Perception<br>Sleight of Hand<br>Stealth                                                                                                                                                                                                                     |                      4 |
-| [Trader and Merchant](#profession-map-trader-and-merchant)                                               | [Trading practice](./learning-groups.md#group-g12)<br>[Field travel and camp practice](./learning-groups.md#group-g04)<br>[Draught-team and vehicle practice](./learning-groups.md#group-f06)<br>[One-handed edged close-combat practice](./learning-groups.md#group-g08)                                                                                                                                                                                                                                                                |                 4 | None                                       | 1-h edged<br>Animal Handling<br>Appraisal<br>Bargaining<br>Cart Driving<br>Dodge<br>Parry<br>Survival<br>Trade<br>Wayfinding<br>Weather Lore                                                                                                                                |                     11 |
-| [Translator and Interpreter](#profession-map-translator-and-interpreter)                                 | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Translation & Interpretation               | Translation & Interpretation                                                                                                                                                                                                                                                |                      1 |
-| [Trapmaker](#profession-map-trapmaker)                                                                   | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Trapmaking                                 | Trapmaking                                                                                                                                                                                                                                                                  |                      1 |
-| [Veterinary Practitioner](#profession-map-veterinary-practitioner)                                       | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Veterinary Medicine                        | Veterinary Medicine                                                                                                                                                                                                                                                         |                      1 |
-| [Vintner](#profession-map-vintner)                                                                       | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Winemaking                                 | Winemaking                                                                                                                                                                                                                                                                  |                      1 |
-| [Visual Artist and Sculptor](#profession-map-visual-artist-and-sculptor)                                 | [Drawing and modelling workshop](./learning-groups.md#group-f20)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |                 1 | Visual Art<br>Sculpture                    | Sculpture<br>Visual Art                                                                                                                                                                                                                                                     |                      2 |
-| [Weapon Instructor](#profession-map-weapon-instructor)                                                   | [One-handed edged close-combat practice](./learning-groups.md#group-g08)<br>[Guard and rough-fighting drill](./learning-groups.md#group-f35)<br>[Swashbuckling fencing instruction](./learning-groups.md#group-f30)                                                                                                                                                                                                                                                                                                                      |                 3 | Teaching                                   | 1-h conc./axe<br>1-h edged<br>Brawling<br>Dodge<br>Parry<br>Teaching                                                                                                                                                                                                        |                      6 |
-| [Wild Plant Gatherer](#profession-map-wild-plant-gatherer)                                               | [Field travel and camp practice](./learning-groups.md#group-g04)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |                 1 | Plant Lore<br>Climbing                     | Climbing<br>Plant Lore<br>Survival<br>Wayfinding<br>Weather Lore                                                                                                                                                                                                            |                      5 |
+| Profession                                                                                               | Learning Groups                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | # Learning Groups | Direct Skills                              | Possible Skill reach                                                                                                                                                                                                                                                        | # possible | Effective package breadth  |
+| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------: | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------: | -------------------------- |
+| [Actor and Dancer](#profession-map-actor-and-dancer)                                                     | [Dramatic acting and dance practice](./learning-groups.md#group-f18)                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 1 | Acting<br>Dance                            | Acting<br>Dance                                                                                                                                                                                                                                                             |          2 | 2 across 1 valid path      |
+| [Alchemist](#profession-map-alchemist)                                                                   | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Alchemy                                    | Alchemy                                                                                                                                                                                                                                                                     |          1 | 1 across 1 valid path      |
+| [Animal Trainer and Falconer](#profession-map-animal-trainer-and-falconer)                               | [Falconry apprenticeship](./learning-groups.md#group-f07)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |                 1 | Animal Handling                            | Animal Handling<br>Hunting                                                                                                                                                                                                                                                  |          2 | 2 across 1 valid path      |
+| [Armorer](#profession-map-armorer)                                                                       | [Forged-metal armor workshop](./learning-groups.md#group-f26)                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |                 1 | Armoring                                   | Armoring<br>Smithing                                                                                                                                                                                                                                                        |          2 | 2 across 1 valid path      |
+| [Astrologer](#profession-map-astrologer)                                                                 | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Astrology                                  | Astrology                                                                                                                                                                                                                                                                   |          1 | 1 across 1 valid path      |
+| [Astronomer](#profession-map-astronomer)                                                                 | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Astronomy                                  | Astronomy                                                                                                                                                                                                                                                                   |          1 | 1 across 1 valid path      |
+| [Athlete and Physical Performer](#profession-map-athlete-and-physical-performer)                         | [Running and athletic field practice](./learning-groups.md#group-f04)                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |                 1 | None                                       | Athletics<br>Running                                                                                                                                                                                                                                                        |          2 | 2 across 1 valid path      |
+| [Banker and Credit Practitioner](#profession-map-banker-and-credit-practitioner)                         | [Credit-house accounts and obligations](./learning-groups.md#group-f12)                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |                 1 | None                                       | Banking & Credit<br>Bookkeeping                                                                                                                                                                                                                                             |          2 | 2 across 1 valid path      |
+| [Birth Attendant and Midwife](#profession-map-birth-attendant-and-midwife)                               | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | None                                       | None                                                                                                                                                                                                                                                                        |          0 | 0 across 1 valid path      |
+| [Brewer](#profession-map-brewer)                                                                         | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Brewing                                    | Brewing                                                                                                                                                                                                                                                                     |          1 | 1 across 1 valid path      |
+| [Building Designer](#profession-map-building-designer)                                                   | [Building design and site surveying](./learning-groups.md#group-f28)                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 1 | None                                       | Architecture<br>Surveying                                                                                                                                                                                                                                                   |          2 | 2 across 1 valid path      |
+| [Campaign Planner](#profession-map-campaign-planner)                                                     | [Unit coordination and command practice](./learning-groups.md#group-g09)                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |                 1 | Campaign Strategy                          | Battle Tactics<br>Campaign Strategy<br>Leadership<br>Military Command                                                                                                                                                                                                       |          4 | 4 across 1 valid path      |
+| [Carpenter](#profession-map-carpenter)                                                                   | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Carpentry                                  | Carpentry                                                                                                                                                                                                                                                                   |          1 | 1 across 1 valid path      |
+| [Clerk and Steward](#profession-map-clerk-and-steward)                                                   | [Records-office practice](./learning-groups.md#group-g11)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |                 1 | None                                       | Administration<br>Bookkeeping                                                                                                                                                                                                                                               |          2 | 2 across 1 valid path      |
+| [Confidence Trickster](#profession-map-confidence-trickster)                                             | [Impersonation and distraction practice](./learning-groups.md#group-g16)                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |                 1 | None                                       | Deception<br>Disguise                                                                                                                                                                                                                                                       |          2 | 2 across 1 valid path      |
+| [Cook](#profession-map-cook)                                                                             | [Seasonal kitchen and preservation practice](./learning-groups.md#group-f22)                                                                                                                                                                                                                                                                                                                                                                                                                                                             |                 1 | Cooking                                    | Cooking                                                                                                                                                                                                                                                                     |          1 | 1 across 1 valid path      |
+| [Courier and Messenger](#profession-map-courier-and-messenger)                                           | [Running and athletic field practice](./learning-groups.md#group-f04)<br>[Mounted travel and animal care](./learning-groups.md#group-g05)<br>[Field travel and camp practice](./learning-groups.md#group-g04)                                                                                                                                                                                                                                                                                                                            |                 3 | None                                       | Animal Handling<br>Athletics<br>Riding<br>Running<br>Survival<br>Wayfinding<br>Weather Lore                                                                                                                                                                                 |          7 | 7 across 1 valid path      |
+| [Distiller](#profession-map-distiller)                                                                   | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Distilling                                 | Distilling                                                                                                                                                                                                                                                                  |          1 | 1 across 1 valid path      |
+| [Diver and Water Worker](#profession-map-diver-and-water-worker)                                         | [Working a boat](./learning-groups.md#group-g06)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |                 1 | Swimming                                   | Seamanship<br>Swimming                                                                                                                                                                                                                                                      |          2 | 2 across 1 valid path      |
+| [Diviner](#profession-map-diviner)                                                                       | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Divination                                 | Divination                                                                                                                                                                                                                                                                  |          1 | 1 across 1 valid path      |
+| [Document Forger](#profession-map-document-forger)                                                       | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Document & Credential Forgery              | Document & Credential Forgery                                                                                                                                                                                                                                               |          1 | 1 across 1 valid path      |
+| [Driver and Teamster](#profession-map-driver-and-teamster)                                               | [Draught-team and vehicle practice](./learning-groups.md#group-f06)<br>[Field travel and camp practice](./learning-groups.md#group-g04)                                                                                                                                                                                                                                                                                                                                                                                                  |                 2 | None                                       | Animal Handling<br>Cart Driving<br>Survival<br>Wayfinding<br>Weather Lore                                                                                                                                                                                                   |          5 | 5 across 1 valid path      |
+| [Enforcer](#profession-map-enforcer)                                                                     | [Guard and rough-fighting drill](./learning-groups.md#group-f35)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |                 1 | Intimidation<br>Underworld                 | 1-h conc./axe<br>Brawling<br>Dodge<br>Intimidation<br>Parry<br>Underworld                                                                                                                                                                                                   |          6 | 6 across 1 valid path      |
+| [Envoy](#profession-map-envoy)                                                                           | [Council and mediation practice](./learning-groups.md#group-g10)<br>[Mounted travel and animal care](./learning-groups.md#group-g05)                                                                                                                                                                                                                                                                                                                                                                                                     |                 2 | None                                       | Animal Handling<br>Bargaining<br>Customs<br>Insight<br>Oratory<br>Riding                                                                                                                                                                                                    |          6 | 6 across 1 valid path      |
+| [Farmer](#profession-map-farmer)                                                                         | [Mixed crop-and-stock household practice](./learning-groups.md#group-f08)                                                                                                                                                                                                                                                                                                                                                                                                                                                                |                 1 | Farming                                    | Animal Husbandry<br>Farming                                                                                                                                                                                                                                                 |          2 | 2 across 1 valid path      |
+| [Field and Caravan Guide](#profession-map-field-and-caravan-guide)                                       | [Field travel and camp practice](./learning-groups.md#group-g04)<br>[Mounted travel and animal care](./learning-groups.md#group-g05)<br>[Draught-team and vehicle practice](./learning-groups.md#group-f06)<br>[One-handed edged close-combat practice](./learning-groups.md#group-g08)                                                                                                                                                                                                                                                  |                 4 | None                                       | 1-h edged<br>Animal Handling<br>Cart Driving<br>Dodge<br>Parry<br>Riding<br>Survival<br>Wayfinding<br>Weather Lore                                                                                                                                                          |          9 | 9 across 1 valid path      |
+| [Fisher](#profession-map-fisher)                                                                         | [Fishing-boat apprenticeship](./learning-groups.md#group-f10)                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |                 1 | Fishing                                    | Fishing<br>Seamanship                                                                                                                                                                                                                                                       |          2 | 2 across 1 valid path      |
+| [Gambler](#profession-map-gambler)                                                                       | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Gambling                                   | Gambling                                                                                                                                                                                                                                                                    |          1 | 1 across 1 valid path      |
+| [Geographer](#profession-map-geographer)                                                                 | [Field surveying and map production](./learning-groups.md#group-f01)                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 1 | Geography                                  | Cartography<br>Geography<br>Surveying                                                                                                                                                                                                                                       |          3 | 3 across 1 valid path      |
+| [Guard, Watcher and Escort](#profession-map-guard-watcher-and-escort)                                    | [Guard and rough-fighting drill](./learning-groups.md#group-f35)<br>[One-handed edged close-combat practice](./learning-groups.md#group-g08)<br>[Field travel and camp practice](./learning-groups.md#group-g04)<br>[Swashbuckling fencing instruction](./learning-groups.md#group-f30)                                                                                                                                                                                                                                                  |                 4 | None                                       | 1-h conc./axe<br>1-h edged<br>Brawling<br>Dodge<br>Parry<br>Survival<br>Wayfinding<br>Weather Lore                                                                                                                                                                          |          8 | 8 across 2 valid paths     |
+| [Herald](#profession-map-herald)                                                                         | [Speech and memory practice](./learning-groups.md#group-f14)<br>[Lineage investigation apprenticeship](./learning-groups.md#group-f16)                                                                                                                                                                                                                                                                                                                                                                                                   |                 2 | Heraldry                                   | Heraldry<br>Mnemonics<br>Oratory<br>Research                                                                                                                                                                                                                                |          4 | 4 across 1 valid path      |
+| [Herbalist and Remedy Maker](#profession-map-herbalist-and-remedy-maker)                                 | [Plant and remedy preparation](./learning-groups.md#group-g02)<br>[Distilling remedy workshop](./learning-groups.md#group-f23)                                                                                                                                                                                                                                                                                                                                                                                                           |                 2 | None                                       | Distilling<br>Pharmacy<br>Plant Lore                                                                                                                                                                                                                                        |          3 | 3 across 1 valid path      |
+| [Herd Keeper](#profession-map-herd-keeper)                                                               | [Pastoral stockkeeping apprenticeship](./learning-groups.md#group-f05)<br>[Mounted travel and animal care](./learning-groups.md#group-g05)                                                                                                                                                                                                                                                                                                                                                                                               |                 2 | Sling                                      | Animal Handling<br>Animal Husbandry<br>Herding<br>Riding<br>Sling                                                                                                                                                                                                           |          5 | 5 across 1 valid path      |
+| [Historian and Genealogist](#profession-map-historian-and-genealogist)                                   | [Historical text investigation](./learning-groups.md#group-f15)<br>[Lineage investigation apprenticeship](./learning-groups.md#group-f16)                                                                                                                                                                                                                                                                                                                                                                                                |                 2 | History                                    | History<br>Palaeography & Decipherment<br>Research                                                                                                                                                                                                                          |          3 | 3 across 1 valid path      |
+| [Hunter and Trapper](#profession-map-hunter-and-trapper)                                                 | [Tracking and hunting practice](./learning-groups.md#group-g03)<br>[Trapline and trail practice](./learning-groups.md#group-f34)<br>[Field travel and camp practice](./learning-groups.md#group-g04)<br>[Longbow hunting apprenticeship](./learning-groups.md#group-f41)                                                                                                                                                                                                                                                                 |                 4 | Bow                                        | Bow<br>Hunting<br>Perception<br>Stealth<br>Survival<br>Tracking<br>Trapping<br>Wayfinding<br>Weather Lore                                                                                                                                                                   |          9 | 9 across 1 valid path      |
+| [Investigator and Intelligence Agent](#profession-map-investigator-and-intelligence-agent)               | [Interview and evidence practice](./learning-groups.md#group-g17)<br>[Local contacts and information gathering](./learning-groups.md#group-g14)<br>[Impersonation and distraction practice](./learning-groups.md#group-g16)                                                                                                                                                                                                                                                                                                              |                 3 | None                                       | Deception<br>Disguise<br>Insight<br>Interrogation<br>Perception<br>Research<br>Streetwise                                                                                                                                                                                   |          7 | 7 across 1 valid path      |
+| [Leatherworker](#profession-map-leatherworker)                                                           | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Leatherwork                                | Leatherwork                                                                                                                                                                                                                                                                 |          1 | 1 across 1 valid path      |
+| [Legal Practitioner and Advocate](#profession-map-legal-practitioner-and-advocate)                       | [Legal study and pleading practice](./learning-groups.md#group-f13)                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |                 1 | Law                                        | Law<br>Oratory                                                                                                                                                                                                                                                              |          2 | 2 across 1 valid path      |
+| [Local Informant](#profession-map-local-informant)                                                       | [Local contacts and information gathering](./learning-groups.md#group-g14)                                                                                                                                                                                                                                                                                                                                                                                                                                                               |                 1 | Underworld                                 | Insight<br>Streetwise<br>Underworld                                                                                                                                                                                                                                         |          3 | 3 across 1 valid path      |
+| [Locksmith](#profession-map-locksmith)                                                                   | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Locksmithing                               | Locksmithing                                                                                                                                                                                                                                                                |          1 | 1 across 1 valid path      |
+| [Mason](#profession-map-mason)                                                                           | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Masonry                                    | Masonry                                                                                                                                                                                                                                                                     |          1 | 1 across 1 valid path      |
+| [Mathematical Practitioner](#profession-map-mathematical-practitioner)                                   | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Mathematics                                | Mathematics                                                                                                                                                                                                                                                                 |          1 | 1 across 1 valid path      |
+| [Mediator and Community Convenor](#profession-map-mediator-and-community-convenor)                       | [Council and mediation practice](./learning-groups.md#group-g10)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |                 1 | None                                       | Bargaining<br>Customs<br>Insight<br>Oratory                                                                                                                                                                                                                                 |          4 | 4 across 1 valid path      |
+| [Military Commander](#profession-map-military-commander)                                                 | [Unit coordination and command practice](./learning-groups.md#group-g09)<br>[One-handed arms and formation drill](./learning-groups.md#group-f36)<br>[Mounted travel and animal care](./learning-groups.md#group-g05)<br>[Mounted lance and troop drill](./learning-groups.md#group-f32)<br>[Guard and rough-fighting drill](./learning-groups.md#group-f35)                                                                                                                                                                             |                 5 | Battlefield Awareness                      | 1-h conc./axe<br>1-h edged<br>Animal Handling<br>Battle Tactics<br>Battlefield Awareness<br>Brawling<br>Dodge<br>Formation Fighting<br>Lance<br>Leadership<br>Military Command<br>Mounted Combat<br>Parry<br>Riding                                                         |         14 | 8–13 across 3 valid paths  |
+| [Military Quartermaster](#profession-map-military-quartermaster)                                         | [Records-office practice](./learning-groups.md#group-g11)<br>[Draught-team and vehicle practice](./learning-groups.md#group-f06)<br>[One-handed arms and formation drill](./learning-groups.md#group-f36)                                                                                                                                                                                                                                                                                                                                |                 3 | Military Logistics                         | 1-h conc./axe<br>1-h edged<br>Administration<br>Animal Handling<br>Bookkeeping<br>Brawling<br>Cart Driving<br>Dodge<br>Formation Fighting<br>Military Logistics<br>Parry                                                                                                    |         11 | 5–11 across 2 valid paths  |
+| [Military Scout](#profession-map-military-scout)                                                         | [Concealed field reconnaissance practice](./learning-groups.md#group-f33)<br>[Field travel and camp practice](./learning-groups.md#group-g04)<br>[One-handed arms and formation drill](./learning-groups.md#group-f36)<br>[Mounted travel and animal care](./learning-groups.md#group-g05)<br>[Mounted lance and troop drill](./learning-groups.md#group-f32)<br>[Guard and rough-fighting drill](./learning-groups.md#group-f35)                                                                                                        |                 6 | Battlefield Awareness                      | 1-h conc./axe<br>1-h edged<br>Animal Handling<br>Battlefield Awareness<br>Brawling<br>Camouflage<br>Dodge<br>Formation Fighting<br>Lance<br>Military Reconnaissance<br>Mounted Combat<br>Parry<br>Perception<br>Riding<br>Stealth<br>Survival<br>Wayfinding<br>Weather Lore |         18 | 12–17 across 3 valid paths |
+| [Millwright and Mechanician](#profession-map-millwright-and-mechanician)                                 | [Timber millwright apprenticeship](./learning-groups.md#group-f27)                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |                 1 | None                                       | Carpentry<br>Mechanics                                                                                                                                                                                                                                                      |          2 | 2 across 1 valid path      |
+| [Miner and Quarry Worker](#profession-map-miner-and-quarry-worker)                                       | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Mining                                     | Mining                                                                                                                                                                                                                                                                      |          1 | 1 across 1 valid path      |
+| [Mounted Soldier and Lancer](#profession-map-mounted-soldier-and-lancer)                                 | [Mounted travel and animal care](./learning-groups.md#group-g05)<br>[Mounted lance and troop drill](./learning-groups.md#group-f32)                                                                                                                                                                                                                                                                                                                                                                                                      |                 2 | Combat Experience<br>Battlefield Awareness | 1-h edged<br>Animal Handling<br>Battlefield Awareness<br>Brawling<br>Combat Experience<br>Dodge<br>Formation Fighting<br>Lance<br>Mounted Combat<br>Parry<br>Riding                                                                                                         |         11 | 11 across 1 valid path     |
+| [Musician and Singer](#profession-map-musician-and-singer)                                               | [Self-accompanied song practice](./learning-groups.md#group-f17)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |                 1 | Music<br>Singing                           | Music<br>Singing                                                                                                                                                                                                                                                            |          2 | 2 across 1 valid path      |
+| [Naturalist](#profession-map-naturalist)                                                                 | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Animal Lore<br>Plant Lore                  | Animal Lore<br>Plant Lore                                                                                                                                                                                                                                                   |          2 | 2 across 1 valid path      |
+| [Navigator and Pilot](#profession-map-navigator-and-pilot)                                               | [Passage navigation](./learning-groups.md#group-g07)<br>[Working a boat](./learning-groups.md#group-g06)<br>[Charted open-water navigation practice](./learning-groups.md#group-f11)                                                                                                                                                                                                                                                                                                                                                     |                 3 | None                                       | Celestial Navigation<br>Chart Navigation<br>Dead Reckoning<br>Pilotage<br>Seamanship<br>Wayfinding                                                                                                                                                                          |          6 | 6 across 1 valid path      |
+| [Nurse and Patient Attendant](#profession-map-nurse-and-patient-attendant)                               | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Nursing                                    | Nursing                                                                                                                                                                                                                                                                     |          1 | 1 across 1 valid path      |
+| [Philosopher](#profession-map-philosopher)                                                               | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Philosophy                                 | Philosophy                                                                                                                                                                                                                                                                  |          1 | 1 across 1 valid path      |
+| [Physician](#profession-map-physician)                                                                   | [Patient care](./learning-groups.md#group-g01)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |                 1 | None                                       | First Aid<br>Medicine<br>Nursing                                                                                                                                                                                                                                            |          3 | 3 across 1 valid path      |
+| [Political Agent and Council Representative](#profession-map-political-agent-and-council-representative) | [Council and mediation practice](./learning-groups.md#group-g10)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |                 1 | Politics                                   | Bargaining<br>Customs<br>Insight<br>Oratory<br>Politics                                                                                                                                                                                                                     |          5 | 5 across 1 valid path      |
+| [Potter](#profession-map-potter)                                                                         | [Modelled ceramic workshop](./learning-groups.md#group-f21)                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |                 1 | Pottery                                    | Pottery<br>Sculpture                                                                                                                                                                                                                                                        |          2 | 2 across 1 valid path      |
+| [Religious Practitioner](#profession-map-religious-practitioner)                                         | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Religion<br>Meditation                     | Meditation<br>Religion                                                                                                                                                                                                                                                      |          2 | 2 across 1 valid path      |
+| [Sailmaker](#profession-map-sailmaker)                                                                   | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Sailmaking                                 | Sailmaking                                                                                                                                                                                                                                                                  |          1 | 1 across 1 valid path      |
+| [Sailor and Boat Worker](#profession-map-sailor-and-boat-worker)                                         | [Working a boat](./learning-groups.md#group-g06)<br>[Rigged-vessel deck apprenticeship](./learning-groups.md#group-f09)<br>[One-handed edged close-combat practice](./learning-groups.md#group-g08)<br>[Guard and rough-fighting drill](./learning-groups.md#group-f35)                                                                                                                                                                                                                                                                  |                 4 | None                                       | 1-h conc./axe<br>1-h edged<br>Brawling<br>Dodge<br>Parry<br>Ropework<br>Seamanship                                                                                                                                                                                          |          7 | 6–7 across 2 valid paths   |
+| [Scribe and Copyist](#profession-map-scribe-and-copyist)                                                 | [Records-office practice](./learning-groups.md#group-g11)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |                 1 | None                                       | Administration<br>Bookkeeping                                                                                                                                                                                                                                               |          2 | 2 across 1 valid path      |
+| [Shipbuilder](#profession-map-shipbuilder)                                                               | [Timber vessel construction](./learning-groups.md#group-f03)                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |                 1 | None                                       | Carpentry<br>Shipbuilding                                                                                                                                                                                                                                                   |          2 | 2 across 1 valid path      |
+| [Shipmaster](#profession-map-shipmaster)                                                                 | [Working a boat](./learning-groups.md#group-g06)<br>[Passage navigation](./learning-groups.md#group-g07)<br>[Trading practice](./learning-groups.md#group-g12)<br>[One-handed edged close-combat practice](./learning-groups.md#group-g08)                                                                                                                                                                                                                                                                                               |                 4 | Leadership                                 | 1-h edged<br>Appraisal<br>Bargaining<br>Dead Reckoning<br>Dodge<br>Leadership<br>Parry<br>Pilotage<br>Seamanship<br>Trade<br>Wayfinding                                                                                                                                     |         11 | 11 across 1 valid path     |
+| [Siege Engine Crew Specialist](#profession-map-siege-engine-crew-specialist)                             | [Military crossbow and formation practice](./learning-groups.md#group-f39)<br>[One-handed arms and formation drill](./learning-groups.md#group-f36)                                                                                                                                                                                                                                                                                                                                                                                      |                 2 | Siege Engine Operation                     | 1-h conc./axe<br>1-h edged<br>Brawling<br>Crossbow<br>Dodge<br>Formation Fighting<br>Parry<br>Siege Engine Operation                                                                                                                                                        |          8 | 8 across 1 valid path      |
+| [Siege Engineer](#profession-map-siege-engineer)                                                         | [Timber millwright apprenticeship](./learning-groups.md#group-f27)<br>[Building design and site surveying](./learning-groups.md#group-f28)                                                                                                                                                                                                                                                                                                                                                                                               |                 2 | Siege Engineering                          | Architecture<br>Carpentry<br>Mechanics<br>Siege Engineering<br>Surveying                                                                                                                                                                                                    |          5 | 5 across 1 valid path      |
+| [Smelter](#profession-map-smelter)                                                                       | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Smelting                                   | Smelting                                                                                                                                                                                                                                                                    |          1 | 1 across 1 valid path      |
+| [Smith and Weaponsmith](#profession-map-smith-and-weaponsmith)                                           | [Metalworking apprenticeship](./learning-groups.md#group-g13)<br>[Ironmaking and forge apprenticeship](./learning-groups.md#group-f24)<br>[Weapon-forge and servicing apprenticeship](./learning-groups.md#group-f25)                                                                                                                                                                                                                                                                                                                    |                 3 | None                                       | Smelting<br>Smithing<br>Weapon Maintenance                                                                                                                                                                                                                                  |          3 | 3 across 1 valid path      |
+| [Smuggler and Illicit Trader](#profession-map-smuggler-and-illicit-trader)                               | [Trading practice](./learning-groups.md#group-g12)<br>[Working a boat](./learning-groups.md#group-g06)<br>[Field travel and camp practice](./learning-groups.md#group-g04)                                                                                                                                                                                                                                                                                                                                                               |                 3 | Conceal Object<br>Underworld               | Appraisal<br>Bargaining<br>Conceal Object<br>Seamanship<br>Survival<br>Trade<br>Underworld<br>Wayfinding<br>Weather Lore                                                                                                                                                    |          9 | 9 across 1 valid path      |
+| [Soldier](#profession-map-soldier)                                                                       | [Guard and rough-fighting drill](./learning-groups.md#group-f35)<br>[One-handed arms and formation drill](./learning-groups.md#group-f36)<br>[Spear, sidearm and throwing formation drill](./learning-groups.md#group-f31)<br>[Two-handed military weapon practice](./learning-groups.md#group-f37)<br>[Military bow and formation practice](./learning-groups.md#group-f38)<br>[Military crossbow and formation practice](./learning-groups.md#group-f39)<br>[Military firearms and formation practice](./learning-groups.md#group-f40) |                 7 | Combat Experience<br>Battlefield Awareness | 1-h conc./axe<br>1-h edged<br>2-h conc./axe<br>2-h edged<br>Battlefield Awareness<br>Bow<br>Brawling<br>Combat Experience<br>Crossbow<br>Dodge<br>Firearms<br>Formation Fighting<br>Parry<br>Polearms<br>Throwing                                                           |         15 | 6–10 across 9 valid paths  |
+| [Spinner and Weaver](#profession-map-spinner-and-weaver)                                                 | [Fibre-to-cloth workshop practice](./learning-groups.md#group-f02)                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |                 1 | None                                       | Fibre Working<br>Weaving                                                                                                                                                                                                                                                    |          2 | 2 across 1 valid path      |
+| [Storyteller and Poet](#profession-map-storyteller-and-poet)                                             | [Oral narrative composition and performance](./learning-groups.md#group-f19)                                                                                                                                                                                                                                                                                                                                                                                                                                                             |                 1 | Poetry & Literary Composition              | Poetry & Literary Composition<br>Storytelling                                                                                                                                                                                                                               |          2 | 2 across 1 valid path      |
+| [Surgeon](#profession-map-surgeon)                                                                       | [Operative care practice](./learning-groups.md#group-g18)<br>[Field surgical apprenticeship](./learning-groups.md#group-f29)<br>[Patient care](./learning-groups.md#group-g01)                                                                                                                                                                                                                                                                                                                                                           |                 3 | None                                       | First Aid<br>Medicine<br>Nursing<br>Surgery                                                                                                                                                                                                                                 |          4 | 4 across 1 valid path      |
+| [Surveyor and Mapmaker](#profession-map-surveyor-and-mapmaker)                                           | [Field surveying and map production](./learning-groups.md#group-f01)                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 1 | None                                       | Cartography<br>Surveying                                                                                                                                                                                                                                                    |          2 | 2 across 1 valid path      |
+| [Tailor](#profession-map-tailor)                                                                         | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Tailoring                                  | Tailoring                                                                                                                                                                                                                                                                   |          1 | 1 across 1 valid path      |
+| [Teacher](#profession-map-teacher)                                                                       | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Teaching                                   | Teaching                                                                                                                                                                                                                                                                    |          1 | 1 across 1 valid path      |
+| [Thief](#profession-map-thief)                                                                           | [Covert entry practice](./learning-groups.md#group-g15)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |                 1 | Sleight of Hand                            | Lockpicking<br>Perception<br>Sleight of Hand<br>Stealth                                                                                                                                                                                                                     |          4 | 4 across 1 valid path      |
+| [Trader and Merchant](#profession-map-trader-and-merchant)                                               | [Trading practice](./learning-groups.md#group-g12)<br>[Field travel and camp practice](./learning-groups.md#group-g04)<br>[Draught-team and vehicle practice](./learning-groups.md#group-f06)<br>[One-handed edged close-combat practice](./learning-groups.md#group-g08)                                                                                                                                                                                                                                                                |                 4 | None                                       | 1-h edged<br>Animal Handling<br>Appraisal<br>Bargaining<br>Cart Driving<br>Dodge<br>Parry<br>Survival<br>Trade<br>Wayfinding<br>Weather Lore                                                                                                                                |         11 | 11 across 1 valid path     |
+| [Translator and Interpreter](#profession-map-translator-and-interpreter)                                 | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Translation & Interpretation               | Translation & Interpretation                                                                                                                                                                                                                                                |          1 | 1 across 1 valid path      |
+| [Trapmaker](#profession-map-trapmaker)                                                                   | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Trapmaking                                 | Trapmaking                                                                                                                                                                                                                                                                  |          1 | 1 across 1 valid path      |
+| [Veterinary Practitioner](#profession-map-veterinary-practitioner)                                       | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Veterinary Medicine                        | Veterinary Medicine                                                                                                                                                                                                                                                         |          1 | 1 across 1 valid path      |
+| [Vintner](#profession-map-vintner)                                                                       | None                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                 0 | Winemaking                                 | Winemaking                                                                                                                                                                                                                                                                  |          1 | 1 across 1 valid path      |
+| [Visual Artist and Sculptor](#profession-map-visual-artist-and-sculptor)                                 | [Drawing and modelling workshop](./learning-groups.md#group-f20)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |                 1 | Visual Art<br>Sculpture                    | Sculpture<br>Visual Art                                                                                                                                                                                                                                                     |          2 | 2 across 1 valid path      |
+| [Weapon Instructor](#profession-map-weapon-instructor)                                                   | [One-handed edged close-combat practice](./learning-groups.md#group-g08)<br>[Guard and rough-fighting drill](./learning-groups.md#group-f35)<br>[Swashbuckling fencing instruction](./learning-groups.md#group-f30)                                                                                                                                                                                                                                                                                                                      |                 3 | Teaching                                   | 1-h conc./axe<br>1-h edged<br>Brawling<br>Dodge<br>Parry<br>Teaching                                                                                                                                                                                                        |          6 | 6 across 1 valid path      |
+| [Wild Plant Gatherer](#profession-map-wild-plant-gatherer)                                               | [Field travel and camp practice](./learning-groups.md#group-g04)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |                 1 | Plant Lore<br>Climbing                     | Climbing<br>Plant Lore<br>Survival<br>Wayfinding<br>Weather Lore                                                                                                                                                                                                            |          5 | 5 across 1 valid path      |
 
 ## Full Profession reference
 
@@ -117,12 +158,25 @@ The [machine-readable equivalent](./profession-learning-group-skills.json) prese
 - [Acting](./skills.md#skill-acting) — Acting-only tradition. Coached dramatic work teaches Acting; F18 would incorrectly add complete Dance.
 - [Dance](./skills.md#skill-dancing) — Dance-only tradition. Sustained movement rehearsal teaches Dance; F18 would incorrectly add complete Acting.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Acting](./skills.md#skill-acting) — routes: Dramatic acting and dance practice (Integrated acting-and-dance tradition); direct Profession route (Acting-only tradition)
 - [Dance](./skills.md#skill-dancing) — routes: Dramatic acting and dance practice (Integrated acting-and-dance tradition); direct Profession route (Dance-only tradition)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Dramatic acting and dance practice
+
+**Direct base Skills:** Acting; Dance
+
+- [Acting](./skills.md#skill-acting)
+- [Dance](./skills.md#skill-dancing)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -142,11 +196,23 @@ None.
 
 - [Alchemy](./skills.md#skill-alchemy) — Ordinary alchemical apprenticeship. The mentor teaches complete alchemical material practice; no approved group includes Alchemy, and remedy or forge groups teach different competences.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Alchemy](./skills.md#skill-alchemy) — routes: direct Profession route (Ordinary alchemical apprenticeship)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Alchemy
+
+- [Alchemy](./skills.md#skill-alchemy)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -171,12 +237,25 @@ None.
 
 - [Animal Handling](./skills.md#skill-skill-animal-handling) — Non-falconry trainer. Supervised control and response work teaches handling; the existing animal groups add riding, herding, driving or hunting not intrinsic to this route.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Animal Handling](./skills.md#skill-skill-animal-handling) — routes: Falconry apprenticeship (Falconry branch only); direct Profession route (Non-falconry trainer)
 - [Hunting](./skills.md#skill-skill-hunting) — routes: Falconry apprenticeship (Falconry branch only)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Falconry apprenticeship
+
+**Direct base Skills:** Animal Handling
+
+- [Animal Handling](./skills.md#skill-skill-animal-handling)
+- [Hunting](./skills.md#skill-skill-hunting)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -202,12 +281,25 @@ None.
 
 - [Armoring](./skills.md#skill-skill-armoring) — Non-forged material tradition. The maker is coached in complete armor construction and fitting; F26 would incorrectly add Smithing to a textile or other non-forged route.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Armoring](./skills.md#skill-skill-armoring) — routes: Forged-metal armor workshop (Forged-metal armor workshop only); direct Profession route (Non-forged material tradition)
 - [Smithing](./skills.md#skill-skill-smithing) — routes: Forged-metal armor workshop (Forged-metal armor workshop only)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Forged-metal armor workshop
+
+**Direct base Skills:** Armoring
+
+- [Armoring](./skills.md#skill-skill-armoring)
+- [Smithing](./skills.md#skill-skill-smithing)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -227,11 +319,23 @@ None.
 
 - [Astrology](./skills.md#skill-astrology) — Ordinary astrological study. Repeated specialist interpretation directly teaches Astrology; no approved group contains it.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Astrology](./skills.md#skill-astrology) — routes: direct Profession route (Ordinary astrological study)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Astrology
+
+- [Astrology](./skills.md#skill-astrology)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -251,11 +355,23 @@ None.
 
 - [Astronomy](./skills.md#skill-astronomy) — Ordinary observing-and-study tradition. Repeated coached observations and explanation teach complete Astronomy; no approved group includes it.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Astronomy](./skills.md#skill-astronomy) — routes: direct Profession route (Ordinary observing-and-study tradition)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Astronomy
+
+- [Astronomy](./skills.md#skill-astronomy)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -280,12 +396,25 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Athletics](./skills.md#skill-skill-athletics) — routes: Running and athletic field practice (Combined running-and-athletic field route)
 - [Running](./skills.md#skill-skill-running) — routes: Running and athletic field practice (Combined running-and-athletic field route)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Running and athletic field practice
+
+**Direct base Skills:** None
+
+- [Athletics](./skills.md#skill-skill-athletics)
+- [Running](./skills.md#skill-skill-running)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -310,12 +439,25 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Banking & Credit](./skills.md#skill-banking) — routes: Credit-house accounts and obligations (Ordinary credit-house apprenticeship)
 - [Bookkeeping](./skills.md#skill-skill-bookkeeping) — routes: Credit-house accounts and obligations (Ordinary credit-house apprenticeship)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Credit-house accounts and obligations
+
+**Direct base Skills:** None
+
+- [Banking & Credit](./skills.md#skill-banking)
+- [Bookkeeping](./skills.md#skill-skill-bookkeeping)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -335,11 +477,23 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 None.
 
-**Total distinct base Skills:** 0
+**Total possible distinct base Skills:** 0
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** None
+
+- None.
+
+**Effective distinct base-Skill breadth:** 0
 
 ### Reachable Specializations
 
@@ -359,11 +513,23 @@ None.
 
 - [Brewing](./skills.md#skill-skill-brewing) — Ordinary brewing apprenticeship. Repeated corrected batches teach the whole Brewing Skill; no approved group includes it.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Brewing](./skills.md#skill-skill-brewing) — routes: direct Profession route (Ordinary brewing apprenticeship)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Brewing
+
+- [Brewing](./skills.md#skill-skill-brewing)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -388,12 +554,25 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Architecture](./skills.md#skill-skill-architecture) — routes: Building design and site surveying (Ordinary design-and-site apprenticeship)
 - [Surveying](./skills.md#skill-surveying) — routes: Building design and site surveying (Ordinary design-and-site apprenticeship)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Building design and site surveying
+
+**Direct base Skills:** None
+
+- [Architecture](./skills.md#skill-skill-architecture)
+- [Surveying](./skills.md#skill-surveying)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -419,20 +598,35 @@ None.
 
 - [Campaign Strategy](./skills.md#skill-skill-campaign-strategy) — Ordinary mentored planning work. Repeated campaign planning and critical review teach the complete Skill; no approved group includes it. Tracks: Campaign adviser.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Battle Tactics](./skills.md#skill-tactics) — routes: Unit coordination and command practice (Commander-planner branch only)
 - [Campaign Strategy](./skills.md#skill-skill-campaign-strategy) — routes: direct Profession route (Ordinary mentored planning work)
 - [Leadership](./skills.md#skill-skill-leadership) — routes: Unit coordination and command practice (Commander-planner branch only)
 - [Military Command](./skills.md#skill-captaincy) — routes: Unit coordination and command practice (Commander-planner branch only)
 
-**Total distinct base Skills:** 4
+**Total possible distinct base Skills:** 4
+
+### Effective package breadth by valid path
+
+#### Campaign adviser
+
+**Learning Groups:** Unit coordination and command practice
+
+**Direct base Skills:** Campaign Strategy
+
+- [Battle Tactics](./skills.md#skill-tactics)
+- [Campaign Strategy](./skills.md#skill-skill-campaign-strategy)
+- [Leadership](./skills.md#skill-skill-leadership)
+- [Military Command](./skills.md#skill-captaincy)
+
+**Effective distinct base-Skill breadth:** 4
 
 ### Reachable Specializations
 
 None.
 
-### Explicit tracks
+### Explicit track source map
 
 - **Campaign adviser** — Unit coordination and command practice; Campaign Strategy
 
@@ -450,11 +644,23 @@ None.
 
 - [Carpentry](./skills.md#skill-carpentry) — Ordinary carpentry apprenticeship. Repeated whole timber projects teach Carpentry; F03 adds Shipbuilding and F27 adds Mechanics, neither required for general carpentry.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Carpentry](./skills.md#skill-carpentry) — routes: direct Profession route (Ordinary carpentry apprenticeship)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Carpentry
+
+- [Carpentry](./skills.md#skill-carpentry)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -479,12 +685,25 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Administration](./skills.md#skill-skill-administration) — routes: Records-office practice (Ordinary office apprenticeship)
 - [Bookkeeping](./skills.md#skill-skill-bookkeeping) — routes: Records-office practice (Ordinary office apprenticeship)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Records-office practice
+
+**Direct base Skills:** None
+
+- [Administration](./skills.md#skill-skill-administration)
+- [Bookkeeping](./skills.md#skill-skill-bookkeeping)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -509,12 +728,25 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Deception](./skills.md#skill-skill-deception) — routes: Impersonation and distraction practice (Ordinary impersonation apprenticeship)
 - [Disguise](./skills.md#skill-skill-disguise) — routes: Impersonation and distraction practice (Ordinary impersonation apprenticeship)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Impersonation and distraction practice
+
+**Direct base Skills:** None
+
+- [Deception](./skills.md#skill-skill-deception)
+- [Disguise](./skills.md#skill-skill-disguise)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -538,11 +770,23 @@ None.
 
 - [Cooking](./skills.md#skill-skill-cooking) — Meal-only kitchen route. A kitchen that teaches complete meal preparation without specialist preservation trains Cooking directly; F22 would otherwise overstate the narrower instruction.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Cooking](./skills.md#skill-skill-cooking) — routes: Seasonal kitchen and preservation practice (Seasonal kitchen-and-preservation apprenticeship); direct Profession route (Meal-only kitchen route)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Seasonal kitchen and preservation practice
+
+**Direct base Skills:** Cooking
+
+- [Cooking](./skills.md#skill-skill-cooking)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -584,7 +828,7 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Animal Handling](./skills.md#skill-skill-animal-handling) — routes: Mounted travel and animal care (Mounted branch)
 - [Athletics](./skills.md#skill-skill-athletics) — routes: Running and athletic field practice (Trained foot-runner branch)
@@ -594,7 +838,25 @@ None.
 - [Wayfinding](./skills.md#skill-skill-wayfinding) — routes: Field travel and camp practice (Long-distance field branch)
 - [Weather Lore](./skills.md#skill-skill-weather-lore) — routes: Field travel and camp practice (Long-distance field branch)
 
-**Total distinct base Skills:** 7
+**Total possible distinct base Skills:** 7
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Running and athletic field practice; Mounted travel and animal care; Field travel and camp practice
+
+**Direct base Skills:** None
+
+- [Animal Handling](./skills.md#skill-skill-animal-handling)
+- [Athletics](./skills.md#skill-skill-athletics)
+- [Riding](./skills.md#skill-skill-riding)
+- [Running](./skills.md#skill-skill-running)
+- [Survival](./skills.md#skill-skill-survival)
+- [Wayfinding](./skills.md#skill-skill-wayfinding)
+- [Weather Lore](./skills.md#skill-skill-weather-lore)
+
+**Effective distinct base-Skill breadth:** 7
 
 ### Reachable Specializations
 
@@ -614,11 +876,23 @@ None.
 
 - [Distilling](./skills.md#skill-skill-distilling) — Non-medicinal distilling apprenticeship. Complete supervised distillation teaches the Skill; F23 would also require Pharmacy, which beverage or other material work need not teach.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Distilling](./skills.md#skill-skill-distilling) — routes: direct Profession route (Non-medicinal distilling apprenticeship)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Distilling
+
+- [Distilling](./skills.md#skill-skill-distilling)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -642,12 +916,25 @@ None.
 
 - [Swimming](./skills.md#skill-skill-swimming) — Ordinary supervised water practice. Repeated coached movement and work in water teach Swimming; no approved group contains it.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Seamanship](./skills.md#skill-skill-seamanship) — routes: Working a boat (Working-boat branch)
 - [Swimming](./skills.md#skill-skill-swimming) — routes: direct Profession route (Ordinary supervised water practice)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Working a boat
+
+**Direct base Skills:** Swimming
+
+- [Seamanship](./skills.md#skill-skill-seamanship)
+- [Swimming](./skills.md#skill-skill-swimming)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -667,11 +954,23 @@ None.
 
 - [Divination](./skills.md#skill-divination) — Ordinary method-specific apprenticeship. Repeated corrected procedure and interpretation teach contextual Divination; no group includes it.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Divination](./skills.md#skill-divination) — routes: direct Profession route (Ordinary method-specific apprenticeship)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Divination
+
+- [Divination](./skills.md#skill-divination)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -691,11 +990,23 @@ None.
 
 - [Document & Credential Forgery](./skills.md#skill-skill-document-forgery) — Ordinary forgery apprenticeship. Repeated construction and review of false documents teaches the complete Skill; G16 concerns personal impersonation and F15 investigates old texts.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Document & Credential Forgery](./skills.md#skill-skill-document-forgery) — routes: direct Profession route (Ordinary forgery apprenticeship)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Document & Credential Forgery
+
+- [Document & Credential Forgery](./skills.md#skill-skill-document-forgery)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -728,7 +1039,7 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Animal Handling](./skills.md#skill-skill-animal-handling) — routes: Draught-team and vehicle practice (Ordinary driving apprenticeship)
 - [Cart Driving](./skills.md#skill-skill-cart-driving) — routes: Draught-team and vehicle practice (Ordinary driving apprenticeship)
@@ -736,7 +1047,23 @@ None.
 - [Wayfinding](./skills.md#skill-skill-wayfinding) — routes: Field travel and camp practice (Long-distance caravan service)
 - [Weather Lore](./skills.md#skill-skill-weather-lore) — routes: Field travel and camp practice (Long-distance caravan service)
 
-**Total distinct base Skills:** 5
+**Total possible distinct base Skills:** 5
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Draught-team and vehicle practice; Field travel and camp practice
+
+**Direct base Skills:** None
+
+- [Animal Handling](./skills.md#skill-skill-animal-handling)
+- [Cart Driving](./skills.md#skill-skill-cart-driving)
+- [Survival](./skills.md#skill-skill-survival)
+- [Wayfinding](./skills.md#skill-skill-wayfinding)
+- [Weather Lore](./skills.md#skill-skill-weather-lore)
+
+**Effective distinct base-Skill breadth:** 5
 
 ### Reachable Specializations
 
@@ -764,7 +1091,7 @@ None.
 - [Intimidation](./skills.md#skill-skill-intimidation) — Coached coercive dealings. A mentor corrects the presentation and management of threats; no approved group teaches the whole Intimidation competence.
 - [Underworld](./skills.md#skill-skill-underworld) — Illicit-network service only. Sustained instruction in the network’s conventions and dealings develops contextual Underworld; G14 teaches Streetwise and Insight instead.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe) — routes: Guard and rough-fighting drill (Ordinary rough-combat apprenticeship)
 - [Brawling](./skills.md#skill-brawling) — routes: Guard and rough-fighting drill (Ordinary rough-combat apprenticeship)
@@ -773,7 +1100,24 @@ None.
 - [Parry](./skills.md#skill-parry) — routes: Guard and rough-fighting drill (Ordinary rough-combat apprenticeship)
 - [Underworld](./skills.md#skill-skill-underworld) — routes: direct Profession route (Illicit-network service only)
 
-**Total distinct base Skills:** 6
+**Total possible distinct base Skills:** 6
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Guard and rough-fighting drill
+
+**Direct base Skills:** Intimidation; Underworld
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [Brawling](./skills.md#skill-brawling)
+- [Dodge](./skills.md#skill-dodge)
+- [Intimidation](./skills.md#skill-skill-intimidation)
+- [Parry](./skills.md#skill-parry)
+- [Underworld](./skills.md#skill-skill-underworld)
+
+**Effective distinct base-Skill breadth:** 6
 
 ### Reachable Specializations
 
@@ -807,7 +1151,7 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Animal Handling](./skills.md#skill-skill-animal-handling) — routes: Mounted travel and animal care (Mounted travelling envoy branch)
 - [Bargaining](./skills.md#skill-skill-bargaining) — routes: Council and mediation practice (Ordinary representative apprenticeship)
@@ -816,7 +1160,24 @@ None.
 - [Oratory](./skills.md#skill-skill-oratory) — routes: Council and mediation practice (Ordinary representative apprenticeship)
 - [Riding](./skills.md#skill-skill-riding) — routes: Mounted travel and animal care (Mounted travelling envoy branch)
 
-**Total distinct base Skills:** 6
+**Total possible distinct base Skills:** 6
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Council and mediation practice; Mounted travel and animal care
+
+**Direct base Skills:** None
+
+- [Animal Handling](./skills.md#skill-skill-animal-handling)
+- [Bargaining](./skills.md#skill-skill-bargaining)
+- [Customs](./skills.md#skill-skill-customs)
+- [Insight](./skills.md#skill-skill-insight)
+- [Oratory](./skills.md#skill-skill-oratory)
+- [Riding](./skills.md#skill-skill-riding)
+
+**Effective distinct base-Skill breadth:** 6
 
 ### Reachable Specializations
 
@@ -841,12 +1202,25 @@ None.
 
 - [Farming](./skills.md#skill-skill-farming) — Crop-only route. Repeated cultivation teaches Farming; F08 would overstate the training if Animal Husbandry is not also taught.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Animal Husbandry](./skills.md#skill-skill-animal-husbandry) — routes: Mixed crop-and-stock household practice (Mixed crop-and-stock holding)
 - [Farming](./skills.md#skill-skill-farming) — routes: Mixed crop-and-stock household practice (Mixed crop-and-stock holding); direct Profession route (Crop-only route)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Mixed crop-and-stock household practice
+
+**Direct base Skills:** Farming
+
+- [Animal Husbandry](./skills.md#skill-skill-animal-husbandry)
+- [Farming](./skills.md#skill-skill-farming)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -894,7 +1268,7 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [1-h edged](./skills.md#skill-one-handed-edged) — routes: One-handed edged close-combat practice (Armed escort-guide assignment only)
 - [Animal Handling](./skills.md#skill-skill-animal-handling) — routes: Mounted travel and animal care (Mounted guide route); Draught-team and vehicle practice (Vehicle-caravan guide route)
@@ -906,7 +1280,27 @@ None.
 - [Wayfinding](./skills.md#skill-skill-wayfinding) — routes: Field travel and camp practice (Ordinary field practice)
 - [Weather Lore](./skills.md#skill-skill-weather-lore) — routes: Field travel and camp practice (Ordinary field practice)
 
-**Total distinct base Skills:** 9
+**Total possible distinct base Skills:** 9
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Field travel and camp practice; Mounted travel and animal care; Draught-team and vehicle practice; One-handed edged close-combat practice
+
+**Direct base Skills:** None
+
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Animal Handling](./skills.md#skill-skill-animal-handling)
+- [Cart Driving](./skills.md#skill-skill-cart-driving)
+- [Dodge](./skills.md#skill-dodge)
+- [Parry](./skills.md#skill-parry)
+- [Riding](./skills.md#skill-skill-riding)
+- [Survival](./skills.md#skill-skill-survival)
+- [Wayfinding](./skills.md#skill-skill-wayfinding)
+- [Weather Lore](./skills.md#skill-skill-weather-lore)
+
+**Effective distinct base-Skill breadth:** 9
 
 ### Reachable Specializations
 
@@ -931,12 +1325,25 @@ None.
 
 - [Fishing](./skills.md#skill-skill-fishing) — Shore-based route. Repeated supervised fishing teaches the full local fishing practice; F10 is unsuitable when the learner is not taught Seamanship.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Fishing](./skills.md#skill-skill-fishing) — routes: Fishing-boat apprenticeship (Boat-fishing apprenticeship); direct Profession route (Shore-based route)
 - [Seamanship](./skills.md#skill-skill-seamanship) — routes: Fishing-boat apprenticeship (Boat-fishing apprenticeship)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Fishing-boat apprenticeship
+
+**Direct base Skills:** Fishing
+
+- [Fishing](./skills.md#skill-skill-fishing)
+- [Seamanship](./skills.md#skill-skill-seamanship)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -956,11 +1363,23 @@ None.
 
 - [Gambling](./skills.md#skill-gambling) — Ordinary coached play. Repeated reviewed play teaches Gambling; no approved group includes it and G12 concerns actual trade.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Gambling](./skills.md#skill-gambling) — routes: direct Profession route (Ordinary coached play)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Gambling
+
+- [Gambling](./skills.md#skill-gambling)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -985,13 +1404,27 @@ None.
 
 - [Geography](./skills.md#skill-skill-geography) — Ordinary regional study. Sustained corrected study teaches Geography; F01 produces measured maps and does not supply the whole geographical body of knowledge.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Cartography](./skills.md#skill-skill-cartography) — routes: Field surveying and map production (Measured-field geographer branch)
 - [Geography](./skills.md#skill-skill-geography) — routes: direct Profession route (Ordinary regional study)
 - [Surveying](./skills.md#skill-surveying) — routes: Field surveying and map production (Measured-field geographer branch)
 
-**Total distinct base Skills:** 3
+**Total possible distinct base Skills:** 3
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Field surveying and map production
+
+**Direct base Skills:** Geography
+
+- [Cartography](./skills.md#skill-skill-cartography)
+- [Geography](./skills.md#skill-skill-geography)
+- [Surveying](./skills.md#skill-surveying)
+
+**Effective distinct base-Skill breadth:** 3
 
 ### Reachable Specializations
 
@@ -1042,7 +1475,7 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe) — routes: Guard and rough-fighting drill (Impact-weapon and rough-contact route)
 - [1-h edged](./skills.md#skill-one-handed-edged) — routes: One-handed edged close-combat practice (Edged-weapon route; additional to F35 when both sets are issued); Swashbuckling fencing instruction (Swashbuckling retainer/escort branch; alternative to G08)
@@ -1053,7 +1486,47 @@ None.
 - [Wayfinding](./skills.md#skill-skill-wayfinding) — routes: Field travel and camp practice (Journey-escort assignment)
 - [Weather Lore](./skills.md#skill-skill-weather-lore) — routes: Field travel and camp practice (Journey-escort assignment)
 
-**Total distinct base Skills:** 8
+**Total possible distinct base Skills:** 8
+
+### Effective package breadth by valid path
+
+#### Family route — Swashbuckling fencing instruction
+
+**Learning Groups:** Guard and rough-fighting drill; Field travel and camp practice; Swashbuckling fencing instruction
+
+**Direct base Skills:** None
+
+**Excluded mutually exclusive alternative:** One-handed edged close-combat practice
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Brawling](./skills.md#skill-brawling)
+- [Dodge](./skills.md#skill-dodge)
+- [Parry](./skills.md#skill-parry)
+- [Survival](./skills.md#skill-skill-survival)
+- [Wayfinding](./skills.md#skill-skill-wayfinding)
+- [Weather Lore](./skills.md#skill-skill-weather-lore)
+
+**Effective distinct base-Skill breadth:** 8
+
+#### Family route — One-handed edged close-combat practice
+
+**Learning Groups:** Guard and rough-fighting drill; One-handed edged close-combat practice; Field travel and camp practice
+
+**Direct base Skills:** None
+
+**Excluded mutually exclusive alternative:** Swashbuckling fencing instruction
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Brawling](./skills.md#skill-brawling)
+- [Dodge](./skills.md#skill-dodge)
+- [Parry](./skills.md#skill-parry)
+- [Survival](./skills.md#skill-skill-survival)
+- [Wayfinding](./skills.md#skill-skill-wayfinding)
+- [Weather Lore](./skills.md#skill-skill-weather-lore)
+
+**Effective distinct base-Skill breadth:** 8
 
 ### Reachable Specializations
 
@@ -1088,14 +1561,29 @@ None.
 
 - [Heraldry](./skills.md#skill-heraldry) — Ordinary heraldic apprenticeship. Repeated interpretation and use of the tradition’s identifying signs teaches Heraldry; no approved group includes it.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Heraldry](./skills.md#skill-heraldry) — routes: direct Profession route (Ordinary heraldic apprenticeship)
 - [Mnemonics](./skills.md#skill-skill-mnemonics) — routes: Speech and memory practice (Formal announcing branch)
 - [Oratory](./skills.md#skill-skill-oratory) — routes: Speech and memory practice (Formal announcing branch)
 - [Research](./skills.md#skill-skill-research) — routes: Lineage investigation apprenticeship (Genealogical-service branch)
 
-**Total distinct base Skills:** 4
+**Total possible distinct base Skills:** 4
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Speech and memory practice; Lineage investigation apprenticeship
+
+**Direct base Skills:** Heraldry
+
+- [Heraldry](./skills.md#skill-heraldry)
+- [Mnemonics](./skills.md#skill-skill-mnemonics)
+- [Oratory](./skills.md#skill-skill-oratory)
+- [Research](./skills.md#skill-skill-research)
+
+**Effective distinct base-Skill breadth:** 4
 
 ### Reachable Specializations
 
@@ -1128,13 +1616,27 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Distilling](./skills.md#skill-skill-distilling) — routes: Distilling remedy workshop (Distilling-remedy specialist branch)
 - [Pharmacy](./skills.md#skill-skill-pharmacy) — routes: Plant and remedy preparation (Ordinary plant-remedy apprenticeship); Distilling remedy workshop (Distilling-remedy specialist branch)
 - [Plant Lore](./skills.md#skill-skill-plant-lore) — routes: Plant and remedy preparation (Ordinary plant-remedy apprenticeship)
 
-**Total distinct base Skills:** 3
+**Total possible distinct base Skills:** 3
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Plant and remedy preparation; Distilling remedy workshop
+
+**Direct base Skills:** None
+
+- [Distilling](./skills.md#skill-skill-distilling)
+- [Pharmacy](./skills.md#skill-skill-pharmacy)
+- [Plant Lore](./skills.md#skill-skill-plant-lore)
+
+**Effective distinct base-Skill breadth:** 3
 
 ### Reachable Specializations
 
@@ -1167,7 +1669,7 @@ None.
 
 - [Sling](./skills.md#skill-sling) — Sling-using pastoral tradition only. A teacher coaches sling handling and accurate release during sustained practice; Sling has no approved group and is not inferred merely from keeping animals.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Animal Handling](./skills.md#skill-skill-animal-handling) — routes: Pastoral stockkeeping apprenticeship (Ordinary pastoral apprenticeship); Mounted travel and animal care (Mounted herding assignment)
 - [Animal Husbandry](./skills.md#skill-skill-animal-husbandry) — routes: Pastoral stockkeeping apprenticeship (Ordinary pastoral apprenticeship)
@@ -1175,7 +1677,23 @@ None.
 - [Riding](./skills.md#skill-skill-riding) — routes: Mounted travel and animal care (Mounted herding assignment)
 - [Sling](./skills.md#skill-sling) — routes: direct Profession route (Sling-using pastoral tradition only)
 
-**Total distinct base Skills:** 5
+**Total possible distinct base Skills:** 5
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Pastoral stockkeeping apprenticeship; Mounted travel and animal care
+
+**Direct base Skills:** Sling
+
+- [Animal Handling](./skills.md#skill-skill-animal-handling)
+- [Animal Husbandry](./skills.md#skill-skill-animal-husbandry)
+- [Herding](./skills.md#skill-herding)
+- [Riding](./skills.md#skill-skill-riding)
+- [Sling](./skills.md#skill-sling)
+
+**Effective distinct base-Skill breadth:** 5
 
 ### Reachable Specializations
 
@@ -1206,13 +1724,27 @@ None.
 
 - [History](./skills.md#skill-history) — Ordinary historical study. Sustained study and correction develop the complete History Skill; neither F15 nor F16 teaches the parent historical body of knowledge automatically.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [History](./skills.md#skill-history) — routes: direct Profession route (Ordinary historical study)
 - [Palaeography & Decipherment](./skills.md#skill-skill-palaeography-decipherment) — routes: Historical text investigation (Historical-text investigation branch)
 - [Research](./skills.md#skill-skill-research) — routes: Historical text investigation (Historical-text investigation branch); Lineage investigation apprenticeship (Genealogical investigation branch)
 
-**Total distinct base Skills:** 3
+**Total possible distinct base Skills:** 3
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Historical text investigation; Lineage investigation apprenticeship
+
+**Direct base Skills:** History
+
+- [History](./skills.md#skill-history)
+- [Palaeography & Decipherment](./skills.md#skill-skill-palaeography-decipherment)
+- [Research](./skills.md#skill-skill-research)
+
+**Effective distinct base-Skill breadth:** 3
 
 ### Reachable Specializations
 
@@ -1261,7 +1793,7 @@ None.
 
 - [Bow](./skills.md#skill-bow) — Non-longbow bow-hunting route. Repeated coached shooting develops Bow; F38 adds military formation and F41 adds Longbow, neither of which an ordinary bow-hunting apprenticeship necessarily teaches.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Bow](./skills.md#skill-bow) — routes: Longbow hunting apprenticeship (Longbow-hunting tradition only); direct Profession route (Non-longbow bow-hunting route)
 - [Hunting](./skills.md#skill-skill-hunting) — routes: Tracking and hunting practice (Tracking-hunt route); Longbow hunting apprenticeship (Longbow-hunting tradition only)
@@ -1273,7 +1805,27 @@ None.
 - [Wayfinding](./skills.md#skill-skill-wayfinding) — routes: Field travel and camp practice (Expedition route)
 - [Weather Lore](./skills.md#skill-skill-weather-lore) — routes: Field travel and camp practice (Expedition route)
 
-**Total distinct base Skills:** 9
+**Total possible distinct base Skills:** 9
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Tracking and hunting practice; Trapline and trail practice; Field travel and camp practice; Longbow hunting apprenticeship
+
+**Direct base Skills:** Bow
+
+- [Bow](./skills.md#skill-bow)
+- [Hunting](./skills.md#skill-skill-hunting)
+- [Perception](./skills.md#skill-skill-perception)
+- [Stealth](./skills.md#skill-skill-stealth)
+- [Survival](./skills.md#skill-skill-survival)
+- [Tracking](./skills.md#skill-skill-tracking)
+- [Trapping](./skills.md#skill-skill-trapping)
+- [Wayfinding](./skills.md#skill-skill-wayfinding)
+- [Weather Lore](./skills.md#skill-skill-weather-lore)
+
+**Effective distinct base-Skill breadth:** 9
 
 ### Reachable Specializations
 
@@ -1314,7 +1866,7 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Deception](./skills.md#skill-skill-deception) — routes: Impersonation and distraction practice (Covert intelligence-service branch only)
 - [Disguise](./skills.md#skill-skill-disguise) — routes: Impersonation and distraction practice (Covert intelligence-service branch only)
@@ -1324,7 +1876,25 @@ None.
 - [Research](./skills.md#skill-skill-research) — routes: Interview and evidence practice (Ordinary inquiry apprenticeship)
 - [Streetwise](./skills.md#skill-skill-streetwise) — routes: Local contacts and information gathering (Settlement-inquiry branch)
 
-**Total distinct base Skills:** 7
+**Total possible distinct base Skills:** 7
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Interview and evidence practice; Local contacts and information gathering; Impersonation and distraction practice
+
+**Direct base Skills:** None
+
+- [Deception](./skills.md#skill-skill-deception)
+- [Disguise](./skills.md#skill-skill-disguise)
+- [Insight](./skills.md#skill-skill-insight)
+- [Interrogation](./skills.md#skill-skill-interrogation)
+- [Perception](./skills.md#skill-skill-perception)
+- [Research](./skills.md#skill-skill-research)
+- [Streetwise](./skills.md#skill-skill-streetwise)
+
+**Effective distinct base-Skill breadth:** 7
 
 ### Reachable Specializations
 
@@ -1344,11 +1914,23 @@ None.
 
 - [Leatherwork](./skills.md#skill-leatherworking) — Ordinary material apprenticeship. Repeated complete leather projects teach Leatherwork; no approved group includes the Skill.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Leatherwork](./skills.md#skill-leatherworking) — routes: direct Profession route (Ordinary material apprenticeship)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Leatherwork
+
+- [Leatherwork](./skills.md#skill-leatherworking)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -1373,12 +1955,25 @@ None.
 
 - [Law](./skills.md#skill-skill-law) — Non-advocacy legal route. Repeated substantive legal study teaches Law; F13 would add complete Oratory and specialist advocacy that an adviser or law-keeper need not be taught.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Law](./skills.md#skill-skill-law) — routes: Legal study and pleading practice (Formal specialist advocacy branch); direct Profession route (Non-advocacy legal route)
 - [Oratory](./skills.md#skill-skill-oratory) — routes: Legal study and pleading practice (Formal specialist advocacy branch)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Legal study and pleading practice
+
+**Direct base Skills:** Law
+
+- [Law](./skills.md#skill-skill-law)
+- [Oratory](./skills.md#skill-skill-oratory)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -1403,13 +1998,27 @@ None.
 
 - [Underworld](./skills.md#skill-skill-underworld) — Illicit-network informant only. A network mentor teaches its actual practices and relationships; no group includes the complete contextual Underworld Skill.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Insight](./skills.md#skill-skill-insight) — routes: Local contacts and information gathering (Ordinary contact apprenticeship)
 - [Streetwise](./skills.md#skill-skill-streetwise) — routes: Local contacts and information gathering (Ordinary contact apprenticeship)
 - [Underworld](./skills.md#skill-skill-underworld) — routes: direct Profession route (Illicit-network informant only)
 
-**Total distinct base Skills:** 3
+**Total possible distinct base Skills:** 3
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Local contacts and information gathering
+
+**Direct base Skills:** Underworld
+
+- [Insight](./skills.md#skill-skill-insight)
+- [Streetwise](./skills.md#skill-skill-streetwise)
+- [Underworld](./skills.md#skill-skill-underworld)
+
+**Effective distinct base-Skill breadth:** 3
 
 ### Reachable Specializations
 
@@ -1429,11 +2038,23 @@ None.
 
 - [Locksmithing](./skills.md#skill-skill-locksmithing) — Ordinary lock apprenticeship. Complete construction and repair teach Locksmithing; G15 teaches covert entry and G13 teaches Smithing, neither of which represents the whole lock craft.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Locksmithing](./skills.md#skill-skill-locksmithing) — routes: direct Profession route (Ordinary lock apprenticeship)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Locksmithing
+
+- [Locksmithing](./skills.md#skill-skill-locksmithing)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -1453,11 +2074,23 @@ None.
 
 - [Masonry](./skills.md#skill-skill-masonry) — Ordinary masonry apprenticeship. Repeated complete construction work directly teaches Masonry; no approved group includes it, and F28 teaches design and surveying.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Masonry](./skills.md#skill-skill-masonry) — routes: direct Profession route (Ordinary masonry apprenticeship)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Masonry
+
+- [Masonry](./skills.md#skill-skill-masonry)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -1477,11 +2110,23 @@ None.
 
 - [Mathematics](./skills.md#skill-mathematics) — Ordinary mathematical study. Repeated problems and reasoned review teach complete Mathematics; no approved group includes it.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Mathematics](./skills.md#skill-mathematics) — routes: direct Profession route (Ordinary mathematical study)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Mathematics
+
+- [Mathematics](./skills.md#skill-mathematics)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -1508,14 +2153,29 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Bargaining](./skills.md#skill-skill-bargaining) — routes: Council and mediation practice (Ordinary mediation apprenticeship)
 - [Customs](./skills.md#skill-skill-customs) — routes: Council and mediation practice (Ordinary mediation apprenticeship)
 - [Insight](./skills.md#skill-skill-insight) — routes: Council and mediation practice (Ordinary mediation apprenticeship)
 - [Oratory](./skills.md#skill-skill-oratory) — routes: Council and mediation practice (Ordinary mediation apprenticeship)
 
-**Total distinct base Skills:** 4
+**Total possible distinct base Skills:** 4
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Council and mediation practice
+
+**Direct base Skills:** None
+
+- [Bargaining](./skills.md#skill-skill-bargaining)
+- [Customs](./skills.md#skill-skill-customs)
+- [Insight](./skills.md#skill-skill-insight)
+- [Oratory](./skills.md#skill-skill-oratory)
+
+**Effective distinct base-Skill breadth:** 4
 
 ### Reachable Specializations
 
@@ -1580,7 +2240,7 @@ None.
 
 - [Battlefield Awareness](./skills.md#skill-battlefield-awareness) — Field-command experience. A senior commander coaches interpretation of developments during and after real encounters; G09 does not supply this whole Skill. Tracks: Foot field commander, Mounted field commander, Communal-force commander.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe) — routes: One-handed arms and formation drill (Foot line-officer service route); Guard and rough-fighting drill (Communal-force commander route; alternative to F36)
 - [1-h edged](./skills.md#skill-one-handed-edged) — routes: One-handed arms and formation drill (Foot line-officer service route); Mounted lance and troop drill (Mounted line-officer route; alternative to F36)
@@ -1597,13 +2257,73 @@ None.
 - [Parry](./skills.md#skill-parry) — routes: One-handed arms and formation drill (Foot line-officer service route); Mounted lance and troop drill (Mounted line-officer route; alternative to F36); Guard and rough-fighting drill (Communal-force commander route; alternative to F36)
 - [Riding](./skills.md#skill-skill-riding) — routes: Mounted travel and animal care (Mounted-officer service route)
 
-**Total distinct base Skills:** 14
+**Total possible distinct base Skills:** 14
+
+### Effective package breadth by valid path
+
+#### Foot field commander
+
+**Learning Groups:** Unit coordination and command practice; One-handed arms and formation drill
+
+**Direct base Skills:** Battlefield Awareness
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Battle Tactics](./skills.md#skill-tactics)
+- [Battlefield Awareness](./skills.md#skill-battlefield-awareness)
+- [Brawling](./skills.md#skill-brawling)
+- [Dodge](./skills.md#skill-dodge)
+- [Formation Fighting](./skills.md#skill-formation-fighting)
+- [Leadership](./skills.md#skill-skill-leadership)
+- [Military Command](./skills.md#skill-captaincy)
+- [Parry](./skills.md#skill-parry)
+
+**Effective distinct base-Skill breadth:** 10
+
+#### Mounted field commander
+
+**Learning Groups:** Unit coordination and command practice; Mounted travel and animal care; Mounted lance and troop drill
+
+**Direct base Skills:** Battlefield Awareness
+
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Animal Handling](./skills.md#skill-skill-animal-handling)
+- [Battle Tactics](./skills.md#skill-tactics)
+- [Battlefield Awareness](./skills.md#skill-battlefield-awareness)
+- [Brawling](./skills.md#skill-brawling)
+- [Dodge](./skills.md#skill-dodge)
+- [Formation Fighting](./skills.md#skill-formation-fighting)
+- [Lance](./skills.md#skill-lance)
+- [Leadership](./skills.md#skill-skill-leadership)
+- [Military Command](./skills.md#skill-captaincy)
+- [Mounted Combat](./skills.md#skill-mounted-combat)
+- [Parry](./skills.md#skill-parry)
+- [Riding](./skills.md#skill-skill-riding)
+
+**Effective distinct base-Skill breadth:** 13
+
+#### Communal-force commander
+
+**Learning Groups:** Unit coordination and command practice; Guard and rough-fighting drill
+
+**Direct base Skills:** Battlefield Awareness
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [Battle Tactics](./skills.md#skill-tactics)
+- [Battlefield Awareness](./skills.md#skill-battlefield-awareness)
+- [Brawling](./skills.md#skill-brawling)
+- [Dodge](./skills.md#skill-dodge)
+- [Leadership](./skills.md#skill-skill-leadership)
+- [Military Command](./skills.md#skill-captaincy)
+- [Parry](./skills.md#skill-parry)
+
+**Effective distinct base-Skill breadth:** 8
 
 ### Reachable Specializations
 
 - [Siege Operations](./skills.md#specialization-spec-siege-operations) — parent: **Battle Tactics**; routes: direct Profession route (Experienced siege-command assignment only); immediate parent appears in this family envelope.
 
-### Explicit tracks
+### Explicit track source map
 
 - **Foot field commander** — Unit coordination and command practice; One-handed arms and formation drill; Battlefield Awareness; Siege Operations
 - **Mounted field commander** — Unit coordination and command practice; Mounted travel and animal care; Mounted lance and troop drill; Battlefield Awareness; Siege Operations
@@ -1646,7 +2366,7 @@ None.
 
 - [Military Logistics](./skills.md#skill-skill-military-logistics) — Ordinary military supply apprenticeship. Mentored planning and revision of force supply teaches the complete Skill; no group combines it with an appropriate co-trained curriculum. Tracks: Supply-office quartermaster, Fighting-service quartermaster.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe) — routes: One-handed arms and formation drill (Fighting-service branch only)
 - [1-h edged](./skills.md#skill-one-handed-edged) — routes: One-handed arms and formation drill (Fighting-service branch only)
@@ -1660,13 +2380,49 @@ None.
 - [Military Logistics](./skills.md#skill-skill-military-logistics) — routes: direct Profession route (Ordinary military supply apprenticeship)
 - [Parry](./skills.md#skill-parry) — routes: One-handed arms and formation drill (Fighting-service branch only)
 
-**Total distinct base Skills:** 11
+**Total possible distinct base Skills:** 11
+
+### Effective package breadth by valid path
+
+#### Supply-office quartermaster
+
+**Learning Groups:** Records-office practice; Draught-team and vehicle practice
+
+**Direct base Skills:** Military Logistics
+
+- [Administration](./skills.md#skill-skill-administration)
+- [Animal Handling](./skills.md#skill-skill-animal-handling)
+- [Bookkeeping](./skills.md#skill-skill-bookkeeping)
+- [Cart Driving](./skills.md#skill-skill-cart-driving)
+- [Military Logistics](./skills.md#skill-skill-military-logistics)
+
+**Effective distinct base-Skill breadth:** 5
+
+#### Fighting-service quartermaster
+
+**Learning Groups:** Records-office practice; Draught-team and vehicle practice; One-handed arms and formation drill
+
+**Direct base Skills:** Military Logistics
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Administration](./skills.md#skill-skill-administration)
+- [Animal Handling](./skills.md#skill-skill-animal-handling)
+- [Bookkeeping](./skills.md#skill-skill-bookkeeping)
+- [Brawling](./skills.md#skill-brawling)
+- [Cart Driving](./skills.md#skill-skill-cart-driving)
+- [Dodge](./skills.md#skill-dodge)
+- [Formation Fighting](./skills.md#skill-formation-fighting)
+- [Military Logistics](./skills.md#skill-skill-military-logistics)
+- [Parry](./skills.md#skill-parry)
+
+**Effective distinct base-Skill breadth:** 11
 
 ### Reachable Specializations
 
 None.
 
-### Explicit tracks
+### Explicit track source map
 
 - **Supply-office quartermaster** — Records-office practice; Draught-team and vehicle practice; Military Logistics
 - **Fighting-service quartermaster** — Records-office practice; Draught-team and vehicle practice; One-handed arms and formation drill; Military Logistics
@@ -1739,7 +2495,7 @@ None.
 
 - [Battlefield Awareness](./skills.md#skill-battlefield-awareness) — Experienced reconnaissance service. Reviewed field encounters teach the significance of changing battle developments; F33 does not teach this whole groupless Skill. Tracks: Foot military scout, Mounted military scout, Communal-force foot scout.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe) — routes: One-handed arms and formation drill (Foot-scout fighting route); Guard and rough-fighting drill (Communal-force foot-scout route; alternative to F36)
 - [1-h edged](./skills.md#skill-one-handed-edged) — routes: One-handed arms and formation drill (Foot-scout fighting route); Mounted lance and troop drill (Mounted-scout fighting route; alternative to F36)
@@ -1760,13 +2516,85 @@ None.
 - [Wayfinding](./skills.md#skill-skill-wayfinding) — routes: Field travel and camp practice (Field-service foundation)
 - [Weather Lore](./skills.md#skill-skill-weather-lore) — routes: Field travel and camp practice (Field-service foundation)
 
-**Total distinct base Skills:** 18
+**Total possible distinct base Skills:** 18
+
+### Effective package breadth by valid path
+
+#### Foot military scout
+
+**Learning Groups:** Concealed field reconnaissance practice; Field travel and camp practice; One-handed arms and formation drill
+
+**Direct base Skills:** Battlefield Awareness
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Battlefield Awareness](./skills.md#skill-battlefield-awareness)
+- [Brawling](./skills.md#skill-brawling)
+- [Camouflage](./skills.md#skill-camouflage)
+- [Dodge](./skills.md#skill-dodge)
+- [Formation Fighting](./skills.md#skill-formation-fighting)
+- [Military Reconnaissance](./skills.md#skill-skill-military-reconnaissance)
+- [Parry](./skills.md#skill-parry)
+- [Perception](./skills.md#skill-skill-perception)
+- [Stealth](./skills.md#skill-skill-stealth)
+- [Survival](./skills.md#skill-skill-survival)
+- [Wayfinding](./skills.md#skill-skill-wayfinding)
+- [Weather Lore](./skills.md#skill-skill-weather-lore)
+
+**Effective distinct base-Skill breadth:** 14
+
+#### Mounted military scout
+
+**Learning Groups:** Concealed field reconnaissance practice; Field travel and camp practice; Mounted travel and animal care; Mounted lance and troop drill
+
+**Direct base Skills:** Battlefield Awareness
+
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Animal Handling](./skills.md#skill-skill-animal-handling)
+- [Battlefield Awareness](./skills.md#skill-battlefield-awareness)
+- [Brawling](./skills.md#skill-brawling)
+- [Camouflage](./skills.md#skill-camouflage)
+- [Dodge](./skills.md#skill-dodge)
+- [Formation Fighting](./skills.md#skill-formation-fighting)
+- [Lance](./skills.md#skill-lance)
+- [Military Reconnaissance](./skills.md#skill-skill-military-reconnaissance)
+- [Mounted Combat](./skills.md#skill-mounted-combat)
+- [Parry](./skills.md#skill-parry)
+- [Perception](./skills.md#skill-skill-perception)
+- [Riding](./skills.md#skill-skill-riding)
+- [Stealth](./skills.md#skill-skill-stealth)
+- [Survival](./skills.md#skill-skill-survival)
+- [Wayfinding](./skills.md#skill-skill-wayfinding)
+- [Weather Lore](./skills.md#skill-skill-weather-lore)
+
+**Effective distinct base-Skill breadth:** 17
+
+#### Communal-force foot scout
+
+**Learning Groups:** Concealed field reconnaissance practice; Field travel and camp practice; Guard and rough-fighting drill
+
+**Direct base Skills:** Battlefield Awareness
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [Battlefield Awareness](./skills.md#skill-battlefield-awareness)
+- [Brawling](./skills.md#skill-brawling)
+- [Camouflage](./skills.md#skill-camouflage)
+- [Dodge](./skills.md#skill-dodge)
+- [Military Reconnaissance](./skills.md#skill-skill-military-reconnaissance)
+- [Parry](./skills.md#skill-parry)
+- [Perception](./skills.md#skill-skill-perception)
+- [Stealth](./skills.md#skill-skill-stealth)
+- [Survival](./skills.md#skill-skill-survival)
+- [Wayfinding](./skills.md#skill-skill-wayfinding)
+- [Weather Lore](./skills.md#skill-skill-weather-lore)
+
+**Effective distinct base-Skill breadth:** 12
 
 ### Reachable Specializations
 
 None.
 
-### Explicit tracks
+### Explicit track source map
 
 - **Foot military scout** — Concealed field reconnaissance practice; Field travel and camp practice; One-handed arms and formation drill; Battlefield Awareness
 - **Mounted military scout** — Concealed field reconnaissance practice; Field travel and camp practice; Mounted travel and animal care; Mounted lance and troop drill; Battlefield Awareness
@@ -1791,12 +2619,25 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Carpentry](./skills.md#skill-carpentry) — routes: Timber millwright apprenticeship (Ordinary timber-mechanism apprenticeship)
 - [Mechanics](./skills.md#skill-mechanics) — routes: Timber millwright apprenticeship (Ordinary timber-mechanism apprenticeship)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Timber millwright apprenticeship
+
+**Direct base Skills:** None
+
+- [Carpentry](./skills.md#skill-carpentry)
+- [Mechanics](./skills.md#skill-mechanics)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -1816,11 +2657,23 @@ None.
 
 - [Mining](./skills.md#skill-skill-mining) — Ordinary extraction apprenticeship. Repeated coached extraction teaches Mining; no approved group contains it.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Mining](./skills.md#skill-skill-mining) — routes: direct Profession route (Ordinary extraction apprenticeship)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Mining
+
+- [Mining](./skills.md#skill-skill-mining)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -1858,7 +2711,7 @@ None.
 - [Combat Experience](./skills.md#skill-combat-experience) — Experienced fighting service only. Reviewed encounters develop practical functioning in combat; neither G05 nor F32 supplies this groupless Skill. Tracks: Mounted lancer.
 - [Battlefield Awareness](./skills.md#skill-battlefield-awareness) — Mentored battlefield service only. A veteran teaches how the rider’s immediate encounter relates to changes across the battle; no group teaches the complete Skill. Tracks: Mounted lancer.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [1-h edged](./skills.md#skill-one-handed-edged) — routes: Mounted lance and troop drill (Lancer and mounted-troop curriculum)
 - [Animal Handling](./skills.md#skill-skill-animal-handling) — routes: Mounted travel and animal care (Working mounted-service foundation)
@@ -1872,13 +2725,35 @@ None.
 - [Parry](./skills.md#skill-parry) — routes: Mounted lance and troop drill (Lancer and mounted-troop curriculum)
 - [Riding](./skills.md#skill-skill-riding) — routes: Mounted travel and animal care (Working mounted-service foundation)
 
-**Total distinct base Skills:** 11
+**Total possible distinct base Skills:** 11
+
+### Effective package breadth by valid path
+
+#### Mounted lancer
+
+**Learning Groups:** Mounted travel and animal care; Mounted lance and troop drill
+
+**Direct base Skills:** Combat Experience; Battlefield Awareness
+
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Animal Handling](./skills.md#skill-skill-animal-handling)
+- [Battlefield Awareness](./skills.md#skill-battlefield-awareness)
+- [Brawling](./skills.md#skill-brawling)
+- [Combat Experience](./skills.md#skill-combat-experience)
+- [Dodge](./skills.md#skill-dodge)
+- [Formation Fighting](./skills.md#skill-formation-fighting)
+- [Lance](./skills.md#skill-lance)
+- [Mounted Combat](./skills.md#skill-mounted-combat)
+- [Parry](./skills.md#skill-parry)
+- [Riding](./skills.md#skill-skill-riding)
+
+**Effective distinct base-Skill breadth:** 11
 
 ### Reachable Specializations
 
 None.
 
-### Explicit tracks
+### Explicit track source map
 
 - **Mounted lancer** — Mounted travel and animal care; Mounted lance and troop drill; Combat Experience; Battlefield Awareness
 
@@ -1902,12 +2777,25 @@ None.
 - [Music](./skills.md#skill-music) — Instrumental-only route. Complete instrumental musical practice is coached; F17 would additionally require Singing.
 - [Singing](./skills.md#skill-singing) — Vocal-only route. Complete vocal practice is coached; F17 would additionally require instrumental Music.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Music](./skills.md#skill-music) — routes: Self-accompanied song practice (Self-accompanied song route); direct Profession route (Instrumental-only route)
 - [Singing](./skills.md#skill-singing) — routes: Self-accompanied song practice (Self-accompanied song route); direct Profession route (Vocal-only route)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Self-accompanied song practice
+
+**Direct base Skills:** Music; Singing
+
+- [Music](./skills.md#skill-music)
+- [Singing](./skills.md#skill-singing)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -1928,12 +2816,25 @@ None.
 - [Animal Lore](./skills.md#skill-skill-animal-lore) — Animal-study branch. Repeated observation and corrected comparison teach the whole Animal Lore Skill; no group currently includes it.
 - [Plant Lore](./skills.md#skill-skill-plant-lore) — Plant-study branch. Complete plant identification, habitat and properties are studied; G02 would incorrectly add Pharmacy to this route.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Animal Lore](./skills.md#skill-skill-animal-lore) — routes: direct Profession route (Animal-study branch)
 - [Plant Lore](./skills.md#skill-skill-plant-lore) — routes: direct Profession route (Plant-study branch)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Animal Lore; Plant Lore
+
+- [Animal Lore](./skills.md#skill-skill-animal-lore)
+- [Plant Lore](./skills.md#skill-skill-plant-lore)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -1973,7 +2874,7 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Celestial Navigation](./skills.md#skill-skill-celestial-navigation) — routes: Charted open-water navigation practice (Historically appropriate charted open-water route only)
 - [Chart Navigation](./skills.md#skill-skill-chart-navigation) — routes: Charted open-water navigation practice (Historically appropriate charted open-water route only)
@@ -1982,7 +2883,24 @@ None.
 - [Seamanship](./skills.md#skill-skill-seamanship) — routes: Working a boat (Working-crew entry route)
 - [Wayfinding](./skills.md#skill-skill-wayfinding) — routes: Passage navigation (Passage-and-local-pilotage apprenticeship)
 
-**Total distinct base Skills:** 6
+**Total possible distinct base Skills:** 6
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Passage navigation; Working a boat; Charted open-water navigation practice
+
+**Direct base Skills:** None
+
+- [Celestial Navigation](./skills.md#skill-skill-celestial-navigation)
+- [Chart Navigation](./skills.md#skill-skill-chart-navigation)
+- [Dead Reckoning](./skills.md#skill-skill-dead-reckoning)
+- [Pilotage](./skills.md#skill-skill-pilotage)
+- [Seamanship](./skills.md#skill-skill-seamanship)
+- [Wayfinding](./skills.md#skill-skill-wayfinding)
+
+**Effective distinct base-Skill breadth:** 6
 
 ### Reachable Specializations
 
@@ -2002,11 +2920,23 @@ None.
 
 - [Nursing](./skills.md#skill-nursing) — Ordinary bedside apprenticeship. Sustained corrected patient care teaches Nursing; G01 would also require complete Medicine and First Aid, which this narrower occupation does not necessarily teach.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Nursing](./skills.md#skill-nursing) — routes: direct Profession route (Ordinary bedside apprenticeship)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Nursing
+
+- [Nursing](./skills.md#skill-nursing)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -2026,11 +2956,23 @@ None.
 
 - [Philosophy](./skills.md#skill-philosophy) — Ordinary sustained philosophical study. Repeated argument and criticism directly teach Philosophy; no approved group covers the whole Skill.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Philosophy](./skills.md#skill-philosophy) — routes: direct Profession route (Ordinary sustained philosophical study)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Philosophy
+
+- [Philosophy](./skills.md#skill-philosophy)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -2056,13 +2998,27 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [First Aid](./skills.md#skill-skill-first-aid) — routes: Patient care (Ordinary clinical apprenticeship)
 - [Medicine](./skills.md#skill-skill-medicine) — routes: Patient care (Ordinary clinical apprenticeship)
 - [Nursing](./skills.md#skill-nursing) — routes: Patient care (Ordinary clinical apprenticeship)
 
-**Total distinct base Skills:** 3
+**Total possible distinct base Skills:** 3
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Patient care
+
+**Direct base Skills:** None
+
+- [First Aid](./skills.md#skill-skill-first-aid)
+- [Medicine](./skills.md#skill-skill-medicine)
+- [Nursing](./skills.md#skill-nursing)
+
+**Effective distinct base-Skill breadth:** 3
 
 ### Reachable Specializations
 
@@ -2091,7 +3047,7 @@ None.
 
 - [Politics](./skills.md#skill-skill-politics) — Ordinary political apprenticeship. Mentored work teaches how institutions, interests and influence interact; no approved group includes the complete Politics Skill.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Bargaining](./skills.md#skill-skill-bargaining) — routes: Council and mediation practice (Deliberative representative branch)
 - [Customs](./skills.md#skill-skill-customs) — routes: Council and mediation practice (Deliberative representative branch)
@@ -2099,7 +3055,23 @@ None.
 - [Oratory](./skills.md#skill-skill-oratory) — routes: Council and mediation practice (Deliberative representative branch)
 - [Politics](./skills.md#skill-skill-politics) — routes: direct Profession route (Ordinary political apprenticeship)
 
-**Total distinct base Skills:** 5
+**Total possible distinct base Skills:** 5
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Council and mediation practice
+
+**Direct base Skills:** Politics
+
+- [Bargaining](./skills.md#skill-skill-bargaining)
+- [Customs](./skills.md#skill-skill-customs)
+- [Insight](./skills.md#skill-skill-insight)
+- [Oratory](./skills.md#skill-skill-oratory)
+- [Politics](./skills.md#skill-skill-politics)
+
+**Effective distinct base-Skill breadth:** 5
 
 ### Reachable Specializations
 
@@ -2124,12 +3096,25 @@ None.
 
 - [Pottery](./skills.md#skill-pottery) — Ordinary vessel-pottery route. Repeated ceramic production teaches Pottery; F21 would overstate training in a workshop that does not teach complete Sculpture.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Pottery](./skills.md#skill-pottery) — routes: Modelled ceramic workshop (Modelled-ceramic specialist route only); direct Profession route (Ordinary vessel-pottery route)
 - [Sculpture](./skills.md#skill-skill-sculpture) — routes: Modelled ceramic workshop (Modelled-ceramic specialist route only)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Modelled ceramic workshop
+
+**Direct base Skills:** Pottery
+
+- [Pottery](./skills.md#skill-pottery)
+- [Sculpture](./skills.md#skill-skill-sculpture)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -2150,12 +3135,25 @@ None.
 - [Religion](./skills.md#skill-skill-religion) — Ordinary tradition-specific instruction. Sustained teaching of the complete religious practice develops contextual Religion; no approved group includes it.
 - [Meditation](./skills.md#skill-meditation) — Explicit preparatory-discipline branch. A teacher trains entry into and maintenance of the appropriate mental state before ceremonies or rituals; no group includes Meditation and prayer alone does not establish it.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Meditation](./skills.md#skill-meditation) — routes: direct Profession route (Explicit preparatory-discipline branch)
 - [Religion](./skills.md#skill-skill-religion) — routes: direct Profession route (Ordinary tradition-specific instruction)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Religion; Meditation
+
+- [Meditation](./skills.md#skill-meditation)
+- [Religion](./skills.md#skill-skill-religion)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -2175,11 +3173,23 @@ None.
 
 - [Sailmaking](./skills.md#skill-skill-sailmaking) — Ordinary sailmaking apprenticeship. Complete layout, construction and repair are directly taught; no approved group includes Sailmaking, and Tailoring does not represent it.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Sailmaking](./skills.md#skill-skill-sailmaking) — routes: direct Profession route (Ordinary sailmaking apprenticeship)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Sailmaking
+
+- [Sailmaking](./skills.md#skill-skill-sailmaking)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -2227,7 +3237,7 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe) — routes: Guard and rough-fighting drill (Impact-weapon and rough-contact armed-crew assignment)
 - [1-h edged](./skills.md#skill-one-handed-edged) — routes: One-handed edged close-combat practice (Edged-weapon armed-crew assignment)
@@ -2237,7 +3247,44 @@ None.
 - [Ropework](./skills.md#skill-ropework) — routes: Rigged-vessel deck apprenticeship (Rigged-vessel apprenticeship; normally replaces G06 as the fuller route)
 - [Seamanship](./skills.md#skill-skill-seamanship) — routes: Working a boat (General vessel-work route); Rigged-vessel deck apprenticeship (Rigged-vessel apprenticeship; normally replaces G06 as the fuller route)
 
-**Total distinct base Skills:** 7
+**Total possible distinct base Skills:** 7
+
+### Effective package breadth by valid path
+
+#### Family route — Rigged-vessel deck apprenticeship
+
+**Learning Groups:** Rigged-vessel deck apprenticeship; One-handed edged close-combat practice; Guard and rough-fighting drill
+
+**Direct base Skills:** None
+
+**Excluded mutually exclusive alternative:** Working a boat
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Brawling](./skills.md#skill-brawling)
+- [Dodge](./skills.md#skill-dodge)
+- [Parry](./skills.md#skill-parry)
+- [Ropework](./skills.md#skill-ropework)
+- [Seamanship](./skills.md#skill-skill-seamanship)
+
+**Effective distinct base-Skill breadth:** 7
+
+#### Family route — Working a boat
+
+**Learning Groups:** Working a boat; One-handed edged close-combat practice; Guard and rough-fighting drill
+
+**Direct base Skills:** None
+
+**Excluded mutually exclusive alternative:** Rigged-vessel deck apprenticeship
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Brawling](./skills.md#skill-brawling)
+- [Dodge](./skills.md#skill-dodge)
+- [Parry](./skills.md#skill-parry)
+- [Seamanship](./skills.md#skill-skill-seamanship)
+
+**Effective distinct base-Skill breadth:** 6
 
 ### Reachable Specializations
 
@@ -2266,12 +3313,25 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Administration](./skills.md#skill-skill-administration) — routes: Records-office practice (Administrative-accounting scribe branch only)
 - [Bookkeeping](./skills.md#skill-skill-bookkeeping) — routes: Records-office practice (Administrative-accounting scribe branch only)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Records-office practice
+
+**Direct base Skills:** None
+
+- [Administration](./skills.md#skill-skill-administration)
+- [Bookkeeping](./skills.md#skill-skill-bookkeeping)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -2296,12 +3356,25 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Carpentry](./skills.md#skill-carpentry) — routes: Timber vessel construction (Timber-vessel apprenticeship)
 - [Shipbuilding](./skills.md#skill-skill-shipbuilding) — routes: Timber vessel construction (Timber-vessel apprenticeship)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Timber vessel construction
+
+**Direct base Skills:** None
+
+- [Carpentry](./skills.md#skill-carpentry)
+- [Shipbuilding](./skills.md#skill-skill-shipbuilding)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -2349,7 +3422,7 @@ None.
 
 - [Leadership](./skills.md#skill-skill-leadership) — Working command apprenticeship. A senior master coaches delegation, motivation and coordination of the crew; G09 would improperly add Battle Tactics and Military Command.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [1-h edged](./skills.md#skill-one-handed-edged) — routes: One-handed edged close-combat practice (Armed civilian command branch)
 - [Appraisal](./skills.md#skill-skill-appraisal) — routes: Trading practice (Owner-trading master branch only)
@@ -2363,7 +3436,29 @@ None.
 - [Trade](./skills.md#skill-skill-trade) — routes: Trading practice (Owner-trading master branch only)
 - [Wayfinding](./skills.md#skill-skill-wayfinding) — routes: Passage navigation (Navigating-master branch)
 
-**Total distinct base Skills:** 11
+**Total possible distinct base Skills:** 11
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Working a boat; Passage navigation; Trading practice; One-handed edged close-combat practice
+
+**Direct base Skills:** Leadership
+
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Appraisal](./skills.md#skill-skill-appraisal)
+- [Bargaining](./skills.md#skill-skill-bargaining)
+- [Dead Reckoning](./skills.md#skill-skill-dead-reckoning)
+- [Dodge](./skills.md#skill-dodge)
+- [Leadership](./skills.md#skill-skill-leadership)
+- [Parry](./skills.md#skill-parry)
+- [Pilotage](./skills.md#skill-skill-pilotage)
+- [Seamanship](./skills.md#skill-skill-seamanship)
+- [Trade](./skills.md#skill-skill-trade)
+- [Wayfinding](./skills.md#skill-skill-wayfinding)
+
+**Effective distinct base-Skill breadth:** 11
 
 ### Reachable Specializations
 
@@ -2399,7 +3494,7 @@ None.
 
 - [Siege Engine Operation](./skills.md#skill-skill-siege-engine-operation) — Ordinary engine-crew apprenticeship. Supervised emplacement and operation of the whole engine teaches this distinct Skill; F39 explicitly excludes it. Tracks: Existing Crossbow-family engine crew.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe) — routes: One-handed arms and formation drill (Military close-combat foundation)
 - [1-h edged](./skills.md#skill-one-handed-edged) — routes: One-handed arms and formation drill (Military close-combat foundation)
@@ -2410,13 +3505,32 @@ None.
 - [Parry](./skills.md#skill-parry) — routes: One-handed arms and formation drill (Military close-combat foundation)
 - [Siege Engine Operation](./skills.md#skill-skill-siege-engine-operation) — routes: direct Profession route (Ordinary engine-crew apprenticeship)
 
-**Total distinct base Skills:** 8
+**Total possible distinct base Skills:** 8
+
+### Effective package breadth by valid path
+
+#### Existing Crossbow-family engine crew
+
+**Learning Groups:** Military crossbow and formation practice; One-handed arms and formation drill
+
+**Direct base Skills:** Siege Engine Operation
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Brawling](./skills.md#skill-brawling)
+- [Crossbow](./skills.md#skill-crossbow)
+- [Dodge](./skills.md#skill-dodge)
+- [Formation Fighting](./skills.md#skill-formation-fighting)
+- [Parry](./skills.md#skill-parry)
+- [Siege Engine Operation](./skills.md#skill-skill-siege-engine-operation)
+
+**Effective distinct base-Skill breadth:** 8
 
 ### Reachable Specializations
 
 None.
 
-### Explicit tracks
+### Explicit track source map
 
 - **Existing Crossbow-family engine crew** — Military crossbow and formation practice; One-handed arms and formation drill; Siege Engine Operation
 
@@ -2446,7 +3560,7 @@ None.
 
 - [Siege Engineering](./skills.md#skill-skill-siege-engineering) — Ordinary siege specialist instruction. The mentor teaches the technical design and conduct of siege works; no approved group includes this complete Skill. Tracks: Technical siege specialist.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Architecture](./skills.md#skill-skill-architecture) — routes: Building design and site surveying (Construction-design branch)
 - [Carpentry](./skills.md#skill-carpentry) — routes: Timber millwright apprenticeship (Timber-mechanism apprenticeship)
@@ -2454,13 +3568,29 @@ None.
 - [Siege Engineering](./skills.md#skill-skill-siege-engineering) — routes: direct Profession route (Ordinary siege specialist instruction)
 - [Surveying](./skills.md#skill-surveying) — routes: Building design and site surveying (Construction-design branch)
 
-**Total distinct base Skills:** 5
+**Total possible distinct base Skills:** 5
+
+### Effective package breadth by valid path
+
+#### Technical siege specialist
+
+**Learning Groups:** Timber millwright apprenticeship; Building design and site surveying
+
+**Direct base Skills:** Siege Engineering
+
+- [Architecture](./skills.md#skill-skill-architecture)
+- [Carpentry](./skills.md#skill-carpentry)
+- [Mechanics](./skills.md#skill-mechanics)
+- [Siege Engineering](./skills.md#skill-skill-siege-engineering)
+- [Surveying](./skills.md#skill-surveying)
+
+**Effective distinct base-Skill breadth:** 5
 
 ### Reachable Specializations
 
 - [Fortification](./skills.md#specialization-spec-fortification) — parent: **Architecture**; routes: direct Profession route (Defensive-building specialist branch); immediate parent appears in this family envelope.
 
-### Explicit tracks
+### Explicit track source map
 
 - **Technical siege specialist** — Timber millwright apprenticeship; Building design and site surveying; Siege Engineering; Fortification
 
@@ -2478,11 +3608,23 @@ None.
 
 - [Smelting](./skills.md#skill-skill-smelting) — Ordinary extraction apprenticeship. Repeated supervised extraction teaches Smelting; F24 would additionally require complete Smithing, absent in a stand-alone smelting occupation.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Smelting](./skills.md#skill-skill-smelting) — routes: direct Profession route (Ordinary extraction apprenticeship)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Smelting
+
+- [Smelting](./skills.md#skill-skill-smelting)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -2520,13 +3662,27 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Smelting](./skills.md#skill-skill-smelting) — routes: Ironmaking and forge apprenticeship (Integrated ironmaking-forge branch)
 - [Smithing](./skills.md#skill-skill-smithing) — routes: Metalworking apprenticeship (General forge apprenticeship); Ironmaking and forge apprenticeship (Integrated ironmaking-forge branch); Weapon-forge and servicing apprenticeship (Weapon-forge branch)
 - [Weapon Maintenance](./skills.md#skill-weapon-maintenance) — routes: Weapon-forge and servicing apprenticeship (Weapon-forge branch)
 
-**Total distinct base Skills:** 3
+**Total possible distinct base Skills:** 3
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Metalworking apprenticeship; Ironmaking and forge apprenticeship; Weapon-forge and servicing apprenticeship
+
+**Direct base Skills:** None
+
+- [Smelting](./skills.md#skill-skill-smelting)
+- [Smithing](./skills.md#skill-skill-smithing)
+- [Weapon Maintenance](./skills.md#skill-weapon-maintenance)
+
+**Effective distinct base-Skill breadth:** 3
 
 ### Reachable Specializations
 
@@ -2567,7 +3723,7 @@ None.
 - [Conceal Object](./skills.md#skill-conceal-object) — Cargo-concealment branch. A mentor repeatedly corrects placement and concealment of goods; no approved group teaches this Skill.
 - [Underworld](./skills.md#skill-skill-underworld) — Ordinary network apprenticeship. The practitioner learns the dealings and obligations of the particular illicit milieu; no group covers that contextual competence.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Appraisal](./skills.md#skill-skill-appraisal) — routes: Trading practice (Trading apprenticeship)
 - [Bargaining](./skills.md#skill-skill-bargaining) — routes: Trading practice (Trading apprenticeship)
@@ -2579,7 +3735,27 @@ None.
 - [Wayfinding](./skills.md#skill-skill-wayfinding) — routes: Field travel and camp practice (Overland carrier branch)
 - [Weather Lore](./skills.md#skill-skill-weather-lore) — routes: Field travel and camp practice (Overland carrier branch)
 
-**Total distinct base Skills:** 9
+**Total possible distinct base Skills:** 9
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Trading practice; Working a boat; Field travel and camp practice
+
+**Direct base Skills:** Conceal Object; Underworld
+
+- [Appraisal](./skills.md#skill-skill-appraisal)
+- [Bargaining](./skills.md#skill-skill-bargaining)
+- [Conceal Object](./skills.md#skill-conceal-object)
+- [Seamanship](./skills.md#skill-skill-seamanship)
+- [Survival](./skills.md#skill-skill-survival)
+- [Trade](./skills.md#skill-skill-trade)
+- [Underworld](./skills.md#skill-skill-underworld)
+- [Wayfinding](./skills.md#skill-skill-wayfinding)
+- [Weather Lore](./skills.md#skill-skill-weather-lore)
+
+**Effective distinct base-Skill breadth:** 9
 
 ### Reachable Specializations
 
@@ -2661,7 +3837,7 @@ None.
 - [Combat Experience](./skills.md#skill-combat-experience) — Experienced service only. Reviewed real fighting develops functioning under combat conditions; no group supplies it and recruit drill alone does not establish it. Tracks: Communal/household contingent, One-handed formation soldier, Spear, short-sword and throwing-spear soldier, Military archer, Military crossbow soldier, Military firearms soldier, Two-handed detachment without formation duties, Two-handed detachment with one-handed sidearms and formation duties, Military longbow specialist.
 - [Battlefield Awareness](./skills.md#skill-battlefield-awareness) — Mentored battlefield service only. Experienced soldiers teach interpretation of changing battlefield developments; no group teaches this whole awareness Skill. Tracks: Communal/household contingent, One-handed formation soldier, Spear, short-sword and throwing-spear soldier, Military archer, Military crossbow soldier, Military firearms soldier, Two-handed detachment without formation duties, Two-handed detachment with one-handed sidearms and formation duties, Military longbow specialist.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe) — routes: Guard and rough-fighting drill (Communal or household fighting contingent without formation service); One-handed arms and formation drill (One-handed formation route; melee foundation for ranged tracks below)
 - [1-h edged](./skills.md#skill-one-handed-edged) — routes: One-handed arms and formation drill (One-handed formation route; melee foundation for ranged tracks below); Spear, sidearm and throwing formation drill (Alternative spear, sidearm and throwing formation route)
@@ -2679,13 +3855,172 @@ None.
 - [Polearms](./skills.md#skill-polearms) — routes: Spear, sidearm and throwing formation drill (Alternative spear, sidearm and throwing formation route)
 - [Throwing](./skills.md#skill-throwing) — routes: Spear, sidearm and throwing formation drill (Alternative spear, sidearm and throwing formation route)
 
-**Total distinct base Skills:** 15
+**Total possible distinct base Skills:** 15
+
+### Effective package breadth by valid path
+
+#### Communal/household contingent
+
+**Learning Groups:** Guard and rough-fighting drill
+
+**Direct base Skills:** Combat Experience; Battlefield Awareness
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [Battlefield Awareness](./skills.md#skill-battlefield-awareness)
+- [Brawling](./skills.md#skill-brawling)
+- [Combat Experience](./skills.md#skill-combat-experience)
+- [Dodge](./skills.md#skill-dodge)
+- [Parry](./skills.md#skill-parry)
+
+**Effective distinct base-Skill breadth:** 6
+
+#### One-handed formation soldier
+
+**Learning Groups:** One-handed arms and formation drill
+
+**Direct base Skills:** Combat Experience; Battlefield Awareness
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Battlefield Awareness](./skills.md#skill-battlefield-awareness)
+- [Brawling](./skills.md#skill-brawling)
+- [Combat Experience](./skills.md#skill-combat-experience)
+- [Dodge](./skills.md#skill-dodge)
+- [Formation Fighting](./skills.md#skill-formation-fighting)
+- [Parry](./skills.md#skill-parry)
+
+**Effective distinct base-Skill breadth:** 8
+
+#### Spear, short-sword and throwing-spear soldier
+
+**Learning Groups:** Spear, sidearm and throwing formation drill
+
+**Direct base Skills:** Combat Experience; Battlefield Awareness
+
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Battlefield Awareness](./skills.md#skill-battlefield-awareness)
+- [Brawling](./skills.md#skill-brawling)
+- [Combat Experience](./skills.md#skill-combat-experience)
+- [Dodge](./skills.md#skill-dodge)
+- [Formation Fighting](./skills.md#skill-formation-fighting)
+- [Parry](./skills.md#skill-parry)
+- [Polearms](./skills.md#skill-polearms)
+- [Throwing](./skills.md#skill-throwing)
+
+**Effective distinct base-Skill breadth:** 9
+
+#### Military archer
+
+**Learning Groups:** One-handed arms and formation drill; Military bow and formation practice
+
+**Direct base Skills:** Combat Experience; Battlefield Awareness
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Battlefield Awareness](./skills.md#skill-battlefield-awareness)
+- [Bow](./skills.md#skill-bow)
+- [Brawling](./skills.md#skill-brawling)
+- [Combat Experience](./skills.md#skill-combat-experience)
+- [Dodge](./skills.md#skill-dodge)
+- [Formation Fighting](./skills.md#skill-formation-fighting)
+- [Parry](./skills.md#skill-parry)
+
+**Effective distinct base-Skill breadth:** 9
+
+#### Military crossbow soldier
+
+**Learning Groups:** One-handed arms and formation drill; Military crossbow and formation practice
+
+**Direct base Skills:** Combat Experience; Battlefield Awareness
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Battlefield Awareness](./skills.md#skill-battlefield-awareness)
+- [Brawling](./skills.md#skill-brawling)
+- [Combat Experience](./skills.md#skill-combat-experience)
+- [Crossbow](./skills.md#skill-crossbow)
+- [Dodge](./skills.md#skill-dodge)
+- [Formation Fighting](./skills.md#skill-formation-fighting)
+- [Parry](./skills.md#skill-parry)
+
+**Effective distinct base-Skill breadth:** 9
+
+#### Military firearms soldier
+
+**Learning Groups:** One-handed arms and formation drill; Military firearms and formation practice
+
+**Direct base Skills:** Combat Experience; Battlefield Awareness
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Battlefield Awareness](./skills.md#skill-battlefield-awareness)
+- [Brawling](./skills.md#skill-brawling)
+- [Combat Experience](./skills.md#skill-combat-experience)
+- [Dodge](./skills.md#skill-dodge)
+- [Firearms](./skills.md#skill-skill-firearms)
+- [Formation Fighting](./skills.md#skill-formation-fighting)
+- [Parry](./skills.md#skill-parry)
+
+**Effective distinct base-Skill breadth:** 9
+
+#### Two-handed detachment without formation duties
+
+**Learning Groups:** Two-handed military weapon practice
+
+**Direct base Skills:** Combat Experience; Battlefield Awareness
+
+- [2-h conc./axe](./skills.md#skill-two-handed-concussion-axe)
+- [2-h edged](./skills.md#skill-two-handed-edged)
+- [Battlefield Awareness](./skills.md#skill-battlefield-awareness)
+- [Brawling](./skills.md#skill-brawling)
+- [Combat Experience](./skills.md#skill-combat-experience)
+- [Dodge](./skills.md#skill-dodge)
+- [Parry](./skills.md#skill-parry)
+
+**Effective distinct base-Skill breadth:** 7
+
+#### Two-handed detachment with one-handed sidearms and formation duties
+
+**Learning Groups:** One-handed arms and formation drill; Two-handed military weapon practice
+
+**Direct base Skills:** Combat Experience; Battlefield Awareness
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [2-h conc./axe](./skills.md#skill-two-handed-concussion-axe)
+- [2-h edged](./skills.md#skill-two-handed-edged)
+- [Battlefield Awareness](./skills.md#skill-battlefield-awareness)
+- [Brawling](./skills.md#skill-brawling)
+- [Combat Experience](./skills.md#skill-combat-experience)
+- [Dodge](./skills.md#skill-dodge)
+- [Formation Fighting](./skills.md#skill-formation-fighting)
+- [Parry](./skills.md#skill-parry)
+
+**Effective distinct base-Skill breadth:** 10
+
+#### Military longbow specialist
+
+**Learning Groups:** One-handed arms and formation drill; Military bow and formation practice
+
+**Direct base Skills:** Combat Experience; Battlefield Awareness
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Battlefield Awareness](./skills.md#skill-battlefield-awareness)
+- [Bow](./skills.md#skill-bow)
+- [Brawling](./skills.md#skill-brawling)
+- [Combat Experience](./skills.md#skill-combat-experience)
+- [Dodge](./skills.md#skill-dodge)
+- [Formation Fighting](./skills.md#skill-formation-fighting)
+- [Parry](./skills.md#skill-parry)
+
+**Effective distinct base-Skill breadth:** 9
 
 ### Reachable Specializations
 
 - [Longbow](./skills.md#specialization-longbow) — parent: **Bow**; routes: direct Profession route (Explicit military-longbow specialist branch); immediate parent appears in this family envelope.
 
-### Explicit tracks
+### Explicit track source map
 
 - **Communal/household contingent** — Guard and rough-fighting drill; Combat Experience; Battlefield Awareness
 - **One-handed formation soldier** — One-handed arms and formation drill; Combat Experience; Battlefield Awareness
@@ -2716,12 +4051,25 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Fibre Working](./skills.md#skill-skill-fibre-working) — routes: Fibre-to-cloth workshop practice (Combined fibre-to-cloth apprenticeship)
 - [Weaving](./skills.md#skill-weaving) — routes: Fibre-to-cloth workshop practice (Combined fibre-to-cloth apprenticeship)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Fibre-to-cloth workshop practice
+
+**Direct base Skills:** None
+
+- [Fibre Working](./skills.md#skill-skill-fibre-working)
+- [Weaving](./skills.md#skill-weaving)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -2746,12 +4094,25 @@ None.
 
 - [Poetry & Literary Composition](./skills.md#skill-skill-poetry-literary-composition) — Non-narrative or written-only composition route. Complete composition is taught directly; F19 would additionally require full Storytelling performance.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Poetry & Literary Composition](./skills.md#skill-skill-poetry-literary-composition) — routes: Oral narrative composition and performance (Oral narrative-composition route); direct Profession route (Non-narrative or written-only composition route)
 - [Storytelling](./skills.md#skill-storytelling) — routes: Oral narrative composition and performance (Oral narrative-composition route)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Oral narrative composition and performance
+
+**Direct base Skills:** Poetry & Literary Composition
+
+- [Poetry & Literary Composition](./skills.md#skill-skill-poetry-literary-composition)
+- [Storytelling](./skills.md#skill-storytelling)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -2791,14 +4152,29 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [First Aid](./skills.md#skill-skill-first-aid) — routes: Operative care practice (Ordinary operative apprenticeship); Field surgical apprenticeship (Field surgical apprenticeship; specialist alternative); Patient care (Integrated physician-surgeon route only)
 - [Medicine](./skills.md#skill-skill-medicine) — routes: Patient care (Integrated physician-surgeon route only)
 - [Nursing](./skills.md#skill-nursing) — routes: Patient care (Integrated physician-surgeon route only)
 - [Surgery](./skills.md#skill-skill-surgery) — routes: Operative care practice (Ordinary operative apprenticeship); Field surgical apprenticeship (Field surgical apprenticeship; specialist alternative)
 
-**Total distinct base Skills:** 4
+**Total possible distinct base Skills:** 4
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Operative care practice; Field surgical apprenticeship; Patient care
+
+**Direct base Skills:** None
+
+- [First Aid](./skills.md#skill-skill-first-aid)
+- [Medicine](./skills.md#skill-skill-medicine)
+- [Nursing](./skills.md#skill-nursing)
+- [Surgery](./skills.md#skill-skill-surgery)
+
+**Effective distinct base-Skill breadth:** 4
 
 ### Reachable Specializations
 
@@ -2823,12 +4199,25 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Cartography](./skills.md#skill-skill-cartography) — routes: Field surveying and map production (Ordinary field-and-map apprenticeship)
 - [Surveying](./skills.md#skill-surveying) — routes: Field surveying and map production (Ordinary field-and-map apprenticeship)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Field surveying and map production
+
+**Direct base Skills:** None
+
+- [Cartography](./skills.md#skill-skill-cartography)
+- [Surveying](./skills.md#skill-surveying)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -2848,11 +4237,23 @@ None.
 
 - [Tailoring](./skills.md#skill-tailoring) — Ordinary clothing apprenticeship. Complete garment construction and fitting are repeatedly taught; no approved group includes Tailoring, and F02 teaches fibre and weaving instead.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Tailoring](./skills.md#skill-tailoring) — routes: direct Profession route (Ordinary clothing apprenticeship)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Tailoring
+
+- [Tailoring](./skills.md#skill-tailoring)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -2872,11 +4273,23 @@ None.
 
 - [Teaching](./skills.md#skill-skill-teaching) — Ordinary mentored teaching practice. Planning, observed lessons and correction teach the whole Teaching Skill; no approved Learning Group contains it.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Teaching](./skills.md#skill-skill-teaching) — routes: direct Profession route (Ordinary mentored teaching practice)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Teaching
+
+- [Teaching](./skills.md#skill-skill-teaching)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -2902,14 +4315,29 @@ None.
 
 - [Sleight of Hand](./skills.md#skill-skill-sleight-of-hand) — Manual-theft route. Repeated coached manipulation develops the complete Skill; none of the approved groups teaches it.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Lockpicking](./skills.md#skill-skill-lockpicking) — routes: Covert entry practice (Burglar route)
 - [Perception](./skills.md#skill-skill-perception) — routes: Covert entry practice (Burglar route)
 - [Sleight of Hand](./skills.md#skill-skill-sleight-of-hand) — routes: direct Profession route (Manual-theft route)
 - [Stealth](./skills.md#skill-skill-stealth) — routes: Covert entry practice (Burglar route)
 
-**Total distinct base Skills:** 4
+**Total possible distinct base Skills:** 4
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Covert entry practice
+
+**Direct base Skills:** Sleight of Hand
+
+- [Lockpicking](./skills.md#skill-skill-lockpicking)
+- [Perception](./skills.md#skill-skill-perception)
+- [Sleight of Hand](./skills.md#skill-skill-sleight-of-hand)
+- [Stealth](./skills.md#skill-skill-stealth)
+
+**Effective distinct base-Skill breadth:** 4
 
 ### Reachable Specializations
 
@@ -2958,7 +4386,7 @@ None.
 
 None.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [1-h edged](./skills.md#skill-one-handed-edged) — routes: One-handed edged close-combat practice (Armed travelling route only)
 - [Animal Handling](./skills.md#skill-skill-animal-handling) — routes: Draught-team and vehicle practice (Owner-driver route)
@@ -2972,7 +4400,29 @@ None.
 - [Wayfinding](./skills.md#skill-skill-wayfinding) — routes: Field travel and camp practice (Overland travelling route)
 - [Weather Lore](./skills.md#skill-skill-weather-lore) — routes: Field travel and camp practice (Overland travelling route)
 
-**Total distinct base Skills:** 11
+**Total possible distinct base Skills:** 11
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Trading practice; Field travel and camp practice; Draught-team and vehicle practice; One-handed edged close-combat practice
+
+**Direct base Skills:** None
+
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Animal Handling](./skills.md#skill-skill-animal-handling)
+- [Appraisal](./skills.md#skill-skill-appraisal)
+- [Bargaining](./skills.md#skill-skill-bargaining)
+- [Cart Driving](./skills.md#skill-skill-cart-driving)
+- [Dodge](./skills.md#skill-dodge)
+- [Parry](./skills.md#skill-parry)
+- [Survival](./skills.md#skill-skill-survival)
+- [Trade](./skills.md#skill-skill-trade)
+- [Wayfinding](./skills.md#skill-skill-wayfinding)
+- [Weather Lore](./skills.md#skill-skill-weather-lore)
+
+**Effective distinct base-Skill breadth:** 11
 
 ### Reachable Specializations
 
@@ -2992,11 +4442,23 @@ None.
 
 - [Translation & Interpretation](./skills.md#skill-skill-translation-interpretation) — Ordinary specialist language-service training. Repeated coached renderings teach the complete Skill; none of the approved groups teaches it.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Translation & Interpretation](./skills.md#skill-skill-translation-interpretation) — routes: direct Profession route (Ordinary specialist language-service training)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Translation & Interpretation
+
+- [Translation & Interpretation](./skills.md#skill-skill-translation-interpretation)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -3016,11 +4478,23 @@ None.
 
 - [Trapmaking](./skills.md#skill-skill-trapmaking) — Ordinary specialist construction practice. Repeated design, testing and technical servicing teach Trapmaking; F34 teaches animal trapping and tracking instead.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Trapmaking](./skills.md#skill-skill-trapmaking) — routes: direct Profession route (Ordinary specialist construction practice)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Trapmaking
+
+- [Trapmaking](./skills.md#skill-skill-trapmaking)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -3040,11 +4514,23 @@ None.
 
 - [Veterinary Medicine](./skills.md#skill-skill-veterinary-medicine) — Ordinary animal-clinical apprenticeship. Repeated mentored investigation and treatment teaches the complete Skill; animal groups teach handling, husbandry, herding or riding instead of clinical practice.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Veterinary Medicine](./skills.md#skill-skill-veterinary-medicine) — routes: direct Profession route (Ordinary animal-clinical apprenticeship)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Veterinary Medicine
+
+- [Veterinary Medicine](./skills.md#skill-skill-veterinary-medicine)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -3064,11 +4550,23 @@ None.
 
 - [Winemaking](./skills.md#skill-skill-winemaking) — Ordinary wine-production apprenticeship. Repeated supervised production teaches Winemaking; no approved group covers it.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Winemaking](./skills.md#skill-skill-winemaking) — routes: direct Profession route (Ordinary wine-production apprenticeship)
 
-**Total distinct base Skills:** 1
+**Total possible distinct base Skills:** 1
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** None
+
+**Direct base Skills:** Winemaking
+
+- [Winemaking](./skills.md#skill-skill-winemaking)
+
+**Effective distinct base-Skill breadth:** 1
 
 ### Reachable Specializations
 
@@ -3094,12 +4592,25 @@ None.
 - [Visual Art](./skills.md#skill-skill-visual-art) — Pictorial-only workshop. Complete image-making is taught directly; F20 would additionally require Sculpture.
 - [Sculpture](./skills.md#skill-skill-sculpture) — Sculpture-only workshop. Complete three-dimensional artistic work is taught directly; F20 adds Visual Art and F21 adds Pottery, neither inevitable in this route.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Sculpture](./skills.md#skill-skill-sculpture) — routes: Drawing and modelling workshop (Drawing-and-modelling workshop); direct Profession route (Sculpture-only workshop)
 - [Visual Art](./skills.md#skill-skill-visual-art) — routes: Drawing and modelling workshop (Drawing-and-modelling workshop); direct Profession route (Pictorial-only workshop)
 
-**Total distinct base Skills:** 2
+**Total possible distinct base Skills:** 2
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Drawing and modelling workshop
+
+**Direct base Skills:** Visual Art; Sculpture
+
+- [Sculpture](./skills.md#skill-skill-sculpture)
+- [Visual Art](./skills.md#skill-skill-visual-art)
+
+**Effective distinct base-Skill breadth:** 2
 
 ### Reachable Specializations
 
@@ -3142,7 +4653,7 @@ None.
 
 - [Teaching](./skills.md#skill-skill-teaching) — Instructional apprenticeship. Observed lessons and mentored correction train Teaching itself; no martial group automatically supplies it.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe) — routes: Guard and rough-fighting drill (Guard-practice instructor route)
 - [1-h edged](./skills.md#skill-one-handed-edged) — routes: One-handed edged close-combat practice (Compact edged-weapon instructor route); Swashbuckling fencing instruction (Swashbuckling Fencing instructor route)
@@ -3151,7 +4662,24 @@ None.
 - [Parry](./skills.md#skill-parry) — routes: One-handed edged close-combat practice (Compact edged-weapon instructor route); Guard and rough-fighting drill (Guard-practice instructor route); Swashbuckling fencing instruction (Swashbuckling Fencing instructor route)
 - [Teaching](./skills.md#skill-skill-teaching) — routes: direct Profession route (Instructional apprenticeship)
 
-**Total distinct base Skills:** 6
+**Total possible distinct base Skills:** 6
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** One-handed edged close-combat practice; Guard and rough-fighting drill; Swashbuckling fencing instruction
+
+**Direct base Skills:** Teaching
+
+- [1-h conc./axe](./skills.md#skill-one-handed-concussion-axe)
+- [1-h edged](./skills.md#skill-one-handed-edged)
+- [Brawling](./skills.md#skill-brawling)
+- [Dodge](./skills.md#skill-dodge)
+- [Parry](./skills.md#skill-parry)
+- [Teaching](./skills.md#skill-skill-teaching)
+
+**Effective distinct base-Skill breadth:** 6
 
 ### Reachable Specializations
 
@@ -3178,7 +4706,7 @@ None.
 - [Plant Lore](./skills.md#skill-skill-plant-lore) — Ordinary plant apprenticeship. Identification, habitat and properties are taught directly; G02 would additionally require the complete Pharmacy practice.
 - [Climbing](./skills.md#skill-climb) — Cliff or canopy collection specialist only. Repeated coached access to difficult gathering sites develops Climbing; no approved group teaches it.
 
-### Distinct learnable base Skills
+### Possible Skill reach
 
 - [Climbing](./skills.md#skill-climb) — routes: direct Profession route (Cliff or canopy collection specialist only)
 - [Plant Lore](./skills.md#skill-skill-plant-lore) — routes: direct Profession route (Ordinary plant apprenticeship)
@@ -3186,7 +4714,23 @@ None.
 - [Wayfinding](./skills.md#skill-skill-wayfinding) — routes: Field travel and camp practice (Travelling collection route)
 - [Weather Lore](./skills.md#skill-skill-weather-lore) — routes: Field travel and camp practice (Travelling collection route)
 
-**Total distinct base Skills:** 5
+**Total possible distinct base Skills:** 5
+
+### Effective package breadth by valid path
+
+#### Family route
+
+**Learning Groups:** Field travel and camp practice
+
+**Direct base Skills:** Plant Lore; Climbing
+
+- [Climbing](./skills.md#skill-climb)
+- [Plant Lore](./skills.md#skill-skill-plant-lore)
+- [Survival](./skills.md#skill-skill-survival)
+- [Wayfinding](./skills.md#skill-skill-wayfinding)
+- [Weather Lore](./skills.md#skill-skill-weather-lore)
+
+**Effective distinct base-Skill breadth:** 5
 
 ### Reachable Specializations
 
@@ -3196,7 +4740,89 @@ None.
 
 ## Extraction diagnostics
 
-Base-Skill count distribution: minimum 0; lower quartile 1; median 2; upper quartile 5; maximum 18. These are observations, not Profession-quality rules.
+Possible-reach union distribution: minimum 0; lower quartile 1; median 2; upper quartile 5; maximum 18. Effective single-path distribution: minimum 0; median 3; maximum 17. These are observations, not Profession-quality rules.
+
+### Approximate 10-Skill authoring target
+
+The Product Owner's target is approximately 10 effective base Skills for an ordinary Profession. It is a review aid, not a quota; specialist coherence and lower-Society-Level breadth remain legitimate reasons for a smaller package. The following families have every currently valid path below 10 and therefore merit review rather than automatic expansion:
+
+- Actor and Dancer: Family route 2
+- Alchemist: Family route 1
+- Animal Trainer and Falconer: Family route 2
+- Armorer: Family route 2
+- Astrologer: Family route 1
+- Astronomer: Family route 1
+- Athlete and Physical Performer: Family route 2
+- Banker and Credit Practitioner: Family route 2
+- Birth Attendant and Midwife: Family route 0
+- Brewer: Family route 1
+- Building Designer: Family route 2
+- Campaign Planner: Campaign adviser 4
+- Carpenter: Family route 1
+- Clerk and Steward: Family route 2
+- Confidence Trickster: Family route 2
+- Cook: Family route 1
+- Courier and Messenger: Family route 7
+- Distiller: Family route 1
+- Diver and Water Worker: Family route 2
+- Diviner: Family route 1
+- Document Forger: Family route 1
+- Driver and Teamster: Family route 5
+- Enforcer: Family route 6
+- Envoy: Family route 6
+- Farmer: Family route 2
+- Field and Caravan Guide: Family route 9
+- Fisher: Family route 2
+- Gambler: Family route 1
+- Geographer: Family route 3
+- Guard, Watcher and Escort: Family route — Swashbuckling fencing instruction 8; Family route — One-handed edged close-combat practice 8
+- Herald: Family route 4
+- Herbalist and Remedy Maker: Family route 3
+- Herd Keeper: Family route 5
+- Historian and Genealogist: Family route 3
+- Hunter and Trapper: Family route 9
+- Investigator and Intelligence Agent: Family route 7
+- Leatherworker: Family route 1
+- Legal Practitioner and Advocate: Family route 2
+- Local Informant: Family route 3
+- Locksmith: Family route 1
+- Mason: Family route 1
+- Mathematical Practitioner: Family route 1
+- Mediator and Community Convenor: Family route 4
+- Millwright and Mechanician: Family route 2
+- Miner and Quarry Worker: Family route 1
+- Musician and Singer: Family route 2
+- Naturalist: Family route 2
+- Navigator and Pilot: Family route 6
+- Nurse and Patient Attendant: Family route 1
+- Philosopher: Family route 1
+- Physician: Family route 3
+- Political Agent and Council Representative: Family route 5
+- Potter: Family route 2
+- Religious Practitioner: Family route 2
+- Sailmaker: Family route 1
+- Sailor and Boat Worker: Family route — Rigged-vessel deck apprenticeship 7; Family route — Working a boat 6
+- Scribe and Copyist: Family route 2
+- Shipbuilder: Family route 2
+- Siege Engine Crew Specialist: Existing Crossbow-family engine crew 8
+- Siege Engineer: Technical siege specialist 5
+- Smelter: Family route 1
+- Smith and Weaponsmith: Family route 3
+- Smuggler and Illicit Trader: Family route 9
+- Spinner and Weaver: Family route 2
+- Storyteller and Poet: Family route 2
+- Surgeon: Family route 4
+- Surveyor and Mapmaker: Family route 2
+- Tailor: Family route 1
+- Teacher: Family route 1
+- Thief: Family route 4
+- Translator and Interpreter: Family route 1
+- Trapmaker: Family route 1
+- Veterinary Practitioner: Family route 1
+- Vintner: Family route 1
+- Visual Artist and Sculptor: Family route 2
+- Weapon Instructor: Family route 6
+- Wild Plant Gatherer: Family route 5
 
 ### Professions with 0 base Skills
 
@@ -3398,4 +5024,4 @@ These are not missing catalogue references. They are current routes whose immedi
 - 0 track-family opportunities are outside every explicit track.
 - Specialization parent eligibility remains independent and is never synthesized by this extraction.
 
-Machine mapping digest: `sha256:00dc86843b3d98ccc3c3a3fe7295225368dbadbea5ce0712708c36c970ca9301`.
+Machine mapping digest: `sha256:d05e74b5090b5f9ddb69871fc40cccd20746c3e2d8b764d4ac98e320cdbb65be`.

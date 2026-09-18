@@ -12,6 +12,13 @@ competency's own requirements.
 See the [competency rules](../competency-rules.md) and [availability gaps
 and exceptions](./gaps-and-exceptions.md).
 
+The current legacy-compatibility catalogue also retains seven older choice-slot
+groups in which a Character selects a stated number of Skills from a candidate
+pool. Those groups are not among these 59 target Learning Groups, and their
+slot grammar has not been translated into the target catalogue. See the
+[choice-slot reconciliation](./profession-learning-group-skills.md#choice-slot-reconciliation).
+Candidate pools are possible choices, not fixed membership.
+
 <a id="group-g01"></a>
 
 ## Patient care

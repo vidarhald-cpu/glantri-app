@@ -303,3 +303,45 @@ The source digests preserved by the approved parsers are:
 Historical material is used only as provenance. It does not add a current
 Skill, group membership, Profession route, availability cell, or migration
 instruction.
+
+## Choice-slot translation gap
+
+The current legacy-compatibility catalogue still defines seven required
+Learning Group choice slots: Basic and Advanced Melee Training, Basic and
+Advanced Missile Training, Craft Specialty, Advanced Craft Specialty, and
+Construction Specialty. Those definitions distinguish fixed members from
+candidate pools and apply `chooseCount` values of 1, 3, 1, 3, 1, 1, and 2
+respectively. Optional slots and multiple slots per group are supported by the
+schema but do not occur in current data.
+
+The approved 59-group target catalogue has no choice-slot field. It explicitly
+defines exact group memberships with no optional or hidden member choices, and
+its runtime projection replaces the Skill Group roster with those fixed-member
+target groups. The seven slot structures are therefore absent; candidate
+Skills have instead been distributed among specific fixed groups or left
+groupless. The fixed target curricula are approved, but no separate source
+decision reconciles the displaced general choice routes. The complete
+candidate-to-target mapping and the conflicting historical/current counts are
+recorded in the [Profession mapping's choice-slot
+reconciliation](./profession-learning-group-skills.md#choice-slot-reconciliation).
+
+This is a content-model reconciliation gap. Candidate pools must not be
+flattened into fixed membership. In particular, `2-h edged` remains a
+candidate in both canonical melee slots, but its target route is only F37
+through two explicit P22 Soldier tracks. No general target Basic/Advanced
+melee choice route currently preserves that access.
+
+The recovered import also conflicts with current executable legacy content for
+Advanced Melee (choose 2 versus choose 3) and Advanced Missile (two described
+choices versus choose 3). Advanced Craft's current choose-one mechanic is
+resolved by its code and commit history; its sentence saying two specialties
+is stale prose. The recovered Field Soldiering row says to choose one attack
+Skill, but supplies no candidate set or structured required flag; no
+corresponding slot was ever materialized, and Field Soldiering was later
+retired and is absent from the target 59.
+
+Exact-ID comparison also needs care for four craft candidates. Historical
+`baking`, `brewing`, `stoneworking`, and `smithing` relate by provenance to
+target Baking (a Specialization of Cooking), Brewing, Masonry, and Smithing.
+Those relationships are source migration evidence, not approved direct-ID
+aliases.

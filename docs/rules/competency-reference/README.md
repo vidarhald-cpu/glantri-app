@@ -25,7 +25,11 @@ The cross-links are derived from the same approved catalogues used by Glantri:
 The Profession mapping provides an alphabetical 84-family comparison, expands
 each Learning Group into its actual base Skills, keeps direct Skill routes
 separate, preserves overlapping routes after deduplication, and reports
-Specializations without counting them as base Skills. Its
+Specializations without counting them as base Skills. It distinguishes the
+family-wide possible Skill reach from the effective breadth of each valid
+track or mutually exclusive route. It also reconciles the seven choice-slot
+groups retained in the current legacy-compatibility catalogue against the target catalogue,
+without flattening their candidate pools into fixed membership. Its
 [machine-readable companion](./profession-learning-group-skills.json) is
 derived from the same approved catalogues.
 
