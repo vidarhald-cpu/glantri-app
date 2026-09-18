@@ -12,6 +12,7 @@ import type { SyncQueueItem } from "@glantri/shared";
 
 export interface ChargenSessionDraft {
   id: string;
+  ownerId: string;
   createdAt: string;
   progression: CharacterProgression;
   rolledProfiles?: RolledCharacterProfile[];
@@ -107,6 +108,15 @@ export class GlantriDexie extends Dexie {
       cachedContent: "key, updatedAt",
       characterDrafts: "id, characterId, syncStatus, updatedAt",
       chargenSessions: "id, updatedAt",
+      encounters: "id, status, updatedAt, title",
+      localCharacters: "id, syncStatus, finalizedAt, updatedAt",
+      syncQueue: "id, status, updatedAt, entityId",
+    });
+
+    this.version(6).stores({
+      cachedContent: "key, updatedAt",
+      characterDrafts: "id, characterId, syncStatus, updatedAt",
+      chargenSessions: "id, ownerId, updatedAt",
       encounters: "id, status, updatedAt, title",
       localCharacters: "id, syncStatus, finalizedAt, updatedAt",
       syncQueue: "id, status, updatedAt, entityId",
