@@ -128,6 +128,7 @@ const mocks = vi.hoisted(() => {
     getOwnedCharacter: vi.fn(),
   };
   const characterEquipmentReadModelService = {
+    getCampaignEquipmentState: vi.fn(),
     getCharacterEquipmentState: vi.fn(),
   };
   const combatStateReadService = {
@@ -8164,6 +8165,91 @@ describe("scenarios route contract", () => {
         campaignId: "campaign-evil",
         id: "encounter-evil",
         scenarioId: "scenario-evil",
+      }),
+    });
+  });
+
+  it("allows GM visibility updates for a freshly dropped Scenario-authorized Item", async () => {
+    const existingEncounter = {
+      campaignId: "campaign-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      id: "encounter-1",
+      itemReferences: [{ itemId: "item-dropped", visibility: "players" as const }],
+      itemReferencesVersion: 1 as const,
+      scenarioId: "scenario-1",
+      status: "active" as const,
+      title: "Courtyard",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const bodySession = {
+      ...existingEncounter,
+      itemReferences: [{ itemId: "item-dropped", visibility: "gm_only" as const }],
+    };
+    mocks.encounterService.getEncounterById.mockResolvedValue(existingEncounter);
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      kind: "combat",
+      liveState: {
+        session: {
+          availableObjects: [
+            {
+              addedAt: "2026-01-01T00:00:00.000Z",
+              id: "combat-item:encounter-1:item-dropped",
+              sourceId: "item-dropped",
+              sourceKind: "campaign_item",
+              visibility: "players",
+            },
+          ],
+        },
+      },
+      name: "Bridge Ambush",
+      status: "live",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.characterEquipmentReadModelService.getCampaignEquipmentState.mockResolvedValue({
+      itemsById: {
+        "item-dropped": {
+          holderCharacterId: null,
+          id: "item-dropped",
+          revision: "2026-01-01T00:00:01.000Z",
+          templateId: "weapon-template-dagger",
+        },
+      },
+      templatesById: {},
+    });
+    mocks.encounterService.updateEncounter.mockImplementation(
+      async (update: { session: EncounterSession }) => update.session,
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PUT",
+      payload: { session: bodySession },
+      url: "/encounters/encounter-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith({
+      campaignId: "campaign-1",
+      encounterId: "encounter-1",
+      expectedRevision: existingEncounter.updatedAt,
+      objectiveEvent: {
+        actorUserId: "gm-1",
+        eventType: "encounter_updated",
+        summary: "Updated Encounter Items for Courtyard.",
+      },
+      scenarioId: "scenario-1",
+      session: expect.objectContaining({
+        itemReferences: [{ itemId: "item-dropped", visibility: "gm_only" }],
+        itemReferencesVersion: 1,
       }),
     });
   });
