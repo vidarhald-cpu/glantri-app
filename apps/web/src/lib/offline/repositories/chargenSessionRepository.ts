@@ -4,7 +4,7 @@ import type { CharacterProgression, RolledCharacterProfile } from "@glantri/doma
 import { localDb, type ChargenSessionDraft } from "../glantriDexie";
 
 export interface SaveChargenSessionInput {
-  id: string;
+  ownerId: string;
   progression: CharacterProgression;
   rolledProfiles?: RolledCharacterProfile[];
   profileAdjustments?: Record<string, ChargenStatAdjustmentState>;
@@ -17,39 +17,62 @@ export interface SaveChargenSessionInput {
   selectedSocietyLevel?: number;
 }
 
+const CHARGEN_SESSION_ID_PREFIX = "chargen-account";
+
+export function getChargenSessionIdForOwner(ownerId: string): string {
+  const normalizedOwnerId = ownerId.trim();
+
+  if (!normalizedOwnerId) {
+    throw new Error("Chargen draft ownership requires an authenticated account.");
+  }
+
+  return `${CHARGEN_SESSION_ID_PREFIX}:${encodeURIComponent(normalizedOwnerId)}`;
+}
+
 export class ChargenSessionRepository {
-  async get(id: string): Promise<ChargenSessionDraft | undefined> {
-    return localDb.chargenSessions.get(id);
+  async getForOwner(ownerId: string): Promise<ChargenSessionDraft | undefined> {
+    const draft = await localDb.chargenSessions.get(getChargenSessionIdForOwner(ownerId));
+
+    return draft?.ownerId === ownerId ? draft : undefined;
   }
 
   async save(input: SaveChargenSessionInput): Promise<void> {
     const now = new Date().toISOString();
-    const existing = await localDb.chargenSessions.get(input.id);
+    const id = getChargenSessionIdForOwner(input.ownerId);
 
-    const record: ChargenSessionDraft = {
-      createdAt: existing?.createdAt ?? now,
-      id: input.id,
-      rolledProfiles: input.rolledProfiles,
-      profileAdjustments: input.profileAdjustments,
-      characterName: input.characterName,
-      selectedCivilizationId: input.selectedCivilizationId,
-      progression: input.progression,
-      selectedProfessionId: input.selectedProfessionId,
-      selectedProfile: input.selectedProfile,
-      selectedSocialClass: input.selectedSocialClass,
-      selectedSocietyId: input.selectedSocietyId,
-      selectedSocietyLevel: input.selectedSocietyLevel,
-      updatedAt: now,
-    };
+    await localDb.transaction("rw", localDb.chargenSessions, async () => {
+      const existing = await localDb.chargenSessions.get(id);
 
-    await localDb.chargenSessions.put(record);
+      const record: ChargenSessionDraft = {
+        createdAt: existing?.createdAt ?? now,
+        id,
+        ownerId: input.ownerId,
+        rolledProfiles: input.rolledProfiles,
+        profileAdjustments: input.profileAdjustments,
+        characterName: input.characterName,
+        selectedCivilizationId: input.selectedCivilizationId,
+        progression: input.progression,
+        selectedProfessionId: input.selectedProfessionId,
+        selectedProfile: input.selectedProfile,
+        selectedSocialClass: input.selectedSocialClass,
+        selectedSocietyId: input.selectedSocietyId,
+        selectedSocietyLevel: input.selectedSocietyLevel,
+        updatedAt: now,
+      };
+
+      await localDb.chargenSessions.put(record);
+    });
   }
 
-  async list(): Promise<ChargenSessionDraft[]> {
-    return localDb.chargenSessions.orderBy("updatedAt").reverse().toArray();
-  }
+  async deleteForOwner(ownerId: string): Promise<void> {
+    const id = getChargenSessionIdForOwner(ownerId);
 
-  async delete(id: string): Promise<void> {
-    await localDb.chargenSessions.delete(id);
+    await localDb.transaction("rw", localDb.chargenSessions, async () => {
+      const draft = await localDb.chargenSessions.get(id);
+
+      if (draft?.ownerId === ownerId) {
+        await localDb.chargenSessions.delete(id);
+      }
+    });
   }
 }

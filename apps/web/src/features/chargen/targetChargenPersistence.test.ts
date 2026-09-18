@@ -15,8 +15,10 @@ import { buildCharacterSheetSkillRows } from "../../lib/characters/characterShee
 describe("synthetic target and historical Chargen drafts", () => {
   it("round-trips target selection/spend and preserves a non-equivalent historical draft", async () => {
     const repository = new ChargenSessionRepository();
-    const targetId = "issue206-synthetic-target-draft";
-    const legacyId = "issue206-synthetic-historical-draft";
+    const targetOwnerId = "issue206-synthetic-target-owner";
+    const legacyOwnerId = "issue206-synthetic-historical-owner";
+    const targetId = "issue206-synthetic-target-character";
+    const legacyId = "issue206-synthetic-historical-character";
     const legacy = characterBuildSchema.parse(
       characterPayload(legacyId, "Historical synthetic").build,
     );
@@ -32,7 +34,7 @@ describe("synthetic target and historical Chargen drafts", () => {
     expect(bought.error).toBeUndefined();
     try {
       await repository.save({
-        id: targetId,
+        ownerId: targetOwnerId,
         characterName: "Synthetic archer",
         selectedProfile: legacy.profile,
         rolledProfiles: [legacy.profile],
@@ -56,7 +58,7 @@ describe("synthetic target and historical Chargen drafts", () => {
         }),
       ).rejects.toThrow("authoritative purchase prices");
       expect((await characters.get(targetId))?.build.progression).toEqual(bought.progression);
-      const loaded = await repository.get(targetId);
+      const loaded = await repository.getForOwner(targetOwnerId);
       expect(loaded?.selectedProfessionId).toBe("profession:soldier:military-archer");
       expect(loaded?.progression).toEqual(bought.progression);
       expect(loaded?.progression.skillGroups[0].targetDefinition?.name).toBe(
@@ -81,12 +83,12 @@ describe("synthetic target and historical Chargen drafts", () => {
         ],
       };
       await repository.save({
-        id: legacyId,
+        ownerId: legacyOwnerId,
         selectedProfile: legacy.profile,
         selectedProfessionId: defaultCanonicalContent.professions[0].id,
         progression,
       });
-      const historical = await repository.get(legacyId);
+      const historical = await repository.getForOwner(legacyOwnerId);
       expect(historical?.progression).toEqual(progression);
       expect(content.skillGroups.some((g) => g.id === group.id)).toBe(false);
       expect(
@@ -106,8 +108,8 @@ describe("synthetic target and historical Chargen drafts", () => {
       expect(JSON.stringify(legacy)).toBe(before);
     } finally {
       await localDb.localCharacters.delete(targetId);
-      await repository.delete(targetId);
-      await repository.delete(legacyId);
+      await repository.deleteForOwner(targetOwnerId);
+      await repository.deleteForOwner(legacyOwnerId);
     }
   });
 });
