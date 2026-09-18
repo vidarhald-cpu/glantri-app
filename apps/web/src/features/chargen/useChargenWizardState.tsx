@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   defaultCanonicalContent,
@@ -100,6 +100,7 @@ import {
   buildTargetRuntimeContent,
 } from "./targetCompetencyContent";
 import { persistAuthenticatedFinalizedCharacter } from "./finalizeCharacterAuthority";
+import { ChargenDraftPersistenceCoordinator } from "./chargenDraftPersistenceCoordinator";
 
 const CONTENT_CACHE_KEY = "canonical-content";
 
@@ -109,6 +110,15 @@ const localCharacterRepository = new LocalCharacterRepository();
 
 export function useChargenWizardState() {
   const router = useRouter();
+  const draftPersistenceRef = useRef<ChargenDraftPersistenceCoordinator | null>(null);
+
+  if (!draftPersistenceRef.current) {
+    draftPersistenceRef.current = new ChargenDraftPersistenceCoordinator((error) => {
+      console.error(error);
+    });
+  }
+
+  const draftPersistence = draftPersistenceRef.current;
   const [characterName, setCharacterName] = useState("");
   const [contentSource, setContentSource] = useState(() =>
     createTargetCompetencyChargenSource(defaultCanonicalContent),
@@ -804,8 +814,8 @@ export function useChargenWizardState() {
       return;
     }
 
-    chargenSessionRepository
-      .save({
+    draftPersistence.enqueue(() =>
+      chargenSessionRepository.save({
         ownerId: currentUser.id,
         characterName,
         rolledProfiles,
@@ -817,11 +827,10 @@ export function useChargenWizardState() {
         selectedSocialClass: selectedSocietyAccess?.socialClass,
         selectedSocietyId: activeSocietyId,
         selectedSocietyLevel: activeSocialBand,
-      })
-      .catch((error) => {
-        console.error(error);
-      });
+      }),
+    );
   }, [
+    draftPersistence,
     historicalDraft,
     rolledProfiles,
     profileAdjustments,
@@ -1085,7 +1094,13 @@ export function useChargenWizardState() {
       return;
     }
 
-    await chargenSessionRepository.deleteForOwner(currentUser.id);
+    await draftPersistence.suspendAndDrain();
+
+    try {
+      await chargenSessionRepository.deleteForOwner(currentUser.id);
+    } finally {
+      draftPersistence.resume();
+    }
 
     setHistoricalDraft(undefined);
     setResumableDraft(undefined);
@@ -1119,6 +1134,7 @@ export function useChargenWizardState() {
       return;
     }
 
+    draftPersistence.resume();
     setCharacterName(resumableDraft.characterName ?? "");
     setSelectedCivilizationId(resumableDraft.selectedCivilizationId);
     setRolledProfiles(
@@ -1620,6 +1636,7 @@ export function useChargenWizardState() {
     }
 
     setIsFinalizing(true);
+    let finalizedDraftDeleted = false;
 
     try {
       const finalizedRecord = await persistAuthenticatedFinalizedCharacter(
@@ -1630,9 +1647,15 @@ export function useChargenWizardState() {
         },
       );
 
+      await draftPersistence.suspendAndDrain();
       await chargenSessionRepository.deleteForOwner(currentUser.id);
+      finalizedDraftDeleted = true;
       router.push(`/characters/${finalizedRecord.id}`);
     } catch (error) {
+      if (!finalizedDraftDeleted) {
+        draftPersistence.resume();
+      }
+
       const message =
         error instanceof Error ? error.message : "Unable to finalize and save the character.";
       setFeedback([message]);
