@@ -2,6 +2,16 @@
 
 Status: accepted product sequencing and portfolio boundary on 2026-09-04.
 
+**Successor product guidance, 2026-09-17:** the target Skills, Learning Groups,
+Professions, and Chargen consumption milestone is integrated. The
+[Chargen and Competency Experience Product Contract](./chargen-competency-experience-contract.md)
+now controls repeatable Character creation, ordinary competency-reference
+presentation, and the required Profession-depth audit. This roadmap remains
+useful for delivery history and source boundaries; its earlier assumptions about
+showing a user-facing `Legacy Catalogue` do not override the successor rule that
+ordinary game, reference, and Admin-facing surfaces explain current Glantri
+content without migration or superseded-system narration.
+
 Observed against local Forgejo `dev@2ae4ceb65dc1bbc25275bde8ca54832d31a3dcc3`.
 Live Forgejo issues remain operational truth for current status, ownership,
 authorization, exact baselines, QA, and integration. This roadmap does not
@@ -41,7 +51,7 @@ Normative content and integrity authority:
    ready, extend the existing mature Chargen and Character flows to consume it
    and resume long-lived test-Character creation.
 
-## Current near-term priority: full content into Chargen
+## Completed delivery path: full content into Chargen
 
 Architecture decision
 [0008](../decisions/architecture/0008-skills-chargen-delivery-priority.md)

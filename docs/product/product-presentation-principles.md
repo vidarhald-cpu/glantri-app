@@ -5,7 +5,7 @@
 **Audience:** Product owners, implementation agents, reviewers, and QA agents
 **Not a visual design system:** This document defines product-quality outcomes and review heuristics. It does not prescribe a component library, visual style, complete screen layouts, or fixed designs for functional areas that have not yet been built.
 
-**Related contracts:** [Combat Presentation Guidelines](../architecture/combat-presentation-guidelines.md), [Combat UX Principles](../architecture/combat-ux-principles.md), [Combat Panel Contract](./combat-panel-contract.md), [Chargen and Combat Manager Interaction Preservation](./ui-interaction-preservation.md), and [Implementation Task Contract](../process/task-contract.md)
+**Related contracts:** [Combat Presentation Guidelines](../architecture/combat-presentation-guidelines.md), [Combat UX Principles](../architecture/combat-ux-principles.md), [Combat Panel Contract](./combat-panel-contract.md), [Chargen and Competency Experience](./chargen-competency-experience-contract.md), [Chargen and Combat Manager Interaction Preservation](./ui-interaction-preservation.md), and [Implementation Task Contract](../process/task-contract.md)
 
 ## 1. Purpose
 
