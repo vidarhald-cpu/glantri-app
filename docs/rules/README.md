@@ -27,6 +27,9 @@ membership, migration lineage, snapshots, and viewer-safe provenance.
 
 Current Skill authority is split deliberately:
 
+- [Competency Rules](./competency-rules.md) and the linked
+  [Skill, Learning Group, and Profession reference](./competency-reference/README.md)
+  provide the complete player/GM-facing target-system explanation and content;
 - [Skill Catalogue qualitative architecture](../decisions/rules/0002-skill-catalogue-qualitative-architecture.md)
   governs the 19 navigation domains, competence identities, DS/AB meaning,
   language/written-tradition boundary, directional authoring relationships, and

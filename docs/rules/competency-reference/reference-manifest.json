@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "glantri-competency-reference/v1",
+  "status": "approved-reference",
+  "baseline": "d9e6a9588588be2e7d5341af5ead4446e1563e51",
+  "inventories": {
+    "baseSkills": 131,
+    "specializations": 26,
+    "spokenLanguages": 12,
+    "writtenTraditions": 3,
+    "learningGroups": 59,
+    "baseSkillMemberships": 151,
+    "specializationMemberships": 9,
+    "professionFamilies": 84,
+    "professionGroupOpportunities": 115,
+    "professionDirectOpportunities": 88,
+    "explicitProfessionTracks": 21,
+    "societyLevels": 6,
+    "socialBands": 4,
+    "archSocieties": 11,
+    "unresolvedContextRecords": 140
+  },
+  "coverage": {
+    "baseSkillsWithLearningGroup": 90,
+    "grouplessBaseSkills": 41,
+    "baseSkillsWithProfessionRoute": 130,
+    "specializationsWithProfessionRoute": 25,
+    "spokenLanguagesWithExactGenericProfessionRoute": 0,
+    "writtenTraditionsWithExactGenericProfessionRoute": 0
+  },
+  "sourceDigests": {
+    "completeSkillSourceSha256": "0bedd313d7d49b3cf4846008b75bf126cf956a985f8d1cc9dcab1ef9446b8376",
+    "fullLearningGroupSourceSha256": "7452da9e5fb0b324ea74b3eb618472c512d3c3f04288a49f124fa50821790423",
+    "martialLearningGroupRevisionSha256": "f44447d438fc33f0a37cc3703bb33d711f4423b95c9c0e047691ea4a12004e8a",
+    "fullProfessionOriginalSourceSha256": "548a81ec323321609fb7af1a2a78459450556dc32a4df5818965c10b2b48def6",
+    "fullProfessionReadableNormalizedSha256": "f200f55a5479a627dda85554ed26e3be0e59029393441bcb8c0af949b8c868cf"
+  },
+  "derivedCatalogueDigests": {
+    "completeSkillProposal": "sha256:6b317d712fff4fc345e72f89bd167c1e9166c9e3d555256a4a6f98229bebb3c9",
+    "targetLearningGroups": "sha256:33bb6b661fd59558b5b6eff0711e259a5614a34e8f341a83f883c1704b2451d9",
+    "targetProfessions": "sha256:11fb66385c82db84ca1097ee8be63638d5bf64470795e100f8eb93040e648a48"
+  }
+}
