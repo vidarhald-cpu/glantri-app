@@ -52,12 +52,13 @@ body:
     id: authorization
     attributes:
       label: Dispatch status and authorization
-      description: State whether the contract is Ready and whether implementation is explicitly Authorized. Link the durable authorization record; Ready alone is not permission to start.
+      description: State whether the contract is Ready and implementation is explicitly Authorized, then link the current role-specific ACTIVE claim or terminal/release record from docs/process/agent-execution.md. Ready alone is not permission to start, and assignees are not lane authority.
       placeholder: |
         Contract status: Ready / Blocked / Design only / Completed / Stale/needs refresh
         Implementation authorization: Authorized / Not authorized
         Activity: Active / Inactive
         Durable authorization record:
+        Current ACTIVE claim or terminal/release record:
     validations:
       required: true
   - type: textarea
