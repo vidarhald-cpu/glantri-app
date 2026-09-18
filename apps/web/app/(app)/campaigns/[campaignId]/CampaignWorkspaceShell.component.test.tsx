@@ -134,23 +134,23 @@ describe("Campaign workspace task navigation", () => {
     const tasks = screen.getByRole("navigation", { name: "Campaign tasks" });
     expect(within(tasks).getByRole("link", { name: "Membership" })).toHaveAttribute(
       "href",
-      "/campaigns/campaign-1#campaign-membership",
+      "/campaigns/campaign-1?tab=campaign#campaign-membership",
     );
     expect(within(tasks).getByRole("link", { name: "Scenarios" })).toHaveAttribute(
       "href",
-      "/campaigns/campaign-1#campaign-scenarios",
+      "/campaigns/campaign-1?tab=campaign#campaign-scenarios",
     );
     expect(within(tasks).getByRole("link", { name: "Campaign history" })).toHaveAttribute(
       "href",
-      "/campaigns/campaign-1#campaign-history",
+      "/campaigns/campaign-1?tab=campaign#campaign-history",
     );
     expect(within(tasks).getByRole("link", { name: "Create material" })).toHaveAttribute(
       "href",
-      "/campaigns/campaign-1#campaign-create-material",
+      "/campaigns/campaign-1?tab=campaign#campaign-create-material",
     );
     expect(within(tasks).getByRole("link", { name: "Notes & material" })).toHaveAttribute(
       "href",
-      "/campaigns/campaign-1#campaign-material",
+      "/campaigns/campaign-1?tab=campaign#campaign-material",
     );
     expect(within(tasks).queryByRole("link", { name: "Combat" })).not.toBeInTheDocument();
     expect(within(tasks).queryByRole("link", { name: "Player combat" })).not.toBeInTheDocument();

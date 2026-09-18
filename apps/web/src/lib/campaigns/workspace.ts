@@ -61,7 +61,21 @@ export function buildCampaignTaskHref(input: {
   campaignId: string;
   section: CampaignTaskSectionId;
 }): string {
-  return `${buildCampaignWorkspaceHref({ campaignId: input.campaignId })}#campaign-${input.section}`;
+  return `${buildCampaignWorkspaceHref({ campaignId: input.campaignId, tab: "campaign" })}#campaign-${input.section}`;
+}
+
+const campaignTaskTargetIds = new Set([
+  "campaign-overview",
+  "campaign-membership",
+  "campaign-scenarios",
+  "campaign-history",
+  "campaign-create-material",
+  "campaign-material",
+]);
+
+export function resolveCampaignTaskTargetId(hash: string): string | undefined {
+  const targetId = hash.startsWith("#") ? hash.slice(1) : hash;
+  return campaignTaskTargetIds.has(targetId) ? targetId : undefined;
 }
 
 export function buildCampaignScenarioHref(input: {

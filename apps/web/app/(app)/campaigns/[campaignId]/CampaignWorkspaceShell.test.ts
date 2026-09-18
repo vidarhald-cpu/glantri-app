@@ -99,6 +99,11 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain('label: "Campaign history"');
     expect(source).toContain('label: "Create material"');
     expect(source).toContain('label: "Notes & material"');
+    expect(source).toContain("scroll={false}");
+    expect(source).toContain("new MutationObserver");
+    expect(source).toContain("observer.observe(document.body, { childList: true, subtree: true })");
+    expect(source).toContain('target.scrollIntoView({ block: "start" })');
+    expect(source).toContain("observer.disconnect()");
     expect(source).toContain('aria-label="Scenario and Encounter tools"');
     expect(source).not.toContain('aria-label="Live play context"');
   });

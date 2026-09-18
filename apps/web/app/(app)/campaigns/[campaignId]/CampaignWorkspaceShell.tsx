@@ -44,6 +44,7 @@ import {
   buildCampaignWorkspaceHref,
   buildCampaignWorkspaceTabs,
   isLiveCampaignScenario,
+  resolveCampaignTaskTargetId,
   resolveCampaignWorkspaceState,
   type CampaignWorkspaceTabId,
 } from "@/lib/campaigns/workspace";
@@ -284,7 +285,7 @@ export function CampaignWorkspaceNavigation({
           Campaigns
         </Link>
         {taskLinks.map((link) => (
-          <Link href={link.href} key={link.href} style={commonLinkStyle}>
+          <Link href={link.href} key={link.href} scroll={false} style={commonLinkStyle}>
             {link.label}
           </Link>
         ))}
@@ -970,18 +971,10 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       scenarioId: workspaceState.activeScenarioId ?? null,
       tab: canonicalWorkspaceTab,
     });
-    const currentHash = window.location.hash;
-    const campaignTaskHash =
-      /^#campaign-(overview|membership|scenarios|history|create-material|material)$/.test(
-        currentHash,
-      )
-        ? currentHash
-        : "";
-    const canonicalHref = `${nextHref}${campaignTaskHash}`;
-    const currentHref = `${searchParamString ? `${pathname}?${searchParamString}` : pathname}${campaignTaskHash}`;
+    const currentHref = searchParamString ? `${pathname}?${searchParamString}` : pathname;
 
-    if (canonicalHref !== currentHref) {
-      router.replace(canonicalHref);
+    if (nextHref !== currentHref) {
+      router.replace(nextHref);
     }
   }, [
     buildWorkspaceHref,
@@ -1020,6 +1013,53 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
     }
   }, [accessMode, setRememberedWorkspaceTab, workspaceState.activeTab]);
 
+  useEffect(() => {
+    if (workspaceState.activeTab !== "campaign") {
+      return;
+    }
+
+    let animationFrameId: number | undefined;
+    const observer = new MutationObserver(() => requestCampaignTaskScroll());
+
+    const scrollToCampaignTask = () => {
+      const targetId = resolveCampaignTaskTargetId(window.location.hash);
+      if (!targetId) {
+        return false;
+      }
+
+      const target = document.getElementById(targetId);
+      if (!target) {
+        return false;
+      }
+
+      if (animationFrameId !== undefined) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+      animationFrameId = window.requestAnimationFrame(() => {
+        target.scrollIntoView({ block: "start" });
+        observer.disconnect();
+        animationFrameId = undefined;
+      });
+      return true;
+    };
+
+    function requestCampaignTaskScroll() {
+      if (!scrollToCampaignTask()) {
+        observer.observe(document.body, { childList: true, subtree: true });
+      }
+    }
+
+    requestCampaignTaskScroll();
+    window.addEventListener("hashchange", requestCampaignTaskScroll);
+    return () => {
+      window.removeEventListener("hashchange", requestCampaignTaskScroll);
+      observer.disconnect();
+      if (animationFrameId !== undefined) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [workspaceState.activeTab]);
+
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1240 }}>
       <CampaignWorkspaceNavigation
@@ -1034,7 +1074,9 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
             aria-label="Scenario and Encounter context"
             style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}
           >
-            <Link href={buildCampaignTaskHref({ campaignId, section: "overview" })}>Campaign</Link>
+            <Link href={buildCampaignTaskHref({ campaignId, section: "overview" })} scroll={false}>
+              Campaign
+            </Link>
             <span aria-hidden="true">›</span>
             <Link
               href={buildCampaignScenarioHref({

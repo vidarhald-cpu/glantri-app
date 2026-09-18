@@ -79,10 +79,14 @@ test.describe("CM1 Campaign home and private notes", () => {
     ] as const;
     for (const activation of ["pointer", "keyboard"] as const) {
       for (const [label, targetId] of campaignTaskTargets) {
-        await page.goto(`/campaigns/${campaign.campaign.id}`);
+        await page.goto(`/campaigns/${campaign.campaign.id}?tab=maps`);
         const taskLink = page
           .getByRole("navigation", { name: "Campaign tasks" })
           .getByRole("link", { name: label, exact: true });
+        await expect(taskLink).toHaveAttribute(
+          "href",
+          `/campaigns/${campaign.campaign.id}?tab=campaign#${targetId}`,
+        );
 
         if (activation === "pointer") {
           await taskLink.click();
@@ -92,6 +96,7 @@ test.describe("CM1 Campaign home and private notes", () => {
         }
 
         await expect.poll(() => page.evaluate(() => window.location.hash)).toBe(`#${targetId}`);
+        await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("campaign");
         await expect(page.locator(`#${targetId}`)).toBeInViewport();
       }
     }
