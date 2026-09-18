@@ -97,37 +97,35 @@ test.describe("Character Sheet failed-save recovery", () => {
     await nameInput.fill(attemptedName);
     await page.getByRole("button", { name: "Save identity" }).click();
 
-    await expect(page.getByText("Local draft retained", { exact: true })).toBeVisible();
+    await expect(page.getByText("Unsaved changes need review", { exact: true })).toBeVisible();
     await expect(
       page.getByRole("heading", { name: `Character Sheet — ${canonical.build.name}` }),
     ).toBeVisible();
     await expect(nameInput).toHaveValue(canonical.build.name);
-    await expect(
-      page.getByText("The current server Character is visible.", { exact: false }),
-    ).toBeVisible();
+    await expect(page.getByText("The current Character is shown.", { exact: false })).toBeVisible();
     await expect((await loadCanonicalCharacter(page, characterId)).build.name).toBe(
       canonical.build.name,
     );
 
-    await page.getByRole("button", { name: "Review retained draft" }).click();
+    await page.getByRole("button", { name: "Review unsaved changes" }).click();
     await expect(nameInput).toHaveValue(attemptedName);
     await expect(
       page.getByRole("heading", { name: `Character Sheet — ${attemptedName}` }),
     ).toBeVisible();
 
-    await page.getByRole("button", { name: "Return to current server version" }).click();
+    await page.getByRole("button", { name: "Return to current Character" }).click();
     await expect(nameInput).toHaveValue(canonical.build.name);
 
     await page.reload();
-    await expect(page.getByText("Local draft retained", { exact: true })).toBeVisible();
+    await expect(page.getByText("Unsaved changes need review", { exact: true })).toBeVisible();
     await expect(nameInput).toHaveValue(canonical.build.name);
 
-    await page.getByRole("button", { name: "Discard draft and keep server version" }).click();
-    await expect(page.getByText("Local draft retained", { exact: true })).toBeHidden();
+    await page.getByRole("button", { name: "Discard unsaved changes" }).click();
+    await expect(page.getByText("Unsaved changes need review", { exact: true })).toBeHidden();
     await expect(nameInput).toHaveValue(canonical.build.name);
 
     await page.reload();
-    await expect(page.getByText("Local draft retained", { exact: true })).toBeHidden();
+    await expect(page.getByText("Unsaved changes need review", { exact: true })).toBeHidden();
     await expect(nameInput).toHaveValue(canonical.build.name);
   });
 });
@@ -153,26 +151,26 @@ test.describe("GM Character edit failed-save recovery", () => {
     await expect(page.getByText(attemptedPointsLabel, { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Save changes" }).click();
 
-    await expect(page.getByText("Local draft retained", { exact: true })).toBeVisible();
+    await expect(page.getByText("Unsaved changes need review", { exact: true })).toBeVisible();
     await expect(page.getByText(canonicalPointsLabel, { exact: true })).toBeVisible();
     await expect(page.getByText(attemptedPointsLabel, { exact: true })).toBeHidden();
 
-    await page.getByRole("button", { name: "Review retained draft" }).click();
+    await page.getByRole("button", { name: "Review unsaved changes" }).click();
     await expect(page.getByText(attemptedPointsLabel, { exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: "Return to current server version" }).click();
+    await page.getByRole("button", { name: "Return to current Character" }).click();
     await expect(page.getByText(canonicalPointsLabel, { exact: true })).toBeVisible();
 
     await page.reload();
-    await expect(page.getByText("Local draft retained", { exact: true })).toBeVisible();
+    await expect(page.getByText("Unsaved changes need review", { exact: true })).toBeVisible();
     await expect(page.getByText(canonicalPointsLabel, { exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: "Discard draft and keep server version" }).click();
-    await expect(page.getByText("Local draft retained", { exact: true })).toBeHidden();
+    await page.getByRole("button", { name: "Discard unsaved changes" }).click();
+    await expect(page.getByText("Unsaved changes need review", { exact: true })).toBeHidden();
     await expect(page.getByText(canonicalPointsLabel, { exact: true })).toBeVisible();
 
     await page.reload();
-    await expect(page.getByText("Local draft retained", { exact: true })).toBeHidden();
+    await expect(page.getByText("Unsaved changes need review", { exact: true })).toBeHidden();
     await expect(page.getByText(canonicalPointsLabel, { exact: true })).toBeVisible();
     await expect(
       (await loadCanonicalCharacter(page, characterId)).build.progressionState?.availablePoints ??

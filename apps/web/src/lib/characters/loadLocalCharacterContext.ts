@@ -1,24 +1,26 @@
 import type { CanonicalContent } from "@glantri/content";
 import type { CharacterRecord } from "@glantri/domain";
 
-import { ApiRequestError } from "../api/apiClient";
 import { loadServerCharacterById } from "../api/characterClient";
 import { loadCanonicalContent } from "../content/loadCanonicalContent";
-import type { LocalCharacterRecord } from "../offline/glantriDexie";
+import type { CharacterRecoveryEnvelope, LocalCharacterRecord } from "../offline/glantriDexie";
+import { CharacterRecoveryRepository } from "../offline/repositories/characterRecoveryRepository";
 import {
   buildServerBackedLocalCharacterRecord,
-  getServerCharacterRevision,
   LocalCharacterRepository,
 } from "../offline/repositories/localCharacterRepository";
 
 const localCharacterRepository = new LocalCharacterRepository();
+const characterRecoveryRepository = new CharacterRecoveryRepository();
 
 export interface LocalCharacterContext {
   canonicalMissing: boolean;
   content: CanonicalContent;
+  conflictPaths: string[];
   hasRevisionConflict: boolean;
   record?: LocalCharacterRecord;
-  recoveryRecord?: LocalCharacterRecord;
+  recoveredBuild?: LocalCharacterRecord["build"];
+  recoveryRecord?: CharacterRecoveryEnvelope;
 }
 
 export interface CurrentCharacterContext {
@@ -26,58 +28,34 @@ export interface CurrentCharacterContext {
   record?: CharacterRecord;
 }
 
-export async function loadLocalCharacterContext(id: string): Promise<LocalCharacterContext> {
+export async function loadLocalCharacterContext(
+  id: string,
+  accountId: string,
+): Promise<LocalCharacterContext> {
   const [content, localRecord] = await Promise.all([
     loadCanonicalContent(),
     localCharacterRepository.get(id),
   ]);
 
-  let serverRecord: CharacterRecord;
-
-  try {
-    serverRecord = await loadServerCharacterById(id);
-  } catch (error) {
-    if (!(error instanceof ApiRequestError) || error.status !== 404 || !localRecord) {
-      throw error;
-    }
-
-    if (getServerCharacterRevision(localRecord)) {
-      return {
-        canonicalMissing: true,
-        content,
-        hasRevisionConflict: true,
-        recoveryRecord: localRecord,
-      };
-    }
-
-    return {
-      canonicalMissing: false,
-      content,
-      hasRevisionConflict: false,
-      record: localRecord,
-    };
-  }
+  const serverRecord: CharacterRecord = await loadServerCharacterById(id);
 
   const canonicalRecord = buildServerBackedLocalCharacterRecord(serverRecord, localRecord);
-  const localHasPendingChanges = localRecord?.syncStatus !== "synced";
-
-  if (localRecord && localHasPendingChanges) {
-    return {
-      canonicalMissing: false,
-      content,
-      hasRevisionConflict: getServerCharacterRevision(localRecord) !== serverRecord.updatedAt,
-      record: canonicalRecord,
-      recoveryRecord: localRecord,
-    };
-  }
-
   const record = await localCharacterRepository.save(canonicalRecord);
+  const recoveryState = await characterRecoveryRepository.reconcile(
+    accountId,
+    id,
+    serverRecord.build,
+    serverRecord.updatedAt,
+  );
 
   return {
     canonicalMissing: false,
+    conflictPaths: recoveryState?.conflictPaths ?? [],
     content,
-    hasRevisionConflict: false,
+    hasRevisionConflict: Boolean(recoveryState && recoveryState.conflictPaths.length > 0),
     record,
+    recoveredBuild: recoveryState?.recoveredBuild,
+    recoveryRecord: recoveryState?.envelope,
   };
 }
 

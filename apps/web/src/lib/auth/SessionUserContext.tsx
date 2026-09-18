@@ -5,6 +5,7 @@ import type { AuthRole, AuthUser } from "@glantri/auth";
 import { canAccessAdmin, hasAnyRole } from "@glantri/auth";
 
 import { getCurrentSessionUser, logoutLocalUser } from "../api/authClient";
+import { purgeCharacterRecoveryOnLogout } from "./characterRecoveryPrivacy";
 
 interface SessionUserContextValue {
   currentUser: AuthUser | null;
@@ -33,6 +34,9 @@ export function SessionUserProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     await logoutLocalUser();
+    if (currentUser) {
+      await purgeCharacterRecoveryOnLogout(currentUser.id);
+    }
     setCurrentUser(null);
   }
 

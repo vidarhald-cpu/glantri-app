@@ -4,6 +4,7 @@ const getMock = vi.fn();
 const saveMock = vi.fn();
 const loadCanonicalContentMock = vi.fn();
 const loadServerCharacterByIdMock = vi.fn();
+const reconcileRecoveryMock = vi.fn();
 
 vi.mock("../content/loadCanonicalContent", () => ({
   loadCanonicalContent: loadCanonicalContentMock,
@@ -11,6 +12,12 @@ vi.mock("../content/loadCanonicalContent", () => ({
 
 vi.mock("../api/characterClient", () => ({
   loadServerCharacterById: loadServerCharacterByIdMock,
+}));
+
+vi.mock("../offline/repositories/characterRecoveryRepository", () => ({
+  CharacterRecoveryRepository: class CharacterRecoveryRepository {
+    reconcile = reconcileRecoveryMock;
+  },
 }));
 
 vi.mock("../offline/repositories/localCharacterRepository", () => ({
@@ -50,6 +57,7 @@ describe("loadLocalCharacterContext", () => {
     saveMock.mockReset();
     loadCanonicalContentMock.mockReset();
     loadServerCharacterByIdMock.mockReset();
+    reconcileRecoveryMock.mockReset().mockResolvedValue(undefined);
   });
 
   it("refreshes an existing synced cache from the canonical server Character", async () => {
@@ -121,13 +129,16 @@ describe("loadLocalCharacterContext", () => {
     saveMock.mockResolvedValue(savedRecord);
 
     const { loadLocalCharacterContext } = await import("./loadLocalCharacterContext");
-    const result = await loadLocalCharacterContext("character-1");
+    const result = await loadLocalCharacterContext("character-1", "account-1");
 
     expect(result).toEqual({
       canonicalMissing: false,
+      conflictPaths: [],
       content,
       hasRevisionConflict: false,
       record: savedRecord,
+      recoveredBuild: undefined,
+      recoveryRecord: undefined,
     });
     expect(loadServerCharacterByIdMock).toHaveBeenCalledWith("character-1");
     expect(saveMock).toHaveBeenCalledWith(expect.objectContaining({ build: serverRecord.build }));
@@ -203,7 +214,7 @@ describe("loadLocalCharacterContext", () => {
     saveMock.mockResolvedValue(savedRecord);
 
     const { loadLocalCharacterContext } = await import("./loadLocalCharacterContext");
-    const result = await loadLocalCharacterContext("character-2");
+    const result = await loadLocalCharacterContext("character-2", "account-1");
 
     expect(loadServerCharacterByIdMock).toHaveBeenCalledWith("character-2");
     expect(saveMock).toHaveBeenCalledWith(
@@ -217,13 +228,16 @@ describe("loadLocalCharacterContext", () => {
     );
     expect(result).toEqual({
       canonicalMissing: false,
+      conflictPaths: [],
       content,
       hasRevisionConflict: false,
       record: savedRecord,
+      recoveredBuild: undefined,
+      recoveryRecord: undefined,
     });
   });
 
-  it("shows the canonical Character while retaining a stale local draft across reloads", async () => {
+  it("uses the canonical Character without disclosing unattributed quarantine existence", async () => {
     const content = { skills: [] };
     const localRecord = {
       build: { id: "character-4", name: "Offline draft" },
@@ -247,17 +261,24 @@ describe("loadLocalCharacterContext", () => {
     loadCanonicalContentMock.mockResolvedValue(content);
     getMock.mockResolvedValue(localRecord);
     loadServerCharacterByIdMock.mockResolvedValue(serverRecord);
-
+    saveMock.mockResolvedValue({
+      ...localRecord,
+      build: serverRecord.build,
+      serverUpdatedAt: serverRecord.updatedAt,
+      syncStatus: "synced",
+      updatedAt: serverRecord.updatedAt,
+    });
     const { loadLocalCharacterContext } = await import("./loadLocalCharacterContext");
-    const first = await loadLocalCharacterContext("character-4");
-    const repeated = await loadLocalCharacterContext("character-4");
+    const first = await loadLocalCharacterContext("character-4", "account-1");
+    const repeated = await loadLocalCharacterContext("character-4", "account-1");
 
     expect(first.record?.build).toBe(serverRecord.build);
-    expect(first.recoveryRecord).toBe(localRecord);
-    expect(first.hasRevisionConflict).toBe(true);
+    expect(first.recoveryRecord).toBeUndefined();
+    expect(first.hasRevisionConflict).toBe(false);
+    expect(first).not.toHaveProperty("legacyRecoveryCount");
     expect(repeated.record?.build).toBe(serverRecord.build);
-    expect(repeated.recoveryRecord).toBe(localRecord);
-    expect(saveMock).not.toHaveBeenCalled();
+    expect(repeated.recoveryRecord).toBeUndefined();
+    expect(saveMock).toHaveBeenCalledTimes(2);
   });
 
   it("can load the current server record even when a stale local cache exists", async () => {

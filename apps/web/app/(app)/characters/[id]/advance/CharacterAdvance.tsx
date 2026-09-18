@@ -17,11 +17,25 @@ import {
   getCurrentCharacterFromMutationConflict,
   updateServerCharacter,
 } from "@/lib/api/localServiceClient";
+import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import { getPlayerFacingSkillBucket, groupRowsBySkillType } from "@/lib/chargen/chargenBrowse";
 import { buildCharacterSheetProfileStatRows } from "@/lib/characters/characterSheet";
+import {
+  formatCharacterRecoveryCompetition,
+  resolveCharacterRecoverySaveFailure,
+} from "@/lib/characters/characterRecoverySaveFailure";
+import { CharacterRecoveryCandidateList } from "@/lib/characters/CharacterRecoveryCandidateList";
 import { loadLocalCharacterAdvancementContext } from "@/lib/characters/loadLocalCharacterAdvancementContext";
-import type { LocalCharacterDraft, LocalCharacterRecord } from "@/lib/offline/glantriDexie";
+import type {
+  CharacterRecoveryEnvelope,
+  LocalCharacterDraft,
+  LocalCharacterRecord,
+} from "@/lib/offline/glantriDexie";
 import { CharacterDraftRepository } from "@/lib/offline/repositories/characterDraftRepository";
+import {
+  CharacterRecoveryRepository,
+  formatCharacterRecoveryField,
+} from "@/lib/offline/repositories/characterRecoveryRepository";
 import {
   buildServerBackedLocalCharacterRecord,
   LocalCharacterRepository,
@@ -33,6 +47,7 @@ interface CharacterAdvanceProps {
 }
 
 const characterDraftRepository = new CharacterDraftRepository();
+const characterRecoveryRepository = new CharacterRecoveryRepository();
 const localCharacterRepository = new LocalCharacterRepository();
 
 function formatTargetType(type: ProgressionTargetType): string {
@@ -91,15 +106,18 @@ function formatSkillStats(stats: string[]): string {
 }
 
 export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
+  const { currentUser, loading: sessionLoading } = useSessionUser();
   const [content, setContent] = useState<
     Awaited<ReturnType<typeof loadLocalCharacterAdvancementContext>>["content"] | undefined
   >();
   const [canonicalDraft, setCanonicalDraft] = useState<LocalCharacterDraft>();
+  const [competingRecovery, setCompetingRecovery] = useState(false);
   const [draft, setDraft] = useState<LocalCharacterDraft>();
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [record, setRecord] = useState<LocalCharacterRecord>();
   const [recoveryDraft, setRecoveryDraft] = useState<LocalCharacterDraft>();
+  const [recoveryRecord, setRecoveryRecord] = useState<CharacterRecoveryEnvelope>();
   const [recoveryRequired, setRecoveryRequired] = useState(false);
   const [reviewingRecovery, setReviewingRecovery] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -108,8 +126,21 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
   useEffect(() => {
     let cancelled = false;
 
-    loadLocalCharacterAdvancementContext(id)
-      .then(async (result) => {
+    if (sessionLoading) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!currentUser) {
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    loadLocalCharacterAdvancementContext(id, currentUser.id)
+      .then((result) => {
         if (cancelled) {
           return;
         }
@@ -117,24 +148,25 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         setContent(result.content);
         setRecord(result.record);
         setRecoveryDraft(result.recoveryDraft);
+        setRecoveryRecord(result.recoveryRecord);
         setRecoveryRequired(Boolean(result.recoveryDraft || result.recoveryRecord));
+        setCompetingRecovery(false);
         setReviewingRecovery(false);
 
         if (!result.record) {
           return;
         }
 
-        const resolvedDraft =
-          result.draft ?? (await characterDraftRepository.createFromCharacter(result.record));
+        const resolvedDraft = result.draft;
 
-        if (!cancelled) {
+        if (!cancelled && resolvedDraft) {
           setCanonicalDraft(resolvedDraft);
           setDraft(resolvedDraft);
           if (result.recoveryDraft || result.recoveryRecord) {
             setFeedback(
               result.hasRevisionConflict
-                ? "The current server Character is shown. A stale local progression draft is retained for review or discard."
-                : "The current server Character is shown. An unsaved local progression draft is retained for review or discard.",
+                ? "The same progression details changed elsewhere. The current Character is shown, and your unsaved progression needs review."
+                : "The current Character is shown, and your unsaved progression remains available on this device.",
             );
           }
         }
@@ -148,7 +180,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [currentUser, id, sessionLoading]);
 
   const progressionView = useMemo(() => {
     if (!draft || !content) {
@@ -187,25 +219,53 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     message?: string,
     sync?: { serverUpdatedAt: string; status: "synced" },
   ) {
-    if (!draft) {
+    if (!draft || !record || !currentUser) {
       return undefined;
     }
 
     if (recoveryRequired && !reviewingRecovery) {
-      setFeedback("Review the retained draft or discard it before changing progression.");
+      setFeedback("Review or discard the existing unsaved progression before making new changes.");
       return undefined;
     }
 
-    const savedDraft = await characterDraftRepository.save({
-      advancementPointsSpent: 0,
-      advancementPointsTotal: nextBuild.progressionState?.availablePoints ?? 0,
-      build: nextBuild,
-      characterId: draft.characterId,
-      id: draft.id,
-      serverUpdatedAt: sync?.serverUpdatedAt ?? draft.serverUpdatedAt,
-      syncStatus: sync?.status ?? "local",
-      updatedAt: new Date().toISOString(),
-    });
+    const updatedAt = new Date().toISOString();
+    const savedDraft: LocalCharacterDraft = sync
+      ? await characterDraftRepository.save({
+          advancementPointsSpent: 0,
+          advancementPointsTotal: nextBuild.progressionState?.availablePoints ?? 0,
+          build: nextBuild,
+          characterId: draft.characterId,
+          id: draft.id,
+          serverUpdatedAt: sync.serverUpdatedAt,
+          syncStatus: sync.status,
+          updatedAt,
+        })
+      : {
+          ...draft,
+          advancementPointsSpent: 0,
+          advancementPointsTotal: nextBuild.progressionState?.availablePoints ?? 0,
+          build: nextBuild,
+          serverUpdatedAt: requireServerCharacterRevision(record),
+          syncStatus: "local",
+          updatedAt,
+        };
+
+    if (!sync) {
+      const envelope = await characterRecoveryRepository.createAttempt({
+        account: currentUser,
+        attemptedBuild: nextBuild,
+        baseBuild: record.build,
+        baseRevision: requireServerCharacterRevision(record),
+        characterId: id,
+        expectedAttemptId: recoveryRecord?.saveAttempt.id,
+        sourceAction: "Edit progression",
+        sourceSurface: "Character Progression",
+      });
+      setRecoveryDraft(savedDraft);
+      setRecoveryRecord(envelope);
+      setRecoveryRequired(Boolean(envelope));
+      setReviewingRecovery(Boolean(envelope));
+    }
 
     setDraft(savedDraft);
     if (message) {
@@ -221,9 +281,10 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     }
 
     setDraft(recoveryDraft);
+    setCompetingRecovery(false);
     setReviewingRecovery(true);
     setFeedback(
-      "Retained progression draft loaded for review. It has not replaced the current server Character; saving remains deliberate and revision-checked.",
+      "Unsaved progression loaded for review. Nothing has been saved to the current Character yet.",
     );
   }
 
@@ -233,27 +294,17 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     }
 
     setDraft(canonicalDraft);
+    setCompetingRecovery(false);
     setReviewingRecovery(false);
-    setFeedback("Current server progression restored. The retained draft is still available.");
+    setFeedback("Current progression restored. Your unsaved progression is still available.");
   }
 
   async function handleDiscardRecovery() {
-    if (!canonicalDraft || !record) {
+    if (!canonicalDraft || !record || !currentUser) {
       return;
     }
 
     const serverUpdatedAt = requireServerCharacterRevision(record);
-    const savedRecord = await localCharacterRepository.save({
-      build: canonicalDraft.build,
-      createdAt: record.createdAt,
-      creatorDisplayName: record.creatorDisplayName,
-      creatorEmail: record.creatorEmail,
-      creatorId: record.creatorId,
-      finalizedAt: record.finalizedAt,
-      serverUpdatedAt,
-      syncStatus: "synced",
-      updatedAt: record.updatedAt,
-    });
     const savedDraft = await characterDraftRepository.save({
       advancementPointsSpent: canonicalDraft.advancementPointsSpent,
       advancementPointsTotal: canonicalDraft.advancementPointsTotal,
@@ -264,14 +315,25 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       syncStatus: "synced",
       updatedAt: record.updatedAt,
     });
+    await characterRecoveryRepository.deleteAttempt(
+      currentUser.id,
+      id,
+      recoveryRecord?.saveAttempt.id ?? "",
+    );
+    const remainingRecovery = await characterRecoveryRepository.get(currentUser.id, id);
 
-    setRecord(savedRecord);
     setCanonicalDraft(savedDraft);
     setDraft(savedDraft);
     setRecoveryDraft(undefined);
-    setRecoveryRequired(false);
+    setRecoveryRecord(remainingRecovery);
+    setRecoveryRequired(Boolean(remainingRecovery));
+    setCompetingRecovery(false);
     setReviewingRecovery(false);
-    setFeedback("Retained progression draft discarded. The server Character remains unchanged.");
+    setFeedback(
+      remainingRecovery
+        ? "The selected recovery was discarded. Another retained attempt now needs review."
+        : "Unsaved progression discarded. The current Character remains unchanged.",
+    );
   }
 
   async function handleBuyAttempt(targetType: ProgressionTargetType, targetId: string) {
@@ -346,7 +408,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     }
 
     if (recoveryRequired && !reviewingRecovery) {
-      setFeedback("Review the retained draft or discard it before resolving progression.");
+      setFeedback("Review or discard the existing unsaved progression before resolving attempts.");
       return;
     }
 
@@ -355,66 +417,60 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       content,
     });
     const successes = result.history.filter((entry) => entry.success).length;
-    const savedRecord = await localCharacterRepository.save({
-      build: result.build,
-      createdAt: record.createdAt,
-      finalizedAt: record.finalizedAt,
-      syncStatus: "local",
-    });
-
-    setRecord(savedRecord);
     await persistDraft(
       result.build,
-      `Resolved ${result.history.length} progression attempt${result.history.length === 1 ? "" : "s"}; ${successes} succeeded. Progression saved locally.`,
+      `Resolved ${result.history.length} progression attempt${result.history.length === 1 ? "" : "s"}; ${successes} succeeded. Unsaved progression is kept on this device until you save.`,
     );
   }
 
   async function handleSaveChanges() {
-    if (!draft || !record) {
+    if (!draft || !record || !currentUser) {
+      return;
+    }
+
+    if (recoveryRecord?.competingCandidates?.length) {
+      setFeedback("Resolve or discard every rejected recovery candidate before saving.");
       return;
     }
 
     if (recoveryRequired && !reviewingRecovery) {
-      setFeedback("Review the retained draft or discard it before saving progression.");
+      setFeedback("Review or discard the existing unsaved progression before saving.");
       return;
     }
 
     setSaving(true);
 
-    const hasServerSavePath = record.syncStatus === "synced" || draft.syncStatus === "synced";
-
-    if (!hasServerSavePath) {
-      const savedRecord = await localCharacterRepository.save({
-        build: draft.build,
-        createdAt: record.createdAt,
-        finalizedAt: record.finalizedAt,
-        syncStatus: "local",
-      });
-
-      setRecord(savedRecord);
-      await persistDraft(draft.build, "Changes saved locally.");
-      setSaving(false);
-      return;
-    }
-
-    const localBackupRecord = await localCharacterRepository.save({
-      build: draft.build,
-      createdAt: record.createdAt,
-      finalizedAt: record.finalizedAt,
-      syncStatus: "local",
-    });
-    setRecord(localBackupRecord);
+    const expectedUpdatedAt = requireServerCharacterRevision(record);
+    let recoveryEnvelope: CharacterRecoveryEnvelope | undefined;
 
     try {
-      const serverRecord = await updateServerCharacter({
-        build: localBackupRecord.build,
+      recoveryEnvelope = await characterRecoveryRepository.createAttempt({
+        account: currentUser,
+        attemptedBuild: draft.build,
+        baseBuild: record.build,
+        baseRevision: expectedUpdatedAt,
         characterId: id,
-        expectedUpdatedAt: requireServerCharacterRevision(localBackupRecord),
+        expectedAttemptId: recoveryRecord?.saveAttempt.id,
+        sourceAction: "Save progression",
+        sourceSurface: "Character Progression",
+      });
+      setCompetingRecovery(false);
+      if (recoveryEnvelope) {
+        setRecoveryRecord(recoveryEnvelope);
+      }
+
+      const serverRecord = await updateServerCharacter({
+        build: draft.build,
+        characterId: id,
+        expectedUpdatedAt,
       });
       const syncedRecord = await localCharacterRepository.save({
         build: serverRecord.build,
-        createdAt: localBackupRecord.createdAt,
-        finalizedAt: localBackupRecord.finalizedAt,
+        createdAt: record.createdAt,
+        creatorDisplayName: record.creatorDisplayName,
+        creatorEmail: record.creatorEmail,
+        creatorId: serverRecord.ownerId ?? record.creatorId,
+        finalizedAt: record.finalizedAt,
         serverUpdatedAt: serverRecord.updatedAt,
         syncStatus: "synced",
         updatedAt: serverRecord.updatedAt,
@@ -426,16 +482,67 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         status: "synced",
       });
       if (syncedDraft) {
+        const remainingRecovery = recoveryEnvelope
+          ? await characterRecoveryRepository.completeAttempt(
+              currentUser.id,
+              id,
+              recoveryEnvelope.saveAttempt.id,
+              serverRecord.build,
+              serverRecord.updatedAt,
+            )
+          : await characterRecoveryRepository.get(currentUser.id, id);
         setCanonicalDraft(syncedDraft);
-        setRecoveryDraft(undefined);
-        setRecoveryRequired(false);
+        if (!remainingRecovery) {
+          setRecoveryDraft(undefined);
+        }
+        setRecoveryRecord(remainingRecovery);
+        setRecoveryRequired(Boolean(remainingRecovery));
+        setCompetingRecovery(false);
         setReviewingRecovery(false);
       }
     } catch (error) {
+      const recoveryFailure = resolveCharacterRecoverySaveFailure(
+        error,
+        draft,
+        canonicalDraft ?? draft,
+      );
+
+      if (recoveryFailure.competingAttempt) {
+        const retainedRecovery = await characterRecoveryRepository.get(currentUser.id, id);
+        setDraft(recoveryFailure.displayedValue);
+        setRecoveryRecord(retainedRecovery);
+        setRecoveryRequired(Boolean(retainedRecovery));
+        setCompetingRecovery(true);
+        setReviewingRecovery(false);
+        setFeedback(formatCharacterRecoveryCompetition(Boolean(retainedRecovery)));
+        return;
+      }
+
       const currentCharacter = getCurrentCharacterFromMutationConflict(error);
 
       if (currentCharacter) {
         const canonicalRecord = buildServerBackedLocalCharacterRecord(currentCharacter, record);
+        await localCharacterRepository.save(canonicalRecord);
+        const markedRecovery = recoveryEnvelope
+          ? await characterRecoveryRepository.markAttemptOutcome(
+              currentUser.id,
+              id,
+              recoveryEnvelope.saveAttempt.id,
+              "conflict",
+              "stale_character",
+            )
+          : undefined;
+        const recoveryState = markedRecovery
+          ? await characterRecoveryRepository.reconcile(
+              currentUser.id,
+              id,
+              currentCharacter.build,
+              currentCharacter.updatedAt,
+              markedRecovery.saveAttempt.id,
+            )
+          : undefined;
+        const retainedRecovery =
+          recoveryState?.envelope ?? (await characterRecoveryRepository.get(currentUser.id, id));
         const currentDraft: LocalCharacterDraft = {
           ...draft,
           advancementPointsSpent: 0,
@@ -449,23 +556,36 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         setCanonicalDraft(currentDraft);
         setDraft(currentDraft);
         setRecoveryDraft(draft);
-        setRecoveryRequired(true);
+        setRecoveryRecord(retainedRecovery);
+        setRecoveryRequired(Boolean(retainedRecovery));
         setReviewingRecovery(false);
         setFeedback(
-          "The Character changed on the server. Its current progression is shown; your exact attempted draft remains retained for deliberate recovery.",
+          "The Character changed elsewhere. Current progression is shown, and your attempted changes remain available for review.",
         );
       } else {
+        const failedRecovery = recoveryEnvelope
+          ? await characterRecoveryRepository.markAttemptOutcome(
+              currentUser.id,
+              id,
+              recoveryEnvelope.saveAttempt.id,
+              "failed",
+              error instanceof Error ? error.name : undefined,
+            )
+          : undefined;
+        const retainedRecovery =
+          failedRecovery ?? (await characterRecoveryRepository.get(currentUser.id, id));
         if (canonicalDraft) {
           setRecord(record);
-          setDraft(canonicalDraft);
+          setDraft(recoveryFailure.displayedValue);
         }
         setRecoveryDraft(draft);
-        setRecoveryRequired(true);
+        setRecoveryRecord(retainedRecovery);
+        setRecoveryRequired(Boolean(retainedRecovery));
         setReviewingRecovery(false);
         setFeedback(
           error instanceof Error
-            ? `${error.message} The last confirmed server progression is shown and your attempted draft is retained.`
-            : "Character could not be confirmed by the server. The last confirmed progression is shown and your attempted draft is retained.",
+            ? `${error.message} The last confirmed progression is shown and your attempted changes remain available for review.`
+            : "The Character could not be confirmed. The last confirmed progression is shown and your attempted changes remain available for review.",
         );
       }
     } finally {
@@ -519,6 +639,9 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     (check) => (check.status ?? "approved") === "approved",
   ).length;
   const availableProgressionPoints = progressionView.availablePoints;
+  const recoveryFieldLabels = recoveryRecord
+    ? [...new Set(recoveryRecord.patch.map((entry) => formatCharacterRecoveryField(entry.path)))]
+    : [];
   const groupedSkillRows = groupRowsBySkillType(
     rowsByType.skill.map((row) => {
       const skill = content.skills.find((item) => item.id === row.targetId);
@@ -620,7 +743,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         </p>
       </div>
 
-      {recoveryRequired ? (
+      {recoveryRequired && recoveryRecord ? (
         <section
           style={{
             background: "#fff8e8",
@@ -632,29 +755,48 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           }}
         >
           <strong>
-            {reviewingRecovery
-              ? "Reviewing retained progression draft"
-              : "Progression draft retained"}
+            {competingRecovery || Boolean(recoveryRecord.competingCandidates?.length)
+              ? "Competing unsaved changes need review"
+              : reviewingRecovery
+                ? "Reviewing unsaved progression"
+                : "Unsaved progression needs review"}
           </strong>
           <span>
-            {reviewingRecovery
-              ? "This draft is visible for deliberate review and has not replaced the current server Character."
-              : "The current server Character is shown. Choose how to handle the retained draft; nothing is merged or overwritten automatically."}
+            {competingRecovery
+              ? "Another tab's primary recovery is listed below. Your newer progression remains visible here and is also retained as a separate rejected candidate."
+              : recoveryRecord.competingCandidates?.length
+                ? "The primary recovery and additional rejected candidates are retained separately. Review candidates on the Character Sheet before retrying here."
+                : reviewingRecovery
+                  ? "These progression changes are visible for review. Saving remains a separate action."
+                  : recoveryRecord.reconciliation === "conflict"
+                    ? "The same progression details changed elsewhere. Review your saved-on-device changes before deciding what to keep."
+                    : "The current Character is shown. Your unsaved progression remains available on this device."}
+          </span>
+          <span>
+            From {recoveryRecord.sourceSurface} · {recoveryRecord.sourceAction} ·{" "}
+            {new Date(recoveryRecord.saveAttempt.attemptedAt).toLocaleString()} · Changed:{" "}
+            {recoveryFieldLabels.join(", ")}
           </span>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-            {reviewingRecovery ? (
+            {competingRecovery ? (
+              <Link href={`/characters/${id}`}>Review competing recovery on Character Sheet</Link>
+            ) : reviewingRecovery ? (
               <button onClick={handleReturnToCanonical} type="button">
-                Return to current server progression
+                Return to current progression
               </button>
             ) : (
               <button onClick={handleReviewRecovery} type="button">
-                Review retained progression draft
+                Review unsaved progression
               </button>
             )}
             <button onClick={() => void handleDiscardRecovery()} type="button">
-              Discard draft and keep server progression
+              Discard unsaved progression
             </button>
           </div>
+          <CharacterRecoveryCandidateList
+            envelope={recoveryRecord}
+            reviewHref={`/characters/${id}`}
+          />
         </section>
       ) : null}
 
@@ -694,7 +836,13 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         <span>Pending: {progressionView.pendingAttempts.length}</span>
         <span>History: {progressionView.history.length}</span>
         <button
-          disabled={saving || Boolean(recoveryRequired && !reviewingRecovery)}
+          disabled={
+            saving ||
+            Boolean(
+              recoveryRequired &&
+              (!reviewingRecovery || recoveryRecord?.competingCandidates?.length),
+            )
+          }
           onClick={() => void handleSaveChanges()}
           type="button"
         >

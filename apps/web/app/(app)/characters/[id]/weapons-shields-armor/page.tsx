@@ -13,7 +13,7 @@ import {
   getCharacterArmorItems,
   getCharacterShieldItems,
   getCharacterWeaponItems,
-  getEquipmentTemplateById
+  getEquipmentTemplateById,
 } from "@/features/equipment/equipmentSelectors";
 import {
   buildCharacterArmorSummary,
@@ -32,7 +32,7 @@ import {
 } from "@/features/equipment/weaponCatalogTables";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { loadCharacterEquipmentState } from "@/lib/api/localServiceClient";
-import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
+import { loadCurrentCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
 import { UNNAMED_CHARACTER_PLACEHOLDER } from "@/lib/offline/repositories/localCharacterRepository";
 
 interface WeaponsShieldsArmorPageProps {
@@ -81,7 +81,7 @@ function TableShell(input: {
         borderRadius: 12,
         display: "grid",
         gap: "0.75rem",
-        padding: "1rem"
+        padding: "1rem",
       }}
     >
       <h2 style={{ margin: 0 }}>{input.title}</h2>
@@ -101,7 +101,10 @@ function TableShell(input: {
               {input.rows.map((row, index) => (
                 <tr key={`${input.title}-${index}`} style={{ borderBottom: "1px solid #eee8dc" }}>
                   {row.map((value, cellIndex) => (
-                    <td key={`${input.title}-${index}-${cellIndex}`} style={{ padding: "0.6rem 0.75rem 0.6rem 0", verticalAlign: "top" }}>
+                    <td
+                      key={`${input.title}-${index}-${cellIndex}`}
+                      style={{ padding: "0.6rem 0.75rem 0.6rem 0", verticalAlign: "top" }}
+                    >
                       {value}
                     </td>
                   ))}
@@ -128,7 +131,7 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([loadCharacterEquipmentState(id), loadLocalCharacterContext(id)])
+    Promise.all([loadCharacterEquipmentState(id), loadCurrentCharacterContext(id)])
       .then(([nextState, characterContext]) => {
         if (cancelled) {
           return;
@@ -148,7 +151,7 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
         setPageError(
           message === "Character not found."
             ? "Character not found or not accessible from this account."
-            : message
+            : message,
         );
       })
       .finally(() => {
@@ -173,13 +176,20 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
         : [],
     [id, state],
   );
-  const meleeWeaponTable = useMemo(() => buildMeleeWeaponCatalogTable(weaponCatalogRows), [weaponCatalogRows]);
-  const missileWeaponTable = useMemo(() => buildMissileWeaponCatalogTable(weaponCatalogRows), [weaponCatalogRows]);
+  const meleeWeaponTable = useMemo(
+    () => buildMeleeWeaponCatalogTable(weaponCatalogRows),
+    [weaponCatalogRows],
+  );
+  const missileWeaponTable = useMemo(
+    () => buildMissileWeaponCatalogTable(weaponCatalogRows),
+    [weaponCatalogRows],
+  );
   const meleeWeaponRowsWithNotes = useMemo(
     () =>
       meleeWeaponTable.rows.map((row) => {
         const source = weaponCatalogRows.find(
-          (candidate) => candidate.label === row[0] && candidate.template.handlingClass !== "missile",
+          (candidate) =>
+            candidate.label === row[0] && candidate.template.handlingClass !== "missile",
         );
         return [...row, truncateWeaponCatalogNote(source?.notes ?? "—")];
       }),
@@ -189,7 +199,8 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
     () =>
       missileWeaponTable.rows.map((row) => {
         const source = weaponCatalogRows.find(
-          (candidate) => candidate.label === row[0] && candidate.template.handlingClass === "missile",
+          (candidate) =>
+            candidate.label === row[0] && candidate.template.handlingClass === "missile",
         );
         return [...row, truncateWeaponCatalogNote(source?.notes ?? "—")];
       }),
@@ -207,7 +218,11 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
         return template ? ({ item, template } satisfies ShieldRow) : null;
       })
       .filter((row): row is ShieldRow => row !== null)
-      .sort((left, right) => getItemName(left.item, left.template).localeCompare(getItemName(right.item, right.template)));
+      .sort((left, right) =>
+        getItemName(left.item, left.template).localeCompare(
+          getItemName(right.item, right.template),
+        ),
+      );
   }, [id, state]);
 
   const armorRows = useMemo(() => {
@@ -221,7 +236,11 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
         return template ? ({ item, template } satisfies ArmorRow) : null;
       })
       .filter((row): row is ArmorRow => row !== null)
-      .sort((left, right) => getItemName(left.item, left.template).localeCompare(getItemName(right.item, right.template)));
+      .sort((left, right) =>
+        getItemName(left.item, left.template).localeCompare(
+          getItemName(right.item, right.template),
+        ),
+      );
   }, [id, state]);
 
   if (loading) {
@@ -279,16 +298,22 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
           "Quality",
           "Condition",
           "Quantity",
-          "Notes"
+          "Notes",
         ]}
         rows={shieldRows.map(({ item, template }) => [
           getItemName(item, template),
           template.name,
-          formatOptionalDisplayValue(template.attackModes?.[0]?.label ?? template.primaryAttackType),
+          formatOptionalDisplayValue(
+            template.attackModes?.[0]?.label ?? template.primaryAttackType,
+          ),
           formatOptionalDisplayValue(template.attackModes?.[0]?.ob ?? template.ob1),
-          template.attackModes?.[0] ? formatWeaponModeDmb(template.attackModes[0]) : formatOptionalDisplayValue(template.dmb1),
+          template.attackModes?.[0]
+            ? formatWeaponModeDmb(template.attackModes[0])
+            : formatOptionalDisplayValue(template.dmb1),
           formatOptionalDisplayValue(template.attackModes?.[0]?.crit ?? template.crit1),
-          formatOptionalDisplayValue(template.attackModes?.[0]?.armorModifier ?? template.armorMod1),
+          formatOptionalDisplayValue(
+            template.attackModes?.[0]?.armorModifier ?? template.armorMod1,
+          ),
           formatOptionalDisplayValue(template.initiative),
           formatOptionalDisplayValue(template.parry),
           formatOptionalDisplayValue(template.shieldBonus),
@@ -300,7 +325,7 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
           item.quality,
           item.conditionState,
           String(item.quantity),
-          item.notes ?? template.rulesNotes ?? "—"
+          item.notes ?? template.rulesNotes ?? "—",
         ])}
       />
 
@@ -329,7 +354,7 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
           "Quality",
           "Condition",
           "Quantity",
-          "Notes"
+          "Notes",
         ]}
         rows={armorRows.map(({ item, template }) => {
           const armorSummary = buildCharacterArmorSummary({
@@ -341,15 +366,24 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
           return [
             getItemName(item, template),
             template.name,
-            armorSummary?.locations.find((location) => location.key === "head")?.valueWithType ?? "—",
-            armorSummary?.locations.find((location) => location.key === "frontArm")?.valueWithType ?? "—",
-            armorSummary?.locations.find((location) => location.key === "chest")?.valueWithType ?? "—",
-            armorSummary?.locations.find((location) => location.key === "backArm")?.valueWithType ?? "—",
-            armorSummary?.locations.find((location) => location.key === "abdomen")?.valueWithType ?? "—",
-            armorSummary?.locations.find((location) => location.key === "frontThigh")?.valueWithType ?? "—",
-            armorSummary?.locations.find((location) => location.key === "frontFoot")?.valueWithType ?? "—",
-            armorSummary?.locations.find((location) => location.key === "backThigh")?.valueWithType ?? "—",
-            armorSummary?.locations.find((location) => location.key === "backFoot")?.valueWithType ?? "—",
+            armorSummary?.locations.find((location) => location.key === "head")?.valueWithType ??
+              "—",
+            armorSummary?.locations.find((location) => location.key === "frontArm")
+              ?.valueWithType ?? "—",
+            armorSummary?.locations.find((location) => location.key === "chest")?.valueWithType ??
+              "—",
+            armorSummary?.locations.find((location) => location.key === "backArm")?.valueWithType ??
+              "—",
+            armorSummary?.locations.find((location) => location.key === "abdomen")?.valueWithType ??
+              "—",
+            armorSummary?.locations.find((location) => location.key === "frontThigh")
+              ?.valueWithType ?? "—",
+            armorSummary?.locations.find((location) => location.key === "frontFoot")
+              ?.valueWithType ?? "—",
+            armorSummary?.locations.find((location) => location.key === "backThigh")
+              ?.valueWithType ?? "—",
+            armorSummary?.locations.find((location) => location.key === "backFoot")
+              ?.valueWithType ?? "—",
             armorSummary?.generalArmorWithType ?? "—",
             formatOptionalDisplayValue(armorSummary?.aaModifier),
             formatOptionalDisplayValue(armorSummary?.perceptionModifier),
@@ -360,7 +394,7 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
             item.quality,
             item.conditionState,
             String(item.quantity),
-            item.notes ?? template.rulesNotes ?? "—"
+            item.notes ?? template.rulesNotes ?? "—",
           ];
         })}
       />
