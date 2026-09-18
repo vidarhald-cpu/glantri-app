@@ -54,21 +54,24 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("setDeclarationIntent(intent)");
   });
 
-  it("keeps the established player Combat Item controls beside the GM-only task panel", () => {
+  it("keeps player Combat Item controls with readable history but without generic declarations", () => {
     const source = readSource();
     const gmPanel = source.indexOf("<GenericCombatActionPanel");
-    const playerItemPanel = source.indexOf("<CombatItemInteractionPanel", gmPanel);
+    const playerItemHistoryPanel = source.indexOf("<GenericCombatActionPanel", gmPanel + 1);
 
-    expect(source).toContain(
-      'import { CombatItemInteractionPanel } from "@/features/combat-generic-actions/CombatItemInteractionPanel";',
-    );
     expect(gmPanel).toBeGreaterThan(-1);
-    expect(playerItemPanel).toBeGreaterThan(gmPanel);
-    expect(source.slice(gmPanel, playerItemPanel)).toContain(") : (");
-    expect(source.slice(playerItemPanel, playerItemPanel + 360)).toContain("isGm={false}");
-    expect(source.slice(playerItemPanel, playerItemPanel + 360)).toContain(
+    expect(playerItemHistoryPanel).toBeGreaterThan(gmPanel);
+    expect(source.slice(gmPanel, playerItemHistoryPanel)).toContain(") : (");
+    expect(source.slice(playerItemHistoryPanel, playerItemHistoryPanel + 500)).toContain(
+      "isGm={false}",
+    );
+    expect(source.slice(playerItemHistoryPanel, playerItemHistoryPanel + 500)).toContain(
       "participantId={selectedRoundParticipant.participantId}",
     );
+    expect(source.slice(playerItemHistoryPanel, playerItemHistoryPanel + 500)).toContain(
+      "showGenericDeclarationControls={false}",
+    );
+    expect(source).not.toContain("<CombatItemInteractionPanel");
   });
 
   it("uses canonical board positioning for Current task and tracker-local keyboard navigation", () => {
