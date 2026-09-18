@@ -66,6 +66,10 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: '3000'
         }
         {
+          name: 'API_UPSTREAM_URL'
+          value: 'https://${apiApp.properties.defaultHostName}'
+        }
+        {
           name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
           value: '@Microsoft.KeyVault(SecretUri=${keyVaultUri}secrets/appinsights-connection-string/)'
         }

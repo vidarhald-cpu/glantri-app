@@ -4,6 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
+const BROWSER_API_URL =
+  process.env.PLAYWRIGHT_BROWSER_API_URL ??
+  `${process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000"}/api`;
 
 function loadTestState(): {
   b2CampaignId: string;
@@ -189,7 +192,7 @@ test.describe("B3 canonical item transfer", () => {
     await seedOwnedCharacterMirror(targetPage, nonHolderCharacterId);
     const targetPayloadPromise = targetPage.waitForResponse(
       (response) =>
-        response.url().startsWith(API_URL) &&
+        response.url().startsWith(BROWSER_API_URL) &&
         response.url().endsWith(`/characters/${nonHolderCharacterId}/equipment`) &&
         response.request().method() === "GET",
     );

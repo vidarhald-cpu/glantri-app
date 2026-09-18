@@ -107,7 +107,9 @@ jobs:
           az webapp config appsettings set \
             --resource-group rg_glantri \
             --name ${{ secrets.AZURE_WEB_APP_NAME }} \
-            --settings WEBSITES_PORT=3000
+            --settings \
+              WEBSITES_PORT=3000 \
+              API_UPSTREAM_URL="https://${{ secrets.AZURE_API_APP_NAME }}.azurewebsites.net"
           az webapp config set \
             --resource-group rg_glantri \
             --name ${{ secrets.AZURE_WEB_APP_NAME }} \
@@ -124,9 +126,7 @@ jobs:
       - name: Build and push Web image
         if: needs.detect-changes.outputs.web == 'true'
         run: |
-          docker build \
-            --build-arg NEXT_PUBLIC_API_BASE_URL=https://${{ secrets.AZURE_API_APP_NAME }}.azurewebsites.net \
-            -t ${{ env.WEB_IMAGE }}:${{ github.sha }} -t ${{ env.WEB_IMAGE }}:latest \
+          docker build -t ${{ env.WEB_IMAGE }}:${{ github.sha }} -t ${{ env.WEB_IMAGE }}:latest \
             -f apps/web/Dockerfile .
           docker push ${{ env.WEB_IMAGE }}:${{ github.sha }}
           docker push ${{ env.WEB_IMAGE }}:latest

@@ -3,7 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
-const BROWSER_API_URL = process.env.PLAYWRIGHT_BROWSER_API_URL ?? "http://localhost:4000";
+const BROWSER_API_URL =
+  process.env.PLAYWRIGHT_BROWSER_API_URL ??
+  `${process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000"}/api`;
 
 interface CanonicalCharacter {
   build: {
@@ -37,15 +39,18 @@ async function failCharacterUpdates(page: Page, characterId: string): Promise<vo
   await page.route(`${BROWSER_API_URL}/**`, async (route) => {
     const request = route.request();
     const requestUrl = new URL(request.url());
+    const apiPath = requestUrl.pathname.startsWith("/api/")
+      ? requestUrl.pathname.slice("/api".length)
+      : requestUrl.pathname;
 
-    if (request.method() === "PUT" && requestUrl.pathname === `/characters/${characterId}`) {
+    if (request.method() === "PUT" && apiPath === `/characters/${characterId}`) {
       await route.abort("failed");
       return;
     }
 
     if (API_URL !== BROWSER_API_URL) {
       await route.continue({
-        url: `${API_URL}${requestUrl.pathname}${requestUrl.search}`,
+        url: `${API_URL}${apiPath}${requestUrl.search}`,
       });
       return;
     }

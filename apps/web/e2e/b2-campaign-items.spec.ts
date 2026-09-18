@@ -4,6 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
+const BROWSER_API_URL =
+  process.env.PLAYWRIGHT_BROWSER_API_URL ??
+  `${process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000"}/api`;
 
 function loadTestState(): { b2CampaignId: string; characterId: string } {
   return JSON.parse(fs.readFileSync(path.join(__dirname, "test-state.json"), "utf-8")) as {
@@ -178,7 +181,7 @@ test.describe("B2 campaign item authoring and reveal", () => {
     await seedOwnedCharacterMirror(playerPage, characterId);
     const beforePayloadPromise = playerPage.waitForResponse(
       (response) =>
-        response.url().startsWith(API_URL) &&
+        response.url().startsWith(BROWSER_API_URL) &&
         response.url().endsWith(`/characters/${characterId}/equipment`) &&
         response.request().method() === "GET",
     );
@@ -203,7 +206,7 @@ test.describe("B2 campaign item authoring and reveal", () => {
 
     const afterPayloadPromise = playerPage.waitForResponse(
       (response) =>
-        response.url().startsWith(API_URL) &&
+        response.url().startsWith(BROWSER_API_URL) &&
         response.url().endsWith(`/characters/${characterId}/equipment`) &&
         response.request().method() === "GET",
     );

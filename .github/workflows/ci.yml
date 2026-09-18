@@ -97,11 +97,7 @@ jobs:
         run: docker build -t glantri-api-test -f apps/api/Dockerfile .
 
       - name: Build Web image
-        run: |
-          docker build \
-            --build-arg NEXT_PUBLIC_API_BASE_URL=http://localhost:4000 \
-            -t glantri-web-test \
-            -f apps/web/Dockerfile .
+        run: docker build -t glantri-web-test -f apps/web/Dockerfile .
 
       - name: Start API container
         run: |
@@ -116,6 +112,7 @@ jobs:
         run: |
           docker run -d --name web-test \
             --network host \
+            -e API_UPSTREAM_URL="http://localhost:4000" \
             -e NODE_ENV="production" \
             glantri-web-test
 
@@ -148,13 +145,41 @@ jobs:
           docker logs web-test
           exit 1
 
+      - name: Start production-shape HTTPS browser origin
+        run: |
+          openssl req -x509 -newkey rsa:2048 -nodes \
+            -keyout /tmp/glantri-ci-key.pem \
+            -out /tmp/glantri-ci-cert.pem \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost" \
+            -days 1
+          HTTPS_PROXY_TARGET="http://localhost:3000" \
+            HTTPS_PROXY_PORT="3443" \
+            HTTPS_PROXY_CERT="/tmp/glantri-ci-cert.pem" \
+            HTTPS_PROXY_KEY="/tmp/glantri-ci-key.pem" \
+            node scripts/testHttpsReverseProxy.mjs \
+            > /tmp/glantri-ci-https-proxy.log 2>&1 &
+          for i in $(seq 1 12); do
+            if curl -kfsS -o /dev/null https://localhost:3443; then
+              echo "HTTPS browser origin started on attempt $i"
+              exit 0
+            fi
+            echo "Attempt $i/12 failed, retrying in 5s..."
+            sleep 5
+          done
+          echo "HTTPS browser origin failed to start after 60s."
+          cat /tmp/glantri-ci-https-proxy.log
+          exit 1
+
       - name: Install Playwright browsers
-        run: pnpm --filter @glantri/web exec playwright install --with-deps chromium
+        run: pnpm --filter @glantri/web exec playwright install --with-deps chromium webkit
 
       - name: Run Playwright smoke tests
         env:
-          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          PLAYWRIGHT_BASE_URL: https://localhost:3443
           PLAYWRIGHT_API_URL: http://localhost:4000
+          PLAYWRIGHT_BROWSER_API_URL: https://localhost:3443/api
+          PLAYWRIGHT_IGNORE_HTTPS_ERRORS: "1"
         run: pnpm --filter @glantri/web exec playwright test
 
       - name: Upload Playwright report on failure
