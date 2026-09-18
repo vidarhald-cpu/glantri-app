@@ -239,9 +239,9 @@ test.describe("player Campaign Home privacy", () => {
       new RegExp(`/campaigns/${testState.delegatedCampaignId}\\?tab=campaign$`),
       { timeout: 10_000 },
     );
-    await expect(page.getByRole("region", { name: "Live play" })).toContainText(
-      "No live Scenario is currently available.",
-    );
+    await expect(
+      page.getByRole("region", { name: "Current Scenario and Encounter" }),
+    ).toContainText("No active Scenario is currently available.");
     const pageText = await page.locator("body").innerText();
     expect(pageText).not.toContain(testState.delegatedScenarioName);
     expect(pageText).not.toContain(testState.delegatedScenarioDescription);
