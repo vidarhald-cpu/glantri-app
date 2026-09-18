@@ -182,6 +182,7 @@ describe("GenericCombatActionPanel", () => {
     expect(updateCombatItemInteractionOnServer).not.toHaveBeenCalled();
   });
 
+  // Preservation intent: player Item submission keeps pending history without generic or GM controls.
   it("keeps a submitted player Item pending and readable at narrow width without generic controls", async () => {
     vi.mocked(loadCombatItemInteractionOptions).mockResolvedValue({
       actors: [
