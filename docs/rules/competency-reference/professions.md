@@ -10,7 +10,10 @@ in the general/unbound reference but unresolved as a certified contextual
 acquisition route.
 
 See the [competency rules](../competency-rules.md) and [availability gaps
-and exceptions](./gaps-and-exceptions.md).
+and exceptions](./gaps-and-exceptions.md). The complete
+[Profession → Learning Group → Skill mapping](./profession-learning-group-skills.md)
+provides the 84-family comparison, group-by-group Skill expansion, direct
+routes, deduplicated totals, Specializations, and route provenance.
 
 <a id="profession-p01"></a>
 

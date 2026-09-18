@@ -1,7 +1,7 @@
 {
   "schemaVersion": "glantri-competency-reference/v1",
   "status": "approved-reference",
-  "baseline": "d9e6a9588588be2e7d5341af5ead4446e1563e51",
+  "baseline": "641eb08d595a5bc09a232cd11ce932f5c92f40dd",
   "inventories": {
     "baseSkills": 131,
     "specializations": 26,
@@ -13,6 +13,8 @@
     "professionFamilies": 84,
     "professionGroupOpportunities": 115,
     "professionDirectOpportunities": 88,
+    "professionDirectBaseSkillOpportunities": 69,
+    "professionDirectSpecializationOpportunities": 19,
     "explicitProfessionTracks": 21,
     "societyLevels": 6,
     "socialBands": 4,
@@ -37,6 +39,11 @@
   "derivedCatalogueDigests": {
     "completeSkillProposal": "sha256:6b317d712fff4fc345e72f89bd167c1e9166c9e3d555256a4a6f98229bebb3c9",
     "targetLearningGroups": "sha256:33bb6b661fd59558b5b6eff0711e259a5614a34e8f341a83f883c1704b2451d9",
-    "targetProfessions": "sha256:11fb66385c82db84ca1097ee8be63638d5bf64470795e100f8eb93040e648a48"
+    "targetProfessions": "sha256:11fb66385c82db84ca1097ee8be63638d5bf64470795e100f8eb93040e648a48",
+    "professionLearningGroupSkillReference": "sha256:00dc86843b3d98ccc3c3a3fe7295225368dbadbea5ce0712708c36c970ca9301"
+  },
+  "referenceFiles": {
+    "professionLearningGroupSkillMarkdown": "docs/rules/competency-reference/profession-learning-group-skills.md",
+    "professionLearningGroupSkillJson": "docs/rules/competency-reference/profession-learning-group-skills.json"
   }
 }

@@ -18,6 +18,24 @@ No approved base Skill, Learning Group, or Profession family is missing its
 reader description. The one package-content gap is Scribe and Copyist's
 unbound written core, described below.
 
+### Profession Specialization parent dependencies
+
+The [complete Profession mapping](./profession-learning-group-skills.md)
+preserves three current Specialization routes whose immediate parent is not
+available through the same Profession family envelope:
+
+- Birth Attendant and Midwife provides Obstetrics but not its Medicine parent;
+- Herald provides Genealogy but not its History parent; and
+- Herald provides Courtly Protocol but not its Customs parent.
+
+These are not missing foreign keys, grants, or permission to bypass the normal
+immediate-parent rule. The required parent must come through another approved
+route. Birth Attendant and Midwife therefore has zero learnable base Skills in
+the currently implemented catalogue. A later Product Owner ruling approved the
+narrow Medicine → Obstetrics correction for P33, but that correction is not yet
+present in the published Profession catalogue data and is not silently
+applied by this extraction.
+
 ## Availability gaps
 
 ### Contextual activation remains incomplete

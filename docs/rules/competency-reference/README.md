@@ -7,6 +7,7 @@ catalogues together without changing their content.
 - [Skills](./skills.md)
 - [Learning Groups](./learning-groups.md)
 - [Professions](./professions.md)
+- [Profession → Learning Group → Skill mapping](./profession-learning-group-skills.md)
 - [Societies and availability](./societies.md)
 - [Availability gaps and exceptions](./gaps-and-exceptions.md)
 - [Reference manifest](./reference-manifest.json) for deterministic inventory
@@ -20,6 +21,13 @@ The cross-links are derived from the same approved catalogues used by Glantri:
 - 84 Profession families with 115 Learning Group and 88 direct competency
   opportunities;
 - 21 explicit Profession tracks.
+
+The Profession mapping provides an alphabetical 84-family comparison, expands
+each Learning Group into its actual base Skills, keeps direct Skill routes
+separate, preserves overlapping routes after deduplication, and reports
+Specializations without counting them as base Skills. Its
+[machine-readable companion](./profession-learning-group-skills.json) is
+derived from the same approved catalogues.
 
 The [Societies and availability](./societies.md) page records the six Society
 Levels, four Social Bands, eleven current Arch-Society lenses, and contextual
