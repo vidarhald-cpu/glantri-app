@@ -70,6 +70,32 @@ test.describe("CM1 Campaign home and private notes", () => {
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
 
+    const campaignTaskTargets = [
+      ["Membership", "campaign-membership"],
+      ["Scenarios", "campaign-scenarios"],
+      ["Campaign history", "campaign-history"],
+      ["Create material", "campaign-create-material"],
+      ["Notes & material", "campaign-material"],
+    ] as const;
+    for (const activation of ["pointer", "keyboard"] as const) {
+      for (const [label, targetId] of campaignTaskTargets) {
+        await page.goto(`/campaigns/${campaign.campaign.id}`);
+        const taskLink = page
+          .getByRole("navigation", { name: "Campaign tasks" })
+          .getByRole("link", { name: label, exact: true });
+
+        if (activation === "pointer") {
+          await taskLink.click();
+        } else {
+          await taskLink.focus();
+          await taskLink.press("Enter");
+        }
+
+        await expect.poll(() => page.evaluate(() => window.location.hash)).toBe(`#${targetId}`);
+        await expect(page.locator(`#${targetId}`)).toBeInViewport();
+      }
+    }
+
     await page.getByRole("link", { name: "Items", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Campaign items" })).toBeVisible();
     await page.goBack();

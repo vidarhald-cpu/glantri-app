@@ -970,10 +970,18 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       scenarioId: workspaceState.activeScenarioId ?? null,
       tab: canonicalWorkspaceTab,
     });
-    const currentHref = searchParamString ? `${pathname}?${searchParamString}` : pathname;
+    const currentHash = window.location.hash;
+    const campaignTaskHash =
+      /^#campaign-(overview|membership|scenarios|history|create-material|material)$/.test(
+        currentHash,
+      )
+        ? currentHash
+        : "";
+    const canonicalHref = `${nextHref}${campaignTaskHash}`;
+    const currentHref = `${searchParamString ? `${pathname}?${searchParamString}` : pathname}${campaignTaskHash}`;
 
-    if (nextHref !== currentHref) {
-      router.replace(nextHref);
+    if (canonicalHref !== currentHref) {
+      router.replace(canonicalHref);
     }
   }, [
     buildWorkspaceHref,
