@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { artifactMediaTypeSchema, artifactUploadMetadataSchema } from "./artifact";
 
+export const ORDINARY_ARTIFACT_UPLOAD_PRODUCER = "glantri-app/ordinary-upload";
+
 export const ARTIFACT_PACKAGE_LIMITS = {
   objects: 100,
   resources: 100,
@@ -81,6 +83,7 @@ export interface ArtifactImportPreviewItem {
   optional: boolean;
   status: "create" | "update" | "present" | "conflict" | "invalid";
   reasons: string[];
+  warnings?: string[];
   targetArtifactId?: string;
   existingTitle?: string;
   expectedVersion?: number;
