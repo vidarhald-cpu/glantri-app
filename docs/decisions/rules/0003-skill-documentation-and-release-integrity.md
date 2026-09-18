@@ -14,6 +14,13 @@
 - Supersedes: none
 - Superseded by: none
 
+**Successor presentation ruling, 2026-09-17:** the
+[Chargen and Competency Experience Product Contract](../../product/chargen-competency-experience-contract.md)
+supersedes this Pilot-era decision's assumption that an ordinary Admin/reference
+surface should retain a visible `Legacy Catalogue`. Historical and migration
+evidence remains durable in repository/source documentation. The integrity,
+versioning, provenance, and read-only review decisions below remain in force.
+
 ## Question
 
 What canonical content, documentation, integrity, authoring, and Admin-reference
