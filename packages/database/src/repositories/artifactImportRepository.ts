@@ -2,6 +2,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import {
   artifactPackageSchema,
+  ORDINARY_ARTIFACT_UPLOAD_PRODUCER,
   validateArtifactSelection,
   type ArtifactPackage,
   type ArtifactImportPreview,
@@ -119,8 +120,19 @@ export class ArtifactImportRepository {
     const assets = await tx.campaignAsset.findMany({
       where: { campaignId, id: { in: [...new Set(targetIds)] } },
     });
+    const declaredDigests = manifest.resources.map((resource) => resource.sha256);
+    const duplicateAssets = await tx.campaignAsset.findMany({
+      where: {
+        campaignId,
+        lifecycleState: { not: "deleted" },
+        sha256Digest: { in: declaredDigests },
+        storageState: "ready",
+      },
+      select: { id: true, sha256Digest: true, title: true },
+    });
     return manifest.objects.map((object) => {
       const reasons = [...(errors.get(object.id) ?? []), ...(errors.get("package") ?? [])];
+      const warnings: string[] = [];
       const item: ArtifactImportPreviewItem = {
         id: object.id,
         title: object.metadata?.title ?? object.id,
@@ -128,6 +140,7 @@ export class ArtifactImportRepository {
         optional: object.optional,
         status: "create",
         reasons,
+        warnings,
         resourceId: object.resourceId,
       };
       if (
@@ -140,6 +153,20 @@ export class ArtifactImportRepository {
         ? mappings.find((x) => x.sourceId === object.sourceId)
         : undefined;
       const targetId = object.targetArtifactId ?? source?.artifactId;
+      const resourceDigest = manifest.resources.find(
+        (resource) => resource.id === object.resourceId,
+      )?.sha256;
+      if (!targetId && resourceDigest) {
+        const matches = duplicateAssets.filter((asset) => asset.sha256Digest === resourceDigest);
+        if (matches.length === 1)
+          warnings.push(
+            `The file matches existing Artifact “${matches[0]!.title}”. Accepting will still create a separate Artifact.`,
+          );
+        else if (matches.length > 1)
+          warnings.push(
+            `The file matches ${matches.length} existing Artifacts. Accepting will still create a separate Artifact.`,
+          );
+      }
       if (source && object.targetArtifactId && source.artifactId !== object.targetArtifactId)
         reasons.push("The explicit update target conflicts with the recorded source identity.");
       if (targetId) {
@@ -287,6 +314,10 @@ export class ArtifactImportRepository {
           if (!resource || !object.metadata) throw new ArtifactConflictError();
           const artifactId = item.targetArtifactId ?? randomUUID();
           const metadata = object.metadata;
+          const ordinaryUpload =
+            manifest.producer === ORDINARY_ARTIFACT_UPLOAD_PRODUCER &&
+            !object.sourceId &&
+            !object.targetArtifactId;
           const representation = {
             storageKey: resource.key,
             storageProvider: resource.provider,
@@ -307,8 +338,10 @@ export class ArtifactImportRepository {
                 type: metadata.artifactKind === "portrait" ? "image" : metadata.artifactKind,
                 description: metadata.description,
                 altText: metadata.altText,
-                provenanceKind: "imported",
-                sourceLabel: metadata.sourceLabel ?? manifest.producer,
+                provenanceKind: ordinaryUpload ? metadata.provenanceKind : "imported",
+                sourceLabel: ordinaryUpload
+                  ? metadata.sourceLabel
+                  : (metadata.sourceLabel ?? manifest.producer),
                 sourceUri: metadata.sourceUri,
                 audience: "gm_private",
                 visibility: "gm_only",
@@ -351,7 +384,9 @@ export class ArtifactImportRepository {
               sha256Digest: resource.sha256,
               originalFilename: resource.filename,
               actorUserId,
-              note: `Imported from ${manifest.title} (${manifest.version})`,
+              note: ordinaryUpload
+                ? "Uploaded through Artifact review"
+                : `Imported from ${manifest.title} (${manifest.version})`,
             },
           });
           await tx.campaignAsset.update({

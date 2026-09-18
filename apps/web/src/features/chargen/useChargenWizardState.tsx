@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   defaultCanonicalContent,
@@ -100,8 +100,8 @@ import {
   buildTargetRuntimeContent,
 } from "./targetCompetencyContent";
 import { persistAuthenticatedFinalizedCharacter } from "./finalizeCharacterAuthority";
+import { ChargenDraftPersistenceCoordinator } from "./chargenDraftPersistenceCoordinator";
 
-const SESSION_ID = "chargen-vertical-slice";
 const CONTENT_CACHE_KEY = "canonical-content";
 
 const chargenSessionRepository = new ChargenSessionRepository();
@@ -110,6 +110,15 @@ const localCharacterRepository = new LocalCharacterRepository();
 
 export function useChargenWizardState() {
   const router = useRouter();
+  const draftPersistenceRef = useRef<ChargenDraftPersistenceCoordinator | null>(null);
+
+  if (!draftPersistenceRef.current) {
+    draftPersistenceRef.current = new ChargenDraftPersistenceCoordinator((error) => {
+      console.error(error);
+    });
+  }
+
+  const draftPersistence = draftPersistenceRef.current;
   const [characterName, setCharacterName] = useState("");
   const [contentSource, setContentSource] = useState(() =>
     createTargetCompetencyChargenSource(defaultCanonicalContent),
@@ -119,6 +128,7 @@ export function useChargenWizardState() {
   const [feedback, setFeedback] = useState<string[]>([]);
   const [hasStartedChargen, setHasStartedChargen] = useState(false);
   const [historicalDraft, setHistoricalDraft] = useState<ChargenSessionDraft>();
+  const [resumableDraft, setResumableDraft] = useState<ChargenSessionDraft>();
   const [hydrated, setHydrated] = useState(false);
   const [profileAdjustments, setProfileAdjustments] = useState<
     Record<string, ChargenStatAdjustmentState>
@@ -642,12 +652,15 @@ export function useChargenWizardState() {
     let cancelled = false;
 
     async function hydrate() {
-      const [cachedContent, sessionUser, activeRuleSet, savedDraft] = await Promise.all([
+      const [cachedContent, sessionUser, activeRuleSet] = await Promise.all([
         contentCacheRepository.get(CONTENT_CACHE_KEY),
         getCurrentSessionUser().catch(() => null),
         loadActiveChargenRuleSet().catch(() => DEFAULT_CHARGEN_RULE_SET),
-        chargenSessionRepository.get(SESSION_ID),
       ]);
+
+      const savedDraft = sessionUser
+        ? await chargenSessionRepository.getForOwner(sessionUser.id)
+        : undefined;
 
       if (cancelled) {
         return;
@@ -679,16 +692,10 @@ export function useChargenWizardState() {
           savedDraft.progression.skillGroups.some(
             (g) => !activeCatalogue?.groupIds?.includes(g.groupId),
           ));
-      if (isHistoricalDraft) setHistoricalDraft(savedDraft);
-      if (savedDraft?.selectedProfile && !isHistoricalDraft) {
-        setCharacterName(savedDraft.characterName ?? "");
-        setSelectedCivilizationId(savedDraft.selectedCivilizationId);
-        setRolledProfiles(savedDraft.rolledProfiles ?? [savedDraft.selectedProfile]);
-        setProfileAdjustments(savedDraft.profileAdjustments ?? {});
-        setSelectedProfileId(savedDraft.selectedProfile.id);
-        setSelectedProfessionId(savedDraft.selectedProfessionId);
-        setProgression(savedDraft.progression);
-        setHasStartedChargen(true);
+      if (isHistoricalDraft) {
+        setHistoricalDraft(savedDraft);
+      } else if (savedDraft) {
+        setResumableDraft(savedDraft);
       }
       setHydrated(true);
 
@@ -803,13 +810,13 @@ export function useChargenWizardState() {
   }, [selectedRolledProfile]);
 
   useEffect(() => {
-    if (!hydrated || historicalDraft) {
+    if (!hydrated || !hasStartedChargen || !currentUser || historicalDraft) {
       return;
     }
 
-    chargenSessionRepository
-      .save({
-        id: SESSION_ID,
+    draftPersistence.enqueue(() =>
+      chargenSessionRepository.save({
+        ownerId: currentUser.id,
         characterName,
         rolledProfiles,
         profileAdjustments,
@@ -820,11 +827,10 @@ export function useChargenWizardState() {
         selectedSocialClass: selectedSocietyAccess?.socialClass,
         selectedSocietyId: activeSocietyId,
         selectedSocietyLevel: activeSocialBand,
-      })
-      .catch((error) => {
-        console.error(error);
-      });
+      }),
+    );
   }, [
+    draftPersistence,
     historicalDraft,
     rolledProfiles,
     profileAdjustments,
@@ -832,6 +838,7 @@ export function useChargenWizardState() {
     selectedCivilizationId,
     hasStartedChargen,
     hydrated,
+    currentUser,
     progression,
     selectedProfessionId,
     selectedProfile,
@@ -1082,8 +1089,21 @@ export function useChargenWizardState() {
   }
 
   async function handleStartChargen() {
-    await chargenSessionRepository.delete(SESSION_ID);
+    if (!currentUser) {
+      setFeedback(["Sign in before starting a Character."]);
+      return;
+    }
 
+    await draftPersistence.suspendAndDrain();
+
+    try {
+      await chargenSessionRepository.deleteForOwner(currentUser.id);
+    } finally {
+      draftPersistence.resume();
+    }
+
+    setHistoricalDraft(undefined);
+    setResumableDraft(undefined);
     setHasStartedChargen(true);
     setRolledProfiles(generateProfiles({ ruleSet: chargenRuleSet }));
     setProfileAdjustments({});
@@ -1107,6 +1127,26 @@ export function useChargenWizardState() {
     setSkillTypeFilter("all");
     setSpecializationSearch("");
     setShowAllSpecializations(false);
+  }
+
+  function handleResumeChargen() {
+    if (!resumableDraft) {
+      return;
+    }
+
+    draftPersistence.resume();
+    setCharacterName(resumableDraft.characterName ?? "");
+    setSelectedCivilizationId(resumableDraft.selectedCivilizationId);
+    setRolledProfiles(
+      resumableDraft.rolledProfiles ??
+        (resumableDraft.selectedProfile ? [resumableDraft.selectedProfile] : []),
+    );
+    setProfileAdjustments(resumableDraft.profileAdjustments ?? {});
+    setSelectedProfileId(resumableDraft.selectedProfile?.id);
+    setSelectedProfessionId(resumableDraft.selectedProfessionId);
+    setProgression(resumableDraft.progression);
+    setResumableDraft(undefined);
+    setHasStartedChargen(true);
   }
 
   function handleAllocate(
@@ -1596,6 +1636,7 @@ export function useChargenWizardState() {
     }
 
     setIsFinalizing(true);
+    let finalizedDraftDeleted = false;
 
     try {
       const finalizedRecord = await persistAuthenticatedFinalizedCharacter(
@@ -1606,9 +1647,15 @@ export function useChargenWizardState() {
         },
       );
 
-      await chargenSessionRepository.delete(SESSION_ID);
+      await draftPersistence.suspendAndDrain();
+      await chargenSessionRepository.deleteForOwner(currentUser.id);
+      finalizedDraftDeleted = true;
       router.push(`/characters/${finalizedRecord.id}`);
     } catch (error) {
+      if (!finalizedDraftDeleted) {
+        draftPersistence.resume();
+      }
+
       const message =
         error instanceof Error ? error.message : "Unable to finalize and save the character.";
       setFeedback([message]);
@@ -1619,6 +1666,7 @@ export function useChargenWizardState() {
 
   return {
     historicalDraft,
+    resumableDraft,
     activeProfessionPreviewId,
     availableProfessions,
     availableProfessionCards,
@@ -1643,6 +1691,7 @@ export function useChargenWizardState() {
     groupedPlayerSkillTableRows,
     groupSlotCandidateSkillIds,
     hasStartedChargen,
+    hydrated,
     isFinalizing,
     languageSelectionSummary,
     languageSkillViews,
@@ -1708,6 +1757,7 @@ export function useChargenWizardState() {
     handleProfileSelect,
     handleRemoveAllocation,
     handleRemoveSpecialization,
+    handleResumeChargen,
     handleResetStatAdjustments,
     handleSelectGroupSlotSkill,
     handleStartChargen,

@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { artifactPackageSchema, type ArtifactPackage } from "@glantri/domain";
+import {
+  artifactPackageSchema,
+  ORDINARY_ARTIFACT_UPLOAD_PRODUCER,
+  type ArtifactPackage,
+} from "@glantri/domain";
 import type { ArtifactBinaryStore } from "../artifacts/artifactBinaryStore";
 import { ArtifactImportRepository } from "../repositories/artifactImportRepository";
 import { ArtifactRepository } from "../repositories/artifactRepository";
@@ -58,6 +62,30 @@ function manifest(count = 4, bytes = png): ArtifactPackage {
     })),
   });
 }
+function ordinaryManifest(count = 1): ArtifactPackage {
+  return artifactPackageSchema.parse({
+    schemaVersion: 1,
+    producer: ORDINARY_ARTIFACT_UPLOAD_PRODUCER,
+    packageId: "ordinary-once",
+    version: "1",
+    title: "Artifact upload",
+    resources: Array.from({ length: count }, (_, index) => ({
+      id: `picture${index}`,
+      mediaType: "image/png",
+      sha256: digest(png),
+    })),
+    objects: Array.from({ length: count }, (_, index) => ({
+      id: `a${index}`,
+      type: "Artifact",
+      resourceId: `picture${index}`,
+      metadata: {
+        title: `Same bytes ${index + 1}`,
+        artifactKind: "image",
+        provenanceKind: "user_upload",
+      },
+    })),
+  });
+}
 if (!prisma) describe.skip("AM1 import integration (owned DB required)", () => {});
 else
   describe("AM1 transactional Artifact imports", () => {
@@ -71,14 +99,15 @@ else
       const artifacts = new ArtifactService(store, new ArtifactRepository(prisma!));
       async function stage(data = manifest(), bytes = png) {
         const session = await service.begin(campaign.id, gm.id, data);
-        await service.uploadResource({
-          campaignId: campaign.id,
-          userId: gm.id,
-          id: session.id,
-          resourceId: "picture",
-          content: stream(bytes),
-          mediaType: "image/png",
-        });
+        for (const resource of data.resources)
+          await service.uploadResource({
+            campaignId: campaign.id,
+            userId: gm.id,
+            id: session.id,
+            resourceId: resource.id,
+            content: stream(bytes),
+            mediaType: resource.mediaType,
+          });
         return service.finish(campaign.id, gm.id, session.id);
       }
       return { gm, campaign, store, service, artifacts, stage };
@@ -98,6 +127,11 @@ else
       expect(new Set(Object.values(accepted.result!)).size).toBe(4);
       expect(await prisma!.artifactRevision.count()).toBe(4);
       expect(
+        (await prisma!.campaignAsset.findMany()).every(
+          (artifact) => artifact.provenanceKind === "imported",
+        ),
+      ).toBe(true);
+      expect(
         (await service.accept(campaign.id, gm.id, preview.id, preview.previewToken, [])).result,
       ).toEqual(accepted.result);
       await service.cleanup(campaign.id, gm.id, preview.id);
@@ -115,6 +149,38 @@ else
       expect(repeated.items.every((x) => x.status === "present")).toBe(true);
       await service.accept(campaign.id, gm.id, repeated.id, repeated.previewToken, []);
       expect(await prisma!.campaignAsset.count()).toBe(4);
+    });
+    it("treats ordinary loose files as creation-only and warns without collapsing matching bytes", async () => {
+      const { gm, campaign, service, stage } = await setup();
+      const first = await stage(ordinaryManifest(2));
+      const firstAccepted = await service.accept(
+        campaign.id,
+        gm.id,
+        first.id,
+        first.previewToken,
+        [],
+      );
+      const second = await stage(ordinaryManifest());
+      expect(second.items[0]!.status).toBe("create");
+      expect(second.items[0]!.targetArtifactId).toBeUndefined();
+      expect(second.items[0]!.warnings).toContain(
+        "The file matches 2 existing Artifacts. Accepting will still create a separate Artifact.",
+      );
+      const secondAccepted = await service.accept(
+        campaign.id,
+        gm.id,
+        second.id,
+        second.previewToken,
+        [],
+      );
+      expect(new Set(Object.values(firstAccepted.result!)).size).toBe(2);
+      expect(Object.values(firstAccepted.result!)).not.toContain(secondAccepted.result!.a0);
+      expect(await prisma!.artifactSourceMapping.count()).toBe(0);
+      const created = await prisma!.campaignAsset.findMany({ orderBy: { createdAt: "asc" } });
+      expect(created).toHaveLength(3);
+      expect(created.every((artifact) => artifact.audience === "gm_private")).toBe(true);
+      expect(created.every((artifact) => artifact.provenanceKind === "user_upload")).toBe(true);
+      expect(created.every((artifact) => artifact.sourceLabel === null)).toBe(true);
     });
     it("requires specific fresh update approval, preserves history and rejects changed/revoked authority", async () => {
       const { gm, campaign, service, stage, artifacts, store } = await setup();

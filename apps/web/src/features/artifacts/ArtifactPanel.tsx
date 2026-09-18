@@ -5,8 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   ArtifactCommonDto,
   ArtifactGmDto,
-  ArtifactKind,
-  ArtifactProvenanceKind,
   Scenario,
   ScenarioArtifactReferenceDto,
 } from "@glantri/domain";
@@ -21,14 +19,11 @@ import {
   setArtifactAudience,
   setArtifactLifecycle,
   updateArtifactMetadata,
-  uploadArtifact,
 } from "@/lib/api/localServiceClient";
 
 import { ArtifactDetails } from "./ArtifactDetails";
 import { ArtifactImportPanel } from "./ArtifactImportPanel";
-
-const supportedTypes = new Set(["image/png", "image/jpeg", "image/webp", "application/pdf"]);
-const maxBytes = 25 * 1024 * 1024;
+import { OrdinaryArtifactUploadPanel } from "./OrdinaryArtifactUploadPanel";
 
 function audienceLabel(artifact: ArtifactGmDto): string {
   if (artifact.audience === "campaign") return "Shared with Campaign";
@@ -52,13 +47,6 @@ export function ArtifactPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
-  const [file, setFile] = useState<File>();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [altText, setAltText] = useState("");
-  const [kind, setKind] = useState<ArtifactKind>("image");
-  const [provenanceKind, setProvenanceKind] = useState<ArtifactProvenanceKind>("user_upload");
-  const [uploadProgress, setUploadProgress] = useState<number>();
   const [selectedScenarioByArtifact, setSelectedScenarioByArtifact] = useState<
     Record<string, string>
   >({});
@@ -105,44 +93,6 @@ export function ArtifactPanel({
     }
   }
 
-  async function handleUpload() {
-    setError(undefined);
-    setFeedback(undefined);
-    if (!file || !title.trim()) {
-      setError("Choose a file and give the Artifact a title.");
-      return;
-    }
-    if (!supportedTypes.has(file.type) || file.size === 0 || file.size > maxBytes) {
-      setError("Choose a non-empty PNG, JPEG, WebP, or PDF no larger than 25 MiB.");
-      return;
-    }
-    setUploadProgress(0);
-    try {
-      await uploadArtifact({
-        campaignId,
-        file,
-        metadata: {
-          altText: altText.trim() || undefined,
-          artifactKind: kind,
-          description: description.trim() || undefined,
-          provenanceKind,
-          title: title.trim(),
-        },
-        onProgress: setUploadProgress,
-      });
-      setFile(undefined);
-      setTitle("");
-      setDescription("");
-      setAltText("");
-      setUploadProgress(undefined);
-      await refresh();
-      setFeedback("Artifact uploaded privately. Review it before sharing.");
-    } catch (caught) {
-      setUploadProgress(undefined);
-      setError(caught instanceof Error ? caught.message : "Upload failed. Try again.");
-    }
-  }
-
   function beginEdit(artifact: ArtifactGmDto) {
     setEditingId(artifact.id);
     setEditTitle(artifact.title);
@@ -182,7 +132,6 @@ export function ArtifactPanel({
           </label>
         ) : null}
       </div>
-      {mode === "gm" ? <ArtifactImportPanel campaignId={campaignId} onAccepted={refresh} /> : null}
       <div>
         <h2 style={{ marginBottom: "0.25rem" }}>Artifacts</h2>
         <p style={{ color: "#5e5a50", margin: 0 }}>
@@ -196,72 +145,9 @@ export function ArtifactPanel({
       {feedback ? <div role="status">{feedback}</div> : null}
 
       {mode === "gm" ? (
-        <div
-          style={{
-            border: "1px solid #d9ddd8",
-            borderRadius: 12,
-            display: "grid",
-            gap: "0.65rem",
-            padding: "1rem",
-          }}
-        >
-          <h3 style={{ margin: 0 }}>Upload an Artifact</h3>
-          <label>
-            File
-            <input
-              accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,image/webp,application/pdf"
-              onChange={(event) => setFile(event.target.files?.[0])}
-              type="file"
-            />
-          </label>
-          <label>
-            Kind
-            <select onChange={(event) => setKind(event.target.value as ArtifactKind)} value={kind}>
-              <option value="map">Map</option>
-              <option value="image">Image</option>
-              <option value="portrait">Portrait</option>
-              <option value="document">Document</option>
-              <option value="handout">Handout</option>
-            </select>
-          </label>
-          <label>
-            Title
-            <input onChange={(event) => setTitle(event.target.value)} value={title} />
-          </label>
-          <label>
-            Description
-            <textarea
-              onChange={(event) => setDescription(event.target.value)}
-              value={description}
-            />
-          </label>
-          <label>
-            Alt text for visual content
-            <input onChange={(event) => setAltText(event.target.value)} value={altText} />
-          </label>
-          <label>
-            Provenance
-            <select
-              onChange={(event) => setProvenanceKind(event.target.value as ArtifactProvenanceKind)}
-              value={provenanceKind}
-            >
-              <option value="user_upload">Uploaded by me</option>
-              <option value="imported">Imported</option>
-              <option value="generated">Generated elsewhere, reviewed and uploaded</option>
-            </select>
-          </label>
-          {uploadProgress !== undefined ? (
-            <progress aria-label="Upload progress" max={100} value={uploadProgress} />
-          ) : null}
-          <button
-            disabled={uploadProgress !== undefined}
-            onClick={() => void handleUpload()}
-            type="button"
-          >
-            {uploadProgress !== undefined ? "Uploading…" : "Upload privately"}
-          </button>
-        </div>
+        <OrdinaryArtifactUploadPanel campaignId={campaignId} onAccepted={refresh} />
       ) : null}
+      {mode === "gm" ? <ArtifactImportPanel campaignId={campaignId} onAccepted={refresh} /> : null}
 
       <div
         style={{
