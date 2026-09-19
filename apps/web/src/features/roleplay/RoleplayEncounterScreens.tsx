@@ -63,6 +63,7 @@ import {
 } from "@/lib/chargen/chargenBrowse";
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import { CompletedEncounterHistory } from "@/features/encounters/CompletedEncounterHistory";
+import { EncounterItemsPanel } from "@/features/encounters/EncounterItemsPanel";
 
 import { RoleplayRollBlock } from "./components/RoleplayRollBlock";
 import {
@@ -1589,6 +1590,8 @@ export function GmRoleplayingEncounterScreen({
             scenarioName={scenario?.name}
           />
 
+          <EncounterItemsPanel encounter={encounter} isGm persistEncounter={onPersist} />
+
           <GmMessageSection
             gmMessageDraft={gmMessageDraft}
             onChange={(message) => {
@@ -2305,6 +2308,7 @@ export function PlayerRoleplayingEncounterScreen({
             encounter={encounter}
             scenarioName={scenario?.name}
           />
+          <EncounterItemsPanel encounter={encounter} isGm={false} />
           {playerView.gmMessage ? (
             <section style={panelStyle}>
               <h2 style={{ margin: 0 }}>Situation</h2>

@@ -195,33 +195,61 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     expect(initialOptionsResponse.ok(), initialOptionsText).toBe(true);
     const initialOptions = JSON.parse(initialOptionsText) as {
       options: {
-        actors: Array<{ label: string; participantId: string }>;
+        actors: Array<{
+          items: Array<{ id: string; revision: string }>;
+          label: string;
+          participantId: string;
+        }>;
         recipients: Array<{ label: string; participantId: string }>;
       };
     };
-    const sourceEncounterParticipantId = initialOptions.options.actors.find(
+    const sourceActor = initialOptions.options.actors.find(
       (candidate) => candidate.label === characterName,
-    )?.participantId;
+    );
+    const sourceEncounterParticipantId = sourceActor?.participantId;
     const recipientEncounterParticipantId = initialOptions.options.recipients.find(
       (candidate) => candidate.label === recipientCharacterName,
     )?.participantId;
     expect(sourceEncounterParticipantId).toBeTruthy();
     expect(recipientEncounterParticipantId).toBeTruthy();
+    expect(sourceActor?.items.map((candidate) => candidate.id)).toEqual([item!.id]);
 
     await playerPage.setViewportSize({ height: 844, width: 390 });
+    await playerPage.goto(`/characters/${characterId}/equipment`);
+    await expect(
+      playerPage.getByRole("heading", { name: `Inventory by location - ${characterName}` }),
+    ).toBeVisible();
+    await expect(playerPage.getByText("On person", { exact: true })).toBeVisible();
+    await expect(playerPage.locator(`input[value="${itemName}"]`)).toBeVisible();
+
     await playerPage.goto(`/campaigns/${campaignId}/scenarios/${scenarioId}/player/combat`);
-    await expect(playerPage.getByRole("heading", { name: "Items in this Combat" })).toBeVisible();
-    await expect(playerPage.getByText(itemName, { exact: true })).toBeVisible();
-    await expect(playerPage.getByText("Held · On person", { exact: true })).toBeVisible();
-    await playerPage
-      .getByLabel(`Pass ${itemName} to`)
-      .selectOption({ label: recipientCharacterName });
-    await playerPage.getByRole("button", { name: `${itemName}: Pass / give` }).click();
+    await expect(playerPage.getByRole("heading", { name: "Encounter Items" })).toBeVisible();
+    await expect(playerPage.getByRole("heading", { name: "Items in this Combat" })).toHaveCount(0);
+    await expect(playerPage.getByText("No Items are present in this Encounter.")).toBeVisible();
+
+    const passActionId = `acov4-pass-${suffix}`;
+    let current = await getEncounter(playerContext.request, encounterId);
+    await postJson(
+      playerContext.request,
+      `/encounters/${encounterId}/combat-round/item-interactions`,
+      {
+        actionId: passActionId,
+        encounterId,
+        expectedItemRevision: sourceActor!.items[0]!.revision,
+        expectedRevision: current.encounter.updatedAt,
+        itemId: item!.id,
+        itemOperation: "pass",
+        operation: "declare",
+        participantId: sourceEncounterParticipantId,
+        recipientParticipantId: recipientEncounterParticipantId,
+      },
+    );
+    await playerPage.reload();
     await expect(playerPage.getByText("Waiting for GM review · GM decides")).toBeVisible();
 
     const declaredPass = await getEncounter(gmPage.request, encounterId);
     const passAction = declaredPass.encounter.combatRoundState?.genericActions?.find(
-      (candidate) => candidate.status === "declared",
+      (candidate) => candidate.id === passActionId && candidate.status === "declared",
     );
     expect(passAction).toBeTruthy();
     await playerPage.reload();
@@ -260,7 +288,7 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     expect(recipientActor?.items.map((candidate) => candidate.id)).toEqual([item!.id]);
 
     const dropActionId = `acov4-drop-${suffix}`;
-    let current = await getEncounter(recipientContext.request, encounterId);
+    current = await getEncounter(recipientContext.request, encounterId);
     await postJson(
       recipientContext.request,
       `/encounters/${encounterId}/combat-round/item-interactions`,
@@ -282,6 +310,14 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
       participantIds: [sourceEncounterParticipantId!, recipientEncounterParticipantId!],
       resultText: `${itemName} is present and unheld.`,
     });
+    await playerPage.reload();
+    await expect(playerPage.getByRole("heading", { name: "Encounter Items" })).toBeVisible();
+    await expect(playerPage.getByText(itemName, { exact: true })).toBeVisible();
+    await gmPage.reload();
+    await expect(gmPage.getByRole("heading", { name: "Encounter Items" })).toBeVisible();
+    await expect(gmPage.getByRole("listitem").filter({ hasText: itemName })).toContainText(
+      "visible to players",
+    );
 
     optionsResponse = await playerContext.request.get(
       `${API_URL}/encounters/${encounterId}/combat-round/item-interactions/options`,
@@ -323,6 +359,10 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     await expect(playerPage.getByText("Result:", { exact: true }).locator("..")).toContainText(
       `${itemName} is picked up again.`,
     );
+    await expect(playerPage.getByText("No Items are present in this Encounter.")).toBeVisible();
+    await playerPage.goto(`/characters/${characterId}/equipment`);
+    await expect(playerPage.getByText("On person", { exact: true })).toBeVisible();
+    await expect(playerPage.locator(`input[value="${itemName}"]`)).toBeVisible();
 
     await playerContext.close();
     await recipientContext.close();

@@ -122,13 +122,20 @@ describe("PlayerCombatActionSelectorPanel", () => {
       />,
     );
 
-    expect(screen.getByRole("option", { name: "Choose action" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Choose primary action" })).toBeInTheDocument();
     expect(screen.getByText("Action declared.")).toBeInTheDocument();
     expect(
       Array.from(
         (screen.getByRole("combobox", { name: "Secondary action" }) as HTMLSelectElement).options,
       ).map((option) => option.text),
-    ).toEqual(["Open", "Observe opponent"]);
+    ).toEqual([
+      "Choose secondary action",
+      "Observe opponent",
+      "Pass",
+      "Talk / Shout",
+      "Equip / Unequip",
+      "Small Action",
+    ]);
   });
 
   it("supports secondary-first selection and then constrains compatible primaries", () => {
@@ -157,7 +164,11 @@ describe("PlayerCombatActionSelectorPanel", () => {
     });
 
     const primary = screen.getByRole("combobox", { name: "Action" }) as HTMLSelectElement;
-    expect(Array.from(primary.options).map((option) => option.value)).toEqual(["", "parry"]);
+    expect(Array.from(primary.options).map((option) => option.value)).toEqual([
+      "",
+      "parry",
+      "pass",
+    ]);
     expect(
       screen.getByText("Choose a compatible primary action for Observe Opponent."),
     ).toBeInTheDocument();
@@ -190,31 +201,45 @@ describe("PlayerCombatActionSelectorPanel", () => {
     const secondary = screen.getByRole("combobox", {
       name: "Secondary action",
     }) as HTMLSelectElement;
-    const movement = screen.getByRole("combobox", { name: "Movement" }) as HTMLSelectElement;
     expect(Array.from(primary.options).some((option) => option.text === "Parry")).toBe(true);
     expect(Array.from(primary.options).some((option) => option.text === "Observe Opponent")).toBe(
       false,
     );
     expect(Array.from(secondary.options).map((option) => option.text)).toEqual([
-      "None",
+      "Choose secondary action",
       "Observe opponent",
+      "Pass",
+      "Talk / Shout",
+      "Equip / Unequip",
+      "Small Action",
     ]);
     expect(secondary.value).toBe("");
     fireEvent.change(secondary, { target: { value: "observe_opponent" } });
     expect(onSecondaryActionChange).toHaveBeenCalledWith("observe_opponent");
-    expect(movement.value).toBe("hold_position");
+    expect(screen.getByRole("combobox", { name: "Movement direction" })).toHaveValue("");
     expect(screen.queryByText("Focus on defense for this round.", { exact: false })).toBeNull();
     expect(
       screen.queryByText("Parry assumes sufficient room to maneuver.", { exact: false }),
     ).toBeNull();
   });
 
-  it("groups visible participant-relative movement without leaking hidden opponents", () => {
+  it("records prioritized participant-relative intent without leaking hidden opponents", () => {
     const onMovementIntentChange = vi.fn();
+    const onDeclarationIntentChange = vi.fn();
     render(
       <PlayerCombatActionSelectorPanel
         actionId="move_only"
         additionalActionNotes=""
+        declarationIntent={{
+          primaryAction: { actionId: "move_only" },
+          relativePositions: [
+            {
+              desiredDistance: 2,
+              kind: "keep_distance",
+              targetParticipantId: "visible-guard",
+            },
+          ],
+        }}
         distancePreferenceOptions={[
           { currentDistance: 2, displayName: "Visible guard", id: "visible-guard" },
         ]}
@@ -222,6 +247,7 @@ describe("PlayerCombatActionSelectorPanel", () => {
         movementIntent={{ distancePreferences: [], mode: "set_distance_preferences" }}
         onActionChange={vi.fn()}
         onAdditionalActionNotesChange={vi.fn()}
+        onDeclarationIntentChange={onDeclarationIntentChange}
         onMovementChange={vi.fn()}
         onMovementIntentChange={onMovementIntentChange}
         onSecondaryActionChange={vi.fn()}
@@ -229,18 +255,27 @@ describe("PlayerCombatActionSelectorPanel", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Change distance to participant" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Relative position" })).toBeTruthy();
+    expect(screen.getByText("Priority 1")).toBeInTheDocument();
     expect(screen.getByText("Visible guard")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("Hidden spy");
-    expect(document.body.textContent).not.toContain("opponents available");
-    fireEvent.change(screen.getByRole("combobox", { name: "Visible guard" }), {
-      target: { value: "close" },
+    fireEvent.change(screen.getByRole("combobox", { name: "Desired distance" }), {
+      target: { value: "1" },
+    });
+    expect(onDeclarationIntentChange).toHaveBeenLastCalledWith({
+      primaryAction: { actionId: "move_only" },
+      relativePositions: [
+        {
+          desiredDistance: 1,
+          kind: "keep_distance",
+          targetParticipantId: "visible-guard",
+        },
+      ],
     });
     expect(onMovementIntentChange).toHaveBeenLastCalledWith({
       distancePreferences: [
         {
           desiredDistance: 1,
-          operation: "close",
           source: "player_declared",
           targetParticipantId: "visible-guard",
         },
@@ -249,21 +284,18 @@ describe("PlayerCombatActionSelectorPanel", () => {
     });
   });
 
-  it("presents environmental movement separately with timing and no participant distance", () => {
+  it("records independent eight-direction movement and facing without feasibility controls", () => {
     render(
       <PlayerCombatActionSelectorPanel
         actionId="move_only"
         additionalActionNotes=""
-        movementId="step"
-        movementIntent={{
-          distancePreferences: [],
-          environmentalMovement: {
-            destination: { description: "doorway", kind: "description" },
-            duration: { kind: "rounds", rounds: 3 },
-            pace: "run",
-          },
-          mode: "move_in_environment",
+        declarationIntent={{
+          facing: "backward_left",
+          movementDirection: "forward_right",
+          primaryAction: { actionId: "move_only" },
+          relativePositions: [],
         }}
+        movementId="step"
         onActionChange={vi.fn()}
         onAdditionalActionNotesChange={vi.fn()}
         onMovementChange={vi.fn()}
@@ -273,13 +305,68 @@ describe("PlayerCombatActionSelectorPanel", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Move in environment" })).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: "Destination" })).toHaveValue("doorway");
-    expect(screen.getByRole("combobox", { name: "How" })).toHaveValue("run");
-    expect(screen.getByRole("spinbutton", { name: "Rounds" })).toHaveValue(3);
+    expect(screen.getByRole("combobox", { name: "Movement direction" })).toHaveValue(
+      "forward_right",
+    );
+    expect(screen.getByRole("combobox", { name: "Facing" })).toHaveValue("backward_left");
+    expect(screen.getByText("The GM resolves feasibility.", { exact: false })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "How" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Expected time", { exact: false })).not.toBeInTheDocument();
+  });
+
+  it("keeps Perform Task and communication as description-only player declarations", () => {
+    const onDeclarationIntentChange = vi.fn();
+    const { rerender } = render(
+      <PlayerCombatActionSelectorPanel
+        actionId="perform_task"
+        additionalActionNotes=""
+        declarationIntent={{
+          primaryAction: { actionId: "perform_task" },
+          relativePositions: [],
+        }}
+        movementId="hold"
+        onActionChange={vi.fn()}
+        onAdditionalActionNotesChange={vi.fn()}
+        onDeclarationIntentChange={onDeclarationIntentChange}
+        onMovementChange={vi.fn()}
+        onSecondaryActionChange={vi.fn()}
+        secondaryActionId=""
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Task description" }), {
+      target: { value: "Bar the gate." },
+    });
+    expect(onDeclarationIntentChange).toHaveBeenLastCalledWith({
+      primaryAction: { actionId: "perform_task", description: "Bar the gate." },
+      relativePositions: [],
+    });
+    expect(screen.queryByText("Difficulty", { exact: false })).not.toBeInTheDocument();
+
+    rerender(
+      <PlayerCombatActionSelectorPanel
+        actionId="pass"
+        additionalActionNotes=""
+        declarationIntent={{
+          primaryAction: { actionId: "pass" },
+          relativePositions: [],
+          secondaryAction: { actionId: "talk_shout" },
+        }}
+        movementId="hold"
+        onActionChange={vi.fn()}
+        onAdditionalActionNotesChange={vi.fn()}
+        onDeclarationIntentChange={onDeclarationIntentChange}
+        onMovementChange={vi.fn()}
+        onSecondaryActionChange={vi.fn()}
+        secondaryActionId="talk_shout"
+      />,
+    );
     expect(
-      screen.getByText("This does not change distance to an opponent.", { exact: false }),
-    ).toBeInTheDocument();
+      Array.from(
+        (screen.getByRole("combobox", { name: "Utterance type" }) as HTMLSelectElement).options,
+      ).map((option) => option.text),
+    ).toEqual(["Choose type", "Speak", "Shout", "Whisper", "Other"]);
+    expect(screen.getByText("it has no automatic mechanics", { exact: false })).toBeInTheDocument();
   });
 
   it("keeps Offensive Parry opponent selection out of the general action selector", () => {
@@ -362,7 +449,7 @@ describe("PlayerCombatActionSelectorPanel", () => {
       Array.from(
         (screen.getByRole("combobox", { name: "Action" }) as HTMLSelectElement).options,
       ).map((option) => option.value),
-    ).toEqual(["", "attack_parry", "parry"]);
+    ).toEqual(["", "attack_parry", "parry", "pass"]);
     expect(
       screen.getByRole("option", {
         name: "Single attack · Not compatible with Observe Opponent",

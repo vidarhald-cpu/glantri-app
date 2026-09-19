@@ -113,6 +113,7 @@ export {
   commitCombatDisarmOnServer,
   createEncounterOnServer,
   loadEncounterById,
+  loadEncounterItems,
   loadEncounterRevision,
   loadCombatHistory,
   loadCombatItemInteractionOptions,
@@ -151,6 +152,8 @@ export {
   updateCombatItemInteractionOnServer,
   type CombatItemInteractionOption,
   type CombatItemInteractionOptions,
+  type EncounterItemProjection,
+  type EncounterItemsProjection,
 } from "./encounterClient";
 export {
   addCharacterEquipmentItemOnServer,

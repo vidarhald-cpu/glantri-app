@@ -38,9 +38,13 @@ import {
 } from "@/lib/campaigns/encounters";
 import { getCampaignWorkspaceSelectionKeys } from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
 import {
+  buildCampaignEncounterHref,
+  buildCampaignScenarioHref,
+  buildCampaignTaskHref,
   buildCampaignWorkspaceHref,
   buildCampaignWorkspaceTabs,
   isLiveCampaignScenario,
+  resolveCampaignTaskTargetId,
   resolveCampaignWorkspaceState,
   type CampaignWorkspaceTabId,
 } from "@/lib/campaigns/workspace";
@@ -77,7 +81,7 @@ const panelStyle = {
   padding: "1rem",
 } as const;
 
-interface LivePlayPanelProps {
+interface CurrentScenarioContextPanelProps {
   buildWorkspaceHref: (input: {
     encounterId?: string | null;
     scenarioId?: string | null;
@@ -88,26 +92,29 @@ interface LivePlayPanelProps {
   scenarios: Array<Scenario | PlayerAccessibleScenario>;
 }
 
-export function LivePlayPanel({
+export function CurrentScenarioContextPanel({
   buildWorkspaceHref,
   canAccessGmEncounter,
   encounters,
   scenarios,
-}: LivePlayPanelProps) {
+}: CurrentScenarioContextPanelProps) {
   return (
-    <section aria-label="Live play" style={{ ...panelStyle, background: "#f6f5ef" }}>
-      <h2 style={{ margin: 0 }}>Live play</h2>
+    <section
+      aria-label="Current Scenario and Encounter"
+      style={{ ...panelStyle, background: "#f6f5ef" }}
+    >
+      <h2 style={{ margin: 0 }}>Current Scenario and Encounter</h2>
       {scenarios.length === 0 ? (
         <div>
-          No live Scenario is currently available. Campaign Home and completed history remain
+          No active Scenario is currently available. Campaign Home and completed history remain
           available below.
         </div>
       ) : (
         <>
           <div>
             {scenarios.length === 1
-              ? "Continue the live Scenario and its active Encounters."
-              : "Choose the live Scenario you want to continue."}
+              ? "Continue the current Scenario and its active Encounters."
+              : "Choose the current Scenario you want to continue."}
           </div>
           <div
             style={{
@@ -136,10 +143,9 @@ export function LivePlayPanel({
                 >
                   <strong>{scenario.name}</strong>
                   <Link
-                    href={buildWorkspaceHref({
-                      encounterId: null,
+                    href={buildCampaignScenarioHref({
+                      campaignId: scenario.campaignId,
                       scenarioId: scenario.id,
-                      tab: "scenario",
                     })}
                   >
                     Open Scenario
@@ -151,10 +157,10 @@ export function LivePlayPanel({
                           <span>{encounter.title}</span>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
                             <Link
-                              href={buildWorkspaceHref({
+                              href={buildCampaignEncounterHref({
+                                campaignId: scenario.campaignId,
                                 encounterId: encounter.id,
                                 scenarioId: scenario.id,
-                                tab: "encounter",
                               })}
                             >
                               Open Encounter
@@ -182,6 +188,124 @@ export function LivePlayPanel({
         </>
       )}
     </section>
+  );
+}
+
+export function CampaignWorkspaceNavigation({
+  activeTab,
+  campaignId,
+  canManageCampaign,
+}: {
+  activeTab: CampaignWorkspaceTabId;
+  campaignId: string;
+  canManageCampaign: boolean;
+}) {
+  const commonLinkStyle = {
+    color: "#2f5d62",
+    fontWeight: 700,
+    padding: "0.4rem 0",
+    textDecoration: "none",
+  } as const;
+  const taskLinks = [
+    { href: buildCampaignTaskHref({ campaignId, section: "overview" }), label: "Campaign home" },
+    { href: buildCampaignTaskHref({ campaignId, section: "membership" }), label: "Membership" },
+    { href: buildCampaignTaskHref({ campaignId, section: "scenarios" }), label: "Scenarios" },
+    { href: buildCampaignTaskHref({ campaignId, section: "history" }), label: "Campaign history" },
+    {
+      href: buildCampaignTaskHref({ campaignId, section: "create-material" }),
+      label: "Create material",
+    },
+    {
+      href: buildCampaignTaskHref({ campaignId, section: "material" }),
+      label: "Notes & material",
+    },
+  ];
+  const relatedLinks = [
+    {
+      href: buildCampaignWorkspaceHref({ campaignId, tab: "blackboard" }),
+      id: "blackboard" as const,
+      label: "Blackboard",
+    },
+    {
+      href: buildCampaignWorkspaceHref({ campaignId, tab: "maps" }),
+      id: "maps" as const,
+      label: "Maps",
+    },
+  ];
+
+  if (!canManageCampaign) {
+    return (
+      <nav
+        aria-label="Campaign navigation"
+        style={{
+          borderBottom: "1px solid #d9ddd8",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "1rem",
+          paddingBottom: "0.5rem",
+        }}
+      >
+        <Link href="/campaigns" style={commonLinkStyle}>
+          Campaigns
+        </Link>
+        <Link
+          aria-current={activeTab === "campaign" ? "page" : undefined}
+          href={buildCampaignWorkspaceHref({ campaignId, tab: "campaign" })}
+          style={commonLinkStyle}
+        >
+          Campaign
+        </Link>
+        {relatedLinks.map((link) => (
+          <Link
+            aria-current={activeTab === link.id ? "page" : undefined}
+            href={link.href}
+            key={link.id}
+            style={commonLinkStyle}
+          >
+            {link.label}
+          </Link>
+        ))}
+      </nav>
+    );
+  }
+
+  return (
+    <div style={{ display: "grid", gap: "0.5rem" }}>
+      <nav
+        aria-label="Campaign tasks"
+        style={{
+          borderBottom: "1px solid #d9ddd8",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "1rem",
+          paddingBottom: "0.5rem",
+        }}
+      >
+        <Link href="/campaigns" style={commonLinkStyle}>
+          Campaigns
+        </Link>
+        {taskLinks.map((link) => (
+          <Link href={link.href} key={link.href} scroll={false} style={commonLinkStyle}>
+            {link.label}
+          </Link>
+        ))}
+      </nav>
+      <nav
+        aria-label="Related Campaign tools"
+        style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}
+      >
+        {relatedLinks.map((link) => (
+          <Link
+            aria-current={activeTab === link.id ? "page" : undefined}
+            href={link.href}
+            key={link.id}
+            style={{ ...commonLinkStyle, fontWeight: 600 }}
+          >
+            {link.label}
+          </Link>
+        ))}
+      </nav>
+    </div>
   );
 }
 
@@ -386,7 +510,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
           setEncounterSummaries([]);
           setActiveEncounter(undefined);
         } else {
-          setError("We couldn't refresh live play. Try again or reload the page.");
+          setError("We couldn't refresh the Campaign context. Try again or reload the page.");
         }
       } finally {
         if (initial && workspaceContextRequestIdRef.current === requestId) {
@@ -889,96 +1013,168 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
     }
   }, [accessMode, setRememberedWorkspaceTab, workspaceState.activeTab]);
 
+  useEffect(() => {
+    if (workspaceState.activeTab !== "campaign") {
+      return;
+    }
+
+    let animationFrameId: number | undefined;
+    const observer = new MutationObserver(() => requestCampaignTaskScroll());
+
+    const scrollToCampaignTask = () => {
+      const targetId = resolveCampaignTaskTargetId(window.location.hash);
+      if (!targetId) {
+        return false;
+      }
+
+      const target = document.getElementById(targetId);
+      if (!target) {
+        return false;
+      }
+
+      if (animationFrameId !== undefined) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+      animationFrameId = window.requestAnimationFrame(() => {
+        target.scrollIntoView({ block: "start" });
+        observer.disconnect();
+        animationFrameId = undefined;
+      });
+      return true;
+    };
+
+    function requestCampaignTaskScroll() {
+      if (!scrollToCampaignTask()) {
+        observer.observe(document.body, { childList: true, subtree: true });
+      }
+    }
+
+    requestCampaignTaskScroll();
+    window.addEventListener("hashchange", requestCampaignTaskScroll);
+    return () => {
+      window.removeEventListener("hashchange", requestCampaignTaskScroll);
+      observer.disconnect();
+      if (animationFrameId !== undefined) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [workspaceState.activeTab]);
+
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1240 }}>
-      <nav
-        aria-label="Campaign workspace"
-        style={{
-          borderBottom: "1px solid #d9ddd8",
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "1rem",
-          paddingBottom: "0.5rem",
-        }}
-      >
-        <Link
-          href="/campaigns"
-          style={{
-            borderBottom: pathname === "/campaigns" ? "2px solid #2f5d62" : "2px solid transparent",
-            color: "#2f5d62",
-            fontWeight: 700,
-            paddingBottom: "0.35rem",
-            textDecoration: "none",
-          }}
-        >
-          Campaigns
-        </Link>
-        {tabs.map((tab) => {
-          const href = buildWorkspaceHref({ tab: tab.id });
+      <CampaignWorkspaceNavigation
+        activeTab={workspaceState.activeTab}
+        campaignId={campaignId}
+        canManageCampaign={canAccessGmEncounter}
+      />
 
-          return (
-            <Link
-              key={tab.id}
-              href={href}
-              style={{
-                borderBottom:
-                  workspaceState.activeTab === tab.id
-                    ? "2px solid #2f5d62"
-                    : "2px solid transparent",
-                color: "#2f5d62",
-                fontWeight: 700,
-                paddingBottom: "0.35rem",
-                textDecoration: "none",
-              }}
-            >
-              {tab.label}
+      {activeScenario ? (
+        <section style={{ ...panelStyle, gap: "0.5rem", padding: "0.75rem 1rem" }}>
+          <nav
+            aria-label="Scenario and Encounter context"
+            style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}
+          >
+            <Link href={buildCampaignTaskHref({ campaignId, section: "overview" })} scroll={false}>
+              Campaign
             </Link>
-          );
-        })}
-      </nav>
-
-      {activeScenario && isLiveCampaignScenario(activeScenario) ? (
-        <nav
-          aria-label="Live play context"
-          style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}
-        >
-          <Link
-            href={buildWorkspaceHref({
-              encounterId: null,
-              participantId: null,
-              scenarioId: null,
-              tab: "campaign",
-            })}
-          >
-            Campaign
-          </Link>
-          <span aria-hidden="true">›</span>
-          <Link
-            href={buildWorkspaceHref({
-              encounterId: null,
-              participantId: null,
-              scenarioId: activeScenario.id,
-              tab: "scenario",
-            })}
-          >
-            {activeScenario.name}
-          </Link>
-          {activeEncounterSummary ? (
-            <>
-              <span aria-hidden="true">›</span>
+            <span aria-hidden="true">›</span>
+            <Link
+              href={buildCampaignScenarioHref({
+                campaignId,
+                scenarioId: activeScenario.id,
+              })}
+            >
+              {activeScenario.name}
+            </Link>
+            <small>
+              {activeScenario.status === "completed" ? "Closed" : activeScenario.status}
+            </small>
+            {activeEncounterSummary ? (
+              <>
+                <span aria-hidden="true">›</span>
+                <Link
+                  href={buildCampaignEncounterHref({
+                    campaignId,
+                    encounterId: activeEncounterSummary.id,
+                    scenarioId: activeScenario.id,
+                  })}
+                >
+                  {activeEncounterSummary.title}
+                </Link>
+              </>
+            ) : null}
+          </nav>
+          {activeScenario.status !== "completed" && activeScenario.status !== "archived" ? (
+            <nav
+              aria-label="Scenario and Encounter tools"
+              style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}
+            >
               <Link
-                href={buildWorkspaceHref({
-                  encounterId: activeEncounterSummary.id,
-                  participantId: null,
+                href={buildCampaignScenarioHref({
+                  campaignId,
                   scenarioId: activeScenario.id,
-                  tab: "encounter",
                 })}
               >
-                {activeEncounterSummary.title}
+                Scenario
               </Link>
-            </>
-          ) : null}
-        </nav>
+              {activeEncounterSummary ? (
+                <Link
+                  href={buildCampaignEncounterHref({
+                    campaignId,
+                    encounterId: activeEncounterSummary.id,
+                    scenarioId: activeScenario.id,
+                  })}
+                >
+                  Encounter
+                </Link>
+              ) : null}
+              <Link
+                href={buildWorkspaceHref({
+                  encounterId: activeEncounterSummary?.id,
+                  scenarioId: activeScenario.id,
+                  tab: "character",
+                })}
+              >
+                Character
+              </Link>
+              {activeEncounterSummary ? (
+                <>
+                  <Link
+                    href={buildWorkspaceHref({
+                      encounterId: activeEncounterSummary.id,
+                      scenarioId: activeScenario.id,
+                      tab: "skill-rolls",
+                    })}
+                  >
+                    Skill rolls
+                  </Link>
+                  {canAccessGmEncounter ? (
+                    <Link
+                      href={buildWorkspaceHref({
+                        encounterId: activeEncounterSummary.id,
+                        scenarioId: activeScenario.id,
+                        tab: "combat",
+                      })}
+                    >
+                      Combat
+                    </Link>
+                  ) : null}
+                  <Link
+                    href={buildWorkspaceHref({
+                      encounterId: activeEncounterSummary.id,
+                      scenarioId: activeScenario.id,
+                      tab: "player-combat",
+                    })}
+                  >
+                    Player combat
+                  </Link>
+                </>
+              ) : null}
+            </nav>
+          ) : (
+            <small>Historical inspection is read-only and does not resume this Scenario.</small>
+          )}
+        </section>
       ) : null}
 
       {error ? <section style={panelStyle}>{error}</section> : null}
@@ -1021,7 +1217,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
             />
           ) : (
             <section style={{ display: "grid", gap: "1rem" }}>
-              <LivePlayPanel
+              <CurrentScenarioContextPanel
                 buildWorkspaceHref={buildWorkspaceHref}
                 canAccessGmEncounter={canAccessGmEncounter}
                 encounters={encounterSummaries}

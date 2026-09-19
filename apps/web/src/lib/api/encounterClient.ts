@@ -8,6 +8,7 @@ import {
   type EncounterSessionSummary,
   CombatAttackSourceRef,
   CombatDefenseSnapshot,
+  CombatDeclarationIntent,
   CombatHistoryProjection,
   CombatGenericActionDuration,
   CombatItemInteractionOperation,
@@ -156,6 +157,25 @@ export async function loadEncounterById(encounterId: string): Promise<EncounterS
   return payload.encounter;
 }
 
+export interface EncounterItemProjection {
+  itemId: string;
+  label: string;
+  revision?: string;
+  visibility: "players" | "gm_only";
+}
+
+export interface EncounterItemsProjection {
+  availableItems: EncounterItemProjection[];
+  items: EncounterItemProjection[];
+}
+
+export async function loadEncounterItems(encounterId: string): Promise<EncounterItemsProjection> {
+  return sendJson<EncounterItemsProjection>(`/encounters/${encounterId}/items`, {
+    cache: "no-store",
+    method: "GET",
+  });
+}
+
 export async function loadEncounterRevision(
   encounterId: string,
 ): Promise<EncounterSessionRevision> {
@@ -256,6 +276,7 @@ export async function submitCombatDeclarationOnServer(input: {
   expectedParticipantRevision?: string;
   movementId?: string;
   movementIntent?: MovementIntent;
+  intent?: CombatDeclarationIntent;
   phaseContexts?: CombatRoundPhaseContexts;
   phaseAttackSources?: Partial<Record<"phase1" | "phase2", CombatAttackSourceRef>>;
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
@@ -301,6 +322,7 @@ export async function submitCombatDeclarationOnServer(input: {
         disarm: input.disarm,
         movementId: input.movementId,
         movementIntent: input.movementIntent,
+        intent: input.intent,
         phaseContexts: input.phaseContexts,
         phaseAttackSources: input.phaseAttackSources,
         phaseWeaponNames: input.phaseWeaponNames,

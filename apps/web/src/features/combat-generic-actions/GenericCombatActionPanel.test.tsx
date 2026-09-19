@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CombatGenericAction, EncounterSession, ScenarioParticipant } from "@glantri/domain";
 
 import {
+  loadCombatItemInteractionOptions,
+  loadEncounterItems,
   updateCombatItemInteractionOnServer,
   updateGenericCombatActionOnServer,
 } from "@/lib/api/localServiceClient";
@@ -13,6 +15,8 @@ import { GenericCombatActionPanel } from "./GenericCombatActionPanel";
 
 vi.mock("@/lib/api/localServiceClient", () => ({
   loadCombatItemInteractionOptions: vi.fn(() => new Promise(() => undefined)),
+  loadEncounterItems: vi.fn(() => new Promise(() => undefined)),
+  updateEncounterOnServer: vi.fn(),
   updateCombatItemInteractionOnServer: vi.fn(),
   updateGenericCombatActionOnServer: vi.fn(),
 }));
@@ -77,10 +81,15 @@ function withActions(...actions: CombatGenericAction[]): EncounterSession {
 
 describe("GenericCombatActionPanel", () => {
   beforeEach(() => {
+    vi.mocked(loadCombatItemInteractionOptions).mockReset();
+    vi.mocked(loadCombatItemInteractionOptions).mockImplementation(
+      () => new Promise(() => undefined),
+    );
     vi.mocked(updateCombatItemInteractionOnServer).mockReset();
     vi.mocked(updateCombatItemInteractionOnServer).mockResolvedValue(encounter);
     vi.mocked(updateGenericCombatActionOnServer).mockReset();
     vi.mocked(updateGenericCombatActionOnServer).mockResolvedValue(encounter);
+    vi.mocked(loadEncounterItems).mockImplementation(() => new Promise(() => undefined));
   });
 
   it.each(["initial", "same value", "fallback"])(
@@ -175,6 +184,60 @@ describe("GenericCombatActionPanel", () => {
     });
     expect(screen.queryByRole("button", { name: "Review action" })).toBeNull();
     expect(updateCombatItemInteractionOnServer).not.toHaveBeenCalled();
+  });
+
+  // Player Item history remains readable after the dedicated questionnaire is removed.
+  it("keeps submitted Item history readable without the player Item questionnaire", async () => {
+    vi.mocked(loadCombatItemInteractionOptions).mockResolvedValue({
+      actors: [
+        {
+          items: [
+            {
+              category: "weapon",
+              id: "canonical-dagger",
+              label: "Silver dagger",
+              operations: ["drop"],
+              revision: "2026-08-14T08:00:00.000Z",
+              state: "held",
+              templateId: "weapon-dagger",
+            },
+          ],
+          label: "Aster",
+          participantId: "encounter-aster",
+        },
+      ],
+      disarmTargets: [],
+      presentItems: [],
+      recipients: [],
+    });
+    const submittedEncounter = withActions(canonicalDrop);
+    vi.mocked(updateCombatItemInteractionOnServer).mockResolvedValue(submittedEncounter);
+    const onEncounterUpdated = vi.fn();
+    const props = {
+      isGm: false,
+      onEncounterUpdated,
+      participantId: "encounter-aster",
+      scenarioParticipants: [scenarioParticipant],
+      showGenericDeclarationControls: false,
+    };
+    render(<GenericCombatActionPanel encounter={submittedEncounter} {...props} />);
+
+    const panel = screen.getByRole("region", { name: "Items and task history" });
+    expect(panel.getAttribute("style")).toContain("max-width: calc(100vw - 3rem)");
+    expect(panel.getAttribute("style")).toContain("min-width: 0");
+    expect(screen.getByLabelText("Action and task history")).toHaveTextContent(
+      "Waiting for GM review — Drop the silver dagger.",
+    );
+    expect(screen.getAllByText("Waiting for GM review", { exact: false }).length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.queryByLabelText("Generic action")).toBeNull();
+    expect(screen.queryByLabelText("What do you intend to do?")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Declare generic action" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Review action" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Silver dagger: Drop" })).toBeNull();
+    expect(loadCombatItemInteractionOptions).not.toHaveBeenCalled();
+    expect(onEncounterUpdated).not.toHaveBeenCalled();
   });
 
   it("declares the Survey preset with canonical Perception and a visible numeric Difficulty", async () => {

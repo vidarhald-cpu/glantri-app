@@ -17,6 +17,7 @@ import {
   updateGenericCombatActionOnServer,
 } from "@/lib/api/localServiceClient";
 import { CombatItemInteractionPanel } from "./CombatItemInteractionPanel";
+import { EncounterItemsPanel } from "@/features/encounters/EncounterItemsPanel";
 
 const panelStyle = {
   background: "#f6f5ef",
@@ -106,6 +107,7 @@ export interface GenericCombatActionPanelProps {
   onEncounterUpdated: (encounter: EncounterSession) => void;
   participantId?: string;
   scenarioParticipants: readonly ScenarioParticipant[];
+  showGenericDeclarationControls?: boolean;
   skills?: readonly Pick<SkillDefinition, "id" | "name">[];
 }
 
@@ -115,6 +117,7 @@ export function GenericCombatActionPanel({
   onEncounterUpdated,
   participantId,
   scenarioParticipants,
+  showGenericDeclarationControls = true,
   skills = [],
 }: GenericCombatActionPanelProps) {
   const actions = encounter.combatRoundState?.genericActions ?? [];
@@ -384,21 +387,31 @@ export function GenericCombatActionPanel({
   return (
     <section aria-labelledby="generic-combat-action-heading" style={panelStyle}>
       <h2 id="generic-combat-action-heading" style={{ margin: 0 }}>
-        Actions and tasks
+        {showGenericDeclarationControls ? "Actions and tasks" : "Items and task history"}
       </h2>
-      <div>
-        Describe a deliberate action. A roll measures the attempt; only the GM decides what it
-        reveals or changes.
-      </div>
+      {showGenericDeclarationControls ? (
+        <div>
+          Describe a deliberate action. A roll measures the attempt; only the GM decides what it
+          reveals or changes.
+        </div>
+      ) : null}
 
-      <CombatItemInteractionPanel
+      {isGm ? (
+        <CombatItemInteractionPanel
+          encounter={encounter}
+          isGm
+          onEncounterUpdated={onEncounterUpdated}
+          participantId={participantId}
+        />
+      ) : null}
+
+      <EncounterItemsPanel
         encounter={encounter}
         isGm={isGm}
         onEncounterUpdated={onEncounterUpdated}
-        participantId={participantId}
       />
 
-      {!isGm || participantId ? (
+      {showGenericDeclarationControls && (!isGm || participantId) ? (
         <div style={{ display: "grid", gap: "0.65rem" }}>
           <label style={{ display: "grid", gap: "0.25rem" }}>
             <span>Generic action</span>

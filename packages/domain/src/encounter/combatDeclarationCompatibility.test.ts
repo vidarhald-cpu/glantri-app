@@ -13,19 +13,9 @@ import {
 } from "./combatDeclarationCompatibility";
 
 describe("combat declaration compatibility", () => {
-  it("keeps Parry plus Observe Opponent valid without generic distance movement", () => {
+  it("keeps Parry plus Observe Opponent valid alongside independent movement intent", () => {
     expect(getCombatDeclarationCompatibilityRule("parry")).toMatchObject({
-      allowedMovementKinds: ["hold_position"],
-      compatibleSecondaryActions: [
-        {
-          actionId: "open",
-          requiredContexts: [],
-        },
-        {
-          actionId: "observe_opponent",
-          requiredContexts: ["secondary_target_participant"],
-        },
-      ],
+      allowedMovementKinds: ["hold_position", "set_distance_preferences", "move_in_environment"],
       primaryAction: "parry",
     });
     expect(
@@ -50,14 +40,37 @@ describe("combat declaration compatibility", () => {
   });
 
   it("projects selector choices in both directions from the same rules", () => {
-    expect(getCompatibleCombatSecondaryActionIds()).toEqual(["observe_opponent"]);
-    expect(getCompatibleCombatSecondaryActionIds("parry")).toEqual(["observe_opponent"]);
-    expect(getCompatibleCombatSecondaryActionIds("attack_parry")).toEqual([]);
-    expect(getCompatibleCombatPrimaryActionIds("observe_opponent")).toEqual(["parry"]);
+    expect(getCompatibleCombatSecondaryActionIds()).toEqual([
+      "observe_opponent",
+      "pass",
+      "talk_shout",
+      "equip_unequip",
+      "small_action",
+    ]);
+    expect(getCompatibleCombatSecondaryActionIds("parry")).toEqual([
+      "observe_opponent",
+      "pass",
+      "talk_shout",
+      "equip_unequip",
+      "small_action",
+    ]);
+    expect(getCompatibleCombatSecondaryActionIds("attack_parry")).toEqual([
+      "pass",
+      "talk_shout",
+      "equip_unequip",
+      "small_action",
+    ]);
+    expect(getCompatibleCombatPrimaryActionIds("observe_opponent")).toEqual(["parry", "pass"]);
     expect(projectCombatDeclarationCompatibility({ secondaryAction: "observe_opponent" })).toEqual(
       expect.objectContaining({
-        compatiblePrimaryActions: ["parry"],
-        compatibleSecondaryActions: ["observe_opponent"],
+        compatiblePrimaryActions: ["parry", "pass"],
+        compatibleSecondaryActions: [
+          "observe_opponent",
+          "pass",
+          "talk_shout",
+          "equip_unequip",
+          "small_action",
+        ],
         message: "observe_opponent requires a compatible primary action.",
         requiredContexts: ["secondary_target_participant"],
         status: "incomplete",
@@ -74,8 +87,8 @@ describe("combat declaration compatibility", () => {
       }),
     ).toEqual(
       expect.objectContaining({
-        compatiblePrimaryActions: ["parry"],
-        compatibleSecondaryActions: [],
+        compatiblePrimaryActions: ["parry", "pass"],
+        compatibleSecondaryActions: ["pass", "talk_shout", "equip_unequip", "small_action"],
         status: "incompatible",
         valid: false,
       }),
@@ -88,7 +101,7 @@ describe("combat declaration compatibility", () => {
     ).toEqual(
       expect.objectContaining({
         compatiblePrimaryActions: [],
-        compatibleSecondaryActions: [],
+        compatibleSecondaryActions: ["pass", "talk_shout", "equip_unequip", "small_action"],
         status: "unsupported",
         valid: false,
       }),
@@ -166,12 +179,11 @@ describe("combat declaration compatibility", () => {
     );
   });
 
-  it("keeps movement-owning maneuvers out of generic relative and environmental resolution", () => {
+  it("records movement intent independently of primary action feasibility", () => {
     for (const primaryAction of ["adjust_range_attack", "offensive_parry", "parry"]) {
       for (const movementKind of ["set_distance_preferences", "move_in_environment"]) {
         expect(validateCombatDeclarationCompatibility({ movementKind, primaryAction })).toEqual({
-          message: "The selected movement is not compatible with the selected primary action.",
-          valid: false,
+          valid: true,
         });
       }
     }

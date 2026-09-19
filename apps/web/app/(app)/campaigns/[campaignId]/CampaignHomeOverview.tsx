@@ -2,7 +2,11 @@ import Link from "next/link";
 
 import type { CampaignWorkspaceOverview } from "@glantri/domain";
 
-import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
+import {
+  buildCampaignEncounterHref,
+  buildCampaignScenarioHref,
+  buildCampaignWorkspaceHref,
+} from "@/lib/campaigns/workspace";
 
 const cardStyle = {
   border: "1px solid #d9ddd8",
@@ -34,9 +38,16 @@ export function CampaignHomeOverview({ overview }: { overview: CampaignWorkspace
   const historicalNpcs = overview.npcs.filter((npc) => npc.historical && !npc.prominent);
 
   return (
-    <section aria-label="Campaign home" style={{ display: "grid", gap: "1rem" }}>
-      <section aria-label="Current play" style={{ ...cardStyle, background: "#f6f5ef" }}>
-        <h2 style={{ margin: 0 }}>Current play</h2>
+    <section
+      aria-label="Campaign home"
+      id="campaign-overview"
+      style={{ display: "grid", gap: "1rem" }}
+    >
+      <section
+        aria-label="Current Scenario and Encounter"
+        style={{ ...cardStyle, background: "#f6f5ef" }}
+      >
+        <h2 style={{ margin: 0 }}>Current Scenario and Encounter</h2>
         {overview.currentContexts.length === 0 ? (
           <p style={{ margin: 0 }}>
             No active or paused Scenario. Draft preparation and Campaign history remain available.
@@ -56,10 +67,9 @@ export function CampaignHomeOverview({ overview }: { overview: CampaignWorkspace
                   <div>{lifecycleLabel(context.scenario.status)}</div>
                 </div>
                 <Link
-                  href={buildCampaignWorkspaceHref({
+                  href={buildCampaignScenarioHref({
                     campaignId: overview.campaign.id,
                     scenarioId: context.scenario.id,
-                    tab: "scenario",
                   })}
                 >
                   Open Scenario
@@ -75,11 +85,10 @@ export function CampaignHomeOverview({ overview }: { overview: CampaignWorkspace
                       </span>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
                         <Link
-                          href={buildCampaignWorkspaceHref({
+                          href={buildCampaignEncounterHref({
                             campaignId: overview.campaign.id,
                             encounterId: encounter.id,
                             scenarioId: context.scenario.id,
-                            tab: "encounter",
                           })}
                         >
                           Open Encounter
@@ -153,10 +162,13 @@ export function CampaignHomeOverview({ overview }: { overview: CampaignWorkspace
         </section>
       </div>
 
-      <section style={cardStyle}>
-        <h2 style={{ margin: 0 }}>Recent activity</h2>
+      <details id="campaign-history" style={cardStyle}>
+        <summary style={{ cursor: "pointer" }}>
+          <strong>Campaign history</strong>
+          <span style={{ color: "#5e5a50" }}> · Recent authoritative activity</span>
+        </summary>
         {overview.recentActivity.length === 0 ? (
-          <p style={{ margin: 0 }}>No objective play activity has been recorded yet.</p>
+          <p style={{ margin: 0 }}>No objective Campaign activity has been recorded yet.</p>
         ) : (
           <ol style={{ display: "grid", gap: "0.5rem", margin: 0, paddingLeft: "1.25rem" }}>
             {overview.recentActivity.map((activity) => (
@@ -170,7 +182,7 @@ export function CampaignHomeOverview({ overview }: { overview: CampaignWorkspace
             ))}
           </ol>
         )}
-      </section>
+      </details>
     </section>
   );
 }

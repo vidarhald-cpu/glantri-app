@@ -108,6 +108,7 @@ export function CampaignNotesPanel({
   return (
     <section
       aria-label="Private GM Notes"
+      id="campaign-notes"
       style={{
         border: "1px solid #d9ddd8",
         borderRadius: 12,

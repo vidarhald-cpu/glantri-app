@@ -45,9 +45,22 @@ test.describe("CM1 Campaign home and private notes", () => {
 
     await page.setViewportSize({ height: 844, width: 390 });
     await page.goto(`/campaigns/${campaign.campaign.id}`);
-    const currentPlay = page.getByRole("region", { name: "Current play" });
+    const currentPlay = page.getByRole("region", { name: "Current Scenario and Encounter" });
+    const campaignTasks = page.getByRole("navigation", { name: "Campaign tasks" });
     await expect(currentPlay.getByText(liveName, { exact: true })).toBeVisible();
     await expect(currentPlay.getByText(pausedName, { exact: true })).toBeVisible();
+    await expect(campaignTasks.getByRole("link", { name: "Membership" })).toBeVisible();
+    await expect(campaignTasks.getByRole("link", { name: "Scenarios" })).toBeVisible();
+    await expect(campaignTasks.getByRole("link", { name: "Campaign history" })).toBeVisible();
+    await expect(campaignTasks.getByRole("link", { name: "Create material" })).toBeVisible();
+    await expect(campaignTasks.getByRole("link", { name: "Notes & material" })).toBeVisible();
+    await expect(campaignTasks.getByRole("link", { name: "Combat" })).toHaveCount(0);
+    await expect(
+      currentPlay.locator(
+        `a[href="/campaigns/${campaign.campaign.id}/scenarios/${live.scenario.id}"]`,
+      ),
+    ).toBeVisible();
+    await expect(page.locator("#campaign-history")).not.toHaveAttribute("open", "");
     await expect(page.getByRole("heading", { name: "Private GM Notes" })).toBeVisible();
     await expect(page.getByText(noteContent, { exact: true })).toBeVisible();
     await expect(currentPlay.getByText(liveName, { exact: true }).locator("..")).toContainText(
@@ -56,6 +69,37 @@ test.describe("CM1 Campaign home and private notes", () => {
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
+
+    const campaignTaskTargets = [
+      ["Membership", "campaign-membership"],
+      ["Scenarios", "campaign-scenarios"],
+      ["Campaign history", "campaign-history"],
+      ["Create material", "campaign-create-material"],
+      ["Notes & material", "campaign-material"],
+    ] as const;
+    for (const activation of ["pointer", "keyboard"] as const) {
+      for (const [label, targetId] of campaignTaskTargets) {
+        await page.goto(`/campaigns/${campaign.campaign.id}?tab=maps`);
+        const taskLink = page
+          .getByRole("navigation", { name: "Campaign tasks" })
+          .getByRole("link", { name: label, exact: true });
+        await expect(taskLink).toHaveAttribute(
+          "href",
+          `/campaigns/${campaign.campaign.id}?tab=campaign#${targetId}`,
+        );
+
+        if (activation === "pointer") {
+          await taskLink.click();
+        } else {
+          await taskLink.focus();
+          await taskLink.press("Enter");
+        }
+
+        await expect.poll(() => page.evaluate(() => window.location.hash)).toBe(`#${targetId}`);
+        await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("campaign");
+        await expect(page.locator(`#${targetId}`)).toBeInViewport();
+      }
+    }
 
     await page.getByRole("link", { name: "Items", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Campaign items" })).toBeVisible();
@@ -72,7 +116,9 @@ test.describe("CM1 Campaign home and private notes", () => {
 
     await page.setViewportSize({ height: 900, width: 1280 });
     await page.reload();
-    const desktopCurrentPlay = page.getByRole("region", { name: "Current play" });
+    const desktopCurrentPlay = page.getByRole("region", {
+      name: "Current Scenario and Encounter",
+    });
     await expect(desktopCurrentPlay.getByText(liveName, { exact: true })).toBeVisible();
     await expect(desktopCurrentPlay.getByText(pausedName, { exact: true })).toBeVisible();
     await expect(

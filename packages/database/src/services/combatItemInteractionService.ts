@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { equipmentTemplatesById } from "@glantri/content";
 import {
+  createScenarioLiveState,
   isScenarioLiveInteractive,
   isSupportedAmmunitionTemplate,
   resolveEffectiveItemTemplate,
@@ -9,12 +10,15 @@ import {
   revealableEquipmentItemFacts,
   resolveWeaponDisarmMismatch,
   resolveWeaponDisarmProfile,
+  scenarioLiveStateSchema,
+  scenarioSessionStateSchema,
   type CombatDisarmDeclaration,
   type CombatGenericAction,
   type CombatGenericActionReference,
   type CombatItemInteraction,
   type CombatItemInteractionOperation,
   type CombatItemInteractionState,
+  type EncounterItemReference,
   type EncounterSession,
   type ScenarioParticipantState,
 } from "@glantri/domain";
@@ -288,6 +292,148 @@ function findCombatCommand(encounter: EncounterSession, commandId: string) {
   return undefined;
 }
 
+function encounterHasItem(encounter: EncounterSession, itemId: string): boolean {
+  return (encounter.itemReferences ?? []).some((reference) => reference.itemId === itemId);
+}
+
+async function legacyEncounterItemReferences(input: {
+  campaignId: string;
+  encounter: EncounterSession;
+  encounterId: string;
+  repository: CharacterEquipmentRepository;
+}): Promise<EncounterItemReference[]> {
+  if (input.encounter.itemReferencesVersion === 1) return [];
+  const records = await input.repository.getCombatItemInteractionRecords(input.campaignId);
+  return records
+    .filter((record) => record.presentEncounterId === input.encounterId)
+    .map((record) => ({
+      itemId: record.item.id,
+      visibility: record.hidden ? ("gm_only" as const) : ("players" as const),
+    }));
+}
+
+function materializedEncounterItemReferences(
+  encounter: EncounterSession,
+  legacyReferences: readonly EncounterItemReference[],
+): EncounterItemReference[] {
+  const references = new Map<string, EncounterItemReference>();
+  for (const reference of legacyReferences) references.set(reference.itemId, reference);
+  for (const reference of encounter.itemReferences ?? []) {
+    references.set(reference.itemId, reference);
+  }
+  return [...references.values()];
+}
+
+function itemEncounterVisibility(
+  item: Pick<CombatThrownWeaponAttackUndo["itemBefore"], "statusTags">,
+): "players" | "gm_only" {
+  const tags = (item.statusTags ?? []).map((tag) => tag.trim().toLowerCase());
+  return tags.includes("hidden") || tags.includes("unrevealed") ? "gm_only" : "players";
+}
+
+function associateEncounterItem(
+  encounter: EncounterSession,
+  itemId: string,
+  visibility: "players" | "gm_only",
+  legacyReferences: readonly EncounterItemReference[] = [],
+): EncounterSession {
+  return {
+    ...encounter,
+    itemReferencesVersion: 1,
+    itemReferences: [
+      ...materializedEncounterItemReferences(encounter, legacyReferences).filter(
+        (reference) => reference.itemId !== itemId,
+      ),
+      { itemId, visibility },
+    ],
+  };
+}
+
+function dissociateEncounterItems(
+  encounter: EncounterSession,
+  itemIds: readonly string[],
+  legacyReferences: readonly EncounterItemReference[] = [],
+): EncounterSession {
+  const removed = new Set(itemIds);
+  return {
+    ...encounter,
+    itemReferencesVersion: 1,
+    itemReferences: materializedEncounterItemReferences(encounter, legacyReferences).filter(
+      (reference) => !removed.has(reference.itemId),
+    ),
+  };
+}
+
+async function reconcileScenarioCampaignItemAvailability(input: {
+  available: boolean;
+  client: Prisma.TransactionClient;
+  encounterId: string;
+  itemId: string;
+  scenarioId: string;
+  visibility: "players" | "gm_only";
+}): Promise<void> {
+  const scenario = await input.client.scenario.findUnique({
+    select: { liveStateJson: true },
+    where: { id: input.scenarioId },
+  });
+  if (!scenario) throw new CombatItemUnavailableError();
+  const liveState = scenarioLiveStateSchema.parse(
+    scenario.liveStateJson ?? createScenarioLiveState(),
+  );
+  const existing = liveState.session.availableObjects.find(
+    (reference) => reference.sourceKind === "campaign_item" && reference.sourceId === input.itemId,
+  );
+  const remaining = liveState.session.availableObjects.filter(
+    (reference) => reference.sourceKind !== "campaign_item" || reference.sourceId !== input.itemId,
+  );
+  const availableObjects = input.available
+    ? [
+        ...remaining,
+        {
+          addedAt: existing?.addedAt ?? new Date().toISOString(),
+          id: existing?.id ?? `combat-item:${input.encounterId}:${input.itemId}`,
+          sourceId: input.itemId,
+          sourceKind: "campaign_item" as const,
+          visibility: input.visibility,
+        },
+      ]
+    : remaining;
+  const session = scenarioSessionStateSchema.parse({
+    ...liveState.session,
+    availableObjects,
+  });
+  await input.client.scenario.update({
+    data: {
+      liveStateJson: {
+        ...liveState,
+        session,
+      } as unknown as Prisma.InputJsonValue,
+    },
+    where: { id: input.scenarioId },
+  });
+}
+
+async function reconcileLegacyScenarioCampaignItemAvailability(input: {
+  client: Prisma.TransactionClient;
+  encounterId: string;
+  excludedItemIds?: readonly string[];
+  legacyReferences: readonly EncounterItemReference[];
+  scenarioId: string;
+}): Promise<void> {
+  const excludedItemIds = new Set(input.excludedItemIds);
+  for (const reference of input.legacyReferences) {
+    if (excludedItemIds.has(reference.itemId)) continue;
+    await reconcileScenarioCampaignItemAvailability({
+      available: true,
+      client: input.client,
+      encounterId: input.encounterId,
+      itemId: reference.itemId,
+      scenarioId: input.scenarioId,
+      visibility: reference.visibility,
+    });
+  }
+}
+
 function attachThrownWeaponUndo(
   encounter: EncounterSession,
   commandId: string,
@@ -497,12 +643,34 @@ export class CombatItemInteractionService {
 
   async getOptions(input: {
     campaignId: string;
+    encounterSession?: EncounterSession;
     encounterId: string;
     participants: readonly CombatItemParticipantContext[];
     viewer: CombatItemInteractionViewer;
   }): Promise<CombatItemInteractionOptions> {
-    await this.assertEncounterScenarioEquipmentCurrent(input.encounterId);
+    const persistedEncounter = await this.assertEncounterScenarioEquipmentCurrent(
+      input.encounterId,
+    );
+    const encounter = input.encounterSession ?? persistedEncounter;
     const records = await this.repository.getCombatItemInteractionRecords(input.campaignId);
+    const references = new Map(
+      (encounter?.itemReferences ?? []).map((reference) => [
+        reference.itemId,
+        reference.visibility,
+      ]),
+    );
+    const projectedRecords = records.map((record) => {
+      const canonicalVisibility = references.get(record.item.id);
+      return canonicalVisibility
+        ? {
+            ...record,
+            hidden: canonicalVisibility === "gm_only",
+            presentEncounterId: input.encounterId,
+          }
+        : encounter?.itemReferencesVersion === 1
+          ? { ...record, presentEncounterId: undefined }
+          : record;
+    });
     const visibleActors = input.participants.filter(
       (participant) =>
         input.viewer.kind === "gm" ||
@@ -520,7 +688,7 @@ export class CombatItemInteractionService {
       }
       return {
         characterId: participant.characterId,
-        items: records
+        items: projectedRecords
           .filter(
             (record) =>
               record.availableInEncounter &&
@@ -532,7 +700,7 @@ export class CombatItemInteractionService {
         participantId: participant.participantId,
       };
     });
-    const presentItems = records
+    const presentItems = projectedRecords
       .filter(
         (record) =>
           record.presentEncounterId === input.encounterId &&
@@ -550,7 +718,7 @@ export class CombatItemInteractionService {
         (participant): CombatItemInteractionActorOptions => ({
           characterId: participant.characterId,
           items: participant.characterId
-            ? records
+            ? projectedRecords
                 .filter(
                   (record) =>
                     record.availableInEncounter &&
@@ -806,6 +974,12 @@ export class CombatItemInteractionService {
             }
 
             const repository = createPrismaCharacterEquipmentRepository(transaction);
+            const legacyReferences = await legacyEncounterItemReferences({
+              campaignId: input.campaignId,
+              encounter: persistedEncounter,
+              encounterId: input.encounterId,
+              repository,
+            });
             const itemBefore = await repository.getCanonicalEquipmentItemById(input.itemId);
             const loadoutsBefore = await repository.getCharacterLoadouts(input.ownerCharacterId);
             const readyInLoadout = loadoutsBefore.some((loadout) =>
@@ -840,6 +1014,20 @@ export class CombatItemInteractionService {
               client: transaction,
               scenarioId: input.scenarioId,
             });
+            await reconcileScenarioCampaignItemAvailability({
+              available: true,
+              client: transaction,
+              encounterId: input.encounterId,
+              itemId: input.itemId,
+              scenarioId: input.scenarioId,
+              visibility: itemEncounterVisibility(itemBefore),
+            });
+            await reconcileLegacyScenarioCampaignItemAvailability({
+              client: transaction,
+              encounterId: input.encounterId,
+              legacyReferences,
+              scenarioId: input.scenarioId,
+            });
             await this.transactionBoundaryHook?.("item");
             if (!item.item.revision) {
               throw new CombatItemUnavailableError();
@@ -853,7 +1041,12 @@ export class CombatItemInteractionService {
               ownerCharacterId: input.ownerCharacterId,
               version: 1,
             };
-            const session = attachThrownWeaponUndo(input.session, input.commandId, undo);
+            const session = associateEncounterItem(
+              attachThrownWeaponUndo(input.session, input.commandId, undo),
+              input.itemId,
+              itemEncounterVisibility(itemBefore),
+              legacyReferences,
+            );
             const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
               maxTransactionAttempts: 1,
             }).updateCombatEncounter({
@@ -1150,6 +1343,12 @@ export class CombatItemInteractionService {
             }
 
             const repository = createPrismaCharacterEquipmentRepository(transaction);
+            const legacyReferences = await legacyEncounterItemReferences({
+              campaignId: input.campaignId,
+              encounter: persistedEncounter,
+              encounterId: input.encounterId,
+              repository,
+            });
             const itemBefore = await repository.getCanonicalEquipmentItemById(
               completedAttempt.targetWeaponItemId,
             );
@@ -1179,6 +1378,20 @@ export class CombatItemInteractionService {
               client: transaction,
               scenarioId: input.scenarioId,
             });
+            await reconcileScenarioCampaignItemAvailability({
+              available: true,
+              client: transaction,
+              encounterId: input.encounterId,
+              itemId: itemBefore.id,
+              scenarioId: input.scenarioId,
+              visibility: itemEncounterVisibility(itemBefore),
+            });
+            await reconcileLegacyScenarioCampaignItemAvailability({
+              client: transaction,
+              encounterId: input.encounterId,
+              legacyReferences,
+              scenarioId: input.scenarioId,
+            });
             await this.transactionBoundaryHook?.("item");
             if (!item.item.revision) throw new CombatItemUnavailableError();
             const undo: CombatThrownWeaponAttackUndo = {
@@ -1190,7 +1403,12 @@ export class CombatItemInteractionService {
               ownerCharacterId: input.ownerCharacterId,
               version: 1,
             };
-            const session = attachDisarmItemUndo(input.session, input.commandId, undo);
+            const session = associateEncounterItem(
+              attachDisarmItemUndo(input.session, input.commandId, undo),
+              itemBefore.id,
+              itemEncounterVisibility(itemBefore),
+              legacyReferences,
+            );
             const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
               maxTransactionAttempts: 1,
             }).updateCombatEncounter({
@@ -1284,13 +1502,35 @@ export class CombatItemInteractionService {
           throw new CombatItemUnavailableError();
         }
         const repository = createPrismaCharacterEquipmentRepository(transaction);
+        const legacyReferences = await legacyEncounterItemReferences({
+          campaignId: input.campaignId,
+          encounter: persistedEncounter,
+          encounterId: input.encounterId,
+          repository,
+        });
         if (!repository.restoreCombatThrownWeaponAttack) throw new CombatItemUnavailableError();
         for (const { undo } of input.undos) {
           await repository.restoreCombatThrownWeaponAttack({
             campaignId: input.campaignId,
+            presentInEncounter: encounterHasItem(persistedEncounter, undo.itemBefore.id),
             undo,
           });
+          await reconcileScenarioCampaignItemAvailability({
+            available: false,
+            client: transaction,
+            encounterId: input.encounterId,
+            itemId: undo.itemBefore.id,
+            scenarioId: input.scenarioId,
+            visibility: itemEncounterVisibility(undo.itemBefore),
+          });
         }
+        await reconcileLegacyScenarioCampaignItemAvailability({
+          client: transaction,
+          encounterId: input.encounterId,
+          excludedItemIds: input.undos.map(({ undo }) => undo.itemBefore.id),
+          legacyReferences,
+          scenarioId: input.scenarioId,
+        });
         await this.transactionBoundaryHook?.("item");
         const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
           maxTransactionAttempts: 1,
@@ -1300,7 +1540,11 @@ export class CombatItemInteractionService {
           expectedRevision: input.expectedEncounterRevision,
           participantStateUpdates: input.participantStateUpdates,
           scenarioId: input.scenarioId,
-          session: input.session,
+          session: dissociateEncounterItems(
+            input.session,
+            input.undos.map(({ undo }) => undo.itemBefore.id),
+            legacyReferences,
+          ),
         });
         await reconcileScenarioEquipmentForCharacters({
           characterIds: input.undos.map(({ undo }) => undo.ownerCharacterId),
@@ -1381,15 +1625,37 @@ export class CombatItemInteractionService {
           throw new CombatItemUnavailableError();
         }
         const repository = createPrismaCharacterEquipmentRepository(transaction);
+        const legacyReferences = await legacyEncounterItemReferences({
+          campaignId: input.campaignId,
+          encounter: persistedEncounter,
+          encounterId: input.encounterId,
+          repository,
+        });
         if (!repository.restoreCombatThrownWeaponAttack) {
           throw new CombatItemUnavailableError();
         }
         for (const { undo } of input.undos) {
           await repository.restoreCombatThrownWeaponAttack({
             campaignId: input.campaignId,
+            presentInEncounter: encounterHasItem(persistedEncounter, undo.itemBefore.id),
             undo,
           });
+          await reconcileScenarioCampaignItemAvailability({
+            available: false,
+            client: transaction,
+            encounterId: input.encounterId,
+            itemId: undo.itemBefore.id,
+            scenarioId: input.scenarioId,
+            visibility: itemEncounterVisibility(undo.itemBefore),
+          });
         }
+        await reconcileLegacyScenarioCampaignItemAvailability({
+          client: transaction,
+          encounterId: input.encounterId,
+          excludedItemIds: input.undos.map(({ undo }) => undo.itemBefore.id),
+          legacyReferences,
+          scenarioId: input.scenarioId,
+        });
         await this.transactionBoundaryHook?.("item");
         const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
           maxTransactionAttempts: 1,
@@ -1399,7 +1665,11 @@ export class CombatItemInteractionService {
           expectedRevision: input.expectedEncounterRevision,
           participantStateUpdates: input.participantStateUpdates,
           scenarioId: input.scenarioId,
-          session: input.session,
+          session: dissociateEncounterItems(
+            input.session,
+            input.undos.map(({ undo }) => undo.itemBefore.id),
+            legacyReferences,
+          ),
         });
         await reconcileScenarioEquipmentForCharacters({
           characterIds: input.undos.map(({ undo }) => undo.ownerCharacterId),
@@ -1645,9 +1915,18 @@ export class CombatItemInteractionService {
               );
             }
 
-            const item = await createPrismaCharacterEquipmentRepository(
-              transaction,
-            ).applyCombatItemInteraction({
+            const presentInEncounter = encounterHasItem(
+              persistedEncounter,
+              input.interaction.itemId,
+            );
+            const repository = createPrismaCharacterEquipmentRepository(transaction);
+            const legacyReferences = await legacyEncounterItemReferences({
+              campaignId: input.campaignId,
+              encounter: persistedEncounter,
+              encounterId: input.encounterId,
+              repository,
+            });
+            const item = await repository.applyCombatItemInteraction({
               actionId: input.actionId,
               campaignId: input.campaignId,
               encounterId: input.encounterId,
@@ -1655,6 +1934,7 @@ export class CombatItemInteractionService {
               itemId: input.interaction.itemId,
               operation: input.interaction.operation,
               ownerCharacterId: input.ownerCharacterId,
+              presentInEncounter,
               recipientCharacterId: input.recipientCharacterId,
             });
             await reconcileScenarioEquipmentForCharacters({
@@ -1664,8 +1944,45 @@ export class CombatItemInteractionService {
               client: transaction,
               scenarioId: input.scenarioId,
             });
+            if (
+              input.interaction.operation === "drop" ||
+              input.interaction.operation === "pickup"
+            ) {
+              await reconcileScenarioCampaignItemAvailability({
+                available: input.interaction.operation === "drop",
+                client: transaction,
+                encounterId: input.encounterId,
+                itemId: input.interaction.itemId,
+                scenarioId: input.scenarioId,
+                visibility:
+                  input.interaction.visibleToParticipantIds.length > 0 ? "players" : "gm_only",
+              });
+            }
+            await reconcileLegacyScenarioCampaignItemAvailability({
+              client: transaction,
+              encounterId: input.encounterId,
+              excludedItemIds:
+                input.interaction.operation === "pickup" ? [input.interaction.itemId] : [],
+              legacyReferences,
+              scenarioId: input.scenarioId,
+            });
             await this.transactionBoundaryHook?.("item");
 
+            const nextSession =
+              input.interaction.operation === "drop"
+                ? associateEncounterItem(
+                    input.encounterSession,
+                    input.interaction.itemId,
+                    input.interaction.visibleToParticipantIds.length > 0 ? "players" : "gm_only",
+                    legacyReferences,
+                  )
+                : input.interaction.operation === "pickup"
+                  ? dissociateEncounterItems(
+                      input.encounterSession,
+                      [input.interaction.itemId],
+                      legacyReferences,
+                    )
+                  : input.encounterSession;
             const encounter = await createPrismaCombatStatePersistenceRepository(transaction, {
               maxTransactionAttempts: 1,
             }).updateCombatEncounter({
@@ -1673,7 +1990,7 @@ export class CombatItemInteractionService {
               encounterId: input.encounterId,
               expectedRevision: input.expectedEncounterRevision,
               scenarioId: input.scenarioId,
-              session: input.encounterSession,
+              session: nextSession,
             });
             await this.transactionBoundaryHook?.("encounter");
 
@@ -1745,22 +2062,39 @@ export class CombatItemInteractionService {
     );
   }
 
-  private async assertEncounterScenarioEquipmentCurrent(encounterId: string): Promise<void> {
-    const encounter = await this.client.encounter.findUnique({
+  private async assertEncounterScenarioEquipmentCurrent(
+    encounterId: string,
+  ): Promise<EncounterSession | undefined> {
+    const metadata = await this.client.encounter.findUnique({
       select: { scenarioId: true },
       where: { id: encounterId },
     });
-    if (!encounter?.scenarioId) throw new CombatItemUnavailableError();
+    if (!metadata?.scenarioId) throw new CombatItemUnavailableError();
     await assertScenarioEquipmentCurrent({
       client: this.client,
-      scenarioId: encounter.scenarioId,
+      scenarioId: metadata.scenarioId,
     });
+    try {
+      return (
+        await createPrismaCombatStateReadRepository(this.client).getFullEncounterById(encounterId)
+      )?.encounter;
+    } catch (error) {
+      // Lightweight unit repositories predating split Combat persistence have
+      // no full Encounter row. Their records exercise the legacy tag path.
+      if (error instanceof CombatPersistenceError && error.code === "unsupported_storage_mode") {
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   private async assertScenarioAllowsCombatMutation(
     scenarioId: string,
     transaction: Prisma.TransactionClient,
   ): Promise<void> {
+    await transaction.$queryRaw(
+      Prisma.sql`SELECT "id" FROM "Scenario" WHERE "id" = ${scenarioId} FOR UPDATE`,
+    );
     const scenario = await transaction.scenario.findUnique({
       where: { id: scenarioId },
       select: { status: true },

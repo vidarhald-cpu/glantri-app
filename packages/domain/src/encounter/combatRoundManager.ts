@@ -2,6 +2,7 @@ import { resolveEffectiveItemTemplate } from "../equipment/itemOverrides";
 import { z } from "zod";
 
 import { COMBAT_ROUND_STEPS, combatRoundStepSchema, type CombatRoundStep } from "./combatRoundStep";
+import { combatDeclarationIntentSchema } from "./combatDeclarationIntent";
 import {
   combatDefenseSnapshotSchema,
   getCombatDefenseSnapshotForAttack,
@@ -2401,6 +2402,7 @@ export const combatRoundDeclarationSchema = z.object({
   combatContext: scenarioParticipantCombatContextSchema.optional(),
   disarm: combatDisarmDeclarationSchema.optional(),
   feint: combatRoundFeintDeclarationSchema.optional(),
+  intent: combatDeclarationIntentSchema.optional(),
   movementId: z.string().min(1).optional(),
   movementIntent: movementIntentSchema.optional(),
   phaseContexts: combatRoundPhaseContextsSchema.optional(),
@@ -2629,6 +2631,7 @@ export const combatRoundStepSnapshotSchema = z.object({
       actionId: idSchema.optional(),
       actionLabel: z.string().min(1).optional(),
       additionalActionNotes: z.string().optional(),
+      intent: combatDeclarationIntentSchema.optional(),
       feint: z
         .object({
           attackerSkillId: idSchema,
@@ -14058,6 +14061,19 @@ function buildCombatRoundEndDistanceProposals(input: {
       });
 
       if (!target || target.participantId === participant.participantId) {
+        continue;
+      }
+      const actionDistanceTarget = declaration.adjustDistance
+        ? findCombatRoundParticipantByAlias({
+            id: declaration.adjustDistance.targetParticipantId,
+            state: normalized,
+          })
+        : undefined;
+      if (
+        declaration.actionId === "adjust_range_attack" &&
+        (!declaration.adjustDistance ||
+          actionDistanceTarget?.participantId === target.participantId)
+      ) {
         continue;
       }
 

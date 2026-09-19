@@ -5,9 +5,10 @@ import React, { useState, type ReactNode } from "react";
 import {
   HIT_LOCATIONS,
   isCombatDeclarationActionAvailable,
-  projectCombatDeclarationCompatibility,
   type CombatEffectsState,
   type CombatDistance,
+  type CombatDeclarationIntent,
+  type CombatDeclarationRelativePositionIntent,
   type CombatRoundInitiativeResult,
   type CombatRoundStep,
   type MovementIntent,
@@ -215,11 +216,13 @@ interface PlayerCombatActionSelectorPanelProps {
   additionalActionNotes: string;
   controlsDisabled?: boolean;
   declarationRecorded?: boolean;
+  declarationIntent?: CombatDeclarationIntent;
   distancePreferenceOptions?: readonly PlayerCombatDistancePreferenceOption[];
   movementId: PlayerEncounterMovementId | "";
   movementIntent?: MovementIntent;
   onActionChange: (actionId: PlayerEncounterActionId | "") => void;
   onAdditionalActionNotesChange: (notes: string) => void;
+  onDeclarationIntentChange?: (intent: CombatDeclarationIntent) => void;
   onMovementChange: (movementId: PlayerEncounterMovementId | "") => void;
   onMovementIntentChange?: (movementIntent: MovementIntent) => void;
   onSecondaryActionChange: (actionId: PlayerEncounterActionId | "") => void;
@@ -232,11 +235,13 @@ export interface PlayerCombatHistoricalActionSelectorPanelProps {
   actionLabel?: string;
   additionalActionNotes?: string;
   declarationRecorded?: boolean;
+  declarationIntent?: CombatDeclarationIntent;
   distancePreferences?: readonly {
     desiredDistance?: CombatDistance;
     displayName: string;
   }[];
   movementLabel?: string;
+  relativePositionLabels?: readonly string[];
   roundNumber?: number;
   secondaryActionLabel?: string;
 }
@@ -402,18 +407,6 @@ const compactWideFieldLabelStyle = {
   display: "grid",
   gap: "0.18rem",
   maxWidth: "100%",
-} as const;
-
-const compactDistancePreferenceGridStyle = {
-  display: "grid",
-  gap: "0.3rem",
-} as const;
-
-const compactDistancePreferenceRowStyle = {
-  alignItems: "center",
-  display: "grid",
-  gap: "0.5rem",
-  gridTemplateColumns: "minmax(0, 1fr) 7.5rem",
 } as const;
 
 const compactModifierGroupHeaderStyle = {
@@ -1560,11 +1553,12 @@ export function PlayerCombatActionSelectorPanel({
   additionalActionNotes,
   controlsDisabled = false,
   declarationRecorded = false,
+  declarationIntent,
   distancePreferenceOptions = [],
-  movementId,
   movementIntent,
   onActionChange,
   onAdditionalActionNotesChange,
+  onDeclarationIntentChange,
   onMovementChange,
   onMovementIntentChange,
   onSecondaryActionChange,
@@ -1583,87 +1577,51 @@ export function PlayerCombatActionSelectorPanel({
   const selectedSecondaryActionIsListed = secondaryActionOptions.some(
     (option) => option.value === secondaryActionId,
   );
+  const effectiveDeclarationIntent: CombatDeclarationIntent = declarationIntent ?? {
+    primaryAction: actionId ? { actionId } : undefined,
+    relativePositions: [],
+    secondaryAction: secondaryActionId ? { actionId: secondaryActionId } : undefined,
+  };
   const effectiveMovementIntent =
-    movementIntent ??
-    ({
-      distancePreferences: [],
-      mode: movementId && movementId !== "hold" ? "set_distance_preferences" : "hold_position",
-    } satisfies MovementIntent);
-  const compatibilityProjection = projectCombatDeclarationCompatibility({
-    movementKind: effectiveMovementIntent.mode,
-    primaryAction: actionId || undefined,
-    secondaryAction: secondaryActionId || undefined,
-  });
-  const allowedMovementKinds = new Set(compatibilityProjection.allowedMovementKinds);
+    movementIntent ?? ({ distancePreferences: [], mode: "hold_position" } satisfies MovementIntent);
   const compatibilityMessage = getPlayerEncounterDeclarationCompatibilityMessage({
     actionId,
     movementKind: effectiveMovementIntent.mode,
     secondaryActionId,
   });
-  const updateMovementMode = (mode: MovementIntent["mode"]) => {
-    onMovementChange(mode === "hold_position" ? "hold" : "step");
+  const commitDeclarationIntent = (next: CombatDeclarationIntent) => {
+    onDeclarationIntentChange?.(next);
+    const distancePreferences = next.relativePositions.flatMap((position) => {
+      if (position.kind === "hold_formation" || position.desiredDistance === undefined) return [];
+      return [
+        {
+          desiredDistance: position.desiredDistance,
+          source: "player_declared" as const,
+          targetParticipantId: position.targetParticipantId,
+        },
+      ];
+    });
+    onMovementChange(distancePreferences.length > 0 ? "step" : "hold");
     onMovementIntentChange?.({
-      distancePreferences: [],
-      environmentalMovement:
-        mode === "move_in_environment"
-          ? {
-              destination: { description: "", kind: "description" },
-              duration: { kind: "round" },
-              pace: "walk",
-            }
-          : undefined,
-      mode,
+      distancePreferences,
+      mode: distancePreferences.length > 0 ? "set_distance_preferences" : "hold_position",
     });
   };
-  const updateDistancePreference = (
-    targetParticipantId: string,
-    operation: "" | "maintain" | "close" | "open" | "retreat",
-  ) => {
-    const nextPreferences = effectiveMovementIntent.distancePreferences.filter(
-      (preference) => preference.targetParticipantId !== targetParticipantId,
-    );
-    const currentDistance = distancePreferenceOptions.find(
-      (option) => option.id === targetParticipantId,
-    )?.currentDistance;
-    const desiredDistance =
-      currentDistance === undefined || operation === ""
-        ? undefined
-        : operation === "maintain"
-          ? currentDistance
-          : operation === "close"
-            ? Math.max(0, currentDistance - 1)
-            : operation === "open"
-              ? Math.min(8, currentDistance + 1)
-              : Math.min(8, currentDistance + 2);
-
-    if (desiredDistance !== undefined) {
-      nextPreferences.push({
-        desiredDistance: desiredDistance as CombatDistance,
-        operation: operation || undefined,
-        source: "player_declared",
-        targetParticipantId,
-      });
-    }
-
-    onMovementIntentChange?.({
-      distancePreferences: nextPreferences,
-      mode: "set_distance_preferences",
-    });
+  const updateRelativePosition = (index: number, next: CombatDeclarationRelativePositionIntent) => {
+    const relativePositions = [...effectiveDeclarationIntent.relativePositions];
+    relativePositions[index] = next;
+    commitDeclarationIntent({ ...effectiveDeclarationIntent, relativePositions });
   };
-  const updateEnvironmentalMovement = (
-    patch: Partial<NonNullable<MovementIntent["environmentalMovement"]>>,
-  ) => {
-    const current = effectiveMovementIntent.environmentalMovement ?? {
-      destination: { description: "", kind: "description" as const },
-      duration: { kind: "round" as const },
-      pace: "walk" as const,
-    };
-    onMovementIntentChange?.({
-      distancePreferences: [],
-      environmentalMovement: { ...current, ...patch },
-      mode: "move_in_environment",
-    });
-  };
+  const directionOptions = [
+    ["forward", "Forward"],
+    ["forward_right", "Forward/right"],
+    ["right", "Right"],
+    ["backward_right", "Backward/right"],
+    ["backward", "Backward"],
+    ["backward_left", "Backward/left"],
+    ["left", "Left"],
+    ["forward_left", "Forward/left"],
+  ] as const;
 
   return (
     <section style={playerCombatPanelCardStyle}>
@@ -1689,11 +1647,22 @@ export function PlayerCombatActionSelectorPanel({
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Action</span>
         <select
           disabled={controlsDisabled}
-          onChange={(event) => onActionChange(event.target.value as PlayerEncounterActionId | "")}
+          onChange={(event) => {
+            const nextActionId = event.target.value as PlayerEncounterActionId | "";
+            onActionChange(nextActionId);
+            commitDeclarationIntent({
+              ...effectiveDeclarationIntent,
+              primaryAction: nextActionId
+                ? effectiveDeclarationIntent.primaryAction?.actionId === nextActionId
+                  ? effectiveDeclarationIntent.primaryAction
+                  : { actionId: nextActionId }
+                : undefined,
+            });
+          }}
           style={{ maxWidth: "100%", width: "100%" }}
           value={actionId}
         >
-          <option value="">Choose action</option>
+          <option value="">Choose primary action</option>
           {actionId && !selectedActionIsListed ? (
             <option disabled value={actionId}>
               {getPlayerEncounterActionLabel(actionId)}
@@ -1717,13 +1686,22 @@ export function PlayerCombatActionSelectorPanel({
         <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Secondary action</span>
         <select
           disabled={controlsDisabled}
-          onChange={(event) =>
-            onSecondaryActionChange(event.target.value as PlayerEncounterActionId | "")
-          }
+          onChange={(event) => {
+            const nextActionId = event.target.value as PlayerEncounterActionId | "";
+            onSecondaryActionChange(nextActionId);
+            commitDeclarationIntent({
+              ...effectiveDeclarationIntent,
+              secondaryAction: nextActionId
+                ? effectiveDeclarationIntent.secondaryAction?.actionId === nextActionId
+                  ? effectiveDeclarationIntent.secondaryAction
+                  : { actionId: nextActionId }
+                : undefined,
+            });
+          }}
           style={{ maxWidth: "100%", width: "100%" }}
           value={secondaryActionId}
         >
-          <option value="">{actionId === "parry" ? "None" : "Open"}</option>
+          <option value="">Choose secondary action</option>
           {secondaryActionId && !selectedSecondaryActionIsListed ? (
             <option disabled value={secondaryActionId}>
               {getPlayerEncounterActionLabel(secondaryActionId)}
@@ -1749,6 +1727,133 @@ export function PlayerCombatActionSelectorPanel({
         </select>
       </label>
 
+      {actionId === "perform_task" ? (
+        <label style={compactWideFieldLabelStyle}>
+          <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Task description</span>
+          <input
+            disabled={controlsDisabled}
+            maxLength={2000}
+            onChange={(event) =>
+              commitDeclarationIntent({
+                ...effectiveDeclarationIntent,
+                primaryAction: {
+                  actionId: "perform_task",
+                  description: event.target.value || undefined,
+                  taskId: effectiveDeclarationIntent.primaryAction?.taskId,
+                },
+              })
+            }
+            placeholder="What is the character trying to accomplish?"
+            type="text"
+            value={effectiveDeclarationIntent.primaryAction?.description ?? ""}
+          />
+        </label>
+      ) : null}
+
+      {secondaryActionId === "talk_shout" ? (
+        <fieldset
+          style={{
+            border: "1px solid #d9ddd8",
+            borderRadius: 8,
+            display: "grid",
+            gap: "0.55rem",
+            margin: 0,
+            minWidth: 0,
+            padding: "0.75rem",
+          }}
+        >
+          <legend style={{ fontSize: "0.88rem", fontWeight: 700, padding: "0 0.25rem" }}>
+            Talk / Shout
+          </legend>
+          <label style={compactFieldLabelStyle}>
+            <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Utterance type</span>
+            <select
+              disabled={controlsDisabled}
+              onChange={(event) =>
+                commitDeclarationIntent({
+                  ...effectiveDeclarationIntent,
+                  secondaryAction: {
+                    ...effectiveDeclarationIntent.secondaryAction,
+                    actionId: "talk_shout",
+                    utteranceType: (event.target.value || undefined) as
+                      | "speak"
+                      | "shout"
+                      | "whisper"
+                      | "other"
+                      | undefined,
+                  },
+                })
+              }
+              value={effectiveDeclarationIntent.secondaryAction?.utteranceType ?? ""}
+            >
+              <option value="">Choose type</option>
+              <option value="speak">Speak</option>
+              <option value="shout">Shout</option>
+              <option value="whisper">Whisper</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label style={compactWideFieldLabelStyle}>
+            <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>What is said</span>
+            <input
+              disabled={controlsDisabled}
+              maxLength={500}
+              onChange={(event) =>
+                commitDeclarationIntent({
+                  ...effectiveDeclarationIntent,
+                  secondaryAction: {
+                    ...effectiveDeclarationIntent.secondaryAction,
+                    actionId: "talk_shout",
+                    utteranceText: event.target.value || undefined,
+                  },
+                })
+              }
+              type="text"
+              value={effectiveDeclarationIntent.secondaryAction?.utteranceText ?? ""}
+            />
+          </label>
+          <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+            Records communication only; it has no automatic mechanics.
+          </div>
+        </fieldset>
+      ) : null}
+
+      {secondaryActionId === "equip_unequip" || secondaryActionId === "small_action" ? (
+        <label style={compactWideFieldLabelStyle}>
+          <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>
+            {secondaryActionId === "equip_unequip"
+              ? "Intended equipment change"
+              : "Small Action description"}
+          </span>
+          <input
+            disabled={controlsDisabled}
+            maxLength={2000}
+            onChange={(event) =>
+              commitDeclarationIntent({
+                ...effectiveDeclarationIntent,
+                secondaryAction: {
+                  actionId: secondaryActionId,
+                  description: event.target.value || undefined,
+                  taskId: effectiveDeclarationIntent.secondaryAction?.taskId,
+                },
+              })
+            }
+            placeholder={
+              secondaryActionId === "equip_unequip"
+                ? "Draw sword, stow shield…"
+                : "What limited action is attempted?"
+            }
+            type="text"
+            value={effectiveDeclarationIntent.secondaryAction?.description ?? ""}
+          />
+          {secondaryActionId === "equip_unequip" ? (
+            <span style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+              This declaration does not change equipment.
+            </span>
+          ) : null}
+        </label>
+      ) : null}
+
       <fieldset
         style={{
           border: "1px solid #d9ddd8",
@@ -1761,201 +1866,284 @@ export function PlayerCombatActionSelectorPanel({
         }}
       >
         <legend style={{ fontSize: "0.88rem", fontWeight: 700, padding: "0 0.25rem" }}>
-          Movement
+          Relative position
         </legend>
-        <label style={compactFieldLabelStyle}>
-          <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Movement intent</span>
-          <select
-            aria-label="Movement"
-            disabled={controlsDisabled}
-            onChange={(event) => updateMovementMode(event.target.value as MovementIntent["mode"])}
-            value={effectiveMovementIntent.mode}
-          >
-            {!allowedMovementKinds.has(effectiveMovementIntent.mode) ? (
-              <option disabled value={effectiveMovementIntent.mode}>
-                Selected movement · Not compatible
-              </option>
-            ) : null}
-            {allowedMovementKinds.has("hold_position") ? (
-              <option value="hold_position">Hold position</option>
-            ) : null}
-            {allowedMovementKinds.has("set_distance_preferences") ? (
-              <option value="set_distance_preferences">Change distance to participant</option>
-            ) : null}
-            {allowedMovementKinds.has("move_in_environment") ? (
-              <option value="move_in_environment">Move in environment</option>
-            ) : null}
-          </select>
-        </label>
-
-        {effectiveMovementIntent.mode === "set_distance_preferences" ? (
+        {effectiveDeclarationIntent.relativePositions.map((position, index) => (
           <section
-            aria-label="Change distance to participant"
-            style={compactDistancePreferenceGridStyle}
+            key={`${index}:${position.kind}`}
+            style={{
+              borderTop: index ? "1px solid #e6e0d2" : undefined,
+              display: "grid",
+              gap: "0.45rem",
+              paddingTop: index ? "0.55rem" : undefined,
+            }}
           >
-            <h3 style={{ fontSize: "0.84rem", margin: 0 }}>Change distance to participant</h3>
-            {distancePreferenceOptions.length === 0 ? (
-              <div style={{ color: "#5e5a50", fontSize: "0.84rem" }}>
-                No visible opponents available.
-              </div>
-            ) : (
-              distancePreferenceOptions.map((option) => {
-                const preference = effectiveMovementIntent.distancePreferences.find(
-                  (entry) => entry.targetParticipantId === option.id,
-                );
-                const selectedOperation =
-                  preference?.operation ??
-                  (preference && option.currentDistance !== undefined
-                    ? preference.desiredDistance === option.currentDistance
-                      ? "maintain"
-                      : preference.desiredDistance < option.currentDistance
-                        ? "close"
-                        : "open"
-                    : "");
-
-                return (
-                  <label key={option.id} style={compactDistancePreferenceRowStyle}>
-                    <span
-                      style={{
-                        fontSize: "0.84rem",
-                        minWidth: 0,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                      title={option.displayName}
-                    >
-                      {option.displayName}
-                    </span>
-                    <select
-                      disabled={controlsDisabled}
-                      onChange={(event) =>
-                        updateDistancePreference(
-                          option.id,
-                          event.target.value as "" | "maintain" | "close" | "open" | "retreat",
-                        )
-                      }
-                      value={selectedOperation}
-                    >
-                      <option value="">No preference</option>
-                      {option.currentDistance === undefined ? (
-                        <option disabled value="unavailable">
-                          Current distance unavailable
-                        </option>
-                      ) : (
-                        <>
-                          <option value="maintain">
-                            Maintain · Distance {option.currentDistance}
-                          </option>
-                          {option.currentDistance > 0 ? (
-                            <option value="close">
-                              Close · Distance {option.currentDistance - 1}
-                            </option>
-                          ) : null}
-                          {option.currentDistance < 8 ? (
-                            <option value="open">
-                              Open · Distance {option.currentDistance + 1}
-                            </option>
-                          ) : null}
-                          {option.currentDistance < 7 ? (
-                            <option value="retreat">
-                              Retreat · Distance {option.currentDistance + 2}
-                            </option>
-                          ) : null}
-                        </>
-                      )}
-                    </select>
-                  </label>
-                );
-              })
-            )}
-          </section>
-        ) : null}
-
-        {effectiveMovementIntent.mode === "move_in_environment" ? (
-          <section aria-label="Move in environment" style={{ display: "grid", gap: "0.55rem" }}>
-            <h3 style={{ fontSize: "0.84rem", margin: 0 }}>Move in environment</h3>
-            <label style={compactFieldLabelStyle}>
-              <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>How</span>
-              <select
-                disabled={controlsDisabled}
-                onChange={(event) =>
-                  updateEnvironmentalMovement({
-                    pace: event.target.value as "walk" | "run" | "reposition",
-                  })
-                }
-                value={effectiveMovementIntent.environmentalMovement?.pace ?? "walk"}
-              >
-                <option value="walk">Walk</option>
-                <option value="run">Run</option>
-                <option value="reposition">Reposition</option>
-              </select>
-            </label>
-            <label style={compactWideFieldLabelStyle}>
-              <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Destination</span>
-              <input
-                disabled={controlsDisabled}
-                maxLength={500}
-                onChange={(event) =>
-                  updateEnvironmentalMovement({
-                    destination: { description: event.target.value, kind: "description" },
-                  })
-                }
-                placeholder="Doorway, courtyard, wounded ally…"
-                type="text"
-                value={effectiveMovementIntent.environmentalMovement?.destination.description ?? ""}
-              />
-            </label>
-            <label style={compactFieldLabelStyle}>
-              <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Expected time</span>
-              <select
-                disabled={controlsDisabled}
-                onChange={(event) =>
-                  updateEnvironmentalMovement({
-                    duration:
-                      event.target.value === "rounds"
-                        ? { kind: "rounds", rounds: 2 }
-                        : event.target.value === "gm_decided"
-                          ? { kind: "gm_decided" }
-                          : { kind: "round" },
-                  })
-                }
-                value={effectiveMovementIntent.environmentalMovement?.duration.kind ?? "round"}
-              >
-                <option value="round">One round</option>
-                <option value="rounds">Multiple rounds</option>
-                <option value="gm_decided">GM decides</option>
-              </select>
-            </label>
-            {effectiveMovementIntent.environmentalMovement?.duration.kind === "rounds" ? (
-              <label style={compactFieldLabelStyle}>
-                <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Rounds</span>
-                <input
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "0.35rem",
+                justifyContent: "space-between",
+              }}
+            >
+              <strong style={{ fontSize: "0.84rem" }}>Priority {index + 1}</strong>
+              <span style={{ display: "flex", gap: "0.25rem" }}>
+                <button
+                  disabled={controlsDisabled || index === 0}
+                  onClick={() => {
+                    const next = [...effectiveDeclarationIntent.relativePositions];
+                    [next[index - 1], next[index]] = [next[index]!, next[index - 1]!];
+                    commitDeclarationIntent({
+                      ...effectiveDeclarationIntent,
+                      relativePositions: next,
+                    });
+                  }}
+                  type="button"
+                >
+                  Up
+                </button>
+                <button
+                  disabled={
+                    controlsDisabled ||
+                    index === effectiveDeclarationIntent.relativePositions.length - 1
+                  }
+                  onClick={() => {
+                    const next = [...effectiveDeclarationIntent.relativePositions];
+                    [next[index], next[index + 1]] = [next[index + 1]!, next[index]!];
+                    commitDeclarationIntent({
+                      ...effectiveDeclarationIntent,
+                      relativePositions: next,
+                    });
+                  }}
+                  type="button"
+                >
+                  Down
+                </button>
+                <button
                   disabled={controlsDisabled}
-                  max={100}
-                  min={2}
-                  onChange={(event) =>
-                    updateEnvironmentalMovement({
-                      duration: {
-                        kind: "rounds",
-                        rounds: Math.max(2, Math.min(100, Number(event.target.value) || 2)),
-                      },
+                  onClick={() =>
+                    commitDeclarationIntent({
+                      ...effectiveDeclarationIntent,
+                      relativePositions: effectiveDeclarationIntent.relativePositions.filter(
+                        (_, candidateIndex) => candidateIndex !== index,
+                      ),
                     })
                   }
-                  type="number"
-                  value={effectiveMovementIntent.environmentalMovement.duration.rounds}
+                  type="button"
+                >
+                  Remove
+                </button>
+              </span>
+            </div>
+            <label style={compactFieldLabelStyle}>
+              <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Intention</span>
+              <select
+                disabled={controlsDisabled}
+                onChange={(event) => {
+                  const kind = event.target
+                    .value as CombatDeclarationRelativePositionIntent["kind"];
+                  const firstTarget = distancePreferenceOptions[0];
+                  updateRelativePosition(
+                    index,
+                    kind === "hold_formation"
+                      ? { formation: "Formation", kind }
+                      : kind === "keep_distance"
+                        ? {
+                            desiredDistance: firstTarget?.currentDistance,
+                            kind,
+                            targetParticipantId: firstTarget?.id ?? "unavailable",
+                          }
+                        : {
+                            desiredDistance:
+                              firstTarget?.defaultDistance ?? firstTarget?.currentDistance ?? 2,
+                            kind,
+                            targetParticipantId: firstTarget?.id ?? "unavailable",
+                          },
+                  );
+                }}
+                value={position.kind}
+              >
+                <option value="keep_distance">Keep distance</option>
+                <option value="adjust_distance">Adjust distance</option>
+                <option value="hold_formation">Hold formation</option>
+              </select>
+            </label>
+            {position.kind === "hold_formation" ? (
+              <label style={compactWideFieldLabelStyle}>
+                <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Formation</span>
+                <input
+                  disabled={controlsDisabled}
+                  maxLength={500}
+                  onChange={(event) =>
+                    updateRelativePosition(index, {
+                      formation: event.target.value,
+                      kind: "hold_formation",
+                    })
+                  }
+                  type="text"
+                  value={position.formation}
                 />
               </label>
-            ) : null}
-            <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-              The GM reviews timing and any roll. This does not change distance to an opponent.
-            </div>
+            ) : (
+              <>
+                <label style={compactFieldLabelStyle}>
+                  <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Person</span>
+                  <select
+                    disabled={controlsDisabled}
+                    onChange={(event) =>
+                      updateRelativePosition(index, {
+                        ...position,
+                        targetParticipantId: event.target.value,
+                      })
+                    }
+                    value={position.targetParticipantId}
+                  >
+                    {!distancePreferenceOptions.some(
+                      (option) => option.id === position.targetParticipantId,
+                    ) ? (
+                      <option disabled value={position.targetParticipantId}>
+                        Unavailable participant
+                      </option>
+                    ) : null}
+                    {distancePreferenceOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.displayName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={compactFieldLabelStyle}>
+                  <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Desired distance</span>
+                  <select
+                    disabled={controlsDisabled}
+                    onChange={(event) =>
+                      updateRelativePosition(index, {
+                        ...position,
+                        desiredDistance: Number(event.target.value) as CombatDistance,
+                      })
+                    }
+                    value={position.desiredDistance ?? ""}
+                  >
+                    {position.kind === "keep_distance" ? (
+                      <option value="">Current relationship</option>
+                    ) : null}
+                    {Array.from({ length: 9 }, (_, distance) => (
+                      <option key={distance} value={distance}>
+                        Distance {distance}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {position.kind === "adjust_distance" ? (
+                  <label style={compactWideFieldLabelStyle}>
+                    <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Intended speed</span>
+                    <input
+                      disabled={controlsDisabled}
+                      maxLength={100}
+                      onChange={(event) =>
+                        updateRelativePosition(index, {
+                          ...position,
+                          intendedSpeed: event.target.value || undefined,
+                        })
+                      }
+                      placeholder="Optional description"
+                      type="text"
+                      value={position.intendedSpeed ?? ""}
+                    />
+                  </label>
+                ) : null}
+              </>
+            )}
           </section>
-        ) : null}
+        ))}
+        <button
+          disabled={controlsDisabled}
+          onClick={() => {
+            const firstTarget = distancePreferenceOptions[0];
+            commitDeclarationIntent({
+              ...effectiveDeclarationIntent,
+              relativePositions: [
+                ...effectiveDeclarationIntent.relativePositions,
+                firstTarget
+                  ? {
+                      desiredDistance: firstTarget.currentDistance,
+                      kind: "keep_distance",
+                      targetParticipantId: firstTarget.id,
+                    }
+                  : { formation: "Formation", kind: "hold_formation" },
+              ],
+            });
+          }}
+          type="button"
+        >
+          Add relative intention
+        </button>
+      </fieldset>
+
+      <fieldset
+        style={{
+          border: "1px solid #d9ddd8",
+          borderRadius: 8,
+          display: "grid",
+          gap: "0.65rem",
+          margin: 0,
+          minWidth: 0,
+          padding: "0.75rem",
+        }}
+      >
+        <legend style={{ fontSize: "0.88rem", fontWeight: 700, padding: "0 0.25rem" }}>
+          Movement and facing
+        </legend>
+        <label style={compactFieldLabelStyle}>
+          <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Movement direction</span>
+          <select
+            disabled={controlsDisabled}
+            onChange={(event) =>
+              commitDeclarationIntent({
+                ...effectiveDeclarationIntent,
+                movementDirection: (event.target.value ||
+                  undefined) as CombatDeclarationIntent["movementDirection"],
+              })
+            }
+            value={effectiveDeclarationIntent.movementDirection ?? ""}
+          >
+            <option value="">None / blank</option>
+            {directionOptions.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={compactFieldLabelStyle}>
+          <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Facing</span>
+          <select
+            disabled={controlsDisabled}
+            onChange={(event) =>
+              commitDeclarationIntent({
+                ...effectiveDeclarationIntent,
+                facing: (event.target.value || undefined) as CombatDeclarationIntent["facing"],
+              })
+            }
+            value={effectiveDeclarationIntent.facing ?? ""}
+          >
+            <option value="">None / blank</option>
+            {directionOptions.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+          Relative intentions, movement direction, and facing are independent plans. The GM resolves
+          feasibility.
+        </div>
       </fieldset>
 
       <label style={compactWideFieldLabelStyle}>
-        <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Description</span>
+        <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Additional declaration notes</span>
         <input
           disabled={controlsDisabled}
           onChange={(event) => onAdditionalActionNotesChange(event.target.value)}
@@ -1972,8 +2160,10 @@ export function PlayerCombatHistoricalActionSelectorPanel({
   actionLabel,
   additionalActionNotes,
   declarationRecorded = false,
+  declarationIntent,
   distancePreferences = [],
   movementLabel,
+  relativePositionLabels = [],
   roundNumber,
   secondaryActionLabel,
 }: PlayerCombatHistoricalActionSelectorPanelProps) {
@@ -1991,6 +2181,18 @@ export function PlayerCombatHistoricalActionSelectorPanel({
       <HistoricalField label="Action" value={actionLabel} />
       <HistoricalField label="Secondary action" value={secondaryActionLabel ?? "None"} />
       <HistoricalField label="Movement" value={movementLabel} />
+      <HistoricalField
+        label="Movement direction"
+        value={declarationIntent?.movementDirection?.replaceAll("_", "/")}
+      />
+      <HistoricalField label="Facing" value={declarationIntent?.facing?.replaceAll("_", "/")} />
+      {relativePositionLabels.map((label, index) => (
+        <HistoricalField
+          key={`${index}:${label}`}
+          label={`Relative priority ${index + 1}`}
+          value={label}
+        />
+      ))}
       {distancePreferences.map((preference) => (
         <HistoricalField
           key={preference.displayName}
@@ -2003,6 +2205,26 @@ export function PlayerCombatHistoricalActionSelectorPanel({
         />
       ))}
       <HistoricalField label="Description" value={additionalActionNotes || "None"} />
+      {declarationIntent?.primaryAction?.description ? (
+        <HistoricalField
+          label="Task description"
+          value={declarationIntent.primaryAction.description}
+        />
+      ) : null}
+      {declarationIntent?.secondaryAction?.utteranceText ? (
+        <HistoricalField
+          label={
+            declarationIntent.secondaryAction.utteranceType?.replaceAll("_", " ") ?? "Utterance"
+          }
+          value={declarationIntent.secondaryAction.utteranceText}
+        />
+      ) : null}
+      {declarationIntent?.secondaryAction?.description ? (
+        <HistoricalField
+          label="Secondary details"
+          value={declarationIntent.secondaryAction.description}
+        />
+      ) : null}
     </section>
   );
 }

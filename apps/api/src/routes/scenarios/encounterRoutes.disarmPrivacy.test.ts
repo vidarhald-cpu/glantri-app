@@ -200,6 +200,25 @@ function fixture(input?: { hiddenSuffix?: string }) {
 }
 
 describe("player-safe Disarm state", () => {
+  it("omits GM-only Encounter Item identities from the player projection", () => {
+    const { encounter, scenarioParticipants } = fixture();
+    const projected = buildPlayerSafeEncounterForUser({
+      encounter: {
+        ...encounter,
+        itemReferences: [
+          { itemId: "visible-item", visibility: "players" },
+          { itemId: "hidden-item", visibility: "gm_only" },
+        ],
+        itemReferencesVersion: 1,
+      },
+      scenarioParticipants,
+      userId: "user-actor",
+    });
+
+    expect(projected.itemReferences).toEqual([{ itemId: "visible-item", visibility: "players" }]);
+    expect(JSON.stringify(projected)).not.toContain("hidden-item");
+  });
+
   it("keeps each involved roll usable without commands, opposite roll math, or hidden ratings", () => {
     const { encounter, scenarioParticipants } = fixture();
     const actor = buildPlayerSafeEncounterForUser({

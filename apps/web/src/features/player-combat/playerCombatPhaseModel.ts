@@ -587,6 +587,34 @@ export function buildCombatDeclarationAttackSelection(input: {
   return { phaseAttackSources, phaseContexts };
 }
 
+export function getCombatDeclarationAttackModeUnavailableMessage(input: {
+  actionId?: string;
+  disarmPhase?: PlayerCombatPhaseKey;
+  feintMethod?: "movement" | "weapon";
+  phaseLoadoutSummaries: Record<
+    PlayerCombatPhaseKey,
+    Pick<PlayerCombatLoadoutSummary, "attackModeUnavailableMessage">
+  >;
+  secondaryActionId?: string;
+}): string | undefined {
+  const attackPhases = new Set<PlayerCombatPhaseKey>(
+    getCombatDeclarationAttackPhases({
+      actionId: input.actionId,
+      disarmPhase: input.disarmPhase,
+      secondaryActionId: input.secondaryActionId,
+    }),
+  );
+  if (input.actionId === "feint_attack" && input.feintMethod === "weapon") {
+    attackPhases.add("phase1");
+  }
+
+  for (const phaseKey of attackPhases) {
+    const message = input.phaseLoadoutSummaries[phaseKey].attackModeUnavailableMessage;
+    if (message) return message;
+  }
+  return undefined;
+}
+
 export function buildPlayerCombatLoadoutSummary(input: {
   actionId: PlayerEncounterActionId | "";
   allowUnarmedFallback?: boolean;
