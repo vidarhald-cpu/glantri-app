@@ -187,9 +187,26 @@ The following remain approved:
 - already approved structural relationships unless substantive content evidence
   supports a revision.
 
-This contract refines product quality within that architecture. It does not
-authorize a return to the previous Skill model, a rewrite of all 84 Professions,
-or a change to Chargen mechanics.
+This contract refines product quality within that architecture.
+
+### Authorized Profession and Learning Group catalogue redesign
+
+The Product Owner has authorized a content redesign of the Profession and
+Learning Group catalogue. The authorization explicitly covers:
+
+- adding, removing, and merging Learning Groups;
+- changing Learning Group memberships;
+- adding and changing choice slots;
+- changing Profession to Learning Group mappings; and
+- changing Profession tracks and routes.
+
+The current count of 59 Learning Groups is **not** fixed and may change.
+
+The authorization explicitly does **not** cover:
+
+- a broad rewrite of the 131 base Skills, which are generally preserved;
+- a return to the previous Skill model; or
+- a change to Chargen mechanics.
 
 ## 7. Decision state
 
@@ -208,6 +225,10 @@ or a change to Chargen mechanics.
   learning opportunities per ordinary valid path, as a signal rather than a
   quota, counted by the rules in
   [section 5.2](#52-effective-breadth-counting-rules).
+- The Profession and Learning Group catalogue redesign is authorized as recorded
+  in [section 6](#authorized-profession-and-learning-group-catalogue-redesign),
+  including a Learning Group count other than 59; the 131 base Skills, the Skill
+  model, and Chargen mechanics stay outside that authorization.
 
 ### Unresolved content dependencies
 
