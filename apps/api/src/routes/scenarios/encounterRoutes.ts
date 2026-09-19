@@ -6801,6 +6801,9 @@ export function buildPlayerSafeEncounterForUser(input: {
     return {
       ...playerSafeEncounter,
       combatRoundState: buildPlayerSafeCombatRoundStateForUser(input),
+      itemReferences: (input.encounter.itemReferences ?? []).filter(
+        (reference) => reference.visibility === "players",
+      ),
       roleplayState: input.encounter.roleplayState
         ? buildPlayerSafeRoleplayStateForUser(input)
         : undefined,
@@ -6813,6 +6816,9 @@ export function buildPlayerSafeEncounterForUser(input: {
   return {
     ...playerSafeEncounter,
     combatRoundState: buildPlayerSafeCombatRoundStateForUser(input),
+    itemReferences: (input.encounter.itemReferences ?? []).filter(
+      (reference) => reference.visibility === "players",
+    ),
     participants: membership.participants
       .filter((participant) =>
         getCombatDistanceParticipantAliases(participant).some((alias) =>
@@ -7648,6 +7654,119 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.get("/encounters/:encounterId/items", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({ error: "Encounter not found." });
+      }
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        {
+          scenarioId: encounter.scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+      if (!access) return reply.code(404).send({ error: "Encounter not found." });
+
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(
+        encounter.scenarioId,
+      );
+      if (
+        access.mode === "player" &&
+        !hasPlayerEncounterReadAccess({ encounter, scenarioParticipants, userId: user.id })
+      ) {
+        return reply.code(404).send({ error: "Encounter not found." });
+      }
+
+      const [equipmentState, scenario] = await Promise.all([
+        characterEquipmentReadModelService.getCampaignEquipmentState(access.campaignId),
+        scenarioService.getScenarioById(encounter.scenarioId),
+      ]);
+      const visibleReferences = (encounter.itemReferences ?? []).filter(
+        (reference) => access.mode === "gm" || reference.visibility === "players",
+      );
+      const legacyItems =
+        encounter.itemReferencesVersion === undefined
+          ? (
+              await combatItemInteractionService.getOptions({
+                campaignId: access.campaignId,
+                encounterSession: encounter,
+                encounterId,
+                participants: [],
+                viewer:
+                  access.mode === "gm"
+                    ? { kind: "gm" }
+                    : {
+                        controlledParticipantIds: new Set<string>(),
+                        kind: "player",
+                        visibleParticipantIds: new Set<string>(),
+                      },
+              })
+            ).presentItems
+          : [];
+      const labelFor = (itemId: string) => {
+        const item = equipmentState.itemsById[itemId];
+        return (
+          item?.displayName?.trim() ||
+          (item?.templateId ? equipmentState.templatesById[item.templateId]?.name : undefined) ||
+          "Item"
+        );
+      };
+      const items = visibleReferences
+        .flatMap((reference) => {
+          const item = equipmentState.itemsById[reference.itemId];
+          return item && item.holderCharacterId === null
+            ? [{ ...reference, label: labelFor(reference.itemId), revision: item.revision }]
+            : [];
+        })
+        .concat(
+          legacyItems
+            .filter((legacy) => !visibleReferences.some((entry) => entry.itemId === legacy.id))
+            .map((legacy) => ({
+              itemId: legacy.id,
+              label: legacy.label,
+              revision: legacy.revision,
+              visibility: legacy.playerVisible ? ("players" as const) : ("gm_only" as const),
+            })),
+        );
+      const associatedIds = new Set(items.map((item) => item.itemId));
+      const availableItems =
+        access.mode === "gm"
+          ? (scenario?.liveState?.session.availableObjects ?? []).flatMap((reference) => {
+              if (
+                reference.sourceKind !== "campaign_item" ||
+                associatedIds.has(reference.sourceId)
+              ) {
+                return [];
+              }
+              const item = equipmentState.itemsById[reference.sourceId];
+              return item && item.holderCharacterId === null
+                ? [
+                    {
+                      itemId: item.id,
+                      label: labelFor(item.id),
+                      revision: item.revision,
+                      visibility: reference.visibility,
+                    },
+                  ]
+                : [];
+            })
+          : [];
+
+      return { availableItems, items };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to load Encounter Items.",
+      });
+    }
+  });
+
   app.get("/encounters/:encounterId/revision", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
 
@@ -7936,6 +8055,32 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         parseOptionalString(body, "expectedRevision") ?? encounterSession.updatedAt;
       if (!expectedRevision) throw new Error("Refresh the Encounter before saving.");
       const statusChanged = encounterSession.status !== existingEncounter.status;
+      const itemReferencesChanged =
+        JSON.stringify(encounterSession.itemReferences ?? []) !==
+        JSON.stringify(existingEncounter.itemReferences ?? []);
+      if (itemReferencesChanged) {
+        const [equipmentState, scenario] = await Promise.all([
+          characterEquipmentReadModelService.getCampaignEquipmentState(access.campaignId),
+          scenarioService.getScenarioById(existingEncounter.scenarioId),
+        ]);
+        const allowedItemIds = new Set(
+          (scenario?.liveState?.session.availableObjects ?? [])
+            .filter((reference) => reference.sourceKind === "campaign_item")
+            .map((reference) => reference.sourceId),
+        );
+        const referencedIds = (encounterSession.itemReferences ?? []).map(
+          (reference) => reference.itemId,
+        );
+        if (
+          new Set(referencedIds).size !== referencedIds.length ||
+          referencedIds.some((itemId) => {
+            const item = equipmentState.itemsById[itemId];
+            return !allowedItemIds.has(itemId) || !item || item.holderCharacterId !== null;
+          })
+        ) {
+          throw new Error("Choose unheld Campaign Items available in this Scenario.");
+        }
+      }
       const participantsChanged =
         encounterSession.participantMembershipMode !==
           existingEncounter.participantMembershipMode ||
@@ -7953,9 +8098,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               : encounterSession.status === "archived"
                 ? "encounter_archived"
                 : undefined
-        : participantsChanged
-          ? "encounter_participants_updated"
-          : undefined;
+        : itemReferencesChanged
+          ? "encounter_updated"
+          : participantsChanged
+            ? "encounter_participants_updated"
+            : undefined;
       const encounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
         encounterId,
@@ -7967,7 +8114,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               summary:
                 eventType === "encounter_closed"
                   ? `Closed encounter ${encounterSession.title}: ${encounterSession.playerOutcome ?? "No outcome recorded."}`
-                  : `Updated encounter ${encounterSession.title}.`,
+                  : itemReferencesChanged
+                    ? `Updated Encounter Items for ${encounterSession.title}.`
+                    : `Updated encounter ${encounterSession.title}.`,
             }
           : undefined,
         scenarioId: existingEncounter.scenarioId,

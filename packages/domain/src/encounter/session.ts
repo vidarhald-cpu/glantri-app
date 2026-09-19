@@ -330,6 +330,16 @@ export const encounterParticipantSchema = z.object({
   scenarioParticipantId: idSchema.optional(),
 });
 
+/**
+ * A reference from one Encounter to an existing Campaign Item. The Item keeps
+ * its canonical identity and ownership in the equipment aggregate; Encounter
+ * state records only presence and audience.
+ */
+export const encounterItemReferenceSchema = z.object({
+  itemId: idSchema,
+  visibility: z.enum(["players", "gm_only"]),
+});
+
 export const encounterSessionSchema = z.object({
   actionLog: z.array(encounterAttackResolutionSchema).default([]),
   campaignId: idSchema.optional(),
@@ -341,6 +351,9 @@ export const encounterSessionSchema = z.object({
   description: z.string().optional(),
   gmPrivateClosingNote: z.string().optional(),
   id: idSchema,
+  /** Present once Encounter references, rather than legacy Item tags, own presence. */
+  itemReferencesVersion: z.literal(1).optional(),
+  itemReferences: z.array(encounterItemReferenceSchema).optional(),
   kind: encounterKindSchema.default("combat"),
   participantMembershipMode: encounterParticipantMembershipModeSchema.optional(),
   participants: z.array(encounterParticipantSchema).default([]),
@@ -377,6 +390,7 @@ export const encounterSessionRevisionSchema = z
   .strict();
 
 export type EncounterStatus = z.infer<typeof encounterStatusSchema>;
+export type EncounterItemReference = z.infer<typeof encounterItemReferenceSchema>;
 export type EncounterKind = z.infer<typeof encounterKindSchema>;
 export type EncounterSessionSummary = z.infer<typeof encounterSessionSummarySchema>;
 export type EncounterSessionRevision = z.infer<typeof encounterSessionRevisionSchema>;

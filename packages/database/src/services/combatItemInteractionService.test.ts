@@ -1,4 +1,4 @@
-import { CanonicalEquipmentItemSchema } from "@glantri/domain";
+import { CanonicalEquipmentItemSchema, type EncounterSession } from "@glantri/domain";
 import { describe, expect, it, vi } from "vitest";
 
 import type {
@@ -72,6 +72,53 @@ const participants = [
 ];
 
 describe("CombatItemInteractionService privacy and declaration authority", () => {
+  it("projects canonical Encounter references and suppresses legacy tags after cutover", async () => {
+    const service = combatService([
+      record({ holderCharacterId: null, id: "visible-reference" }),
+      record({ holderCharacterId: null, id: "private-reference" }),
+      record({
+        holderCharacterId: null,
+        id: "retired-legacy-reference",
+        presentEncounterId: "encounter-1",
+      }),
+    ]);
+    const encounterSession = {
+      id: "encounter-1",
+      itemReferences: [
+        { itemId: "visible-reference", visibility: "players" },
+        { itemId: "private-reference", visibility: "gm_only" },
+      ],
+      itemReferencesVersion: 1,
+    } as EncounterSession;
+
+    const player = await service.getOptions({
+      campaignId: "campaign-1",
+      encounterId: "encounter-1",
+      encounterSession,
+      participants,
+      viewer: {
+        controlledParticipantIds: new Set(["participant-1"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["participant-1"]),
+      },
+    });
+    const gm = await service.getOptions({
+      campaignId: "campaign-1",
+      encounterId: "encounter-1",
+      encounterSession,
+      participants,
+      viewer: { kind: "gm" },
+    });
+
+    expect(player.presentItems.map((item) => item.id)).toEqual(["visible-reference"]);
+    expect(gm.presentItems.map((item) => item.id)).toEqual([
+      "visible-reference",
+      "private-reference",
+    ]);
+    expect(JSON.stringify(player)).not.toContain("private-reference");
+    expect(JSON.stringify(gm)).not.toContain("retired-legacy-reference");
+  });
+
   it("shows only controlled Items and revealed Encounter-present Items to a player", async () => {
     const service = combatService([
       record({ holderCharacterId: "character-1", id: "owned-dagger" }),

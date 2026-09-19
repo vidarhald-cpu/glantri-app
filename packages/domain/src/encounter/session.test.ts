@@ -92,6 +92,23 @@ function encounter(input: Partial<EncounterSession> = {}): EncounterSession {
 }
 
 describe("encounter session normalization invariants", () => {
+  it("preserves Campaign Item identity in versioned Encounter references", () => {
+    const parsed = encounterSessionSchema.parse({
+      ...encounter(),
+      itemReferences: [
+        { itemId: "campaign-item-visible", visibility: "players" },
+        { itemId: "campaign-item-private", visibility: "gm_only" },
+      ],
+      itemReferencesVersion: 1,
+    });
+
+    expect(parsed.itemReferences).toEqual([
+      { itemId: "campaign-item-visible", visibility: "players" },
+      { itemId: "campaign-item-private", visibility: "gm_only" },
+    ]);
+    expect(parsed.itemReferencesVersion).toBe(1);
+  });
+
   it("normalizes legacy statuses and enforces the common lifecycle", () => {
     expect(encounterStatusSchema.parse("setup")).toBe("draft");
     expect(encounterStatusSchema.parse("planned")).toBe("draft");

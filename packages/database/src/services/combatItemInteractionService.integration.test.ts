@@ -508,6 +508,90 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(JSON.stringify(playerHistory)).not.toMatch(
         /holderCharacterId|itemRevision|resolvedByUserId|payload|audienceParticipantIds/,
       );
+      const storedScenario = await prisma!.scenario.findUniqueOrThrow({
+        select: { liveStateJson: true },
+        where: { id: current.scenario.id },
+      });
+      expect(JSON.stringify(storedScenario.liveStateJson)).not.toContain(current.item.id);
+    });
+
+    it("materializes every legacy present Item and authorizes the new drop in Scenario state", async () => {
+      const current = await fixture("legacy-materialization");
+      const equipmentService = new CharacterEquipmentWriteService(current.itemRepository);
+      const legacyItem = await equipmentService.createCampaignEquipmentItem({
+        campaignId: current.campaign.id,
+        displayName: "Unrelated hidden legacy Item",
+        holderCharacterId: null,
+        itemFacts: {
+          activeMechanics: [],
+          descriptiveTraits: [],
+          templateOverrides: [],
+          unsupportedCapabilities: [],
+          version: 1,
+        },
+        templateId: "weapon-template-dagger",
+      });
+      await prisma!.characterEquipmentItem.update({
+        data: {
+          statusTagsJson: ["hidden", `glantri:combat-item:present:${current.encounterId}`],
+        },
+        where: { id: legacyItem.id },
+      });
+
+      const service = new CombatItemInteractionService(current.itemRepository, prisma!);
+      const committed = await service.commitResolution({
+        actionId: current.actionId,
+        actorUserId: current.gm.id,
+        campaignId: current.campaign.id,
+        encounterId: current.encounterId,
+        encounterSession: current.completedSession,
+        expectedEncounterRevision: current.persisted.updatedAt,
+        interaction: current.completedSession.combatRoundState!.genericActions[0]!.itemInteraction!,
+        ownerCharacterId: current.character.id,
+        roundNumber: 1,
+        scenarioId: current.scenario.id,
+      });
+
+      expect(committed.encounter.itemReferencesVersion).toBe(1);
+      expect(committed.encounter.itemReferences).toEqual(
+        expect.arrayContaining([
+          { itemId: legacyItem.id, visibility: "gm_only" },
+          { itemId: current.item.id, visibility: "players" },
+        ]),
+      );
+      const storedScenario = await prisma!.scenario.findUniqueOrThrow({
+        select: { liveStateJson: true },
+        where: { id: current.scenario.id },
+      });
+      expect(storedScenario.liveStateJson).toMatchObject({
+        session: {
+          availableObjects: expect.arrayContaining([
+            expect.objectContaining({
+              sourceId: current.item.id,
+              sourceKind: "campaign_item",
+              visibility: "players",
+            }),
+            expect.objectContaining({
+              sourceId: legacyItem.id,
+              sourceKind: "campaign_item",
+              visibility: "gm_only",
+            }),
+          ]),
+        },
+      });
+      const options = await service.getOptions({
+        campaignId: current.campaign.id,
+        encounterId: current.encounterId,
+        participants: committed.encounter.participants.map((participant) => ({
+          characterId: participant.characterId,
+          label: participant.label,
+          participantId: participant.id,
+        })),
+        viewer: { kind: "gm" },
+      });
+      expect(options.presentItems.map((item) => item.id)).toEqual(
+        expect.arrayContaining([legacyItem.id, current.item.id]),
+      );
     });
 
     it("keeps an unmapped Item audience empty rather than public", async () => {
@@ -774,7 +858,7 @@ if (!process.env.DATABASE_URL_TEST) {
         expect.arrayContaining([
           expect.objectContaining({
             item: expect.objectContaining({ holderCharacterId: null, id: current.item.id }),
-            presentEncounterId: current.encounterId,
+            presentEncounterId: undefined,
           }),
         ]),
       );
@@ -1215,6 +1299,7 @@ if (!process.env.DATABASE_URL_TEST) {
         itemId: current.item.id,
         operation: "pickup",
         ownerCharacterId: current.character.id,
+        presentInEncounter: true,
       });
       expect(pickedUp.item).toMatchObject({
         holderCharacterId: current.character.id,

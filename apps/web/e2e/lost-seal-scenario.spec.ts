@@ -587,6 +587,27 @@ test.describe("Lost Seal Scenario happy path", () => {
 
     await setParticipantVisibility(participantB.participant.id, "visible_to_all");
 
+    const readGmEquipmentStatuses = async () => {
+      const gmSession = await json<{
+        session: { participants: Array<{ equipment?: { status: string }; id: string }> };
+      }>(await page.request.get(`${API_URL}/scenarios/${scenario.scenario.id}/session`));
+      return Object.fromEntries(
+        gmSession.session.participants.map((participant) => [
+          participant.id,
+          participant.equipment?.status,
+        ]),
+      );
+    };
+    const expectedCurrentEquipmentStatuses = {
+      [participantA.participant.id]: "current",
+      [participantB.participant.id]: "current",
+    };
+
+    const sharedGmCombatHref = `/campaigns/${campaign.campaign.id}?tab=combat&scenarioId=${scenario.scenario.id}&encounterId=${activeSharedCombat.encounter.id}`;
+    await page.goto(sharedGmCombatHref);
+    await page.getByRole("button", { name: "Open Combat Experience" }).click();
+    expect(await readGmEquipmentStatuses()).toMatchObject(expectedCurrentEquipmentStatuses);
+
     const playerCombatHref = `/campaigns/${campaign.campaign.id}?tab=player-combat&scenarioId=${scenario.scenario.id}&encounterId=${activeSharedCombat.encounter.id}`;
     await playerAPage.setViewportSize({ height: 900, width: 1280 });
     await playerAPage.goto(playerCombatHref);
@@ -596,6 +617,11 @@ test.describe("Lost Seal Scenario happy path", () => {
     await expect(
       playerAPage.getByText(hiddenParticipantName, { exact: false }).first(),
     ).toBeVisible();
+    await playerAPage.getByRole("button", { name: /^(Confirm|Roll) Combat Experience$/ }).click();
+    expect(await readGmEquipmentStatuses()).toMatchObject(expectedCurrentEquipmentStatuses);
+    await playerAPage
+      .getByRole("combobox", { exact: true, name: "Action" })
+      .selectOption("attack_parry");
     await expect(
       playerAPage.locator("option").filter({ hasText: hiddenParticipantName }),
     ).not.toHaveCount(0);
@@ -646,6 +672,16 @@ test.describe("Lost Seal Scenario happy path", () => {
     await restrictDuringOpenCombat("hidden");
     await restoreVisibleParticipant();
     await restrictDuringOpenCombat("gm_only");
+    expect(await readGmEquipmentStatuses()).toMatchObject({
+      ...expectedCurrentEquipmentStatuses,
+      [participantB.participant.id]: "stale",
+    });
+    await json(
+      await page.request.post(
+        `${API_URL}/scenarios/${scenario.scenario.id}/participants/${participantB.participant.id}/reconcile-character-equipment`,
+      ),
+    );
+    expect(await readGmEquipmentStatuses()).toMatchObject(expectedCurrentEquipmentStatuses);
 
     await playerAPage.reload();
     await playerAPage.goto(

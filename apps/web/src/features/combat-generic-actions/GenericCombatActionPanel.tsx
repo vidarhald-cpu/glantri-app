@@ -17,6 +17,7 @@ import {
   updateGenericCombatActionOnServer,
 } from "@/lib/api/localServiceClient";
 import { CombatItemInteractionPanel } from "./CombatItemInteractionPanel";
+import { EncounterItemsPanel } from "@/features/encounters/EncounterItemsPanel";
 
 const panelStyle = {
   background: "#f6f5ef",
@@ -395,11 +396,19 @@ export function GenericCombatActionPanel({
         </div>
       ) : null}
 
-      <CombatItemInteractionPanel
+      {isGm ? (
+        <CombatItemInteractionPanel
+          encounter={encounter}
+          isGm
+          onEncounterUpdated={onEncounterUpdated}
+          participantId={participantId}
+        />
+      ) : null}
+
+      <EncounterItemsPanel
         encounter={encounter}
         isGm={isGm}
         onEncounterUpdated={onEncounterUpdated}
-        participantId={participantId}
       />
 
       {showGenericDeclarationControls && (!isGm || participantId) ? (
