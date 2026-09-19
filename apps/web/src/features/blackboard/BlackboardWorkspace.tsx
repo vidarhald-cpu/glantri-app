@@ -29,6 +29,8 @@ import {
   type BlackboardSafeHistory,
 } from "@/lib/api/blackboardClient";
 
+import { FullViewportInspection } from "@/features/artifacts/inspection";
+
 import { ArtifactInspectionViewport } from "./ArtifactInspectionViewport";
 import styles from "./BlackboardWorkspace.module.css";
 import { buildFocusedBlackboardHref } from "./blackboardInspectionRoute";
@@ -765,39 +767,41 @@ export function BlackboardWorkspace({
     const inspectableEntry =
       selectedEntry?.category === "image_map" && selectedEntry.content ? selectedEntry : undefined;
     return (
-      <section className={styles.artifactInspectionShell}>
-        <header className={styles.inspectionHeader}>
-          <button onClick={onExitArtifact} type="button">
-            Back to Blackboard
-          </button>
-          <div>
-            <span className={styles.category}>Artifact</span>
-            <h1>{inspectableEntry?.title ?? "Artifact unavailable"}</h1>
-          </div>
-        </header>
+      <FullViewportInspection
+        closeOnEscape={false}
+        exitLabel="Back to Blackboard"
+        onExit={() => onExitArtifact?.()}
+        presentation="page"
+        subtitle="Artifact"
+        title={inspectableEntry?.title ?? "Artifact unavailable"}
+      >
         {inspectableEntry && artifactView.status === "ready" ? (
           <ArtifactInspectionViewport
             alt={inspectableEntry.artifact.altText}
             src={artifactView.objectUrl}
           />
-        ) : inspectableEntry && artifactView.status === "loading" ? (
-          <div className={styles.notice} role="status">
-            Loading the Artifact…
-          </div>
-        ) : inspectableEntry && artifactView.status === "operational_unavailable" ? (
-          <div className={styles.error} role="status">
-            <strong>The Artifact could not be loaded right now.</strong>
-            <p>The Blackboard reference remains available. Try loading the Artifact again.</p>
-            <button onClick={() => setArtifactRetry((current) => current + 1)} type="button">
-              Retry Artifact
-            </button>
-          </div>
         ) : (
-          <div className={styles.notice} role="status">
-            This Artifact was removed or is not available in this Campaign.
+          <div className={styles.inspectionMessage}>
+            {inspectableEntry && artifactView.status === "loading" ? (
+              <div className={styles.notice} role="status">
+                Loading the Artifact…
+              </div>
+            ) : inspectableEntry && artifactView.status === "operational_unavailable" ? (
+              <div className={styles.error} role="status">
+                <strong>The Artifact could not be loaded right now.</strong>
+                <p>The Blackboard reference remains available. Try loading the Artifact again.</p>
+                <button onClick={() => setArtifactRetry((current) => current + 1)} type="button">
+                  Retry Artifact
+                </button>
+              </div>
+            ) : (
+              <div className={styles.notice} role="status">
+                This Artifact was removed or is not available in this Campaign.
+              </div>
+            )}
           </div>
         )}
-      </section>
+      </FullViewportInspection>
     );
   }
 

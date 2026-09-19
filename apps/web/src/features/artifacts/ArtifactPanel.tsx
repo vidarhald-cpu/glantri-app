@@ -23,6 +23,7 @@ import {
 
 import { ArtifactDetails } from "./ArtifactDetails";
 import { ArtifactImportPanel } from "./ArtifactImportPanel";
+import { ArtifactInspectionDialog, type InspectedArtifact } from "./ArtifactInspectionDialog";
 import { OrdinaryArtifactUploadPanel } from "./OrdinaryArtifactUploadPanel";
 
 function audienceLabel(artifact: ArtifactGmDto): string {
@@ -54,6 +55,7 @@ export function ArtifactPanel({
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editAltText, setEditAltText] = useState("");
+  const [inspected, setInspected] = useState<InspectedArtifact>();
 
   const refresh = useCallback(async () => {
     const result = await loadArtifacts(campaignId);
@@ -170,7 +172,18 @@ export function ArtifactPanel({
           .map((artifact) => {
             const managed = isManagedArtifact(artifact) ? artifact : undefined;
             const isImage = artifact.mediaType?.startsWith("image/");
+            const isDocument = artifact.mediaType === "application/pdf";
             const contentAvailable = !managed || managed.storageState === "ready";
+            const contentSrc = `${artifactContentUrl(campaignId, artifact.id)}${managed ? `?version=${managed.metadataVersion}` : ""}`;
+            const inspect = (kind: "image" | "document") =>
+              setInspected({
+                alt: artifact.altText ?? artifact.title,
+                artifactKind: artifact.artifactKind,
+                audience: managed ? audienceLabel(managed) : undefined,
+                kind,
+                src: contentSrc,
+                title: artifact.title,
+              });
             const selectedScenarioId =
               selectedScenarioByArtifact[artifact.id] ?? activeScenarios[0]?.id ?? "";
             const reference = references.find(
@@ -224,20 +237,38 @@ export function ArtifactPanel({
                   </div>
                 ) : null}
                 {contentAvailable && isImage ? (
-                  <img
-                    alt={artifact.altText ?? ""}
-                    src={`${artifactContentUrl(campaignId, artifact.id)}${managed ? `?version=${managed.metadataVersion}` : ""}`}
-                    style={{ maxHeight: 240, maxWidth: "100%", objectFit: "contain" }}
-                  />
-                ) : null}
-                {contentAvailable && artifact.mediaType === "application/pdf" ? (
-                  <a
-                    href={artifactContentUrl(campaignId, artifact.id)}
-                    rel="noreferrer"
-                    target="_blank"
+                  <button
+                    aria-label={`Inspect ${artifact.title}`}
+                    onClick={() => inspect("image")}
+                    style={{
+                      background: "none",
+                      border: 0,
+                      cursor: "zoom-in",
+                      display: "grid",
+                      padding: 0,
+                    }}
+                    type="button"
                   >
-                    Download PDF safely
-                  </a>
+                    <img
+                      alt={artifact.altText ?? ""}
+                      src={contentSrc}
+                      style={{ maxHeight: 240, maxWidth: "100%", objectFit: "contain" }}
+                    />
+                  </button>
+                ) : null}
+                {contentAvailable && isDocument ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <button onClick={() => inspect("document")} type="button">
+                      Inspect full screen
+                    </button>
+                    <a
+                      href={artifactContentUrl(campaignId, artifact.id)}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Download PDF safely
+                    </a>
+                  </div>
                 ) : null}
 
                 {managed && managed.lifecycle !== "deleted" && managed.storageState === "ready" ? (
@@ -433,6 +464,9 @@ export function ArtifactPanel({
           })}
       </div>
       {artifacts.length === 0 ? <div>No shared Artifacts yet.</div> : null}
+      {inspected ? (
+        <ArtifactInspectionDialog artifact={inspected} onExit={() => setInspected(undefined)} />
+      ) : null}
     </section>
   );
 }
