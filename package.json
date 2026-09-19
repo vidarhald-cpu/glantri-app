@@ -8,6 +8,7 @@
   },
   "scripts": {
     "bootstrap:test": "node --test scripts/bootstrap/*.test.mjs",
+    "database:tooling:test": "node --test scripts/database/*.test.mjs",
     "playtest:start": "sh scripts/playtest-runtime.sh start",
     "playtest:stop": "sh scripts/playtest-runtime.sh stop",
     "playtest:restart": "sh scripts/playtest-runtime.sh restart",
@@ -22,7 +23,7 @@
     "format:check": "prettier --check .",
     "format:check:changed": "node scripts/checkChangedFormatting.mjs",
     "lint": "eslint scripts/database scripts/recovery scripts/bootstrap scripts/playtest && turbo lint --force",
-    "test": "pnpm recovery:historical:test && pnpm playtest:test && turbo test --force",
+    "test": "pnpm recovery:historical:test && pnpm database:tooling:test && pnpm playtest:test && turbo test --force",
     "recovery:historical": "node --import tsx scripts/recovery/historicalPlaytestImporter.ts",
     "recovery:historical:migrate": "pnpm --filter @glantri/database exec prisma migrate deploy --config scripts/historicalPlaytestPrisma.config.ts",
     "recovery:historical:test": "vitest run scripts/recovery/*.test.ts",

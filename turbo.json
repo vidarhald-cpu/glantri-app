@@ -3,16 +3,24 @@
   "tasks": {
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": [
+        "API_HOST",
+        "API_PORT",
+        "ARTIFACT_E2E_STORAGE_ENABLED",
+        "ARTIFACT_LOCAL_ROOT",
+        "DATABASE_URL",
+        "DATABASE_URL_TEST",
+        "GLANTRI_*",
+        "LOG_LEVEL",
+        "NEXT_PUBLIC_*",
+        "NODE_ENV",
+        "WEB_ORIGIN"
+      ]
     },
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [
-        ".next/**",
-        "dist/**",
-        "build/**",
-        "coverage/**"
-      ]
+      "outputs": [".next/**", "dist/**", "build/**", "coverage/**"]
     },
     "typecheck": {
       "dependsOn": ["^build", "^typecheck"]
