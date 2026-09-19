@@ -130,8 +130,8 @@ export function CampaignNoteEditor({
       <div style={{ display: "grid", gap: "0.4rem" }}>
         <strong style={{ fontSize: "0.9rem" }}>Associations</strong>
         <p style={{ color: "#5d635c", fontSize: "0.8125rem", margin: 0 }}>
-          Link this Note to anything it concerns. Linking is a reference only; it does not
-          change who owns the Scenario, Encounter, PC, NPC, or Artifact.
+          Link this Note to anything it concerns. Linking is a reference only; it does not change
+          who owns the Scenario, Encounter, PC, NPC, or Artifact.
         </p>
         <CampaignNoteAssociationChips associations={associations} campaignId={campaignId} />
         {atLimit ? (
@@ -145,8 +145,10 @@ export function CampaignNoteEditor({
         <details key={group.type} style={{ border: "1px solid #e4e7e2", borderRadius: 8 }}>
           <summary style={{ cursor: "pointer", padding: "0.45rem 0.6rem" }}>
             {group.plural} (
-            {group.entries.filter((entry) => selectedKeys.has(campaignNoteAssociationKey(entry)))
-              .length}
+            {
+              group.entries.filter((entry) => selectedKeys.has(campaignNoteAssociationKey(entry)))
+                .length
+            }
             /{group.entries.length})
           </summary>
           <div
@@ -162,10 +164,7 @@ export function CampaignNoteEditor({
               const key = campaignNoteAssociationKey(entry);
               const checked = selectedKeys.has(key);
               return (
-                <label
-                  key={key}
-                  style={{ alignItems: "start", display: "flex", gap: "0.45rem" }}
-                >
+                <label key={key} style={{ alignItems: "start", display: "flex", gap: "0.45rem" }}>
                   <input
                     checked={checked}
                     disabled={disabled || (!checked && atLimit)}

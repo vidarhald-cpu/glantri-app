@@ -291,9 +291,7 @@ describe("Campaign management panels", () => {
     expect(expandButton).toHaveAttribute("aria-expanded", "false");
     await user.click(expandButton);
 
-    expect(
-      screen.getByText(/Second line the list must not show up front/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Second line the list must not show up front/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Collapse Note" }));
     expect(
       screen.queryByText(/Second line the list must not show up front/),

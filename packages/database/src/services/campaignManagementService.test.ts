@@ -240,7 +240,9 @@ function buildAssociationService(noteRepository: Partial<CampaignNoteRepository>
         updatedAt: now,
       },
     ]),
-    listReusableEntitiesByGameMaster: vi.fn().mockResolvedValue([{ id: "npc-1", name: "Captain Harl" }]),
+    listReusableEntitiesByGameMaster: vi
+      .fn()
+      .mockResolvedValue([{ id: "npc-1", name: "Captain Harl" }]),
   };
   const scenarios = {
     listScenarioEventLogs: vi.fn().mockResolvedValue([]),
@@ -284,7 +286,12 @@ describe("CampaignManagementService Note associations", () => {
 
     expect(overview?.references).toEqual(
       expect.arrayContaining([
-        { id: "encounter-1", label: "Gate Skirmish", scenarioId: "scenario-live", type: "encounter" },
+        {
+          id: "encounter-1",
+          label: "Gate Skirmish",
+          scenarioId: "scenario-live",
+          type: "encounter",
+        },
       ]),
     );
   });
@@ -330,7 +337,9 @@ describe("CampaignManagementService Note associations", () => {
     await expect(
       service.createNote({
         actorUserId: "gm-1",
-        associations: [{ id: "scenario-from-another-campaign", label: "Elsewhere", type: "scenario" }],
+        associations: [
+          { id: "scenario-from-another-campaign", label: "Elsewhere", type: "scenario" },
+        ],
         campaignId: "campaign-1",
         content: "Should not persist.",
       }),
