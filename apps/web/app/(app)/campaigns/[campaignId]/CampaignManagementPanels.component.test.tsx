@@ -28,6 +28,7 @@ const now = "2026-09-17T08:00:00.000Z";
 
 function note(overrides: Partial<CampaignNote> = {}): CampaignNote {
   return {
+    associations: [],
     campaignId: "campaign-1",
     content: "Question the sentry.",
     createdAt: now,
@@ -134,6 +135,7 @@ const overview: CampaignWorkspaceOverview = {
       updatedAt: now,
     },
   ],
+  tags: [],
 };
 
 function NotesHarness({ initialNotes = [] }: { initialNotes?: CampaignNote[] }) {
@@ -144,7 +146,17 @@ function NotesHarness({ initialNotes = [] }: { initialNotes?: CampaignNote[] }) 
       notes={notes}
       onAuthorizationLoss={vi.fn()}
       onNotesChanged={setNotes}
-      references={[{ id: "scenario-live", label: "Western Gate", type: "scenario" }]}
+      references={[
+        { id: "scenario-live", label: "Western Gate", type: "scenario" },
+        {
+          id: "encounter-1",
+          label: "Gate Skirmish",
+          scenarioId: "scenario-live",
+          type: "encounter",
+        },
+        { id: "character-1", label: "Ari", type: "character" },
+        { id: "npc-1", label: "Captain Harl", type: "npc" },
+      ]}
     />
   );
 }
@@ -190,47 +202,142 @@ describe("Campaign management panels", () => {
     });
   });
 
-  it("creates, edits, resolves, and reopens a typed private note", async () => {
+  it("creates a note through a proper editor with several associations and links each to its canonical home", async () => {
+    const user = userEvent.setup();
+    const created = note({
+      associations: [
+        { id: "scenario-live", label: "Western Gate", type: "scenario" },
+        {
+          id: "encounter-1",
+          label: "Gate Skirmish",
+          scenarioId: "scenario-live",
+          type: "encounter",
+        },
+        { id: "character-1", label: "Ari", type: "character" },
+        { id: "npc-1", label: "Captain Harl", type: "npc" },
+        { id: "loose end", label: "Loose End", type: "tag" },
+      ],
+    });
+    mocks.createCampaignNoteOnServer.mockResolvedValue(created);
+    render(<NotesHarness />);
+
+    // Meaningful writing does not happen in a tiny always-on inline control.
+    expect(screen.queryByRole("textbox", { name: "New Campaign Note" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "New note" }));
+
+    const editor = screen.getByRole("textbox", { name: "New Campaign Note" });
+    expect(editor).toHaveAttribute("rows", "10");
+    await user.type(editor, "Question the sentry.");
+
+    await user.click(screen.getByRole("checkbox", { name: "Scenario: Western Gate" }));
+    await user.click(screen.getByRole("checkbox", { name: "Encounter: Gate Skirmish" }));
+    await user.click(screen.getByRole("checkbox", { name: "PC: Ari" }));
+    await user.click(screen.getByRole("checkbox", { name: "NPC: Captain Harl" }));
+    await user.type(screen.getByRole("textbox", { name: "Custom tag" }), "Loose End");
+    await user.click(screen.getByRole("button", { name: "Add tag" }));
+
+    await user.click(screen.getByRole("button", { name: "Save Note" }));
+    await screen.findByText("Question the sentry.");
+
+    expect(mocks.createCampaignNoteOnServer).toHaveBeenCalledWith({
+      associations: [
+        { id: "scenario-live", label: "Western Gate", type: "scenario" },
+        {
+          id: "encounter-1",
+          label: "Gate Skirmish",
+          scenarioId: "scenario-live",
+          type: "encounter",
+        },
+        { id: "character-1", label: "Ari", type: "character" },
+        { id: "npc-1", label: "Captain Harl", type: "npc" },
+        { id: "loose end", label: "Loose End", type: "tag" },
+      ],
+      campaignId: "campaign-1",
+      content: "Question the sentry.",
+    });
+
+    // The editor closes, and each association click-through reaches a canonical home.
+    expect(screen.queryByRole("textbox", { name: "New Campaign Note" })).not.toBeInTheDocument();
+    expect(screen.getByTitle("Open Scenario: Western Gate")).toHaveAttribute(
+      "href",
+      "/campaigns/campaign-1/scenarios/scenario-live",
+    );
+    expect(screen.getByTitle("Open Encounter: Gate Skirmish")).toHaveAttribute(
+      "href",
+      "/campaigns/campaign-1/scenarios/scenario-live/encounters/encounter-1",
+    );
+    expect(screen.getByTitle("Open PC: Ari")).toHaveAttribute("href", "/characters/character-1");
+    expect(screen.getByTitle("Open NPC: Captain Harl")).toHaveAttribute(
+      "href",
+      expect.stringContaining("#campaign-membership"),
+    );
+    // A custom tag has no separate home, so it filters instead of navigating.
+    expect(screen.getByRole("button", { name: "#Loose End" })).toBeInTheDocument();
+  });
+
+  it("keeps the list compact until the reader deliberately expands a note", async () => {
+    const user = userEvent.setup();
+    const long = note({
+      content: "First line of the plan.\nSecond line the list must not show up front.",
+    });
+    render(<NotesHarness initialNotes={[long]} />);
+
+    expect(screen.getByText("First line of the plan.")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Second line the list must not show up front/),
+    ).not.toBeInTheDocument();
+
+    const expandButton = screen.getByRole("button", { name: "Expand Note" });
+    expect(expandButton).toHaveAttribute("aria-expanded", "false");
+    await user.click(expandButton);
+
+    expect(
+      screen.getByText(/Second line the list must not show up front/),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Collapse Note" }));
+    expect(
+      screen.queryByText(/Second line the list must not show up front/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("edits associations, resolves, and reopens a private note", async () => {
     const user = userEvent.setup();
     const editedAt = "2026-09-17T08:01:00.000Z";
     const resolvedAt = "2026-09-17T08:02:00.000Z";
-    mocks.createCampaignNoteOnServer.mockResolvedValue(
-      note({ reference: { id: "scenario-live", label: "Western Gate", type: "scenario" } }),
-    );
+    const existing = note({
+      associations: [{ id: "scenario-live", label: "Western Gate", type: "scenario" }],
+    });
     mocks.updateCampaignNoteOnServer.mockResolvedValue(
       note({
+        associations: [{ id: "character-1", label: "Ari", type: "character" }],
         content: "Question the sentry before dawn.",
-        reference: { id: "scenario-live", label: "Western Gate", type: "scenario" },
         updatedAt: editedAt,
       }),
     );
     mocks.setCampaignNoteStatusOnServer
       .mockResolvedValueOnce(note({ status: "resolved", updatedAt: resolvedAt }))
       .mockResolvedValueOnce(note({ status: "open", updatedAt: "2026-09-17T08:03:00.000Z" }));
-    render(<NotesHarness />);
-
-    await user.type(
-      screen.getByRole("textbox", { name: "New Campaign Note" }),
-      "Question the sentry.",
-    );
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "New Note reference" }),
-      "scenario:scenario-live",
-    );
-    await user.click(screen.getByRole("button", { name: "Add Note" }));
-    await screen.findByText("Question the sentry.");
-    expect(mocks.createCampaignNoteOnServer).toHaveBeenCalledWith({
-      campaignId: "campaign-1",
-      content: "Question the sentry.",
-      reference: { id: "scenario-live", label: "Western Gate", type: "scenario" },
-    });
+    render(<NotesHarness initialNotes={[existing]} />);
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
     const edit = screen.getByRole("textbox", { name: "Edit Note Question the sentry." });
     await user.clear(edit);
     await user.type(edit, "Question the sentry before dawn.");
+
+    // The existing association is pre-selected; swap it for a different one.
+    expect(screen.getByRole("checkbox", { name: "Scenario: Western Gate" })).toBeChecked();
+    await user.click(screen.getByRole("checkbox", { name: "Scenario: Western Gate" }));
+    await user.click(screen.getByRole("checkbox", { name: "PC: Ari" }));
     await user.click(screen.getByRole("button", { name: "Save Note" }));
     await screen.findByText("Question the sentry before dawn.");
+
+    expect(mocks.updateCampaignNoteOnServer).toHaveBeenCalledWith({
+      associations: [{ id: "character-1", label: "Ari", type: "character" }],
+      campaignId: "campaign-1",
+      content: "Question the sentry before dawn.",
+      expectedRevision: now,
+      noteId: "note-1",
+    });
 
     await user.click(screen.getByRole("button", { name: "Resolve" }));
     await waitFor(() => expect(screen.getByText("Resolved")).toBeInTheDocument());
@@ -271,21 +378,21 @@ describe("Campaign management panels", () => {
       "Accepted edit from A",
     );
     expect(mocks.updateCampaignNoteOnServer).toHaveBeenNthCalledWith(1, {
+      associations: [],
       campaignId: "campaign-1",
       content: "Reviewed edit from B",
       expectedRevision: now,
       noteId: "note-1",
-      reference: undefined,
     });
 
     await user.click(screen.getByRole("button", { name: "Save Note" }));
     await screen.findByText("Reviewed edit from B");
     expect(mocks.updateCampaignNoteOnServer).toHaveBeenNthCalledWith(2, {
+      associations: [],
       campaignId: "campaign-1",
       content: "Reviewed edit from B",
       expectedRevision: currentServerNote.updatedAt,
       noteId: "note-1",
-      reference: undefined,
     });
   });
 });

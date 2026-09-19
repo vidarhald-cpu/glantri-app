@@ -175,6 +175,7 @@ enum CampaignNoteReferenceType {
   character
   npc
   artifact
+  tag
 }
 
 enum CampaignMapRole {
@@ -822,9 +823,28 @@ model CampaignNote {
   createdAt              DateTime                   @default(now())
   updatedAt              DateTime                   @updatedAt
   campaign               Campaign                   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  associations           CampaignNoteAssociation[]
 
   @@index([campaignId, status, updatedAt])
   @@index([campaignId, referenceType, referenceId])
+}
+
+/// Multi-association reference from a Campaign Note to Campaign material or a custom tag.
+/// References only; associating a Note never transfers ownership of the target.
+model CampaignNoteAssociation {
+  id            String                    @id @default(cuid())
+  noteId        String
+  type          CampaignNoteReferenceType
+  targetId      String
+  labelSnapshot String
+  scenarioId    String?
+  position      Int                       @default(0)
+  createdAt     DateTime                  @default(now())
+  note          CampaignNote              @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@unique([noteId, type, targetId])
+  @@index([noteId, position])
+  @@index([type, targetId])
 }
 
 model CampaignBlackboardEntry {

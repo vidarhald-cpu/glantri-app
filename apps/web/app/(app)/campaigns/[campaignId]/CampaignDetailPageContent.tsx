@@ -755,6 +755,7 @@ export default function CampaignDetailPageContent({
             setOverview((current) => (current ? { ...current, notes } : current))
           }
           references={overview.references}
+          tags={overview.tags}
         />
       ) : null}
 
