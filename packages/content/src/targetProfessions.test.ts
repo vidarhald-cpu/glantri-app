@@ -72,4 +72,20 @@ describe("approved target Profession projection", () => {
       expect(getTargetProgressionValidationErrors(p)).toEqual([]);
     }
   });
+  it("keeps internal Arch-Society codes out of the game-facing competency reference", () => {
+    const gameFacingDocuments = [
+      "../../../docs/rules/competency-rules.md",
+      "../../../docs/rules/competency-reference/README.md",
+      "../../../docs/rules/competency-reference/skills.md",
+      "../../../docs/rules/competency-reference/learning-groups.md",
+      "../../../docs/rules/competency-reference/professions.md",
+      "../../../docs/rules/competency-reference/societies.md",
+      "../../../docs/rules/competency-reference/gaps-and-exceptions.md",
+    ];
+
+    for (const path of gameFacingDocuments) {
+      const contents = readFileSync(new URL(path, import.meta.url), "utf8");
+      expect(contents, path).not.toMatch(/\bS\d{2}\b/);
+    }
+  });
 });
