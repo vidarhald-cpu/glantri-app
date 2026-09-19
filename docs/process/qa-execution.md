@@ -88,6 +88,13 @@ authority—not from an additional standing routing chat.
   explicit documentation-only QA exemption routes evidence to acceptance and
   does not manufacture independent QA PASS.
 
+QA is always bound to one exact PR head SHA. If a freshness refresh, rebase, or
+any other change moves the head of a runtime or code PR after QA, fresh QA on
+the new exact head is required; the earlier verdict does not carry forward to a
+head it never reviewed. Establishing PR freshness and merge base before dispatch
+is the Development Orchestrator's responsibility under
+[PR freshness, merge base, and pre-integration recheck](./development-baseline.md#pr-freshness-merge-base-and-pre-integration-recheck).
+
 An unchanged exact-head QA PASS does not expire merely through elapsed time or
 unrelated work. A mechanical head change requires preservation QA; a product
 change requires fresh substantive exact-head QA. Changed dependencies or other
@@ -195,8 +202,10 @@ entry, lease, and anti-loop rules apply.
 
 In a fresh QA worktree, independently confirm canonical origin/common Git
 directory, detached `HEAD` at the requested exact candidate, and no local branch
-or upstream. Fetch authorized refs without attaching to a moving branch, then
-independently resolve:
+or upstream. Because `remote.origin.fetch` is intentionally narrow, explicitly
+fetch and verify the exact PR head by refspec rather than relying on ambient
+remote-tracking refs, and do not widen the configured refspec. Fetch authorized
+refs without attaching to a moving branch, then independently resolve:
 
 - PR/ref and actual candidate head;
 - accepted baseline and merge base;
