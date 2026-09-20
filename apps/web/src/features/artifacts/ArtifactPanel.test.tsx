@@ -88,7 +88,11 @@ describe("ArtifactPanel", () => {
     );
     expect(screen.queryByText(/Private to GM/)).not.toBeInTheDocument();
     expect(screen.queryByText(/digest|storage|filename/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /share/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: /share with|withdraw|attach privately|retire|restore|edit details/i,
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows legacy recovery without fetching or rendering the old URL", async () => {
@@ -119,6 +123,53 @@ describe("ArtifactPanel", () => {
     expect(screen.getByLabelText("Files")).toHaveAttribute("multiple");
     expect(screen.getByText("Import Artifact package")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Upload privately" })).toBeNull();
+  });
+
+  it("inspects a shared image on the whole viewport and returns focus on exit", async () => {
+    const user = userEvent.setup();
+    render(<ArtifactPanel campaignId="campaign-1" scenarios={[]} />);
+
+    const trigger = await screen.findByRole("button", { name: "Inspect Northern pass" });
+    await user.click(trigger);
+
+    const inspection = screen.getByRole("dialog", { name: "Northern pass" });
+    expect(inspection).toHaveAttribute("aria-modal", "true");
+    expect(inspection).toHaveTextContent("map · Private to GM");
+    expect(screen.getByRole("group", { name: "Pan and zoom Artifact" })).toBeVisible();
+    expect(screen.getAllByRole("img", { name: "A mountain pass map" })[1]).toHaveAttribute(
+      "src",
+      "/content/artifact-1?version=1",
+    );
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("offers only the safe download for a PDF, with no misleading full-screen inspection", async () => {
+    mocks.loadArtifacts.mockResolvedValue({
+      artifacts: [
+        {
+          ...managedArtifact,
+          id: "handout-1",
+          mediaType: "application/pdf",
+          title: "Session notes",
+        },
+      ],
+      mode: "gm",
+      references: [],
+    });
+    render(<ArtifactPanel campaignId="campaign-1" scenarios={[]} />);
+    await screen.findByText("Session notes");
+
+    // The API deliberately refuses inline rendering of PDF Artifact content
+    // (attachment disposition plus a `sandbox; default-src 'none'` CSP), so a
+    // full-screen "Inspect" action for a PDF would only render a blank stage
+    // and silently trigger a download. Only the plain download link remains.
+    expect(screen.queryByRole("button", { name: /inspect/i })).not.toBeInTheDocument();
+    const download = screen.getByRole("link", { name: "Download PDF safely" });
+    expect(download).toHaveAttribute("href", "/content/handout-1");
+    expect(download).toHaveAttribute("target", "_blank");
   });
 
   it("refreshes instead of restoring stale publication state", async () => {
