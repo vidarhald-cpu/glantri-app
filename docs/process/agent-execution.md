@@ -54,7 +54,7 @@ Use this procedure for an authorized implementation case or other named durable 
    Orchestrator applies only the shallow dispatch gate in
    [`qa-execution.md`](./qa-execution.md) and creates one fresh QA task from the
    applicable immutable INITIAL, REPAIR, or PRESERVATION tuple. A fresh QA
-   reviewer in a separate visible task and clean worktree independently checks
+   reviewer in a separate execution context and clean worktree independently checks
    topology, scope, the actual delta, and the selected substantive gates. A
    mismatch returns quickly as `BLOCKED`; the Orchestrator does not duplicate
    that substantive verification.
@@ -87,16 +87,20 @@ The single Development Orchestrator moves handoffs directly and keeps the
 issue/PR current. The Product Owner receives decision and acceptance messages;
 they do not copy QA prompts or monitor child completion.
 
-## Visible task dispatch and completion
+## Isolated-context dispatch and completion
 
 Substantial implementation Builder, independent QA, and dispatched bounded
-Investigator/Ops lanes each use a separate visible Work/Codex task. Builder and QA
-for the same result must be different visible tasks. Hidden internal sub-agents
-may assist minor orchestration inside a lane, but same-thread or hidden work does
-not satisfy a Builder, QA, or dispatched Investigator/Ops lane. If visible task
-creation fails, use the bounded recovery below. Escalate an unresolved capability
-problem with exact evidence; only an explicitly authorized manual visible
-fallback can replace direct creation. A hidden substitute does not fulfill the role.
+Investigator/Ops lanes each execute in a separate isolated context—normally a
+separate visible Work/Codex task where the client supports it, or an
+explicitly authorized fresh background/subagent context for bounded,
+durably-recorded unattended work. Builder and QA for the same result must be
+different contexts. A helper agent operating inside another lane's execution
+context does not satisfy that lane: same-thread or same-context work does not
+satisfy a Builder, QA, or dispatched Investigator/Ops lane, whether or not that
+work is visible. If separate-context dispatch fails, use the bounded recovery
+below. Escalate an unresolved capability problem with exact evidence; only an
+explicitly authorized manual fallback in its own separate context can replace
+direct creation. A same-context substitute does not fulfill the role.
 
 At Builder, Investigator/Ops, or QA dispatch, record one execution-ledger entry
 keyed by `issue + role + mode + exact SHA`:

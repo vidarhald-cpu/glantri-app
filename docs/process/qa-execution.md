@@ -67,9 +67,11 @@ remote HEAD or a default branch. A queued request is pending, not a passed gate.
 This mechanical provisioning check does not replace the worker's independent
 scope/topology/delta verification.
 
-There is no permanent QA Orchestrator. Independence comes from a fresh worker,
-separate visible task, separate clean exact-head worktree, and review-only
-authority—not from an additional standing routing chat.
+There is no permanent QA Orchestrator. Independence comes from a fresh worker
+in a separate execution context from the Builder, separate clean exact-head
+worktree, and review-only authority—not from an additional standing routing
+chat. A helper agent operating inside the Builder's execution context does not
+supply this independence, regardless of whether that helper is visible.
 
 ## Verification classes and evidence validity
 
@@ -235,8 +237,8 @@ An intended or merely queued dispatch is not started work.
 For substantive INITIAL or REPAIR QA, verify and record; for PRESERVATION,
 retain independence, exact-head and scope gates and apply the verification class:
 
-- independence: separate visible task, reviewer, and clean worktree from the
-  Builder;
+- independence: separate execution context, reviewer, and clean worktree from
+  the Builder;
 - exact head: verdict names the full immutable reviewed SHA;
 - contract and scope: approved acceptance, exclusions, changed files, and no
   unauthorized widening;
