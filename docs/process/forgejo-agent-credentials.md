@@ -39,6 +39,23 @@ Recorder function. Lifecycle mutations remain with the Development Orchestrator.
 Role-prose reconciliation changes no account, token scope, repository permission,
 Keychain handle or protected-branch setting.
 
+## Execution identity assignment
+
+Each execution lane uses one fixed identity. Selecting an identity never grants
+authority the task contract and branch protection do not already permit.
+
+| Identity               | Used for                                                                                                                |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `glantri-builder`      | Ordinary task-branch and Builder PR activity.                                                                           |
+| `glantri-orchestrator` | Orchestration, issue and PR lifecycle, and accepted merges into protected `dev`.                                        |
+| `glantri-qa`           | Independent QA evidence. No implementation push and no merge.                                                           |
+| `recovery-admin`       | Emergency and repository administration only, under separate break-glass authority. Never a routine execution identity. |
+
+Direct pushes to `dev` remain prohibited for every identity, including
+`glantri-orchestrator` and `recovery-admin`; accepted work enters `dev` only
+through a merged PR. `main` remains outside agent authority entirely, and
+possession of an administrator credential is not a bypass.
+
 ## Branch enforcement
 
 The recorded local Forgejo protected-branch configuration is below. Verify live

@@ -1,40 +1,62 @@
 # Glantri repository instructions
 
-## Core rules
+This file is the canonical, provider-neutral execution policy for every worker on this repository, whatever agent product or model runs it. Provider-specific files (for example `CLAUDE.md`) are thin adapters: they may map this policy onto a client's substrate, but they never restate, extend, or override it.
+
+## Authority and roles
 
 - Work from the existing Glantri monorepo and preserve established architecture unless the task explicitly changes it.
+- The product owner decides priority, game rules, user experience, development integration, and acceptance.
+- The architecture/control plane authorizes work. One Development Orchestrator coordinates and dispatches Builders, Investigators/Ops workers, and fresh independent QA directly; a permanent QA Orchestrator is not part of the operating model.
+- The Orchestrator does not author tracked implementation, rules, architecture, product, or process content. Coordination output, issue and PR evidence, and execution-ledger records are its own work and are not tracked repository content.
 - Current Git and case-management authority is the loopback-only Forgejo repository `recovery-admin/glantri-app`. The canonical MacBook clone is `/Users/vidarhald/dev/glantri-app-forgejo`, and the canonical Codex project is `Glantri app — Forgejo`.
 - The historical `Glantri app` Codex project and `/Users/vidarhald/dev/glantri-app` checkout are read-only, non-mutable recovery/history evidence. Do not use them for new implementation, Builder work, QA mutation, branch creation, reset/rebase/cleanup, migration, or routine current-development fetch/push. Repository documents remain authoritative; Codex project references are navigation aids.
-- The product owner decides priority, game rules, user experience, development integration, and acceptance.
 - `dev` is the shared development integration branch. The product owner/project development process may create and protect it and merge ordinary task PRs into it.
 - The external maintainer participates only in future production-release/deployment support at the `dev -> main -> Azure` boundary.
-- Never push or merge to `main`, deploy, change production/Azure configuration or secrets, or treat credentials as authority.
+- Direct push to `dev` is prohibited. Never push or merge to `main`, deploy, change production/Azure configuration or secrets, or treat credentials as authority.
 - Pushes and PR changes require explicit task or user authorization and a confirmed target.
-- One Development Orchestrator owns execution coordination. It dispatches
-  Builders, Investigators/Ops workers, and fresh independent QA directly; a
-  permanent QA Orchestrator is not part of the operating model.
+- Discussion and proposed prompts are not dispatch. A product-owner/control-plane order must actually reach the Development Orchestrator; process-policy updates do not authorize product work or change existing lane contracts/states.
 
-Canonical operating map: `docs/process/development-operating-model.md`. Detailed
-authority and baseline policy: `docs/process/control-plane.md` and
-`docs/process/development-baseline.md`.
+## Execution substrate and independence
 
-## Task start and reading
+- Builder and independent QA execute in distinct isolated contexts. Builder and QA for one result are never the same context.
+- Attended substantial Builders normally use separate visible execution sessions where the client supports them.
+- Explicitly authorized unattended Builders may use fresh background/subagent contexts when the task is bounded and the substrate is durably recorded.
+- Fresh background/subagent contexts are acceptable for normal independent QA provided they share no Builder conversational history.
+- **A helper agent operating inside the Builder's implementation context is not independent QA.**
+- A Builder never self-accepts. The control plane and the Orchestrator do not substitute for QA. QA reviews and reports; it never repairs, pushes code, merges, or makes product decisions.
+- Every QA verdict names the exact PR head SHA verified.
+- Substantive work requires independent immutable-head QA. Mechanical refreshes use preservation QA; process/docs work uses light relevant checks and its explicit exemption route, which carries complete evidence to control-plane acceptance without a QA claim. An unchanged exact-head PASS does not expire merely with time. See [QA classes](docs/process/qa-execution.md#verification-classes-and-evidence-validity).
+- Read-only investigation and bounded operational diagnosis may be delegated to Investigator/Ops workers. They do not silently become implementation. Authorized read-only investigation includes assigned-issue evidence publication; if a worker cannot publish with its assigned credential, the Orchestrator/Recorder publishes the exact ready result.
+
+### Mandatory QA floor
+
+These classes **require** full adversarial independent QA at the strongest reasonably capable model, in a visible dedicated QA session. The Orchestrator **may not** downgrade class, model, or substrate on cost grounds:
+
+1. database migrations and any change to persisted schema or stored data semantics;
+2. authorization, authentication, privacy projection, or other security-relevant behaviour;
+3. any change to the `dev` integration gate, protected-branch configuration, or CI workflow definitions.
+
+Escalation above the floor is discretionary. Where a task spans a floor class and ordinary work, the floor governs the whole task.
+
+## Task start and required reading
 
 Before non-trivial work:
 
-1. Read this file and the exact additional documents named in the task contract.
+1. Read this file and its authoritative Forgejo task/QA contract.
 2. Confirm the current Forgejo issue, when applicable, has reached `Authorized` through the canonical lifecycle and its body is the complete, current executable contract. Reconcile stale bodies before dispatch; comments cannot silently override them. `Ready` alone is not permission to start.
 3. Confirm outcome, scope, ownership, accepted baseline branch/SHA, reserved hotspots, acceptance examples, verification, and Git authority.
 4. Fetch and resolve the live `origin/dev` SHA. Stop for contract refresh if it differs from the accepted baseline; do not silently choose a new baseline.
-5. Verify canonical provisioning source, origin/common Git directory and requested versus observed exact `HEAD`; use the authorized continuation parent when specified. QA is detached with no branch/upstream. Never infer from `main`, remote HEAD or defaults. Inspect current task sources/tests, not old branches or chat history.
+5. Verify canonical provisioning source, origin/common Git directory and requested versus observed exact `HEAD`; use the authorized continuation parent when specified. QA is detached with no branch/upstream. Never infer from `main`, remote HEAD, or defaults. Inspect current task sources/tests, not old branches or chat history.
 6. Stop if the task requires an unapproved product/rule decision, an unknown baseline, or uncoordinated hotspot edits.
 
-Keep mandatory startup reading controlled and task-specific. Area documents are required only when the task touches that area. Decision records, audits, and historical reports are read on demand. Task contracts must name exact paths rather than say `read all architecture docs`.
+Beyond this file and the task contract, a worker reads only the additional task-specific documents or sections its dispatch packet explicitly names. Area documents are required only when the task touches that area; decision records, audits, and historical reports are read on demand. `docs/process/development-operating-model.md` is primarily an Orchestrator/control-plane reference and is **not** mandatory startup reading for ordinary workers. Do not create redundant provider-specific copies of general policy.
 
-For an ordinary independent-QA task, the mandatory process set is only this
-file, `docs/process/qa-execution.md`, the exact QA task contract, and the exact
-task-specific sources named there. Load the broader process documents below
-only when the task or an entry/risk check requires them.
+For an ordinary independent-QA task, the mandatory process set is only this file, `docs/process/qa-execution.md`, the exact QA task contract, and the exact task-specific sources named there.
+
+### Scope precision
+
+- Dispatch packets name the **exact files and paths** the task owns, not only a surface or a document list, and never say `read all architecture docs`.
+- For data-heavy content or analysis work, process large data files with a script rather than reading them into context.
 
 Useful references:
 
@@ -42,83 +64,50 @@ Useful references:
 - Isolated Builder/QA execution: `docs/process/agent-execution.md`
 - Compact independent QA execution: `docs/process/qa-execution.md`
 - Canonical development operating model: `docs/process/development-operating-model.md`
+- Durable authority and baseline policy: `docs/process/control-plane.md` and `docs/process/development-baseline.md`
 - Functional ownership/hotspots: `docs/architecture/ownership.md`
 - Global user-facing principles: `docs/product/product-presentation-principles.md`
 - Regression guidance: `docs/testing-regression-matrix.md`
 - Rule and architecture decisions: `docs/decisions/`
 
-## Execution efficiency
+## Cost-aware execution
 
-- Discussion and proposed prompts are not dispatch. A Product Owner/control-plane
-  order must actually reach the Development Orchestrator; process-policy updates
-  do not authorize product work or change existing lane contracts/states.
-- Prefer the largest coherent vertical capability under one Builder. Prepare
-  settled decisions, scope, acceptance, dependencies, hotspots and verification
-  proportionately. For future work, keep durable conceptual specifications and
-  do the exact-code/baseline preflight near activation. Product lanes needing
-  substantial definition use Preparing for Ready under Design; importance alone
-  does not make a lane Active. See the [operating model](docs/process/development-operating-model.md#capability-sizing-and-preparation).
-- Substantive work requires independent immutable-head QA. Mechanical refreshes
-  use preservation QA; process/docs use light relevant checks. Unchanged exact-head
-  PASS does not expire merely with time. Run QA and hosted checks in parallel
-  unless a concrete dependency or measured resource constraint prevents it. See
-  [QA classes](docs/process/qa-execution.md#verification-classes-and-evidence-validity).
-- Safari launch, authorized testing-process control and ordinary local/development
-  Glantri browser checks have [standing authorization](docs/process/control-plane.md#standing-safari-and-development-browser-authority).
-  Actual human-only OS/login/security prompts still require immediate USER ACTION
-  REQUIRED; never bypass them or infer external/production access.
+- The Orchestrator owns per-task model/effort selection and fresh-versus-resume, within control-plane policy. Workers may recommend escalation but may not independently spawn workers or expand model budget.
+- **Do not default to resuming an existing agent.** Resume only when prior reasoning context has material value. Prefer a fresh narrow worker for mechanical fixes, formatting, preservation verification, small documentation amendments, and anything completely describable from durable state.
+- Use the least expensive model/effort reasonably capable of satisfying the complete task and verification standard.
+- Cost optimization must never weaken acceptance, verification, QA independence, stop conditions, or authority boundaries.
+- After a failure or QA handoff, provide a compact repair packet — exact SHA, defects and evidence, authorized repair scope, implicated files, required verification — instead of relying on transcript replay. Where practical, QA identifies all material in-scope defects before returning one repair cycle.
+- Prefer the largest coherent vertical capability under one Builder. Prepare settled decisions, scope, acceptance, dependencies, hotspots and verification proportionately. For future work, keep durable conceptual specifications and do the exact-code/baseline preflight near activation. Product lanes needing substantial definition use Preparing for Ready under Design; importance alone does not make a lane Active. See the [operating model](docs/process/development-operating-model.md#capability-sizing-and-preparation).
+
+### Where economy is taken
+
+Builder and reviewer errors are not symmetric: a weaker Builder produces work the reviewer catches, while a weaker reviewer lets defects reach `dev`. Measured execution also shows QA is not the expensive half — independent QA runs have cost materially less than the Builder runs they review.
+
+**Prefer taking model economy on the Builder side and preserving reviewer capability.** Independent QA must not be routed to a cheaper model merely because its work appears checklist-shaped; its value lies in adversarial verification no test plan enumerates.
+
+Preservation QA and other mechanically specifiable verification may use a cheaper model **only when the dispatch packet enumerates the exact proofs required**, so capability comes from the contract rather than being assumed of the model. The mandatory QA floor above still governs.
 
 ## Continuation-first execution
 
-- Continue the current authorized task, branch, PR, and worker whenever it can
-  make meaningful progress. Do not create a replacement merely because status
-  delivery is delayed, a worktree path briefly disappears, or a task is slow.
-- The Development Orchestrator maintains one durable execution-ledger entry per
-  `issue + role + mode + exact SHA`, including the provisioning request, real
-  task ID, parent task, leased worktree, observed HEAD, liveness, and next
-  action. A replacement is allowed only after the prior owner is confirmed
-  completed, canceled, retired, or lost.
-- A provisioned worktree is leased to its request/task until that ownership is
-  durably released. Do not remove, reuse, or recreate it from the outside while
-  the request may still materialize or the task may still be running.
-- An authorized Builder has the full bounded authority stated in its contract:
-  implementation, proportionate tests, commit, task-branch push, draft-PR
-  publication/updates, evidence, and automatic batched in-scope repair
-  continuations including repair commits/pushes without routine reapproval. It does
-  not gain merge, product-decision, `main`, release, or production authority.
-- Independent QA is always a fresh separate visible task at the exact immutable
-  candidate head when required by the contract. An explicit documentation-only
-  exemption routes complete evidence to control-plane acceptance, without a QA
-  claim. The Development Orchestrator dispatches and harvests QA directly. QA
-  reviews/reports; it never repairs, pushes code, merges or makes product decisions.
-- Read-only investigation and bounded operational diagnosis may be delegated to
-  Investigator/Ops tasks. They do not silently become implementation. Authorized
-  read-only investigation includes assigned-issue evidence publication; if a
-  worker cannot publish with its assigned credential, the Development
-  Orchestrator/Recorder automatically publishes the exact ready result.
-- If a worker needs login, OS/browser permission, credential interaction, or
-  another human action, record it and surface `USER ACTION REQUIRED` promptly.
-- Integration may proceed automatically only when the task contract explicitly
-  pre-authorizes it and the exact-head QA, scope, dependency, topology, and
-  protected-check conditions all pass. Then integrate promptly without another
-  approval stamp. Otherwise stop at the stated gate.
-- Permit one initial attempt plus at most two automatic recovery/replacement
-  attempts (three total); stop earlier after two substantially identical
-  consecutive failures without a changed causal condition. Normally allow at
-  most two Builder–QA repair cycles after initial QA; the same root cause twice
-  or exhausted allowance requires **STOP — REPEATED EXECUTION FAILURE —
-  CONTROL-PLANE CONFIRMATION REQUIRED**. Counters do not reset on handoff.
-  Publish exact attempts/IDs/SHAs/failures, changed conditions and recommendation;
-  no further attempt without confirmation. Follow `docs/process/agent-execution.md`.
-- Validate returns against the ledger key; quarantine routing mismatches.
-  Reconcile delayed duplicates to one retained owner and terminally retire the
-  others before releasing leases. Unknown child existence blocks replacement.
-- The coordinator never overrides QA FAIL: scoped defects go to the existing
-  Builder, unrelated CI/environment failures to bounded Ops repair, and product,
-  rule, UX, consequential architecture or permission decisions to control plane.
-- The path-aware dev gate is integrated through #163/PR #164. Its aggregate
-  controls integration through the existing protected compatibility guards; no bypass or
-  fabricated success. See `docs/process/development-baseline.md`.
+- Continue the current authorized task, branch, PR, and worker whenever it can make meaningful progress. Do not create a replacement merely because status delivery is delayed, a worktree path briefly disappears, or a task is slow.
+- **Continuation-first governs Git issue, branch, and worktree ownership. It is not a requirement to resume the same conversational or model context.**
+- The Orchestrator maintains one durable execution-ledger entry per `issue + role + mode + exact SHA`, including the provisioning request, real task/agent ID, parent task, leased worktree, observed HEAD, liveness, and next action. A replacement is allowed only after the prior owner is confirmed completed, canceled, retired, or lost.
+- A provisioned worktree is leased to its request/task until that ownership is durably released. Do not remove, reuse, or recreate it from the outside while the request may still materialize or the task may still be running.
+- An authorized Builder has the full bounded authority stated in its contract: implementation, proportionate tests, commit, task-branch push, draft-PR publication/updates, evidence, and automatic batched in-scope repair continuations including repair commits/pushes without routine reapproval. It does not gain merge, product-decision, `main`, release, or production authority.
+- If a worker needs login, OS/browser permission, credential interaction, or another human action, record it and surface `USER ACTION REQUIRED` promptly. Safari launch, authorized testing-process control, and ordinary local/development Glantri browser checks have [standing authorization](docs/process/control-plane.md#standing-safari-and-development-browser-authority); actual human-only OS/login/security prompts still require immediate `USER ACTION REQUIRED` and are never bypassed, nor do they imply external/production access.
+- Integration may proceed automatically only when the task contract explicitly pre-authorizes it and the exact-head QA, scope, dependency, topology, and protected-check conditions all pass. Then integrate promptly without another approval stamp. Otherwise stop at the stated gate.
+- Permit one initial attempt plus at most two automatic recovery/replacement attempts (three total); stop earlier after two substantially identical consecutive failures without a changed causal condition. Normally allow at most two Builder–QA repair cycles after initial QA; the same root cause twice or exhausted allowance requires **STOP — REPEATED EXECUTION FAILURE — CONTROL-PLANE CONFIRMATION REQUIRED**. Counters do not reset on handoff. Publish exact attempts/IDs/SHAs/failures, changed conditions and recommendation; no further attempt without confirmation. Follow `docs/process/agent-execution.md`.
+- Validate returns against the ledger key; quarantine routing mismatches. Reconcile delayed duplicates to one retained owner and terminally retire the others before releasing leases. Unknown child existence blocks replacement.
+- The coordinator never overrides QA FAIL: scoped defects go to the existing Builder, unrelated CI/environment failures to bounded Ops repair, and product, rule, UX, consequential architecture or permission decisions to the control plane.
+
+## Freshness, checks, and integration readiness
+
+- Before QA or control-plane acceptance, establish actual protected-branch freshness and merge-base state. **Do not infer freshness from `mergeable=true` or the PR `base_sha`** — the former means only "no conflicts", and the latter reports the base branch head, not the merge base. See [PR freshness, merge base, and pre-integration recheck](docs/process/development-baseline.md#pr-freshness-merge-base-and-pre-integration-recheck).
+- Refresh outdated PRs mechanically before QA where practical. A head-changing refresh after runtime QA requires an exact-head QA verdict on the new head; preservation QA may be proportionate for mechanically proven deltas.
+- **Do not move work to Ready for Control-plane Acceptance while required CI or protected contexts are still pending.** Required CI must have settled.
+- Immediately before integration, recheck exact head, target branch, freshness, required checks, and mergeability.
+- The path-aware dev gate is integrated through #163/PR #164. Its aggregate controls integration through the existing protected compatibility guards; no bypass or fabricated success. See `docs/process/development-baseline.md`.
+- Run QA and hosted checks in parallel unless a concrete dependency or measured resource constraint prevents it.
 
 ## Rule and architecture discipline
 
@@ -130,17 +119,31 @@ Useful references:
 - Database repositories are internal; callers use services. Game calculations belong in rules-engine. `@glantri/test-scenarios` is test/e2e only.
 - Preserve canonical helpers/services and avoid duplicate calculation paths, unrelated refactors, or placeholders for unimplemented features.
 
-## Git, tools, and verification
+### Codebase orientation
+
+- `apps/web`: Next.js UI; route files stay thin and feature logic belongs under `apps/web/src/features/`.
+- `apps/api`: Fastify routes and server orchestration.
+- `packages/domain`: independent schemas/state/contracts.
+- `packages/rules-engine`: deterministic calculations; imports only from domain.
+- `packages/database`: internal repositories and outward-facing services.
+- `packages/content` and `packages/importers`: curated content and source ingestion.
+
+Large web features normally separate `components/`, `hooks/`, `state/`, `view-models/`, tests, and a responsibility README; roughly 500 lines is a review signal, not a mandatory split. Apply `docs/product/product-presentation-principles.md` when the task changes user-visible behavior.
+
+## Git, provenance, tools, and verification
 
 - Use one clean, short-lived task branch/worktree from the exact accepted `dev` SHA. Do not continue feature work on accepted or long-lived branches.
-- Substantial implementation Builder, independent QA, and dispatched bounded
-  Investigator/Ops roles use separate visible Codex tasks. Builder and QA must
-  never be the same visible task; hidden helper agents do not satisfy these
-  roles. The single Development Orchestrator coordinates all of them directly.
 - Coordinate reserved hotspots and cross-area merge order through the task contract.
+- Builder commits use an approved Builder Git identity rather than silently inheriting the product owner's personal identity; mechanical Orchestrator refresh commits use an Orchestrator identity where practical.
+- **Required identity mechanism:** linked worktrees share `.git/config`, so a naive identity change alters the canonical checkout. `extensions.worktreeConfig` is enabled in this repository, so set identity worktree-scoped at provisioning (`git -C <worktree> config --worktree user.name/user.email`) or pass it per commit (`git -c user.name=... commit`). **Never set `user.name`/`user.email` at global or repository scope, and never modify the canonical checkout's identity.**
+- Service authentication remains governed by the `glantri-builder`, `glantri-orchestrator`, and `glantri-qa` identities and by branch protections. Do not expose or alter credentials. See `docs/process/forgejo-agent-credentials.md`.
+- The narrow `remote.origin.fetch` (`dev` only) is an operational constraint and is not to be silently broadened. Builder/QA packets supply explicit task-ref/head fetch information.
+- Actual execution substrate must be stated accurately. **A background subagent must not be described as a separate visible session.** Retain the agent/session ID in durable execution evidence.
+- If the QA agent can post as `glantri-qa`, prefer that. If the Orchestrator must relay, post under `glantri-orchestrator` and identify it explicitly as a relay from independent QA subagent `<id>`. **Do not impersonate QA provenance.**
 - Existing repository tools, Docker/local database tooling, and declared dependency installation are allowed. New software, global tools, services, permissions, or external transmission require explicit approval.
 - A linked Builder/QA worktree that can reach PostgreSQL must own an explicit disposable task target; worktree filesystem isolation is not database isolation. Follow `docs/dev-database.md`, never copy the primary checkout `.env`, and never use the protected `localhost:5432/glantri` database from a linked worktree.
 - Run verification proportional to the change class and affected layers: light relevant checks for process/docs, preservation evidence for mechanical refreshes, and applicable typecheck, lint, tests, build, database or browser proof for substantive implementation.
+- Changed-file formatting verification in a narrow-fetch worktree must be supplied an explicit correct base SHA, including `FORMAT_BASE_SHA` where that gate requires it. **Lint and typecheck are not substitutes for formatting verification.**
 - Inspect Git status after generation/build/test steps. Do not silently commit generated output.
 
 At handoff report outcome, files, decisions, exact baseline/head, verification, Git/PR state, remaining risks, and follow-ups.
