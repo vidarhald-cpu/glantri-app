@@ -48,6 +48,41 @@ function overlaps(
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 }
 
+/**
+ * Waits for the material's `transform 100ms ease-out` transition (see
+ * `mediaInspection.module.css`) to actually finish before the caller reads a
+ * bounding box, instead of racing it. A fixed timeout is only a safety net in
+ * case a transition never starts (for example when a zoom/pan step produces
+ * no visual change) or `transitionend` is otherwise missed.
+ */
+async function settled(locator: Locator): Promise<void> {
+  await locator.evaluate(
+    (element) =>
+      new Promise<void>((resolve) => {
+        const durations = getComputedStyle(element)
+          .transitionDuration.split(",")
+          .map((value) => parseFloat(value) || 0);
+        if (Math.max(0, ...durations) === 0) {
+          resolve();
+          return;
+        }
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          element.removeEventListener("transitionend", onEnd);
+          resolve();
+        };
+        const onEnd = (event: Event) => {
+          if ((event as TransitionEvent).propertyName === "transform") finish();
+        };
+        element.addEventListener("transitionend", onEnd);
+        // Safety net: the transition is fixed at 100ms in mediaInspection.module.css.
+        setTimeout(finish, 400);
+      }),
+  );
+}
+
 for (const viewport of [
   { width: 390, height: 844 },
   { width: 1440, height: 900 },
@@ -95,17 +130,23 @@ for (const viewport of [
     // The obvious way out takes focus first.
     await expect(page.getByRole("button", { name: "Close inspection" })).toBeFocused();
 
-    // Keyboard zoom and pan act on the material.
+    // Keyboard zoom and pan act on the material. Each box is read only after
+    // the CSS transform transition has settled (see `settled` above) so the
+    // assertions check the actual end state rather than a mid-animation frame.
     const material = inspection.getByRole("img", { name: "A mountain pass map" });
     await page.getByRole("group", { name: "Pan and zoom Artifact" }).focus();
     await page.keyboard.press("+");
     await page.keyboard.press("+");
+    await settled(material);
     await expect(page.getByText("Zoom 150%")).toBeVisible();
-    await expect.poll(async () => (await box(material)).width).toBeGreaterThan(image.width);
     const zoomed = await box(material);
+    expect(zoomed.width).toBeGreaterThan(image.width);
     await page.keyboard.press("ArrowRight");
-    await expect.poll(async () => (await box(material)).x).toBeGreaterThan(zoomed.x);
+    await settled(material);
+    const panned = await box(material);
+    expect(panned.x).toBeGreaterThan(zoomed.x);
     await page.keyboard.press("0");
+    await settled(material);
     await expect(page.getByText("Zoom 100%")).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("inspection-keyboard.png") });
 

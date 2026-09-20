@@ -4,8 +4,14 @@ Reusable, effectively full-viewport inspection of visual material.
 
 - `FullViewportInspection` owns the shell: it covers the viewport, carries the
   identity of what is being inspected, and provides the obvious way out. As a
-  `dialog` it traps focus, exits on Escape, and returns focus to whatever opened
-  it. As a `page` it is the whole inspection route.
+  `dialog` it applies `role="dialog"`/`aria-modal`, traps focus with Tab, exits
+  on Escape by default, and returns focus to whatever opened it. As a `page` it
+  is meant to be the whole inspection route rather than an overlay, but today it
+  renders through the same fixed, full-viewport shell as `dialog` — there is no
+  `page`-specific layout, and it skips the dialog role, the focus trap, and
+  Escape handling of its own (the caller decides Escape behaviour via
+  `closeOnEscape`, and typically owns its own route-level Escape handling
+  instead, as the Blackboard's focused Artifact inspection does).
 - `MediaInspectionViewport` owns the material: fit-to-screen scaling, zoom, drag
   and keyboard pan for images, and the reader's own controls for documents.
 

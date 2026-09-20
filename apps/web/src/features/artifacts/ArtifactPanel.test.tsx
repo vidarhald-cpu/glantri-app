@@ -146,6 +146,32 @@ describe("ArtifactPanel", () => {
     expect(trigger).toHaveFocus();
   });
 
+  it("offers only the safe download for a PDF, with no misleading full-screen inspection", async () => {
+    mocks.loadArtifacts.mockResolvedValue({
+      artifacts: [
+        {
+          ...managedArtifact,
+          id: "handout-1",
+          mediaType: "application/pdf",
+          title: "Session notes",
+        },
+      ],
+      mode: "gm",
+      references: [],
+    });
+    render(<ArtifactPanel campaignId="campaign-1" scenarios={[]} />);
+    await screen.findByText("Session notes");
+
+    // The API deliberately refuses inline rendering of PDF Artifact content
+    // (attachment disposition plus a `sandbox; default-src 'none'` CSP), so a
+    // full-screen "Inspect" action for a PDF would only render a blank stage
+    // and silently trigger a download. Only the plain download link remains.
+    expect(screen.queryByRole("button", { name: /inspect/i })).not.toBeInTheDocument();
+    const download = screen.getByRole("link", { name: "Download PDF safely" });
+    expect(download).toHaveAttribute("href", "/content/handout-1");
+    expect(download).toHaveAttribute("target", "_blank");
+  });
+
   it("refreshes instead of restoring stale publication state", async () => {
     const user = userEvent.setup();
     mocks.setArtifactAudience.mockRejectedValue(

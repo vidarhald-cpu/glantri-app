@@ -175,12 +175,17 @@ export function ArtifactPanel({
             const isDocument = artifact.mediaType === "application/pdf";
             const contentAvailable = !managed || managed.storageState === "ready";
             const contentSrc = `${artifactContentUrl(campaignId, artifact.id)}${managed ? `?version=${managed.metadataVersion}` : ""}`;
-            const inspect = (kind: "image" | "document") =>
+            // Only images support full-viewport inspection today. The API deliberately
+            // refuses inline rendering of PDF Artifact content (attachment disposition
+            // plus a `sandbox; default-src 'none'` CSP), so PDFs keep the plain, safe
+            // download link only. Secure in-app PDF inspection is a separate, out-of-scope
+            // Design issue.
+            const inspect = () =>
               setInspected({
                 alt: artifact.altText ?? artifact.title,
                 artifactKind: artifact.artifactKind,
                 audience: managed ? audienceLabel(managed) : undefined,
-                kind,
+                kind: "image",
                 src: contentSrc,
                 title: artifact.title,
               });
@@ -239,7 +244,7 @@ export function ArtifactPanel({
                 {contentAvailable && isImage ? (
                   <button
                     aria-label={`Inspect ${artifact.title}`}
-                    onClick={() => inspect("image")}
+                    onClick={() => inspect()}
                     style={{
                       background: "none",
                       border: 0,
@@ -257,18 +262,13 @@ export function ArtifactPanel({
                   </button>
                 ) : null}
                 {contentAvailable && isDocument ? (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    <button onClick={() => inspect("document")} type="button">
-                      Inspect full screen
-                    </button>
-                    <a
-                      href={artifactContentUrl(campaignId, artifact.id)}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      Download PDF safely
-                    </a>
-                  </div>
+                  <a
+                    href={artifactContentUrl(campaignId, artifact.id)}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Download PDF safely
+                  </a>
                 ) : null}
 
                 {managed && managed.lifecycle !== "deleted" && managed.storageState === "ready" ? (

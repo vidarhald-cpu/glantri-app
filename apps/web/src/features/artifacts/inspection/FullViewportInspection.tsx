@@ -12,8 +12,13 @@ export interface FullViewportInspectionProps {
   exitLabel: string;
   onExit: () => void;
   /**
-   * `dialog` covers an owning page and traps focus. `page` is the whole
-   * inspection route and leaves surrounding navigation alone.
+   * `dialog` covers an owning page, applies dialog semantics (`role`,
+   * `aria-modal`), and traps focus with Tab. `page` is meant to be the whole
+   * inspection route rather than an overlay dialog, so it renders without
+   * dialog semantics or a focus trap and leaves Escape handling to the
+   * caller — but it currently shares the same fixed, full-viewport shell as
+   * `dialog` rather than a distinct, non-overlay layout (see the package
+   * README).
    */
   presentation?: "dialog" | "page";
   /** Short game-world line under the title, such as the kind or who may see it. */
