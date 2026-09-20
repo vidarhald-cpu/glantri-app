@@ -219,31 +219,31 @@ export async function loadCampaignWorkspaceOverview(
 }
 
 export async function createCampaignNoteOnServer(input: {
+  associations?: CampaignNoteReference[];
   campaignId: string;
   content: string;
-  reference?: CampaignNoteReference;
 }): Promise<CampaignNote> {
   const payload = await sendJson<{ note: CampaignNote }>(`/campaigns/${input.campaignId}/notes`, {
-    body: JSON.stringify({ content: input.content, reference: input.reference }),
+    body: JSON.stringify({ associations: input.associations ?? [], content: input.content }),
     method: "POST",
   });
   return payload.note;
 }
 
 export async function updateCampaignNoteOnServer(input: {
+  associations?: CampaignNoteReference[];
   campaignId: string;
   content: string;
   expectedRevision: string;
   noteId: string;
-  reference?: CampaignNoteReference;
 }): Promise<CampaignNote> {
   const payload = await sendJson<{ note: CampaignNote }>(
     `/campaigns/${input.campaignId}/notes/${input.noteId}`,
     {
       body: JSON.stringify({
+        associations: input.associations ?? [],
         content: input.content,
         expectedRevision: input.expectedRevision,
-        reference: input.reference ?? null,
       }),
       method: "PUT",
     },
