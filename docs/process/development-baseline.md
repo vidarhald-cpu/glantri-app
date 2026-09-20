@@ -49,6 +49,11 @@ Credentials never replace task authorization. Pushes, PR creation/updates, branc
   including separately authorized recovery administration, must be selected
   explicitly through the repository-path-scoped handles in
   [`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md).
+- `remote.origin.fetch` in the canonical clone is intentionally narrow
+  (`+refs/heads/dev:refs/remotes/origin/dev`). Task preparation, QA, and
+  integration checks must fetch task branches and PR heads through explicit
+  refspecs rather than relying on ambient remote-tracking refs, and must not
+  widen the configured refspec to work around that.
 - `main`, Azure, and production remain the external-maintainer release boundary described above.
 - One Development Orchestrator coordinates all visible execution directly. Its
   UI association is operator configuration, not repository authority. Historical
@@ -116,6 +121,41 @@ The merge topology preserves correspondence with PR #200, the 50 local continuat
 6. Completed work records parent SHA, resulting SHA, verification, dependencies, compatibility, and follow-ups.
 7. A release is prepared from `dev` to `main`; production review/deployment support occurs only at that boundary.
 8. After release, merge or otherwise reconcile exact `main` back into `dev`, verify the result, and record the new accepted `dev` SHA.
+
+## PR freshness, merge base, and pre-integration recheck
+
+Before independent QA is dispatched and before control-plane acceptance is
+requested, the Development Orchestrator must establish the actual protected-branch
+freshness and merge-base state of the candidate PR.
+
+- The Forgejo `mergeable` field means only that no conflict was detected. It is
+  not a freshness statement.
+- The PR `base_sha` field reports the base branch head, not the merge base
+  between the base branch and the PR head. It must not be read as evidence that
+  the PR contains the current `dev`.
+- Resolve the real facts explicitly: the current `dev` head, the PR head, and
+  the actual merge base between them. An outdated merge base means the PR is
+  outdated regardless of `mergeable`.
+
+Handling an outdated PR:
+
+1. Refresh it mechanically wherever that is possible, before QA rather than
+   after it.
+2. Independent QA remains bound to one exact PR head SHA; a verdict always names
+   the full immutable SHA it reviewed.
+3. If a later refresh changes the head of a runtime or code PR after QA, fresh
+   QA on the new exact head is required. See
+   [QA verification classes](./qa-execution.md#verification-classes-and-evidence-validity).
+4. Control-plane acceptance should normally be requested only for an
+   integration-ready exact head.
+
+Immediately before integration, recheck the exact head, the target branch,
+freshness against the current `dev`, the required protected checks, and
+mergeability. Earlier evidence does not substitute for that final recheck.
+
+Direct pushes to `dev` remain prohibited for every identity; task work reaches
+`dev` only through a reviewed PR merged by the authorized integration identity.
+`main` remains outside agent authority entirely.
 
 ## Verification and publication prerequisites
 

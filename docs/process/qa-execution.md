@@ -67,9 +67,11 @@ remote HEAD or a default branch. A queued request is pending, not a passed gate.
 This mechanical provisioning check does not replace the worker's independent
 scope/topology/delta verification.
 
-There is no permanent QA Orchestrator. Independence comes from a fresh worker,
-separate visible task, separate clean exact-head worktree, and review-only
-authority—not from an additional standing routing chat.
+There is no permanent QA Orchestrator. Independence comes from a fresh worker
+in a separate execution context from the Builder, separate clean exact-head
+worktree, and review-only authority—not from an additional standing routing
+chat. A helper agent operating inside the Builder's execution context does not
+supply this independence, regardless of whether that helper is visible.
 
 ## Verification classes and evidence validity
 
@@ -87,6 +89,13 @@ authority—not from an additional standing routing chat.
   gate. No unrelated application, database, or browser proof is required. An
   explicit documentation-only QA exemption routes evidence to acceptance and
   does not manufacture independent QA PASS.
+
+QA is always bound to one exact PR head SHA. If a freshness refresh, rebase, or
+any other change moves the head of a runtime or code PR after QA, fresh QA on
+the new exact head is required; the earlier verdict does not carry forward to a
+head it never reviewed. Establishing PR freshness and merge base before dispatch
+is the Development Orchestrator's responsibility under
+[PR freshness, merge base, and pre-integration recheck](./development-baseline.md#pr-freshness-merge-base-and-pre-integration-recheck).
 
 An unchanged exact-head QA PASS does not expire merely through elapsed time or
 unrelated work. A mechanical head change requires preservation QA; a product
@@ -195,8 +204,10 @@ entry, lease, and anti-loop rules apply.
 
 In a fresh QA worktree, independently confirm canonical origin/common Git
 directory, detached `HEAD` at the requested exact candidate, and no local branch
-or upstream. Fetch authorized refs without attaching to a moving branch, then
-independently resolve:
+or upstream. Because `remote.origin.fetch` is intentionally narrow, explicitly
+fetch and verify the exact PR head by refspec rather than relying on ambient
+remote-tracking refs, and do not widen the configured refspec. Fetch authorized
+refs without attaching to a moving branch, then independently resolve:
 
 - PR/ref and actual candidate head;
 - accepted baseline and merge base;
@@ -226,8 +237,8 @@ An intended or merely queued dispatch is not started work.
 For substantive INITIAL or REPAIR QA, verify and record; for PRESERVATION,
 retain independence, exact-head and scope gates and apply the verification class:
 
-- independence: separate visible task, reviewer, and clean worktree from the
-  Builder;
+- independence: separate execution context, reviewer, and clean worktree from
+  the Builder;
 - exact head: verdict names the full immutable reviewed SHA;
 - contract and scope: approved acceptance, exclusions, changed files, and no
   unauthorized widening;

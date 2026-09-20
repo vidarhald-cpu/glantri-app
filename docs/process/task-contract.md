@@ -128,11 +128,14 @@ assign the full process, ownership, baseline, or regression documents. Name
 on-demand escalation references separately from startup reading.
 
 Substantial Builder, independent QA, and dispatched Investigator work uses
-separate visible Work/Codex tasks; QA must be a different visible task from the
-Builder. Hidden internal sub-agents do not satisfy those roles. If visible task
-creation fails, apply bounded recovery; if unresolved, record and escalate the
-capability problem and use only an explicitly authorized manual visible fallback.
-A hidden lane is not a substitute. Repository documents are authoritative; the
+separate isolated execution contexts—normally separate visible Work/Codex
+tasks; QA must be a different execution context from the Builder. A helper
+agent operating inside another lane's execution context does not satisfy that
+lane, whether or not that helper is visible. If separate-context dispatch
+fails, apply bounded recovery; if unresolved, record and escalate the
+capability problem and use only an explicitly authorized manual fallback in
+its own separate context. A same-context lane is not a substitute. Repository
+documents are authoritative; the
 Codex project and task links
 are navigation and execution evidence only. Builders must not rely on chat
 history to reconstruct issue, baseline, sources, scope, exclusions,
@@ -386,8 +389,9 @@ For an authorized Builder/QA loop, use the exact-SHA Builder return in
 `docs/process/agent-execution.md` and the mode-aware QA handoff and return in
 `docs/process/qa-execution.md` in addition to the evidence below. The
 Development Orchestrator harvests the Builder result and sends the compact
-immutable-head INITIAL, REPAIR, or PRESERVATION contract directly to a fresh separate visible
-independent-QA task, harvests the verdict and routes it without overriding FAIL.
+immutable-head INITIAL, REPAIR, or PRESERVATION contract directly to a fresh
+independent-QA task in its own separate execution context, harvests the
+verdict and routes it without overriding FAIL.
 The Product Owner is not the routine relay.
 
 - Result and files changed.
