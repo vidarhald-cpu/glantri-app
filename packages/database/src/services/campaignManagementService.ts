@@ -1,9 +1,14 @@
 import {
+  campaignNoteAssociationKey,
+  campaignNoteAssociationLimit,
+  campaignNoteAssociationsSchema,
   campaignNoteReferenceSchema,
   campaignNoteRevisionSchema,
   campaignNoteSchema,
   campaignNoteStatusSchema,
+  campaignNoteTagId,
   campaignWorkspaceOverviewSchema,
+  normalizeCampaignNoteTagLabel,
   type CampaignNote,
   type CampaignNoteReference,
   type CampaignNoteStatus,
@@ -49,6 +54,30 @@ function readEncounterId(payload: unknown): string | undefined {
 
 function participantLabel(participant: ScenarioParticipant): string {
   return participant.snapshot.displayName || "Campaign NPC";
+}
+
+/**
+ * Callers may send the new `associations` list, or the legacy single `reference`.
+ * `associations` wins when present; otherwise a legacy reference becomes one association.
+ */
+function resolveRequestedAssociations(input: {
+  associations?: CampaignNoteReference[];
+  reference?: CampaignNoteReference | null;
+}): CampaignNoteReference[] {
+  if (input.associations !== undefined) return input.associations;
+  return input.reference ? [input.reference] : [];
+}
+
+/** Distinct custom tags already used by this Campaign's Notes, offered for reuse. */
+function collectCampaignNoteTags(notes: CampaignNote[]): CampaignNoteReference[] {
+  const tagsById = new Map<string, CampaignNoteReference>();
+  for (const note of notes) {
+    for (const association of note.associations) {
+      if (association.type !== "tag" || tagsById.has(association.id)) continue;
+      tagsById.set(association.id, association);
+    }
+  }
+  return [...tagsById.values()].sort((left, right) => left.label.localeCompare(right.label));
 }
 
 export class CampaignManagementService {
@@ -130,11 +159,16 @@ export class CampaignManagementService {
         label: scenario.name,
         type: "scenario" as const,
       })),
-      ...allEncounters.map((encounter) => ({
-        id: encounter.id,
-        label: encounter.title,
-        type: "encounter" as const,
-      })),
+      // Encounter references carry their owning Scenario so the Campaign index can
+      // link straight to the Encounter's canonical home.
+      ...scenarioDetails.flatMap(({ encounters, scenario }) =>
+        encounters.map((encounter) => ({
+          id: encounter.id,
+          label: encounter.title,
+          scenarioId: scenario.id,
+          type: "encounter" as const,
+        })),
+      ),
       ...roster
         .filter((entry) => entry.category === "pc" && entry.sourceType === "character")
         .map((entry) => ({
@@ -209,23 +243,33 @@ export class CampaignManagementService {
       recentActivity,
       references,
       roster,
+      tags: collectCampaignNoteTags(notes),
     });
   }
 
   async createNote(input: {
     actorUserId: string;
+    associations?: CampaignNoteReference[];
     campaignId: string;
     content: string;
     reference?: CampaignNoteReference;
   }): Promise<CampaignNote> {
     const content = campaignNoteSchema.shape.content.parse(input.content);
-    const reference =
-      (await this.validateReference(input.campaignId, input.reference)) ?? undefined;
-    return this.notes.create({ ...input, content, reference });
+    const associations = await this.validateAssociations(
+      input.campaignId,
+      resolveRequestedAssociations(input),
+    );
+    return this.notes.create({
+      actorUserId: input.actorUserId,
+      associations,
+      campaignId: input.campaignId,
+      content,
+    });
   }
 
   async updateNote(input: {
     actorUserId: string;
+    associations?: CampaignNoteReference[];
     campaignId: string;
     content: string;
     expectedRevision: string;
@@ -236,13 +280,16 @@ export class CampaignManagementService {
     const content = campaignNoteSchema.shape.content.parse(input.content);
     const expectedRevision = campaignNoteRevisionSchema.parse(input.expectedRevision);
     if (note.updatedAt !== expectedRevision) throw new CampaignNoteConflictError(note);
-    const reference = await this.validateReference(input.campaignId, input.reference);
+    const associations = await this.validateAssociations(
+      input.campaignId,
+      resolveRequestedAssociations(input),
+    );
     const updated = await this.notes.update({
       actorUserId: input.actorUserId,
+      associations,
       content,
       expectedRevision,
       noteId: input.noteId,
-      reference,
     });
     if (updated) return updated;
     throw new CampaignNoteConflictError(await this.requireNote(input.campaignId, input.noteId));
@@ -276,17 +323,61 @@ export class CampaignManagementService {
     return note;
   }
 
-  private async validateReference(
+  /**
+   * Fail-closed, Campaign-scoped association validation.
+   *
+   * Every object association must resolve to material this Campaign actually offers,
+   * and the stored label/Scenario always comes from that canonical entry rather than
+   * from the caller, so a caller cannot smuggle in a foreign object or a false label.
+   * Custom tags are Campaign-local by construction and are only normalized.
+   */
+  private async validateAssociations(
     campaignId: string,
-    reference?: CampaignNoteReference | null,
-  ): Promise<CampaignNoteReference | undefined | null> {
-    if (reference === undefined || reference === null) return reference;
-    const parsed = campaignNoteReferenceSchema.parse(reference);
-    const overview = await this.getOverview(campaignId);
-    const canonical = overview?.references.find(
-      (candidate) => candidate.type === parsed.type && candidate.id === parsed.id,
+    requested: CampaignNoteReference[],
+  ): Promise<CampaignNoteReference[]> {
+    const parsed = campaignNoteAssociationsSchema.parse(
+      requested.map((association) => campaignNoteReferenceSchema.parse(association)),
     );
-    if (!canonical) throw new CampaignNoteReferenceError();
-    return canonical;
+    if (parsed.length === 0) return [];
+
+    const tags: CampaignNoteReference[] = [];
+    const objectAssociations: CampaignNoteReference[] = [];
+    for (const association of parsed) {
+      if (association.type === "tag") {
+        const label = normalizeCampaignNoteTagLabel(association.label);
+        if (!label) throw new CampaignNoteReferenceError();
+        tags.push({ id: campaignNoteTagId(label), label, type: "tag" });
+      } else {
+        objectAssociations.push(association);
+      }
+    }
+
+    const resolved: CampaignNoteReference[] = [];
+    if (objectAssociations.length > 0) {
+      const overview = await this.getOverview(campaignId);
+      const canonicalByKey = new Map(
+        (overview?.references ?? []).map((reference) => [
+          campaignNoteAssociationKey(reference),
+          reference,
+        ]),
+      );
+      for (const association of objectAssociations) {
+        const canonical = canonicalByKey.get(campaignNoteAssociationKey(association));
+        if (!canonical) throw new CampaignNoteReferenceError();
+        resolved.push(canonical);
+      }
+    }
+
+    // Deduplicate after normalization, keeping the caller's ordering.
+    const seen = new Set<string>();
+    const associations: CampaignNoteReference[] = [];
+    for (const association of [...resolved, ...tags]) {
+      const key = campaignNoteAssociationKey(association);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      associations.push(association);
+    }
+    if (associations.length > campaignNoteAssociationLimit) throw new CampaignNoteReferenceError();
+    return associations;
   }
 }

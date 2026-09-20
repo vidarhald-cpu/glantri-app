@@ -374,12 +374,18 @@ test.describe("Campaign Blackboard shared-reference workspace", () => {
       await expect(artifactViewport).toBeVisible();
       await page.getByRole("button", { name: "Zoom in" }).click();
       await expect(page.getByText("Zoom 125%")).toBeVisible();
-      await artifactViewport.press("ArrowRight");
+      // GrinulGrimbrew.jpeg is a 4284x5712 portrait photo, so in the full-viewport
+      // stage at this (desktop) viewport it is height-constrained: at 125% zoom
+      // there is real overflow to pan through vertically, but essentially none
+      // horizontally, so a correct overflow-based clamp (see clampOffset in
+      // MediaInspectionViewport) legitimately keeps ArrowRight from moving the
+      // image. ArrowDown pans against the axis that actually has room.
+      await artifactViewport.press("ArrowDown");
       await expect(
         page.getByRole("img", {
           name: "A hand-drawn route from the mill to the hill caves",
         }),
-      ).toHaveAttribute("style", /translate\(48px, 0px\) scale\(1.25\)/);
+      ).toHaveAttribute("style", /translate\(0px, 48px\) scale\(1.25\)/);
       const artifactBounds = await artifactViewport.boundingBox();
       expect(artifactBounds).not.toBeNull();
       const artifactImage = page.getByRole("img", {
