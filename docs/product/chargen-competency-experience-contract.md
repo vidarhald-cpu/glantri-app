@@ -127,24 +127,53 @@ multiple coherent Learning Groups and direct competencies. Specialist
 Professions may also be narrower where that narrowness remains recognizable and
 useful in play.
 
-## 5. Required quantitative audit and future decision
+## 5. Profession competency depth target
 
-A measurable target for Profession competency depth is required, but no numeric
-minimum or target band is yet approved. Earlier example ranges are not
-canonical rules.
+### 5.1 Approved authoring target
 
-The future full-catalogue audit must:
+The Product Owner has approved an authoring target of **roughly 10 effective
+distinct base-Skill learning opportunities for an ordinary valid Profession
+path**.
+
+The target is a design and review signal, not a hard quota:
+
+- Society Levels 1-2 may legitimately be narrower;
+- more developed societies should generally support richer professional
+  training;
+- a Profession is never padded with irrelevant Skills to reach the number; and
+- falling short is a prompt to review the content, not an automatic defect.
+
+Earlier example ranges remain non-canonical.
+
+### 5.2 Effective-breadth counting rules
+
+Effective distinct base-Skill breadth is counted as follows:
+
+- deduplicate a Skill reached through several routes;
+- count fixed Skills;
+- count only `chooseCount` for a choice slot, never the whole candidate pool;
+- exclude unselected alternatives;
+- evaluate mutually exclusive tracks separately; and
+- exclude Specializations from base-Skill totals.
+
+Possible Skill reach, meaning the union of every alternative a Profession family
+can touch, may be reported separately. It is not effective breadth and must not
+be substituted for it.
+
+### 5.3 Required quantitative audit
+
+The full-catalogue audit must:
 
 1. compute distinct base-Skill coverage for all 84 Profession families;
 2. deduplicate overlap between Learning Groups and direct routes;
 3. report the actual distribution across the catalogue;
 4. identify clearly thin Profession packages;
-5. propose a useful target or minimum band for Product Owner approval;
+5. report the distribution against the approved target in 5.1;
 6. distinguish legitimate specialist narrowness from deficient content.
 
 No Profession should receive irrelevant Skills solely to reach a number. The
-audit supplies evidence for a later Product Owner decision; it does not set the
-number itself.
+audit supplies evidence about the catalogue; the target itself is already
+recorded in 5.1.
 
 ## 6. Preserved architecture and authority boundaries
 
@@ -158,9 +187,26 @@ The following remain approved:
 - already approved structural relationships unless substantive content evidence
   supports a revision.
 
-This contract refines product quality within that architecture. It does not
-authorize a return to the previous Skill model, a rewrite of all 84 Professions,
-or a change to Chargen mechanics.
+This contract refines product quality within that architecture.
+
+### Authorized Profession and Learning Group catalogue redesign
+
+The Product Owner has authorized a content redesign of the Profession and
+Learning Group catalogue. The authorization explicitly covers:
+
+- adding, removing, and merging Learning Groups;
+- changing Learning Group memberships;
+- adding and changing choice slots;
+- changing Profession to Learning Group mappings; and
+- changing Profession tracks and routes.
+
+The current count of 59 Learning Groups is **not** fixed and may change.
+
+The authorization explicitly does **not** cover:
+
+- a broad rewrite of the 131 base Skills, which are generally preserved;
+- a return to the previous Skill model; or
+- a change to Chargen mechanics.
 
 ## 7. Decision state
 
@@ -175,6 +221,14 @@ or a change to Chargen mechanics.
 - Approved contextual availability belongs in the reference.
 - Profession packages must be recognizable and useful in play.
 - The Skill → Learning Group → Profession architecture remains controlling.
+- The Profession authoring target is roughly 10 effective distinct base-Skill
+  learning opportunities per ordinary valid path, as a signal rather than a
+  quota, counted by the rules in
+  [section 5.2](#52-effective-breadth-counting-rules).
+- The Profession and Learning Group catalogue redesign is authorized as recorded
+  in [section 6](#authorized-profession-and-learning-group-catalogue-redesign),
+  including a Learning Group count other than 59; the 131 base Skills, the Skill
+  model, and Chargen mechanics stay outside that authorization.
 
 ### Unresolved content dependencies
 
@@ -182,11 +236,6 @@ or a change to Chargen mechanics.
   Social Band, Setting, and S01/B1 content remain unfinished where the
   authoritative sources say so.
 - Missing contextual values must not be invented for the reference.
-
-### Future Product Owner decision
-
-- The numeric target or minimum band for distinct Profession base-Skill coverage
-  will be decided after the 84-family coverage and distribution audit.
 
 ## 8. Required next preparation
 

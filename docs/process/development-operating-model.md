@@ -105,6 +105,17 @@ It coordinates the required visible lanes directly. Hidden helpers cannot
 replace a substantial Builder, dispatched Investigator/Ops task, or independent
 QA task.
 
+The Development Orchestrator does not author tracked repository content. Code,
+tests, documentation, rules, architecture, and process content all reach the
+repository through bounded workers on authorized task branches. Coordination
+output, issue and PR evidence, and execution-ledger records are not tracked
+repository content and remain the Orchestrator's own work.
+
+Before dispatching QA or requesting control-plane acceptance, it establishes
+actual PR freshness and merge-base state, and it rechecks head, target,
+freshness, checks, and mergeability immediately before integration. See
+[PR freshness, merge base, and pre-integration recheck](./development-baseline.md#pr-freshness-merge-base-and-pre-integration-recheck).
+
 ### Visible execution roles
 
 Builders receive the complete bounded authority in their authorized contract:
