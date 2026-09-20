@@ -94,8 +94,8 @@ decisions.
 ### Development Orchestrator
 
 The Development Orchestrator task is the single stable operational lane. It
-owns current Forgejo state, issue claims, accepted-baseline checks, visible task
-dispatch, dependency and hotspot coordination, Builder, Investigator/Ops, and
+owns current Forgejo state, issue claims, accepted-baseline checks, task
+dispatch on the authorized substrate, dependency and hotspot coordination, Builder, Investigator/Ops, and
 independent-QA supervision, completion harvesting, bounded repair loops,
 conditional integration, durable execution evidence, and meaningful returns to
 Architecture/control plane.
@@ -141,7 +141,7 @@ Product Owner sets direction
   -> Architecture/control plane proposes, interprets, and prepares authorization
   -> Product Owner decides and copies the authorization
   -> Development Orchestrator validates durable gates and dispatches
-  -> visible Builder or bounded Investigator
+  -> Builder (visible or authorized background/subagent context) or bounded Investigator
   -> Development Orchestrator harvests exact result and Forgejo evidence
   -> Development Orchestrator dispatches separate exact-head independent QA
   -> Development Orchestrator harvests and records the verdict or blocker
@@ -163,7 +163,7 @@ Every operational issue carries exactly one of these lifecycle statuses:
 | `Design`                             | Evidence, scope, or consequential decisions are still being developed. No execution authority.                                                                                     |
 | `Ready`                              | The self-contained task contract is complete and current. Prepared only; not authorized.                                                                                           |
 | `Authorized`                         | The Product Owner has approved the bounded execution and copied that authorization into the operational flow. Dispatch may proceed only after live gates pass.                     |
-| `Active`                             | A named visible Builder, Investigator, QA lane, or bounded repair owns work in flight.                                                                                             |
+| `Active`                             | A named Builder, Investigator, QA lane, or bounded repair owns work in flight, on the authorized substrate.                                                                        |
 | `Ready for Independent QA`           | Builder work is complete at an exact immutable head and awaits independent QA.                                                                                                     |
 | `Ready for Control-plane Acceptance` | Required independent QA passed, or an investigation that did not require QA produced its complete durable result; acceptance/integration remains pending.                          |
 | `Integrated`                         | Required acceptance and development integration are complete. For a design or investigation, the accepted outcome is integrated into the durable operational or repository record. |
