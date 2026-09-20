@@ -22,6 +22,14 @@ export interface V2SelectionSlot {
   label: string;
   /** Number of candidates the learner actually selects. Only this many count toward breadth or cost. */
   chooseCount: number;
+  /**
+   * `approved` — the Product Owner has settled this count.
+   * `unresolved-source-conflict` — the sources disagree and the conflict is NOT settled here. The
+   * proposal then uses the lowest evidenced count so that no content depends on the open question.
+   */
+  chooseCountStatus: "approved" | "unresolved-source-conflict";
+  /** Every count the surviving evidence supports, when they disagree. */
+  conflictingChooseCounts?: readonly number[];
   /** Approved base-Skill ids. Unselected candidates grant nothing, cost nothing, add no breadth. */
   candidateSkillIds: readonly string[];
   required: boolean;
@@ -296,6 +304,7 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
         id: "melee-family",
         label: "Choose one taught melee weapon family",
         chooseCount: 1,
+        chooseCountStatus: "approved",
         candidateSkillIds: [
           "one_handed_edged",
           "one_handed_concussion_axe",
@@ -321,6 +330,8 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
         id: "advanced-melee-families",
         label: "Choose three taught melee weapon families",
         chooseCount: 3,
+        chooseCountStatus: "approved",
+        conflictingChooseCounts: [2, 3],
         candidateSkillIds: [
           "one_handed_edged",
           "one_handed_concussion_axe",
@@ -332,8 +343,8 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
       },
     ],
     note:
-      "Restores the historical Advanced Melee Training choose-three slot. The recovered import's choose-2 " +
-      "reading is recorded as an unresolved source conflict and is not silently adopted.",
+      "Restores the historical Advanced Melee Training choose-three slot. Product Owner ruling: pick 3 is " +
+      "accepted. The recovered import's choose-2 reading is retained as provenance, not as an open question.",
   },
   {
     id: "F30",
@@ -356,6 +367,7 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
         id: "formation-arms",
         label: "Choose two taught formation weapon families",
         chooseCount: 2,
+        chooseCountStatus: "approved",
         candidateSkillIds: [
           "one_handed_edged",
           "one_handed_concussion_axe",
@@ -382,7 +394,6 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
       "skill:riding",
       "dodge",
       "parry",
-      "brawling",
       "formation_fighting",
     ],
     selectionSlots: [
@@ -390,11 +401,15 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
         id: "mounted-sidearm",
         label: "Choose one taught mounted sidearm family",
         chooseCount: 1,
+        chooseCountStatus: "approved",
         candidateSkillIds: ["one_handed_edged", "one_handed_concussion_axe"],
         required: true,
       },
     ],
-    note: "Revised: Riding made explicit, and the sidearm becomes a slot instead of a fixed 1-h edged charge.",
+    note:
+      "Revised: Riding made explicit, and the sidearm becomes a slot instead of a fixed 1-h edged charge. " +
+      "The group-size review also removed Brawling: mounted troop drill teaches fighting from the saddle, " +
+      "not unarmed scuffling, and a fixed burden of seven needed a reason it did not have.",
   },
   {
     id: "M04",
@@ -408,6 +423,7 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
         id: "missile-family",
         label: "Choose one taught missile weapon family",
         chooseCount: 1,
+        chooseCountStatus: "approved",
         candidateSkillIds: ["bow", "crossbow", "skill:firearms", "sling", "throwing"],
         required: true,
       },
@@ -425,6 +441,7 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
         id: "advanced-missile-families",
         label: "Choose three taught missile weapon families",
         chooseCount: 3,
+        chooseCountStatus: "approved",
         candidateSkillIds: ["bow", "crossbow", "skill:firearms", "sling", "throwing"],
         required: true,
       },
@@ -517,6 +534,7 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
         id: "craft-specialty",
         label: "Choose one taught craft",
         chooseCount: 1,
+        chooseCountStatus: "approved",
         candidateSkillIds: [
           "pottery",
           "weaving",
@@ -547,8 +565,10 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     selectionSlots: [
       {
         id: "advanced-craft-specialties",
-        label: "Choose three taught crafts",
-        chooseCount: 3,
+        label: "Choose the taught crafts",
+        chooseCount: 1,
+        chooseCountStatus: "unresolved-source-conflict",
+        conflictingChooseCounts: [1, 2, 3],
         candidateSkillIds: [
           "pottery",
           "weaving",
@@ -566,8 +586,10 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
       },
     ],
     note:
-      "Restores the Advanced Craft Specialty slot. The approved data's choose-one and its choose-two prose " +
-      "disagree; the proposal states choose-three explicitly and flags the conflict for ruling.",
+      "Restores the Advanced Craft Specialty slot. Its count is NOT settled: the executable data says " +
+      "choose one, its own prose says two specialties, and the master-artisan reading suggests three. The " +
+      "Product Owner has ruled that this conflict must not be resolved by breadth pressure, so the " +
+      "proposal counts the lowest evidenced value (1) and leaves the question open.",
   },
   {
     id: "C03",
@@ -581,6 +603,7 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
         id: "construction-specialties",
         label: "Choose two taught construction trades",
         chooseCount: 2,
+        chooseCountStatus: "approved",
         candidateSkillIds: ["skill:masonry", "carpentry", "skill:smithing", "mechanics"],
         required: true,
       },
@@ -697,8 +720,11 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     id: "F22",
     name: "Seasonal kitchen and preservation practice",
     shortDescription: "Cooking through the season and keeping what the season gives.",
-    disposition: "retained",
-    fixedSkillIds: ["skill:cooking"],
+    disposition: "revised",
+    fixedSkillIds: ["skill:cooking", "skill:plant-lore"],
+    note:
+      "Revised by the group-size review: a one-Skill group was really a direct Cooking route. Seasonal " +
+      "kitchen work genuinely teaches what is available when, so Plant Lore joins it as taught practice.",
     specializationIds: ["spec:food-preservation"],
   },
   {
@@ -769,8 +795,11 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     name: "Court service practice",
     shortDescription: "Serving in a court and knowing how it is actually organised.",
     disposition: "new",
-    fixedSkillIds: ["skill:customs", "skill:politics", "heraldry"],
+    fixedSkillIds: ["skill:customs", "skill:politics", "heraldry", "skill:administration"],
     specializationIds: ["spec:courtly-protocol", "spec:court-administration"],
+    note:
+      "Administration is fixed here rather than left to each Profession: it is the daily substance of court " +
+      "service, and it is the immediate parent of Court Administration, which this group makes available.",
   },
   {
     id: "K10",
@@ -934,14 +963,6 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     fixedSkillIds: ["skill:research", "skill:palaeography-decipherment"],
   },
   {
-    id: "F16",
-    name: "Lineage investigation apprenticeship",
-    shortDescription: "Establishing descent from the evidence that survives.",
-    disposition: "retained",
-    fixedSkillIds: ["skill:research"],
-    specializationIds: ["spec:genealogy"],
-  },
-  {
     id: "F17",
     name: "Self-accompanied song practice",
     shortDescription: "Singing to one's own accompaniment.",
@@ -1036,6 +1057,15 @@ export const competencyContentV2RemovedGroups: readonly V2RemovedGroup[] = [
     reason: "One issued missile arm among several.",
     replacedBy: ["M04"],
   },
+  {
+    id: "F16",
+    name: "Lineage investigation apprenticeship",
+    reason:
+      "Retired by the group-size review. Its only base Skill was Research, which both users already reach " +
+      "elsewhere, so it was a Specialization-access wrapper rather than a taught practice. Genealogy " +
+      "becomes a direct Specialization route, and its immediate parent History is supplied by K10.",
+    replacedBy: [],
+  },
 ];
 
 /* ------------------------------------------------------------------------------------------ */
@@ -1066,7 +1096,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "G12", route: "Selling the season's collection" },
     ],
     directRoute: "Taught directly on the collecting rounds",
-    skillIds: ["climb", "skill:animal-lore"],
+    skillIds: ["climb"],
   },
   {
     code: "P03",
@@ -1090,8 +1120,6 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "N01", route: "Working the family boat" },
       { groupId: "G12", route: "Selling the catch" },
     ],
-    directRoute: "Taught directly aboard and on the shore",
-    skillIds: ["skill:survival", "skill:animal-lore"],
   },
   {
     code: "P05",
@@ -1104,7 +1132,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "F22", route: "Household kitchen and storing the season" },
     ],
     directRoute: "Taught directly in the working year of the holding",
-    skillIds: ["skill:weather-lore", "skill:plant-lore", "skill:appraisal", "skill:bargaining"],
+    skillIds: ["skill:weather-lore"],
   },
   {
     code: "P06",
@@ -1117,7 +1145,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "F02", route: "Household fibre and cloth work from the clip" },
     ],
     directRoute: "Taught directly by the herd owner and the older keepers",
-    skillIds: ["sling", "skill:animal-lore"],
+    skillIds: ["sling"],
     specializationIds: ["spec:steppe-remount-training"],
   },
   {
@@ -1131,8 +1159,6 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K13", route: "Treating the animals in one's charge" },
       { groupId: "G03", route: "Hunting with what one has trained" },
     ],
-    directRoute: "Taught directly in the mews and the yard",
-    skillIds: ["skill:animal-lore"],
   },
   {
     code: "P08",
@@ -1144,8 +1170,6 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "G05", route: "Riding with the team" },
       { groupId: "G12", route: "Carrying goods on one's own account" },
     ],
-    directRoute: "Taught directly on the road and in the yard",
-    skillIds: ["carpentry"],
   },
   {
     code: "P09",
@@ -1153,7 +1177,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
     name: "Sailor and Boat Worker",
     groups: [{ groupId: "M01", route: "Rough shipboard fighting instruction" }],
     directRoute: "Taught directly by the crew one sails with",
-    skillIds: ["climb", "skill:perception", "skill:swimming"],
+    skillIds: ["skill:swimming"],
     tracks: [
       {
         id: "profession:sailor:small-craft",
@@ -1178,7 +1202,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "N01", route: "Deck grounding before navigation" },
     ],
     directRoute: "Taught directly by the pilot one serves under",
-    skillIds: ["skill:cartography", "mathematics", "skill:geography"],
+    skillIds: ["skill:cartography", "mathematics"],
   },
   {
     code: "P11",
@@ -1190,7 +1214,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "G12", route: "Trading the voyage" },
     ],
     directRoute: "Taught directly by the master one serves under",
-    skillIds: ["skill:leadership", "skill:bookkeeping"],
+    skillIds: ["skill:leadership"],
   },
   {
     code: "P12",
@@ -1202,7 +1226,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "G04", route: "Carrying across open country" },
     ],
     directRoute: "Taught directly by the stage or household one carries for",
-    skillIds: ["skill:geography", "skill:customs"],
+    skillIds: ["skill:geography"],
   },
   {
     code: "P13",
@@ -1223,7 +1247,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
     name: "Guard, Watcher and Escort",
     groups: [{ groupId: "G04", route: "Escort duty away from the town" }],
     directRoute: "Taught directly on watch and on escort",
-    skillIds: ["skill:perception", "skill:streetwise", "skill:intimidation", "combat_experience"],
+    skillIds: ["skill:perception", "skill:streetwise", "skill:intimidation"],
     tracks: [
       {
         id: "profession:guard-escort:rough-fighting",
@@ -1248,7 +1272,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "G14", route: "Knowing the district one works" },
     ],
     directRoute: "Taught directly by the enterprise one works for",
-    skillIds: ["skill:perception", "conceal_object"],
+    skillIds: ["conceal_object"],
   },
   {
     code: "P16",
@@ -1260,7 +1284,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "G16", route: "Passing unremarked where one does not belong" },
     ],
     directRoute: "Taught directly through the district one works",
-    skillIds: ["skill:perception", "skill:customs", "skill:mnemonics", "skill:bargaining"],
+    skillIds: ["skill:perception", "skill:customs", "skill:mnemonics"],
   },
   {
     code: "P17",
@@ -1272,7 +1296,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "G16", route: "Approach under another identity" },
     ],
     directRoute: "Taught directly by the mentor conducting the inquiry",
-    skillIds: ["skill:stealth", "skill:law", "skill:mnemonics"],
+    skillIds: ["skill:stealth", "skill:law"],
   },
   {
     code: "P18",
@@ -1296,7 +1320,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K17", route: "Working the gaming tables" },
     ],
     directRoute: "Taught directly by the trickster one works with",
-    skillIds: ["skill:customs", "skill:oratory", "skill:appraisal", "skill:bargaining"],
+    skillIds: ["skill:customs", "skill:oratory"],
   },
   {
     code: "P20",
@@ -1320,7 +1344,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K18", route: "Placing the work through an illicit milieu" },
     ],
     directRoute: "Taught directly by the forger one trains under",
-    skillIds: ["skill:visual-art", "skill:customs"],
+    skillIds: ["skill:visual-art"],
   },
   {
     code: "P22",
@@ -1330,8 +1354,6 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "M06", route: "Repeated service in the field" },
       { groupId: "G04", route: "Marching and camping with the force" },
     ],
-    directRoute: "Taught directly in drill and on the march",
-    skillIds: ["skill:athletics"],
     tracks: [
       {
         id: "profession:soldier:communal-contingent",
@@ -1370,7 +1392,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "M06", route: "Repeated service in the field" },
     ],
     directRoute: "Taught directly in the troop lines",
-    skillIds: ["skill:animal-handling", "skill:animal-husbandry"],
+    skillIds: ["skill:animal-handling"],
   },
   {
     code: "P24",
@@ -1455,7 +1477,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K09", route: "Studying the theatre" },
     ],
     directRoute: "Taught directly on the staff one serves",
-    skillIds: ["skill:politics", "mathematics", "skill:mnemonics"],
+    skillIds: ["mathematics"],
   },
   {
     code: "P28",
@@ -1493,7 +1515,6 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K01", route: "Learned study of the art" },
     ],
     directRoute: "Taught directly by the practitioner one attends",
-    skillIds: ["skill:customs", "skill:teaching"],
     specializationIds: ["spec:diagnostic-medicine", "poison_treatment", "bone_setting"],
   },
   {
@@ -1505,7 +1526,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K01", route: "Learned study of the art" },
     ],
     directRoute: "Taught directly by the operator one assists",
-    skillIds: ["skill:pharmacy", "skill:teaching", "skill:plant-lore"],
+    skillIds: ["skill:pharmacy"],
     tracks: [
       {
         id: "profession:surgeon:civil",
@@ -1533,7 +1554,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "F22", route: "Feeding the sick household" },
     ],
     directRoute: "Taught directly at the bedside",
-    skillIds: ["skill:insight", "skill:teaching", "skill:mnemonics"],
+    skillIds: ["skill:insight"],
   },
   {
     code: "P33",
@@ -1545,7 +1566,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K14", route: "Continuing attendance after the birth" },
     ],
     directRoute: "Taught directly by the attendant one accompanies",
-    skillIds: ["skill:insight", "skill:teaching", "skill:religion", "skill:mnemonics"],
+    skillIds: ["skill:insight", "skill:religion"],
     note:
       "Closes the approved catalogue's only zero-base-Skill package and applies the approved " +
       "Medicine -> Obstetrics correction (#231) by supplying the immediate parent inside the same practice.",
@@ -1560,7 +1581,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "F05", route: "Working among kept stock" },
     ],
     directRoute: "Taught directly among the stock one treats",
-    skillIds: ["skill:animal-lore", "skill:first-aid", "skill:riding", "skill:appraisal"],
+    skillIds: ["skill:animal-lore"],
   },
   {
     code: "P35",
@@ -1572,13 +1593,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K12", route: "Comparing what is collected" },
     ],
     directRoute: "Taught directly in the remedy maker's shop",
-    skillIds: [
-      "skill:first-aid",
-      "skill:appraisal",
-      "skill:bargaining",
-      "skill:customs",
-      "skill:survival",
-    ],
+    skillIds: ["skill:first-aid", "skill:survival"],
   },
   {
     code: "P36",
@@ -1590,8 +1605,6 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "F26", route: "Armor workshop practice" },
       { groupId: "C02", route: "Master's shop with apprentices" },
     ],
-    directRoute: "Taught directly at the forge",
-    skillIds: ["mechanics"],
   },
   {
     code: "P37",
@@ -1602,8 +1615,6 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C07", route: "Working with the extraction face" },
       { groupId: "C01", route: "Workshop apprenticeship" },
     ],
-    directRoute: "Taught directly at the furnace",
-    skillIds: ["mechanics", "skill:trade"],
   },
   {
     code: "P38",
@@ -1615,8 +1626,6 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C04", route: "Hide and strap work for fittings" },
       { groupId: "C01", route: "Workshop apprenticeship" },
     ],
-    directRoute: "Taught directly in the armor shop",
-    skillIds: ["mechanics", "skill:trade"],
   },
   {
     code: "P39",
@@ -1627,8 +1636,6 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C03", route: "Working on building sites" },
       { groupId: "C01", route: "Workshop apprenticeship" },
     ],
-    directRoute: "Taught directly in the timber shop",
-    skillIds: ["ropework", "skill:teaching", "skill:trade"],
   },
   {
     code: "P40",
@@ -1640,7 +1647,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C03", route: "Setting out and running the yard" },
     ],
     directRoute: "Taught directly in the yard",
-    skillIds: ["ropework", "skill:sailmaking", "skill:appraisal", "skill:teaching"],
+    skillIds: ["ropework", "skill:appraisal"],
   },
   {
     code: "P41",
@@ -1651,8 +1658,6 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "F02", route: "Cloth work behind the canvas" },
       { groupId: "C01", route: "Workshop apprenticeship" },
     ],
-    directRoute: "Taught directly in the sail loft",
-    skillIds: ["skill:seamanship", "tailoring", "skill:trade"],
   },
   {
     code: "P42",
@@ -1664,7 +1669,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C01", route: "Workshop apprenticeship" },
     ],
     directRoute: "Taught directly at the wheel and the loom",
-    skillIds: ["ropework", "skill:trade", "skill:teaching", "skill:plant-lore"],
+    skillIds: ["ropework"],
     specializationIds: ["spec:cordage-ropemaking"],
   },
   {
@@ -1677,7 +1682,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C01", route: "Workshop apprenticeship" },
     ],
     directRoute: "Taught directly in the cutting shop",
-    skillIds: ["leatherworking", "skill:trade", "skill:customs", "skill:teaching"],
+    skillIds: ["skill:customs"],
   },
   {
     code: "P44",
@@ -1688,13 +1693,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C01", route: "Workshop apprenticeship" },
     ],
     directRoute: "Taught directly at the bench",
-    skillIds: [
-      "tailoring",
-      "skill:animal-husbandry",
-      "skill:trade",
-      "skill:teaching",
-      "skill:armoring",
-    ],
+    skillIds: ["tailoring", "skill:armoring"],
   },
   {
     code: "P45",
@@ -1702,11 +1701,10 @@ export const competencyContentV2Families: readonly V2Family[] = [
     name: "Potter",
     groups: [
       { groupId: "F21", route: "Ordinary ceramic apprenticeship" },
-      { groupId: "C06", route: "Winning and preparing the material" },
       { groupId: "C01", route: "Workshop apprenticeship" },
     ],
     directRoute: "Taught directly at the wheel and the kiln",
-    skillIds: ["skill:visual-art", "skill:trade", "skill:teaching"],
+    skillIds: ["skill:visual-art", "skill:masonry"],
   },
   {
     code: "P46",
@@ -1718,7 +1716,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "F28", route: "Setting out a building" },
     ],
     directRoute: "Taught directly on the site and at the banker",
-    skillIds: ["skill:appraisal", "skill:teaching", "mechanics"],
+    skillIds: ["skill:appraisal"],
   },
   {
     code: "P47",
@@ -1726,11 +1724,10 @@ export const competencyContentV2Families: readonly V2Family[] = [
     name: "Miner and Quarry Worker",
     groups: [
       { groupId: "C07", route: "Ordinary extraction apprenticeship" },
-      { groupId: "C06", route: "Dressing what is won" },
       { groupId: "F24", route: "Feeding the furnace" },
     ],
     directRoute: "Taught directly at the face",
-    skillIds: ["mechanics", "skill:appraisal", "ropework"],
+    skillIds: ["ropework", "skill:appraisal"],
   },
   {
     code: "P48",
@@ -1741,7 +1738,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C03", route: "Installing on site" },
     ],
     directRoute: "Taught directly at the mill and on installation",
-    skillIds: ["skill:smithing", "mathematics", "skill:architecture", "ropework", "skill:teaching"],
+    skillIds: ["mathematics", "skill:smithing", "ropework"],
   },
   {
     code: "P49",
@@ -1750,16 +1747,10 @@ export const competencyContentV2Families: readonly V2Family[] = [
     groups: [
       { groupId: "F28", route: "Ordinary design apprenticeship" },
       { groupId: "C03", route: "Running the trades on site" },
+      { groupId: "F01", route: "Measuring and drawing the site oneself" },
     ],
     directRoute: "Taught directly in the design office and on site",
-    skillIds: [
-      "mathematics",
-      "skill:masonry",
-      "carpentry",
-      "skill:cartography",
-      "skill:administration",
-      "skill:bargaining",
-    ],
+    skillIds: ["mathematics", "skill:administration"],
     specializationIds: ["spec:fortification"],
   },
   {
@@ -1772,7 +1763,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "G04", route: "Working away from settlement" },
     ],
     directRoute: "Taught directly in the field and at the drawing table",
-    skillIds: ["mathematics", "astronomy", "skill:visual-art", "skill:administration"],
+    skillIds: ["mathematics", "astronomy", "skill:visual-art"],
   },
   {
     code: "P51",
@@ -1783,13 +1774,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C01", route: "Workshop apprenticeship" },
     ],
     directRoute: "Taught directly at the bench",
-    skillIds: [
-      "skill:lockpicking",
-      "skill:trade",
-      "skill:teaching",
-      "carpentry",
-      "skill:perception",
-    ],
+    skillIds: ["skill:lockpicking"],
   },
   {
     code: "P52",
@@ -1800,7 +1785,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C13", route: "Mechanism workshop practice" },
     ],
     directRoute: "Taught directly at the bench and on the line",
-    skillIds: ["carpentry", "ropework", "skill:animal-lore", "skill:hunting", "skill:appraisal"],
+    skillIds: ["carpentry", "ropework", "skill:animal-lore"],
   },
   {
     code: "P53",
@@ -1811,16 +1796,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C10", route: "Brewhouse attached to the kitchen" },
     ],
     directRoute: "Taught directly in the kitchen it serves",
-    skillIds: [
-      "skill:appraisal",
-      "skill:bargaining",
-      "skill:plant-lore",
-      "skill:customs",
-      "skill:trade",
-      "skill:teaching",
-      "skill:farming",
-      "skill:animal-husbandry",
-    ],
+    skillIds: ["skill:customs", "skill:appraisal", "skill:bargaining", "skill:farming"],
     specializationIds: ["spec:baking", "spec:court-cookery"],
   },
   {
@@ -1832,7 +1808,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C01", route: "Workshop apprenticeship" },
     ],
     directRoute: "Taught directly in the brewhouse",
-    skillIds: ["skill:farming", "skill:plant-lore", "skill:trade", "skill:teaching", "carpentry"],
+    skillIds: ["skill:farming", "skill:plant-lore"],
   },
   {
     code: "P55",
@@ -1843,14 +1819,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C01", route: "Workshop apprenticeship" },
     ],
     directRoute: "Taught directly in the vineyard and the cellar",
-    skillIds: [
-      "skill:plant-lore",
-      "skill:weather-lore",
-      "skill:trade",
-      "skill:teaching",
-      "carpentry",
-      "skill:bookkeeping",
-    ],
+    skillIds: ["skill:plant-lore", "skill:weather-lore"],
   },
   {
     code: "P56",
@@ -1862,7 +1831,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C15", route: "Service in an alchemical workshop" },
     ],
     directRoute: "Taught directly at the still",
-    skillIds: ["skill:plant-lore", "skill:appraisal", "skill:trade", "mechanics", "skill:teaching"],
+    skillIds: ["skill:plant-lore", "mechanics"],
   },
   {
     code: "P57",
@@ -1874,7 +1843,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K02", route: "Argument about the nature of matter" },
     ],
     directRoute: "Taught directly in the alchemist's workshop",
-    skillIds: ["skill:plant-lore", "skill:smelting", "skill:appraisal"],
+    skillIds: ["skill:plant-lore", "skill:smelting"],
   },
   {
     code: "P58",
@@ -1886,7 +1855,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K21", route: "Accounts, measures and the estate" },
     ],
     directRoute: "Taught directly in the establishment one serves",
-    skillIds: ["skill:law", "skill:appraisal", "skill:trade"],
+    skillIds: ["skill:law", "skill:appraisal"],
     specializationIds: ["spec:court-administration"],
   },
   {
@@ -1900,7 +1869,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K01", route: "Learned study of the art" },
     ],
     directRoute: "Taught directly by the advocate one reads with",
-    skillIds: ["skill:customs", "skill:politics", "skill:insight"],
+    skillIds: ["skill:customs", "skill:insight"],
   },
   {
     code: "P60",
@@ -1912,7 +1881,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "G05", route: "Travelling to the other party" },
     ],
     directRoute: "Taught directly in the service one is entrusted with",
-    skillIds: ["skill:law", "skill:geography", "skill:mnemonics", "skill:administration"],
+    skillIds: ["skill:law"],
     specializationIds: ["spec:courtly-protocol"],
   },
   {
@@ -1925,7 +1894,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K07", route: "Instructing those who will convene after" },
     ],
     directRoute: "Taught directly in the community one convenes",
-    skillIds: ["skill:law", "skill:religion", "history", "skill:administration"],
+    skillIds: ["skill:law"],
   },
   {
     code: "P62",
@@ -1937,7 +1906,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "G11", route: "Keeping the house's records" },
     ],
     directRoute: "Taught directly in the credit house",
-    skillIds: ["skill:law", "skill:insight", "skill:politics", "mathematics"],
+    skillIds: ["skill:law", "mathematics"],
   },
   {
     code: "P63",
@@ -1949,7 +1918,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "G14", route: "Working the district for support" },
     ],
     directRoute: "Taught directly in the council one serves",
-    skillIds: ["skill:law", "history", "skill:administration"],
+    skillIds: ["skill:law"],
   },
   {
     code: "P64",
@@ -1961,7 +1930,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "F14", route: "Delivering from memory" },
     ],
     directRoute: "Taught directly by the master one assists",
-    skillIds: ["history", "philosophy", "skill:customs", "skill:administration", "skill:insight"],
+    skillIds: ["history", "philosophy"],
   },
   {
     code: "P65",
@@ -1973,7 +1942,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K01", route: "Learned study behind the copying" },
     ],
     directRoute: "Taught directly in the writing room",
-    skillIds: ["skill:visual-art", "skill:law", "skill:customs", "skill:appraisal"],
+    skillIds: ["skill:visual-art"],
     note:
       "BLOCKED DEPENDENCY: the defining Written Tradition core remains unresolved under #113 and is " +
       "deliberately not supplied here. This package must not be presented as universal literacy.",
@@ -1988,7 +1957,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K01", route: "Learned study of the languages' matter" },
     ],
     directRoute: "Taught directly in the service one interprets for",
-    skillIds: ["skill:oratory", "skill:geography", "history", "skill:administration"],
+    skillIds: ["skill:oratory"],
     note: "The spoken languages themselves remain separate contextual competencies and are not granted here.",
   },
   {
@@ -1997,12 +1966,12 @@ export const competencyContentV2Families: readonly V2Family[] = [
     name: "Historian and Genealogist",
     groups: [
       { groupId: "F15", route: "Ordinary historical study" },
-      { groupId: "F16", route: "Lineage investigation apprenticeship" },
       { groupId: "K10", route: "Service in a heraldic office" },
       { groupId: "K01", route: "Learned study of the art" },
     ],
     directRoute: "Taught directly by the scholar one reads with",
-    skillIds: ["skill:geography", "skill:politics", "skill:religion"],
+    skillIds: ["skill:research"],
+    specializationIds: ["spec:genealogy"],
   },
   {
     code: "P68",
@@ -2013,8 +1982,6 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K01", route: "Learned study of method" },
       { groupId: "K03", route: "Calculation applied to the sky" },
     ],
-    directRoute: "Taught directly by the practitioner one calculates for",
-    skillIds: ["skill:architecture", "skill:teaching", "skill:cartography", "philosophy"],
   },
   {
     code: "P69",
@@ -2026,7 +1993,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K07", route: "Teaching within a school" },
     ],
     directRoute: "Taught directly within the school",
-    skillIds: ["skill:religion", "history", "skill:politics"],
+    skillIds: ["history"],
   },
   {
     code: "P70",
@@ -2038,12 +2005,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K02", route: "Argument about what is observed" },
     ],
     directRoute: "Taught directly at the instrument and the record",
-    skillIds: [
-      "skill:celestial-navigation",
-      "skill:cartography",
-      "skill:geography",
-      "skill:teaching",
-    ],
+    skillIds: ["skill:celestial-navigation"],
   },
   {
     code: "P71",
@@ -2055,7 +2017,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K01", route: "Learned study of the tradition" },
     ],
     directRoute: "Taught directly by the astrologer one reads with",
-    skillIds: ["skill:religion", "divination", "skill:insight", "history"],
+    skillIds: ["divination", "skill:insight"],
   },
   {
     code: "P72",
@@ -2067,7 +2029,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K01", route: "Learned study of the record" },
     ],
     directRoute: "Taught directly in the field and the collection",
-    skillIds: ["skill:geography", "skill:visual-art", "skill:teaching", "philosophy"],
+    skillIds: ["skill:geography", "skill:visual-art"],
   },
   {
     code: "P73",
@@ -2079,7 +2041,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "G04", route: "Travelling what one describes" },
     ],
     directRoute: "Taught directly by the geographer one works with",
-    skillIds: ["astronomy", "skill:customs", "history", "mathematics"],
+    skillIds: ["astronomy", "skill:customs"],
   },
   {
     code: "P74",
@@ -2091,7 +2053,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "F14", route: "Delivering before the congregation" },
     ],
     directRoute: "Taught directly within the vocation",
-    skillIds: ["meditation", "history", "skill:teaching", "skill:first-aid", "skill:insight"],
+    skillIds: ["meditation"],
   },
   {
     code: "P75",
@@ -2102,14 +2064,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "K04", route: "Celestial method within the practice" },
     ],
     directRoute: "Taught directly by the diviner one serves",
-    skillIds: [
-      "meditation",
-      "skill:insight",
-      "skill:animal-lore",
-      "skill:weather-lore",
-      "skill:mnemonics",
-      "skill:oratory",
-    ],
+    skillIds: ["meditation", "skill:insight", "skill:mnemonics"],
   },
   {
     code: "P76",
@@ -2117,12 +2072,12 @@ export const competencyContentV2Families: readonly V2Family[] = [
     name: "Herald",
     groups: [
       { groupId: "K10", route: "Ordinary heraldic office apprenticeship" },
-      { groupId: "F16", route: "Lineage investigation" },
       { groupId: "F14", route: "Proclamation from memory" },
       { groupId: "K11", route: "Service inside the court" },
     ],
     directRoute: "Taught directly in the heraldic office",
-    skillIds: ["skill:administration", "skill:visual-art", "skill:law"],
+    skillIds: ["skill:visual-art"],
+    specializationIds: ["spec:genealogy"],
     note:
       "Closes the recorded Herald parent-access gaps: History for Genealogy and Customs for Courtly " +
       "Protocol are supplied by K10 inside the family's own envelope.",
@@ -2137,7 +2092,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "F18", route: "Performing with players and dancers" },
     ],
     directRoute: "Taught directly by the players one performs with",
-    skillIds: ["skill:customs", "skill:teaching", "skill:mnemonics", "history"],
+    skillIds: ["skill:mnemonics"],
     specializationIds: ["spec:music-composition"],
   },
   {
@@ -2150,7 +2105,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "F19", route: "The matter the company performs" },
     ],
     directRoute: "Taught directly by the company",
-    skillIds: ["skill:customs", "skill:athletics", "skill:disguise", "skill:mnemonics"],
+    skillIds: ["skill:athletics", "skill:mnemonics"],
   },
   {
     code: "P79",
@@ -2162,7 +2117,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C01", route: "Workshop trade practice" },
     ],
     directRoute: "Taught directly in the workshop",
-    skillIds: ["skill:masonry", "carpentry", "skill:customs", "skill:teaching", "heraldry"],
+    skillIds: ["skill:masonry"],
   },
   {
     code: "P80",
@@ -2174,7 +2129,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "F17", route: "Singing what one composes" },
     ],
     directRoute: "Taught directly by the teller one learns from",
-    skillIds: ["skill:customs", "history", "skill:religion", "skill:geography", "skill:insight"],
+    skillIds: ["history"],
   },
   {
     code: "P81",
@@ -2185,7 +2140,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "F18", route: "Performing before an audience" },
     ],
     directRoute: "Taught directly by the trainer one works under",
-    skillIds: ["brawling", "skill:teaching", "skill:customs", "skill:first-aid"],
+    skillIds: ["brawling"],
   },
   {
     code: "P82",
@@ -2193,14 +2148,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
     name: "Weapon Instructor",
     groups: [],
     directRoute: "Taught directly in the salle one instructs in",
-    skillIds: [
-      "skill:teaching",
-      "combat_experience",
-      "weapon_maintenance",
-      "skill:athletics",
-      "skill:first-aid",
-      "skill:customs",
-    ],
+    skillIds: ["skill:teaching", "weapon_maintenance", "skill:athletics"],
     tracks: [
       {
         id: "profession:weapon-instructor:close-combat",
@@ -2232,7 +2180,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "G16", route: "Passing as what one is not" },
     ],
     directRoute: "Taught directly at the tables",
-    skillIds: ["mathematics", "skill:customs", "skill:bargaining"],
+    skillIds: ["mathematics"],
   },
   {
     code: "P84",
@@ -2243,7 +2191,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "N01", route: "Working from a boat" },
     ],
     directRoute: "Taught directly on the working line",
-    skillIds: ["skill:athletics", "climb", "skill:fishing", "skill:survival", "skill:appraisal"],
+    skillIds: ["skill:athletics", "skill:appraisal"],
   },
 ];
 
@@ -2550,5 +2498,402 @@ export const competencyContentV2CivilizationLanguages: readonly V2CivilizationLa
     note:
       "Candidate names only. Language, script and administrative written tradition must still be separated " +
       "with explicit evidence, as the approved gap report requires.",
+  },
+];
+
+/* ------------------------------------------------------------------------------------------ */
+/* Direct-grant review (Product Owner revision)                                                 */
+/* ------------------------------------------------------------------------------------------ */
+
+/**
+ * The first draft of this proposal was authored under breadth pressure: every ordinary path was
+ * pushed to at least ten. The Product Owner has inverted that pressure — author coherent
+ * occupational training first, then read breadth as a diagnostic. This record is the honest
+ * accounting of which direct Profession Skill grants were added to reach a number and have now been
+ * withdrawn, and which were kept because the Skill is genuinely part of the occupation.
+ */
+export interface V2DirectGrantDecision {
+  skillId: string;
+  /** Profession codes the grant was withdrawn from. */
+  removedFrom: readonly string[];
+  /** Profession codes that keep it, because it is genuinely taught there. */
+  retainedIn: readonly string[];
+  rationale: string;
+}
+
+export const competencyContentV2DirectGrantPolicy: readonly string[] = [
+  "R1 — no generic instruction grant. Teaching is withdrawn wherever instructing others is not part of the occupation's own definition. Master artisans still reach it through C02, and Teachers through K07.",
+  "R2 — no generic commerce top-up. Trade, Appraisal and Bargaining are withdrawn wherever a Learning Group already supplies the family's commercial practice, or where selling one's output is not itself a taught practice.",
+  "R3 — no generic social polish. Customs is withdrawn wherever the curriculum has no social, ceremonial, courtly or cross-cultural element beyond ordinary life.",
+  "R4 — no generic learned top-up. History, Philosophy, Politics, Religion, Geography, Mathematics, Mnemonics and Insight are withdrawn wherever a learned group already supplies the grounding and the Skill is not the family's own subject matter.",
+  "R5 — no workshop garnish. Carpentry, Ropework, Mechanics and similar adjacent trades are withdrawn where they were decoration rather than taught craft, and kept where the material genuinely is the craft.",
+  "R6 — a grant survives on coherence, never on arithmetic. Several retained grants leave their path at 7 or 8; that is an accepted outcome, not a defect to be corrected.",
+];
+
+export const competencyContentV2DirectGrantDecisions: readonly V2DirectGrantDecision[] = [
+  {
+    skillId: "skill:teaching",
+    removedFrom: [
+      "P30",
+      "P31",
+      "P32",
+      "P33",
+      "P39",
+      "P40",
+      "P42",
+      "P43",
+      "P44",
+      "P45",
+      "P46",
+      "P48",
+      "P51",
+      "P53",
+      "P54",
+      "P55",
+      "P56",
+      "P68",
+      "P70",
+      "P72",
+      "P74",
+      "P77",
+      "P79",
+      "P81",
+    ],
+    retainedIn: ["P82"],
+    rationale:
+      "R1. Twenty-four families were told they taught apprentices purely to add a Skill. Instruction is " +
+      "constitutive only for the Weapon Instructor; the master artisan reaches it through C02 and the " +
+      "Teacher through K07.",
+  },
+  {
+    skillId: "skill:trade",
+    removedFrom: [
+      "P37",
+      "P38",
+      "P39",
+      "P41",
+      "P42",
+      "P43",
+      "P44",
+      "P45",
+      "P51",
+      "P53",
+      "P54",
+      "P55",
+      "P56",
+      "P58",
+    ],
+    retainedIn: [],
+    rationale:
+      "R2. Every occurrence was a craft Profession being told it also ran a trading business. Workshop " +
+      "commerce is already the fixed content of C01 and C02, and the merchant Professions reach Trade " +
+      "through G12.",
+  },
+  {
+    skillId: "skill:customs",
+    removedFrom: [
+      "P12",
+      "P21",
+      "P30",
+      "P35",
+      "P64",
+      "P65",
+      "P77",
+      "P78",
+      "P79",
+      "P80",
+      "P81",
+      "P82",
+      "P83",
+    ],
+    retainedIn: ["P13", "P16", "P19", "P43", "P53", "P59", "P73"],
+    rationale:
+      "R3. Retained where convention is the subject: the travelling merchant and the geographer meet " +
+      "other peoples' custom, the informant and the trickster work it, the tailor and the cook are judged " +
+      "by what is proper to serve or to wear, and legal custom is the advocate's material.",
+  },
+  {
+    skillId: "skill:appraisal",
+    removedFrom: ["P05", "P19", "P34", "P35", "P52", "P56", "P57", "P65"],
+    retainedIn: ["P18", "P40", "P46", "P47", "P53", "P58", "P84"],
+    rationale:
+      "R2. Retained where judging worth is the work itself: the thief's loot, the shipwright's and mason's " +
+      "material selection, the miner's ore, the cook's provisions, the steward's estate, the diver's salvage.",
+  },
+  {
+    skillId: "skill:bargaining",
+    removedFrom: ["P05", "P16", "P19", "P35", "P49", "P83"],
+    retainedIn: ["P53"],
+    rationale:
+      "R2. Retained only for the cook, whose buying at market is part of running the kitchen.",
+  },
+  {
+    skillId: "skill:administration",
+    removedFrom: ["P50", "P60", "P61", "P63", "P64", "P66", "P76"],
+    retainedIn: ["P49"],
+    rationale:
+      "R4. The court families now reach Administration through K11, where it belongs as daily court " +
+      "service. Retained directly only for the building designer's site office.",
+  },
+  {
+    skillId: "history",
+    removedFrom: ["P61", "P63", "P66", "P71", "P73", "P74", "P77"],
+    retainedIn: ["P64", "P69", "P80"],
+    rationale:
+      "R4. Retained where the past is the matter handled: what the teacher teaches, what the philosopher " +
+      "argues from, what the storyteller tells.",
+  },
+  {
+    skillId: "skill:politics",
+    removedFrom: ["P27", "P59", "P62", "P67", "P69"],
+    retainedIn: [],
+    rationale:
+      "R4. Political knowledge is reached through K11 where it is genuinely part of the service.",
+  },
+  {
+    skillId: "skill:religion",
+    removedFrom: ["P61", "P67", "P69", "P71", "P80"],
+    retainedIn: ["P33"],
+    rationale:
+      "R4. Retained only for the birth attendant, where rite around birth is an attested part of the " +
+      "practice rather than background knowledge.",
+  },
+  {
+    skillId: "skill:geography",
+    removedFrom: ["P10", "P60", "P66", "P67", "P70", "P80"],
+    retainedIn: ["P03", "P12", "P72"],
+    rationale:
+      "R4. Retained where knowing the country is the service sold: the caravan guide, the courier, and the " +
+      "naturalist's account of where things live.",
+  },
+  {
+    skillId: "skill:mnemonics",
+    removedFrom: ["P17", "P27", "P32", "P33", "P60"],
+    retainedIn: ["P16", "P75", "P77", "P78"],
+    rationale:
+      "R4. Retained where holding material without writing is the practice: the informant's ear, the " +
+      "diviner's tradition, the musician's and the player's repertoire.",
+  },
+  {
+    skillId: "skill:insight",
+    removedFrom: ["P62", "P64", "P74", "P80"],
+    retainedIn: ["P32", "P33", "P59", "P71", "P75"],
+    rationale:
+      "R4. Retained where reading the person in front of you is the work: the attendant, the midwife, the " +
+      "advocate, the astrologer and the diviner with their clients.",
+  },
+  {
+    skillId: "skill:animal-lore",
+    removedFrom: ["P02", "P04", "P06", "P07", "P75"],
+    retainedIn: ["P01", "P34", "P52"],
+    rationale:
+      "R4. Retained where the animal's behaviour is the subject: the hunter's quarry, the veterinary " +
+      "practitioner's patient, the trapmaker's target.",
+  },
+  {
+    skillId: "mechanics",
+    removedFrom: ["P36", "P37", "P38", "P46", "P47"],
+    retainedIn: ["P56"],
+    rationale:
+      "R5. Retained only for the distiller, whose apparatus is a mechanism they build and keep.",
+  },
+  {
+    skillId: "carpentry",
+    removedFrom: ["P08", "P49", "P51", "P54", "P55", "P79"],
+    retainedIn: ["P29", "P52"],
+    rationale:
+      "R5. Retained where timber is the material worked: siege-engine carriages and constructed traps. " +
+      "Withdrawn where it stood in for 'repairs things made of wood'.",
+  },
+  {
+    skillId: "ropework",
+    removedFrom: ["P39"],
+    retainedIn: ["P29", "P40", "P42", "P47", "P48", "P52"],
+    rationale:
+      "R5. Cordage genuinely belongs to engine crews, yards, spinners, shafts, mill hoists and traps; it " +
+      "was garnish on the carpenter.",
+  },
+  {
+    skillId: "skill:plant-lore",
+    removedFrom: ["P05", "P31", "P42", "P53"],
+    retainedIn: ["P54", "P55", "P56", "P57"],
+    rationale:
+      "R4. Retained where the plant is the raw material of the process. The farmer and the cook now reach " +
+      "it through the revised F22, and the surgeon and weaver did not need it.",
+  },
+  {
+    skillId: "skill:first-aid",
+    removedFrom: ["P34", "P74", "P81", "P82"],
+    retainedIn: ["P35"],
+    rationale:
+      "R4. Retained only for the remedy maker, who treats the people who come to the shop. Veterinary, " +
+      "religious, athletic and instructional first aid were all arithmetic.",
+  },
+  {
+    skillId: "skill:perception",
+    removedFrom: ["P09", "P15", "P51"],
+    retainedIn: ["P14", "P16"],
+    rationale: "R4. Retained where watching is the duty: the watchman and the informant.",
+  },
+  {
+    skillId: "skill:cartography",
+    removedFrom: ["P49", "P68", "P70"],
+    retainedIn: ["P10"],
+    rationale: "R4. Retained for the navigator, who works from and corrects charts.",
+  },
+  {
+    skillId: "mathematics",
+    removedFrom: ["P73"],
+    retainedIn: ["P10", "P13", "P26", "P27", "P28", "P48", "P49", "P50", "P62", "P83"],
+    rationale:
+      "R4. Reckoning is genuinely taught in navigation, trade, supply, planning, engineering, design, " +
+      "survey, credit and play. The geographer reaches what he needs through K09 and F01.",
+  },
+  {
+    skillId: "philosophy",
+    removedFrom: ["P68", "P72"],
+    retainedIn: ["P64"],
+    rationale: "R4. Retained only where the teacher's subject includes it.",
+  },
+  {
+    skillId: "skill:law",
+    removedFrom: ["P65", "P76"],
+    retainedIn: ["P17", "P58", "P60", "P61", "P62", "P63"],
+    rationale:
+      "R4. Retained where obligation and jurisdiction are handled in the work. The scribe copies " +
+      "documents without pleading them, and the herald proclaims without adjudicating.",
+  },
+  {
+    skillId: "skill:animal-husbandry",
+    removedFrom: ["P23", "P44", "P53"],
+    retainedIn: [],
+    rationale: "R5. Keeping stock is reached through F05 and F08 where it is genuinely taught.",
+  },
+  {
+    skillId: "combat_experience",
+    removedFrom: ["P14", "P82"],
+    retainedIn: [],
+    rationale:
+      "R6. Both already reach it where it is earned: the guard through service, the instructor through " +
+      "M02 and M05.",
+  },
+  {
+    skillId: "skill:architecture",
+    removedFrom: ["P48", "P68"],
+    retainedIn: [],
+    rationale:
+      "R5. Design of buildings is the building designer's and siege engineer's practice, not the millwright's or the calculator's.",
+  },
+  {
+    skillId: "skill:bookkeeping",
+    removedFrom: ["P11", "P55"],
+    retainedIn: [],
+    rationale: "R2. Reached through G11, F12 and K21 where accounts are genuinely kept.",
+  },
+  {
+    skillId: "climb",
+    removedFrom: ["P09", "P84"],
+    retainedIn: ["P02", "P18"],
+    rationale:
+      "R5. Retained for the cliff-and-tree collector and the thief. The rigged-vessel sailor reaches it " +
+      "through F09, and the diver works on a line rather than a face.",
+  },
+  {
+    skillId: "skill:survival",
+    removedFrom: ["P04", "P84"],
+    retainedIn: ["P35"],
+    rationale:
+      "R4. Retained for the remedy maker's collecting trips; the fisher and diver work from a boat.",
+  },
+  {
+    skillId: "skill:athletics",
+    removedFrom: ["P22"],
+    retainedIn: ["P78", "P82", "P84"],
+    rationale:
+      "R6. Marching is already what G04 and M06 describe; stage movement, salle conditioning and breath work are taught.",
+  },
+  {
+    skillId: "tailoring",
+    removedFrom: ["P41"],
+    retainedIn: ["P44"],
+    rationale: "R5. Retained for leather garments; the sailmaker's canvas is not tailoring.",
+  },
+  {
+    skillId: "skill:masonry",
+    removedFrom: ["P49"],
+    retainedIn: ["P45", "P79"],
+    rationale:
+      "R5. Withdrawn from the designer, whose C03 slot already offers it. Newly granted to the potter, " +
+      "whose kiln is built masonry, and retained for the sculptor working stone.",
+  },
+  {
+    skillId: "skill:disguise",
+    removedFrom: ["P78"],
+    retainedIn: ["P18"],
+    rationale: "R3. Costume is not disguise; the thief's is.",
+  },
+  {
+    skillId: "skill:oratory",
+    removedFrom: ["P75"],
+    retainedIn: ["P19", "P25", "P66"],
+    rationale:
+      "R4. Retained where public speech carries the work: the con, the command, the rendering aloud.",
+  },
+  {
+    skillId: "skill:weather-lore",
+    removedFrom: ["P75"],
+    retainedIn: ["P05", "P55"],
+    rationale: "R4. Retained for the farmer and the vintner, whose year turns on it.",
+  },
+  {
+    skillId: "skill:riding",
+    removedFrom: ["P34"],
+    retainedIn: [],
+    rationale:
+      "R5. Travelling to a patient is not a taught competence; G05 supplies it where it is one.",
+  },
+  {
+    skillId: "skill:sailmaking",
+    removedFrom: ["P40"],
+    retainedIn: [],
+    rationale: "R5. Canvas is the sailmaker's separate trade, not the shipwright's.",
+  },
+  {
+    skillId: "skill:seamanship",
+    removedFrom: ["P41"],
+    retainedIn: [],
+    rationale: "R5. Fitting a sail aboard does not make the sailmaker a seaman.",
+  },
+  {
+    skillId: "leatherworking",
+    removedFrom: ["P43"],
+    retainedIn: [],
+    rationale: "R5. The tailor's C01 slot already offers it where a shop genuinely works leather.",
+  },
+  {
+    skillId: "skill:hunting",
+    removedFrom: ["P52"],
+    retainedIn: [],
+    rationale: "R5. Building a trap is not hunting with it; C14 supplies Trapping.",
+  },
+  {
+    skillId: "skill:fishing",
+    removedFrom: ["P84"],
+    retainedIn: [],
+    rationale: "R5. Working underwater is not fishing.",
+  },
+  {
+    skillId: "heraldry",
+    removedFrom: ["P79"],
+    retainedIn: [],
+    rationale: "R4. Painting arms to order does not teach the heraldic system; K10 and K11 do.",
+  },
+  {
+    skillId: "skill:research",
+    removedFrom: [],
+    retainedIn: ["P67"],
+    rationale:
+      "Restored to the historian as a direct route after the group-size review retired F16, whose only " +
+      "base Skill was Research.",
   },
 ];

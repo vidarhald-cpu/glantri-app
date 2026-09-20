@@ -16,6 +16,8 @@ import {
 } from "../src/proposals/competencyContentV2/competencyContentV2";
 import {
   competencyContentV2CivilizationLanguages,
+  competencyContentV2DirectGrantDecisions,
+  competencyContentV2DirectGrantPolicy,
   competencyContentV2RemovedGroups,
 } from "../src/proposals/competencyContentV2/competencyContentV2Source";
 
@@ -55,8 +57,8 @@ const groupLines: string[] = [
   "",
   "A choice slot's unselected candidates grant no competence, cost nothing, and add nothing to breadth.",
   "",
-  "| Group | Name | Disposition | Fixed base Skills | Choice slots | Explicit Specializations |",
-  "| --- | --- | --- | --- | --- | --- |",
+  "| Group | Name | Disposition | Fixed | Slot | Effective | Fixed base Skills | Choice slots | Explicit Specializations |",
+  "| --- | --- | --- | ---: | ---: | ---: | --- | --- | --- |",
 ];
 for (const group of catalogue.groups) {
   const slots = (group.selectionSlots ?? [])
@@ -65,10 +67,13 @@ for (const group of catalogue.groups) {
         `pick ${slot.chooseCount} of ${slot.candidateSkillIds.map((id) => name(id)).join(", ")}`,
     )
     .join("; ");
+  const size = catalogue.groupSizes.find((row) => row.id === group.id)!;
   groupLines.push(
     `| ${group.id} | ${group.name} | ${group.disposition}${
       group.supersedes?.length ? ` (supersedes ${group.supersedes.join(", ")})` : ""
-    } | ${group.fixedSkillIds.map((id) => name(id)).join(", ") || "—"} | ${slots || "—"} | ${
+    } | ${size.fixedSize} | ${size.slotSize} | ${size.effectiveSize} | ${
+      group.fixedSkillIds.map((id) => name(id)).join(", ") || "—"
+    } | ${slots || "—"} | ${
       (group.specializationIds ?? []).map((id) => name(id)).join(", ") || "None"
     } |`,
   );
@@ -84,7 +89,47 @@ for (const removed of competencyContentV2RemovedGroups)
   groupLines.push(
     `| ${removed.id} | ${approvedGroupName.get(removed.id) ?? removed.name} | ${removed.reason} | ${removed.replacedBy.join(", ")} |`,
   );
-groupLines.push("", "## Group notes", "");
+groupLines.push(
+  "",
+  "## Group size review",
+  "",
+  "Guidance: a normal centre of 3-4 effective base Skills; 2 is entirely acceptable where competencies",
+  "are genuinely learned together; 1 normally means a direct Skill route or a broader practice fits",
+  "better; 5+ needs positive justification and 6+ should be advanced, compound or materially",
+  "choice-driven. Fixed purchase burden is reported separately from player-selected slot breadth, and",
+  "coherence takes precedence over size.",
+  "",
+  "| Effective size | Groups |",
+  "| ---: | ---: |",
+  ...Object.keys(catalogue.groupSizeDistribution)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map((size) => `| ${size} | ${catalogue.groupSizeDistribution[size]} |`),
+  "",
+  `Largest fixed purchase burden of any single group: ${catalogue.manifest.maximumFixedGroupBurden}.`,
+  "",
+  "### Tail review — every group at 1-2 and 5+",
+  "",
+  "| Group | Name | Fixed | Slot | Effective | Finding |",
+  "| --- | --- | ---: | ---: | ---: | --- |",
+  ...catalogue.groupSizes
+    .filter((row) => row.effectiveSize <= 2 || row.effectiveSize >= 5)
+    .map(
+      (row) =>
+        `| ${row.id} | ${row.name} | ${row.fixedSize} | ${row.slotSize} | ${row.effectiveSize} | ${
+          row.effectiveSize >= 5
+            ? "Above band: advanced or compound and materially choice-driven."
+            : "At two: reviewed and retained — the pair is genuinely learned together."
+        } |`,
+    ),
+  "",
+  "Two one-Skill groups were found and changed rather than left: F22 gained Plant Lore because seasonal",
+  "kitchen work genuinely teaches what is available when, and F16 was retired because its only base Skill",
+  "was Research, which both its users already reach elsewhere. No group is forced into the 3-4 centre.",
+  "",
+  "## Group notes",
+  "",
+);
 for (const group of catalogue.groups)
   if (group.note) groupLines.push(`- **${group.id} ${group.name}.** ${group.note}`);
 groupLines.push("");
@@ -152,6 +197,14 @@ const breadthLines = [
   "",
   banner,
   "",
+  "## How this figure is used",
+  "",
+  "Breadth is a **diagnostic, not a target**. The proposal authors coherent occupational training first",
+  "and then reads the distribution. Roughly 10 effective base Skills remains a design signal, never a",
+  "quota or a minimum: a coherent path at 7-9 is an accepted outcome, and a broader path is accepted",
+  "where it is genuinely justified. A path below 7 is flagged for a coherence review, not marked",
+  "defective.",
+  "",
   "## Counting rules (#250)",
   "",
   "- Deduplicate Skills reachable through several routes on the same path.",
@@ -186,17 +239,22 @@ const breadthLines = [
   ...distributionRows("Approved", analysis.approved.distribution),
   ...distributionRows("Proposal", analysis.proposed.distribution),
   "",
-  "## Paths still below the ~10 design signal",
+  "## Paths flagged for coherence review (below 7)",
   "",
-  analysis.belowTarget.length
+  analysis.reviewPrompts.length
     ? [
         "| Profession | Path | Effective breadth |",
         "| --- | --- | ---: |",
-        ...analysis.belowTarget.map(
+        ...analysis.reviewPrompts.map(
           (row) => `| ${row.professionCode} | ${row.pathName} | ${row.effectiveBreadthNominal} |`,
         ),
       ].join("\n")
     : "None, other than paths explicitly marked narrow by design.",
+  "",
+  "## Direct-grant review",
+  "",
+  `The first draft carried 283 direct Profession Skill grants; ${catalogue.manifest.directSkillOpportunities} remain. ` +
+    "The withdrawals and the reasons for each retention are recorded in the [direct-grant review](./direct-grant-review.md).",
   "",
   "## Paths marked narrow by design",
   "",
@@ -269,6 +327,46 @@ const categoryLines = [
 ];
 writeFileSync(join(outDir, "skill-categories-and-languages-v2.md"), categoryLines.join("\n"));
 
+/* --- Direct-grant review ------------------------------------------------------------------- */
+const grantLines = [
+  "# Direct Profession Skill grants: what was withdrawn and what was kept",
+  "",
+  banner,
+  "",
+  "The first draft of this proposal was authored under breadth pressure and pushed every ordinary path",
+  "to at least ten. The Product Owner inverted that pressure: author coherent occupational training",
+  "first, then read breadth as a diagnostic. This is the honest accounting of the result.",
+  "",
+  `Direct Skill grants: **283 before, ${catalogue.manifest.directSkillOpportunities} after** — ` +
+    `${competencyContentV2DirectGrantDecisions.reduce((sum, row) => sum + row.removedFrom.length, 0)} withdrawn.`,
+  "",
+  "## Policy applied",
+  "",
+  ...competencyContentV2DirectGrantPolicy.map((rule) => `- ${rule}`),
+  "",
+  "## Decisions",
+  "",
+  "| Skill | Withdrawn from | Retained in | Rationale |",
+  "| --- | --- | --- | --- |",
+  ...[...competencyContentV2DirectGrantDecisions]
+    .sort((a, b) => b.removedFrom.length - a.removedFrom.length)
+    .map(
+      (row) =>
+        `| ${name(row.skillId)} | ${row.removedFrom.length ? `${row.removedFrom.length}: ${row.removedFrom.join(", ")}` : "—"} | ${
+          row.retainedIn.length ? `${row.retainedIn.length}: ${row.retainedIn.join(", ")}` : "none"
+        } | ${row.rationale} |`,
+    ),
+  "",
+  "## Effect on the distribution",
+  "",
+  `Median effective breadth moved from ${analysis.approved.median} in the approved catalogue, to 10 in the` +
+    ` first draft, to ${analysis.proposed.median} here. Quartiles are now ${analysis.proposed.lowerQuartile}` +
+    ` and ${analysis.proposed.upperQuartile}. That is the intended shape: most paths sit in the 7-10 range` +
+    " on their own content, and the handful that run wider do so because the occupation genuinely is wide.",
+  "",
+];
+writeFileSync(join(outDir, "direct-grant-review.md"), grantLines.join("\n"));
+
 /* --- Machine-readable companion ------------------------------------------------------------ */
 writeFileSync(
   join(outDir, "competency-content-v2.json"),
@@ -282,8 +380,13 @@ writeFileSync(
         approved: analysis.approved,
         proposed: analysis.proposed,
         proposedWorstCase: analysis.proposedMinimum,
-        belowTarget: analysis.belowTarget,
+        reviewPrompts: analysis.reviewPrompts,
+        narrowByDesignPaths: analysis.narrowByDesignPaths,
       },
+      groupSizes: catalogue.groupSizes,
+      groupSizeDistribution: catalogue.groupSizeDistribution,
+      directGrantPolicy: competencyContentV2DirectGrantPolicy,
+      directGrantDecisions: competencyContentV2DirectGrantDecisions,
       groups: catalogue.groups,
       removedGroups: competencyContentV2RemovedGroups,
       families: catalogue.families,

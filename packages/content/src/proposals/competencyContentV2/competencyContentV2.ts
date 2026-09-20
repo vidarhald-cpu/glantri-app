@@ -19,6 +19,8 @@ import {
   competencyContentV2CategoryByDomain,
   competencyContentV2CategoryOverrides,
   competencyContentV2CivilizationLanguages,
+  competencyContentV2DirectGrantDecisions,
+  competencyContentV2DirectGrantPolicy,
   competencyContentV2Families,
   competencyContentV2LearningGroups,
   competencyContentV2RemovedGroups,
@@ -61,7 +63,15 @@ export interface BreadthDistribution {
   belowTarget: number;
 }
 
-const TARGET_EFFECTIVE_BREADTH = 10;
+/**
+ * The approved authoring signal. It is a design and review signal, never a quota or a minimum:
+ * a coherent path at 7-9 is an accepted outcome, and a broader one is accepted where justified.
+ */
+const EFFECTIVE_BREADTH_SIGNAL = 10;
+/** Below this, a path is flagged for a coherence review — not marked defective. */
+const BREADTH_REVIEW_FLOOR = 7;
+/** Learning Group effective sizes outside this band are reviewed as diagnostics, not corrected on sight. */
+const GROUP_SIZE_REVIEW_BAND: readonly [number, number] = [2, 4];
 
 function fail(message: string): never {
   throw new Error(`Invalid Competency Content V2 proposal: ${message}`);
@@ -88,8 +98,8 @@ export function summarizeBreadth(values: readonly number[]): BreadthDistribution
     mean: sorted.length
       ? Math.round((sorted.reduce((sum, value) => sum + value, 0) / sorted.length) * 100) / 100
       : 0,
-    atOrAboveTarget: sorted.filter((value) => value >= TARGET_EFFECTIVE_BREADTH).length,
-    belowTarget: sorted.filter((value) => value < TARGET_EFFECTIVE_BREADTH).length,
+    atOrAboveTarget: sorted.filter((value) => value >= EFFECTIVE_BREADTH_SIGNAL).length,
+    belowTarget: sorted.filter((value) => value < EFFECTIVE_BREADTH_SIGNAL).length,
   };
 }
 
@@ -195,6 +205,19 @@ export function measureApprovedBaseline(): BreadthPath[] {
 /* Proposal build and deterministic catalogue checks                                            */
 /* ------------------------------------------------------------------------------------------ */
 
+export interface GroupSizeRow {
+  id: string;
+  name: string;
+  disposition: string;
+  /** Skills every learner of the group is charged for. */
+  fixedSize: number;
+  /** Total `chooseCount` across the group's slots: breadth the player selects, not a fixed burden. */
+  slotSize: number;
+  effectiveSize: number;
+  band: "below-band" | "in-band" | "above-band";
+  justification?: string;
+}
+
 export interface CompetencyContentV2Catalogue {
   schemaVersion: typeof COMPETENCY_CONTENT_V2_SCHEMA_VERSION;
   status: typeof COMPETENCY_CONTENT_V2_STATUS;
@@ -202,6 +225,8 @@ export interface CompetencyContentV2Catalogue {
   families: readonly V2Family[];
   paths: BreadthPath[];
   categories: { competencyId: string; name: string; categoryId: V2PlayerFacingCategoryId }[];
+  groupSizes: GroupSizeRow[];
+  groupSizeDistribution: Record<number, number>;
   coverage: {
     baseSkills: number;
     baseSkillsInAGroup: number;
@@ -222,6 +247,9 @@ export interface CompetencyContentV2Catalogue {
     newGroups: number;
     removedGroups: number;
     groupsWithSelectionSlots: number;
+    groupsBelowSizeBand: number;
+    groupsAboveSizeBand: number;
+    maximumFixedGroupBurden: number;
     selectionSlots: number;
     families: number;
     validPaths: number;
@@ -449,6 +477,57 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
     return { competencyId: entry.id, name: entry.name, categoryId };
   });
 
+  for (const decision of competencyContentV2DirectGrantDecisions) {
+    const entry =
+      entries.get(decision.skillId) ??
+      fail(`direct-grant review names unknown Skill ${decision.skillId}`);
+    if (entry.competencyType !== "base-skill")
+      fail(`direct-grant review names ${decision.skillId}, which is not a base Skill`);
+    if (!decision.rationale.trim())
+      fail(`direct-grant review for ${decision.skillId} has no rationale`);
+    for (const code of decision.removedFrom) {
+      const family =
+        competencyContentV2Families.find((candidate) => candidate.code === code) ??
+        fail(`direct-grant review names unknown Profession ${code}`);
+      if ((family.skillIds ?? []).includes(decision.skillId))
+        fail(`${code} still grants ${decision.skillId}, which the review records as withdrawn`);
+    }
+    for (const code of decision.retainedIn) {
+      const family =
+        competencyContentV2Families.find((candidate) => candidate.code === code) ??
+        fail(`direct-grant review names unknown Profession ${code}`);
+      if (!(family.skillIds ?? []).includes(decision.skillId))
+        fail(`${code} no longer grants ${decision.skillId}, which the review records as retained`);
+    }
+  }
+
+  const groupSizes: GroupSizeRow[] = competencyContentV2LearningGroups.map((group) => {
+    const fixedSize = group.fixedSkillIds.length;
+    const slotSize = (group.selectionSlots ?? []).reduce((sum, slot) => sum + slot.chooseCount, 0);
+    const effectiveSize = fixedSize + slotSize;
+    return {
+      id: group.id,
+      name: group.name,
+      disposition: group.disposition,
+      fixedSize,
+      slotSize,
+      effectiveSize,
+      band:
+        effectiveSize < GROUP_SIZE_REVIEW_BAND[0]
+          ? ("below-band" as const)
+          : effectiveSize > GROUP_SIZE_REVIEW_BAND[1]
+            ? ("above-band" as const)
+            : ("in-band" as const),
+      justification: group.note,
+    };
+  });
+  for (const row of groupSizes)
+    if (row.band !== "in-band" && !row.justification)
+      fail(`group ${row.id} sits outside the 2-4 size band with no stated justification`);
+  const groupSizeDistribution: Record<number, number> = {};
+  for (const row of groupSizes)
+    groupSizeDistribution[row.effectiveSize] = (groupSizeDistribution[row.effectiveSize] ?? 0) + 1;
+
   const catalogue = {
     schemaVersion: COMPETENCY_CONTENT_V2_SCHEMA_VERSION,
     status: COMPETENCY_CONTENT_V2_STATUS,
@@ -456,6 +535,8 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
     families: competencyContentV2Families,
     paths,
     categories,
+    groupSizes,
+    groupSizeDistribution,
     coverage: {
       baseSkills: baseSkills.length,
       baseSkillsInAGroup: baseSkills.filter((entry) => groupedSkillIds.has(entry.id)).length,
@@ -486,6 +567,9 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
       groupsWithSelectionSlots: competencyContentV2LearningGroups.filter(
         (g) => (g.selectionSlots?.length ?? 0) > 0,
       ).length,
+      groupsBelowSizeBand: groupSizes.filter((row) => row.band === "below-band").length,
+      groupsAboveSizeBand: groupSizes.filter((row) => row.band === "above-band").length,
+      maximumFixedGroupBurden: groupSizes.reduce((max, row) => Math.max(max, row.fixedSize), 0),
       selectionSlots: competencyContentV2LearningGroups.reduce(
         (sum, g) => sum + (g.selectionSlots?.length ?? 0),
         0,
@@ -506,7 +590,17 @@ export interface CompetencyContentV2Analysis {
   proposedMinimum: BreadthDistribution;
   approvedPaths: BreadthPath[];
   proposedPaths: BreadthPath[];
-  belowTarget: { professionCode: string; pathName: string; effectiveBreadthNominal: number }[];
+  /** Paths below the review floor, excluding those the proposal marks narrow by design. */
+  reviewPrompts: { professionCode: string; pathName: string; effectiveBreadthNominal: number }[];
+  narrowByDesignPaths: {
+    professionCode: string;
+    pathName: string;
+    effectiveBreadthNominal: number;
+  }[];
+  groupSizes: GroupSizeRow[];
+  groupSizeDistribution: Record<number, number>;
+  directGrantPolicy: readonly string[];
+  directGrantDecisions: typeof competencyContentV2DirectGrantDecisions;
 }
 
 export function analyseCompetencyContentV2(): CompetencyContentV2Analysis {
@@ -523,10 +617,10 @@ export function analyseCompetencyContentV2(): CompetencyContentV2Analysis {
     proposedMinimum: summarizeBreadth(catalogue.paths.map((path) => path.effectiveBreadthMinimum)),
     approvedPaths,
     proposedPaths: catalogue.paths,
-    belowTarget: catalogue.paths
+    reviewPrompts: catalogue.paths
       .filter(
         (path) =>
-          path.effectiveBreadthNominal < TARGET_EFFECTIVE_BREADTH &&
+          path.effectiveBreadthNominal < BREADTH_REVIEW_FLOOR &&
           !narrowByDesign.has(path.professionCode),
       )
       .map((path) => ({
@@ -534,8 +628,24 @@ export function analyseCompetencyContentV2(): CompetencyContentV2Analysis {
         pathName: path.pathName,
         effectiveBreadthNominal: path.effectiveBreadthNominal,
       })),
+    narrowByDesignPaths: catalogue.paths
+      .filter((path) => narrowByDesign.has(path.professionCode))
+      .map((path) => ({
+        professionCode: path.professionCode,
+        pathName: path.pathName,
+        effectiveBreadthNominal: path.effectiveBreadthNominal,
+      })),
+    groupSizes: catalogue.groupSizes,
+    groupSizeDistribution: catalogue.groupSizeDistribution,
+    directGrantPolicy: competencyContentV2DirectGrantPolicy,
+    directGrantDecisions: competencyContentV2DirectGrantDecisions,
   };
 }
 
 export const competencyContentV2Catalogue = buildCompetencyContentV2Catalogue();
-export { competencyContentV2CivilizationLanguages, TARGET_EFFECTIVE_BREADTH };
+export {
+  BREADTH_REVIEW_FLOOR,
+  competencyContentV2CivilizationLanguages,
+  EFFECTIVE_BREADTH_SIGNAL,
+  GROUP_SIZE_REVIEW_BAND,
+};

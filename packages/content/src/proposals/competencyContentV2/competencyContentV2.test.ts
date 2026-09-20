@@ -5,15 +5,18 @@ import { targetLearningGroupCatalogue } from "../../skillContentPlatform/targetL
 import { targetProfessionCatalogue } from "../../targetProfessions";
 import {
   analyseCompetencyContentV2,
+  BREADTH_REVIEW_FLOOR,
   buildCompetencyContentV2Catalogue,
   competencyContentV2Catalogue,
+  EFFECTIVE_BREADTH_SIGNAL,
+  GROUP_SIZE_REVIEW_BAND,
   measureApprovedBaseline,
-  TARGET_EFFECTIVE_BREADTH,
 } from "./competencyContentV2";
 import {
   COMPETENCY_CONTENT_V2_RETIRED_CATEGORY_ID,
   COMPETENCY_CONTENT_V2_STATUS,
   competencyContentV2CivilizationLanguages,
+  competencyContentV2DirectGrantDecisions,
   competencyContentV2Families,
   competencyContentV2LearningGroups,
   competencyContentV2RemovedGroups,
@@ -52,7 +55,7 @@ describe("deterministic catalogue checks", () => {
       ...competencyContentV2RemovedGroups.map((group) => group.id),
     ]);
     for (const group of targetLearningGroupCatalogue.groups) expect(accounted).toContain(group.id);
-    expect(catalogue.manifest.removedGroups).toBe(10);
+    expect(catalogue.manifest.removedGroups).toBe(11);
   });
 
   it("preserves the 131 base-Skill catalogue without adding or renaming a Skill", () => {
@@ -90,8 +93,25 @@ describe("deterministic catalogue checks", () => {
     expect(slotCounts.M04).toEqual([1]); // Basic Missile Training
     expect(slotCounts.M05).toEqual([3]); // Advanced Missile Training
     expect(slotCounts.C01).toEqual([1]); // Craft Specialty
-    expect(slotCounts.C02).toEqual([3]); // Advanced Craft Specialty
+    expect(slotCounts.C02).toHaveLength(1); // Advanced Craft Specialty — count deliberately unsettled
     expect(slotCounts.C03).toEqual([2]); // Construction Specialty
+  });
+
+  it("leaves the Advanced Craft Specialty count unresolved rather than settling it by breadth pressure", () => {
+    const advancedCraft = competencyContentV2LearningGroups.find((group) => group.id === "C02")!;
+    const slot = advancedCraft.selectionSlots![0]!;
+    expect(slot.chooseCountStatus).toBe("unresolved-source-conflict");
+    expect(slot.conflictingChooseCounts).toEqual([1, 2, 3]);
+    // The proposal counts the lowest evidenced value so no content depends on the open question.
+    expect(slot.chooseCount).toBe(Math.min(...slot.conflictingChooseCounts!));
+  });
+
+  it("records the approved Advanced Melee count with its conflict kept as provenance", () => {
+    const advancedMelee = competencyContentV2LearningGroups.find((group) => group.id === "M02")!;
+    const slot = advancedMelee.selectionSlots![0]!;
+    expect(slot.chooseCount).toBe(3);
+    expect(slot.chooseCountStatus).toBe("approved");
+    expect(slot.conflictingChooseCounts).toEqual([2, 3]);
   });
 
   it("gives combat alternative weapon families choice slots rather than fixed charges", () => {
@@ -141,7 +161,7 @@ describe("deterministic catalogue checks", () => {
     const midwife = catalogue.paths.find((path) => path.professionCode === "P33")!;
     expect(midwife.reachableSpecializationIds).toContain("obstetrics");
     expect(midwife.fixedSkillIds).toContain("skill:medicine");
-    expect(midwife.effectiveBreadthNominal).toBeGreaterThanOrEqual(TARGET_EFFECTIVE_BREADTH);
+    expect(midwife.effectiveBreadthNominal).toBeGreaterThanOrEqual(BREADTH_REVIEW_FLOOR);
   });
 
   it("does not resolve the blocked or deliberately absent routes", () => {
@@ -215,17 +235,19 @@ describe("quantitative effective-breadth analysis", () => {
 
   it("measures the approved baseline over all 99 valid paths", () => {
     expect(measureApprovedBaseline()).toHaveLength(99);
-    expect(analysis.approved.median).toBeLessThan(TARGET_EFFECTIVE_BREADTH);
+    expect(analysis.approved.median).toBeLessThan(BREADTH_REVIEW_FLOOR);
   });
 
-  it("raises the proposed distribution to the ~10 design signal", () => {
-    expect(analysis.proposed.median).toBeGreaterThanOrEqual(TARGET_EFFECTIVE_BREADTH);
-    expect(analysis.proposed.minimum).toBeGreaterThanOrEqual(9);
+  it("treats the ~10 signal as a diagnostic, not a floor every path must clear", () => {
+    expect(EFFECTIVE_BREADTH_SIGNAL).toBe(10);
     expect(analysis.proposed.paths).toBe(catalogue.manifest.validPaths);
+    expect(analysis.proposed.median).toBeGreaterThanOrEqual(BREADTH_REVIEW_FLOOR);
+    expect(analysis.proposed.median).toBeLessThanOrEqual(EFFECTIVE_BREADTH_SIGNAL);
   });
 
-  it("leaves no unexplained thin package", () => {
-    expect(analysis.belowTarget).toEqual([]);
+  it("leaves no path below the review floor except those marked narrow by design", () => {
+    expect(analysis.reviewPrompts).toEqual([]);
+    expect(analysis.narrowByDesignPaths.length).toBeGreaterThan(0);
   });
 
   it("counts only chooseCount per slot, never the whole candidate pool", () => {
@@ -241,5 +263,56 @@ describe("quantitative effective-breadth analysis", () => {
     const sailor = catalogue.paths.filter((path) => path.professionCode === "P09");
     expect(sailor).toHaveLength(2);
     expect(new Set(sailor.map((path) => path.pathId)).size).toBe(2);
+  });
+});
+
+describe("Learning Group size review", () => {
+  it("has no group outside the 2-4 band without a stated justification", () => {
+    for (const row of catalogue.groupSizes)
+      if (row.band !== "in-band") expect(row.justification?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  it("retired the one-Skill groups the size review found", () => {
+    expect(catalogue.manifest.groupsBelowSizeBand).toBe(0);
+    expect(competencyContentV2LearningGroups.some((group) => group.id === "F16")).toBe(false);
+    const seasonalKitchen = competencyContentV2LearningGroups.find((group) => group.id === "F22")!;
+    expect(seasonalKitchen.fixedSkillIds.length).toBeGreaterThan(1);
+  });
+
+  it("keeps every above-band group advanced, compound or choice-driven", () => {
+    for (const row of catalogue.groupSizes.filter((candidate) => candidate.band === "above-band"))
+      expect(row.slotSize).toBeGreaterThan(0);
+    expect(GROUP_SIZE_REVIEW_BAND).toEqual([2, 4]);
+  });
+
+  it("keeps the fixed purchase burden of any group within reason", () => {
+    expect(catalogue.manifest.maximumFixedGroupBurden).toBeLessThanOrEqual(6);
+  });
+});
+
+describe("direct-grant review", () => {
+  it("records a rationale for every reviewed grant", () => {
+    expect(competencyContentV2DirectGrantDecisions.length).toBeGreaterThan(0);
+    for (const decision of competencyContentV2DirectGrantDecisions) {
+      expect(decision.rationale.trim().length).toBeGreaterThan(0);
+      expect(decision.removedFrom.length + decision.retainedIn.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("matches the authored catalogue exactly", () => {
+    for (const decision of competencyContentV2DirectGrantDecisions) {
+      for (const code of decision.removedFrom) {
+        const family = competencyContentV2Families.find((candidate) => candidate.code === code)!;
+        expect(family.skillIds ?? []).not.toContain(decision.skillId);
+      }
+      for (const code of decision.retainedIn) {
+        const family = competencyContentV2Families.find((candidate) => candidate.code === code)!;
+        expect(family.skillIds ?? []).toContain(decision.skillId);
+      }
+    }
+  });
+
+  it("substantially reduces the direct-grant count", () => {
+    expect(catalogue.manifest.directSkillOpportunities).toBeLessThan(150);
   });
 });

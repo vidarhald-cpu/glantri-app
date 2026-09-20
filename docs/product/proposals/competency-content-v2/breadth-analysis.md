@@ -6,6 +6,14 @@
 > Regenerate with `pnpm --filter @glantri/content exec tsx ./scripts/generateCompetencyContentV2Report.ts`,
 > then run Prettier over this folder.
 
+## How this figure is used
+
+Breadth is a **diagnostic, not a target**. The proposal authors coherent occupational training first
+and then reads the distribution. Roughly 10 effective base Skills remains a design signal, never a
+quota or a minimum: a coherent path at 7-9 is an accepted outcome, and a broader path is accepted
+where it is genuinely justified. A path below 7 is flagged for a coherence review, not marked
+defective.
+
 ## Counting rules (#250)
 
 - Deduplicate Skills reachable through several routes on the same path.
@@ -21,14 +29,14 @@ Both sides of the comparison are measured by the same code path, so the before/a
 | Measure              | Approved catalogue | Proposal (nominal) | Proposal (worst case) |
 | -------------------- | -----------------: | -----------------: | --------------------: |
 | Valid paths          |                 99 |                 96 |                    96 |
-| Minimum              |                  0 |                  9 |                     7 |
-| Lower quartile       |                  1 |                 10 |                    10 |
-| Median               |                  3 |                 10 |                    10 |
-| Upper quartile       |                  7 |                 11 |                    11 |
+| Minimum              |                  0 |                  6 |                     5 |
+| Lower quartile       |                  1 |                  7 |                     7 |
+| Median               |                  3 |                  8 |                     8 |
+| Upper quartile       |                  7 |                 10 |                    10 |
 | Maximum              |                 17 |                 15 |                    14 |
-| Mean                 |               4.39 |              10.73 |                 10.19 |
-| Paths at or above 10 |                 10 |                 95 |                    75 |
-| Paths below 10       |                 89 |                  1 |                    21 |
+| Mean                 |               4.39 |               8.86 |                  8.34 |
+| Paths at or above 10 |                 10 |                 32 |                    28 |
+| Paths below 10       |                 89 |                 64 |                    68 |
 
 The worst-case column assumes every single slot selection duplicates a Skill the path already teaches.
 That never happens by design — no slot offers a Skill its own group already fixes — but it bounds the figure honestly.
@@ -53,19 +61,28 @@ That never happens by design — no slot offers a Skill its own group already fi
 | Approved  |                             13 |           1 |
 | Approved  |                             14 |           1 |
 | Approved  |                             17 |           1 |
-| Proposal  |                              9 |           1 |
-| Proposal  |                             10 |          52 |
-| Proposal  |                             11 |          25 |
-| Proposal  |                             12 |          12 |
-| Proposal  |                             13 |           4 |
-| Proposal  |                             15 |           2 |
+| Proposal  |                              6 |           1 |
+| Proposal  |                              7 |          26 |
+| Proposal  |                              8 |          23 |
+| Proposal  |                              9 |          14 |
+| Proposal  |                             10 |          14 |
+| Proposal  |                             11 |          10 |
+| Proposal  |                             12 |           4 |
+| Proposal  |                             13 |           2 |
+| Proposal  |                             14 |           1 |
+| Proposal  |                             15 |           1 |
 
-## Paths still below the ~10 design signal
+## Paths flagged for coherence review (below 7)
 
 None, other than paths explicitly marked narrow by design.
 
+## Direct-grant review
+
+The first draft carried 283 direct Profession Skill grants; 119 remain. The withdrawals and the reasons for each retention are recorded in the [direct-grant review](./direct-grant-review.md).
+
 ## Paths marked narrow by design
 
-| Profession            | Path           | Effective breadth | Why the narrowness is legitimate                                                                  |
-| --------------------- | -------------- | ----------------: | ------------------------------------------------------------------------------------------------- |
-| P82 Weapon Instructor | Fencing master |                 9 | The fencing-master path is deliberately narrow: a single named tradition is the whole occupation. |
+| Profession            | Path                  | Effective breadth | Why the narrowness is legitimate                                                                  |
+| --------------------- | --------------------- | ----------------: | ------------------------------------------------------------------------------------------------- |
+| P82 Weapon Instructor | Fencing master        |                 6 | The fencing-master path is deliberately narrow: a single named tradition is the whole occupation. |
+| P82 Weapon Instructor | Missile weapon master |                 8 | The fencing-master path is deliberately narrow: a single named tradition is the whole occupation. |
