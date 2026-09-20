@@ -184,9 +184,22 @@ Its declaration context should expose:
 - a structured utterance-type selector; and
 - a short text field containing what the character says.
 
-This is a declaration aid, not a separate communications subsystem. The exact
-utterance-type vocabulary is not yet approved and must not be invented during
-implementation.
+This is a declaration aid, not a separate communications subsystem.
+
+The approved utterance-type vocabulary is:
+
+- **Speak**;
+- **Shout**;
+- **Whisper**; and
+- **Other**.
+
+The selector is accompanied by the short text field containing what the
+character says.
+
+These utterance types are roleplay and declaration structure only. They carry no
+automatic mechanical effect: they do not modify rolls, initiative, detection, or
+any other resolved combat value. A GM may still adjudicate consequences in play,
+as with any other declared intent.
 
 ### 4.4 Equip / Unequip
 
