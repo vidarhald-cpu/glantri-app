@@ -7,6 +7,11 @@ who coordinates, where substantial work runs, how Forgejo state advances, and
 where evidence becomes durable. Detailed procedures remain in the linked
 owning documents rather than being duplicated here.
 
+The canonical provider-neutral execution policy every worker reads is
+[`../../AGENTS.md`](../../AGENTS.md). This document is primarily an
+Orchestrator/control-plane reference and is not mandatory startup reading for
+ordinary workers; a worker reads it only when its dispatch packet names it.
+
 Current Git and case-management authority is the loopback-only Forgejo
 repository `recovery-admin/glantri-app`. Repository policy and Forgejo evidence
 control execution. Chat coordinates work but is not the sole durable authority.
@@ -101,9 +106,10 @@ prior FAIL for repair, complete handoff tuple, and no duplicate active QA owner.
 The independent QA worker—not the Development Orchestrator—owns substantive
 topology, scope, and delta verification.
 
-It coordinates the required visible lanes directly. Hidden helpers cannot
-replace a substantial Builder, dispatched Investigator/Ops task, or independent
-QA task.
+It coordinates the required execution lanes directly, on the substrate
+authorized in [`../../AGENTS.md`](../../AGENTS.md). A helper agent operating
+inside another lane's context never replaces a substantial Builder, a dispatched
+Investigator/Ops lane, or independent QA.
 
 The Development Orchestrator does not author tracked repository content. Code,
 tests, documentation, rules, architecture, and process content all reach the
@@ -122,8 +128,11 @@ Builders receive the complete bounded authority in their authorized contract:
 implementation, verification, commit, task-branch push, draft-PR publication,
 evidence, and in-scope repair continuation. Bounded Investigators/Ops workers
 answer or diagnose only their authorized question. Independent QA reviews an
-immutable result in a different visible task and never repairs Builder work.
-All substantial execution runs visibly in `Glantri app — Forgejo`.
+immutable result in a context isolated from the Builder's and never repairs
+Builder work. Attended substantial execution normally runs visibly in
+`Glantri app — Forgejo`; the authorized substrate alternatives are defined in
+[`../../AGENTS.md`](../../AGENTS.md) under "Execution substrate and independence",
+including the mandatory QA floor.
 
 ## Canonical workflow
 
@@ -228,32 +237,77 @@ and handoff mechanics live in [`agent-execution.md`](./agent-execution.md), the
 compact [`qa-execution.md`](./qa-execution.md), and
 [`../dev-database.md`](../dev-database.md).
 
-## Visible threads and dispatch evidence
+## Dispatch substrate and execution evidence
 
-Substantial Builder, bounded Investigator, and independent-QA work requires
-separate visible tasks. Builder and QA for one result must never be the same
-task. Hidden sub-agents may assist minor orchestration mechanics only; they do
-not satisfy a required lane.
+Substantial Builder, bounded Investigator, and independent-QA work runs on the
+substrate authorized in
+[`../../AGENTS.md`](../../AGENTS.md): attended substantial Builders normally use
+separate visible sessions; explicitly authorized unattended Builders may use
+fresh background/subagent contexts for bounded, durably recorded tasks; and a
+fresh background/subagent context sharing no Builder conversational history is
+normal independent QA. Builder and QA for one result must never share a context,
+and a helper agent inside the Builder's implementation context never satisfies
+the QA lane. The mandatory QA floor there is not downgradable on cost grounds.
 
-For every visible lane, the Development Orchestrator maintains one durable
+The actual substrate must be stated accurately in dispatch evidence. **A
+background subagent must not be recorded or reported as a separate visible
+session.**
+
+For every lane, the Development Orchestrator maintains one durable
 execution-ledger record keyed by `issue + role + mode + exact SHA`, containing:
 
 - project, provisioning root, verified origin and common Git directory;
 - role;
 - applicable Forgejo issue;
 - parent task and provisioning request ID;
-- mandatory resolved visible thread ID;
+- the actual execution substrate, stated accurately;
+- the mandatory resolved visible thread ID or background agent/session ID;
 - a separate direct link whenever the client exposes one;
 - leased worktree and lease state;
 - applicable branch;
 - accepted baseline, requested SHA and independently observed `HEAD`;
 - recovery/replacement and repair-cycle counts;
-- liveness state, owner, last meaningful progress, and next action.
+- liveness state, owner, last meaningful progress, and next action;
+- approximate token usage and task class, so fresh-versus-resume rests on
+  observed context size rather than estimation. The minimal form suffices:
+  `agent <id> - <model>/<effort> - ~<n>k tokens - <task class> - resume: yes/no`.
 
-The thread ID is required once the task materializes. A request without a task
-ID remains pending, not proven lost. A direct link never substitutes for the
-task ID. Validate all returns against the correlation key and recorded lease;
+The thread or agent ID is required once the task materializes. A request without
+an ID remains pending, not proven lost. A direct link never substitutes for the
+ID. Validate all returns against the correlation key and recorded lease;
 quarantine another issue/role/mode/SHA as a routing mismatch.
+
+QA verdicts name the exact PR head SHA verified. Where the QA agent can post as
+`glantri-qa`, it does. Where the Orchestrator must relay, it posts under
+`glantri-orchestrator` and identifies the comment explicitly as a relay from
+independent QA subagent `<id>`. **QA provenance is never impersonated.**
+
+### Visible-Builder launch packet
+
+A dispatched Builder packet is complete when the Product Owner needs only to
+open the session, select the supplied worktree, choose the recommended model and
+effort, and paste the packet. The Orchestrator pre-creates the worktree, and the
+packet states literal model and effort values. The durable minimum is:
+
+- the Forgejo issue;
+- the role;
+- the execution substrate;
+- the recommended model;
+- the recommended effort;
+- the exact accepted baseline branch and SHA;
+- the pre-created worktree path;
+- the branch;
+- the minimal required reading, as exact documents or sections;
+- the exact owned files, paths and reserved hotspots;
+- the complete self-contained prompt, depending on no chat history;
+- acceptance criteria;
+- verification, including explicit base SHAs for changed-file gates;
+- stop conditions; and
+- Git and PR authority, stated as granted or withheld.
+
+QA packets carry the equivalent minimum plus the immutable candidate head, and
+for preservation or other mechanically specifiable verification they enumerate
+the exact proofs required.
 
 ### Continuation-first and worktree leases
 
@@ -269,7 +323,8 @@ owns binding/direct-access checks, proven-orphan cleanup and verified terminal
 retirement. Unknown child existence blocks replacement. Reconcile delayed
 duplicates, retain one owner, harvest unique results and terminally retire the
 others before releasing leases. Manual visible fallback requires explicit
-authorization; hidden substitutes never fulfill a required lane.
+authorization; a helper agent inside another lane's context never fulfills a
+required lane.
 
 One initial attempt plus at most **two automatic recovery/replacement attempts**
 (**three total**) is allowed, with one live attempt at a time. Stop earlier after
@@ -297,7 +352,7 @@ and includes the outcome in its consolidated return. The Product Owner is not
 expected to monitor child tasks.
 
 At `Ready for Independent QA`, the Development Orchestrator dispatches one
-fresh separate visible QA task with the immutable INITIAL, REPAIR, or PRESERVATION contract.
+fresh independent QA context, isolated from the Builder's, with the immutable INITIAL, REPAIR, or PRESERVATION contract.
 It supervises that exact child, harvests its result, records durable evidence,
 and routes the outcome. The QA worker independently verifies the exact head,
 topology, scope, and actual delta; any tuple mismatch produces a quick
@@ -454,6 +509,9 @@ separately dispatched product orders authorize that work.
 
 This document owns the high-level operating map. Details stay with:
 
+- [`../../AGENTS.md`](../../AGENTS.md): the canonical provider-neutral execution
+  policy read by every worker, including execution substrate, the mandatory QA
+  floor, required reading, and cost-aware execution;
 - [`control-plane.md`](./control-plane.md): durable authority, tooling,
   governance, sources of truth, and integration policy;
 - [`task-contract.md`](./task-contract.md): self-contained contract and

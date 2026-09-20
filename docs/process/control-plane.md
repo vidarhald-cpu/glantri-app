@@ -193,18 +193,20 @@ areas are kept in the
 
 ## Visible execution and standing authority
 
-Visible-lane requirements, mandatory dispatch evidence, completion harvesting,
+Execution-lane requirements, mandatory dispatch evidence, completion harvesting,
 direct Development-Orchestrator-to-independent-QA routing, standing execution
 authority, return gates, and the concurrency ceiling are defined in the
-[canonical operating model](./development-operating-model.md#visible-threads-and-dispatch-evidence).
-The detailed isolated execution and exact return formats remain in
-[`agent-execution.md`](./agent-execution.md).
+[canonical operating model](./development-operating-model.md#dispatch-substrate-and-execution-evidence).
+The authorized execution substrate and the mandatory QA floor are defined in
+[`../../AGENTS.md`](../../AGENTS.md). The detailed isolated execution and exact
+return formats remain in [`agent-execution.md`](./agent-execution.md).
 
 These linked rules are mandatory: substantial Builder/Investigator and
-independent-QA work uses separate visible tasks in `Glantri app — Forgejo`; a
-thread ID is always recorded; hidden helpers do not satisfy a lane; the
-Development Orchestrator harvests every child result; and the Product Owner is
-not expected to relay QA prompts or notice completion manually.
+independent-QA work runs on an authorized substrate, isolated from the lane it
+reviews; the actual substrate and the thread or agent ID are always recorded
+accurately; a helper agent inside another lane's context does not satisfy a
+lane; the Development Orchestrator harvests every child result; and the Product
+Owner is not expected to relay QA prompts or notice completion manually.
 
 ### Standing task-provisioning recovery authority
 
