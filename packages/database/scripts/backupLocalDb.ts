@@ -1,9 +1,9 @@
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+import { streamDumpToFile } from "../src/streamingPgDump";
 import { assertWorktreeDatabaseRuntimeSafety } from "../src/worktreeDatabaseRuntimeSafety";
 
 function loadDatabaseEnv(): void {
@@ -30,24 +30,6 @@ function getRequiredDatabaseUrl(): string {
 
 function buildTimestamp(date: Date): string {
   return date.toISOString().replace(/[:.]/g, "-");
-}
-
-function runDumpCommand(
-  command: string,
-  args: string[],
-  env: NodeJS.ProcessEnv,
-): { error?: NodeJS.ErrnoException | null; status: number | null; stderr: string; stdout: Buffer } {
-  const result = spawnSync(command, args, {
-    env,
-    encoding: "buffer",
-  });
-
-  return {
-    error: result.error,
-    status: result.status,
-    stderr: Buffer.from(result.stderr ?? []).toString("utf8"),
-    stdout: Buffer.from(result.stdout ?? []),
-  };
 }
 
 async function main(): Promise<void> {
@@ -90,13 +72,17 @@ async function main(): Promise<void> {
     "--no-privileges",
   ];
 
-  const localDump = runDumpCommand("pg_dump", dumpArgs, {
-    ...process.env,
-    PGPASSWORD: password,
+  const localDump = await streamDumpToFile({
+    args: dumpArgs,
+    command: "pg_dump",
+    destination: backupFile,
+    env: {
+      ...process.env,
+      PGPASSWORD: password,
+    },
   });
 
-  let dumpOutput = localDump.stdout;
-  let dumpError = localDump.stderr;
+  let bytesWritten = localDump.bytesWritten;
 
   if (localDump.error?.code === "ENOENT") {
     const container = worktreeEnvironment?.container ?? "glantri-postgres";
@@ -111,31 +97,34 @@ async function main(): Promise<void> {
 
       return argument;
     });
-    const dockerDump = runDumpCommand(
-      "docker",
-      ["exec", "-e", `PGPASSWORD=${password}`, container, "pg_dump", ...dockerDumpArgs],
-      process.env,
-    );
-
-    dumpOutput = dockerDump.stdout;
-    dumpError = dockerDump.stderr;
+    const dockerDump = await streamDumpToFile({
+      args: ["exec", "-e", `PGPASSWORD=${password}`, container, "pg_dump", ...dockerDumpArgs],
+      command: "docker",
+      destination: backupFile,
+      env: process.env,
+    });
 
     if (dockerDump.error) {
       throw dockerDump.error;
     }
 
     if (dockerDump.status !== 0) {
-      throw new Error(dumpError || "Docker pg_dump backup failed.");
+      throw new Error(dockerDump.stderr || "Docker pg_dump backup failed.");
     }
+
+    bytesWritten = dockerDump.bytesWritten;
   } else if (localDump.error) {
     throw localDump.error;
   } else if (localDump.status !== 0) {
-    throw new Error(dumpError || "pg_dump backup failed.");
+    throw new Error(localDump.stderr || "pg_dump backup failed.");
   }
 
-  await writeFile(backupFile, dumpOutput);
+  if (bytesWritten <= 0) {
+    await rm(backupFile, { force: true });
+    throw new Error("pg_dump produced an empty backup; refusing to present it as a valid backup.");
+  }
 
-  console.log(`Local database backup written to ${backupFile}`);
+  console.log(`Local database backup written to ${backupFile} (${bytesWritten} bytes)`);
 }
 
 main().catch((error: unknown) => {

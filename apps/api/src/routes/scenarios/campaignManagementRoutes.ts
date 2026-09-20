@@ -8,6 +8,7 @@ import {
   CampaignService,
 } from "@glantri/database";
 import {
+  campaignNoteAssociationsSchema,
   campaignNoteReferenceSchema,
   campaignNoteStatusSchema,
   type CampaignNoteReference,
@@ -21,6 +22,14 @@ const campaignManagementService = new CampaignManagementService();
 
 function parseOptionalReference(value: unknown): CampaignNoteReference | undefined {
   return value == null ? undefined : campaignNoteReferenceSchema.parse(value);
+}
+
+/**
+ * Absent `associations` means the caller did not express associations at all, so the
+ * legacy single `reference` field still applies. An explicit empty array clears them.
+ */
+function parseOptionalAssociations(value: unknown): CampaignNoteReference[] | undefined {
+  return value === undefined ? undefined : campaignNoteAssociationsSchema.parse(value);
 }
 
 function sendNoteError(reply: FastifyReply, error: unknown) {
@@ -78,6 +87,7 @@ export const campaignManagementRoutes: FastifyPluginAsync = async (app) => {
       const body = parseBodyObject(request.body, "Campaign note payload");
       const note = await campaignManagementService.createNote({
         actorUserId: access.user.id,
+        associations: parseOptionalAssociations(body.associations),
         campaignId: access.campaignId,
         content: parseRequiredString(body, "content"),
         reference: parseOptionalReference(body.reference),
@@ -96,6 +106,7 @@ export const campaignManagementRoutes: FastifyPluginAsync = async (app) => {
       const body = parseBodyObject(request.body, "Campaign note payload");
       const note = await campaignManagementService.updateNote({
         actorUserId: access.user.id,
+        associations: parseOptionalAssociations(body.associations),
         campaignId: access.campaignId,
         content: parseRequiredString(body, "content"),
         expectedRevision: parseRequiredString(body, "expectedRevision"),

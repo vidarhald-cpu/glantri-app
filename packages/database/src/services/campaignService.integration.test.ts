@@ -1,5 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
+import { encounterSessionSchema } from "@glantri/domain";
+
 import { createPrismaCharacterRepository } from "../repositories/characterRepository";
 import { createPrismaCampaignNoteRepository } from "../repositories/campaignNoteRepository";
 import { createPrismaEncounterRepository } from "../repositories/encounterRepository";
@@ -149,6 +151,145 @@ if (!process.env.DATABASE_URL_TEST) {
       await expect(
         prisma!.campaignNote.count({ where: { campaignId: campaign.id } }),
       ).resolves.toBe(1);
+    });
+
+    it("round-trips multiple Campaign-scoped associations, custom tags, and legacy single-reference Notes", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const otherGm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const repository = createPrismaScenarioRepository(prisma!);
+      const campaignService = new CampaignService(repository);
+      const scenarioService = new ScenarioService(repository);
+      const encounterService = new EncounterService(
+        createPrismaEncounterRepository(prisma!),
+        repository,
+      );
+      const noteRepository = createPrismaCampaignNoteRepository(prisma!);
+      const service = new CampaignManagementService(
+        noteRepository,
+        campaignService,
+        scenarioService,
+        encounterService,
+      );
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Associated Notes",
+      });
+      const scenario = await scenarioService.createScenario({
+        campaignId: campaign.id,
+        name: "Western Gate",
+      });
+      const encounter = await encounterService.createEncounter({
+        scenarioId: scenario.id,
+        session: encounterSessionSchema.parse({
+          actionLog: [],
+          createdAt: "2026-09-20T10:00:00.000Z",
+          currentRound: 1,
+          id: `encounter-${scenario.id}`,
+          kind: "roleplay",
+          participants: [],
+          scenarioId: scenario.id,
+          status: "draft",
+          title: "Gate Skirmish",
+          updatedAt: "2026-09-20T10:00:00.000Z",
+        }),
+      });
+      const foreignCampaign = await campaignService.createCampaign({
+        gmUserId: otherGm.id,
+        name: "Foreign Campaign",
+      });
+      const foreignScenario = await scenarioService.createScenario({
+        campaignId: foreignCampaign.id,
+        name: "Foreign Scenario",
+      });
+
+      const created = await service.createNote({
+        actorUserId: gm.id,
+        associations: [
+          { id: scenario.id, label: "Client label is not authoritative", type: "scenario" },
+          { id: encounter.id, label: "Gate Skirmish", type: "encounter" },
+          { id: "ignored", label: "  Loose   End ", type: "tag" },
+        ],
+        campaignId: campaign.id,
+        content: "Several contexts at once.",
+      });
+      expect(created.associations).toEqual([
+        { id: scenario.id, label: scenario.name, type: "scenario" },
+        { id: encounter.id, label: "Gate Skirmish", scenarioId: scenario.id, type: "encounter" },
+        { id: "loose end", label: "Loose End", type: "tag" },
+      ]);
+      // The legacy single-reference columns keep mirroring the first object association.
+      expect(created.reference).toEqual({
+        id: scenario.id,
+        label: scenario.name,
+        type: "scenario",
+      });
+      await expect(noteRepository.getById(created.id)).resolves.toMatchObject({
+        associations: created.associations,
+      });
+
+      // Editing rewrites the whole association set.
+      const edited = await service.updateNote({
+        actorUserId: gm.id,
+        associations: [{ id: "ignored", label: "Rumour", type: "tag" }],
+        campaignId: campaign.id,
+        content: "Only a tag now.",
+        expectedRevision: created.updatedAt,
+        noteId: created.id,
+      });
+      expect(edited.associations).toEqual([{ id: "rumour", label: "Rumour", type: "tag" }]);
+      expect(edited.reference).toBeUndefined();
+      await expect(
+        prisma!.campaignNoteAssociation.count({ where: { noteId: created.id } }),
+      ).resolves.toBe(1);
+
+      // Fail closed: one foreign association rejects the whole write.
+      await expect(
+        service.updateNote({
+          actorUserId: gm.id,
+          associations: [
+            { id: scenario.id, label: scenario.name, type: "scenario" },
+            { id: foreignScenario.id, label: foreignScenario.name, type: "scenario" },
+          ],
+          campaignId: campaign.id,
+          content: "Do not cross campaigns.",
+          expectedRevision: edited.updatedAt,
+          noteId: created.id,
+        }),
+      ).rejects.toBeInstanceOf(CampaignNoteReferenceError);
+      await expect(noteRepository.getById(created.id)).resolves.toMatchObject({
+        associations: [{ id: "rumour", label: "Rumour", type: "tag" }],
+        content: "Only a tag now.",
+      });
+
+      // A Note stored the legacy way, with no association row, stays readable.
+      const legacy = await prisma!.campaignNote.create({
+        data: {
+          campaignId: campaign.id,
+          content: "Legacy single-reference Note.",
+          createdByUserId: gm.id,
+          referenceId: scenario.id,
+          referenceLabelSnapshot: scenario.name,
+          referenceType: "scenario",
+          updatedByUserId: gm.id,
+        },
+      });
+      await expect(noteRepository.getById(legacy.id)).resolves.toMatchObject({
+        associations: [{ id: scenario.id, label: scenario.name, type: "scenario" }],
+        reference: { id: scenario.id, label: scenario.name, type: "scenario" },
+      });
+
+      const overview = await service.getOverview(campaign.id);
+      expect(overview?.tags).toEqual([{ id: "rumour", label: "Rumour", type: "tag" }]);
+      expect(overview?.references).toEqual(
+        expect.arrayContaining([
+          {
+            id: encounter.id,
+            label: "Gate Skirmish",
+            scenarioId: scenario.id,
+            type: "encounter",
+          },
+        ]),
+      );
     });
 
     it("rejects a stale Note edit without overwrite and accepts a refreshed retry", async () => {
