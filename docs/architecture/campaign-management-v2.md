@@ -72,6 +72,11 @@ screens.
 This removes duplicated navigation without transferring runtime authority into
 Campaign Management.
 
+The successor
+[Scenario Play Workspace](scenario-play-workspace.md) contract extends this
+ruling to the in-play surface: the Scenario surface is the canonical play
+workspace and the active Encounter is contextual state within it.
+
 ## 4. Campaign log and history
 
 Campaign history remains available but secondary to current GM work.
@@ -209,7 +214,10 @@ The only currently approved Blackboard correction is:
 > being used.**
 
 Broader Blackboard product work remains deferred until actual use establishes a
-concrete need.
+concrete need. The
+[Scenario Play Workspace §8](scenario-play-workspace.md#8-blackboard-boundary)
+contract states a non-mutation boundary for Blackboard projection in play; it
+is a boundary statement, not a redesign, and this deferral stands.
 
 ## 10. Controlling V2 principles
 
