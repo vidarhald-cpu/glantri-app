@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
-import { basename, dirname } from "node:path";
+import { basename, resolve } from "node:path";
 
 import {
+  ownerDatabasePrefix,
   validateTaskDatabaseEnvironment,
   type TaskDatabaseEnvironment,
   type ValidatedTaskDatabaseEnvironment,
@@ -34,16 +36,24 @@ export interface ValidatedCurrentWorktreeTaskDatabaseEnvironment extends Validat
 }
 
 function normalizeWorktreeKey(repositoryRoot: string): string {
-  const key = basename(dirname(repositoryRoot))
+  // The key must uniquely identify this worktree's own filesystem location, not just its
+  // parent directory: sibling worktrees for the same issue (for example a Builder at
+  // /private/tmp/glantri-260-builder and QA at /private/tmp/glantri-260-qa) share a parent
+  // directory but must never collide on owner marker, container name, or port. A directory
+  // basename alone is also not sufficient (two worktrees can share a leaf name under
+  // different parents, as in a `.../<random>/glantri-app-forgejo` layout), so the key
+  // combines a human-readable label with a short digest of the full resolved path, which is
+  // guaranteed distinct for any two distinct worktree locations.
+  const resolvedRoot = resolve(repositoryRoot);
+  const label = basename(resolvedRoot)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+  // The digest is always a fixed-length 8 hex-character SHA-256 prefix, so it (and therefore
+  // the combined key) can never be empty; there is no reachable failure mode here to guard.
+  const digest = createHash("sha256").update(resolvedRoot).digest("hex").slice(0, 8);
 
-  if (!key) {
-    throw new Error("Unable to derive a stable identity for the current linked worktree.");
-  }
-
-  return key;
+  return label ? `${label}-${digest}` : digest;
 }
 
 export function deriveCurrentWorktreeTaskDatabaseIdentity(
@@ -58,14 +68,19 @@ export function deriveCurrentWorktreeTaskDatabaseIdentity(
 
   const worktreeKey = normalizeWorktreeKey(repositoryRoot);
   const owner = `issue-${normalizedTask}-${worktreeKey}`;
-  const databaseOwner = owner.replace(/[^a-z0-9]+/g, "_");
+  // Container names and ports are not subject to PostgreSQL's 63-byte identifier limit, so the
+  // container keeps the full, untruncated owner for readability. Database names go through
+  // `ownerDatabasePrefix`, the single shared derivation also used by `validateTaskDatabaseEnvironment`,
+  // which truncates only the human-readable label and always preserves the trailing worktree
+  // digest that guarantees distinctness between worktrees (see databaseTargetSafety.ts).
+  const applicationDatabase = ownerDatabasePrefix(owner);
 
   return {
-    applicationDatabase: `glantri_task_${databaseOwner}`,
+    applicationDatabase,
     container: `glantri-task-${owner}-pg16`,
     owner,
     task: normalizedTask,
-    testDatabase: `glantri_task_${databaseOwner}_test`,
+    testDatabase: `${applicationDatabase}_test`,
     worktreeKey,
   };
 }

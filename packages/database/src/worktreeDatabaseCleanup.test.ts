@@ -52,7 +52,7 @@ describe("owned task database cleanup", () => {
       "rm",
       "--force",
       "--volumes",
-      "glantri-task-issue-55-glantri-55-cleanup-pg16",
+      validated.container,
     ]);
   });
 
