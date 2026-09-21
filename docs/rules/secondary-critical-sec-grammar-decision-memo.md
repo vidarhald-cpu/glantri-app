@@ -1,14 +1,25 @@
 # Secondary Critical `Sec` grammar — Product Owner decision memo
 
-Status: decision aid; not a ruling. No record exists yet under `docs/decisions/rules/` for these
-four questions, and none should be added until the Product Owner decides.
+**Status: RESOLVED. This memo is preserved as decision provenance, not as an open decision aid.**
+All four questions below were decided by the Product Owner's ruling on Forgejo #223, "PRODUCT OWNER
+RULING — Secondary Criticals, all four questions settled" (2026-09-21). That ruling amended
+[Rule decision 0006](../decisions/rules/0006-secondary-critical-resolution.md) and is fully recorded
+in [Secondary Critical `Sec` grammar reconciliation](./secondary-critical-sec-grammar.md), which is
+the current rule-authoritative document. **Read that document, and decision 0006 as amended, for the
+settled rules — not this memo.** This page keeps the original per-question evidence, alternatives,
+and reasoning below unedited (except this notice and the per-question resolution lines added just
+beneath each question's heading), because that reasoning — in particular why the weapon-anchored
+reading would have required amending 0006 §2, and why reusing the Primary's hit location was the
+better-supported tie-break — is exactly what the ruling adopted, and is useful history for anyone
+asking "why was it decided this way."
 
-Authority: [Rule decision 0006](../decisions/rules/0006-secondary-critical-resolution.md) (approved,
-integrated) settled trigger, grade-reduction shape, and roll. It explicitly deferred the exact `Sec`
-grammar. That deferred reconciliation was completed as evidence in Forgejo #223 PR
+Authority (historical, at the time this memo was written): [Rule decision 0006](../decisions/rules/0006-secondary-critical-resolution.md)
+(approved, integrated) settled trigger, grade-reduction shape, and roll. It explicitly deferred the
+exact `Sec` grammar. That deferred reconciliation was completed as evidence in Forgejo #223 PR
 [#269](http://127.0.0.1:3001/recovery-admin/glantri-app/pulls/269) (branch `codex/223-sec-grammar`,
 head `e1b4cceb39598e164c2abff6a1ea2fd0111e6fef`, not yet merged to `dev` at the time of this memo).
-This memo does not restate that reconciliation; it presents its four open questions for a decision.
+This memo did not restate that reconciliation; it presented its four open questions for a decision.
+Both PR #269 and this memo's PR #273 have since been reconciled onto branch `codex/223-sec-grammar`.
 
 Portfolio: Forgejo #111 Criticals / Injury.
 
@@ -37,6 +48,12 @@ grade-reduction readings disagree:
 ---
 
 ## Q1 — Reduction anchor: weapon-anchored vs constant-`F`
+
+> **Resolved.** Neither alternative below is what was ruled. The table columns are maxima: `Crit 1`
+> caps the Primary grade and the `Sec` first character caps the Secondary grade. The reduction
+> itself is a universal, weapon-independent two-grade-step applied to the resolved Primary grade,
+> and the `Sec` first character then caps the result. See
+> [Secondary Critical `Sec` grammar reconciliation §3](./secondary-critical-sec-grammar.md#3-grade-reduction-and-capping-resolved).
 
 **Source evidence.** `Weapon1!Q` (`Second crit.`) is populated in twelve rows; no workbook formula
 reads column `Q` (widest ranges stop at column `P`: `Calculations!AI17`, `C17`, `N17`, `O17`;
@@ -93,6 +110,9 @@ preference this memo does not have standing to make.
 
 ## Q2 — Recognized grammar: full 12-code matrix vs six attested codes
 
+> **Resolved.** Reading B (attested-only). The six attested codes `AP, AC, AS, BS, CC, DC` are
+> recognized; unknown codes fail closed; future content may explicitly add codes.
+
 **Source evidence.** `Weapon1!Q` contains exactly six distinct values across its twelve populated
 cells: `AP` (`Q15`), `AC` (`Q18`, `Q19`), `AS` (`Q28`, `Q29`), `BS` (`Q30`), `CC` (`Q20`), `DC`
 (`Q22`, `Q24`, `Q32`, `Q33`, `Q35`). Grade letters observed are only `A`–`D`; family letters observed
@@ -130,6 +150,11 @@ either way from the current weapon table, since no weapon yet exercises the disp
 ---
 
 ## Q3 — Scope: is melee-only deliberate?
+
+> **Resolved.** Secondary Critical content applies only where an authored recognized `Sec` value
+> exists, so the present source is melee-only. This is stated explicitly as **not a permanent
+> prohibition** on future missile or other non-melee Secondary Critical authoring — a middle
+> position between Reading A and Reading B below.
 
 **Source evidence.** `Weapon1` (melee) has a `Second crit.` column (`Q`). `Weapon2` (missile/ammo)
 does not: its header row is `Weapon2!A1:K1` = `Weapon, Skill, OB 1, DMB 1, Parry%, Initiativ, Range,
@@ -173,6 +198,10 @@ missile/ammo Secondary Criticals at all.
 ---
 
 ## Q4 — Hit location: does the Secondary reuse the Primary's location?
+
+> **Resolved as Reading A (reuse), matching this memo's weak recommendation below.** The Secondary
+> Critical reuses the Primary Critical's hit location. Only the Critical result uses a fresh
+> independent 2d8. See decision 0006 §4 (added by its 2026-09-21 amendment).
 
 **Source evidence.** Decision 0006 §5 rules a fresh independent 2d8 for the Secondary Critical's
 _result_ roll, but is silent on hit **location**. Location is one of the three axes of the catalogue
@@ -225,26 +254,30 @@ reasonably choose Reading B instead.
 
 ---
 
-## Summary table
+## Summary table (historical — see resolutions above and in the linked ruling)
 
-| #   | Question         | Divergence example                         | Requires amending 0006?                     | Recommendation                 |
-| --- | ---------------- | ------------------------------------------ | ------------------------------------------- | ------------------------------ |
-| Q1  | Reduction anchor | Hatchet 3 vs 5; Wood axe 4 vs 5            | Weapon-anchored: yes (§2). Constant-`F`: no | None                           |
-| Q2  | Grammar scope    | Only affects future unattested codes       | No                                          | None                           |
-| Q3  | Melee-only scope | Only affects future missile/ammo authoring | No                                          | None                           |
-| Q4  | Hit location     | Same vs different location per attack      | No (fills a gap, doesn't contradict)        | Weak: reuse Primary's location |
+| #   | Question         | Divergence example                         | Requires amending 0006?                     | Recommendation (then)          | Ruling                                     |
+| --- | ---------------- | ------------------------------------------ | ------------------------------------------- | ------------------------------ | ------------------------------------------ |
+| Q1  | Reduction anchor | Hatchet 3 vs 5; Wood axe 4 vs 5            | Weapon-anchored: yes (§2). Constant-`F`: no | None                           | Neither: maxima + universal two-step + cap |
+| Q2  | Grammar scope    | Only affects future unattested codes       | No                                          | None                           | Attested-only (Reading B)                  |
+| Q3  | Melee-only scope | Only affects future missile/ammo authoring | No                                          | None                           | Melee-only now, not a permanent boundary   |
+| Q4  | Hit location     | Same vs different location per attack      | No (fills a gap, doesn't contradict)        | Weak: reuse Primary's location | Reuse Primary's location                   |
 
 ## Verification and traceability
 
 - Portfolio: Forgejo #111 Criticals / Injury.
-- Source reconciliation: PR #269 (branch `codex/223-sec-grammar`), `docs/rules/secondary-critical-sec-grammar.md`.
-- Rule authority for settled matters: [decision 0006](../decisions/rules/0006-secondary-critical-resolution.md).
-- Open-question record: [Ambiguity Log](./ambiguity-log.md), "Secondary Critical `Sec` Grammar" entry.
-- Issue: Forgejo #223 and its comment thread.
+- Source reconciliation: `docs/rules/secondary-critical-sec-grammar.md` (now the current rule
+  document, reconciled onto this same branch).
+- Rule authority for settled matters: [decision 0006](../decisions/rules/0006-secondary-critical-resolution.md)
+  (as amended 2026-09-21).
+- Resolution record: [Ambiguity Log](./ambiguity-log.md), "Secondary Critical `Sec` Grammar" entry
+  (status: resolved).
+- Issue: Forgejo #223 and its comment thread, including the "PRODUCT OWNER RULING — Secondary
+  Criticals, all four questions settled" comment.
 
-## Dependency note
+## Dependency note (historical)
 
-This memo cites `docs/rules/secondary-critical-sec-grammar.md` by path but does not link to it,
-because that file exists only on the unmerged PR #269 branch (`codex/223-sec-grammar`), not at this
-memo's `dev` baseline. If PR #269 merges under a different path or is materially revised before
-merge, update the citation above accordingly.
+At the time this memo was written, it cited `docs/rules/secondary-critical-sec-grammar.md` by path
+without linking to it, because that file existed only on the then-unmerged PR #269 branch
+(`codex/223-sec-grammar`), not at this memo's `dev` baseline. PR #269 and this memo's branch have
+since been reconciled onto the same branch, so the citations above now link directly.

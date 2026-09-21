@@ -1,9 +1,11 @@
 # Secondary Critical `Sec` grammar reconciliation
 
-Status: rules/content reconciliation candidate from Forgejo #223; non-runtime
+Status: settled rules/content reconciliation from Forgejo #223; non-runtime
 
-Authority: [Rule decision 0006](../decisions/rules/0006-secondary-critical-resolution.md) and the
-bounded read-only source recovery recorded on Forgejo #223
+Authority: [Rule decision 0006](../decisions/rules/0006-secondary-critical-resolution.md) (as
+amended 2026-09-21), the bounded read-only source recovery recorded on Forgejo #223, and the
+Product Owner ruling "PRODUCT OWNER RULING — Secondary Criticals, all four questions settled" on
+Forgejo #223
 
 Portfolio: Forgejo #111 Criticals / Injury
 
@@ -11,10 +13,12 @@ Portfolio: Forgejo #111 Criticals / Injury
 
 [Rule decision 0006](../decisions/rules/0006-secondary-critical-resolution.md) settled that
 Secondary Critical capability is weapon-authored through the `Sec` field, that the Secondary grade
-is a fixed relative reduction from the resolved Primary grade, that a result below `A` produces no
-Secondary Critical, and that the Secondary Critical uses a fresh independent 2d8. It explicitly
-deferred the `Sec` grammar itself. This document completes that deferred reconciliation from the
-evidence already recovered.
+is derived from the resolved Primary grade by a universal two-grade-step reduction and then capped
+at the Secondary maximum, that a result below `A` produces no Secondary Critical, that the
+Secondary Critical reuses the Primary Critical's hit location, and that the Secondary Critical uses
+a fresh independent 2d8. It originally deferred the `Sec` grammar itself; that deferral, and the
+four questions the first reconciliation pass returned to the Product Owner, are now resolved. This
+document records the settled grammar from the evidence already recovered.
 
 This document is documentation only.
 
@@ -23,10 +27,10 @@ This document is documentation only.
 - It does not alter the 608 primary Critical catalogue described in
   [Target Critical catalogue V1](./target-critical-catalogue-v1.md). A Secondary Critical performs a
   second lookup against existing positions; it never adds, removes, or rewrites one.
-- It does not reopen the three settled rulings in decision 0006.
-- Where the sources cannot settle a question, it records the competing readings and returns the
-  question to the Product Owner rather than choosing between them. See
-  [Open Product Owner questions](#open-product-owner-questions).
+- It does not reopen the rulings settled in decision 0006.
+- The four questions this document previously returned to the Product Owner as open are resolved.
+  See [Resolved Product Owner questions](#resolved-product-owner-questions) for each question's
+  ruling and citation.
 
 The `Sec` column description in
 [Combat loadout calculations](./combat-loadout-calculations.md) remains a data-column gloss. Rule
@@ -119,9 +123,12 @@ family letter := S | P | C
 - Family letters observed: `S` (`Q28`, `Q29`, `Q30`), `P` (`Q15`), `C` (`Q18`, `Q19`, `Q20`, `Q22`,
   `Q24`, `Q32`, `Q33`, `Q35`).
 
-Whether the recognized grammar is the full twelve-combination `A-D` by `S|P|C` matrix or only the
-six attested codes is not decided by the source. See
-[question Q2](#q2-recognized-grammar-versus-attested-inventory).
+**Ruled: only the six attested codes are recognized.** The source alone did not decide whether the
+recognized grammar is the full twelve-combination `A-D` by `S|P|C` matrix or only the six attested
+codes (see [Q2 — resolved](#q2-recognized-grammar-versus-attested-inventory-resolved)); the Product Owner
+ruling settled it as the attested-only reading. `AP, AC, AS, BS, CC, DC` are recognized. Any other
+well-formed two-character code — including an unattested but structurally valid combination such as
+`BP` or `CS` — is **unrecognized and must fail closed** until content authoring adds it explicitly.
 
 The `Sec` vocabulary is **stricter than the `Crit 1` and `Crit 2` vocabularies** and must not be
 generalized to them. `Weapon1!N32 = "FP cs"` carries a qualifier, and `Weapon1!M36`, `Weapon1!N36`,
@@ -160,14 +167,18 @@ Two properties of the attested inventory are worth recording as inventory facts 
    Great sword, Battle Axe, Halberd, Pole axe), `FP` to `AS`/`BS` (spears and javelin), and `FP` to
    `DC` (Lance). Each pairing is physically legible: the morning star's spikes, an axe's haft and
    back, a spear's edge, a lance's mass.
-2. **Only three of the eight frozen families are reachable from `Sec`.** `arrows_bolts`,
-   `teeth_claws`, `firearms`, `falling_crushing`, and `fire_energy` have no `Sec` letter. The
-   missile weapon sheet has no Secondary Critical field at all: `Weapon2!A1:K1` is `Weapon`,
-   `Skill`, `OB 1`, `DMB 1`, `Parry%`, `Initiativ`, `Range`, `Arm.mod. 1`, `Crit 1`, `Enc.`,
-   `Ammo Enc.` — there is no `Second crit.` column. See
-   [question Q3](#q3-scope-of-sec-outside-the-melee-weapon-table).
+2. **Only three of the eight frozen families are reachable from `Sec` in the present source.**
+   `arrows_bolts`, `teeth_claws`, `firearms`, `falling_crushing`, and `fire_energy` have no `Sec`
+   letter. The missile weapon sheet has no Secondary Critical field at all: `Weapon2!A1:K1` is
+   `Weapon`, `Skill`, `OB 1`, `DMB 1`, `Parry%`, `Initiativ`, `Range`, `Arm.mod. 1`, `Crit 1`,
+   `Enc.`, `Ammo Enc.` — there is no `Second crit.` column. **This is a scope statement about the
+   present source, not a permanent prohibition** — see
+   [Q3 — resolved](#q3-scope-of-sec-outside-the-melee-weapon-table-resolved): Secondary Criticals apply only
+   where an authored recognized `Sec` value exists, so the present source gives Secondary Criticals
+   to melee weapons only, and future content may extend `Sec` (or an equivalent field) to missile,
+   ammunition, or other non-melee attack tables without contradicting this document or decision 0006.
 
-## 3. Grade reduction per code
+## 3. Grade reduction and capping (resolved)
 
 ### What the source encodes
 
@@ -175,51 +186,60 @@ The source encodes an **absolute grade letter**, not a reduction. `Sec` uses the
 and the same position as the `Crit 1` grade letter that `Game sheet!F31` calls `Max Critical` and
 that `'cleon vs slaver'!C130:C131` applies as a ceiling.
 
-Decision 0006 §2 and §4 replaced absolute-grade semantics with a **fixed relative reduction from the
-resolved Primary grade**, with no absolute cap. Converting the authored absolute letters into
-reductions requires an anchor grade to measure each `Sec` letter against, and **no source states an
-anchor**, because no formula consumes column `Q` at all.
+The first reconciliation pass read decision 0006 §2's original wording — "a fixed number of Critical
+grades below the resolved Primary Critical grade" — as leaving open what the authored absolute
+`Sec` letter was measured **from**, and offered two candidate anchors ("Reading A — weapon-anchored"
+and "Reading B — `F`-anchored"; both are preserved below as [Q1 — resolved](#q1-anchor-for-the-relative-grade-reduction-resolved)
+for their evidence value). **Neither anchoring reading is what the Product Owner ruled.** The
+ruling instead reads the `Crit 1` letter and the `Sec` first character the same way `Game sheet!F31`
+already labels the `Crit 1` letter — as **maxima**, not as anchors a distance is measured from —
+and applies a single **universal, weapon-independent two-grade-step reduction**, with the `Sec`
+first character acting as a **cap** applied afterward, never as the reduction distance itself.
 
-Two anchors are available from the evidence. They agree on ten of the twelve rows.
+Resolution, per decision 0006 §2 as amended (see
+[Rule decision 0006](../decisions/rules/0006-secondary-critical-resolution.md)):
 
-- **Reading A — weapon-anchored.** The reduction is the grade distance from the weapon's own
-  `Crit 1` grade letter to its `Sec` grade letter. This preserves the authored pairing exactly at
-  the weapon's maximum grade.
-- **Reading B — `F`-anchored.** The reduction is the grade distance from `F` to the `Sec` grade
-  letter, making the reduction a property of the `Sec` code alone.
+1. Resolve the Primary Critical normally, capped by the weapon's `Crit 1` maximum.
+2. Apply the universal two-grade-step reduction (`F→D, E→C, D→B, C→A, B/A→none`) to the resolved
+   Primary grade.
+3. Cap the reduced grade at the Secondary maximum encoded by the `Sec` first character (never
+   raising it).
+4. Route through the family encoded by the `Sec` second character.
 
-| Row | Weapon       | `Crit 1` | `Sec` | Reading A reduction | Reading B reduction |
-| --- | ------------ | -------- | ----- | ------------------- | ------------------- |
-| 15  | Morning star | `FC`     | `AP`  | 5                   | 5                   |
-| 18  | Hatchet      | `DS`     | `AC`  | **3**               | **5**               |
-| 19  | Wood axe     | `ES`     | `AC`  | **4**               | **5**               |
-| 20  | Hand axe     | `FS`     | `CC`  | 3                   | 3                   |
-| 22  | Great sword  | `FS`     | `DC`  | 2                   | 2                   |
-| 24  | Battle Axe   | `FS`     | `DC`  | 2                   | 2                   |
-| 28  | 1-h Spear    | `FP`     | `AS`  | 5                   | 5                   |
-| 29  | 2-h Javelin  | `FP`     | `AS`  | 5                   | 5                   |
-| 30  | 2-h Spear    | `FP`     | `BS`  | 4                   | 4                   |
-| 32  | Halberd      | `FS`     | `DC`  | 2                   | 2                   |
-| 33  | Pole axe     | `FS`     | `DC`  | 2                   | 2                   |
-| 35  | Lance        | `FP`     | `DC`  | 2                   | 2                   |
+| Row | Weapon       | `Crit 1` (Primary max) | `Sec` | Secondary max (`Sec[0]`) | Universal two-step, if Primary resolves at its max |
+| --- | ------------ | ---------------------- | ----- | ------------------------ | -------------------------------------------------- |
+| 15  | Morning star | `F`                    | `AP`  | `A`                      | F→D, capped at A → **A**                           |
+| 18  | Hatchet      | `D`                    | `AC`  | `A`                      | D→B, capped at A → **A**                           |
+| 19  | Wood axe     | `E`                    | `AC`  | `A`                      | E→C, capped at A → **A**                           |
+| 20  | Hand axe     | `F`                    | `CC`  | `C`                      | F→D, capped at C → **C**                           |
+| 22  | Great sword  | `F`                    | `DC`  | `D`                      | F→D, capped at D → **D**                           |
+| 24  | Battle Axe   | `F`                    | `DC`  | `D`                      | F→D, capped at D → **D**                           |
+| 28  | 1-h Spear    | `F`                    | `AS`  | `A`                      | F→D, capped at A → **A**                           |
+| 29  | 2-h Javelin  | `F`                    | `AS`  | `A`                      | F→D, capped at A → **A**                           |
+| 30  | 2-h Spear    | `F`                    | `BS`  | `B`                      | F→D, capped at B → **B**                           |
+| 32  | Halberd      | `F`                    | `DC`  | `D`                      | F→D, capped at D → **D**                           |
+| 33  | Pole axe     | `F`                    | `DC`  | `D`                      | F→D, capped at D → **D**                           |
+| 35  | Lance        | `F`                    | `DC`  | `D`                      | F→D, capped at D → **D**                           |
 
-The readings diverge only on `Weapon1!Q18` and `Weapon1!Q19`, the two `Sec`-bearing weapons whose
-`Crit 1` grade letter is below `F` (`Weapon1!M18 = "DS"`, `Weapon1!M19 = "ES"`).
+The reduction step is identical (`F→D, E→C, D→B, C→A`) on every row; only the cap changes, and the
+cap is read directly off the `Sec` first character, so `AC`'s first character means the same thing
+(a maximum of `A`) on every weapon that carries it.
 
-The most common authored reduction is `2`, carried by `Weapon1!Q22`, `Q24`, `Q32`, `Q33`, and `Q35`.
-That is the same reduction decision 0006 §2 uses for its worked `F` to `D`, `E` to `C`, `D` to `B`,
-`C` to `A` example.
+### Why this resolves the Hatchet / Wood axe divergence
 
-### The reduction is not a property of the code alone
+Hatchet (`Crit 1 = D`, `Sec = AC`) and Wood axe (`Crit 1 = E`, `Sec = AC`) were the two rows where
+the "Reading A" and "Reading B" anchoring candidates disagreed (see
+[Q1 — resolved](#q1-anchor-for-the-relative-grade-reduction-resolved)). Under the ruled mechanism both
+resolve cleanly and identically in kind:
 
-Under Reading A, the identical code `AC` encodes a reduction of `3` at `Weapon1!Q18` (Hatchet,
-`Crit 1` `DS`) and a reduction of `4` at `Weapon1!Q19` (Wood axe, `Crit 1` `ES`). The reduction is
-then a property of the **pair** (`Crit 1` grade letter, `Sec` grade letter), not of the `Sec` code
-in isolation. Under Reading B it is a property of the code alone.
+- **Hatchet**: resolved Primary capped at `D` → universal two-step → `B` → capped at Secondary
+  maximum `A` (from `AC`) → **Secondary A, blunt**.
+- **Wood axe**: resolved Primary capped at `E` → universal two-step → `C` → capped at Secondary
+  maximum `A` (from `AC`) → **Secondary A, blunt**.
 
-This is the single decisive difference between the two readings, and it is exactly what a future
-parser would have to encode. It is returned to the Product Owner as
-[question Q1](#q1-anchor-for-the-relative-grade-reduction), not resolved here.
+Both weapons yield `A` blunt from the identical `AC` code, because the code encodes a cap that
+applies after a reduction that is the same for every weapon — not a code-specific or
+weapon-specific reduction distance. No anchoring choice, and no per-code reduction table, is needed.
 
 ### Grade order
 
@@ -236,9 +256,11 @@ The grade alphabet used above is `A < B < C < D < E < F`, the order applied by
    five-character qualified code and `Weapon1!M36`, `Weapon1!N36`, `Weapon1!M42` are `N/A`
    sentinels. Nothing of that shape appears in `Weapon1!Q`. The strict two-character `Sec` grammar
    must not be generalized to `Crit 1` or `Crit 2`.
-3. **The same `Sec` code carries different reductions.** `Weapon1!Q18 = Weapon1!Q19 = "AC"` sit on
-   `Crit 1` values `DS` and `ES` respectively. See
-   [question Q1](#q1-anchor-for-the-relative-grade-reduction).
+3. **The same `Sec` code sits on different `Crit 1` values.** `Weapon1!Q18 = Weapon1!Q19 = "AC"` sit
+   on `Crit 1` values `DS` and `ES` respectively. This looked like a contradiction under either
+   anchoring candidate considered in the first reconciliation pass; it is not one under the ruled
+   mechanism, where `AC`'s first character is a cap applied identically after the same universal
+   reduction on both weapons. See [Q1 — resolved](#q1-anchor-for-the-relative-grade-reduction-resolved).
 4. **No uniform per-weapon-family authoring.** Four axes carry four different pairings: Hatchet
    `DS`/`AC`, Wood axe `ES`/`AC`, Hand axe `FS`/`CC`, Battle Axe `FS`/`DC` (`Weapon1!M18:M20`,
    `M24`, `Q18:Q20`, `Q24`). `Sec` is authored per weapon, and no family-level or class-level rule
@@ -248,12 +270,13 @@ The grade alphabet used above is `A < B < C < D < E < F`, the order applied by
    Likewise 1-h Spear `Weapon1!Q28 = "AS"` against 2-h Spear `Weapon1!Q30 = "BS"`. These are not
    contradictions, but they show `Sec` is a sparse hand-authored field: absence carries no implied
    default from a similar weapon.
-6. **Reading B makes two authored rows unreachable.** Under the `F`-anchored reading, Hatchet
-   (`Weapon1!M18 = "DS"`, maximum grade `D`) and Wood axe (`Weapon1!M19 = "ES"`, maximum grade `E`)
-   would need a resolved Primary grade of `F` to produce any Secondary Critical, which their own
-   `Crit 1` ceiling forbids. Both authored `Sec` codes would then be dead entries. This is evidence
-   against Reading B, but it is an argument from authoring intent rather than a source statement,
-   so it does not settle [question Q1](#q1-anchor-for-the-relative-grade-reduction).
+6. **The `F`-anchored candidate reading would have made two authored rows unreachable.** Under that
+   candidate (preserved as evidence in [Q1 — resolved](#q1-anchor-for-the-relative-grade-reduction-resolved)),
+   Hatchet (`Weapon1!M18 = "DS"`, maximum grade `D`) and Wood axe (`Weapon1!M19 = "ES"`, maximum
+   grade `E`) would need a resolved Primary grade of `F` to produce any Secondary Critical, which
+   their own `Crit 1` ceiling forbids — both authored `Sec` codes would have been dead entries. The
+   ruled mechanism (universal two-step reduction, then cap by `Sec` first character) does not have
+   this problem: both rows resolve and land at Secondary `A` blunt.
 7. **`Sec` exists only on the melee weapon table.** `Weapon2` has no `Second crit.` column
    (`Weapon2!A1:K1`). Missile and ammunition rows cannot author a Secondary Critical.
 8. **Non-weapon and unarmed rows carry no `Sec`.** `Weapon1!A34 = "Movement"` and
@@ -282,42 +305,48 @@ on unrecognized grammar. Concretely, and still without authorizing any implement
 - Treat a blank or absent `Sec` as "no Secondary Critical", not as unknown.
 - Attach `Sec` to the main attack mode only, consistent with the `Sec` gloss in
   [Combat loadout calculations](./combat-loadout-calculations.md).
+- Reuse the Primary Critical's hit location for the Secondary Critical lookup; do not roll a second,
+  independent hit location (decision 0006 §4, resolving
+  [Q4 — resolved](#q4-hit-location-for-the-secondary-critical-resolved)).
 
 The Forgejo #223 recovery report records that current runtime concatenates the primary MC code and
 `secondCrit` into one `weaponCriticalCode`. That concatenation is inconsistent with every reading
 above, because it produces a four-character string that is neither a `Crit 1` code nor a `Sec` code.
 Correcting it is runtime work and is not authorized by this document.
 
-## Open Product Owner questions
+## Resolved Product Owner questions
 
-Each question below is genuinely unsettled by the recovered evidence. None may be closed by
-preference.
+The first reconciliation pass returned four questions to the Product Owner as genuinely unsettled
+by the recovered evidence. The Product Owner's ruling on Forgejo #223 ("PRODUCT OWNER RULING —
+Secondary Criticals, all four questions settled") settled all four. Each is recorded below with its
+original candidate readings preserved for their evidence value, followed by the ruling. None of
+these four is open again; do not relitigate them.
 
-### Q1: anchor for the relative grade reduction
+### Q1: anchor for the relative grade reduction — resolved
 
-Decision 0006 §2 makes the Secondary grade a fixed relative reduction from the resolved Primary
-grade. The source authors an absolute grade letter and never states an anchor, because no formula
-reads `Weapon1!Q`.
+Decision 0006 §2 (original wording) made the Secondary grade a fixed relative reduction from the
+resolved Primary grade. The source authors an absolute grade letter and never states an anchor,
+because no formula reads `Weapon1!Q`. Two candidate anchors were offered:
 
 - **Reading A — weapon-anchored.** Reduction is the distance from the weapon's own `Crit 1` grade
-  letter to its `Sec` grade letter. Evidence: `Sec` shares the grade alphabet and position with the
-  `Crit 1` letter that `Game sheet!F31` calls `Max Critical`; this preserves the authored pairing
-  exactly at the weapon's maximum grade; it keeps `Weapon1!Q18` and `Weapon1!Q19` reachable.
-  Consequence: the reduction is a property of the (`Crit 1`, `Sec`) pair, so `AC` means `3` on the
-  Hatchet and `4` on the Wood axe.
+  letter to its `Sec` grade letter. Consequence: the reduction is a property of the (`Crit 1`,
+  `Sec`) pair, so `AC` would mean `3` on the Hatchet and `4` on the Wood axe.
 - **Reading B — `F`-anchored.** Reduction is the distance from `F` to the `Sec` grade letter.
-  Evidence: ten of the twelve rows have `Crit 1` grade `F`, so `F` is the dominant implicit anchor;
-  the reduction becomes a self-contained property of the `Sec` code, which is the simplest thing to
-  encode. Consequence: `Weapon1!Q18` (`DS`/`AC`) and `Weapon1!Q19` (`ES`/`AC`) become dead entries
-  that can never fire.
+  Consequence: `Weapon1!Q18` (`DS`/`AC`) and `Weapon1!Q19` (`ES`/`AC`) become dead entries that can
+  never fire.
 
-Both readings reproduce decision 0006's worked two-grade example. The two rows that separate them
-are `Weapon1!Q18` and `Weapon1!Q19`.
+**Ruling: neither reading.** The table columns are maxima. `Crit 1` is the maximum Primary grade and
+the `Sec` first character is the maximum Secondary grade (a cap), not a reduction anchor. The
+reduction itself is universal and weapon-independent — always two grade steps — applied to the
+resolved (already `Crit 1`-capped) Primary grade, and the `Sec` first character then caps the
+result. This supersedes the earlier reading that `Sec` encodes the reduction distance. See
+[§3](#3-grade-reduction-and-capping-resolved) above for the worked mechanism and the Hatchet / Wood
+axe resolution, and decision 0006 §2 (amended) for the rule authority.
 
-### Q2: recognized grammar versus attested inventory
+### Q2: recognized grammar versus attested inventory — resolved
 
-Six codes are attested (`AP`, `AC`, `AS`, `BS`, `CC`, `DC`). The source does not say whether the
-authorized vocabulary is:
+Six codes are attested (`AP`, `AC`, `AS`, `BS`, `CC`, `DC`). The source did not say whether the
+authorized vocabulary was:
 
 - **Reading A —** the full `A-D` by `S|P|C` matrix of twelve combinations, of which six happen to be
   used; or
@@ -327,22 +356,33 @@ authorized vocabulary is:
 Both fail closed on `E`/`F` grade letters and on non-`S|P|C` family letters, which are unattested in
 `Weapon1!Q` in either reading.
 
-### Q3: scope of `Sec` outside the melee weapon table
+**Ruling: Reading B.** Only the six attested codes (`AP, AC, AS, BS, CC, DC`) are recognized.
+Unknown codes fail closed. Future content may explicitly add codes if needed.
+
+### Q3: scope of `Sec` outside the melee weapon table — resolved
 
 `Weapon2!A1:K1` has no `Second crit.` column, so missile and ammunition rows cannot author a `Sec`
 code, and no `Sec` letter routes to `arrows_bolts`, `teeth_claws`, `firearms`, `falling_crushing`,
-or `fire_energy`. The source does not say whether this is a deliberate melee-only boundary or simply
-the limit of what was authored. The question matters because it decides whether five of the eight
-frozen catalogue families are permanently unreachable through Secondary Criticals.
+or `fire_energy`. The source did not say whether this was a deliberate melee-only boundary or simply
+the limit of what was authored.
 
-### Q4: hit location for the Secondary Critical
+**Ruling: not settled as either a deliberate boundary or a mere gap — settled as scope.** Secondary
+Critical content applies only where an authored recognized `Sec` value exists, so the present source
+gives Secondary Criticals only to the applicable melee weapons. **This is not a permanent
+prohibition** on future missile or other non-melee Secondary Critical authoring; it describes the
+current source's scope, not a ceiling on future content.
+
+### Q4: hit location for the Secondary Critical — resolved
 
 Decision 0006 §5 rules that the Secondary Critical uses a fresh independent 2d8 for the Critical
-roll. It does not state whether the Secondary Critical reuses the Primary Critical's hit location or
-rolls its own, and the hit location is one of the three axes of the catalogue key. The Forgejo #223
-recovery found no source supporting a fresh hit-location roll, and both options it offered reused
-the location, but that reuse was never explicitly ruled. Confirmation is needed before the Secondary
-lookup key is fully specified.
+result roll. It did not originally state whether the Secondary Critical reuses the Primary
+Critical's hit location or rolls its own, and hit location is one of the three axes of the catalogue
+key. The Forgejo #223 recovery found no source supporting a fresh hit-location roll, and both
+options it offered reused the location, but that reuse was never explicitly ruled.
+
+**Ruling: reuse the Primary Critical's hit location.** The Secondary Critical still uses a fresh
+independent 2d8 result roll; only the hit location is shared with the Primary. See decision 0006 §4
+(added by the 2026-09-21 amendment).
 
 ## Verification and traceability
 

@@ -41,23 +41,27 @@ Track unresolved rules questions and implementation decisions.
 
 ## Secondary Critical `Sec` Grammar
 
-- Status: reconciled from source; four questions returned to the Product Owner
+- Status: **resolved** by the Forgejo #223 Product Owner ruling ("PRODUCT OWNER RULING — Secondary
+  Criticals, all four questions settled"); reconciled from source and ratified
 - Scope:
   - `docs/rules/secondary-critical-sec-grammar.md`
-  - `docs/decisions/rules/0006-secondary-critical-resolution.md`
+  - `docs/decisions/rules/0006-secondary-critical-resolution.md` (as amended 2026-09-21)
   - `data/raw/glantri/Themistogenes 1.07.xlsx`, sheet `Weapon1`, column `Q`
 - Source facts confirmed:
   - `Weapon1!Q` (`Second crit.`) is populated in exactly twelve rows, every value two characters,
     grade letter `A`-`D` and family letter `S`/`P`/`C`
   - the family letter routes `S` to `sharp`, `P` to `pointed_weapons`, and `C` to `blunt`
   - no workbook formula reads `Weapon1!Q`; the widest weapon-table ranges stop at column `P`
-- What is still missing:
-  - the anchor the authored absolute `Sec` grade letter is measured against to yield the relative
-    reduction ruled in decision 0006 (the weapon's own `Crit 1` grade, or a constant `F`)
-  - whether the authorized vocabulary is the full `A-D` by `S|P|C` matrix or only the six attested
-    codes
-  - whether `Sec` is deliberately melee-only, leaving five frozen catalogue families unreachable
-  - whether the Secondary Critical reuses the Primary Critical's hit location
+- Resolved by the ruling (all four questions the source alone could not settle):
+  - the `Crit 1` grade letter and the `Sec` first character are **maxima**, not reduction anchors;
+    the grade reduction from the resolved Primary grade is a **universal two-grade-step reduction**,
+    the same for every weapon, and the `Sec` first character then **caps** the reduced grade
+  - the recognized vocabulary is the six attested codes (`AP, AC, AS, BS, CC, DC`); unknown codes
+    fail closed, and future content may add codes explicitly
+  - `Sec` applies only where an authored recognized value exists, so the present source is
+    melee-only; this is **not a permanent prohibition** on future non-melee authoring
+  - the Secondary Critical reuses the Primary Critical's hit location; only the Critical result uses
+    a fresh independent 2d8
 - Decision in code:
-  - none; no runtime Secondary Critical work is authorized
+  - none; no runtime Secondary Critical work is authorized by this resolution
   - parsing work preserves the raw code and provenance and fails closed on unrecognized grammar
