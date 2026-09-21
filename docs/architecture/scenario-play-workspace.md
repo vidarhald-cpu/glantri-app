@@ -779,11 +779,15 @@ Artifact never becomes an Item.
 
 **The mechanism is deliberately not chosen here.** This contract states the
 semantics and does not depend on any particular implementation. A separate
-in-flight change
-([#271](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/271)) proposes a
-`CampaignItemArtifactAttachment` link table; that work is **in flight and not
-accepted**, so it is not the canonical mechanism and nothing in this contract is
-written against it.
+change ([#271](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/271),
+PR #275) introduced a `CampaignItemArtifactAttachment` link table and has since
+been accepted and integrated into `dev`
+(`5b034464abba4ecf55f1aeb15914d8f9d5ad9a87`). Its existence in `dev` does **not**
+make it the canonical mechanism: S6 must evaluate it against the association
+semantics above and may reuse it **only if it cleanly satisfies all of them**
+(points 1 to 4); otherwise S6 introduces the dedicated Item-to-Artifact link
+entity/table called for by point 6. Nothing in this contract is written against
+`CampaignItemArtifactAttachment`.
 
 **Scope of the ruling.** Contract and product documentation only. It authorizes
 no runtime implementation, schema, or migration beyond what the existing slice
