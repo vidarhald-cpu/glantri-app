@@ -3,6 +3,7 @@ import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 
 import {
+  ownerDatabasePrefix,
   validateTaskDatabaseEnvironment,
   type TaskDatabaseEnvironment,
   type ValidatedTaskDatabaseEnvironment,
@@ -48,14 +49,11 @@ function normalizeWorktreeKey(repositoryRoot: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+  // The digest is always a fixed-length 8 hex-character SHA-256 prefix, so it (and therefore
+  // the combined key) can never be empty; there is no reachable failure mode here to guard.
   const digest = createHash("sha256").update(resolvedRoot).digest("hex").slice(0, 8);
-  const key = label ? `${label}-${digest}` : digest;
 
-  if (!key) {
-    throw new Error("Unable to derive a stable identity for the current linked worktree.");
-  }
-
-  return key;
+  return label ? `${label}-${digest}` : digest;
 }
 
 export function deriveCurrentWorktreeTaskDatabaseIdentity(
@@ -70,14 +68,19 @@ export function deriveCurrentWorktreeTaskDatabaseIdentity(
 
   const worktreeKey = normalizeWorktreeKey(repositoryRoot);
   const owner = `issue-${normalizedTask}-${worktreeKey}`;
-  const databaseOwner = owner.replace(/[^a-z0-9]+/g, "_");
+  // Container names and ports are not subject to PostgreSQL's 63-byte identifier limit, so the
+  // container keeps the full, untruncated owner for readability. Database names go through
+  // `ownerDatabasePrefix`, the single shared derivation also used by `validateTaskDatabaseEnvironment`,
+  // which truncates only the human-readable label and always preserves the trailing worktree
+  // digest that guarantees distinctness between worktrees (see databaseTargetSafety.ts).
+  const applicationDatabase = ownerDatabasePrefix(owner);
 
   return {
-    applicationDatabase: `glantri_task_${databaseOwner}`,
+    applicationDatabase,
     container: `glantri-task-${owner}-pg16`,
     owner,
     task: normalizedTask,
-    testDatabase: `glantri_task_${databaseOwner}_test`,
+    testDatabase: `${applicationDatabase}_test`,
     worktreeKey,
   };
 }

@@ -60,9 +60,12 @@ describe("current worktree database ownership", () => {
       taskEnvironment(worktreeA),
     );
 
-    expect(validated.worktreeKey).toBe(
-      deriveCurrentWorktreeTaskDatabaseIdentity(worktreeA, "312").worktreeKey,
-    );
+    // Independently computed expected value (not re-derived through the function under test):
+    // basename("repository") + "-" + sha256("/tmp/glantri-312-cross-a/repository").hex.slice(0, 8).
+    expect(validated.worktreeKey).toBe("repository-f3808e29");
+    expect(validated.owner).toBe("issue-312-repository-f3808e29");
+    expect(validated.application.database).toBe("glantri_task_issue_312_repository_f3808e29");
+    expect(validated.test.database).toBe("glantri_task_issue_312_repository_f3808e29_test");
     expect(() =>
       assertCurrentWorktreeTaskContainer(inspection(worktreeA), validated),
     ).not.toThrow();
@@ -92,6 +95,45 @@ describe("current worktree database ownership", () => {
 
     // Stable/deterministic: deriving again from the same path yields the same identity.
     expect(deriveCurrentWorktreeTaskDatabaseIdentity(sibling1, "260")).toEqual(identity1);
+  });
+
+  it("keeps database names within PostgreSQL's 63-byte limit and preserves the digest for a long Codex-style task id", () => {
+    // Reproduces the QA #260 regression scenario: a long task id under the canonical Codex
+    // worktree layout previously produced a 28-character worktree key, pushing the composed
+    // database name past 63 bytes and losing the trailing digest to PostgreSQL's own silent
+    // truncation.
+    const longTaskRepositoryRoot = "/private/tmp/glantri-app-forgejo-copy-a";
+    const identity = deriveCurrentWorktreeTaskDatabaseIdentity(
+      longTaskRepositoryRoot,
+      "codex-24-admin-skill-reference",
+    );
+    const expectedDigest = identity.worktreeKey.slice(-8);
+
+    expect(identity.applicationDatabase.length).toBeLessThanOrEqual(63);
+    expect(identity.testDatabase.length).toBeLessThanOrEqual(63);
+    expect(identity.testDatabase).toBe(`${identity.applicationDatabase}_test`);
+    expect(identity.applicationDatabase.endsWith(expectedDigest)).toBe(true);
+    expect(identity.testDatabase.endsWith(`${expectedDigest}_test`)).toBe(true);
+    expect(identity.applicationDatabase).not.toBe(identity.testDatabase);
+  });
+
+  it("keeps distinct database names for two long, overflowing sibling worktrees after truncation", () => {
+    const overflowSibling1 = "/private/tmp/glantri-app-forgejo-codex-24-admin-skill-reference-a";
+    const overflowSibling2 = "/private/tmp/glantri-app-forgejo-codex-24-admin-skill-reference-b";
+    const task = "codex-24-admin-skill-reference";
+
+    const identity1 = deriveCurrentWorktreeTaskDatabaseIdentity(overflowSibling1, task);
+    const identity2 = deriveCurrentWorktreeTaskDatabaseIdentity(overflowSibling2, task);
+
+    expect(identity1.applicationDatabase.length).toBeLessThanOrEqual(63);
+    expect(identity2.applicationDatabase.length).toBeLessThanOrEqual(63);
+    expect(identity1.testDatabase.length).toBeLessThanOrEqual(63);
+    expect(identity2.testDatabase.length).toBeLessThanOrEqual(63);
+    expect(identity1.applicationDatabase).not.toBe(identity2.applicationDatabase);
+    expect(identity1.testDatabase).not.toBe(identity2.testDatabase);
+
+    // Stability holds under overflow too.
+    expect(deriveCurrentWorktreeTaskDatabaseIdentity(overflowSibling1, task)).toEqual(identity1);
   });
 
   it("refuses a copied foreign .env.task before verify, reset, or cleanup can select its target", () => {

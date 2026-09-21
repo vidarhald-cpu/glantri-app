@@ -107,11 +107,48 @@ export function validatePlaytestDatabaseEnvironment(environment: {
   return { database };
 }
 
-function ownerDatabasePrefix(owner: string): string {
-  return `glantri_task_${owner
+// PostgreSQL identifiers are silently truncated to 63 bytes: a name built by naive
+// concatenation of an owner label (which can be long, e.g. a Codex task id plus a worktree
+// label) and a trailing uniqueness digest can overflow that limit, and PostgreSQL truncates
+// from the end -- removing exactly the digest that keeps two distinct worktrees from
+// colliding on one database. `deriveCurrentWorktreeTaskDatabaseIdentity` always appends the
+// worktree digest as the final 8 characters of `owner` (see worktreeDatabaseOwnership.ts), so
+// this function reserves and preserves those trailing 8 characters unconditionally and only
+// ever truncates the human-readable label in front of them. The budget is sized against the
+// longest name this owner will ever produce -- the `_test` suffixed database -- so both the
+// application and test database names are guaranteed to fit within 63 bytes.
+export const DATABASE_IDENTIFIER_BYTE_LIMIT = 63;
+const DATABASE_NAME_PREFIX = "glantri_task_";
+const DATABASE_TEST_SUFFIX = "_test";
+const OWNER_DIGEST_LENGTH = 8;
+
+function normalizeOwnerForDatabase(owner: string): string {
+  return owner
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")}`;
+    .replace(/^_+|_+$/g, "");
+}
+
+export function ownerDatabasePrefix(owner: string): string {
+  const normalizedOwner = normalizeOwnerForDatabase(owner);
+  const digest = normalizedOwner.slice(-OWNER_DIGEST_LENGTH);
+  const label = normalizedOwner.slice(0, -OWNER_DIGEST_LENGTH).replace(/_+$/, "");
+
+  const budgetForLabelAndSeparator =
+    DATABASE_IDENTIFIER_BYTE_LIMIT -
+    DATABASE_TEST_SUFFIX.length -
+    DATABASE_NAME_PREFIX.length -
+    digest.length;
+
+  if (label.length === 0 || budgetForLabelAndSeparator <= 0) {
+    return `${DATABASE_NAME_PREFIX}${digest}`;
+  }
+
+  const truncatedLabel = label.slice(0, budgetForLabelAndSeparator - 1).replace(/_+$/, "");
+
+  return truncatedLabel.length > 0
+    ? `${DATABASE_NAME_PREFIX}${truncatedLabel}_${digest}`
+    : `${DATABASE_NAME_PREFIX}${digest}`;
 }
 
 export function validateTestDatabaseTarget(

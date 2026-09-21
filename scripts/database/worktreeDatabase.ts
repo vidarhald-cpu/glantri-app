@@ -233,6 +233,42 @@ function printPreflight(
   );
 }
 
+// Confirms the container is not merely running the right *labels* but is actually serving
+// the exact database this worktree believes it owns. Cheap (one `SELECT current_database()`
+// per target) and fails closed: any other name -- including a name PostgreSQL silently
+// truncated to -- is refused rather than silently proceeding against an aliased target.
+function assertConnectedDatabaseIdentity(
+  validated: ValidatedCurrentWorktreeTaskDatabaseEnvironment,
+): void {
+  for (const database of [validated.application.database, validated.test.database]) {
+    const result = run(
+      "docker",
+      [
+        "exec",
+        validated.container,
+        "psql",
+        "-U",
+        "postgres",
+        "-d",
+        database,
+        "-tAc",
+        "SELECT current_database()",
+      ],
+      { capture: true },
+    );
+
+    if (result !== database) {
+      fail(
+        `Database identity verification failed: expected to be connected to "${database}" but the server reports "${result}". Refusing to proceed against an unexpected target.`,
+      );
+    }
+  }
+}
+
+// Shared preflight for every command that touches the task database (migrate, reset, seed,
+// backup, test, exec, verify): confirms the container is the exact one this worktree owns,
+// waits for it to be ready to accept connections, and confirms the connection actually lands
+// on the expected application and test databases rather than a same-named alias.
 function verifyOwnedRunningContainer(
   validated: ValidatedCurrentWorktreeTaskDatabaseEnvironment,
 ): TaskContainerInspection {
@@ -245,6 +281,8 @@ function verifyOwnedRunningContainer(
   }
 
   assertCurrentWorktreeTaskContainer(inspection, validated);
+  waitForPostgres(validated.container);
+  assertConnectedDatabaseIdentity(validated);
 
   return inspection;
 }
@@ -354,6 +392,9 @@ function setup(): void {
   validateCurrentWorktreeTaskDatabaseEnvironment(repoRoot, environment);
   writeTaskEnvironment(defaultEnvironmentFile, environment);
   const validated = validateCurrentWorktreeTaskDatabaseEnvironment(repoRoot, environment);
+  // Confirm application and test are genuinely two distinct physical databases before handing
+  // back an environment that claims they are.
+  assertConnectedDatabaseIdentity(validated);
   printPreflight("setup", "application", validated);
   printPreflight("setup", "test", validated);
   console.log(`Disposable PostgreSQL 16 task target ${identity.container} is ready.`);
@@ -469,32 +510,12 @@ function execute(): void {
 
 function verify(): void {
   const { validated } = loadValidatedEnvironment();
+  // Ownership-label, readiness, and database-identity checks now live in the shared
+  // verifyOwnedRunningContainer preflight so every database-touching command runs them, not
+  // only verify.
   verifyOwnedRunningContainer(validated);
-  waitForPostgres(validated.container);
   printPreflight("verify", "application", validated);
   printPreflight("verify", "test", validated);
-
-  for (const database of [validated.application.database, validated.test.database]) {
-    const result = run(
-      "docker",
-      [
-        "exec",
-        validated.container,
-        "psql",
-        "-U",
-        "postgres",
-        "-d",
-        database,
-        "-tAc",
-        "SELECT current_database()",
-      ],
-      { capture: true },
-    );
-
-    if (result !== database) {
-      fail(`Database identity verification failed for ${database}.`);
-    }
-  }
 
   console.log(
     `Task database ownership and PostgreSQL 16 container ${validated.container} verified.`,
