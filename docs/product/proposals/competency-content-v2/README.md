@@ -104,7 +104,7 @@ reaches five, and refuses any listed group that stops being large and choice-hea
 focused package the ruling describes (Dodge, Parry, one chosen melee family), Brawling stays out of
 the fixed weapon courses, and M11/M12 continue to carry the retired F32.
 
-### 3. Tracks audited; sixteen retired
+### 3. Tracks audited; sixteen retired — settled by Product Owner ruling
 
 A track is a materially different **form** of the occupation, so the audit applies one mechanisable
 test: **a track must declare a core route of its own.** If the defining training does not differ, the
@@ -119,8 +119,19 @@ The **four Soldier tracks are retired**: every one differed from its siblings on
 Learning Group it bought. The Soldier is one identity whose core is repeated service in the field,
 with contingent drill, formation drill, the issued missile arm and the longbow tradition all openly
 available — which is exactly the access-to-several-coherent-groups shape the breadth ruling asks for.
-This closes the previous revision's open question 3. Valid paths fall from 96 to 86, and the
-`narrowByDesign` exemption P82's one-tradition fencing track needed is removed with it.
+Valid paths fall from 96 to 86, and the `narrowByDesign` exemption P82's one-tradition fencing track
+needed is removed with it.
+
+This is no longer merely this proposal's own internal audit outcome: the **"PRODUCT OWNER RULING —
+Profession tracks (settled)"** comment recorded on [issue #266](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/266)
+on 2026-09-21 **approves the retirement of all 16 tracks and confirms the same four retained tracks**
+listed above, and settles two dispositions by name: **Soldier longbow identity** is carried by the
+longbow/combat Learning Group plus contextual/cultural availability, not a track, and **communal/militia
+command** remains a route/context distinction, not a track, absent future content showing a materially
+different defining curriculum. The ruling states the same governing rule the mechanisable build test
+enforces — see [Track discipline](./professions-v2.md#track-discipline) — and that **no further track
+investigation is required**. This closes the previous revision's open question 3, and the track outcome
+is settled, not pending further Product Owner review.
 
 ### 4. Cores audited and held minimal
 

@@ -33,7 +33,29 @@ Groups already say. The audit applies one mechanisable test: **a track must decl
 own.** If the defining training does not differ, the variant is a route choice and belongs in the
 Profession's own group list. The build refuses a track that declares no core.
 
-Result: 2 of 84 Professions keep tracks, carrying 4 tracks between them. Valid paths fall to 86.
+**Settled by Product Owner ruling.** The "PRODUCT OWNER RULING — Profession tracks (settled)" comment
+recorded on [issue #266](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/266) on 2026-09-21
+approves this retirement outcome as authoritative settled input, not merely this proposal's own internal
+audit: **"A Profession track exists only where it changes the defining core
+curriculum of the occupation. If the difference can be expressed through Learning Groups, choice slots,
+equipment, Society/cultural availability, or optional routes, do not create a track."** The mechanisable
+build test above — a track must declare a core route of its own — is how that governing rule is enforced
+in this catalogue; the two are the same discipline stated once as product policy and once as an
+executable check.
+
+The same ruling settles two dispositions by name, so neither is an open track question:
+
+- **Soldier longbow identity** is represented through the appropriate longbow/combat Learning Group (F41,
+  reachable through the retired track's former route) plus contextual/cultural availability, **not**
+  through a Profession track.
+- **Communal/militia command** (the former P25 communal-command track) remains a route/context
+  distinction, **not** a track, unless future content demonstrates a materially different defining
+  curriculum.
+
+**No further track investigation is required.** The result below is final for this reconciliation, not
+pending further Product Owner review.
+
+Result: 2 of 84 Professions keep tracks, carrying 4 tracks between them (16 retired). Valid paths fall to 86.
 
 | Profession                    | Tracks before | Tracks after | Why                                                                                                                                                                                                                                     |
 | ----------------------------- | ------------: | -----------: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
