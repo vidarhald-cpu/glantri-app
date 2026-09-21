@@ -60,16 +60,38 @@ describe("current worktree database ownership", () => {
       taskEnvironment(worktreeA),
     );
 
-    expect(validated.worktreeKey).toBe("glantri-312-cross-a");
+    expect(validated.worktreeKey).toBe(
+      deriveCurrentWorktreeTaskDatabaseIdentity(worktreeA, "312").worktreeKey,
+    );
     expect(() =>
       assertCurrentWorktreeTaskContainer(inspection(worktreeA), validated),
     ).not.toThrow();
     expect(() =>
       assertCurrentWorktreeTaskContainer(
-        inspection(worktreeA, { "glantri.db.worktree": "glantri-312-cross-b" }),
+        inspection(worktreeA, {
+          "glantri.db.worktree": deriveCurrentWorktreeTaskDatabaseIdentity(worktreeB, "312")
+            .worktreeKey,
+        }),
         validated,
       ),
     ).toThrow("current worktree");
+  });
+
+  it("derives distinct keys, owners, containers, and ports for sibling worktrees sharing a parent directory", () => {
+    const sibling1 = "/private/tmp/glantri-260-builder";
+    const sibling2 = "/private/tmp/glantri-260-qa";
+
+    const identity1 = deriveCurrentWorktreeTaskDatabaseIdentity(sibling1, "260");
+    const identity2 = deriveCurrentWorktreeTaskDatabaseIdentity(sibling2, "260");
+
+    expect(identity1.worktreeKey).not.toBe(identity2.worktreeKey);
+    expect(identity1.owner).not.toBe(identity2.owner);
+    expect(identity1.container).not.toBe(identity2.container);
+    expect(identity1.applicationDatabase).not.toBe(identity2.applicationDatabase);
+    expect(identity1.testDatabase).not.toBe(identity2.testDatabase);
+
+    // Stable/deterministic: deriving again from the same path yields the same identity.
+    expect(deriveCurrentWorktreeTaskDatabaseIdentity(sibling1, "260")).toEqual(identity1);
   });
 
   it("refuses a copied foreign .env.task before verify, reset, or cleanup can select its target", () => {

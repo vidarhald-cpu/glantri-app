@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
-import { basename, dirname } from "node:path";
+import { basename, resolve } from "node:path";
 
 import {
   validateTaskDatabaseEnvironment,
@@ -34,10 +35,21 @@ export interface ValidatedCurrentWorktreeTaskDatabaseEnvironment extends Validat
 }
 
 function normalizeWorktreeKey(repositoryRoot: string): string {
-  const key = basename(dirname(repositoryRoot))
+  // The key must uniquely identify this worktree's own filesystem location, not just its
+  // parent directory: sibling worktrees for the same issue (for example a Builder at
+  // /private/tmp/glantri-260-builder and QA at /private/tmp/glantri-260-qa) share a parent
+  // directory but must never collide on owner marker, container name, or port. A directory
+  // basename alone is also not sufficient (two worktrees can share a leaf name under
+  // different parents, as in a `.../<random>/glantri-app-forgejo` layout), so the key
+  // combines a human-readable label with a short digest of the full resolved path, which is
+  // guaranteed distinct for any two distinct worktree locations.
+  const resolvedRoot = resolve(repositoryRoot);
+  const label = basename(resolvedRoot)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+  const digest = createHash("sha256").update(resolvedRoot).digest("hex").slice(0, 8);
+  const key = label ? `${label}-${digest}` : digest;
 
   if (!key) {
     throw new Error("Unable to derive a stable identity for the current linked worktree.");
