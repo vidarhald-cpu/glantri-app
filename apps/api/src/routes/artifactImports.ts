@@ -104,7 +104,9 @@ export const artifactImportRoutes: FastifyPluginAsync = async (app) => {
         if (action === "cleanup") return service.cleanup(campaignId, user.id, id);
         if (action === "preview") {
           const input = artifactImportSelectionSchema.parse(request.body);
-          return { preview: await service.preview(campaignId, user.id, id, input.selected) };
+          return {
+            preview: await service.preview(campaignId, user.id, id, input.selected, input.bindings),
+          };
         }
         const input = artifactImportAcceptanceSchema.parse(request.body);
         return {

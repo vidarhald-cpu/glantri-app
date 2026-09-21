@@ -396,6 +396,7 @@ model User {
   createdAssets CampaignAsset[]
   artifactAuditEvents ArtifactAuditEvent[] @relation("ArtifactAuditActor")
   attachedArtifactReferences ScenarioArtifactReference[] @relation("ScenarioArtifactAttachedBy")
+  attachedItemArtifacts CampaignItemArtifactAttachment[] @relation("CampaignItemArtifactAttachedBy")
   publishedArtifactReferences ScenarioArtifactReference[] @relation("ScenarioArtifactPublishedBy")
   controlledScenarioParticipants ScenarioParticipant[] @relation("ScenarioParticipantController")
   reusableEntities ReusableEntity[]
@@ -474,6 +475,7 @@ model CharacterEquipmentItem {
   holderCharacter       Character?          @relation(fields: [holderCharacterId], references: [id], onDelete: SetNull)
   campaignContext       Campaign?           @relation(fields: [campaignContextId], references: [id], onDelete: SetNull)
   storageLocation       CharacterStorageLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  artifactAttachments   CampaignItemArtifactAttachment[]
 
   @@index([holderCharacterId])
   @@index([holderCharacterId, locationId])
@@ -534,6 +536,7 @@ model Campaign {
   artifactAuditEvents ArtifactAuditEvent[]
   artifactReferences ScenarioArtifactReference[]
   equipmentItems CharacterEquipmentItem[]
+  itemArtifactAttachments CampaignItemArtifactAttachment[]
   gmUser      User            @relation(fields: [gmUserId], references: [id], onDelete: Cascade)
   maps        CampaignMap[]
   notes        CampaignNote[]
@@ -714,6 +717,8 @@ model CampaignAsset {
   visibility  ScenarioVisibility
   artifactKind String?
   altText String?
+  /// GM-private notes. Never included in the player-facing Artifact projection.
+  gmNotes String?
   originalFilename String?
   provenanceKind String?
   sourceLabel String?
@@ -741,6 +746,7 @@ model CampaignAsset {
   currentRevision ArtifactRevision? @relation("ArtifactCurrentRevision", fields: [currentRevisionId], references: [id], onDelete: Restrict)
   revisions ArtifactRevision[] @relation("ArtifactRevisions")
   sourceMappings ArtifactSourceMapping[]
+  itemAttachments CampaignItemArtifactAttachment[]
 
   @@unique([campaignId, id])
   @@index([campaignId])
@@ -1067,6 +1073,26 @@ model ArtifactImportSession {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([campaignId, actorUserId, createdAt])
+}
+
+/// Representation link from a canonical Item to an Artifact that depicts it.
+/// Attaching a representation never transfers ownership, changes Item
+/// presence or location, or makes the Artifact into a game-world object.
+model CampaignItemArtifactAttachment {
+  id String @id @default(cuid())
+  campaignId String
+  itemId String
+  artifactId String
+  attachedByUserId String
+  createdAt DateTime @default(now())
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  item CharacterEquipmentItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  artifact CampaignAsset @relation(fields: [campaignId, artifactId], references: [campaignId, id], onDelete: Cascade)
+  attachedByUser User @relation("CampaignItemArtifactAttachedBy", fields: [attachedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([itemId, artifactId])
+  @@index([campaignId, artifactId])
+  @@index([campaignId, itemId])
 }
 
 model ArtifactSourceMapping {

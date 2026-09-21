@@ -56,6 +56,107 @@ function serializeItemFacts(value: CanonicalEquipmentItem["itemFacts"]): Prisma.
   return EquipmentItemFactsV1Schema.parse(value) as unknown as Prisma.InputJsonValue;
 }
 
+/**
+ * The single canonical mapping from a domain Item to its stored row. Shared so
+ * that every writer — including staged intake acceptance, which must create the
+ * Item inside the same transaction as its Artifact — uses one derivation.
+ */
+/**
+ * A descriptive-only campaign Item: a game-world object the GM described in
+ * words, with no Equipment template and therefore no mechanical behaviour. It
+ * has campaign presence and no holder until somebody picks it up.
+ */
+export function buildDescriptiveCampaignEquipmentItem(input: {
+  campaignId: string;
+  description: string | null;
+  id: string;
+  notes: string | null;
+  title: string;
+}): CanonicalEquipmentItem {
+  return CanonicalEquipmentItemSchema.parse({
+    acquiredFrom: null,
+    campaignContextId: input.campaignId,
+    category: null,
+    characterId: null,
+    conditionState: "intact",
+    displayName: input.title,
+    durabilityCurrent: null,
+    durabilityMax: null,
+    encumbranceOverride: null,
+    holderCharacterId: null,
+    id: input.id,
+    isEquipped: false,
+    isFavorite: null,
+    isStackable: false,
+    itemFacts: EquipmentItemFactsV1Schema.parse({
+      activeMechanics: [],
+      descriptiveTraits: input.description
+        ? [
+            {
+              category: "other",
+              id: `intake-description-${input.id}`,
+              text: input.description,
+              visibility: "revealed",
+            },
+          ]
+        : [],
+      templateOverrides: [],
+      unsupportedCapabilities: [],
+      version: 1,
+    }),
+    itemKind: "descriptive_only",
+    material: "other",
+    mechanicalOverrides: [],
+    notes: input.notes,
+    physicalBaseEncumbrance: null,
+    previousStorageAssignment: null,
+    quality: "standard",
+    quantity: 1,
+    specificityType: "specific",
+    statusTags: null,
+    storageAssignment: null,
+    templateId: null,
+    valueOverride: null,
+  });
+}
+
+export function campaignEquipmentItemCreateData(
+  item: CanonicalEquipmentItem,
+): Prisma.CharacterEquipmentItemUncheckedCreateInput {
+  return {
+    acquiredFrom: item.acquiredFrom ?? null,
+    campaignContextId: item.campaignContextId,
+    category: item.category,
+    holderCharacterId: item.holderCharacterId,
+    conditionState: item.conditionState,
+    displayName: item.displayName ?? null,
+    durabilityCurrent: item.durabilityCurrent ?? null,
+    durabilityMax: item.durabilityMax ?? null,
+    encumbranceOverride: item.encumbranceOverride ?? null,
+    id: item.id,
+    isEquipped: item.isEquipped ?? null,
+    isFavorite: item.isFavorite ?? null,
+    isStackable: item.isStackable,
+    itemFactsJson: serializeItemFacts(item.itemFacts),
+    mechanicalOverridesJson: ItemMechanicalOverridesSchema.parse(
+      item.mechanicalOverrides ?? [],
+    ) as Prisma.InputJsonValue,
+    physicalBaseEncumbrance: item.physicalBaseEncumbrance ?? null,
+    locationId: item.storageAssignment?.locationId ?? null,
+    carryMode: item.storageAssignment?.carryMode ?? null,
+    previousLocationId: item.previousStorageAssignment?.locationId ?? null,
+    previousCarryMode: item.previousStorageAssignment?.carryMode ?? null,
+    material: item.material,
+    notes: item.notes ?? null,
+    quality: item.quality,
+    quantity: item.quantity,
+    specificityType: item.specificityType,
+    statusTagsJson: serializeJsonArray(item.statusTags),
+    templateId: item.templateId,
+    valueOverride: item.valueOverride ?? null,
+  };
+}
+
 function preserveStoredItemFacts(
   value: CanonicalEquipmentItem["itemFacts"],
   stored: unknown,
@@ -645,38 +746,7 @@ export function createPrismaCharacterEquipmentRepository(
     },
     async createCampaignEquipmentItem(item) {
       const created = await prisma.characterEquipmentItem.create({
-        data: {
-          acquiredFrom: item.acquiredFrom ?? null,
-          campaignContextId: item.campaignContextId,
-          category: item.category,
-          holderCharacterId: item.holderCharacterId,
-          conditionState: item.conditionState,
-          displayName: item.displayName ?? null,
-          durabilityCurrent: item.durabilityCurrent ?? null,
-          durabilityMax: item.durabilityMax ?? null,
-          encumbranceOverride: item.encumbranceOverride ?? null,
-          id: item.id,
-          isEquipped: item.isEquipped ?? null,
-          isFavorite: item.isFavorite ?? null,
-          isStackable: item.isStackable,
-          itemFactsJson: serializeItemFacts(item.itemFacts),
-          mechanicalOverridesJson: ItemMechanicalOverridesSchema.parse(
-            item.mechanicalOverrides ?? [],
-          ) as Prisma.InputJsonValue,
-          physicalBaseEncumbrance: item.physicalBaseEncumbrance ?? null,
-          locationId: item.storageAssignment?.locationId ?? null,
-          carryMode: item.storageAssignment?.carryMode ?? null,
-          previousLocationId: item.previousStorageAssignment?.locationId ?? null,
-          previousCarryMode: item.previousStorageAssignment?.carryMode ?? null,
-          material: item.material,
-          notes: item.notes ?? null,
-          quality: item.quality,
-          quantity: item.quantity,
-          specificityType: item.specificityType,
-          statusTagsJson: serializeJsonArray(item.statusTags),
-          templateId: item.templateId,
-          valueOverride: item.valueOverride ?? null,
-        },
+        data: campaignEquipmentItemCreateData(item),
       });
 
       return mapCanonicalEquipmentItem(created);

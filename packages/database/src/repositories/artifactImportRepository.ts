@@ -4,12 +4,24 @@ import {
   artifactPackageSchema,
   ORDINARY_ARTIFACT_UPLOAD_PRODUCER,
   validateArtifactSelection,
+  type ArtifactImportDerivedMetadata,
   type ArtifactPackage,
   type ArtifactImportPreview,
   type ArtifactImportPreviewItem,
+  type ArtifactRelationshipBinding,
 } from "@glantri/domain";
 import { prisma } from "../client";
 import { ArtifactConflictError, ArtifactNotFoundError } from "../services/artifactService";
+import {
+  buildDescriptiveCampaignEquipmentItem,
+  campaignEquipmentItemCreateData,
+} from "./characterEquipmentRepository";
+import {
+  loadRelationshipContext,
+  objectLabel,
+  relationshipBlocks,
+  resolveRelationship,
+} from "./artifactIntakeRelationships";
 
 export interface StagedResource {
   id: string;
@@ -96,8 +108,26 @@ export class ArtifactImportRepository {
     campaignId: string,
     manifest: ArtifactPackage,
     selected: string[],
+    bindings: ArtifactRelationshipBinding[],
+    resources: StagedResource[],
   ): Promise<ArtifactImportPreviewItem[]> {
     const errors = validateArtifactSelection(manifest, selected);
+    const relationships = await loadRelationshipContext(tx, campaignId, manifest, bindings);
+    const derivedFor = (
+      resourceId: string | undefined,
+    ): ArtifactImportDerivedMetadata | undefined => {
+      const resource = resources.find((entry) => entry.id === resourceId);
+      return resource
+        ? {
+            byteSize: resource.byteSize,
+            mediaType: resource.mediaType,
+            originalFilename: resource.filename,
+            sha256: resource.sha256,
+            storageKey: resource.key,
+            storageProvider: resource.provider,
+          }
+        : undefined;
+    };
     const mappings = await tx.artifactSourceMapping.findMany({
       where: {
         campaignId,
@@ -130,9 +160,54 @@ export class ArtifactImportRepository {
       },
       select: { id: true, sha256Digest: true, title: true },
     });
+    const relationshipFor = (object: ArtifactPackage["objects"][number], reasons: string[]) => {
+      const relationship = resolveRelationship({
+        binding: bindings.find((entry) => entry.objectId === object.id),
+        context: relationships,
+        manifest,
+        object,
+      });
+      if (relationship && relationshipBlocks(relationship)) reasons.push(relationship.explanation);
+      if (
+        relationship?.target?.kind === "local" &&
+        ["resolved", "bound"].includes(relationship.status) &&
+        !selected.includes(relationship.target.id)
+      )
+        reasons.push(
+          "The related object in this proposal is excluded. Include it, or clear the link.",
+        );
+      return relationship;
+    };
+
     return manifest.objects.map((object) => {
       const reasons = [...(errors.get(object.id) ?? []), ...(errors.get("package") ?? [])];
       const warnings: string[] = [];
+      if (object.type === "Item") {
+        const proposal: ArtifactImportPreviewItem = {
+          id: object.id,
+          title: objectLabel(object),
+          selected: selected.includes(object.id),
+          optional: object.optional,
+          status: "create",
+          reasons,
+          warnings,
+          objectType: "Item",
+          attachedObjectIds: object.attachments.flatMap((attachment) =>
+            attachment.kind === "local" ? [attachment.id] : [],
+          ),
+          attachedArtifactIds: object.attachments.flatMap((attachment) =>
+            attachment.kind === "existing" ? [attachment.artifactId] : [],
+          ),
+          gmNotes: object.gmNotes,
+          itemDescription: object.itemMetadata?.description,
+        };
+        for (const artifactId of proposal.attachedArtifactIds ?? [])
+          if (!relationships.artifactsById.has(artifactId))
+            reasons.push("An attached existing Artifact is unavailable in this Campaign.");
+        proposal.relationship = relationshipFor(object, reasons);
+        if (reasons.length) proposal.status = "invalid";
+        return proposal;
+      }
       const item: ArtifactImportPreviewItem = {
         id: object.id,
         title: object.metadata?.title ?? object.id,
@@ -142,7 +217,11 @@ export class ArtifactImportRepository {
         reasons,
         warnings,
         resourceId: object.resourceId,
+        objectType: "Artifact",
+        derived: derivedFor(object.resourceId),
+        gmNotes: object.gmNotes,
       };
+      item.relationship = relationshipFor(object, reasons);
       if (
         manifest.resources.find((resource) => resource.id === object.resourceId)?.mediaType ===
           "application/pdf" &&
@@ -229,6 +308,7 @@ export class ArtifactImportRepository {
     actorUserId: string,
     id: string,
     selected: string[],
+    bindings: ArtifactRelationshipBinding[] = [],
   ): Promise<ArtifactImportPreview> {
     return this.client.$transaction(
       async (tx) => {
@@ -240,13 +320,15 @@ export class ArtifactImportRepository {
         if (!["ready", "review"].includes(session.state))
           throw new ArtifactConflictError("This import is no longer available for review.");
         const manifest = artifactPackageSchema.parse(session.manifestJson);
-        const items = await this.plan(tx, campaignId, manifest, selected);
+        const resources = session.resourcesJson as unknown as StagedResource[];
+        const items = await this.plan(tx, campaignId, manifest, selected, bindings, resources);
         const structural = validateArtifactSelection(manifest, selected);
         const preview: ArtifactImportPreview = {
           id,
           title: manifest.title,
           state: "review",
           previewToken: randomUUID(),
+          bindings,
           items,
           valid:
             structural.size === 0 &&
@@ -291,7 +373,15 @@ export class ArtifactImportRepository {
           throw new ArtifactConflictError("Resolve the selected content before accepting.");
         const manifest = artifactPackageSchema.parse(session.manifestJson);
         const selected = preview.items.filter((x) => x.selected).map((x) => x.id);
-        const items = await this.plan(tx, campaignId, manifest, selected);
+        const resources = session.resourcesJson as unknown as StagedResource[];
+        const items = await this.plan(
+          tx,
+          campaignId,
+          manifest,
+          selected,
+          preview.bindings ?? [],
+          resources,
+        );
         if (canonical(items) !== canonical(preview.items))
           throw new ArtifactConflictError(
             "Content changed since review. Refresh the preview and approve again.",
@@ -302,9 +392,9 @@ export class ArtifactImportRepository {
           approvedUpdates.some((id) => !targets.some((x) => x.id === id))
         )
           throw new ArtifactConflictError("Approve each proposed update explicitly.");
-        const resources = session.resourcesJson as unknown as StagedResource[];
         const result: Record<string, string> = {};
         for (const item of items.filter((x) => x.selected)) {
+          if (item.objectType === "Item") continue;
           if (item.status === "present") {
             result[item.id] = item.targetArtifactId!;
             continue;
@@ -338,6 +428,7 @@ export class ArtifactImportRepository {
                 type: metadata.artifactKind === "portrait" ? "image" : metadata.artifactKind,
                 description: metadata.description,
                 altText: metadata.altText,
+                gmNotes: object.gmNotes,
                 provenanceKind: ordinaryUpload ? metadata.provenanceKind : "imported",
                 sourceLabel: ordinaryUpload
                   ? metadata.sourceLabel
@@ -363,6 +454,7 @@ export class ArtifactImportRepository {
                 title: metadata.title,
                 description: metadata.description ?? null,
                 altText: metadata.altText ?? null,
+                ...(object.gmNotes === undefined ? {} : { gmNotes: object.gmNotes }),
                 metadataVersion: { increment: 1 },
                 ...representation,
               },
@@ -430,6 +522,75 @@ export class ArtifactImportRepository {
             },
           });
           result[item.id] = artifactId;
+        }
+        // Canonical Items are created in the same transaction as their Artifacts,
+        // so a confirmed proposal becomes real as a whole or not at all.
+        for (const proposal of items.filter((x) => x.selected && x.objectType === "Item")) {
+          const object = manifest.objects.find((x) => x.id === proposal.id)!;
+          if (!object.itemMetadata) throw new ArtifactConflictError();
+          const itemId = `${campaignId}:item-${randomUUID()}`;
+          await tx.characterEquipmentItem.create({
+            data: campaignEquipmentItemCreateData(
+              buildDescriptiveCampaignEquipmentItem({
+                campaignId,
+                description: object.itemMetadata.description ?? null,
+                id: itemId,
+                notes: object.gmNotes ?? null,
+                title: object.itemMetadata.title,
+              }),
+            ),
+          });
+          result[proposal.id] = itemId;
+        }
+        // Representation links, once every confirmed object has canonical identity.
+        for (const proposal of items.filter((x) => x.selected)) {
+          const object = manifest.objects.find((x) => x.id === proposal.id)!;
+          const links: Array<{ artifactId: string; itemId: string }> = [];
+          if (proposal.objectType === "Item") {
+            const itemId = result[proposal.id]!;
+            for (const attachment of object.attachments) {
+              const artifactId =
+                attachment.kind === "local" ? result[attachment.id] : attachment.artifactId;
+              if (!artifactId) throw new ArtifactConflictError();
+              links.push({ artifactId, itemId });
+            }
+          }
+          const relationship = proposal.relationship;
+          if (
+            relationship?.target &&
+            ["resolved", "bound"].includes(relationship.status) &&
+            proposal.objectType
+          ) {
+            const target = relationship.target;
+            const targetId = target.kind === "local" ? result[target.id] : target.id;
+            if (!targetId) throw new ArtifactConflictError();
+            links.push(
+              proposal.objectType === "Item"
+                ? { artifactId: targetId, itemId: result[proposal.id]! }
+                : { artifactId: result[proposal.id]!, itemId: targetId },
+            );
+          }
+          for (const link of links) {
+            await tx.campaignItemArtifactAttachment.upsert({
+              where: { itemId_artifactId: { artifactId: link.artifactId, itemId: link.itemId } },
+              create: {
+                artifactId: link.artifactId,
+                attachedByUserId: actorUserId,
+                campaignId,
+                itemId: link.itemId,
+              },
+              update: {},
+            });
+            await tx.artifactAuditEvent.create({
+              data: {
+                campaignId,
+                artifactId: link.artifactId,
+                actorUserId,
+                action: "item_representation_attach",
+                metadataJson: { importId: id, itemId: link.itemId, localId: proposal.id },
+              },
+            });
+          }
         }
         await tx.artifactImportSession.update({
           where: { id },

@@ -69,6 +69,41 @@ describe("Artifact-only package contract", () => {
       ).get("n0"),
     ).toContain("Dependency graph is too deep.");
   });
+  it("accepts a proposed Item with an attached Artifact and refuses malformed Item shapes", () => {
+    const withItem = input();
+    withItem.objects.push({
+      id: "item",
+      optional: true,
+      type: "Item",
+      itemMetadata: { title: "Torn Treasure Map" },
+      attachments: [{ kind: "local", id: "b" }],
+    } as never);
+    const manifest = artifactPackageSchema.parse(withItem);
+    expect(validateArtifactSelection(manifest, ["a", "b", "item"]).size).toBe(0);
+    // Excluding the representation must not leave the Item pointing at nothing.
+    expect(validateArtifactSelection(manifest, ["a", "item"]).get("item")).toContain(
+      "Keep the Artifact that represents this Item selected, or exclude the Item too.",
+    );
+  });
+  it("refuses an Item that declares media identity and an Artifact that declares Item details", () => {
+    const bad = input();
+    bad.objects.push({
+      id: "item",
+      optional: true,
+      type: "Item",
+      itemMetadata: { title: "Sword" },
+      resourceId: "image",
+    } as never);
+    const manifest = artifactPackageSchema.parse(bad);
+    expect(validateArtifactSelection(manifest, ["a", "b", "item"]).get("item")).toContain(
+      "An Item never declares Artifact media, media identity or an update target.",
+    );
+    const mixed = input();
+    (mixed.objects[1] as never as { itemMetadata: unknown }).itemMetadata = { title: "B" };
+    expect(
+      validateArtifactSelection(artifactPackageSchema.parse(mixed), ["a", "b"]).get("b"),
+    ).toContain("Only an Item may carry Item details or attached representations.");
+  });
   it("rejects dependency cycles and excessive graph depth", () => {
     const manifest = artifactPackageSchema.parse(input());
     manifest.objects[1]!.dependencies = [{ kind: "local", id: "a" }];
