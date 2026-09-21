@@ -13,7 +13,12 @@ PRODUCT OWNER RULINGS — 2026-09-21\
 [#268](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/268). The
 Blackboard is meta-level player collaboration. See
 [section 8](#8-blackboard-boundary) and
-[decision PO-SPW-2](#po-spw-2--settled-the-blackboard-is-meta-level-player-collaboration).
+[decision PO-SPW-2](#po-spw-2--settled-the-blackboard-is-meta-level-player-collaboration).\
+**Amended:** 2026-09-21 — PRODUCT OWNER RULING PO-SPW-1 and PO-SPW-3, recorded
+on [#268](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/268).
+**#268 now has no remaining open Product Owner decisions**, and no slice is
+gated on one. See
+[section 12](#12-product-owner-decisions--all-settled).
 
 This contract records the approved rulings that govern the in-play surface: how
 Items and Artifacts differ, how presence differs from visibility, where play
@@ -119,9 +124,14 @@ and
 
 ### 4.3 Attached representation
 
-A physical game-world object may have one or more Artifacts attached as its
-representation. Attachment is a representation link. It does not make the
-Artifact an Item, and it does not make the Item media.
+A physical game-world object may have **zero, one or multiple** Artifacts
+attached as its representation. Attachment is a representation link. It does not
+make the Artifact an Item, and it does not make the Item media.
+
+The required association semantics — multiplicity, revision pinning, and
+attachment provenance — are settled by
+[PO-SPW-1](#po-spw-1--settled-item-to-artifact-representation-requires-association-semantics).
+The recording mechanism belongs to the slice that implements it.
 
 | Example                | Model                                  |
 | ---------------------- | -------------------------------------- |
@@ -498,14 +508,22 @@ one-state/two-authorities pattern for the workspace.
 tooling. Does not change Encounter lifecycle, membership, or Combat. No Item or
 Artifact work.
 
+**Scope boundary from ruling PO-SPW-3.** **S2 is not widened by absorbing the
+existing Encounter workspace tabs.** That tooling is retained as transitional
+GM-only management tooling alongside the workspace; S2 surfaces the active
+Encounter as contextual state and stops there. No new player-facing play
+capability is added to the Encounter workspace by this slice or any other.
+Later absorption or consolidation is separately scoped, after playtesting. See
+[PO-SPW-3](#po-spw-3--settled-the-existing-encounter-workspace-is-retained-as-transitional-gm-only-management-tooling).
+
 **Likely surfaces.** Scenario workspace shell and Scenario session projection;
 the Campaign workspace/scenario orchestration hotspot.
 
 **Dependencies.** Independent of S1 but shares the workspace shell; if both run,
 name one integration owner for the shell.
 
-**Product decision needed first.** No, but section 12 decision PO-SPW-3 shapes
-how far the existing Encounter surface is folded in.
+**Product decision needed first.** No. PO-SPW-3 is settled and closed; it bounds
+S2's scope rather than gating it.
 
 ### Slice S3 — Encounter-context Artifact Reveal
 
@@ -595,11 +613,30 @@ to the existing entry-level retract capability.
 **Likely surfaces.** Item and Artifact domain/services; the Campaign Blackboard
 hotspot; the play workspace.
 
+**Acceptance requirements from ruling PO-SPW-1.** The representation link this
+slice builds must satisfy the settled association semantics. It must:
+
+1. allow an Item **zero, one or multiple** Artifact representations;
+2. **support revision pinning**;
+3. **carry attachment provenance**;
+4. **not assume one-to-one**;
+5. reuse an existing canonical association mechanism **only if that mechanism
+   cleanly satisfies points 1 to 4**, and otherwise introduce a **dedicated
+   Item-to-Artifact link entity/table** at this slice.
+
+**A simple one-to-one Item-to-Artifact pointer field is not acceptable.** The
+mechanism is this slice's choice within those semantics, not a decision it waits
+for. See
+[PO-SPW-1](#po-spw-1--settled-item-to-artifact-representation-requires-association-semantics).
+
 **Dependencies.** After S4 and S5, and after the durable shared-material
 collection exists in player-facing form (established in S1; S3 extends it but is
-not a prerequisite). **Blocked on product decision PO-SPW-1.**
+not a prerequisite). **No longer gated on any product decision.**
 
-**Product decision needed first.** Yes — PO-SPW-1 only.
+**Product decision needed first.** No. PO-SPW-1 is settled and closed. What
+remains is an acceptance requirement on this slice: if the semantics above
+cannot be met by the mechanism chosen, that is a stop condition, not a licence
+to fall back to a one-to-one pointer.
 
 ### Later bounded capability — player-created collaboration Artifacts
 
@@ -645,13 +682,17 @@ S2 active Encounter as contextual state
         S1 + S2 -> S3 Encounter-context Reveal
         S2      -> S4 Items present in the play context
                    S4 -> S5 player play inventory projection
-                   S4 + S5 + durable collection + PO-SPW-1
+                   S4 + S5 + durable collection
                        -> S6 attached representation + Blackboard sharing
 ```
 
+**No slice is gated on a product decision.** All of PO-SPW-1, PO-SPW-2 and
+PO-SPW-3 are settled and closed, so the ordering above contains only slice and
+capability dependencies.
+
 S1 and S2 may proceed in parallel with a named shell integration owner. S3 and
-S4 may proceed in parallel once S2 lands. S6 is last and is gated on a product
-decision.
+S4 may proceed in parallel once S2 lands. S6 is last because of its slice
+dependencies, not because it waits for a decision.
 
 **Effect of ruling PO-SPW-2 on this ordering.** PO-SPW-2 is settled and closed
 and **now gates nothing**. S3 is no longer conditioned on it and needs no
@@ -664,28 +705,89 @@ already follows S1 in the graph, no new slice and no new parallelism constraint
 is created. Player-created collaboration Artifacts are outside this ordering
 entirely.
 
+**Effect of rulings PO-SPW-1 and PO-SPW-3 on this ordering.** Both are settled
+and closed and **neither gates anything**. PO-SPW-1 removes the last decision
+edge from the graph: S6 is now conditioned on the association semantics recorded
+as its acceptance requirements, which the slice satisfies rather than waits for.
+PO-SPW-3 adds no edge at all; it bounds S2's scope so that the existing
+Encounter workspace tabs are not absorbed into it. No new slice and no new
+parallelism constraint is created by either ruling.
+
 ---
 
-## 12. Product Owner decisions
+## 12. Product Owner decisions — all settled
 
-PO-SPW-1 and PO-SPW-3 remain **open**. PO-SPW-2 is **settled and closed**; its
-record is retained below rather than deleted, so the history shows what was
-asked and how the ruling reframed it.
+**#268 has no remaining open Product Owner decisions.** PO-SPW-1, PO-SPW-2 and
+PO-SPW-3 are all **settled and closed**, and no slice in section 11 is gated on
+a product decision any more.
 
-### PO-SPW-1 — Where an Item's attached Artifact representations are recorded
+Each original question text is retained below rather than deleted, so the
+history shows what was asked and how the ruling answered or reframed it.
 
-Section 4.3 approves that an Item may have attached Artifact representations.
-The recording mechanism is not settled. The plausible options are a reference
-from the Item to Artifact identity, a reference-table between the two existing
-entities, or reuse of an existing reference mechanism.
+### PO-SPW-1 — SETTLED: Item-to-Artifact representation requires association semantics
 
-Each is a link between two existing entities rather than a new primitive, so no
-stop condition is triggered. But the choice has permission, provenance, and
-revision-pinning consequences under
-[Artifact Management](artifact-management-package-import.md#82-consumers-reference-artifact-identity),
-so it is a product/architecture decision rather than a Builder choice.
+**Status:** **Settled and closed.**\
+**Settled on:** 2026-09-21\
+**Authority:** PRODUCT OWNER RULING recorded on
+[#268](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/268),
+"PRODUCT OWNER RULING — PO-SPW-1 and PO-SPW-3 SETTLED".\
+**Gates:** **Nothing.** In particular, **S6 is no longer gated on this
+decision.** S6 is now conditioned on the semantics below being met, which is an
+acceptance requirement rather than a decision to wait for.
 
-**Status:** Open. **Blocks:** Slice S6.
+**The question as originally recorded**, retained as provenance:
+
+> **PO-SPW-1 — Where an Item's attached Artifact representations are recorded**
+>
+> Section 4.3 approves that an Item may have attached Artifact representations.
+> The recording mechanism is not settled. The plausible options are a reference
+> from the Item to Artifact identity, a reference-table between the two existing
+> entities, or reuse of an existing reference mechanism.
+>
+> Each is a link between two existing entities rather than a new primitive, so
+> no stop condition is triggered. But the choice has permission, provenance, and
+> revision-pinning consequences under
+> [Artifact Management](artifact-management-package-import.md#82-consumers-reference-artifact-identity),
+> so it is a product/architecture decision rather than a Builder choice.
+>
+> **Affects:** Slice S6.
+
+**How it was settled.** The ruling does not name a table. It settles the
+**required association semantics** and leaves the mechanism to the slice that
+reaches the work, provided the mechanism satisfies them.
+
+**What was ruled.** The Item-to-Artifact representation mechanism must:
+
+1. allow an Item **zero, one or multiple** Artifact representations;
+2. **support revision pinning**, in the sense of
+   [Artifact Management §4.4](artifact-management-package-import.md#44-revision-pinning),
+   while still referencing stable Artifact identity under
+   [§8.2](artifact-management-package-import.md#82-consumers-reference-artifact-identity);
+3. **carry attachment provenance**;
+4. **not assume one-to-one**;
+5. **reuse an existing canonical association mechanism only if that mechanism
+   cleanly satisfies points 1 to 4**;
+6. otherwise use a **dedicated Item-to-Artifact link entity/table**, introduced
+   when the downstream slice reaches that work.
+
+**A simple one-to-one Item-to-Artifact pointer field is not acceptable.**
+
+The association records representation only. Under
+[Artifact Management §6.4](artifact-management-package-import.md#64-no-implicit-ownership-transfer)
+attaching, referencing or sharing transfers no ownership, and an attached
+Artifact never becomes an Item.
+
+**The mechanism is deliberately not chosen here.** This contract states the
+semantics and does not depend on any particular implementation. A separate
+in-flight change
+([#271](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/271)) proposes a
+`CampaignItemArtifactAttachment` link table; that work is **in flight and not
+accepted**, so it is not the canonical mechanism and nothing in this contract is
+written against it.
+
+**Scope of the ruling.** Contract and product documentation only. It authorizes
+no runtime implementation, schema, or migration beyond what the existing slice
+authorizations already permit.
 
 ### PO-SPW-2 — SETTLED: the Blackboard is meta-level player collaboration
 
@@ -744,37 +846,74 @@ name. The question dissolves once they are separated.
 no runtime implementation beyond what the existing slice authorizations already
 permit.
 
-### PO-SPW-3 — The fate of the existing Encounter workspace surface
+### PO-SPW-3 — SETTLED: the existing Encounter workspace is retained as transitional GM-only management tooling
 
-The rulings establish that play happens in the Scenario Play Workspace and that
-no separate Encounter play page is created. The existing Encounter workspace and
-its tabs, documented in
-[Encounter Workspace](../product/campaign-scenario-encounter-workflows.md#encounter-workspace),
-are GM tooling that predates this contract.
+**Status:** **Settled and closed.**\
+**Settled on:** 2026-09-21\
+**Authority:** PRODUCT OWNER RULING recorded on
+[#268](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/268),
+"PRODUCT OWNER RULING — PO-SPW-1 and PO-SPW-3 SETTLED".\
+**Gates:** **Nothing.** It places a **scope boundary** on S2 rather than
+blocking it.
 
-Whether that GM tooling is progressively absorbed into the workspace, retained
-as GM-only management alongside it, or left unchanged is a product decision.
-This contract does not remove it.
+**The question as originally recorded**, retained as provenance:
 
-**Status:** Open. **Affects:** Slice S2 scope.
+> **PO-SPW-3 — The fate of the existing Encounter workspace surface**
+>
+> The rulings establish that play happens in the Scenario Play Workspace and
+> that no separate Encounter play page is created. The existing Encounter
+> workspace and its tabs, documented in
+> [Encounter Workspace](../product/campaign-scenario-encounter-workflows.md#encounter-workspace),
+> are GM tooling that predates this contract.
+>
+> Whether that GM tooling is progressively absorbed into the workspace, retained
+> as GM-only management alongside it, or left unchanged is a product decision.
+> This contract does not remove it.
+>
+> **Affects:** Slice S2 scope.
 
-Ruling PO-SPW-2 does not touch PO-SPW-1 or PO-SPW-3. Both remain open on their
-original terms.
+**How it was settled.** **Option A is chosen:** retain it, alongside the
+workspace, as transitional tooling.
+
+**What was ruled:**
+
+1. The existing Encounter workspace is **retained as transitional GM-only
+   management tooling**. It is not removed.
+2. It is **not a second play surface**. The **Scenario Play Workspace is
+   canonical for in-play presentation**.
+3. **No new player-facing play capability** goes into the Encounter workspace.
+   New in-play capability belongs to the Scenario Play Workspace.
+4. **S2 is not widened** by absorbing the existing Encounter workspace tabs.
+   Recorded as a scope boundary on
+   [S2](#slice-s2--active-encounter-as-contextual-state-in-the-scenario-workspace).
+5. Later absorption or consolidation of that tooling is **separately scoped,
+   after playtesting**, and is not authorized here.
+
+**Scope of the ruling.** Contract and product documentation only. It authorizes
+no runtime implementation beyond what the existing slice authorizations already
+permit.
+
+### Preserved by the 2026-09-21 rulings
+
+The Blackboard semantics settled under PO-SPW-2 stand unchanged: **Reveal**,
+**Share**, and **Place-or-remove** are three distinct operations, and the
+Blackboard is meta-level player collaboration rather than game-world state.
+Nothing in PO-SPW-1 or PO-SPW-3 weakens them.
 
 ---
 
 ## 13. Relationship to existing contracts
 
-| Existing statement                                                                                                                                                             | Effect of this contract                                                                                                                                                                                                                                                                                                                        |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Campaign Management V2 §3.1](campaign-management-v2.md#31-no-separate-play-hierarchy) removes a separate Play navigation hierarchy.                                           | Consistent and extended. Play is the Scenario's own canonical surface; the active Encounter is contextual state within it rather than a further destination.                                                                                                                                                                                   |
-| [Campaign Management V2 §9](campaign-management-v2.md#9-blackboard-boundary) defers Blackboard redesign.                                                                       | **Still unchanged, and the deferral still stands.** Section 8 is strengthened by ruling PO-SPW-2 into an invariant plus a non-mutation and durability boundary, and it names who may act. It adds no board category, revision rule, layout behavior, or search behavior, so it remains a boundary statement rather than the deferred redesign. |
-| [Canonical equipment in Scenario play](../product/campaign-scenario-encounter-workflows.md#canonical-equipment-in-scenario-play) defines the operational equipment projection. | Unchanged and relied upon. Section 7 is its play-facing presentation rule.                                                                                                                                                                                                                                                                     |
-| [Encounter Workspace](../product/campaign-scenario-encounter-workflows.md#encounter-workspace) describes Encounter as a workspace with its own tabs.                           | Superseded **for the in-play surface only**. Play is the Scenario Play Workspace. The existing GM Encounter tooling is not removed by this contract; see decision PO-SPW-3.                                                                                                                                                                    |
-| [Campaign play lifecycle roadmap](../product/campaign-play-lifecycle-roadmap.md) defers contextual Scenario Artifacts and Scenario-relevant Blackboard to later contracts.     | This is that later contract for the play surface. The roadmap's sequencing, hotspot, and authorization rules continue to apply; nothing here authorizes any roadmap case. Its deferral of new Blackboard kinds also covers player-created collaboration Artifacts, which section 11 records as a later bounded capability.                     |
-| [Artifact Management §6.4](artifact-management-package-import.md#64-no-implicit-ownership-transfer) states that referencing, sharing, or exposing transfers no ownership.      | Directly relied upon. Reveal, Share, and Blackboard placement are exactly such acts.                                                                                                                                                                                                                                                           |
-| [Artifact Management §8.2](artifact-management-package-import.md#82-consumers-reference-artifact-identity) requires consumers to reference stable Artifact identity.           | Directly relied upon. The durable shared-material collection and every Blackboard entry reference Artifact identity; neither holds an independent copy of the media.                                                                                                                                                                           |
-| [Shared Campaign Blackboard](../product/campaign-scenario-encounter-workflows.md#shared-campaign-blackboard) describes the shared catalogue, board layout, and entry states.   | Unchanged and relied upon. Section 8.3 identifies the existing catalogue/placement separation as the durable shared-material collection this contract requires, and section 8.2 distinguishes any-participant removal of a **placement** from the existing consequential entry-level removal.                                                  |
+| Existing statement                                                                                                                                                             | Effect of this contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Campaign Management V2 §3.1](campaign-management-v2.md#31-no-separate-play-hierarchy) removes a separate Play navigation hierarchy.                                           | Consistent and extended. Play is the Scenario's own canonical surface; the active Encounter is contextual state within it rather than a further destination.                                                                                                                                                                                                                                                                                                                                      |
+| [Campaign Management V2 §9](campaign-management-v2.md#9-blackboard-boundary) defers Blackboard redesign.                                                                       | **Still unchanged, and the deferral still stands.** Section 8 is strengthened by ruling PO-SPW-2 into an invariant plus a non-mutation and durability boundary, and it names who may act. It adds no board category, revision rule, layout behavior, or search behavior, so it remains a boundary statement rather than the deferred redesign.                                                                                                                                                    |
+| [Canonical equipment in Scenario play](../product/campaign-scenario-encounter-workflows.md#canonical-equipment-in-scenario-play) defines the operational equipment projection. | Unchanged and relied upon. Section 7 is its play-facing presentation rule.                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| [Encounter Workspace](../product/campaign-scenario-encounter-workflows.md#encounter-workspace) describes Encounter as a workspace with its own tabs.                           | Superseded **for the in-play surface only**, now settled by ruling PO-SPW-3. The Scenario Play Workspace is canonical for in-play presentation. The existing Encounter workspace is **not removed**: it is **retained as transitional GM-only management tooling** alongside the workspace, is not a second play surface, and receives **no new player-facing play capability**. S2 is not widened to absorb its tabs. Later absorption or consolidation is separately scoped, after playtesting. |
+| [Campaign play lifecycle roadmap](../product/campaign-play-lifecycle-roadmap.md) defers contextual Scenario Artifacts and Scenario-relevant Blackboard to later contracts.     | This is that later contract for the play surface. The roadmap's sequencing, hotspot, and authorization rules continue to apply; nothing here authorizes any roadmap case. Its deferral of new Blackboard kinds also covers player-created collaboration Artifacts, which section 11 records as a later bounded capability.                                                                                                                                                                        |
+| [Artifact Management §6.4](artifact-management-package-import.md#64-no-implicit-ownership-transfer) states that referencing, sharing, or exposing transfers no ownership.      | Directly relied upon. Reveal, Share, and Blackboard placement are exactly such acts.                                                                                                                                                                                                                                                                                                                                                                                                              |
+| [Artifact Management §8.2](artifact-management-package-import.md#82-consumers-reference-artifact-identity) requires consumers to reference stable Artifact identity.           | Directly relied upon. The durable shared-material collection and every Blackboard entry reference Artifact identity; neither holds an independent copy of the media.                                                                                                                                                                                                                                                                                                                              |
+| [Shared Campaign Blackboard](../product/campaign-scenario-encounter-workflows.md#shared-campaign-blackboard) describes the shared catalogue, board layout, and entry states.   | Unchanged and relied upon. Section 8.3 identifies the existing catalogue/placement separation as the durable shared-material collection this contract requires, and section 8.2 distinguishes any-participant removal of a **placement** from the existing consequential entry-level removal.                                                                                                                                                                                                     |
 
 No conflict was found with the canonical Item, Character, Scenario, or Encounter
 domain models. Nothing in this contract changes them.
@@ -823,3 +962,25 @@ touches the Blackboard or the shared-material collection:
     share, placement, or removal operation in routes, commands, event types,
     domain identifiers, or user-facing labels; and any-participant removal is
     not wired to the existing entry-level retract capability.
+
+**Ruling PO-SPW-1 adds the following required proofs** for the slice that
+implements Item-to-Artifact representation. They are expectations on that slice
+when it is authorized; they authorize no implementation here:
+
+11. **Multiple representations.** One Item can carry more than one Artifact
+    representation at the same time, and each is independently openable from
+    play. An Item with zero representations and an Item with exactly one both
+    remain valid. Prove it against persisted state, not only against the UI.
+12. **A pinned revision stays pinned.** Where a representation pins an Artifact
+    revision, publishing a newer Artifact revision does not move the pinned
+    representation; it continues to resolve to the pinned revision, including
+    after reload. Prove that an unpinned representation and a pinned one behave
+    differently under the same update.
+13. **Attachment provenance is recorded and readable.** Each attachment records
+    its own provenance — who attached it and when, at minimum — and an entitled
+    viewer can read it. Provenance survives Reveal, Share, Blackboard placement
+    and removal, and it is not reconstructed from current state.
+14. **No one-to-one assumption anywhere.** No route, projection, schema, or UI
+    path assumes a single Artifact per Item, and a one-to-one pointer field is
+    not introduced. Attaching transfers no ownership, and an attached Artifact
+    never becomes an Item.
