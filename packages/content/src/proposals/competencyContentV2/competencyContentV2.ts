@@ -24,6 +24,7 @@ import {
   competencyContentV2Families,
   competencyContentV2LearningGroups,
   competencyContentV2RemovedGroups,
+  competencyContentV2RetiredProposedGroups,
   type V2Family,
   type V2LearningGroup,
   type V2PathBody,
@@ -106,6 +107,22 @@ const C02_SETTLED_FIXED_SKILL_IDS: readonly string[] = [
   "skill:teaching",
 ];
 const C02_SETTLED_CHOOSE_COUNT = 1;
+
+/**
+ * The 2026-09-21 Learning-Group membership ruling, expressed as data rather than described in prose.
+ *
+ * Four groups are settled at an exact fixed membership with no choice slot, and one proposed group is
+ * retired outright. Asserting the shape here is what stops a later breadth argument from quietly
+ * adding a member back, in the same way C02's shape is asserted above.
+ */
+const MEMBERSHIP_RULING_SETTLED_GROUPS: Readonly<Record<string, readonly string[]>> = {
+  K01: ["skill:research", "skill:mnemonics"],
+  M10: ["skill:teaching", "weapon_maintenance"],
+  C06: ["skill:masonry", "skill:sculpture"],
+  C07: ["skill:mining", "climb"],
+};
+/** Proposed groups the same ruling retires. A one-Skill survivor must not be left in their place. */
+const MEMBERSHIP_RULING_RETIRED_GROUP_IDS: readonly string[] = ["C03"];
 
 /**
  * A core route states what a Profession is not that Profession without. It must be minimal — enough
@@ -326,6 +343,8 @@ export interface CompetencyContentV2Catalogue {
     revisedGroups: number;
     newGroups: number;
     removedGroups: number;
+    /** Groups this proposal authored and a later ruling retired. */
+    retiredProposedGroups: number;
     groupsWithSelectionSlots: number;
     groupsBelowSizeBand: number;
     groupsAboveSizeBand: number;
@@ -463,6 +482,56 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
       fail(
         "C02's craft count is settled by ruling and must no longer be recorded as an open source conflict",
       );
+  }
+
+  for (const [groupId, settled] of Object.entries(MEMBERSHIP_RULING_SETTLED_GROUPS)) {
+    const group =
+      groupsById.get(groupId) ??
+      fail(`the 2026-09-21 membership ruling retains ${groupId}, and it is missing`);
+    if ([...group.fixedSkillIds].sort().join(",") !== [...settled].sort().join(","))
+      fail(
+        `group ${groupId} does not match the membership settled for it on 2026-09-21; the ruling forbids ` +
+          `restoring a member under breadth pressure`,
+      );
+    if (group.selectionSlots?.length)
+      fail(`group ${groupId} is settled at a fixed membership and must carry no choice slot`);
+  }
+  {
+    const retired = new Map(
+      competencyContentV2RetiredProposedGroups.map((row) => [row.id, row] as const),
+    );
+    for (const groupId of MEMBERSHIP_RULING_RETIRED_GROUP_IDS) {
+      if (groupsById.has(groupId))
+        fail(
+          `group ${groupId} is retired by the 2026-09-21 membership ruling but is still proposed`,
+        );
+      if (!retired.has(groupId))
+        fail(`retired group ${groupId} has no record of what became of its routes`);
+    }
+    for (const row of retired.values()) {
+      if (!MEMBERSHIP_RULING_RETIRED_GROUP_IDS.includes(row.id))
+        fail(`${row.id} is recorded as a retired proposed group but no ruling retires it`);
+      if (!row.reason.trim() || !row.formerMembership.trim())
+        fail(`retired group ${row.id} records no reason or no former membership`);
+      if (!row.rehousing.length) fail(`retired group ${row.id} rehouses nothing`);
+      const seen = new Set<string>();
+      for (const entry of row.rehousing) {
+        if (seen.has(entry.professionCode))
+          fail(`retired group ${row.id} records ${entry.professionCode} twice`);
+        seen.add(entry.professionCode);
+        if (!entry.disposition.trim() || !entry.formerRoute.trim())
+          fail(`retired group ${row.id} gives ${entry.professionCode} no stated disposition`);
+        const family =
+          competencyContentV2Families.find(
+            (candidate) => candidate.code === entry.professionCode,
+          ) ?? fail(`retired group ${row.id} names unknown Profession ${entry.professionCode}`);
+        const stillRoutes = [family, ...(family.tracks ?? [])].some((body) =>
+          (body.groups ?? []).some((route) => route.groupId === row.id),
+        );
+        if (stillRoutes)
+          fail(`${entry.professionCode} still routes to the retired group ${row.id}`);
+      }
+    }
   }
 
   for (const removed of competencyContentV2RemovedGroups) {
@@ -877,6 +946,7 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
         .length,
       newGroups: competencyContentV2LearningGroups.filter((g) => g.disposition === "new").length,
       removedGroups: competencyContentV2RemovedGroups.length,
+      retiredProposedGroups: competencyContentV2RetiredProposedGroups.length,
       groupsWithSelectionSlots: competencyContentV2LearningGroups.filter(
         (g) => (g.selectionSlots?.length ?? 0) > 0,
       ).length,

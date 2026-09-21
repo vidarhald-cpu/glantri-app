@@ -1,6 +1,7 @@
 # Competency Content V2 — Product Owner proposal
 
-> **Status: NON-CANONICAL PRODUCT OWNER PROPOSAL — reconciled against both 2026-09-21 ruling sets, awaiting review.**
+> **Status: NON-CANONICAL PRODUCT OWNER PROPOSAL — reconciled against all 2026-09-21 rulings, awaiting review.**
+> **Content V2 product design is closed by ruling; the catalogue itself is still not canonical.**
 > Nothing in this folder is approved Glantri content. It does not replace the approved
 > [competency reference](../../../rules/competency-reference/README.md), is not registered with
 > Chargen, and is not projected into canonical content.
@@ -17,7 +18,11 @@ a new catalogue investigation and not a redesign from scratch. It carries the **
 combat is an explicit exception to the group-size rule, the category roster may be simplified, tracks
 must earn their complexity, cores must be minimal, and the language blocker is removed. It then carries
 the two later **settled rulings of the same day** — **Profession tracks** and **Profession cores** —
-which close the track question outright and settle every core the previous revision had left open.
+which close the track question outright and settle every core the previous revision had left open. It
+now also carries the final ruling of that day, **Learning Group membership (settled)**, which retires
+one group, reduces four, and **closes Content V2 product design**. Closing the design does **not** make
+the catalogue canonical: it means the remaining genuine Product Owner questions are answered, and what
+is left is bounded completion under settled rules.
 
 ## Contents
 
@@ -65,27 +70,28 @@ drift apart.
 
 ## What the proposal changes
 
-|                                                      | Approved | #250 revision | First reconciliation | This revision                                                   |
-| ---------------------------------------------------- | -------: | ------------: | -------------------: | --------------------------------------------------------------- |
-| Base Skills / Specializations                        | 131 / 26 |      131 / 26 |             131 / 26 | 131 / 26 (unchanged)                                            |
-| Learning Groups                                      |       59 |            92 |                   96 | 96 — 44 retained, 2 revised, 50 new                             |
-| Groups in the 3–4 preferred centre                   |       15 |            53 |                   57 | 57                                                              |
-| Groups at two                                        |       36 |            35 |                   36 | 36                                                              |
-| Groups at one                                        |        4 |             0 |                    0 | 0                                                               |
-| Groups at five or more                               |        4 |             4 |                    3 | 3 (all combat, under the exception)                             |
-| Largest fixed purchase burden of one group           |        7 |             6 |                    4 | 4                                                               |
-| Profession families                                  |       84 |            84 |                   84 | 84 (all preserved)                                              |
-| Professions carrying tracks                          |        — |             8 |                    8 | 2                                                               |
-| Tracks                                               |        — |            21 |                   21 | 4                                                               |
-| Valid Profession paths                               |       99 |            96 |                   96 | 86                                                              |
-| Direct Profession Skill grants                       |     88\* |           119 |                  101 | 104                                                             |
-| Player-facing browse categories                      |        — |            16 |                   16 | 14                                                              |
-| Civilization languages awaiting a naming ruling      |        — |             — |                    7 | 0                                                               |
-| Declared core routes                                 |        — |             — |                   96 | 90 across 86 paths, all satisfied (1 partially blocked on #113) |
-| Median effective distinct base Skills per valid path |        3 |             8 |                    8 | 8                                                               |
-| Quartiles                                            |    1 / 7 |        7 / 10 |               7 / 10 | 7 / 10                                                          |
-| Narrowest path                                       |        0 |             6 |                    6 | 7                                                               |
-| Broadest path                                        |       17 |            15 |                   15 | 16                                                              |
+|                                                      | Approved | #250 revision | First reconciliation | Tracks and cores | This revision (membership)                                      |
+| ---------------------------------------------------- | -------: | ------------: | -------------------: | ---------------: | --------------------------------------------------------------- |
+| Base Skills / Specializations                        | 131 / 26 |      131 / 26 |             131 / 26 |         131 / 26 | 131 / 26 (unchanged)                                            |
+| Learning Groups                                      |       59 |            92 |                   96 |               96 | 95 — 44 retained, 2 revised, 49 new                             |
+| Groups in the 3–4 preferred centre                   |       15 |            53 |                   57 |               57 | 52                                                              |
+| Groups at two                                        |       36 |            35 |                   36 |               36 | 40                                                              |
+| Groups at one                                        |        4 |             0 |                    0 |                0 | 0                                                               |
+| Groups at five or more                               |        4 |             4 |                    3 |                3 | 3 (all combat, under the exception)                             |
+| Largest fixed purchase burden of one group           |        7 |             6 |                    4 |                4 | 4                                                               |
+| Profession families                                  |       84 |            84 |                   84 |               84 | 84 (all preserved)                                              |
+| Professions carrying tracks                          |        — |             8 |                    8 |                2 | 2 (unchanged)                                                   |
+| Tracks                                               |        — |            21 |                   21 |                4 | 4 (unchanged)                                                   |
+| Valid Profession paths                               |       99 |            96 |                   96 |               86 | 86 (unchanged)                                                  |
+| Direct Profession Skill grants                       |     88\* |           119 |                  101 |              104 | 106                                                             |
+| Player-facing browse categories                      |        — |            16 |                   16 |               14 | 14                                                              |
+| Civilization languages awaiting a naming ruling      |        — |             — |                    7 |                0 | 0                                                               |
+| Declared core routes                                 |        — |             — |                   96 |               90 | 90 across 86 paths, all satisfied (1 partially blocked on #113) |
+| Median effective distinct base Skills per valid path |        3 |             8 |                    8 |                8 | 8                                                               |
+| Quartiles                                            |    1 / 7 |        7 / 10 |               7 / 10 |           7 / 10 | 7 / 9                                                           |
+| Narrowest path                                       |        0 |             6 |                    6 |                7 | 5                                                               |
+| Broadest path                                        |       17 |            15 |                   15 |               16 | 16                                                              |
+| Paths flagged for coherence review (below 7)         |        — |             — |                    — |                0 | 6                                                               |
 
 \* The approved figure counts direct Skill and Specialization opportunities together across 84
 families.
@@ -235,14 +241,63 @@ variant.
 ### 9. Overlap economics
 
 Unchanged and preserved, as ruled. The existing group-rebate arithmetic is untouched; no defect was
-demonstrated. Overlapping routes name the same competency 111 times across the catalogue and every
+demonstrated. Overlapping routes name the same competency 105 times across the catalogue and every
 one is charged once, with the charged set identical when the routes are accumulated in reverse order.
+
+## What the Learning Group membership ruling changed
+
+The **"PRODUCT OWNER RULING — Learning Group membership (settled). CONTENT V2 PRODUCT DESIGN CLOSED."**
+comment recorded on [issue #266](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/266) on
+2026-09-21 names five groups and closes the product design. **No Learning Group was created to absorb
+any of it**, and the retained/retired track set and every settled core are unchanged.
+
+| Group                                  | Outcome                       | Removed                                | Where the removed competence is learned instead                                 |
+| -------------------------------------- | ----------------------------- | -------------------------------------- | ------------------------------------------------------------------------------- |
+| **C03** Construction site practice     | **Retired**                   | Surveying, and a choose-two craft slot | Per Profession — see the table below                                            |
+| **K01** Scholarly study practice       | Research + Mnemonics          | Mathematics                            | **K21** Applied calculation practice, or **K03** Celestial observation practice |
+| **M10** Arms instruction practice      | Teaching + Weapon Maintenance | Athletics                              | **F04** Running and athletic field practice                                     |
+| **C06** Stone workshop and quarry      | Masonry + Sculpture           | Mining                                 | **C07**, which stays available to the Mason                                     |
+| **C07** Mine and quarry apprenticeship | Mining + Climbing             | Survival                               | **G04** Field travel and camp practice                                          |
+
+### C03 retired, and where each of its six users went
+
+C03's only fixed base Skill was Surveying, and its choice slot charged a second and third craft
+apprenticeship for what is really site coordination. The ruling retires it **without preserving a
+one-Skill group** in its place, and forbids charging two craft apprenticeships merely to coordinate
+trades. C03 was the core of none of its six users.
+
+| Profession                | What now carries the route                                                                                                                                      |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P28** Siege Engineer    | Nothing added. Surveying already comes from **F28**, the timber and mechanism trades from **F27**.                                                              |
+| **P39** Carpenter         | **Surveying becomes a direct Profession route** — the site carpenter is genuinely taught to set the work out. Crafts stay with **C01**.                         |
+| **P40** Shipbuilder       | Nothing added. Laying off a hull in the mould loft is not the ground measurement Surveying describes; trades stay with **F03**/**F27**.                         |
+| **P46** Mason             | Surveying retained through **F28**; **C07** added as an ordinary route, which the ruling permits the Mason explicitly.                                          |
+| **P48** Millwright        | **Surveying becomes a direct Profession route** — levelling and setting out a mill and its race. **C01** added for the forge work: one apprenticeship, not two. |
+| **P49** Building Designer | Nothing added. **F28** is its core and already teaches Architecture and Surveying; **F01** remains available. Directing trades is not an apprenticeship.        |
+
+### The consequences, reported rather than absorbed
+
+- **Every Profession core and every valid path is still satisfiable.** Four of the five named groups
+  are somebody's core — M10 the Weapon Instructor's, C06 the Mason's, C07 the Miner's, and K01 nobody's
+  — and each survives the reduction. No core was moved, and no track disposition changed.
+- **No base Skill lost its last route.** Poisons remains the one deliberately routeless Skill, exactly
+  as before.
+- **Group shape moves toward two**: 52 in the 3–4 centre and 40 at two, against 57 and 36. That is the
+  intended outcome, not drift — two is explicitly valid where the competencies are genuinely learned
+  together, and coherence takes precedence over size.
+- **Six paths fall below the coherence-review floor of seven** and are left there: P39 Carpenter (6),
+  P40 Shipbuilder (5), P49 Building Designer (5), P64 Teacher (6), P65 Scribe (6) and P67 Historian (6).
+  Three lost Mathematics with K01; three lost C03. A flag is a prompt to look, never a defect and never
+  a licence to pad, and the ruling is explicit that coherent training is authored first and breadth read
+  afterwards. The flagged set is asserted exactly by test so it cannot drift silently.
+- **Two direct grants added, none restored.** Surveying to P39 and P48 only. Athletics is **not**
+  returned to the Weapon Instructor, because the ruling removed it from M10 as well.
 
 ## What the first reconciliation did, and this revision keeps
 
 Breadth as a signal rather than a quota; F32 retired for M11 and M12; focused M01/M04 beside broad
 M02/M03/M05 with cross-category pools; Combat Experience out of every instruction group; direct
-grants reduced from 283 to 104; F16 and F22 retired with the Genealogy and Food Preservation routes
+grants reduced from 283 to 106; F16 and F22 retired with the Genealogy and Food Preservation routes
 preserved through P67/P76 and C10; invented language names withdrawn and kept out by test; core routes
 introduced as a data annotation; and the machine-readable companion regenerated from the source so
 the prose and the numbers cannot drift.
@@ -262,18 +317,24 @@ the prose and the numbers cannot drift.
 
 ## Remaining Product Owner decisions
 
-Everything the ruling sets settle has been removed. Five of the previous nine questions are closed:
-**C02's count** (settled by ruling), **the four Soldier tracks** (retired, so there is nothing to
-name), **the Common and Old Common written traditions** and **the identity of Tuu** (both closed by
-the naming ruling), and **the declared core routes** (closed by the Profession-cores ruling, which
-names every core that was open). What remains is genuinely unsettled.
+**None. Content V2 product design is closed by the 2026-09-21 Learning Group membership ruling**,
+which states that the remaining genuine Product Owner questions are answered and that **no further
+catalogue-wide design review is to be begun**. All four questions the previous revision still carried
+are disposed of by that ruling:
 
-| #   | Question                                                                                                                   | Why it cannot be settled here                                                                                                                                                                                        |
-| --- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Are the 50 new Learning Groups correct as descriptions of **taught practice**?                                             | Each is a content judgement the Product Owner owns. K22, K24, K25, M10, M11 and M12 deserve particular attention.                                                                                                    |
-| 2   | Are the three Professions carrying three direct Skill grants acceptable — P16 Local Informant, P52 Trapmaker and P53 Cook? | P16 and P52 were argued on coherence rather than trimmed to a number, and folding either into a group would push a non-combat group to five. P53's third grant is the Cooking route the cores ruling makes its core. |
-| 3   | Now that `special-access` is not a category, where should direct-Profession access provenance be shown instead?            | The label still has to appear somewhere. That is a Chargen presentation decision.                                                                                                                                    |
-| 4   | Which individual routes should Society Level 1–2 withhold?                                                                 | The model is settled and explained for players; the per-route data is contextual availability, unfinished under #113.                                                                                                |
+| Previous question                                                       | Disposition                                                                                                                                                       |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Are the new Learning Groups correct as descriptions of taught practice? | **Settled.** The ruling names the five groups whose membership was genuinely doubtful and fixes each. The rest stand; no catalogue-wide review is to be reopened. |
+| Are the Professions carrying three direct Skill grants acceptable?      | **Explicitly not reopened.** P16 and P52 are no issue merely because there are three; a control-plane check for an actual curriculum cluster found none.          |
+| Where should direct-Profession access provenance be shown?              | **Deferred to #252**, which owns access-provenance presentation UX.                                                                                               |
+| Which routes should Society Level 1–2 withhold?                         | **Bounded content authoring under settled rules**, before #251.                                                                                                   |
+
+What remains is **bounded completion, not design**: written-language and Civilization completion with
+the P65 representation gap (**#113**), SL1–2 and Social Band route authoring (before **#251**), and
+access-provenance presentation (**#252**).
+
+**Closing the design does not make Content V2 canonical.** The catalogue is still a non-canonical
+proposal awaiting review, and nothing in this folder is approved Glantri content.
 
 ## Flagged for separate follow-up, not fixed here
 
@@ -294,6 +355,8 @@ names every core that was open). What remains is genuinely unsettled.
 ## Verification performed
 
 - Deterministic catalogue checks, extended for the second ruling set: **C02's exact settled shape**;
+  **the settled Learning Group memberships** — K01, M10, C06 and C07 asserted exactly, with C03 refused
+  outright and its rehousing record required to account for every former user;
   the **combat exception allowlist**, enforced both ways; **track discipline** (a track must declare
   its own core); **core minimality** (at most two requirements); **Specializations charged nowhere** —
   not in a group's Skill cost, not in a path's charged set, not as base breadth — with the parent Skill
@@ -303,8 +366,15 @@ names every core that was open). What remains is genuinely unsettled.
   a rollable written one unless the absence is authored, and no entry deferring to a further ruling).
   These join the existing group-shape bands, core-route satisfaction and the no-duplicate-payment and
   order-independence cost invariants. Failing any of them fails the build, not just a test.
-- 83 proposal checks inside 324 content-package tests, typecheck, ESLint, `git diff --check`, and the
-  changed-file formatting gate. Nine of those checks are new and lock the Profession-cores ruling in
+- 95 proposal checks inside 336 content-package tests, typecheck, ESLint, `git diff --check`, and the
+  changed-file formatting gate. Twelve of those checks lock the Learning Group membership ruling in
+  line by line: the four settled memberships with no choice slot, that exactly the four named members
+  are removed and no others, that each removed competence is still reachable through the route the
+  ruling names, that C03 is retired with no one-Skill survivor and no group created to absorb it, that
+  every route into C03 is accounted for, the two rehoused direct Surveying routes against the three
+  Professions that keep it through F28, the Mason's C07 and the Miner's G04, that every touched core
+  and every valid path still satisfies an applicable core route, that no base Skill was orphaned, and
+  the exact set of paths that fell below the coherence floor. Nine further checks lock the Profession-cores ruling in
   line by line: the affirmed shared cores, that a Learning Group may be the core of more than one
   Profession, the three direct-route cores with their displaced groups still reachable, the Courier's
   and Soldier's alternative core routes with no tracks and every alternative genuinely satisfiable,

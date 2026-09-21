@@ -126,7 +126,7 @@ Guard, the Military Quartermaster and the civil Surgeon reach no Combat Experien
 
 Overlapping routes never require duplicate payment for the same competency, and final cost does not
 depend on purchase order. Across all valid paths the routes name a competency more than once on
-111 occasions; every one is charged exactly once. Accumulating each path's routes in reverse order yields the identical charged
+105 occasions; every one is charged exactly once. Accumulating each path's routes in reverse order yields the identical charged
 set, which is what order-independence means here. Both properties are enforced by the build, not asserted
 in prose: a catalogue that broke either would fail to build.
 
@@ -502,13 +502,12 @@ Mutually exclusive tracks:
 - **M08** — _Ordinary siege-works apprenticeship_
 - **F28** — _Design and setting out_
 - **F27** — _Timber mechanism construction_
-- **C03** — _Running the trades on the works_
 - **M06** — _Repeated service with a besieging force_
 - _Taught directly on the works_: Mathematics, Siege Engine Operation
 
 | Valid path     | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | -------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Siege Engineer |                             12 |                        2 |                                       10 |
+| Siege Engineer |                             10 |                        0 |                                       10 |
 
 ### P29 — Siege Engine Crew Specialist
 
@@ -532,7 +531,7 @@ Mutually exclusive tracks:
 
 | Valid path | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Physician  |                              8 |                        0 |                                        8 |
+| Physician  |                              7 |                        0 |                                        7 |
 
 ### P31 — Surgeon
 
@@ -549,8 +548,8 @@ Mutually exclusive tracks:
 
 | Valid path              | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ----------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Civil operative surgeon |                              8 |                        0 |                                        8 |
-| Field surgeon           |                             11 |                        0 |                                       11 |
+| Civil operative surgeon |                              7 |                        0 |                                        7 |
+| Field surgeon           |                             10 |                        0 |                                       10 |
 
 ### P32 — Nurse and Patient Attendant
 
@@ -624,7 +623,7 @@ Mutually exclusive tracks:
 
 | Valid path | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Smelter    |                              8 |                        1 |                                        7 |
+| Smelter    |                              7 |                        1 |                                        6 |
 
 ### P38 — Armorer
 
@@ -642,13 +641,12 @@ Mutually exclusive tracks:
 
 - **Core route** — _Working timber, learned directly at the bench one is set to_: Carpentry
 - **F27** — _Ordinary timber apprenticeship_
-- **C03** — _Working on building sites_
 - **C01** — _Workshop apprenticeship_
-- _Taught directly at the bench by the carpenter one is set to_: Carpentry
+- _Taught directly at the bench by the carpenter one is set to, and set out on site with him_: Carpentry, Surveying
 
 | Valid path | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Carpenter  |                              8 |                        3 |                                        5 |
+| Carpenter  |                              6 |                        1 |                                        5 |
 
 > Core settled by the 2026-09-21 Profession-cores ruling: the carpenter is defined by working timber itself, not by the millwright's mechanism curriculum. F27 remains an ordinary optional route for a carpenter who also builds working timber mechanisms.
 
@@ -657,12 +655,11 @@ Mutually exclusive tracks:
 - **Core route** — _Ordinary yard apprenticeship_: F03
 - **F03** — _Ordinary yard apprenticeship_
 - **F27** — _Timber mechanism work in the yard_
-- **C03** — _Setting out and running the yard_
 - _Taught directly in the yard_: Ropework, Appraisal
 
 | Valid path  | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ----------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Shipbuilder |                              8 |                        2 |                                        6 |
+| Shipbuilder |                              5 |                        0 |                                        5 |
 
 ### P41 — Sailmaker
 
@@ -725,47 +722,47 @@ Mutually exclusive tracks:
 
 - **Core route** — _Ordinary stone apprenticeship_: C06
 - **C06** — _Ordinary stone apprenticeship_
-- **C03** — _Running the trades on site_
 - **F28** — _Setting out a building_
+- **C07** — _Winning the stone one works_
 - _Taught directly on the site and at the banker_: Appraisal
 
 | Valid path | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Mason      |                              8 |                        2 |                                        6 |
+| Mason      |                              7 |                        0 |                                        7 |
 
 ### P47 — Miner and Quarry Worker
 
 - **Core route** — _Ordinary extraction apprenticeship_: C07
 - **C07** — _Ordinary extraction apprenticeship_
 - **F24** — _Feeding the furnace_
+- **G04** — _Working a mine far from settlement_
 - _Taught directly at the face_: Ropework, Appraisal
 
 | Valid path              | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ----------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Miner and Quarry Worker |                              7 |                        0 |                                        7 |
+| Miner and Quarry Worker |                              9 |                        0 |                                        9 |
 
 ### P48 — Millwright and Mechanician
 
 - **Core route** — _Ordinary millwright apprenticeship_: F27
 - **F27** — _Ordinary millwright apprenticeship_
-- **C03** — _Installing on site_
-- _Taught directly at the mill and on installation_: Mathematics, Ropework
+- **C01** — _Workshop apprenticeship in the trade one also works_
+- _Taught directly at the mill and on installation_: Mathematics, Ropework, Surveying
 
 | Valid path                 | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | -------------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Millwright and Mechanician |                              7 |                        2 |                                        5 |
+| Millwright and Mechanician |                              8 |                        1 |                                        7 |
 
 ### P49 — Building Designer
 
 - **Core route** — _Ordinary design apprenticeship_: F28
 - **F28** — _Ordinary design apprenticeship_
-- **C03** — _Running the trades on site_
 - **F01** — _Measuring and drawing the site oneself_
 - _Taught directly in the design office and on site_: Mathematics, Administration, Fortification
 
 | Valid path        | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ----------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Building Designer |                              7 |                        2 |                                        5 |
+| Building Designer |                              5 |                        0 |                                        5 |
 
 ### P50 — Surveyor and Mapmaker
 
@@ -858,7 +855,7 @@ Mutually exclusive tracks:
 
 | Valid path | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Alchemist  |                             10 |                        0 |                                       10 |
+| Alchemist  |                              9 |                        0 |                                        9 |
 
 ### P58 — Clerk and Steward
 
@@ -883,7 +880,7 @@ Mutually exclusive tracks:
 
 | Valid path                      | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ------------------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Legal Practitioner and Advocate |                             10 |                        0 |                                       10 |
+| Legal Practitioner and Advocate |                              9 |                        0 |                                        9 |
 
 ### P60 — Envoy
 
@@ -943,7 +940,7 @@ Mutually exclusive tracks:
 
 | Valid path | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Teacher    |                              7 |                        0 |                                        7 |
+| Teacher    |                              6 |                        0 |                                        6 |
 
 ### P65 — Scribe and Copyist
 
@@ -955,7 +952,7 @@ Mutually exclusive tracks:
 
 | Valid path         | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ------------------ | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Scribe and Copyist |                              7 |                        0 |                                        7 |
+| Scribe and Copyist |                              6 |                        0 |                                        6 |
 
 > PARTIALLY BLOCKED DEPENDENCY. The 2026-09-21 Profession-cores ruling settles the core SHAPE: G11 plus at least one written-language competency route. The first requirement is authored here. The second is not, and the dependency on #113 is real rather than residual, for two reasons the ruling does not resolve. (1) Representation: a core route requires Learning Groups or base Skills, and a written-language competency is neither — it is a `written-tradition` competency, which no path body can currently carry, and 'at least one of any written tradition' is not expressible as a fixed requirement or as alternative core routes. (2) Content: the approved catalogue holds only 3 written traditions (Sacred Mogrebi, Church Ologian, Phoenician) against the 12 Civilizations this proposal gives written competencies to, and which tradition a given scribe writes is precisely the contextual written-tradition availability question #113 owns. Inventing either the representation or the tradition would distort the content, which the ruling forbids. This package must not be presented as universal literacy.
 
@@ -969,7 +966,7 @@ Mutually exclusive tracks:
 
 | Valid path                 | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | -------------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Translator and Interpreter |                              8 |                        0 |                                        8 |
+| Translator and Interpreter |                              7 |                        0 |                                        7 |
 
 > The spoken languages themselves remain separate contextual competencies and are not granted here.
 
@@ -983,7 +980,7 @@ Mutually exclusive tracks:
 
 | Valid path                | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ------------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Historian and Genealogist |                              7 |                        0 |                                        7 |
+| Historian and Genealogist |                              6 |                        0 |                                        6 |
 
 ### P68 — Mathematical Practitioner
 
@@ -1006,7 +1003,7 @@ Mutually exclusive tracks:
 
 | Valid path  | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ----------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Philosopher |                              8 |                        0 |                                        8 |
+| Philosopher |                              7 |                        0 |                                        7 |
 
 ### P70 — Astronomer
 
@@ -1042,7 +1039,7 @@ Mutually exclusive tracks:
 
 | Valid path | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Naturalist |                             10 |                        0 |                                       10 |
+| Naturalist |                              9 |                        0 |                                        9 |
 
 ### P73 — Geographer
 
@@ -1066,7 +1063,7 @@ Mutually exclusive tracks:
 
 | Valid path             | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Religious Practitioner |                              8 |                        0 |                                        8 |
+| Religious Practitioner |                              7 |                        0 |                                        7 |
 
 ### P75 — Diviner
 
@@ -1162,7 +1159,7 @@ Mutually exclusive tracks:
 
 | Valid path        | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ----------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Weapon Instructor |                             13 |                        6 |                                        7 |
+| Weapon Instructor |                             12 |                        6 |                                        6 |
 
 > All three tracks retired under the track-discipline ruling: the subject a weapon master teaches is an ordinary weapon choice, already expressed by M02, M05 and F30. The Profession no longer needs the narrow-by-design exemption the one-tradition fencing track required. The instructor still reaches no Combat Experience by any of these routes, which is the point of the Combat Experience ruling: instructing is not exposure.
 
