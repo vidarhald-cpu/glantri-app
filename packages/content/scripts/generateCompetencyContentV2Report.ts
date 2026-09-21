@@ -166,6 +166,72 @@ groupLines.push("");
 writeFileSync(join(outDir, "learning-groups-v2.md"), groupLines.join("\n"));
 
 /* --- Professions -------------------------------------------------------------------------- */
+/**
+ * Track dispositions under the 2026-09-21 Profession-tracks ruling. Held as data so the retired count
+ * is derived from the table rather than asserted beside it, and so the retained/retired set is a single
+ * reviewable record. The "after" column is cross-checked against the built catalogue below.
+ */
+const TRACK_DISPOSITIONS: { profession: string; before: number; after: number; why: string }[] = [
+  {
+    profession: "P09 Sailor and Boat Worker",
+    before: 2,
+    after: 2,
+    why: "Kept. Inshore boat work and rigged-vessel deck service have different defining training — N01 against F09 — so each track carries its own core.",
+  },
+  {
+    profession: "P31 Surgeon",
+    before: 2,
+    after: 2,
+    why: "Kept. The civil operative surgeon and the field surgeon are defined by different apprenticeships, G18 against F29, and only the field surgeon has an authored route to combat exposure.",
+  },
+  {
+    profession: "P14 Guard, Watcher and Escort",
+    before: 2,
+    after: 0,
+    why: "Retired. The tracks differed only in which combat group the guard bought; M01 and F30 are now both openly available routes.",
+  },
+  {
+    profession: "P22 Soldier",
+    before: 4,
+    after: 0,
+    why: "Retired. All four differed only in which combat Learning Group they bought — contingent drill, formation drill, the issued missile arm, the longbow tradition. The Soldier is one identity whose core is being drilled to arms, stated as the alternative core routes M01, M03 and M04 rather than as tracks.",
+  },
+  {
+    profession: "P24 Military Scout",
+    before: 2,
+    after: 0,
+    why: "Retired. Foot and mounted scouting differed only by whether the scout was given a horse, which G05 already says.",
+  },
+  {
+    profession: "P25 Military Commander",
+    before: 3,
+    after: 0,
+    why: "Retired. Foot, mounted and communal command differed only in the combat groups shared with the command.",
+  },
+  {
+    profession: "P26 Military Quartermaster",
+    before: 2,
+    after: 0,
+    why: "Retired. Neither refined the defining core; G12 and M01 state the difference themselves.",
+  },
+  {
+    profession: "P82 Weapon Instructor",
+    before: 3,
+    after: 0,
+    why: "Retired. The subject an arms master teaches is a weapon choice, already expressed by M02, M05 and F30. The narrow-by-design exemption the one-tradition fencing track needed is gone with it.",
+  },
+];
+
+/* The table is the record; the build is the truth. They must agree. */
+{
+  const declared = TRACK_DISPOSITIONS.reduce((sum, row) => sum + row.after, 0);
+  const built = catalogue.families.reduce((sum, family) => sum + (family.tracks?.length ?? 0), 0);
+  if (declared !== built)
+    throw new Error(
+      `track disposition table records ${declared} retained tracks; the catalogue builds ${built}`,
+    );
+}
+
 const familyLines: string[] = [
   "# Proposed Professions and valid paths (V2)",
   "",
@@ -183,8 +249,10 @@ familyLines.push(
   "routes refine or replace its parent's. This is an annotation over Learning Groups and directly taught",
   "Skills that already exist, not a separate mechanism, and it needs no GM override.",
   "",
-  `All ${catalogue.manifest.coreRoutes} path/core-route pairs are satisfied by the authored content. ` +
-    `${catalogue.manifest.coreRoutesBlocked} core route is recorded as blocked on an external question.`,
+  `Every valid path satisfies an applicable core route. ${catalogue.manifest.coreRoutes} path/core-route ` +
+    `pairs are declared and ${catalogue.coreRoutes.filter((row) => row.satisfied).length} are satisfied by ` +
+    `the authored content; ${catalogue.manifest.coreRoutesBlocked} core route is recorded as partially ` +
+    `blocked on an external question.`,
   "",
   "## Core minimality",
   "",
@@ -193,11 +261,42 @@ familyLines.push(
   `requires more than two things in total. Largest core in the catalogue: ` +
     `${Math.max(...catalogue.coreRoutes.map((row) => row.groupIds.length + row.skillIds.length))} requirement(s). ` +
     `${catalogue.coreRoutes.filter((row) => row.groupIds.length + row.skillIds.length === 1).length} of ` +
-    `${catalogue.coreRoutes.length} path/core pairs are a single Learning Group.`,
+    `${catalogue.coreRoutes.length} path/core pairs require exactly one thing — ` +
+    `${catalogue.coreRoutes.filter((row) => row.groupIds.length === 1 && !row.skillIds.length).length} a single ` +
+    `Learning Group and ` +
+    `${catalogue.coreRoutes.filter((row) => !row.groupIds.length && row.skillIds.length === 1).length} a single ` +
+    `direct competency route.`,
   "",
-  "A Profession may declare a small set of alternative core routes, of which one must be satisfied. None",
-  "is needed today: where the defining training genuinely differs, the difference is carried by a track",
-  "with its own core, which is the same latitude expressed as a named player-visible variant.",
+  "**A core is a necessary defining training route, not a unique classification key.** The",
+  '"PRODUCT OWNER RULING — Profession cores (settled)" comment recorded on',
+  "[issue #266](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/266) on 2026-09-21 rejects the",
+  "assumption that a core must discriminate one Profession from every other. **Several Professions may",
+  "share the same core Learning Group where that training is genuinely defining for each**, and a shared",
+  "core is therefore correct content rather than a defect to be designed away. G10 is the core of the Envoy,",
+  "the Mediator and the Political Agent; G11 of the Clerk and the Scribe; F24 of the Smith and the Smelter;",
+  "M07 of the Quartermaster and the Campaign Planner; F04 of the Athlete and the foot Courier. **No Learning",
+  "Group is invented to manufacture a unique core.**",
+  "",
+  "The same ruling settles that a core requirement may name **an existing Learning Group route or an",
+  "existing direct competency route**. That is an annotation over routes the Profession already has, not a",
+  "new primitive. Three Professions are defined by a direct route rather than by a group: the Cook by",
+  "Cooking, the Wild Plant Gatherer by Plant Lore, and the Carpenter by Carpentry. In each case the group",
+  "that previously held the core — C10, G02 and F27 — remains an ordinary optional route, and because",
+  "overlapping routes are charged once, moving the core changes no breadth figure.",
+  "",
+  `A Profession may declare a small set of **alternative core routes**, of which one must be satisfied. ` +
+    `${[...new Set(catalogue.coreRoutes.map((row) => row.pathId))].filter((pathId) => catalogue.coreRoutes.filter((row) => row.pathId === pathId).length > 1).length} ` +
+    `paths use them today.`,
+  "",
+  "- **P12 Courier and Messenger** — one of F04, G05 or F06: the foot, mounted and vehicle courier are the",
+  "  same occupation practised three ways, and any one of them makes the courier.",
+  "- **P22 Soldier** — one of M01, M03 or M04: a soldier is made by being drilled to arms. **M06 Campaign",
+  "  service experience is not core.** It stays an ordinary route, because Combat Experience is experiential",
+  "  competence earned by real service — available to the soldier who sees it, not required of the one who",
+  "  does not.",
+  "",
+  "Both are stated as alternatives rather than as tracks, which the cores ruling requires explicitly and the",
+  "track-discipline ruling below independently demands.",
   "",
   "## Track discipline",
   "",
@@ -207,25 +306,46 @@ familyLines.push(
   "own.** If the defining training does not differ, the variant is a route choice and belongs in the",
   "Profession's own group list. The build refuses a track that declares no core.",
   "",
+  '**Settled by Product Owner ruling.** The "PRODUCT OWNER RULING — Profession tracks (settled)" comment',
+  "recorded on [issue #266](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/266) on 2026-09-21",
+  "approves this retirement outcome as authoritative settled input, not merely this proposal's own internal",
+  'audit: **"A Profession track exists only where it changes the defining core curriculum of the',
+  "occupation. If the difference can be expressed through Learning Groups, choice slots, equipment,",
+  'Society/cultural availability, or optional routes, do not create a track."** The mechanisable build test',
+  "above — a track must declare a core route of its own — is how that governing rule is enforced in this",
+  "catalogue; the two are the same discipline stated once as product policy and once as an executable check.",
+  "",
+  "The same ruling settles two dispositions by name, so neither is an open track question:",
+  "",
+  "- **Soldier longbow identity** is represented through the appropriate longbow/combat Learning Group (F41,",
+  "  reachable through the retired track's former route) plus contextual/cultural availability, **not**",
+  "  through a Profession track.",
+  "- **Communal/militia command** (the former P25 communal-command track) remains a route/context",
+  "  distinction, **not** a track, unless future content demonstrates a materially different defining",
+  "  curriculum.",
+  "",
+  "**No further track investigation is required.** The result below is final for this reconciliation, not",
+  "pending further Product Owner review. The 2026-09-21 Profession-cores ruling does not reopen it: P12 and",
+  "P22 gain **alternative core routes**, never tracks, and the retained/retired set below is unchanged.",
+  "",
   `Result: ${catalogue.families.filter((family) => family.tracks?.length).length} of ` +
     `${catalogue.manifest.families} Professions keep tracks, carrying ` +
-    `${catalogue.families.reduce((sum, family) => sum + (family.tracks?.length ?? 0), 0)} tracks between them. ` +
+    `${catalogue.families.reduce((sum, family) => sum + (family.tracks?.length ?? 0), 0)} tracks between them ` +
+    `(${TRACK_DISPOSITIONS.reduce((sum, row) => sum + row.before - row.after, 0)} retired). ` +
     `Valid paths fall to ${catalogue.manifest.validPaths}.`,
   "",
   "| Profession | Tracks before | Tracks after | Why |",
   "| --- | ---: | ---: | --- |",
-  "| P09 Sailor and Boat Worker | 2 | 2 | Kept. Inshore boat work and rigged-vessel deck service have different defining training — N01 against F09 — so each track carries its own core. |",
-  "| P31 Surgeon | 2 | 2 | Kept. The civil operative surgeon and the field surgeon are defined by different apprenticeships, G18 against F29, and only the field surgeon has an authored route to combat exposure. |",
-  "| P14 Guard, Watcher and Escort | 2 | 0 | Retired. The tracks differed only in which combat group the guard bought; M01 and F30 are now both openly available routes. |",
-  "| P22 Soldier | 4 | 0 | Retired. All four differed only in which combat Learning Group they bought — contingent drill, formation drill, the issued missile arm, the longbow tradition. The Soldier is one identity whose core is repeated service in the field. |",
-  "| P24 Military Scout | 2 | 0 | Retired. Foot and mounted scouting differed only by whether the scout was given a horse, which G05 already says. |",
-  "| P25 Military Commander | 3 | 0 | Retired. Foot, mounted and communal command differed only in the combat groups shared with the command. |",
-  "| P26 Military Quartermaster | 2 | 0 | Retired. Neither refined the defining core; G12 and M01 state the difference themselves. |",
-  "| P82 Weapon Instructor | 3 | 0 | Retired. The subject an arms master teaches is a weapon choice, already expressed by M02, M05 and F30. The narrow-by-design exemption the one-tradition fencing track needed is gone with it. |",
+  ...TRACK_DISPOSITIONS.map(
+    (row) => `| ${row.profession} | ${row.before} | ${row.after} | ${row.why} |`,
+  ),
   "",
   "The Soldier collapse is the ruling applied at its sharpest, and it is deliberate: breadth that used to be",
   "split across four near-identical tracks is now what the breadth ruling actually asks for — one identity",
-  "with access to several coherent Learning Groups.",
+  "with access to several coherent Learning Groups. The cores ruling completes it. Where a difference really",
+  "is a difference in defining training but not in occupational identity — the mounted courier against the",
+  "foot courier — the answer is an alternative core route, not a track. Tracks remain reserved for a",
+  "materially different occupational form, which is why only the Sailor and the Surgeon keep any.",
   "",
   "## Combat Experience route audit",
   "",

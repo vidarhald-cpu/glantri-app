@@ -13,17 +13,42 @@ without. A path is valid only when it satisfies one of its applicable core route
 routes refine or replace its parent's. This is an annotation over Learning Groups and directly taught
 Skills that already exist, not a separate mechanism, and it needs no GM override.
 
-All 86 path/core-route pairs are satisfied by the authored content. 1 core route is recorded as blocked on an external question.
+Every valid path satisfies an applicable core route. 90 path/core-route pairs are declared and 90 are satisfied by the authored content; 1 core route is recorded as partially blocked on an external question.
 
 ## Core minimality
 
 A core states what a Profession is not that Profession without — enough for identity, never a rigid
 class build. Every declared core route is audited against that, and the build now refuses any core that
-requires more than two things in total. Largest core in the catalogue: 2 requirement(s). 85 of 86 path/core pairs are a single Learning Group.
+requires more than two things in total. Largest core in the catalogue: 2 requirement(s). 89 of 90 path/core pairs require exactly one thing — 86 a single Learning Group and 3 a single direct competency route.
 
-A Profession may declare a small set of alternative core routes, of which one must be satisfied. None
-is needed today: where the defining training genuinely differs, the difference is carried by a track
-with its own core, which is the same latitude expressed as a named player-visible variant.
+**A core is a necessary defining training route, not a unique classification key.** The
+"PRODUCT OWNER RULING — Profession cores (settled)" comment recorded on
+[issue #266](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/266) on 2026-09-21 rejects the
+assumption that a core must discriminate one Profession from every other. **Several Professions may
+share the same core Learning Group where that training is genuinely defining for each**, and a shared
+core is therefore correct content rather than a defect to be designed away. G10 is the core of the Envoy,
+the Mediator and the Political Agent; G11 of the Clerk and the Scribe; F24 of the Smith and the Smelter;
+M07 of the Quartermaster and the Campaign Planner; F04 of the Athlete and the foot Courier. **No Learning
+Group is invented to manufacture a unique core.**
+
+The same ruling settles that a core requirement may name **an existing Learning Group route or an
+existing direct competency route**. That is an annotation over routes the Profession already has, not a
+new primitive. Three Professions are defined by a direct route rather than by a group: the Cook by
+Cooking, the Wild Plant Gatherer by Plant Lore, and the Carpenter by Carpentry. In each case the group
+that previously held the core — C10, G02 and F27 — remains an ordinary optional route, and because
+overlapping routes are charged once, moving the core changes no breadth figure.
+
+A Profession may declare a small set of **alternative core routes**, of which one must be satisfied. 2 paths use them today.
+
+- **P12 Courier and Messenger** — one of F04, G05 or F06: the foot, mounted and vehicle courier are the
+  same occupation practised three ways, and any one of them makes the courier.
+- **P22 Soldier** — one of M01, M03 or M04: a soldier is made by being drilled to arms. **M06 Campaign
+  service experience is not core.** It stays an ordinary route, because Combat Experience is experiential
+  competence earned by real service — available to the soldier who sees it, not required of the one who
+  does not.
+
+Both are stated as alternatives rather than as tracks, which the cores ruling requires explicitly and the
+track-discipline ruling below independently demands.
 
 ## Track discipline
 
@@ -36,12 +61,11 @@ Profession's own group list. The build refuses a track that declares no core.
 **Settled by Product Owner ruling.** The "PRODUCT OWNER RULING — Profession tracks (settled)" comment
 recorded on [issue #266](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/266) on 2026-09-21
 approves this retirement outcome as authoritative settled input, not merely this proposal's own internal
-audit: **"A Profession track exists only where it changes the defining core
-curriculum of the occupation. If the difference can be expressed through Learning Groups, choice slots,
-equipment, Society/cultural availability, or optional routes, do not create a track."** The mechanisable
-build test above — a track must declare a core route of its own — is how that governing rule is enforced
-in this catalogue; the two are the same discipline stated once as product policy and once as an
-executable check.
+audit: **"A Profession track exists only where it changes the defining core curriculum of the
+occupation. If the difference can be expressed through Learning Groups, choice slots, equipment,
+Society/cultural availability, or optional routes, do not create a track."** The mechanisable build test
+above — a track must declare a core route of its own — is how that governing rule is enforced in this
+catalogue; the two are the same discipline stated once as product policy and once as an executable check.
 
 The same ruling settles two dispositions by name, so neither is an open track question:
 
@@ -53,24 +77,28 @@ The same ruling settles two dispositions by name, so neither is an open track qu
   curriculum.
 
 **No further track investigation is required.** The result below is final for this reconciliation, not
-pending further Product Owner review.
+pending further Product Owner review. The 2026-09-21 Profession-cores ruling does not reopen it: P12 and
+P22 gain **alternative core routes**, never tracks, and the retained/retired set below is unchanged.
 
 Result: 2 of 84 Professions keep tracks, carrying 4 tracks between them (16 retired). Valid paths fall to 86.
 
-| Profession                    | Tracks before | Tracks after | Why                                                                                                                                                                                                                                     |
-| ----------------------------- | ------------: | -----------: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P09 Sailor and Boat Worker    |             2 |            2 | Kept. Inshore boat work and rigged-vessel deck service have different defining training — N01 against F09 — so each track carries its own core.                                                                                         |
-| P31 Surgeon                   |             2 |            2 | Kept. The civil operative surgeon and the field surgeon are defined by different apprenticeships, G18 against F29, and only the field surgeon has an authored route to combat exposure.                                                 |
-| P14 Guard, Watcher and Escort |             2 |            0 | Retired. The tracks differed only in which combat group the guard bought; M01 and F30 are now both openly available routes.                                                                                                             |
-| P22 Soldier                   |             4 |            0 | Retired. All four differed only in which combat Learning Group they bought — contingent drill, formation drill, the issued missile arm, the longbow tradition. The Soldier is one identity whose core is repeated service in the field. |
-| P24 Military Scout            |             2 |            0 | Retired. Foot and mounted scouting differed only by whether the scout was given a horse, which G05 already says.                                                                                                                        |
-| P25 Military Commander        |             3 |            0 | Retired. Foot, mounted and communal command differed only in the combat groups shared with the command.                                                                                                                                 |
-| P26 Military Quartermaster    |             2 |            0 | Retired. Neither refined the defining core; G12 and M01 state the difference themselves.                                                                                                                                                |
-| P82 Weapon Instructor         |             3 |            0 | Retired. The subject an arms master teaches is a weapon choice, already expressed by M02, M05 and F30. The narrow-by-design exemption the one-tradition fencing track needed is gone with it.                                           |
+| Profession                    | Tracks before | Tracks after | Why                                                                                                                                                                                                                                                                                                           |
+| ----------------------------- | ------------: | -----------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P09 Sailor and Boat Worker    |             2 |            2 | Kept. Inshore boat work and rigged-vessel deck service have different defining training — N01 against F09 — so each track carries its own core.                                                                                                                                                               |
+| P31 Surgeon                   |             2 |            2 | Kept. The civil operative surgeon and the field surgeon are defined by different apprenticeships, G18 against F29, and only the field surgeon has an authored route to combat exposure.                                                                                                                       |
+| P14 Guard, Watcher and Escort |             2 |            0 | Retired. The tracks differed only in which combat group the guard bought; M01 and F30 are now both openly available routes.                                                                                                                                                                                   |
+| P22 Soldier                   |             4 |            0 | Retired. All four differed only in which combat Learning Group they bought — contingent drill, formation drill, the issued missile arm, the longbow tradition. The Soldier is one identity whose core is being drilled to arms, stated as the alternative core routes M01, M03 and M04 rather than as tracks. |
+| P24 Military Scout            |             2 |            0 | Retired. Foot and mounted scouting differed only by whether the scout was given a horse, which G05 already says.                                                                                                                                                                                              |
+| P25 Military Commander        |             3 |            0 | Retired. Foot, mounted and communal command differed only in the combat groups shared with the command.                                                                                                                                                                                                       |
+| P26 Military Quartermaster    |             2 |            0 | Retired. Neither refined the defining core; G12 and M01 state the difference themselves.                                                                                                                                                                                                                      |
+| P82 Weapon Instructor         |             3 |            0 | Retired. The subject an arms master teaches is a weapon choice, already expressed by M02, M05 and F30. The narrow-by-design exemption the one-tradition fencing track needed is gone with it.                                                                                                                 |
 
 The Soldier collapse is the ruling applied at its sharpest, and it is deliberate: breadth that used to be
 split across four near-identical tracks is now what the breadth ruling actually asks for — one identity
-with access to several coherent Learning Groups.
+with access to several coherent Learning Groups. The cores ruling completes it. Where a difference really
+is a difference in defining training but not in occupational identity — the mounted courier against the
+foot courier — the answer is an alternative core route, not a track. Tracks remain reserved for a
+materially different occupational form, which is why only the Sailor and the Surgeon keep any.
 
 ## Combat Experience route audit
 
@@ -98,7 +126,7 @@ Guard, the Military Quartermaster and the civil Surgeon reach no Combat Experien
 
 Overlapping routes never require duplicate payment for the same competency, and final cost does not
 depend on purchase order. Across all valid paths the routes name a competency more than once on
-107 occasions; every one is charged exactly once. Accumulating each path's routes in reverse order yields the identical charged
+111 occasions; every one is charged exactly once. Accumulating each path's routes in reverse order yields the identical charged
 set, which is what order-independence means here. Both properties are enforced by the build, not asserted
 in prose: a catalogue that broke either would fail to build.
 
@@ -117,15 +145,17 @@ in prose: a catalogue that broke either would fail to build.
 
 ### P02 — Wild Plant Gatherer
 
-- **Core route** — _Knowing and preparing what grows wild_: G02
+- **Core route** — _Knowing what grows wild, learned directly on the collecting rounds_: Plant Lore
 - **G04** — _Seasonal collecting rounds_
 - **G02** — _Supplying and preparing for a remedy maker_
 - **G12** — _Selling the season's collection_
-- _Taught directly on the collecting rounds_: Climbing
+- _Taught directly on the collecting rounds_: Climbing, Plant Lore
 
 | Valid path          | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
 | Wild Plant Gatherer |                              9 |                        0 |                                        9 |
+
+> Core settled by the 2026-09-21 Profession-cores ruling: the gatherer is defined by knowing the plant itself, learned on the rounds, not by the remedy maker's preparation curriculum. G02 remains an ordinary optional route for a gatherer who also learns to prepare what is collected.
 
 ### P03 — Field and Caravan Guide
 
@@ -247,15 +277,20 @@ Mutually exclusive tracks:
 
 ### P12 — Courier and Messenger
 
-- **Core route** — _Conditioning for the road_: F04
+- **Core route** — _Foot courier practice: conditioned to carry it there oneself_: F04
+- **Core route** — _Mounted courier practice: riding the stage and keeping the animal_: G05
+- **Core route** — _Vehicle courier practice: driving the carrying team_: F06
 - **F04** — _Conditioning for the road_
 - **G05** — _Mounted stage service_
+- **F06** — _Driving the carrying team_
 - **G04** — _Carrying across open country_
 - _Taught directly by the stage or household one carries for_: Geography
 
 | Valid path            | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | --------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Courier and Messenger |                             10 |                        0 |                                       10 |
+| Courier and Messenger |                             11 |                        0 |                                       11 |
+
+> Core settled by the 2026-09-21 Profession-cores ruling: the courier is defined by a practised way of getting it there — on foot, mounted or by vehicle — and any one of the three makes the occupation. These are alternative core routes, which the model already carries; the ruling is explicit that they must not become Profession tracks. F06 is added as an ordinary route so the vehicle alternative is genuinely reachable rather than merely declared.
 
 ### P13 — Trader and Merchant
 
@@ -371,7 +406,9 @@ Mutually exclusive tracks:
 
 ### P22 — Soldier
 
-- **Core route** — _Repeated service in the field_: M06
+- **Core route** — _Contingent fighting drill_: M01
+- **Core route** — _Formation arms drill_: M03
+- **Core route** — _Issued missile arm and formation drill_: M04
 - **M06** — _Repeated service in the field_
 - **G04** — _Marching and camping with the force_
 - **M01** — _Contingent fighting drill_
@@ -383,7 +420,7 @@ Mutually exclusive tracks:
 | ---------- | -----------------------------: | -----------------------: | ---------------------------------------: |
 | Soldier    |                             16 |                        4 |                                       12 |
 
-> The approved catalogue's nine fixed-weapon Soldier tracks became four in the previous revision; the track-discipline ruling retires those four as well. Every one of them differed from its siblings only in which combat Learning Group it bought — contingent drill, formation drill, the issued missile arm, the longbow tradition — and a track must not exist for an ordinary weapon or equipment choice. The Soldier is one occupational identity whose defining core is repeated service in the field; the arm served in is a choice among coherent combat curricula, which is exactly the access-to-several-groups shape the breadth ruling asks for.
+> The approved catalogue's nine fixed-weapon Soldier tracks became four in the previous revision; the track-discipline ruling retires those four as well. Every one of them differed from its siblings only in which combat Learning Group it bought — contingent drill, formation drill, the issued missile arm, the longbow tradition — and a track must not exist for an ordinary weapon or equipment choice. Core settled by the 2026-09-21 Profession-cores ruling: M06 Campaign service experience is NOT core. A soldier is made by being drilled to arms, so the core is one of M01, M03 or M04, stated as alternative core routes rather than as tracks. M06 remains an ordinary route: Combat Experience is experiential competence earned by real service, available to the soldier who sees it and not required of the soldier who does not. That keeps the Combat Experience route audit correct — M06 and K23 remain its only two routes — and it is exactly the access-to-several-groups shape the breadth ruling asks for.
 
 ### P23 — Mounted Soldier and Lancer
 
@@ -603,14 +640,17 @@ Mutually exclusive tracks:
 
 ### P39 — Carpenter
 
-- **Core route** — _Ordinary timber apprenticeship_: F27
+- **Core route** — _Working timber, learned directly at the bench one is set to_: Carpentry
 - **F27** — _Ordinary timber apprenticeship_
 - **C03** — _Working on building sites_
 - **C01** — _Workshop apprenticeship_
+- _Taught directly at the bench by the carpenter one is set to_: Carpentry
 
 | Valid path | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------- | -----------------------------: | -----------------------: | ---------------------------------------: |
 | Carpenter  |                              8 |                        3 |                                        5 |
+
+> Core settled by the 2026-09-21 Profession-cores ruling: the carpenter is defined by working timber itself, not by the millwright's mechanism curriculum. F27 remains an ordinary optional route for a carpenter who also builds working timber mechanisms.
 
 ### P40 — Shipbuilder
 
@@ -763,14 +803,16 @@ Mutually exclusive tracks:
 
 ### P53 — Cook
 
-- **Core route** — _Ordinary kitchen and brewhouse apprenticeship_: C10
+- **Core route** — _Cooking, learned directly in the kitchen one serves_: Cooking
 - **C10** — _Ordinary kitchen and brewhouse apprenticeship_
 - **C01** — _Buying for the kitchen as a trained trade_
-- _Taught directly in the kitchen it serves_: Customs, Plant Lore, Baking, Court Cookery
+- _Taught directly in the kitchen it serves_: Customs, Plant Lore, Cooking, Baking, Court Cookery
 
 | Valid path | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------- | -----------------------------: | -----------------------: | ---------------------------------------: |
 | Cook       |                              7 |                        1 |                                        6 |
+
+> Core settled by the 2026-09-21 Profession-cores ruling: the cook is defined by cooking, not by the brewhouse's brewing-and-preserving cycle. C10 remains an ordinary optional route and still carries the Food Preservation access; C10 stays the Brewer's core, which the ruling affirms.
 
 ### P54 — Brewer
 
@@ -905,7 +947,7 @@ Mutually exclusive tracks:
 
 ### P65 — Scribe and Copyist
 
-- **Core route** — _Ordinary records-office service_: G11 — **blocked:** #113 — the defining Written Tradition core cannot be authored until contextual written-tradition availability is resolved
+- **Core route** — _Ordinary records-office service, plus the written tradition the scribe actually writes_: G11 — **blocked:** #113 — the ruled core shape is G11 plus at least one written-language competency route. G11 is authored here; the second requirement is not, because the written-language competencies are not base Skills and the catalogue carries only 3 written traditions against this proposal's 12 Civilizations. Which tradition a scribe writes is the contextual written-tradition availability question #113 owns.
 - **G11** — _Ordinary records-office service_
 - **F15** — _Reading and copying older hands_
 - **K01** — _Learned study behind the copying_
@@ -915,7 +957,7 @@ Mutually exclusive tracks:
 | ------------------ | -----------------------------: | -----------------------: | ---------------------------------------: |
 | Scribe and Copyist |                              7 |                        0 |                                        7 |
 
-> BLOCKED DEPENDENCY: the defining Written Tradition core remains unresolved under #113 and is deliberately not supplied here. This package must not be presented as universal literacy.
+> PARTIALLY BLOCKED DEPENDENCY. The 2026-09-21 Profession-cores ruling settles the core SHAPE: G11 plus at least one written-language competency route. The first requirement is authored here. The second is not, and the dependency on #113 is real rather than residual, for two reasons the ruling does not resolve. (1) Representation: a core route requires Learning Groups or base Skills, and a written-language competency is neither — it is a `written-tradition` competency, which no path body can currently carry, and 'at least one of any written tradition' is not expressible as a fixed requirement or as alternative core routes. (2) Content: the approved catalogue holds only 3 written traditions (Sacred Mogrebi, Church Ologian, Phoenician) against the 12 Civilizations this proposal gives written competencies to, and which tradition a given scribe writes is precisely the contextual written-tradition availability question #113 owns. Inventing either the representation or the tradition would distort the content, which the ruling forbids. This package must not be presented as universal literacy.
 
 ### P66 — Translator and Interpreter
 

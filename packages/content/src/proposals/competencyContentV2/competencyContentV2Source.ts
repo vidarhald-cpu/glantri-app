@@ -1201,8 +1201,9 @@ export const competencyContentV2Families: readonly V2Family[] = [
     coreRoutes: [
       {
         id: "profession:wild-plant-gatherer:core",
-        label: "Knowing and preparing what grows wild",
-        groupIds: ["G02"],
+        label: "Knowing what grows wild, learned directly on the collecting rounds",
+        groupIds: [],
+        skillIds: ["skill:plant-lore"],
       },
     ],
     groups: [
@@ -1211,7 +1212,11 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "G12", route: "Selling the season's collection" },
     ],
     directRoute: "Taught directly on the collecting rounds",
-    skillIds: ["climb"],
+    skillIds: ["climb", "skill:plant-lore"],
+    note:
+      "Core settled by the 2026-09-21 Profession-cores ruling: the gatherer is defined by knowing the " +
+      "plant itself, learned on the rounds, not by the remedy maker's preparation curriculum. G02 remains " +
+      "an ordinary optional route for a gatherer who also learns to prepare what is collected.",
   },
   {
     code: "P03",
@@ -1407,18 +1412,35 @@ export const competencyContentV2Families: readonly V2Family[] = [
     name: "Courier and Messenger",
     coreRoutes: [
       {
-        id: "profession:courier:core",
-        label: "Conditioning for the road",
+        id: "profession:courier:core:foot",
+        label: "Foot courier practice: conditioned to carry it there oneself",
         groupIds: ["F04"],
+      },
+      {
+        id: "profession:courier:core:mounted",
+        label: "Mounted courier practice: riding the stage and keeping the animal",
+        groupIds: ["G05"],
+      },
+      {
+        id: "profession:courier:core:vehicle",
+        label: "Vehicle courier practice: driving the carrying team",
+        groupIds: ["F06"],
       },
     ],
     groups: [
       { groupId: "F04", route: "Conditioning for the road" },
       { groupId: "G05", route: "Mounted stage service" },
+      { groupId: "F06", route: "Driving the carrying team" },
       { groupId: "G04", route: "Carrying across open country" },
     ],
     directRoute: "Taught directly by the stage or household one carries for",
     skillIds: ["skill:geography"],
+    note:
+      "Core settled by the 2026-09-21 Profession-cores ruling: the courier is defined by a practised way " +
+      "of getting it there — on foot, mounted or by vehicle — and any one of the three makes the " +
+      "occupation. These are alternative core routes, which the model already carries; the ruling is " +
+      "explicit that they must not become Profession tracks. F06 is added as an ordinary route so the " +
+      "vehicle alternative is genuinely reachable rather than merely declared.",
   },
   {
     code: "P13",
@@ -1602,9 +1624,19 @@ export const competencyContentV2Families: readonly V2Family[] = [
     name: "Soldier",
     coreRoutes: [
       {
-        id: "profession:soldier:core",
-        label: "Repeated service in the field",
-        groupIds: ["M06"],
+        id: "profession:soldier:core:contingent",
+        label: "Contingent fighting drill",
+        groupIds: ["M01"],
+      },
+      {
+        id: "profession:soldier:core:formation",
+        label: "Formation arms drill",
+        groupIds: ["M03"],
+      },
+      {
+        id: "profession:soldier:core:missile",
+        label: "Issued missile arm and formation drill",
+        groupIds: ["M04"],
       },
     ],
     groups: [
@@ -1619,10 +1651,14 @@ export const competencyContentV2Families: readonly V2Family[] = [
       "The approved catalogue's nine fixed-weapon Soldier tracks became four in the previous revision; the " +
       "track-discipline ruling retires those four as well. Every one of them differed from its siblings only " +
       "in which combat Learning Group it bought — contingent drill, formation drill, the issued missile arm, " +
-      "the longbow tradition — and a track must not exist for an ordinary weapon or equipment choice. The " +
-      "Soldier is one occupational identity whose defining core is repeated service in the field; the arm " +
-      "served in is a choice among coherent combat curricula, which is exactly the access-to-several-groups " +
-      "shape the breadth ruling asks for.",
+      "the longbow tradition — and a track must not exist for an ordinary weapon or equipment choice. " +
+      "Core settled by the 2026-09-21 Profession-cores ruling: M06 Campaign service experience is NOT core. " +
+      "A soldier is made by being drilled to arms, so the core is one of M01, M03 or M04, stated as " +
+      "alternative core routes rather than as tracks. M06 remains an ordinary route: Combat Experience is " +
+      "experiential competence earned by real service, available to the soldier who sees it and not " +
+      "required of the soldier who does not. That keeps the Combat Experience route audit correct — M06 " +
+      "and K23 remain its only two routes — and it is exactly the access-to-several-groups shape the " +
+      "breadth ruling asks for.",
   },
   {
     code: "P23",
@@ -1979,8 +2015,9 @@ export const competencyContentV2Families: readonly V2Family[] = [
     coreRoutes: [
       {
         id: "profession:carpenter:core",
-        label: "Ordinary timber apprenticeship",
-        groupIds: ["F27"],
+        label: "Working timber, learned directly at the bench one is set to",
+        groupIds: [],
+        skillIds: ["carpentry"],
       },
     ],
     groups: [
@@ -1988,6 +2025,12 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C03", route: "Working on building sites" },
       { groupId: "C01", route: "Workshop apprenticeship" },
     ],
+    directRoute: "Taught directly at the bench by the carpenter one is set to",
+    skillIds: ["carpentry"],
+    note:
+      "Core settled by the 2026-09-21 Profession-cores ruling: the carpenter is defined by working timber " +
+      "itself, not by the millwright's mechanism curriculum. F27 remains an ordinary optional route for a " +
+      "carpenter who also builds working timber mechanisms.",
   },
   {
     code: "P40",
@@ -2237,8 +2280,9 @@ export const competencyContentV2Families: readonly V2Family[] = [
     coreRoutes: [
       {
         id: "profession:cook:core",
-        label: "Ordinary kitchen and brewhouse apprenticeship",
-        groupIds: ["C10"],
+        label: "Cooking, learned directly in the kitchen one serves",
+        groupIds: [],
+        skillIds: ["skill:cooking"],
       },
     ],
     groups: [
@@ -2246,8 +2290,12 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "C01", route: "Buying for the kitchen as a trained trade" },
     ],
     directRoute: "Taught directly in the kitchen it serves",
-    skillIds: ["skill:customs", "skill:plant-lore"],
+    skillIds: ["skill:customs", "skill:plant-lore", "skill:cooking"],
     specializationIds: ["spec:baking", "spec:court-cookery"],
+    note:
+      "Core settled by the 2026-09-21 Profession-cores ruling: the cook is defined by cooking, not by the " +
+      "brewhouse's brewing-and-preserving cycle. C10 remains an ordinary optional route and still carries " +
+      "the Food Preservation access; C10 stays the Brewer's core, which the ruling affirms.",
   },
   {
     code: "P54",
@@ -2466,10 +2514,11 @@ export const competencyContentV2Families: readonly V2Family[] = [
     coreRoutes: [
       {
         id: "profession:scribe:core",
-        label: "Ordinary records-office service",
+        label:
+          "Ordinary records-office service, plus the written tradition the scribe actually writes",
         groupIds: ["G11"],
         blockedBy:
-          "#113 — the defining Written Tradition core cannot be authored until contextual written-tradition availability is resolved",
+          "#113 — the ruled core shape is G11 plus at least one written-language competency route. G11 is authored here; the second requirement is not, because the written-language competencies are not base Skills and the catalogue carries only 3 written traditions against this proposal's 12 Civilizations. Which tradition a scribe writes is the contextual written-tradition availability question #113 owns.",
       },
     ],
     groups: [
@@ -2480,8 +2529,18 @@ export const competencyContentV2Families: readonly V2Family[] = [
     directRoute: "Taught directly in the writing room",
     skillIds: ["skill:visual-art"],
     note:
-      "BLOCKED DEPENDENCY: the defining Written Tradition core remains unresolved under #113 and is " +
-      "deliberately not supplied here. This package must not be presented as universal literacy.",
+      "PARTIALLY BLOCKED DEPENDENCY. The 2026-09-21 Profession-cores ruling settles the core SHAPE: G11 " +
+      "plus at least one written-language competency route. The first requirement is authored here. The " +
+      "second is not, and the dependency on #113 is real rather than residual, for two reasons the ruling " +
+      "does not resolve. (1) Representation: a core route requires Learning Groups or base Skills, and a " +
+      "written-language competency is neither — it is a `written-tradition` competency, which no path body " +
+      "can currently carry, and 'at least one of any written tradition' is not expressible as a fixed " +
+      "requirement or as alternative core routes. (2) Content: the approved catalogue holds only 3 written " +
+      "traditions (Sacred Mogrebi, Church Ologian, Phoenician) against the 12 Civilizations this proposal " +
+      "gives written competencies to, and which tradition a given scribe writes is precisely the " +
+      "contextual written-tradition availability question #113 owns. Inventing either the representation " +
+      "or the tradition would distort the content, which the ruling forbids. This package must not be " +
+      "presented as universal literacy.",
   },
   {
     code: "P66",
@@ -3247,6 +3306,16 @@ export const competencyContentV2DirectGrantPolicy: readonly string[] = [
 
 export const competencyContentV2DirectGrantDecisions: readonly V2DirectGrantDecision[] = [
   {
+    skillId: "skill:cooking",
+    removedFrom: [],
+    retainedIn: ["P53"],
+    rationale:
+      "Added by the 2026-09-21 Profession-cores ruling, which makes the direct Cooking route the cook's " +
+      "defining core and states that C10 is not it. Cooking is also taught inside C10, so the grant adds " +
+      "no breadth — overlapping routes are charged once — but it states the occupation's own defining " +
+      "practice as a route the cook always has, independently of the brewhouse curriculum.",
+  },
+  {
     skillId: "skill:streetwise",
     removedFrom: ["P14"],
     retainedIn: [],
@@ -3489,10 +3558,12 @@ export const competencyContentV2DirectGrantDecisions: readonly V2DirectGrantDeci
   {
     skillId: "carpentry",
     removedFrom: ["P08", "P49", "P51", "P54", "P55", "P79"],
-    retainedIn: ["P29", "P52"],
+    retainedIn: ["P29", "P52", "P39"],
     rationale:
       "R5. Retained where timber is the material worked: siege-engine carriages and constructed traps. " +
-      "Withdrawn where it stood in for 'repairs things made of wood'.",
+      "Withdrawn where it stood in for 'repairs things made of wood'. Added to P39 by the 2026-09-21 " +
+      "Profession-cores ruling, which makes the direct Carpentry route the carpenter's defining core: " +
+      "timber is not adjacent to this occupation, it is the occupation.",
   },
   {
     skillId: "ropework",
@@ -3505,11 +3576,13 @@ export const competencyContentV2DirectGrantDecisions: readonly V2DirectGrantDeci
   {
     skillId: "skill:plant-lore",
     removedFrom: ["P05", "P31", "P42"],
-    retainedIn: ["P54", "P55", "P56", "P57", "P53"],
+    retainedIn: ["P54", "P55", "P56", "P57", "P53", "P02"],
     rationale:
       "R4. Retained where the plant is the raw material of the process, and restored to the cook when F22 " +
       "was retired: a kitchen genuinely teaches what is available when. The farmer reaches it through the " +
-      "holding's own year, and the surgeon and weaver did not need it.",
+      "holding's own year, and the surgeon and weaver did not need it. Added to P02 by the 2026-09-21 " +
+      "Profession-cores ruling, which makes the direct Plant Lore route the gatherer's defining core: this " +
+      "is the ruling's exceptional-occupational-route case, not a breadth top-up.",
   },
   {
     skillId: "skill:first-aid",

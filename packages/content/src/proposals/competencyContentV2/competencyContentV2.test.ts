@@ -539,11 +539,128 @@ describe("second ruling set — core minimality", () => {
       expect(row.groupIds.length + row.skillIds.length).toBeLessThanOrEqual(2);
   });
 
-  it("expresses most cores as a single Learning Group", () => {
+  it("expresses most cores as a single requirement", () => {
     const single = catalogue.coreRoutes.filter(
       (row) => row.groupIds.length + row.skillIds.length === 1,
     );
     expect(single.length).toBeGreaterThan(catalogue.coreRoutes.length / 2);
+  });
+});
+
+describe("Profession cores ruling — 2026-09-21", () => {
+  /**
+   * The ruling rejects the premise that a core must discriminate one Profession from every other.
+   * A core is a necessary defining training route; sharing one is legitimate where the training is
+   * genuinely defining for each Profession. The affirmed cores are asserted so that a later breadth
+   * or uniqueness pressure cannot quietly move them again.
+   */
+  const coreRequirements = (code: string): string[][] =>
+    [
+      ...new Map(
+        catalogue.coreRoutes
+          .filter((row) => row.professionCode === code)
+          .map((row) => [row.coreRouteId, row]),
+      ).values(),
+    ].map((row) => [...row.groupIds, ...row.skillIds].sort());
+
+  it("keeps the shared Learning Group cores the ruling affirms", () => {
+    const affirmed: Record<string, string> = {
+      P60: "G10",
+      P61: "G10",
+      P63: "G10",
+      P58: "G11",
+      P54: "C10",
+      P35: "G02",
+      P36: "F24",
+      P37: "F24",
+      P48: "F27",
+      P81: "F04",
+      P27: "M07",
+      P26: "M07",
+      P30: "G01",
+    };
+    for (const [code, groupId] of Object.entries(affirmed))
+      expect(coreRequirements(code)).toEqual([[groupId]]);
+  });
+
+  it("lets a Learning Group be the core of more than one Profession", () => {
+    const shared = new Map<string, string[]>();
+    for (const row of catalogue.coreRoutes)
+      for (const groupId of row.groupIds)
+        shared.set(groupId, [...new Set([...(shared.get(groupId) ?? []), row.professionCode])]);
+    /* G10 is the core of three Professions and G11, F24, M07 and F04 of two each. Under the ruling
+       that is correct content, not a defect to be designed away. */
+    expect(shared.get("G10")!.sort()).toEqual(["P60", "P61", "P63"]);
+    for (const groupId of ["G11", "F24", "M07", "F04"]) expect(shared.get(groupId)!.length).toBe(2);
+  });
+
+  it("makes the direct competency route core for the Cook, the Gatherer and the Carpenter", () => {
+    expect(coreRequirements("P53")).toEqual([["skill:cooking"]]);
+    expect(coreRequirements("P02")).toEqual([["skill:plant-lore"]]);
+    expect(coreRequirements("P39")).toEqual([["carpentry"]]);
+    /* The displaced groups stay reachable as ordinary optional routes. */
+    const groupsOf = (code: string) =>
+      catalogue.paths.find((path) => path.professionCode === code)!.groupIds;
+    expect(groupsOf("P53")).toContain("C10");
+    expect(groupsOf("P02")).toContain("G02");
+    expect(groupsOf("P39")).toContain("F27");
+  });
+
+  it("gives the Courier three alternative core routes rather than three tracks", () => {
+    expect(coreRequirements("P12").flat().sort()).toEqual(["F04", "F06", "G05"]);
+    const courier = competencyContentV2Families.find((family) => family.code === "P12")!;
+    expect(courier.tracks ?? []).toHaveLength(0);
+    /* Each alternative must be genuinely reachable, not merely declared. */
+    for (const row of catalogue.coreRoutes.filter((r) => r.professionCode === "P12"))
+      expect(row.satisfied).toBe(true);
+  });
+
+  it("removes M06 from the Soldier core and keeps it as an experiential route", () => {
+    expect(coreRequirements("P22").flat().sort()).toEqual(["M01", "M03", "M04"]);
+    const soldier = competencyContentV2Families.find((family) => family.code === "P22")!;
+    expect(soldier.tracks ?? []).toHaveLength(0);
+    expect((soldier.groups ?? []).map((route) => route.groupId)).toContain("M06");
+    for (const row of catalogue.coreRoutes.filter((r) => r.professionCode === "P22"))
+      expect(row.satisfied).toBe(true);
+  });
+
+  it("never makes Campaign service experience the core of any Profession", () => {
+    for (const row of catalogue.coreRoutes) expect(row.groupIds).not.toContain("M06");
+  });
+
+  it("retains the Smuggler's two-route core and the Surgeon's track cores", () => {
+    expect(coreRequirements("P20")).toEqual([["G12", "K18"]]);
+    const surgeonCores = catalogue.coreRoutes.filter((row) => row.professionCode === "P31");
+    expect(surgeonCores.map((row) => row.groupIds.join("+")).sort()).toEqual(["F29", "G18"]);
+  });
+
+  it("records the Scribe core as G11 plus a written-language route that stays blocked on #113", () => {
+    const scribe = catalogue.coreRoutes.filter((row) => row.professionCode === "P65");
+    expect(scribe).toHaveLength(1);
+    expect(scribe[0]!.groupIds).toEqual(["G11"]);
+    expect(scribe[0]!.blockedBy).toContain("#113");
+    expect(scribe[0]!.blockedBy).toContain("written-language");
+    /* The blocker is real: no path body can carry a written-tradition competency, and the approved
+       catalogue holds fewer written traditions than this proposal gives Civilizations. */
+    const writtenTraditions = fullSkillCatalogueProposal.entries.filter(
+      (entry) => entry.competencyType === "written-tradition",
+    );
+    expect(writtenTraditions.length).toBeLessThan(
+      competencyContentV2CivilizationLanguages.filter((row) => row.writtenName !== null).length,
+    );
+    for (const row of catalogue.coreRoutes)
+      for (const skillId of row.skillIds)
+        expect(
+          fullSkillCatalogueProposal.entries.find((entry) => entry.id === skillId)!.competencyType,
+        ).toBe("base-skill");
+  });
+
+  it("does not invent a Learning Group to manufacture a unique core", () => {
+    /* Four cores moved in this reconciliation and not one of them added a Learning Group: three
+       became an existing direct competency route and three became alternatives over groups the
+       Profession already had. F06 was added to the Courier as an ordinary route, not as a group. */
+    expect(catalogue.manifest.groups).toBe(96);
+    expect(catalogue.manifest.newGroups).toBe(50);
   });
 });
 
