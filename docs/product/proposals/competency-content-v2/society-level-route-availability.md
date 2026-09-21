@@ -57,6 +57,22 @@ that is a deliberate statement about the society, not a side effect of a missing
   and **the order you buy them in makes no difference to the final cost**. Overlap between routes is
   deliberate; it exists so that a narrow society can still reach a competency by a different road.
 
+## Where a restriction is written down
+
+A restriction is recorded **at the most general level where it is genuinely true**, and no higher.
+
+If a whole curriculum simply does not exist in a society — nobody teaches close-order drill, because
+there is no close-order force — the restriction belongs to the **Learning Group**. It is true of that
+training wherever the training would be, and writing it once keeps it honest.
+
+If the curriculum exists but one occupation cannot reach it there — the training is real, but not
+open to that trade in that place — the restriction belongs to that **Profession's route** into the
+group. That is the contextual exception, and it is deliberately the narrower tool.
+
+There is no third thing. In particular, **there is no society-specific version of a Profession**. You
+will never find "Hill-Village Mason" beside "Mason"; there is one Mason, reached by whichever routes
+exist around her.
+
 ## The core route
 
 Every Profession has at least one **defining core route** — the training it is not that Profession

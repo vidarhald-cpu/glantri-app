@@ -80,6 +80,53 @@ const GROUP_SIZE_PREFERRED_CENTRE: readonly [number, number] = [3, 4];
 /** Retained for callers that still read the earlier diagnostic band. */
 const GROUP_SIZE_REVIEW_BAND: readonly [number, number] = [2, 4];
 
+/**
+ * Combat is the Product Owner's explicit exception to the 5+ rule: a larger, choice-heavy combat
+ * group is desirable, because it makes broad investment in one narrow competence domain
+ * economically viable. The exception is an allowlist rather than a category test, so a non-combat
+ * group cannot quietly grow into it and a listed group cannot quietly shrink out of it.
+ */
+const COMBAT_BREADTH_EXCEPTION_GROUP_IDS: readonly string[] = ["M02", "M03", "M05"];
+
+/**
+ * Combat Experience is experiential competence from credible real combat or field exposure.
+ * Instruction, fencing, drill and advanced weapon training do not confer it, so it may appear only
+ * in a group whose whole curriculum is that exposure.
+ */
+const COMBAT_EXPERIENCE_SKILL_ID = "combat_experience";
+const COMBAT_EXPERIENCE_ROUTE_GROUP_IDS: readonly string[] = ["M06", "K23"];
+
+/**
+ * C02 is settled by ruling: Appraisal, Bargaining, Teaching and exactly one chosen craft. Breadth
+ * pressure must never raise it to two or three, so the shape is asserted rather than described.
+ */
+const C02_SETTLED_FIXED_SKILL_IDS: readonly string[] = [
+  "skill:appraisal",
+  "skill:bargaining",
+  "skill:teaching",
+];
+const C02_SETTLED_CHOOSE_COUNT = 1;
+
+/**
+ * A core route states what a Profession is not that Profession without. It must be minimal — enough
+ * for identity, never a rigid class build — so it may require at most this many things in total.
+ */
+const CORE_ROUTE_MAXIMUM_REQUIREMENTS = 2;
+
+/**
+ * A browse category must be guessable from the Skill name and the category labels, which a narrow
+ * category of one or two members is not. `language` is exempt: it holds the Civilization language
+ * competencies, which are not part of the 157-competency catalogue counted here.
+ */
+const CATEGORY_MINIMUM_MEMBERS = 4;
+const CATEGORY_MEMBERSHIP_EXEMPT: readonly V2PlayerFacingCategoryId[] = ["language"];
+/** Categories retired by the simplification ruling; no competency may still name one. */
+const RETIRED_CATEGORY_IDS: readonly string[] = [
+  COMPETENCY_CONTENT_V2_RETIRED_CATEGORY_ID,
+  "mental",
+  "high-society",
+];
+
 function fail(message: string): never {
   throw new Error(`Invalid Competency Content V2 proposal: ${message}`);
 }
@@ -368,6 +415,54 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
     for (const supersededId of group.supersedes ?? [])
       if (!approvedGroupIds.has(supersededId))
         fail(`group ${group.id} supersedes unknown approved group ${supersededId}`);
+
+    /* Specializations are purchased separately. A group provides access, never the Specialization,
+       so a Specialization may never sit among the Skills the group charges for. */
+    const chargedSkillIds = new Set([
+      ...group.fixedSkillIds,
+      ...(group.selectionSlots ?? []).flatMap((slot) => slot.candidateSkillIds),
+    ]);
+    for (const specializationId of group.specializationIds ?? [])
+      if (chargedSkillIds.has(specializationId))
+        fail(
+          `group ${group.id} charges for the Specialization ${specializationId} as a base Skill`,
+        );
+
+    /* Combat Experience is exposure, not instruction. */
+    if (
+      chargedSkillIds.has(COMBAT_EXPERIENCE_SKILL_ID) &&
+      !COMBAT_EXPERIENCE_ROUTE_GROUP_IDS.includes(group.id)
+    )
+      fail(
+        `group ${group.id} teaches Combat Experience, which only an authored experiential route may expose`,
+      );
+  }
+
+  for (const groupId of COMBAT_EXPERIENCE_ROUTE_GROUP_IDS) {
+    const group =
+      groupsById.get(groupId) ?? fail(`unknown Combat Experience route group ${groupId}`);
+    if (!group.fixedSkillIds.includes(COMBAT_EXPERIENCE_SKILL_ID))
+      fail(`group ${groupId} is recorded as a Combat Experience route but does not teach it`);
+  }
+
+  {
+    const c02 = groupsById.get("C02") ?? fail("the settled group C02 is missing");
+    const expected = [...C02_SETTLED_FIXED_SKILL_IDS].sort().join(",");
+    if ([...c02.fixedSkillIds].sort().join(",") !== expected)
+      fail(
+        `C02 is settled as Appraisal, Bargaining and Teaching plus one chosen craft, and its fixed Skills differ`,
+      );
+    if ((c02.selectionSlots?.length ?? 0) !== 1)
+      fail("C02 is settled with exactly one craft choice slot");
+    const slot = c02.selectionSlots![0]!;
+    if (slot.chooseCount !== C02_SETTLED_CHOOSE_COUNT)
+      fail(
+        `C02 chooses ${slot.chooseCount} crafts; the ruling settles it at exactly one and forbids raising it under breadth pressure`,
+      );
+    if (slot.chooseCountStatus !== "approved")
+      fail(
+        "C02's craft count is settled by ruling and must no longer be recorded as an open source conflict",
+      );
   }
 
   for (const removed of competencyContentV2RemovedGroups) {
@@ -415,6 +510,15 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
       fail(`duplicate family ${family.code}`);
     familyCodes.add(family.code);
     familyIds.add(family.id);
+
+    /* Track discipline: a track is a materially different form of the occupation, which means its
+       defining training differs. A track that does not refine or replace the parent core is an
+       ordinary weapon, Skill or equipment choice, and the groups already express that. */
+    for (const track of family.tracks ?? [])
+      if (!(track.coreRoutes?.length ?? 0))
+        fail(
+          `track ${track.id} declares no core route of its own; a track must not exist for a choice the Learning Groups already express`,
+        );
 
     for (const { id, name, bodies } of pathBodies(family)) {
       const fixed = new Set<string>();
@@ -489,6 +593,10 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
         if (!core.label.trim()) fail(`core route ${core.id} has no player-facing label`);
         if (!core.groupIds.length && !(core.skillIds?.length ?? 0))
           fail(`core route ${core.id} requires nothing`);
+        if (core.groupIds.length + (core.skillIds?.length ?? 0) > CORE_ROUTE_MAXIMUM_REQUIREMENTS)
+          fail(
+            `core route ${core.id} requires more than ${CORE_ROUTE_MAXIMUM_REQUIREMENTS} things; a core must be minimal, not a rigid class build`,
+          );
         for (const groupId of core.groupIds)
           if (!groupsById.has(groupId))
             fail(`core route ${core.id} names unknown group ${groupId}`);
@@ -522,6 +630,11 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
       if (!orderIndependent) fail(`${id} charges a different set depending on purchase order`);
       if (forward.size !== fixed.size)
         fail(`${id} charges a set that does not match its recorded breadth`);
+      for (const specializationId of reachableSpecializations)
+        if (forward.has(specializationId))
+          fail(
+            `${id} charges for the Specialization ${specializationId}, which is purchased separately`,
+          );
       const chargedAppearances = routeSkillLists.reduce((sum, list) => sum + list.length, 0);
       costInvariants.push({
         pathId: id,
@@ -594,6 +707,57 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
     return { competencyId: entry.id, name: entry.name, categoryId };
   });
 
+  {
+    /* Guessability, so far as it is mechanisable: no competency may name a retired category, and no
+       surviving category may be so narrow that a player would not think to look in it. */
+    const members = new Map<string, number>();
+    for (const row of categories) {
+      if (RETIRED_CATEGORY_IDS.includes(row.categoryId as string))
+        fail(`${row.competencyId} is assigned the retired category ${row.categoryId}`);
+      members.set(row.categoryId, (members.get(row.categoryId) ?? 0) + 1);
+    }
+    for (const [categoryId, count] of members)
+      if (
+        !CATEGORY_MEMBERSHIP_EXEMPT.includes(categoryId as V2PlayerFacingCategoryId) &&
+        count < CATEGORY_MINIMUM_MEMBERS
+      )
+        fail(
+          `category ${categoryId} holds only ${count} competencies; a category that narrow is not guessable and should be folded away`,
+        );
+    for (const retiredId of RETIRED_CATEGORY_IDS)
+      if (
+        Object.values(competencyContentV2CategoryByDomain).includes(
+          retiredId as V2PlayerFacingCategoryId,
+        )
+      )
+        fail(`a domain still defaults to the retired category ${retiredId}`);
+  }
+
+  {
+    /* Languages: the blocker is removed, so every Civilization carries a rollable spoken competency
+       and a rollable written one unless the absence is explicitly authored. */
+    const civilizationIds = new Set<string>();
+    for (const language of competencyContentV2CivilizationLanguages) {
+      if (civilizationIds.has(language.civilizationId))
+        fail(`duplicate Civilization language entry ${language.civilizationId}`);
+      civilizationIds.add(language.civilizationId);
+      if (!language.spokenName.trim())
+        fail(`${language.civilizationId} has no rollable spoken competency`);
+      if (language.writtenName === null) {
+        if (!language.writtenAbsenceReason?.trim())
+          fail(
+            `${language.civilizationId} has no written competency and no authored reason for the absence`,
+          );
+      } else if (!language.writtenName.trim()) {
+        fail(`${language.civilizationId} has an empty written competency name`);
+      }
+      if (language.requiresProductOwnerNamingRuling)
+        fail(
+          `${language.civilizationId} still defers to a naming ruling; the ruling is given, so the name must be settled here`,
+        );
+    }
+  }
+
   for (const decision of competencyContentV2DirectGrantDecisions) {
     const entry =
       entries.get(decision.skillId) ??
@@ -653,6 +817,23 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
       );
     if (row.shape === "justified-large" && !row.justification)
       fail(`group ${row.id} is 5 or larger and states no justification`);
+    if (row.shape === "justified-large" && !COMBAT_BREADTH_EXCEPTION_GROUP_IDS.includes(row.id))
+      fail(
+        `group ${row.id} is 5 or larger but is not one of the combat groups the Product Owner's exception covers`,
+      );
+  }
+  for (const groupId of COMBAT_BREADTH_EXCEPTION_GROUP_IDS) {
+    const row =
+      groupSizes.find((candidate) => candidate.id === groupId) ??
+      fail(`the combat exception names unknown group ${groupId}`);
+    if (row.shape !== "justified-large")
+      fail(
+        `group ${groupId} is listed under the combat breadth exception but is no longer 5 or larger; the exception must not be carried by a group that does not need it`,
+      );
+    if (!row.slotSize)
+      fail(
+        `group ${groupId} claims the combat exception but offers no choice; the exception is for choice-heavy groups`,
+      );
   }
   const groupSizeDistribution: Record<number, number> = {};
   for (const row of groupSizes)
@@ -729,13 +910,8 @@ export interface CompetencyContentV2Analysis {
   proposedMinimum: BreadthDistribution;
   approvedPaths: BreadthPath[];
   proposedPaths: BreadthPath[];
-  /** Paths below the review floor, excluding those the proposal marks narrow by design. */
+  /** Paths below the coherence-review floor. A prompt to look, never a defect. */
   reviewPrompts: { professionCode: string; pathName: string; effectiveBreadthNominal: number }[];
-  narrowByDesignPaths: {
-    professionCode: string;
-    pathName: string;
-    effectiveBreadthNominal: number;
-  }[];
   groupSizes: GroupSizeRow[];
   groupSizeDistribution: Record<number, number>;
   coreRoutes: CompetencyContentV2Catalogue["coreRoutes"];
@@ -747,11 +923,6 @@ export interface CompetencyContentV2Analysis {
 export function analyseCompetencyContentV2(): CompetencyContentV2Analysis {
   const approvedPaths = measureApprovedBaseline();
   const catalogue = buildCompetencyContentV2Catalogue();
-  const narrowByDesign = new Set(
-    competencyContentV2Families
-      .filter((family) => family.narrowByDesign)
-      .map((family) => family.code),
-  );
   return {
     approved: summarizeBreadth(approvedPaths.map((path) => path.effectiveBreadthNominal)),
     proposed: summarizeBreadth(catalogue.paths.map((path) => path.effectiveBreadthNominal)),
@@ -759,18 +930,7 @@ export function analyseCompetencyContentV2(): CompetencyContentV2Analysis {
     approvedPaths,
     proposedPaths: catalogue.paths,
     reviewPrompts: catalogue.paths
-      .filter(
-        (path) =>
-          path.effectiveBreadthNominal < BREADTH_REVIEW_FLOOR &&
-          !narrowByDesign.has(path.professionCode),
-      )
-      .map((path) => ({
-        professionCode: path.professionCode,
-        pathName: path.pathName,
-        effectiveBreadthNominal: path.effectiveBreadthNominal,
-      })),
-    narrowByDesignPaths: catalogue.paths
-      .filter((path) => narrowByDesign.has(path.professionCode))
+      .filter((path) => path.effectiveBreadthNominal < BREADTH_REVIEW_FLOOR)
       .map((path) => ({
         professionCode: path.professionCode,
         pathName: path.pathName,

@@ -16,15 +16,15 @@
     "groupsAtTwo": 36,
     "groupsNeedingReconsideration": 0,
     "groupsAtFiveOrMore": 3,
-    "coreRoutes": 96,
+    "coreRoutes": 86,
     "coreRoutesBlocked": 1,
-    "duplicatePaymentsAvoided": 102,
+    "duplicatePaymentsAvoided": 107,
     "families": 84,
-    "validPaths": 96,
-    "groupOpportunities": 276,
+    "validPaths": 86,
+    "groupOpportunities": 274,
     "directSkillOpportunities": 101,
     "directSpecializationOpportunities": 14,
-    "digest": "sha256:893830f56f7d88f4a67661754e583524c6c3a5cb0053f4822106b1d43e980328"
+    "digest": "sha256:6d7df22e7ddf33cab6ee55fcf604d760a52518fe35fb40afe0c590577dd91659"
   },
   "coverage": {
     "baseSkills": 131,
@@ -76,70 +76,52 @@
       "belowTarget": 89
     },
     "proposed": {
-      "paths": 96,
+      "paths": 86,
       "distribution": {
-        "6": 1,
-        "7": 28,
-        "8": 23,
-        "9": 16,
-        "10": 13,
-        "11": 8,
-        "12": 4,
-        "13": 1,
-        "14": 1,
-        "15": 1
-      },
-      "minimum": 6,
-      "lowerQuartile": 7,
-      "median": 8,
-      "upperQuartile": 10,
-      "maximum": 15,
-      "mean": 8.73,
-      "atOrAboveTarget": 28,
-      "belowTarget": 68
-    },
-    "proposedWorstCase": {
-      "paths": 96,
-      "distribution": {
-        "4": 1,
-        "5": 4,
-        "6": 14,
-        "7": 19,
-        "8": 18,
-        "9": 15,
-        "10": 16,
-        "11": 4,
+        "7": 27,
+        "8": 21,
+        "9": 13,
+        "10": 12,
+        "11": 5,
         "12": 3,
         "13": 1,
-        "14": 1
+        "14": 1,
+        "15": 1,
+        "16": 2
       },
-      "minimum": 4,
+      "minimum": 7,
       "lowerQuartile": 7,
       "median": 8,
       "upperQuartile": 10,
-      "maximum": 14,
-      "mean": 8.2,
+      "maximum": 16,
+      "mean": 8.83,
       "atOrAboveTarget": 25,
-      "belowTarget": 71
+      "belowTarget": 61
     },
-    "reviewPrompts": [],
-    "narrowByDesignPaths": [
-      {
-        "professionCode": "P82",
-        "pathName": "Close-combat weapon master",
-        "effectiveBreadthNominal": 8
+    "proposedWorstCase": {
+      "paths": 86,
+      "distribution": {
+        "5": 3,
+        "6": 13,
+        "7": 19,
+        "8": 15,
+        "9": 14,
+        "10": 13,
+        "11": 3,
+        "12": 3,
+        "13": 2,
+        "14": 1
       },
-      {
-        "professionCode": "P82",
-        "pathName": "Fencing master",
-        "effectiveBreadthNominal": 6
-      },
-      {
-        "professionCode": "P82",
-        "pathName": "Missile weapon master",
-        "effectiveBreadthNominal": 7
-      }
-    ]
+      "minimum": 5,
+      "lowerQuartile": 7,
+      "median": 8,
+      "upperQuartile": 9,
+      "maximum": 14,
+      "mean": 8.27,
+      "atOrAboveTarget": 22,
+      "belowTarget": 64
+    },
+    "reviewPrompts": []
   },
   "groupSizes": [
     {
@@ -407,7 +389,7 @@
       "effectiveSize": 5,
       "band": "above-band",
       "shape": "justified-large",
-      "justification": "Deliberately larger than the 3-4 centre: a broad combat group whose job is economical breadth across close-quarters fighting. The pool now crosses melee, throwing and unarmed, because a close-quarters school genuinely teaches the grapple and the thrown weapon alongside the sword. Combat Experience was removed: this is instruction, and instruction cannot confer what only real exposure teaches. Overlap with M01 and M03 is intentional; Profession breadth is deduplicated. Restores the historical Advanced Melee Training choose-three slot, and the recovered import's choose-2 reading is provenance only."
+      "justification": "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: a broad combat group is desirable precisely because it makes broad investment in one narrow competence domain economically viable. This is not an oversized group tolerated for breadth; it is the shape the ruling asks for. The pool crosses melee, throwing and unarmed, because a close-quarters school genuinely teaches the grapple and the thrown weapon alongside the sword. Combat Experience is absent: this is instruction, and instruction cannot confer what only real exposure teaches. Overlap with M01 and M03 is intentional; Profession breadth is deduplicated. Restores the historical Advanced Melee Training choose-three slot, and the recovered import's choose-2 reading is provenance only."
     },
     {
       "id": "F30",
@@ -429,7 +411,7 @@
       "effectiveSize": 5,
       "band": "above-band",
       "shape": "justified-large",
-      "justification": "Deliberately larger than the 3-4 centre: a broad combat group giving economical drilled competence in the arms a formation actually carries. The pool crosses melee, throwing and the sling, because a close-order unit issues skirmishing arms alongside the line weapon. Merges the three fixed formation groups: a soldier is charged for the arms actually issued and drilled, not for every weapon family the army fields. Brawling was removed — close-order drill is not an unarmed course."
+      "justification": "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: drilled competence in the arms a formation actually carries is worth buying as one course. The pool crosses melee, throwing and the sling, because a close-order unit issues skirmishing arms alongside the line weapon. Merges the three fixed formation groups: a soldier is charged for the arms actually issued and drilled, not for every weapon family the army fields. Brawling is absent — close-order drill is not an unarmed course."
     },
     {
       "id": "M11",
@@ -473,7 +455,7 @@
       "effectiveSize": 5,
       "band": "above-band",
       "shape": "justified-large",
-      "justification": "Deliberately larger than the 3-4 centre: a broad combat group giving economical breadth across the missile arms. Combat Experience was removed — a shooting master who has never been shot at has not earned it. Restores the historical Advanced Missile Training choose-three slot."
+      "justification": "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: sustained instruction across the missile arms is the economical way to invest broadly in shooting. Combat Experience is absent — a shooting master who has never been shot at has not earned it. Restores the historical Advanced Missile Training choose-three slot."
     },
     {
       "id": "F41",
@@ -588,7 +570,7 @@
       "effectiveSize": 4,
       "band": "in-band",
       "shape": "preferred-centre",
-      "justification": "Authored exactly as the Product Owner ruled: Appraisal, Bargaining, Teaching and one chosen craft. Restores the Advanced Craft Specialty slot. Its count is NOT settled: the executable data says choose one, its own prose says two specialties, and the master-artisan reading suggests three. The Product Owner has ruled that this conflict must not be resolved by breadth pressure, so the proposal counts the lowest evidenced value (1) and leaves the question open."
+      "justification": "Settled by Product Owner ruling: Appraisal, Bargaining, Teaching and exactly one chosen craft. The earlier source conflict — the executable data said choose one, its own prose said two specialties, and a master-artisan reading suggested three — is closed in favour of one, and the ruling forbids raising the count under breadth pressure. The exact shape is enforced by a deterministic check, so it cannot drift."
     },
     {
       "id": "C03",
@@ -1750,7 +1732,7 @@
           "required": true
         }
       ],
-      "note": "Deliberately larger than the 3-4 centre: a broad combat group whose job is economical breadth across close-quarters fighting. The pool now crosses melee, throwing and unarmed, because a close-quarters school genuinely teaches the grapple and the thrown weapon alongside the sword. Combat Experience was removed: this is instruction, and instruction cannot confer what only real exposure teaches. Overlap with M01 and M03 is intentional; Profession breadth is deduplicated. Restores the historical Advanced Melee Training choose-three slot, and the recovered import's choose-2 reading is provenance only."
+      "note": "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: a broad combat group is desirable precisely because it makes broad investment in one narrow competence domain economically viable. This is not an oversized group tolerated for breadth; it is the shape the ruling asks for. The pool crosses melee, throwing and unarmed, because a close-quarters school genuinely teaches the grapple and the thrown weapon alongside the sword. Combat Experience is absent: this is instruction, and instruction cannot confer what only real exposure teaches. Overlap with M01 and M03 is intentional; Profession breadth is deduplicated. Restores the historical Advanced Melee Training choose-three slot, and the recovered import's choose-2 reading is provenance only."
     },
     {
       "id": "F30",
@@ -1786,7 +1768,7 @@
           "required": true
         }
       ],
-      "note": "Deliberately larger than the 3-4 centre: a broad combat group giving economical drilled competence in the arms a formation actually carries. The pool crosses melee, throwing and the sling, because a close-order unit issues skirmishing arms alongside the line weapon. Merges the three fixed formation groups: a soldier is charged for the arms actually issued and drilled, not for every weapon family the army fields. Brawling was removed — close-order drill is not an unarmed course."
+      "note": "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: drilled competence in the arms a formation actually carries is worth buying as one course. The pool crosses melee, throwing and the sling, because a close-order unit issues skirmishing arms alongside the line weapon. Merges the three fixed formation groups: a soldier is charged for the arms actually issued and drilled, not for every weapon family the army fields. Brawling is absent — close-order drill is not an unarmed course."
     },
     {
       "id": "M11",
@@ -1839,7 +1821,7 @@
           "required": true
         }
       ],
-      "note": "Deliberately larger than the 3-4 centre: a broad combat group giving economical breadth across the missile arms. Combat Experience was removed — a shooting master who has never been shot at has not earned it. Restores the historical Advanced Missile Training choose-three slot."
+      "note": "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: sustained instruction across the missile arms is the economical way to invest broadly in shooting. Combat Experience is absent — a shooting master who has never been shot at has not earned it. Restores the historical Advanced Missile Training choose-three slot."
     },
     {
       "id": "F41",
@@ -1963,10 +1945,9 @@
       "selectionSlots": [
         {
           "id": "advanced-craft-specialties",
-          "label": "Choose the taught crafts",
+          "label": "Choose one taught craft",
           "chooseCount": 1,
-          "chooseCountStatus": "unresolved-source-conflict",
-          "conflictingChooseCounts": [1, 2, 3],
+          "chooseCountStatus": "approved",
           "candidateSkillIds": [
             "pottery",
             "weaving",
@@ -1983,7 +1964,7 @@
           "required": true
         }
       ],
-      "note": "Authored exactly as the Product Owner ruled: Appraisal, Bargaining, Teaching and one chosen craft. Restores the Advanced Craft Specialty slot. Its count is NOT settled: the executable data says choose one, its own prose says two specialties, and the master-artisan reading suggests three. The Product Owner has ruled that this conflict must not be resolved by breadth pressure, so the proposal counts the lowest evidenced value (1) and leaves the question open."
+      "note": "Settled by Product Owner ruling: Appraisal, Bargaining, Teaching and exactly one chosen craft. The earlier source conflict — the executable data said choose one, its own prose said two specialties, and a master-artisan reading suggested three — is closed in favour of one, and the ruling forbids raising the count under breadth pressure. The exact shape is enforced by a deterministic check, so it cannot drift."
     },
     {
       "id": "C03",
@@ -2907,31 +2888,17 @@
         {
           "groupId": "G04",
           "route": "Escort duty away from the town"
-        }
-      ],
-      "tracks": [
-        {
-          "id": "profession:guard-escort:rough-fighting",
-          "name": "Rough-fighting guard",
-          "groups": [
-            {
-              "groupId": "M01",
-              "route": "Guard and rough-fighting drill"
-            }
-          ]
         },
         {
-          "id": "profession:guard-escort:fencing",
-          "name": "Fencing-trained escort",
-          "groups": [
-            {
-              "groupId": "F30",
-              "route": "Swashbuckling fencing instruction"
-            }
-          ]
+          "groupId": "M01",
+          "route": "Guard and rough-fighting drill"
+        },
+        {
+          "groupId": "F30",
+          "route": "Swashbuckling fencing instruction"
         }
       ],
-      "note": "Preserves the approved catalogue's Guard exclusion pair as two explicitly separate valid paths."
+      "note": "Both tracks retired under the track-discipline ruling. They differed only in which combat Learning Group the guard bought, and that distinction is already expressed by the groups themselves: a rough house guard takes M01, an escort trained in the fencing tradition takes F30. One Profession, one identity, two openly available fighting curricula."
     },
     {
       "code": "P15",
@@ -3154,55 +3121,25 @@
         {
           "groupId": "G04",
           "route": "Marching and camping with the force"
+        },
+        {
+          "groupId": "M01",
+          "route": "Contingent fighting drill"
+        },
+        {
+          "groupId": "M03",
+          "route": "Formation arms drill"
+        },
+        {
+          "groupId": "M04",
+          "route": "Issued missile arm and formation drill"
+        },
+        {
+          "groupId": "F41",
+          "route": "Longbow tradition brought into service"
         }
       ],
-      "tracks": [
-        {
-          "id": "profession:soldier:communal-contingent",
-          "name": "Communal/household contingent",
-          "groups": [
-            {
-              "groupId": "M01",
-              "route": "Contingent fighting drill"
-            }
-          ]
-        },
-        {
-          "id": "profession:soldier:formation-soldier",
-          "name": "Close-order formation soldier",
-          "groups": [
-            {
-              "groupId": "M03",
-              "route": "Formation arms drill"
-            }
-          ]
-        },
-        {
-          "id": "profession:soldier:missile-soldier",
-          "name": "Missile soldier",
-          "groups": [
-            {
-              "groupId": "M04",
-              "route": "Issued missile arm and formation drill"
-            }
-          ]
-        },
-        {
-          "id": "profession:soldier:longbow-specialist",
-          "name": "Military longbow specialist",
-          "groups": [
-            {
-              "groupId": "M04",
-              "route": "Issued missile arm and formation drill"
-            },
-            {
-              "groupId": "F41",
-              "route": "Longbow tradition brought into service"
-            }
-          ]
-        }
-      ],
-      "note": "Nine fixed-weapon tracks collapse to four. Weapon family is now a choice inside the drill, which is what the historical Basic/Advanced Melee and Missile slots described."
+      "note": "The approved catalogue's nine fixed-weapon Soldier tracks became four in the previous revision; the track-discipline ruling retires those four as well. Every one of them differed from its siblings only in which combat Learning Group it bought — contingent drill, formation drill, the issued missile arm, the longbow tradition — and a track must not exist for an ordinary weapon or equipment choice. The Soldier is one occupational identity whose defining core is repeated service in the field; the arm served in is a choice among coherent combat curricula, which is exactly the access-to-several-groups shape the breadth ruling asks for."
     },
     {
       "code": "P23",
@@ -3263,26 +3200,15 @@
         {
           "groupId": "M06",
           "route": "Repeated service forward of the force"
+        },
+        {
+          "groupId": "G05",
+          "route": "Mounted reconnaissance service"
         }
       ],
       "directRoute": "Taught directly by the scouts one serves with",
       "skillIds": ["skill:tracking"],
-      "tracks": [
-        {
-          "id": "profession:military-scout:foot",
-          "name": "Foot military scout"
-        },
-        {
-          "id": "profession:military-scout:mounted",
-          "name": "Mounted military scout",
-          "groups": [
-            {
-              "groupId": "G05",
-              "route": "Mounted reconnaissance service"
-            }
-          ]
-        }
-      ]
+      "note": "Both tracks retired under the track-discipline ruling: foot and mounted scouting differed only by whether the scout was given a horse, which is an equipment choice already expressed by G05."
     },
     {
       "code": "P25",
@@ -3303,51 +3229,28 @@
         {
           "groupId": "M06",
           "route": "Repeated service in the field"
+        },
+        {
+          "groupId": "M03",
+          "route": "Formation arms drill with the command"
+        },
+        {
+          "groupId": "M11",
+          "route": "Commanding from the saddle"
+        },
+        {
+          "groupId": "M12",
+          "route": "Lance and troop drill with the command"
+        },
+        {
+          "groupId": "M01",
+          "route": "Contingent and sidearm fighting drill"
         }
       ],
       "directRoute": "Taught directly by the commander one serves under",
       "skillIds": ["skill:oratory"],
       "specializationIds": ["spec:siege-operations"],
-      "tracks": [
-        {
-          "id": "profession:military-commander:foot",
-          "name": "Foot field commander",
-          "groups": [
-            {
-              "groupId": "M03",
-              "route": "Formation arms drill with the command"
-            }
-          ]
-        },
-        {
-          "id": "profession:military-commander:mounted",
-          "name": "Mounted field commander",
-          "groups": [
-            {
-              "groupId": "M11",
-              "route": "Commanding from the saddle"
-            },
-            {
-              "groupId": "M12",
-              "route": "Lance and troop drill with the command"
-            },
-            {
-              "groupId": "M01",
-              "route": "Sidearm and close-combat drill"
-            }
-          ]
-        },
-        {
-          "id": "profession:military-commander:communal",
-          "name": "Communal-force commander",
-          "groups": [
-            {
-              "groupId": "M01",
-              "route": "Contingent fighting drill"
-            }
-          ]
-        }
-      ]
+      "note": "All three tracks retired under the track-discipline ruling. Foot, mounted and communal commanders differed only in which combat Learning Groups they bought; commanding a body of troops is one occupational identity, and the fighting curriculum a commander shares with the command is a route choice, not a separate occupation."
     },
     {
       "code": "P26",
@@ -3372,32 +3275,19 @@
         {
           "groupId": "F06",
           "route": "Moving the force's supplies"
+        },
+        {
+          "groupId": "G12",
+          "route": "Buying for the force"
+        },
+        {
+          "groupId": "M01",
+          "route": "Fighting drill alongside supply duties"
         }
       ],
       "directRoute": "Taught directly in the supply office",
       "skillIds": ["mathematics"],
-      "tracks": [
-        {
-          "id": "profession:military-quartermaster:supply-office",
-          "name": "Supply-office quartermaster",
-          "groups": [
-            {
-              "groupId": "G12",
-              "route": "Buying for the force"
-            }
-          ]
-        },
-        {
-          "id": "profession:military-quartermaster:fighting-service",
-          "name": "Fighting-service quartermaster",
-          "groups": [
-            {
-              "groupId": "M01",
-              "route": "Fighting drill alongside supply duties"
-            }
-          ]
-        }
-      ]
+      "note": "Both tracks retired under the track-discipline ruling. Neither refined the defining core — keeping a campaign supplied and recorded — and the difference between a quartermaster who buys for the force and one who drills alongside it is already stated by G12 and M01."
     },
     {
       "code": "P27",
@@ -4968,42 +4858,21 @@
         {
           "groupId": "M10",
           "route": "Ordinary arms-instruction apprenticeship"
-        }
-      ],
-      "tracks": [
-        {
-          "id": "profession:weapon-instructor:close-combat",
-          "name": "Close-combat weapon master",
-          "groups": [
-            {
-              "groupId": "M02",
-              "route": "Advanced close-combat instruction"
-            }
-          ]
         },
         {
-          "id": "profession:weapon-instructor:fencing",
-          "name": "Fencing master",
-          "groups": [
-            {
-              "groupId": "F30",
-              "route": "Swashbuckling fencing instruction"
-            }
-          ]
+          "groupId": "M02",
+          "route": "Advanced close-combat instruction"
         },
         {
-          "id": "profession:weapon-instructor:missile",
-          "name": "Missile weapon master",
-          "groups": [
-            {
-              "groupId": "M05",
-              "route": "Advanced missile instruction"
-            }
-          ]
+          "groupId": "M05",
+          "route": "Advanced missile instruction"
+        },
+        {
+          "groupId": "F30",
+          "route": "Swashbuckling fencing instruction"
         }
       ],
-      "narrowByDesign": true,
-      "note": "The fencing-master path is deliberately narrow: a single named tradition is the whole occupation."
+      "note": "All three tracks retired under the track-discipline ruling: the subject a weapon master teaches is an ordinary weapon choice, already expressed by M02, M05 and F30. The Profession no longer needs the narrow-by-design exemption the one-tradition fencing track required. The instructor still reaches no Combat Experience by any of these routes, which is the point of the Combat Experience ruling: instructing is not exposure."
     },
     {
       "code": "P83",
@@ -5377,30 +5246,9 @@
     {
       "professionCode": "P14",
       "professionName": "Guard, Watcher and Escort",
-      "pathId": "profession:guard-escort:rough-fighting",
-      "pathName": "Rough-fighting guard",
-      "groupIds": ["K24", "G04", "M01"],
-      "fixedSkillIds": [
-        "dodge",
-        "parry",
-        "skill:intimidation",
-        "skill:perception",
-        "skill:streetwise",
-        "skill:survival",
-        "skill:wayfinding",
-        "skill:weather-lore"
-      ],
-      "slotSelections": 1,
-      "effectiveBreadthNominal": 9,
-      "effectiveBreadthMinimum": 8,
-      "reachableSpecializationIds": []
-    },
-    {
-      "professionCode": "P14",
-      "professionName": "Guard, Watcher and Escort",
-      "pathId": "profession:guard-escort:fencing",
-      "pathName": "Fencing-trained escort",
-      "groupIds": ["K24", "G04", "F30"],
+      "pathId": "profession:guard-escort",
+      "pathName": "Guard, Watcher and Escort",
+      "groupIds": ["K24", "G04", "M01", "F30"],
       "fixedSkillIds": [
         "dodge",
         "one_handed_edged",
@@ -5412,8 +5260,8 @@
         "skill:wayfinding",
         "skill:weather-lore"
       ],
-      "slotSelections": 0,
-      "effectiveBreadthNominal": 9,
+      "slotSelections": 1,
+      "effectiveBreadthNominal": 10,
       "effectiveBreadthMinimum": 9,
       "reachableSpecializationIds": ["fencing"]
     },
@@ -5577,76 +5425,16 @@
     {
       "professionCode": "P22",
       "professionName": "Soldier",
-      "pathId": "profession:soldier:communal-contingent",
-      "pathName": "Communal/household contingent",
-      "groupIds": ["M06", "G04", "M01"],
-      "fixedSkillIds": [
-        "battlefield_awareness",
-        "combat_experience",
-        "dodge",
-        "parry",
-        "skill:survival",
-        "skill:wayfinding",
-        "skill:weather-lore"
-      ],
-      "slotSelections": 1,
-      "effectiveBreadthNominal": 8,
-      "effectiveBreadthMinimum": 7,
-      "reachableSpecializationIds": []
-    },
-    {
-      "professionCode": "P22",
-      "professionName": "Soldier",
-      "pathId": "profession:soldier:formation-soldier",
-      "pathName": "Close-order formation soldier",
-      "groupIds": ["M06", "G04", "M03"],
-      "fixedSkillIds": [
-        "battlefield_awareness",
-        "combat_experience",
-        "dodge",
-        "formation_fighting",
-        "parry",
-        "skill:survival",
-        "skill:wayfinding",
-        "skill:weather-lore"
-      ],
-      "slotSelections": 2,
-      "effectiveBreadthNominal": 10,
-      "effectiveBreadthMinimum": 8,
-      "reachableSpecializationIds": []
-    },
-    {
-      "professionCode": "P22",
-      "professionName": "Soldier",
-      "pathId": "profession:soldier:missile-soldier",
-      "pathName": "Missile soldier",
-      "groupIds": ["M06", "G04", "M04"],
-      "fixedSkillIds": [
-        "battlefield_awareness",
-        "combat_experience",
-        "formation_fighting",
-        "skill:perception",
-        "skill:survival",
-        "skill:wayfinding",
-        "skill:weather-lore",
-        "weapon_maintenance"
-      ],
-      "slotSelections": 1,
-      "effectiveBreadthNominal": 9,
-      "effectiveBreadthMinimum": 8,
-      "reachableSpecializationIds": []
-    },
-    {
-      "professionCode": "P22",
-      "professionName": "Soldier",
-      "pathId": "profession:soldier:longbow-specialist",
-      "pathName": "Military longbow specialist",
-      "groupIds": ["M06", "G04", "M04", "F41"],
+      "pathId": "profession:soldier",
+      "pathName": "Soldier",
+      "groupIds": ["M06", "G04", "M01", "M03", "M04", "F41"],
       "fixedSkillIds": [
         "battlefield_awareness",
         "bow",
         "combat_experience",
+        "dodge",
         "formation_fighting",
+        "parry",
         "skill:hunting",
         "skill:perception",
         "skill:survival",
@@ -5654,9 +5442,9 @@
         "skill:weather-lore",
         "weapon_maintenance"
       ],
-      "slotSelections": 1,
-      "effectiveBreadthNominal": 11,
-      "effectiveBreadthMinimum": 10,
+      "slotSelections": 4,
+      "effectiveBreadthNominal": 16,
+      "effectiveBreadthMinimum": 12,
       "reachableSpecializationIds": ["longbow"]
     },
     {
@@ -5685,33 +5473,8 @@
     {
       "professionCode": "P24",
       "professionName": "Military Scout",
-      "pathId": "profession:military-scout:foot",
-      "pathName": "Foot military scout",
-      "groupIds": ["F33", "G04", "M01", "M06"],
-      "fixedSkillIds": [
-        "battlefield_awareness",
-        "camouflage",
-        "combat_experience",
-        "dodge",
-        "parry",
-        "skill:military-reconnaissance",
-        "skill:perception",
-        "skill:stealth",
-        "skill:survival",
-        "skill:tracking",
-        "skill:wayfinding",
-        "skill:weather-lore"
-      ],
-      "slotSelections": 1,
-      "effectiveBreadthNominal": 13,
-      "effectiveBreadthMinimum": 12,
-      "reachableSpecializationIds": []
-    },
-    {
-      "professionCode": "P24",
-      "professionName": "Military Scout",
-      "pathId": "profession:military-scout:mounted",
-      "pathName": "Mounted military scout",
+      "pathId": "profession:military-scout",
+      "pathName": "Military Scout",
       "groupIds": ["F33", "G04", "M01", "M06", "G05"],
       "fixedSkillIds": [
         "battlefield_awareness",
@@ -5737,32 +5500,9 @@
     {
       "professionCode": "P25",
       "professionName": "Military Commander",
-      "pathId": "profession:military-commander:foot",
-      "pathName": "Foot field commander",
-      "groupIds": ["G09", "M06", "M03"],
-      "fixedSkillIds": [
-        "battlefield_awareness",
-        "captaincy",
-        "combat_experience",
-        "dodge",
-        "formation_fighting",
-        "parry",
-        "skill:leadership",
-        "skill:oratory",
-        "skill:survival",
-        "tactics"
-      ],
-      "slotSelections": 2,
-      "effectiveBreadthNominal": 12,
-      "effectiveBreadthMinimum": 10,
-      "reachableSpecializationIds": ["spec:siege-operations"]
-    },
-    {
-      "professionCode": "P25",
-      "professionName": "Military Commander",
-      "pathId": "profession:military-commander:mounted",
-      "pathName": "Mounted field commander",
-      "groupIds": ["G09", "M06", "M11", "M12", "M01"],
+      "pathId": "profession:military-commander",
+      "pathName": "Military Commander",
+      "groupIds": ["G09", "M06", "M03", "M11", "M12", "M01"],
       "fixedSkillIds": [
         "battlefield_awareness",
         "captaincy",
@@ -5778,41 +5518,21 @@
         "skill:survival",
         "tactics"
       ],
-      "slotSelections": 1,
-      "effectiveBreadthNominal": 14,
+      "slotSelections": 3,
+      "effectiveBreadthNominal": 16,
       "effectiveBreadthMinimum": 13,
-      "reachableSpecializationIds": ["spec:siege-operations"]
-    },
-    {
-      "professionCode": "P25",
-      "professionName": "Military Commander",
-      "pathId": "profession:military-commander:communal",
-      "pathName": "Communal-force commander",
-      "groupIds": ["G09", "M06", "M01"],
-      "fixedSkillIds": [
-        "battlefield_awareness",
-        "captaincy",
-        "combat_experience",
-        "dodge",
-        "parry",
-        "skill:leadership",
-        "skill:oratory",
-        "skill:survival",
-        "tactics"
-      ],
-      "slotSelections": 1,
-      "effectiveBreadthNominal": 10,
-      "effectiveBreadthMinimum": 9,
       "reachableSpecializationIds": ["spec:siege-operations"]
     },
     {
       "professionCode": "P26",
       "professionName": "Military Quartermaster",
-      "pathId": "profession:military-quartermaster:supply-office",
-      "pathName": "Supply-office quartermaster",
-      "groupIds": ["G11", "M07", "F06", "G12"],
+      "pathId": "profession:military-quartermaster",
+      "pathName": "Military Quartermaster",
+      "groupIds": ["G11", "M07", "F06", "G12", "M01"],
       "fixedSkillIds": [
+        "dodge",
         "mathematics",
+        "parry",
         "skill:administration",
         "skill:animal-handling",
         "skill:appraisal",
@@ -5824,32 +5544,9 @@
         "skill:trade",
         "tactics"
       ],
-      "slotSelections": 0,
-      "effectiveBreadthNominal": 11,
-      "effectiveBreadthMinimum": 11,
-      "reachableSpecializationIds": []
-    },
-    {
-      "professionCode": "P26",
-      "professionName": "Military Quartermaster",
-      "pathId": "profession:military-quartermaster:fighting-service",
-      "pathName": "Fighting-service quartermaster",
-      "groupIds": ["G11", "M07", "F06", "M01"],
-      "fixedSkillIds": [
-        "dodge",
-        "mathematics",
-        "parry",
-        "skill:administration",
-        "skill:animal-handling",
-        "skill:bookkeeping",
-        "skill:campaign-strategy",
-        "skill:cart-driving",
-        "skill:military-logistics",
-        "tactics"
-      ],
       "slotSelections": 1,
-      "effectiveBreadthNominal": 11,
-      "effectiveBreadthMinimum": 10,
+      "effectiveBreadthNominal": 14,
+      "effectiveBreadthMinimum": 13,
       "reachableSpecializationIds": []
     },
     {
@@ -7003,56 +6700,22 @@
     {
       "professionCode": "P82",
       "professionName": "Weapon Instructor",
-      "pathId": "profession:weapon-instructor:close-combat",
-      "pathName": "Close-combat weapon master",
-      "groupIds": ["M10", "M02"],
-      "fixedSkillIds": [
-        "dodge",
-        "parry",
-        "skill:athletics",
-        "skill:teaching",
-        "weapon_maintenance"
-      ],
-      "slotSelections": 3,
-      "effectiveBreadthNominal": 8,
-      "effectiveBreadthMinimum": 5,
-      "reachableSpecializationIds": []
-    },
-    {
-      "professionCode": "P82",
-      "professionName": "Weapon Instructor",
-      "pathId": "profession:weapon-instructor:fencing",
-      "pathName": "Fencing master",
-      "groupIds": ["M10", "F30"],
+      "pathId": "profession:weapon-instructor",
+      "pathName": "Weapon Instructor",
+      "groupIds": ["M10", "M02", "M05", "F30"],
       "fixedSkillIds": [
         "dodge",
         "one_handed_edged",
         "parry",
         "skill:athletics",
-        "skill:teaching",
-        "weapon_maintenance"
-      ],
-      "slotSelections": 0,
-      "effectiveBreadthNominal": 6,
-      "effectiveBreadthMinimum": 6,
-      "reachableSpecializationIds": ["fencing"]
-    },
-    {
-      "professionCode": "P82",
-      "professionName": "Weapon Instructor",
-      "pathId": "profession:weapon-instructor:missile",
-      "pathName": "Missile weapon master",
-      "groupIds": ["M10", "M05"],
-      "fixedSkillIds": [
-        "skill:athletics",
         "skill:perception",
         "skill:teaching",
         "weapon_maintenance"
       ],
-      "slotSelections": 3,
-      "effectiveBreadthNominal": 7,
-      "effectiveBreadthMinimum": 4,
-      "reachableSpecializationIds": []
+      "slotSelections": 6,
+      "effectiveBreadthNominal": 13,
+      "effectiveBreadthMinimum": 7,
+      "reachableSpecializationIds": ["fencing"]
     },
     {
       "professionCode": "P83",
@@ -7156,12 +6819,12 @@
     {
       "competencyId": "meditation",
       "name": "Meditation",
-      "categoryId": "mental"
+      "categoryId": "mystical"
     },
     {
       "competencyId": "skill:mnemonics",
       "name": "Mnemonics",
-      "categoryId": "mental"
+      "categoryId": "knowledge"
     },
     {
       "competencyId": "philosophy",
@@ -7661,7 +7324,7 @@
     {
       "competencyId": "heraldry",
       "name": "Heraldry",
-      "categoryId": "high-society"
+      "categoryId": "knowledge"
     },
     {
       "competencyId": "history",
@@ -7671,7 +7334,7 @@
     {
       "competencyId": "skill:politics",
       "name": "Politics",
-      "categoryId": "high-society"
+      "categoryId": "social"
     },
     {
       "competencyId": "skill:religion",
@@ -7696,7 +7359,7 @@
     {
       "competencyId": "skill:animal-husbandry",
       "name": "Animal Husbandry",
-      "categoryId": "trade"
+      "categoryId": "fieldcraft"
     },
     {
       "competencyId": "skill:cart-driving",
@@ -7706,7 +7369,7 @@
     {
       "competencyId": "skill:farming",
       "name": "Farming",
-      "categoryId": "trade"
+      "categoryId": "fieldcraft"
     },
     {
       "competencyId": "herding",
@@ -7771,12 +7434,12 @@
     {
       "competencyId": "spec:steppe-remount-training",
       "name": "Steppe Remount Training",
-      "categoryId": "trade"
+      "categoryId": "fieldcraft"
     },
     {
       "competencyId": "spec:falconry",
       "name": "Falconry",
-      "categoryId": "trade"
+      "categoryId": "fieldcraft"
     },
     {
       "competencyId": "spec:fortification",
@@ -7811,7 +7474,7 @@
     {
       "competencyId": "spec:courtly-protocol",
       "name": "Courtly Protocol",
-      "categoryId": "high-society"
+      "categoryId": "social"
     },
     {
       "competencyId": "spec:omen-reading",
@@ -7900,8 +7563,8 @@
       "spokenName": "Spoken Common",
       "existingSpokenCompetencyId": "spoken:common",
       "writtenName": "Written Common",
-      "requiresProductOwnerNamingRuling": true,
-      "note": "Common is an established Glantri name, so the written competency takes it directly and no script name is invented. The script, register and conventions of the Common written tradition remain an open case in the approved gap report."
+      "requiresProductOwnerNamingRuling": false,
+      "note": "Common is an established Glantri name, so the written competency takes it directly and no script name is invented. The competency is rollable as it stands, and a reading roll is made against it. Script, register and conventions are later enrichment, not a blocker: the Product Owner has ruled that written competence must exist now and that detailed prose may follow."
     },
     {
       "civilizationId": "thyatis",
@@ -7909,8 +7572,8 @@
       "spokenName": "Spoken Common",
       "existingSpokenCompetencyId": "spoken:common",
       "writtenName": "Written Common",
-      "requiresProductOwnerNamingRuling": true,
-      "note": "Shares the Common written tradition; the same open case applies."
+      "requiresProductOwnerNamingRuling": false,
+      "note": "Shares the rollable Common written competency; enrichment of the tradition follows later."
     },
     {
       "civilizationId": "glantri",
@@ -7918,8 +7581,8 @@
       "spokenName": "Spoken Common",
       "existingSpokenCompetencyId": "spoken:common",
       "writtenName": "Written Common",
-      "requiresProductOwnerNamingRuling": true,
-      "note": "Shares the Common written tradition; Old Common remains an authored optional second tongue."
+      "requiresProductOwnerNamingRuling": false,
+      "note": "Shares the rollable Common written competency. Old Common remains an authored optional second tongue; no descent between the two is asserted."
     },
     {
       "civilizationId": "scyria",
@@ -7927,8 +7590,8 @@
       "spokenName": "Spoken Old Common",
       "existingSpokenCompetencyId": "spoken:old-common",
       "writtenName": "Written Old Common",
-      "requiresProductOwnerNamingRuling": true,
-      "note": "Old Common is an established Glantri name and no script name is invented. The Old Common written identity must still be defined without inferring equivalence with Common."
+      "requiresProductOwnerNamingRuling": false,
+      "note": "Old Common is an established Glantri name and no script name is invented. The written competency is rollable in its own right and is what an Old Common reading roll is made against. No equivalence with Common, and no descent from it, is asserted; the earlier suggestion of Mycenaean descent from Scyria stays withdrawn."
     },
     {
       "civilizationId": "byzantine_empire",
@@ -7936,8 +7599,8 @@
       "spokenName": "Spoken Old Common",
       "existingSpokenCompetencyId": "spoken:old-common",
       "writtenName": "Written Old Common",
-      "requiresProductOwnerNamingRuling": true,
-      "note": "The Civilization name itself is a real-world analogue; renaming it is outside this task's scope."
+      "requiresProductOwnerNamingRuling": false,
+      "note": "Shares the rollable Old Common written competency. The Civilization name itself is a real-world analogue; renaming it is outside this task's scope."
     },
     {
       "civilizationId": "lankhmar",
@@ -7976,16 +7639,17 @@
       "spokenName": "Spoken N'kolian",
       "existingSpokenCompetencyId": "spoken:nkolian",
       "writtenName": "Written N'kolian",
-      "requiresProductOwnerNamingRuling": true,
-      "note": "N'kolian is an established Glantri name, so the written competency takes it directly and the invented Royal N'kolian register is withdrawn. Register and script support remain an open case."
+      "requiresProductOwnerNamingRuling": false,
+      "note": "N'kolian is an established Glantri name, so the written competency takes it directly and the invented Royal N'kolian register stays withdrawn. The competency is rollable as it stands; no register or script is invented for it."
     },
     {
       "civilizationId": "san_forager_bands",
       "civilizationName": "San Forager Bands",
       "spokenName": "Spoken Tuu",
       "writtenName": null,
-      "requiresProductOwnerNamingRuling": true,
-      "note": "No spoken competency exists for this Civilization today; one is added. The Civilization is explicitly authored as having no written tradition. The approved gap report still asks for a precise Tuu identity."
+      "writtenAbsenceReason": "Authored as having no written tradition: the San forager bands are a non-literate society, so no reading roll is made for them and no written competency is invented to carry one.",
+      "requiresProductOwnerNamingRuling": false,
+      "note": "No spoken competency exists for this Civilization today; one is added. No approved Glantri name exists, so the appropriate historical name stands: Tuu is the established scholarly name for the language family the San forager bands speak. Nothing is invented — no descent, no sub-language and no fictional relationship to another Civilization — and the earlier request for a further Tuu identity is answered by the naming ruling rather than left open."
     },
     {
       "civilizationId": "scythians",
@@ -7993,8 +7657,9 @@
       "spokenName": "Spoken Scythian",
       "existingSpokenCompetencyId": "spoken:scythian",
       "writtenName": null,
+      "writtenAbsenceReason": "Authored as having no written tradition: the Scythian steppe societies are non-literate, so no reading roll is made for them.",
       "requiresProductOwnerNamingRuling": false,
-      "note": "No established Glantri name exists, so the historical name stands. The invented Kethran is withdrawn. Authored as having no written tradition."
+      "note": "No established Glantri name exists, so the historical name stands. The invented Kethran is withdrawn."
     },
     {
       "civilizationId": "latial_chiefdoms",

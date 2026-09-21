@@ -1,6 +1,6 @@
 # Competency Content V2 — Product Owner proposal
 
-> **Status: NON-CANONICAL PRODUCT OWNER PROPOSAL — reconciled against the 2026-09-21 rulings, awaiting review.**
+> **Status: NON-CANONICAL PRODUCT OWNER PROPOSAL — reconciled against both 2026-09-21 ruling sets, awaiting review.**
 > Nothing in this folder is approved Glantri content. It does not replace the approved
 > [competency reference](../../../rules/competency-reference/README.md), is not registered with
 > Chargen, and is not projected into canonical content.
@@ -12,7 +12,11 @@ Contract](../../chargen-competency-experience-contract.md), whose section 5 reco
 target and section 6 authorizes this catalogue redesign.
 
 This revision is a **reconciliation of the existing proposal against the Product Owner rulings**, not
-a new catalogue investigation and not a redesign from scratch.
+a new catalogue investigation and not a redesign from scratch. It now carries the **second ruling set
+of 2026-09-21**, which confirmed most of the first reconciliation and changed six things: C02 is
+settled, combat is an explicit exception to the group-size rule, the category roster may be
+simplified, tracks must earn their complexity, cores must be minimal, and the language blocker is
+removed.
 
 ## Contents
 
@@ -41,154 +45,196 @@ drift apart.
   direct-Skill padding.
 - **Direct Profession Skills are exceptional occupational routes**, not a breadth mechanism.
 - **Access is not a grant.** A group or Profession may make a Specialization reachable; it is still
-  purchased separately, and parent-Skill eligibility still applies.
+  purchased separately, parent-Skill eligibility still applies, and the parent must be reachable on
+  the valid path — though not necessarily in the same Learning Group. A Specialization never counts
+  toward base-Skill breadth or a group's Skill cost.
 - **Availability applies to routes.** A closed route does not close a Skill; Skills remain reachable
-  through the union of all valid routes.
+  through the union of all valid routes, and a restriction is recorded at the most general route
+  level where it is genuinely true.
+- **Combat is an explicit exception to the 5+ rule.** A larger, choice-heavy combat group is
+  _desirable_, because it makes broad investment in one narrow competence domain economically viable.
+- **A track must earn its complexity.** Where a Learning Group or a choice slot already expresses the
+  distinction, there is no track.
+- **A core must be minimal** — enough for identity, never a rigid class build.
+- **A category must be guessable** from the Skill name and the category labels alone, and the roster
+  is no longer held to awkward placements for compatibility.
 
 ## What the proposal changes
 
-|                                                      | Approved | #250 revision | This reconciliation                                  |
-| ---------------------------------------------------- | -------: | ------------: | ---------------------------------------------------- |
-| Base Skills / Specializations                        | 131 / 26 |      131 / 26 | 131 / 26 (unchanged; none added, renamed, redefined) |
-| Learning Groups                                      |       59 |            92 | 96 — 44 retained, 2 revised, 50 new, 13 removed      |
-| Groups in the 3–4 preferred centre                   |       15 |            53 | 57                                                   |
-| Groups at two                                        |       36 |            35 | 36                                                   |
-| Groups at one                                        |        4 |             0 | 0                                                    |
-| Groups at five or more                               |        4 |             4 | 3 (all broad combat groups, each justified)          |
-| Largest fixed purchase burden of one group           |        7 |             6 | 4                                                    |
-| Profession families                                  |       84 |            84 | 84 (all preserved)                                   |
-| Valid Profession paths                               |       99 |            96 | 96                                                   |
-| Direct Profession Skill grants                       |     88\* |           119 | 101                                                  |
-| Declared core routes                                 |        — |             — | 96, all satisfied (1 recorded as blocked on #113)    |
-| Median effective distinct base Skills per valid path |        3 |             8 | 8                                                    |
-| Quartiles                                            |    1 / 7 |        7 / 10 | 7 / 10                                               |
+|                                                      | Approved | #250 revision | First reconciliation | This revision                         |
+| ---------------------------------------------------- | -------: | ------------: | -------------------: | ------------------------------------- |
+| Base Skills / Specializations                        | 131 / 26 |      131 / 26 |             131 / 26 | 131 / 26 (unchanged)                  |
+| Learning Groups                                      |       59 |            92 |                   96 | 96 — 44 retained, 2 revised, 50 new   |
+| Groups in the 3–4 preferred centre                   |       15 |            53 |                   57 | 57                                    |
+| Groups at two                                        |       36 |            35 |                   36 | 36                                    |
+| Groups at one                                        |        4 |             0 |                    0 | 0                                     |
+| Groups at five or more                               |        4 |             4 |                    3 | 3 (all combat, under the exception)   |
+| Largest fixed purchase burden of one group           |        7 |             6 |                    4 | 4                                     |
+| Profession families                                  |       84 |            84 |                   84 | 84 (all preserved)                    |
+| Professions carrying tracks                          |        — |             8 |                    8 | 2                                     |
+| Tracks                                               |        — |            21 |                   21 | 4                                     |
+| Valid Profession paths                               |       99 |            96 |                   96 | 86                                    |
+| Direct Profession Skill grants                       |     88\* |           119 |                  101 | 101                                   |
+| Player-facing browse categories                      |        — |            16 |                   16 | 14                                    |
+| Civilization languages awaiting a naming ruling      |        — |             — |                    7 | 0                                     |
+| Declared core routes                                 |        — |             — |                   96 | 86, all satisfied (1 blocked on #113) |
+| Median effective distinct base Skills per valid path |        3 |             8 |                    8 | 8                                     |
+| Quartiles                                            |    1 / 7 |        7 / 10 |               7 / 10 | 7 / 10                                |
+| Narrowest path                                       |        0 |             6 |                    6 | 7                                     |
+| Broadest path                                        |       17 |            15 |                   15 | 16                                    |
 
 \* The approved figure counts direct Skill and Specialization opportunities together across 84
 families.
 
-## What this reconciliation did
+## What the second ruling set changed
 
-### 1. Combat restructuring — the largest change
+### 1. C02 is settled
 
-Focused and broad combat groups now coexist, and the **overlap between them is intentional**: breadth
-is deduplicated per path, so reaching the same weapon family twice costs once.
+**C02 = Appraisal + Bargaining + Teaching + choose ONE craft.** The earlier source conflict — data
+said one, its prose said two, a master-artisan reading suggested three — is closed in favour of one,
+and the ruling forbids raising it under breadth pressure. The exact shape is now a deterministic
+check, so it cannot drift. This closes the previous revision's open question 1.
 
-- **M01** is the focused melee package the ruling describes: Dodge, Parry and one chosen melee weapon
-  family. **M04** is its missile counterpart. **F30** stays fixed, because the tradition is defined
-  by its weapon.
-- **M02, M03 and M05** are the broad groups, deliberately at five, buying economical breadth. Their
-  pools are context-specific and **cross category**: M02 offers Brawling and Throwing beside the
-  melee families; M03 offers Throwing and the Sling beside the line weapons.
-- **Brawling is no longer fixed in any weapon course.** It sits in the broad pool, taken where the
-  school genuinely teaches it, instead of being an unexamined surcharge on every melee curriculum.
-- **F32 is replaced as ruled** by **M11 Mounted combat practice** (Riding + Mounted Combat) and
-  **M12 Mounted lance and formation drill** (Lance + Formation Fighting), with the general
-  close-combat group M01 supplying the mounted Profession's sidearm and guard.
+### 2. Combat groups revisited under the explicit exception
 
-### 2. Combat Experience is out of every instruction group
+M02, M03 and M05 were re-examined as _desirable_ rather than defended as tolerable. None had been
+trimmed to reach a number, so none grew back; what changed is that the catalogue no longer apologises
+for them, and the exception is enforced as an **allowlist** — the build refuses any other group that
+reaches five, and refuses any listed group that stops being large and choice-heavy. M01 remains the
+focused package the ruling describes (Dodge, Parry, one chosen melee family), Brawling stays out of
+the fixed weapon courses, and M11/M12 continue to carry the retired F32.
 
-It is experiential competence from credible real combat or field exposure, not instruction. It now
-comes from exactly two routes, both experiential:
+### 3. Tracks audited; sixteen retired
 
-- **M06 Campaign service experience** — repeated service in the field: the Soldier, the Mounted
-  Soldier, the Military Scout, the Military Commander, the Siege Engineer, the Siege Engine Crew
-  Specialist and the Field Surgeon.
-- **K23 Coercive service practice** — habitual real violence in someone's service: the Enforcer.
+A track is a materially different **form** of the occupation, so the audit applies one mechanisable
+test: **a track must declare a core route of its own.** If the defining training does not differ, the
+variant was an ordinary weapon, Skill or equipment choice and belongs in the Profession's group list.
 
-The **Weapon Instructor no longer acquires it**, which is the point of the ruling: instructing is not
-exposure.
+- **Kept:** P09 Sailor (inshore boat work against rigged-vessel service) and P31 Surgeon (civil
+  operative apprenticeship against field surgery) — four tracks, each with its own core.
+- **Retired:** P14 Guard (2), **P22 Soldier (4)**, P24 Military Scout (2), P25 Military Commander (3),
+  P26 Military Quartermaster (2) and P82 Weapon Instructor (3).
 
-### 3. F16 and F22 retired, their Specialization routes preserved
+The **four Soldier tracks are retired**: every one differed from its siblings only in which combat
+Learning Group it bought. The Soldier is one identity whose core is repeated service in the field,
+with contingent drill, formation drill, the issued missile arm and the longbow tradition all openly
+available — which is exactly the access-to-several-coherent-groups shape the breadth ruling asks for.
+This closes the previous revision's open question 3. Valid paths fall from 96 to 86, and the
+`narrowByDesign` exemption P82's one-tradition fencing track needed is removed with it.
 
-Both were a single effective base Skill wrapped around Specialization access.
+### 4. Cores audited and held minimal
 
-- **F16** was already retired in #250. **Genealogy** remains reachable through P67 Historian and P76
-  Herald, with its parent History supplied by K10 on both paths.
-- **F22** is retired here. **Food Preservation** is carried by **C10 Brewing and preserving
-  practice**, whose curriculum genuinely contains it and whose Cooking is the Specialization's
-  immediate parent. Five paths still reach it.
+Every core is one Learning Group, except P20 Smuggler, which needs two. The build now refuses any
+core requiring more than two things. A small set of **alternative** core routes is permitted and none
+is needed: where the defining training genuinely differs, a track with its own core says so.
 
-### 4. Coherent direct-grant clusters moved into groups
+### 5. Category roster simplified from sixteen to fourteen
 
-Direct grants are exceptional routes, so four clusters that described a real taught practice became
-Learning Groups: **K24 Watch and guard practice** (the Guard), **K25 Street theft practice** (the
-Thief), **K22 Contemplative discipline practice** (the Diviner and the Religious Practitioner) and
-**M10 Arms instruction practice** (the Weapon Instructor). Direct grants fell from 119 to 101.
+- **`mental` retired.** Two members — Meditation and Mnemonics — is proliferation, and neither name
+  points a player at the word. Meditation joins `mystical`; Mnemonics joins `knowledge`.
+- **`high-society` retired.** It described a milieu, which is what the ruling forbids. Heraldry joins
+  `knowledge`; Politics and Courtly Protocol join `social`.
+- **One arbitrary placement corrected.** Agriculture & Husbandry defaulted to `trade`, splitting the
+  living-animal competencies across two categories. It now defaults to `fieldcraft`, with Cart Driving
+  overridden back to `trade` as the transport trade it is.
 
-### 5. Core routes
+`special-access` remains retired as provenance rather than a category, and `language` remains a
+distinct browse category. The build refuses a retired category and refuses any category that falls
+below four competencies.
 
-Every Profession declares at least one **defining core route** — the training it is not that
-Profession without, expressed entirely in terms of the Learning Groups and directly taught Skills
-that already exist. A track's own core routes refine or replace its parent's. All 96 path/core-route
-pairs are satisfied. **No GM override mechanism is required or introduced.** The Scribe and Copyist's
-Written Tradition core is recorded as **blocked on #113** rather than invented.
+### 6. The language blocker is removed
 
-### 6. Cost invariants are enforced, not asserted
+Every Civilization now carries a rollable spoken competency, and a rollable written one unless the
+absence is **authored** — San Forager Bands and Scythians, both non-literate. Reading is rolled
+against the written competency. **No entry defers to a further naming ruling any more**, which closes
+the previous revision's open questions 6 and 7:
 
-Overlapping routes name the same competency 102 times across the catalogue; every one is charged
-once. Accumulating each path's routes in reverse order yields the identical charged set. A catalogue
-that broke either property would **fail to build**.
+- **Common and Old Common written traditions** are rollable now, named for their languages. Script,
+  register and conventions are later enrichment, not a blocker.
+- **Tuu** is settled by the naming ruling itself: no approved Glantri name exists, so the appropriate
+  historical name stands, and nothing further is invented.
 
-### 7. Languages: invented names withdrawn
+Invented names stay withdrawn, no descent is asserted, and **Olog is flagged for later correction and
+deliberately not corrected**.
 
-Kethran, Old Latian, Palace Scyrian, Kaldan and Aspardic are withdrawn, along with the Harbour, Hill,
-Palace, Wedge and Chancery scripts, and the derived Common Hand and Royal N'kolian registers.
-Canonical Glantri names are used where established; the appropriate historical name otherwise. No
-linguistic descent is asserted — in particular, the suggested Mycenaean descent from Scyria is gone.
-Every Civilization has a rollable spoken competency, and a rollable written one unless authored as
-having no writing. **Olog is flagged for later correction and deliberately not corrected here.**
+### 7. Combat Experience: routes audited separately
 
-### 8. Skill categories
+CE is reachable only through **M06 Campaign service experience** and **K23 Coercive service
+practice**, and only eight paths reach it — the Enforcer through coercive service, and the Soldier,
+Mounted Soldier, Military Scout, Military Commander, Siege Engineer, Siege Engine Crew Specialist and
+field Surgeon through campaign service. Each has an authored route label that explains the exposure.
+The Weapon Instructor, the Guard, the Military Quartermaster and the civil Surgeon reach none. The
+containment is enforced both ways: the build refuses any other group that teaches CE, and refuses
+either route group if it stops teaching it. The full audit table is in the Professions report.
 
-Sixteen broad, semantically predictable browse categories covering all 157 competencies. They
-describe what a competency **is**, never where it was learned, which is why `special-access` is
-retired as a category.
+### 8. Society Level
 
-### 9. Player-facing Society-Level explanation
+The player-facing explanation now also states **where a restriction is written down**: at the
+Learning Group when the curriculum does not exist in that society, at the Profession's route into the
+group when it exists but that occupation cannot reach it — and never as a society-specific Profession
+variant.
 
-[society-level-route-availability.md](./society-level-route-availability.md) explains, in a player's
-terms, why the same Profession exposes different training in different societies: the Profession is
-one identity, Society Level and Social Band govern which **routes** exist, and a Skill is reachable
-through the union of every route that does.
+### 9. Overlap economics
+
+Unchanged and preserved, as ruled. The existing group-rebate arithmetic is untouched; no defect was
+demonstrated. Overlapping routes name the same competency 107 times across the catalogue and every
+one is charged once, with the charged set identical when the routes are accumulated in reverse order.
+
+## What the first reconciliation did, and this revision keeps
+
+Breadth as a signal rather than a quota; F32 retired for M11 and M12; focused M01/M04 beside broad
+M02/M03/M05 with cross-category pools; Combat Experience out of every instruction group; direct
+grants reduced from 283 to 101; F16 and F22 retired with the Genealogy and Food Preservation routes
+preserved through P67/P76 and C10; invented language names withdrawn and kept out by test; core routes
+introduced as a data annotation; and the machine-readable companion regenerated from the source so
+the prose and the numbers cannot drift.
 
 ## What the proposal deliberately does not do
 
 - **No change to the 131 base Skills or the 26 Specializations** — identities, mechanics, boundaries
-  and reader prose are untouched. This work reorganises access and topology only.
-- **No new conceptual layer or entity type.** Core routes are a data annotation over existing groups
-  and Skills, not a new primitive.
-- **Scribe and Copyist's Written Tradition core remains blocked on #113.** The package must not be
-  presented as universal literacy.
-- **Advanced Craft Specialty's count is left unresolved.** The analysis counts the lowest evidenced
-  value so that no content depends on the answer.
+  and reader prose are untouched. Prior authoring is reused, not rewritten.
+- **No new conceptual layer or entity type.** Every ruling above is expressed with primitives the
+  proposal already had.
+- **Scribe and Copyist's Written Tradition core remains blocked on #113.**
 - **Poisons and Warded-Lock Entry keep their approved absence of a generic occupational route.**
-- **Olog is not corrected**, only flagged.
-- **No runtime, UI or Chargen change**, and no mechanical relationship edge is invented.
+- **Olog is not corrected**, only flagged for a separate follow-up.
+- **No runtime, UI or Chargen change**, no importer outside this directory, and no entry in
+  `packages/content/src/index.ts`. The proposal is not canonical.
 
 ## Remaining Product Owner decisions
 
-Everything the 2026-09-21 rulings settle has been removed from this list. What remains is genuinely
-unsettled.
+Everything both ruling sets settle has been removed. Four of the previous nine questions are closed
+here: **C02's count** (settled by ruling), **the four Soldier tracks** (retired, so there is nothing
+to name), **the Common and Old Common written traditions** and **the identity of Tuu** (both closed by
+the naming ruling). What remains is genuinely unsettled.
 
-| #   | Question                                                                                                                              | Why it cannot be settled here                                                                                                               |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Advanced Craft Specialty (C02): choose one, two, or three?                                                                            | Held open by explicit ruling and must not be settled by breadth pressure. The proposal counts one so that no content depends on the answer. |
-| 2   | Are the 50 new Learning Groups correct as descriptions of **taught practice**?                                                        | Each is a content judgement the Product Owner owns. The six added here — K22, K24, K25, M10, M11, M12 — deserve particular attention.       |
-| 3   | Are the four Soldier tracks the right four, by name and identity?                                                                     | The collapse is approved in principle; the resulting track identities are player-facing content.                                            |
-| 4   | Are the declared core routes right where the first-listed group was not obviously the defining one — P02, P09, P20, P26, P27 and P31? | A core route states what a Profession is not that Profession without. That is a product judgement, not a derivable fact.                    |
-| 5   | Are the two Professions still carrying three direct Skill grants acceptable — P16 Local Informant and P52 Trapmaker?                  | Both were argued on coherence rather than trimmed to a number, and the Product Owner may read either differently.                           |
-| 6   | Should the Common and Old Common **written traditions** be given script, register and conventions now?                                | The competencies are named for their languages and invent no script. Authoring the traditions themselves is unfinished in the gap report.   |
-| 7   | What is the precise identity of the San Forager Bands' spoken **Tuu**?                                                                | No competency exists today, and the approved gap report asks for an identity this proposal cannot infer.                                    |
-| 8   | Now that `special-access` is not a category, where should direct-Profession access provenance be shown instead?                       | The label still has to appear somewhere. That is a Chargen presentation decision.                                                           |
-| 9   | Which individual routes should Society Level 1–2 withhold?                                                                            | The model is settled and now explained for players; the per-route data is contextual availability, unfinished under #113.                   |
+| #   | Question                                                                                                                              | Why it cannot be settled here                                                                                                         |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Are the 50 new Learning Groups correct as descriptions of **taught practice**?                                                        | Each is a content judgement the Product Owner owns. K22, K24, K25, M10, M11 and M12 deserve particular attention.                     |
+| 2   | Are the declared core routes right where the first-listed group was not obviously the defining one — P02, P09, P20, P26, P27 and P31? | A core states what a Profession is not that Profession without. That is a product judgement, not a derivable fact.                    |
+| 3   | Are the two Professions still carrying three direct Skill grants acceptable — P16 Local Informant and P52 Trapmaker?                  | Both were argued on coherence rather than trimmed to a number, and folding either into a group would push a non-combat group to five. |
+| 4   | Now that `special-access` is not a category, where should direct-Profession access provenance be shown instead?                       | The label still has to appear somewhere. That is a Chargen presentation decision.                                                     |
+| 5   | Which individual routes should Society Level 1–2 withhold?                                                                            | The model is settled and explained for players; the per-route data is contextual availability, unfinished under #113.                 |
+
+## Flagged for separate follow-up, not fixed here
+
+- **Olog** appears modelled from a historical stage later and more advanced than the intended Glantri
+  Olog society. Recorded in the language data, deliberately uncorrected.
+- **Scribe and Copyist's Written Tradition core** is blocked on **#113** rather than invented.
 
 ## Verification performed
 
-- Deterministic catalogue checks, extended for these rulings: group-shape bands with mandatory
-  justification at one and at five or more; Specialization access-not-grant, including the refusal to
-  count a Specialization as base breadth and the empty unreachable-parent list; core-route presence
-  and satisfaction on every valid path; and the no-duplicate-payment and order-independence cost
-  invariants. Failing any of them fails the build, not just a test.
-- 52 content-package tests, typecheck, ESLint, the changed-file formatting gate, and `git diff --check`.
+- Deterministic catalogue checks, extended for the second ruling set: **C02's exact settled shape**;
+  the **combat exception allowlist**, enforced both ways; **track discipline** (a track must declare
+  its own core); **core minimality** (at most two requirements); **Specializations charged nowhere** —
+  not in a group's Skill cost, not in a path's charged set, not as base breadth — with the parent Skill
+  required to be reachable on the path but not in the same group; **category guessability** so far as
+  it is mechanisable (no retired category, no category below four competencies); **Combat Experience
+  containment** to M06 and K23; and **language completeness** (a rollable spoken competency everywhere,
+  a rollable written one unless the absence is authored, and no entry deferring to a further ruling).
+  These join the existing group-shape bands, core-route satisfaction and the no-duplicate-payment and
+  order-independence cost invariants. Failing any of them fails the build, not just a test.
+- 74 proposal checks inside 315 content-package tests, typecheck, ESLint, `git diff --check`, and the
+  changed-file formatting gate.
 - Quantitative effective-breadth and group-size analysis across all families and valid paths, with the
   approved catalogue measured by the same code path.

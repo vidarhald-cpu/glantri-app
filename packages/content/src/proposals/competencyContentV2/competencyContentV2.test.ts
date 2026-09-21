@@ -94,17 +94,23 @@ describe("deterministic catalogue checks", () => {
     expect(slotCounts.M04).toEqual([1]); // Basic Missile Training
     expect(slotCounts.M05).toEqual([3]); // Advanced Missile Training
     expect(slotCounts.C01).toEqual([1]); // Craft Specialty
-    expect(slotCounts.C02).toHaveLength(1); // Advanced Craft Specialty — count deliberately unsettled
+    expect(slotCounts.C02).toEqual([1]); // Advanced Craft Specialty — settled at exactly one
     expect(slotCounts.C03).toEqual([2]); // Construction Specialty
   });
 
-  it("leaves the Advanced Craft Specialty count unresolved rather than settling it by breadth pressure", () => {
+  it("holds C02 to the settled shape: Appraisal, Bargaining, Teaching and exactly one craft", () => {
     const advancedCraft = competencyContentV2LearningGroups.find((group) => group.id === "C02")!;
+    expect([...advancedCraft.fixedSkillIds].sort()).toEqual([
+      "skill:appraisal",
+      "skill:bargaining",
+      "skill:teaching",
+    ]);
+    expect(advancedCraft.selectionSlots).toHaveLength(1);
     const slot = advancedCraft.selectionSlots![0]!;
-    expect(slot.chooseCountStatus).toBe("unresolved-source-conflict");
-    expect(slot.conflictingChooseCounts).toEqual([1, 2, 3]);
-    // The proposal counts the lowest evidenced value so no content depends on the open question.
-    expect(slot.chooseCount).toBe(Math.min(...slot.conflictingChooseCounts!));
+    expect(slot.chooseCount).toBe(1);
+    expect(slot.chooseCountStatus).toBe("approved");
+    // The ruling forbids raising the count under breadth pressure, so nothing records it as open.
+    expect(slot.conflictingChooseCounts).toBeUndefined();
   });
 
   it("records the approved Advanced Melee count with its conflict kept as provenance", () => {
@@ -279,17 +285,16 @@ describe("quantitative effective-breadth analysis", () => {
     expect(analysis.proposed.median).toBeLessThanOrEqual(EFFECTIVE_BREADTH_SIGNAL);
   });
 
-  it("leaves no path below the review floor except those marked narrow by design", () => {
+  it("leaves no path below the coherence-review floor, and needs no narrow-by-design exemption", () => {
     expect(analysis.reviewPrompts).toEqual([]);
-    expect(analysis.narrowByDesignPaths.length).toBeGreaterThan(0);
+    expect(analysis.proposed.minimum).toBeGreaterThanOrEqual(BREADTH_REVIEW_FLOOR);
   });
 
   it("counts only chooseCount per slot, never the whole candidate pool", () => {
-    const melee = catalogue.paths.find(
-      (path) => path.pathId === "profession:soldier:formation-soldier",
-    )!;
-    expect(melee.slotSelections).toBe(2);
-    expect(melee.effectiveBreadthNominal).toBe(melee.fixedSkillIds.length + 2);
+    const melee = catalogue.paths.find((path) => path.pathId === "profession:soldier")!;
+    /* M01 chooses 1, M03 chooses 2, M04 chooses 1: six candidate pools, four selections. */
+    expect(melee.slotSelections).toBe(4);
+    expect(melee.effectiveBreadthNominal).toBe(melee.fixedSkillIds.length + 4);
     expect(melee.effectiveBreadthMinimum).toBe(melee.fixedSkillIds.length);
   });
 
@@ -493,6 +498,178 @@ describe("direct-grant review", () => {
     for (const code of ["P14", "P18", "P74", "P75", "P82"]) {
       const family = competencyContentV2Families.find((candidate) => candidate.code === code)!;
       expect((family.skillIds ?? []).length).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+describe("second ruling set — track discipline", () => {
+  it("keeps a track only where the defining training genuinely differs", () => {
+    for (const family of competencyContentV2Families)
+      for (const track of family.tracks ?? [])
+        expect(track.coreRoutes?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  it("retires every track that expressed only a weapon, Skill or equipment choice", () => {
+    const withoutTracks = ["P14", "P22", "P24", "P25", "P26", "P82"];
+    for (const code of withoutTracks) {
+      const family = competencyContentV2Families.find((candidate) => candidate.code === code)!;
+      expect(family.tracks ?? []).toHaveLength(0);
+      expect(catalogue.paths.filter((path) => path.professionCode === code)).toHaveLength(1);
+    }
+  });
+
+  it("collapses the four Soldier tracks into one identity reached through several combat groups", () => {
+    const soldier = competencyContentV2Families.find((family) => family.code === "P22")!;
+    const groupIds = (soldier.groups ?? []).map((route) => route.groupId);
+    expect(groupIds).toEqual(expect.arrayContaining(["M01", "M03", "M04", "F41", "M06"]));
+    const paths = catalogue.paths.filter((path) => path.professionCode === "P22");
+    expect(paths).toHaveLength(1);
+    expect(paths[0]!.groupIds).toContain("M06");
+  });
+
+  it("keeps the tracks whose cores differ", () => {
+    const tracked = competencyContentV2Families.filter((family) => family.tracks?.length);
+    expect(tracked.map((family) => family.code).sort()).toEqual(["P09", "P31"]);
+  });
+});
+
+describe("second ruling set — core minimality", () => {
+  it("keeps every core route minimal rather than a rigid class build", () => {
+    for (const row of catalogue.coreRoutes)
+      expect(row.groupIds.length + row.skillIds.length).toBeLessThanOrEqual(2);
+  });
+
+  it("expresses most cores as a single Learning Group", () => {
+    const single = catalogue.coreRoutes.filter(
+      (row) => row.groupIds.length + row.skillIds.length === 1,
+    );
+    expect(single.length).toBeGreaterThan(catalogue.coreRoutes.length / 2);
+  });
+});
+
+describe("second ruling set — combat is an explicit exception", () => {
+  it("allows a large, choice-heavy group only where the exception covers it", () => {
+    const large = catalogue.groupSizes.filter((row) => row.shape === "justified-large");
+    expect(large.map((row) => row.id).sort()).toEqual(["M02", "M03", "M05"]);
+    for (const row of large) expect(row.slotSize).toBeGreaterThan(0);
+  });
+
+  it("states the exception positively rather than apologising for the size", () => {
+    for (const row of catalogue.groupSizes.filter((r) => r.shape === "justified-large"))
+      expect(row.justification).toContain("combat exception");
+  });
+
+  it("keeps the focused melee package exactly as ruled", () => {
+    const m01 = competencyContentV2LearningGroups.find((group) => group.id === "M01")!;
+    expect([...m01.fixedSkillIds].sort()).toEqual(["dodge", "parry"]);
+    expect(m01.selectionSlots![0]!.chooseCount).toBe(1);
+  });
+});
+
+describe("second ruling set — Combat Experience route audit", () => {
+  it("exposes Combat Experience only through an authored experiential route", () => {
+    const exposed = catalogue.paths.filter((path) =>
+      path.fixedSkillIds.includes("combat_experience"),
+    );
+    expect(exposed.length).toBeGreaterThan(0);
+    for (const path of exposed)
+      expect(path.groupIds.some((groupId) => groupId === "M06" || groupId === "K23")).toBe(true);
+  });
+
+  it("leaves the instructing and supporting Professions without it", () => {
+    const withoutExposure = ["P82", "P14", "P26"];
+    for (const code of withoutExposure)
+      for (const path of catalogue.paths.filter((p) => p.professionCode === code))
+        expect(path.fixedSkillIds).not.toContain("combat_experience");
+  });
+});
+
+describe("second ruling set — Specializations never count toward breadth or group cost", () => {
+  it("keeps every Specialization out of the Skills a group charges for", () => {
+    for (const group of competencyContentV2LearningGroups) {
+      const charged = new Set([
+        ...group.fixedSkillIds,
+        ...(group.selectionSlots ?? []).flatMap((slot) => slot.candidateSkillIds),
+      ]);
+      for (const specializationId of group.specializationIds ?? [])
+        expect(charged.has(specializationId)).toBe(false);
+    }
+  });
+
+  it("keeps the effective size of a group independent of the Specializations it unlocks", () => {
+    for (const row of catalogue.groupSizes) {
+      const group = competencyContentV2LearningGroups.find((g) => g.id === row.id)!;
+      expect(row.effectiveSize).toBe(
+        group.fixedSkillIds.length +
+          (group.selectionSlots ?? []).reduce((sum, slot) => sum + slot.chooseCount, 0),
+      );
+    }
+  });
+
+  it("reaches the parent Skill on the path without requiring it in the same group", () => {
+    expect(catalogue.coverage.specializationsWhoseParentIsUnreachableInTheSameFamily).toEqual([]);
+  });
+});
+
+describe("second ruling set — simplified category roster", () => {
+  it("retires the categories that were narrow or described a milieu", () => {
+    for (const row of catalogue.categories)
+      expect(["special-access", "mental", "high-society"]).not.toContain(row.categoryId as string);
+  });
+
+  it("leaves no category too narrow to be guessable", () => {
+    const counts = new Map<string, number>();
+    for (const row of catalogue.categories)
+      counts.set(row.categoryId, (counts.get(row.categoryId) ?? 0) + 1);
+    for (const [, count] of counts) expect(count).toBeGreaterThanOrEqual(4);
+  });
+
+  it("places the re-bucketed competencies where a player would look for them", () => {
+    const at = (id: string) =>
+      catalogue.categories.find((row) => row.competencyId === id)?.categoryId;
+    expect(at("meditation")).toBe("mystical");
+    expect(at("skill:mnemonics")).toBe("knowledge");
+    expect(at("heraldry")).toBe("knowledge");
+    expect(at("skill:politics")).toBe("social");
+    expect(at("spec:courtly-protocol")).toBe("social");
+  });
+
+  it("stops splitting the living-animal competencies between two categories", () => {
+    const at = (id: string) =>
+      catalogue.categories.find((row) => row.competencyId === id)?.categoryId;
+    expect(at("skill:animal-handling")).toBe("fieldcraft");
+    expect(at("herding")).toBe("fieldcraft");
+    expect(at("skill:cart-driving")).toBe("trade");
+  });
+});
+
+describe("second ruling set — the language blocker is removed", () => {
+  it("settles every Civilization name rather than deferring to a further ruling", () => {
+    for (const row of competencyContentV2CivilizationLanguages)
+      expect(row.requiresProductOwnerNamingRuling).toBe(false);
+  });
+
+  it("authors the absence of writing rather than leaving it blank", () => {
+    for (const row of competencyContentV2CivilizationLanguages)
+      if (row.writtenName === null)
+        expect((row.writtenAbsenceReason ?? "").trim().length).toBeGreaterThan(0);
+  });
+
+  it("settles Tuu with the appropriate historical name and invents nothing", () => {
+    const san = competencyContentV2CivilizationLanguages.find(
+      (row) => row.civilizationId === "san_forager_bands",
+    )!;
+    expect(san.spokenName).toBe("Spoken Tuu");
+    expect(san.writtenName).toBeNull();
+  });
+
+  it("gives the Common and Old Common written traditions rollable competencies now", () => {
+    for (const civilizationId of ["iest", "thyatis", "glantri", "scyria", "byzantine_empire"]) {
+      const row = competencyContentV2CivilizationLanguages.find(
+        (candidate) => candidate.civilizationId === civilizationId,
+      )!;
+      expect(row.writtenName).toMatch(/^Written /);
+      expect(row.requiresProductOwnerNamingRuling).toBe(false);
     }
   });
 });

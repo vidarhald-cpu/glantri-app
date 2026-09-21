@@ -119,8 +119,6 @@ export interface V2Family extends V2PathBody {
    * An empty list means the family has exactly one ordinary valid path.
    */
   tracks?: readonly V2Track[];
-  /** Deliberately narrow specialist path; excluded from the "thin package" finding, not from the analysis. */
-  narrowByDesign?: boolean;
   note?: string;
 }
 
@@ -373,12 +371,14 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
       },
     ],
     note:
-      "Deliberately larger than the 3-4 centre: a broad combat group whose job is economical breadth across " +
-      "close-quarters fighting. The pool now crosses melee, throwing and unarmed, because a close-quarters " +
-      "school genuinely teaches the grapple and the thrown weapon alongside the sword. Combat Experience was " +
-      "removed: this is instruction, and instruction cannot confer what only real exposure teaches. Overlap " +
-      "with M01 and M03 is intentional; Profession breadth is deduplicated. Restores the historical Advanced " +
-      "Melee Training choose-three slot, and the recovered import's choose-2 reading is provenance only.",
+      "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: " +
+      "a broad combat group is desirable precisely because it makes broad investment in one narrow competence " +
+      "domain economically viable. This is not an oversized group tolerated for breadth; it is the shape the " +
+      "ruling asks for. The pool crosses melee, throwing and unarmed, because a close-quarters school genuinely " +
+      "teaches the grapple and the thrown weapon alongside the sword. Combat Experience is absent: this is " +
+      "instruction, and instruction cannot confer what only real exposure teaches. Overlap with M01 and M03 is " +
+      "intentional; Profession breadth is deduplicated. Restores the historical Advanced Melee Training " +
+      "choose-three slot, and the recovered import's choose-2 reading is provenance only.",
   },
   {
     id: "F30",
@@ -415,11 +415,12 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
       },
     ],
     note:
-      "Deliberately larger than the 3-4 centre: a broad combat group giving economical drilled competence " +
-      "in the arms a formation actually carries. The pool crosses melee, throwing and the sling, because a " +
-      "close-order unit issues skirmishing arms alongside the line weapon. Merges the three fixed formation " +
-      "groups: a soldier is charged for the arms actually issued and drilled, not for every weapon family " +
-      "the army fields. Brawling was removed — close-order drill is not an unarmed course.",
+      "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: " +
+      "drilled competence in the arms a formation actually carries is worth buying as one course. The pool " +
+      "crosses melee, throwing and the sling, because a close-order unit issues skirmishing arms alongside the " +
+      "line weapon. Merges the three fixed formation groups: a soldier is charged for the arms actually issued " +
+      "and drilled, not for every weapon family the army fields. Brawling is absent — close-order drill is not " +
+      "an unarmed course.",
   },
   {
     id: "M11",
@@ -477,9 +478,10 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
       },
     ],
     note:
-      "Deliberately larger than the 3-4 centre: a broad combat group giving economical breadth across the " +
-      "missile arms. Combat Experience was removed — a shooting master who has never been shot at has not " +
-      "earned it. Restores the historical Advanced Missile Training choose-three slot.",
+      "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: " +
+      "sustained instruction across the missile arms is the economical way to invest broadly in shooting. " +
+      "Combat Experience is absent — a shooting master who has never been shot at has not earned it. Restores " +
+      "the historical Advanced Missile Training choose-three slot.",
   },
   {
     id: "F41",
@@ -616,10 +618,9 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     selectionSlots: [
       {
         id: "advanced-craft-specialties",
-        label: "Choose the taught crafts",
+        label: "Choose one taught craft",
         chooseCount: 1,
-        chooseCountStatus: "unresolved-source-conflict",
-        conflictingChooseCounts: [1, 2, 3],
+        chooseCountStatus: "approved",
         candidateSkillIds: [
           "pottery",
           "weaving",
@@ -637,11 +638,11 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
       },
     ],
     note:
-      "Authored exactly as the Product Owner ruled: Appraisal, Bargaining, Teaching and one chosen craft. " +
-      "Restores the Advanced Craft Specialty slot. Its count is NOT settled: the executable data says " +
-      "choose one, its own prose says two specialties, and the master-artisan reading suggests three. The " +
-      "Product Owner has ruled that this conflict must not be resolved by breadth pressure, so the " +
-      "proposal counts the lowest evidenced value (1) and leaves the question open.",
+      "Settled by Product Owner ruling: Appraisal, Bargaining, Teaching and exactly one chosen craft. " +
+      "The earlier source conflict — the executable data said choose one, its own prose said two " +
+      "specialties, and a master-artisan reading suggested three — is closed in favour of one, and the " +
+      "ruling forbids raising the count under breadth pressure. The exact shape is enforced by a " +
+      "deterministic check, so it cannot drift.",
   },
   {
     id: "C03",
@@ -1453,20 +1454,14 @@ export const competencyContentV2Families: readonly V2Family[] = [
     groups: [
       { groupId: "K24", route: "Ordinary watch and guard instruction" },
       { groupId: "G04", route: "Escort duty away from the town" },
+      { groupId: "M01", route: "Guard and rough-fighting drill" },
+      { groupId: "F30", route: "Swashbuckling fencing instruction" },
     ],
-    tracks: [
-      {
-        id: "profession:guard-escort:rough-fighting",
-        name: "Rough-fighting guard",
-        groups: [{ groupId: "M01", route: "Guard and rough-fighting drill" }],
-      },
-      {
-        id: "profession:guard-escort:fencing",
-        name: "Fencing-trained escort",
-        groups: [{ groupId: "F30", route: "Swashbuckling fencing instruction" }],
-      },
-    ],
-    note: "Preserves the approved catalogue's Guard exclusion pair as two explicitly separate valid paths.",
+    note:
+      "Both tracks retired under the track-discipline ruling. They differed only in which combat Learning " +
+      "Group the guard bought, and that distinction is already expressed by the groups themselves: a rough " +
+      "house guard takes M01, an escort trained in the fencing tradition takes F30. One Profession, one " +
+      "identity, two openly available fighting curricula.",
   },
   {
     code: "P15",
@@ -1615,35 +1610,19 @@ export const competencyContentV2Families: readonly V2Family[] = [
     groups: [
       { groupId: "M06", route: "Repeated service in the field" },
       { groupId: "G04", route: "Marching and camping with the force" },
-    ],
-    tracks: [
-      {
-        id: "profession:soldier:communal-contingent",
-        name: "Communal/household contingent",
-        groups: [{ groupId: "M01", route: "Contingent fighting drill" }],
-      },
-      {
-        id: "profession:soldier:formation-soldier",
-        name: "Close-order formation soldier",
-        groups: [{ groupId: "M03", route: "Formation arms drill" }],
-      },
-      {
-        id: "profession:soldier:missile-soldier",
-        name: "Missile soldier",
-        groups: [{ groupId: "M04", route: "Issued missile arm and formation drill" }],
-      },
-      {
-        id: "profession:soldier:longbow-specialist",
-        name: "Military longbow specialist",
-        groups: [
-          { groupId: "M04", route: "Issued missile arm and formation drill" },
-          { groupId: "F41", route: "Longbow tradition brought into service" },
-        ],
-      },
+      { groupId: "M01", route: "Contingent fighting drill" },
+      { groupId: "M03", route: "Formation arms drill" },
+      { groupId: "M04", route: "Issued missile arm and formation drill" },
+      { groupId: "F41", route: "Longbow tradition brought into service" },
     ],
     note:
-      "Nine fixed-weapon tracks collapse to four. Weapon family is now a choice inside the drill, which is " +
-      "what the historical Basic/Advanced Melee and Missile slots described.",
+      "The approved catalogue's nine fixed-weapon Soldier tracks became four in the previous revision; the " +
+      "track-discipline ruling retires those four as well. Every one of them differed from its siblings only " +
+      "in which combat Learning Group it bought — contingent drill, formation drill, the issued missile arm, " +
+      "the longbow tradition — and a track must not exist for an ordinary weapon or equipment choice. The " +
+      "Soldier is one occupational identity whose defining core is repeated service in the field; the arm " +
+      "served in is a choice among coherent combat curricula, which is exactly the access-to-several-groups " +
+      "shape the breadth ruling asks for.",
   },
   {
     code: "P23",
@@ -1681,17 +1660,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "G04", route: "Working alone forward of the force" },
       { groupId: "M01", route: "Fighting instruction for a scout" },
       { groupId: "M06", route: "Repeated service forward of the force" },
+      { groupId: "G05", route: "Mounted reconnaissance service" },
     ],
     directRoute: "Taught directly by the scouts one serves with",
     skillIds: ["skill:tracking"],
-    tracks: [
-      { id: "profession:military-scout:foot", name: "Foot military scout" },
-      {
-        id: "profession:military-scout:mounted",
-        name: "Mounted military scout",
-        groups: [{ groupId: "G05", route: "Mounted reconnaissance service" }],
-      },
-    ],
+    note:
+      "Both tracks retired under the track-discipline ruling: foot and mounted scouting differed only by " +
+      "whether the scout was given a horse, which is an equipment choice already expressed by G05.",
   },
   {
     code: "P25",
@@ -1707,31 +1682,19 @@ export const competencyContentV2Families: readonly V2Family[] = [
     groups: [
       { groupId: "G09", route: "Mentored unit command" },
       { groupId: "M06", route: "Repeated service in the field" },
+      { groupId: "M03", route: "Formation arms drill with the command" },
+      { groupId: "M11", route: "Commanding from the saddle" },
+      { groupId: "M12", route: "Lance and troop drill with the command" },
+      { groupId: "M01", route: "Contingent and sidearm fighting drill" },
     ],
     directRoute: "Taught directly by the commander one serves under",
     skillIds: ["skill:oratory"],
     specializationIds: ["spec:siege-operations"],
-    tracks: [
-      {
-        id: "profession:military-commander:foot",
-        name: "Foot field commander",
-        groups: [{ groupId: "M03", route: "Formation arms drill with the command" }],
-      },
-      {
-        id: "profession:military-commander:mounted",
-        name: "Mounted field commander",
-        groups: [
-          { groupId: "M11", route: "Commanding from the saddle" },
-          { groupId: "M12", route: "Lance and troop drill with the command" },
-          { groupId: "M01", route: "Sidearm and close-combat drill" },
-        ],
-      },
-      {
-        id: "profession:military-commander:communal",
-        name: "Communal-force commander",
-        groups: [{ groupId: "M01", route: "Contingent fighting drill" }],
-      },
-    ],
+    note:
+      "All three tracks retired under the track-discipline ruling. Foot, mounted and communal commanders " +
+      "differed only in which combat Learning Groups they bought; commanding a body of troops is one " +
+      "occupational identity, and the fighting curriculum a commander shares with the command is a route " +
+      "choice, not a separate occupation.",
   },
   {
     code: "P26",
@@ -1748,21 +1711,15 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "G11", route: "Supply-office records" },
       { groupId: "M07", route: "Campaign staff service" },
       { groupId: "F06", route: "Moving the force's supplies" },
+      { groupId: "G12", route: "Buying for the force" },
+      { groupId: "M01", route: "Fighting drill alongside supply duties" },
     ],
     directRoute: "Taught directly in the supply office",
     skillIds: ["mathematics"],
-    tracks: [
-      {
-        id: "profession:military-quartermaster:supply-office",
-        name: "Supply-office quartermaster",
-        groups: [{ groupId: "G12", route: "Buying for the force" }],
-      },
-      {
-        id: "profession:military-quartermaster:fighting-service",
-        name: "Fighting-service quartermaster",
-        groups: [{ groupId: "M01", route: "Fighting drill alongside supply duties" }],
-      },
-    ],
+    note:
+      "Both tracks retired under the track-discipline ruling. Neither refined the defining core — keeping a " +
+      "campaign supplied and recorded — and the difference between a quartermaster who buys for the force " +
+      "and one who drills alongside it is already stated by G12 and M01.",
   },
   {
     code: "P27",
@@ -2842,26 +2799,18 @@ export const competencyContentV2Families: readonly V2Family[] = [
         groupIds: ["M10"],
       },
     ],
-    groups: [{ groupId: "M10", route: "Ordinary arms-instruction apprenticeship" }],
-    tracks: [
-      {
-        id: "profession:weapon-instructor:close-combat",
-        name: "Close-combat weapon master",
-        groups: [{ groupId: "M02", route: "Advanced close-combat instruction" }],
-      },
-      {
-        id: "profession:weapon-instructor:fencing",
-        name: "Fencing master",
-        groups: [{ groupId: "F30", route: "Swashbuckling fencing instruction" }],
-      },
-      {
-        id: "profession:weapon-instructor:missile",
-        name: "Missile weapon master",
-        groups: [{ groupId: "M05", route: "Advanced missile instruction" }],
-      },
+    groups: [
+      { groupId: "M10", route: "Ordinary arms-instruction apprenticeship" },
+      { groupId: "M02", route: "Advanced close-combat instruction" },
+      { groupId: "M05", route: "Advanced missile instruction" },
+      { groupId: "F30", route: "Swashbuckling fencing instruction" },
     ],
-    narrowByDesign: true,
-    note: "The fencing-master path is deliberately narrow: a single named tradition is the whole occupation.",
+    note:
+      "All three tracks retired under the track-discipline ruling: the subject a weapon master teaches is an " +
+      "ordinary weapon choice, already expressed by M02, M05 and F30. The Profession no longer needs the " +
+      "narrow-by-design exemption the one-tradition fencing track required. The instructor still reaches no " +
+      "Combat Experience by any of these routes, which is the point of the Combat Experience ruling: " +
+      "instructing is not exposure.",
   },
   {
     code: "P83",
@@ -2913,7 +2862,23 @@ export const competencyContentV2Families: readonly V2Family[] = [
  * Learning Group; only the access label differs. The proposal therefore assigns every competency a
  * real category and proposes that the `special-access` bucket be retired.
  *
- * Applying this to the runtime enum, `chargenBrowse.ts` and
+ * The roster itself is simplified under the ruling's new latitude, which releases it from
+ * preserving awkward current categories for compatibility. Two categories are retired:
+ *
+ * - `mental` held only Meditation and Mnemonics. Two members is category proliferation, and neither
+ *   name points a player at the word "mental". Meditation joins `mystical` with the contemplative
+ *   competencies it is practised beside; Mnemonics joins `knowledge`, where a trained memory belongs.
+ * - `high-society` described a milieu — who has access — rather than what the competency is, which
+ *   is exactly what the ruling forbids. Heraldry is a learned body of lore and joins `knowledge`;
+ *   Politics and Courtly Protocol are ways of dealing with people and join `social`.
+ *
+ * One arbitrary placement is corrected for guessability: Agriculture & Husbandry defaulted to
+ * `trade`, which split the living-animal competencies in two — Animal Husbandry, Falconry and
+ * Steppe Remount Training sat under `trade` while Animal Handling, Herding, Animal Training and
+ * Animal Lore sat under `fieldcraft`. The domain now defaults to `fieldcraft`, and Cart Driving is
+ * overridden back to `trade` because carting is a transport trade rather than land or stock work.
+ *
+ * Applying any of this to the runtime enum, `chargenBrowse.ts` and
  * `getPlayerFacingSkillCategoryId({ preferDirectProfession })` is deliberately OUT OF SCOPE here
  * and belongs to a separate authorized implementation task.
  */
@@ -2926,13 +2891,11 @@ export type V2PlayerFacingCategoryId =
   | "maritime"
   | "healing"
   | "trade"
-  | "high-society"
   | "performance"
   | "social"
   | "covert"
   | "language"
   | "knowledge"
-  | "mental"
   | "mystical"
   | "craft"
   | "physical";
@@ -2941,7 +2904,7 @@ export type V2PlayerFacingCategoryId =
 export const competencyContentV2CategoryByDomain: Readonly<
   Record<string, V2PlayerFacingCategoryId>
 > = {
-  "Agriculture & Husbandry": "trade",
+  "Agriculture & Husbandry": "fieldcraft",
   "Arts & Performance": "performance",
   "Athletics & Movement": "physical",
   "Awareness & Investigation": "fieldcraft",
@@ -2963,9 +2926,12 @@ export const competencyContentV2CategoryByDomain: Readonly<
 };
 
 /**
- * Explicit per-competency overrides. Where the competency also exists in the current runtime
- * catalogue, the override preserves that catalogue's existing player-facing category so the
- * proposal does not silently re-bucket Skills players already see.
+ * Explicit per-competency overrides.
+ *
+ * The controlling test is the ruling's: a player should normally be able to guess the category from
+ * the Skill name and the category labels alone. Where an existing runtime category already passes
+ * that test it is preserved, but compatibility on its own is no longer a reason to keep an awkward
+ * placement — the Product Owner has explicitly released the roster from that constraint.
  */
 export const competencyContentV2CategoryOverrides: Readonly<
   Record<string, V2PlayerFacingCategoryId>
@@ -2976,23 +2942,24 @@ export const competencyContentV2CategoryOverrides: Readonly<
   camouflage: "fieldcraft",
   divination: "mystical",
   gambling: "social",
-  heraldry: "high-society",
+  heraldry: "knowledge",
   herding: "fieldcraft",
   history: "knowledge",
   mechanics: "knowledge",
-  meditation: "mental",
+  meditation: "mystical",
   mounted_combat: "combat",
   ropework: "maritime",
   surveying: "knowledge",
   "skill:animal-handling": "fieldcraft",
   "skill:animal-lore": "fieldcraft",
+  "skill:cart-driving": "trade",
   "skill:cartography": "knowledge",
   "skill:document-forgery": "covert",
   "skill:geography": "knowledge",
   "skill:law": "knowledge",
-  "skill:mnemonics": "mental",
+  "skill:mnemonics": "knowledge",
   "skill:poisons": "covert",
-  "skill:politics": "high-society",
+  "skill:politics": "social",
   "skill:religion": "mystical",
   "skill:sculpture": "craft",
   "skill:siege-engineering": "military",
@@ -3003,7 +2970,7 @@ export const competencyContentV2CategoryOverrides: Readonly<
   "skill:wayfinding": "fieldcraft",
   "spec:court-administration": "trade",
   "spec:court-advocacy": "knowledge",
-  "spec:courtly-protocol": "high-society",
+  "spec:courtly-protocol": "social",
   "spec:fortification": "military",
   "spec:genealogy": "knowledge",
   "spec:omen-reading": "mystical",
@@ -3025,6 +2992,12 @@ export interface V2CivilizationLanguage {
   existingSpokenCompetencyId?: string;
   /** Proposed Glantri written-tradition competency name, or null when authored as having no writing. */
   writtenName: string | null;
+  /**
+   * Required whenever `writtenName` is null: the ruling gives every Civilization a rollable written
+   * competency unless it is explicitly authored as having no writing, so an absence must be authored,
+   * never merely left blank.
+   */
+  writtenAbsenceReason?: string;
   existingWrittenCompetencyId?: string;
   /** Real-world analogue name this proposal replaces, if any. */
   replacesAnalogueSpokenName?: string;
@@ -3040,9 +3013,16 @@ export interface V2CivilizationLanguage {
  * against.
  *
  * Product Owner naming ruling: use the canonical Glantri name where one is established, and the
- * appropriate historical name where none is. Do not invent Glantri names, and do not assert
- * linguistic descent. The previous revision's invented names — Kethran, Old Latian, Palace Scyrian,
- * Kaldan, Aspardic, and the Harbour, Hill, Palace, Wedge and Chancery scripts — are withdrawn.
+ * appropriate historical language or writing-tradition name where none is. Do not invent Glantri
+ * names, linguistic descent, scripts, registers or relationships between Civilizations. The previous
+ * revision's invented names — Kethran, Old Latian, Palace Scyrian, Kaldan, Aspardic, and the Harbour,
+ * Hill, Palace, Wedge and Chancery scripts — stay withdrawn.
+ *
+ * The indefinite blocker around usable written competencies is REMOVED by ruling. Every written
+ * competency below is rollable now, named for its language, and is what a reading roll is made
+ * against. Script, register and conventions are later enrichment and no longer hold anything up, so
+ * no entry requires a further naming ruling: the list below is complete, and a deterministic check
+ * fails the build if any entry reopens one.
  */
 export const competencyContentV2CivilizationLanguages: readonly V2CivilizationLanguage[] = [
   {
@@ -3060,11 +3040,12 @@ export const competencyContentV2CivilizationLanguages: readonly V2CivilizationLa
     spokenName: "Spoken Common",
     existingSpokenCompetencyId: "spoken:common",
     writtenName: "Written Common",
-    requiresProductOwnerNamingRuling: true,
+    requiresProductOwnerNamingRuling: false,
     note:
       "Common is an established Glantri name, so the written competency takes it directly and no script " +
-      "name is invented. The script, register and conventions of the Common written tradition remain an " +
-      "open case in the approved gap report.",
+      "name is invented. The competency is rollable as it stands, and a reading roll is made against it. " +
+      "Script, register and conventions are later enrichment, not a blocker: the Product Owner has ruled " +
+      "that written competence must exist now and that detailed prose may follow.",
   },
   {
     civilizationId: "thyatis",
@@ -3072,8 +3053,8 @@ export const competencyContentV2CivilizationLanguages: readonly V2CivilizationLa
     spokenName: "Spoken Common",
     existingSpokenCompetencyId: "spoken:common",
     writtenName: "Written Common",
-    requiresProductOwnerNamingRuling: true,
-    note: "Shares the Common written tradition; the same open case applies.",
+    requiresProductOwnerNamingRuling: false,
+    note: "Shares the rollable Common written competency; enrichment of the tradition follows later.",
   },
   {
     civilizationId: "glantri",
@@ -3081,8 +3062,10 @@ export const competencyContentV2CivilizationLanguages: readonly V2CivilizationLa
     spokenName: "Spoken Common",
     existingSpokenCompetencyId: "spoken:common",
     writtenName: "Written Common",
-    requiresProductOwnerNamingRuling: true,
-    note: "Shares the Common written tradition; Old Common remains an authored optional second tongue.",
+    requiresProductOwnerNamingRuling: false,
+    note:
+      "Shares the rollable Common written competency. Old Common remains an authored optional second " +
+      "tongue; no descent between the two is asserted.",
   },
   {
     civilizationId: "scyria",
@@ -3090,10 +3073,12 @@ export const competencyContentV2CivilizationLanguages: readonly V2CivilizationLa
     spokenName: "Spoken Old Common",
     existingSpokenCompetencyId: "spoken:old-common",
     writtenName: "Written Old Common",
-    requiresProductOwnerNamingRuling: true,
+    requiresProductOwnerNamingRuling: false,
     note:
-      "Old Common is an established Glantri name and no script name is invented. The Old Common written " +
-      "identity must still be defined without inferring equivalence with Common.",
+      "Old Common is an established Glantri name and no script name is invented. The written competency is " +
+      "rollable in its own right and is what an Old Common reading roll is made against. No equivalence " +
+      "with Common, and no descent from it, is asserted; the earlier suggestion of Mycenaean descent from " +
+      "Scyria stays withdrawn.",
   },
   {
     civilizationId: "byzantine_empire",
@@ -3101,8 +3086,10 @@ export const competencyContentV2CivilizationLanguages: readonly V2CivilizationLa
     spokenName: "Spoken Old Common",
     existingSpokenCompetencyId: "spoken:old-common",
     writtenName: "Written Old Common",
-    requiresProductOwnerNamingRuling: true,
-    note: "The Civilization name itself is a real-world analogue; renaming it is outside this task's scope.",
+    requiresProductOwnerNamingRuling: false,
+    note:
+      "Shares the rollable Old Common written competency. The Civilization name itself is a real-world " +
+      "analogue; renaming it is outside this task's scope.",
   },
   {
     civilizationId: "lankhmar",
@@ -3146,20 +3133,27 @@ export const competencyContentV2CivilizationLanguages: readonly V2CivilizationLa
     spokenName: "Spoken N'kolian",
     existingSpokenCompetencyId: "spoken:nkolian",
     writtenName: "Written N'kolian",
-    requiresProductOwnerNamingRuling: true,
+    requiresProductOwnerNamingRuling: false,
     note:
       "N'kolian is an established Glantri name, so the written competency takes it directly and the " +
-      "invented Royal N'kolian register is withdrawn. Register and script support remain an open case.",
+      "invented Royal N'kolian register stays withdrawn. The competency is rollable as it stands; no " +
+      "register or script is invented for it.",
   },
   {
     civilizationId: "san_forager_bands",
     civilizationName: "San Forager Bands",
     spokenName: "Spoken Tuu",
     writtenName: null,
-    requiresProductOwnerNamingRuling: true,
+    writtenAbsenceReason:
+      "Authored as having no written tradition: the San forager bands are a non-literate society, so no " +
+      "reading roll is made for them and no written competency is invented to carry one.",
+    requiresProductOwnerNamingRuling: false,
     note:
-      "No spoken competency exists for this Civilization today; one is added. The Civilization is explicitly " +
-      "authored as having no written tradition. The approved gap report still asks for a precise Tuu identity.",
+      "No spoken competency exists for this Civilization today; one is added. No approved Glantri name " +
+      "exists, so the appropriate historical name stands: Tuu is the established scholarly name for the " +
+      "language family the San forager bands speak. Nothing is invented — no descent, no sub-language and " +
+      "no fictional relationship to another Civilization — and the earlier request for a further Tuu " +
+      "identity is answered by the naming ruling rather than left open.",
   },
   {
     civilizationId: "scythians",
@@ -3167,10 +3161,11 @@ export const competencyContentV2CivilizationLanguages: readonly V2CivilizationLa
     spokenName: "Spoken Scythian",
     existingSpokenCompetencyId: "spoken:scythian",
     writtenName: null,
+    writtenAbsenceReason:
+      "Authored as having no written tradition: the Scythian steppe societies are non-literate, so no " +
+      "reading roll is made for them.",
     requiresProductOwnerNamingRuling: false,
-    note:
-      "No established Glantri name exists, so the historical name stands. The invented Kethran is withdrawn. " +
-      "Authored as having no written tradition.",
+    note: "No established Glantri name exists, so the historical name stands. The invented Kethran is withdrawn.",
   },
   {
     civilizationId: "latial_chiefdoms",

@@ -28,15 +28,15 @@ Both sides of the comparison are measured by the same code path, so the before/a
 
 | Measure              | Approved catalogue | Proposal (nominal) | Proposal (worst case) |
 | -------------------- | -----------------: | -----------------: | --------------------: |
-| Valid paths          |                 99 |                 96 |                    96 |
-| Minimum              |                  0 |                  6 |                     4 |
+| Valid paths          |                 99 |                 86 |                    86 |
+| Minimum              |                  0 |                  7 |                     5 |
 | Lower quartile       |                  1 |                  7 |                     7 |
 | Median               |                  3 |                  8 |                     8 |
-| Upper quartile       |                  7 |                 10 |                    10 |
-| Maximum              |                 17 |                 15 |                    14 |
-| Mean                 |               4.39 |               8.73 |                   8.2 |
-| Paths at or above 10 |                 10 |                 28 |                    25 |
-| Paths below 10       |                 89 |                 68 |                    71 |
+| Upper quartile       |                  7 |                 10 |                     9 |
+| Maximum              |                 17 |                 16 |                    14 |
+| Mean                 |               4.39 |               8.83 |                  8.27 |
+| Paths at or above 10 |                 10 |                 25 |                    22 |
+| Paths below 10       |                 89 |                 61 |                    64 |
 
 The worst-case column assumes every single slot selection duplicates a Skill the path already teaches.
 That never happens by design — no slot offers a Skill its own group already fixes — but it bounds the figure honestly.
@@ -61,20 +61,20 @@ That never happens by design — no slot offers a Skill its own group already fi
 | Approved  |                             13 |           1 |
 | Approved  |                             14 |           1 |
 | Approved  |                             17 |           1 |
-| Proposal  |                              6 |           1 |
-| Proposal  |                              7 |          28 |
-| Proposal  |                              8 |          23 |
-| Proposal  |                              9 |          16 |
-| Proposal  |                             10 |          13 |
-| Proposal  |                             11 |           8 |
-| Proposal  |                             12 |           4 |
+| Proposal  |                              7 |          27 |
+| Proposal  |                              8 |          21 |
+| Proposal  |                              9 |          13 |
+| Proposal  |                             10 |          12 |
+| Proposal  |                             11 |           5 |
+| Proposal  |                             12 |           3 |
 | Proposal  |                             13 |           1 |
 | Proposal  |                             14 |           1 |
 | Proposal  |                             15 |           1 |
+| Proposal  |                             16 |           2 |
 
 ## Paths flagged for coherence review (below 7)
 
-None, other than paths explicitly marked narrow by design.
+None. Every valid path is at or above the coherence-review floor of seven.
 
 ## Group-size distribution, before and after
 
@@ -96,11 +96,3 @@ Approved: 59 groups. Proposal: 96 groups — 57 in the 3-4 preferred centre, 36 
 ## Direct-grant review
 
 The first draft carried 283 direct Profession Skill grants; 101 remain. The withdrawals and the reasons for each retention are recorded in the [direct-grant review](./direct-grant-review.md).
-
-## Paths marked narrow by design
-
-| Profession            | Path                       | Effective breadth | Why the narrowness is legitimate                                                                  |
-| --------------------- | -------------------------- | ----------------: | ------------------------------------------------------------------------------------------------- |
-| P82 Weapon Instructor | Close-combat weapon master |                 8 | The fencing-master path is deliberately narrow: a single named tradition is the whole occupation. |
-| P82 Weapon Instructor | Fencing master             |                 6 | The fencing-master path is deliberately narrow: a single named tradition is the whole occupation. |
-| P82 Weapon Instructor | Missile weapon master      |                 7 | The fencing-master path is deliberately narrow: a single named tradition is the whole occupation. |

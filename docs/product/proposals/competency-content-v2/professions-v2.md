@@ -6,20 +6,77 @@
 > Regenerate with `pnpm --filter @glantri/content exec tsx ./scripts/generateCompetencyContentV2Report.ts`,
 > then run Prettier over this folder.
 
-All 84 approved Profession families are preserved. They yield 96 valid paths (the approved catalogue yields 99). Mutually exclusive tracks are evaluated separately; Specializations never count toward base-Skill breadth.
+All 84 approved Profession families are preserved. They yield 86 valid paths (the approved catalogue yields 99). Mutually exclusive tracks are evaluated separately; Specializations never count toward base-Skill breadth.
 
 Every Profession declares at least one **defining core route**: the training it is not that Profession
 without. A path is valid only when it satisfies one of its applicable core routes; a track's own core
 routes refine or replace its parent's. This is an annotation over Learning Groups and directly taught
 Skills that already exist, not a separate mechanism, and it needs no GM override.
 
-All 96 path/core-route pairs are satisfied by the authored content. 1 core route is recorded as blocked on an external question.
+All 86 path/core-route pairs are satisfied by the authored content. 1 core route is recorded as blocked on an external question.
+
+## Core minimality
+
+A core states what a Profession is not that Profession without — enough for identity, never a rigid
+class build. Every declared core route is audited against that, and the build now refuses any core that
+requires more than two things in total. Largest core in the catalogue: 2 requirement(s). 85 of 86 path/core pairs are a single Learning Group.
+
+A Profession may declare a small set of alternative core routes, of which one must be satisfied. None
+is needed today: where the defining training genuinely differs, the difference is carried by a track
+with its own core, which is the same latitude expressed as a named player-visible variant.
+
+## Track discipline
+
+A track is a **named player-visible curriculum variant representing a materially different form of the
+occupation** — not a weapon, Skill or equipment choice, and not a restatement of something the Learning
+Groups already say. The audit applies one mechanisable test: **a track must declare a core route of its
+own.** If the defining training does not differ, the variant is a route choice and belongs in the
+Profession's own group list. The build refuses a track that declares no core.
+
+Result: 2 of 84 Professions keep tracks, carrying 4 tracks between them. Valid paths fall to 86.
+
+| Profession                    | Tracks before | Tracks after | Why                                                                                                                                                                                                                                     |
+| ----------------------------- | ------------: | -----------: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P09 Sailor and Boat Worker    |             2 |            2 | Kept. Inshore boat work and rigged-vessel deck service have different defining training — N01 against F09 — so each track carries its own core.                                                                                         |
+| P31 Surgeon                   |             2 |            2 | Kept. The civil operative surgeon and the field surgeon are defined by different apprenticeships, G18 against F29, and only the field surgeon has an authored route to combat exposure.                                                 |
+| P14 Guard, Watcher and Escort |             2 |            0 | Retired. The tracks differed only in which combat group the guard bought; M01 and F30 are now both openly available routes.                                                                                                             |
+| P22 Soldier                   |             4 |            0 | Retired. All four differed only in which combat Learning Group they bought — contingent drill, formation drill, the issued missile arm, the longbow tradition. The Soldier is one identity whose core is repeated service in the field. |
+| P24 Military Scout            |             2 |            0 | Retired. Foot and mounted scouting differed only by whether the scout was given a horse, which G05 already says.                                                                                                                        |
+| P25 Military Commander        |             3 |            0 | Retired. Foot, mounted and communal command differed only in the combat groups shared with the command.                                                                                                                                 |
+| P26 Military Quartermaster    |             2 |            0 | Retired. Neither refined the defining core; G12 and M01 state the difference themselves.                                                                                                                                                |
+| P82 Weapon Instructor         |             3 |            0 | Retired. The subject an arms master teaches is a weapon choice, already expressed by M02, M05 and F30. The narrow-by-design exemption the one-tradition fencing track needed is gone with it.                                           |
+
+The Soldier collapse is the ruling applied at its sharpest, and it is deliberate: breadth that used to be
+split across four near-identical tracks is now what the breadth ruling actually asks for — one identity
+with access to several coherent Learning Groups.
+
+## Combat Experience route audit
+
+Combat Experience is experiential competence from credible real combat or field exposure. Weapon
+instruction, fencing, drill and advanced combat training do not grant it. It is reachable only through
+M06 Campaign service experience and K23 Coercive service practice, and a Profession may expose it only
+through an authored experiential route that explains the exposure. Every path that reaches it is listed
+here; there are no others, and the build enforces that.
+
+| Path                                                            | Route group | Authored route                            |
+| --------------------------------------------------------------- | ----------- | ----------------------------------------- |
+| P15 Enforcer — Enforcer                                         | K23         | _Ordinary coercive service_               |
+| P22 Soldier — Soldier                                           | M06         | _Repeated service in the field_           |
+| P23 Mounted Soldier and Lancer — Mounted Soldier and Lancer     | M06         | _Repeated service in the field_           |
+| P24 Military Scout — Military Scout                             | M06         | _Repeated service forward of the force_   |
+| P25 Military Commander — Military Commander                     | M06         | _Repeated service in the field_           |
+| P28 Siege Engineer — Siege Engineer                             | M06         | _Repeated service with a besieging force_ |
+| P29 Siege Engine Crew Specialist — Siege Engine Crew Specialist | M06         | _Repeated service in the field_           |
+| P31 Surgeon — Field surgeon                                     | M06         | _Repeated service with a force_           |
+
+Professions that train hard and fight rarely are the point of the audit: the Weapon Instructor, the
+Guard, the Military Quartermaster and the civil Surgeon reach no Combat Experience by any route.
 
 ## Cost invariants
 
 Overlapping routes never require duplicate payment for the same competency, and final cost does not
 depend on purchase order. Across all valid paths the routes name a competency more than once on
-102 occasions; every one is charged exactly once. Accumulating each path's routes in reverse order yields the identical charged
+107 occasions; every one is charged exactly once. Accumulating each path's routes in reverse order yields the identical charged
 set, which is what order-independence means here. Both properties are enforced by the build, not asserted
 in prose: a catalogue that broke either would fail to build.
 
@@ -196,18 +253,14 @@ Mutually exclusive tracks:
 - **Core route** — _Ordinary watch and guard instruction_: K24
 - **K24** — _Ordinary watch and guard instruction_
 - **G04** — _Escort duty away from the town_
+- **M01** — _Guard and rough-fighting drill_
+- **F30** — _Swashbuckling fencing instruction_
 
-Mutually exclusive tracks:
+| Valid path                | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
+| ------------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
+| Guard, Watcher and Escort |                             10 |                        1 |                                        9 |
 
-- **Rough-fighting guard** — M01 (_Guard and rough-fighting drill_)
-- **Fencing-trained escort** — F30 (_Swashbuckling fencing instruction_)
-
-| Valid path             | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
-| ---------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Rough-fighting guard   |                              9 |                        1 |                                        8 |
-| Fencing-trained escort |                              9 |                        0 |                                        9 |
-
-> Preserves the approved catalogue's Guard exclusion pair as two explicitly separate valid paths.
+> Both tracks retired under the track-discipline ruling. They differed only in which combat Learning Group the guard bought, and that distinction is already expressed by the groups themselves: a rough house guard takes M01, an escort trained in the fencing tradition takes F30. One Profession, one identity, two openly available fighting curricula.
 
 ### P15 — Enforcer
 
@@ -299,22 +352,16 @@ Mutually exclusive tracks:
 - **Core route** — _Repeated service in the field_: M06
 - **M06** — _Repeated service in the field_
 - **G04** — _Marching and camping with the force_
+- **M01** — _Contingent fighting drill_
+- **M03** — _Formation arms drill_
+- **M04** — _Issued missile arm and formation drill_
+- **F41** — _Longbow tradition brought into service_
 
-Mutually exclusive tracks:
+| Valid path | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
+| ---------- | -----------------------------: | -----------------------: | ---------------------------------------: |
+| Soldier    |                             16 |                        4 |                                       12 |
 
-- **Communal/household contingent** — M01 (_Contingent fighting drill_)
-- **Close-order formation soldier** — M03 (_Formation arms drill_)
-- **Missile soldier** — M04 (_Issued missile arm and formation drill_)
-- **Military longbow specialist** — M04 (_Issued missile arm and formation drill_), F41 (_Longbow tradition brought into service_)
-
-| Valid path                    | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
-| ----------------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Communal/household contingent |                              8 |                        1 |                                        7 |
-| Close-order formation soldier |                             10 |                        2 |                                        8 |
-| Missile soldier               |                              9 |                        1 |                                        8 |
-| Military longbow specialist   |                             11 |                        1 |                                       10 |
-
-> Nine fixed-weapon tracks collapse to four. Weapon family is now a choice inside the drill, which is what the historical Basic/Advanced Melee and Missile slots described.
+> The approved catalogue's nine fixed-weapon Soldier tracks became four in the previous revision; the track-discipline ruling retires those four as well. Every one of them differed from its siblings only in which combat Learning Group it bought — contingent drill, formation drill, the issued missile arm, the longbow tradition — and a track must not exist for an ordinary weapon or equipment choice. The Soldier is one occupational identity whose defining core is repeated service in the field; the arm served in is a choice among coherent combat curricula, which is exactly the access-to-several-groups shape the breadth ruling asks for.
 
 ### P23 — Mounted Soldier and Lancer
 
@@ -336,36 +383,31 @@ Mutually exclusive tracks:
 - **G04** — _Working alone forward of the force_
 - **M01** — _Fighting instruction for a scout_
 - **M06** — _Repeated service forward of the force_
+- **G05** — _Mounted reconnaissance service_
 - _Taught directly by the scouts one serves with_: Tracking
 
-Mutually exclusive tracks:
+| Valid path     | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
+| -------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
+| Military Scout |                             15 |                        1 |                                       14 |
 
-- **Foot military scout** — no additional routes
-- **Mounted military scout** — G05 (_Mounted reconnaissance service_)
-
-| Valid path             | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
-| ---------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Foot military scout    |                             13 |                        1 |                                       12 |
-| Mounted military scout |                             15 |                        1 |                                       14 |
+> Both tracks retired under the track-discipline ruling: foot and mounted scouting differed only by whether the scout was given a horse, which is an equipment choice already expressed by G05.
 
 ### P25 — Military Commander
 
 - **Core route** — _Mentored unit command_: G09
 - **G09** — _Mentored unit command_
 - **M06** — _Repeated service in the field_
+- **M03** — _Formation arms drill with the command_
+- **M11** — _Commanding from the saddle_
+- **M12** — _Lance and troop drill with the command_
+- **M01** — _Contingent and sidearm fighting drill_
 - _Taught directly by the commander one serves under_: Oratory, Siege Operations
 
-Mutually exclusive tracks:
+| Valid path         | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
+| ------------------ | -----------------------------: | -----------------------: | ---------------------------------------: |
+| Military Commander |                             16 |                        3 |                                       13 |
 
-- **Foot field commander** — M03 (_Formation arms drill with the command_)
-- **Mounted field commander** — M11 (_Commanding from the saddle_), M12 (_Lance and troop drill with the command_), M01 (_Sidearm and close-combat drill_)
-- **Communal-force commander** — M01 (_Contingent fighting drill_)
-
-| Valid path               | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
-| ------------------------ | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Foot field commander     |                             12 |                        2 |                                       10 |
-| Mounted field commander  |                             14 |                        1 |                                       13 |
-| Communal-force commander |                             10 |                        1 |                                        9 |
+> All three tracks retired under the track-discipline ruling. Foot, mounted and communal commanders differed only in which combat Learning Groups they bought; commanding a body of troops is one occupational identity, and the fighting curriculum a commander shares with the command is a route choice, not a separate occupation.
 
 ### P26 — Military Quartermaster
 
@@ -373,17 +415,15 @@ Mutually exclusive tracks:
 - **G11** — _Supply-office records_
 - **M07** — _Campaign staff service_
 - **F06** — _Moving the force's supplies_
+- **G12** — _Buying for the force_
+- **M01** — _Fighting drill alongside supply duties_
 - _Taught directly in the supply office_: Mathematics
 
-Mutually exclusive tracks:
+| Valid path             | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
+| ---------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
+| Military Quartermaster |                             14 |                        1 |                                       13 |
 
-- **Supply-office quartermaster** — G12 (_Buying for the force_)
-- **Fighting-service quartermaster** — M01 (_Fighting drill alongside supply duties_)
-
-| Valid path                     | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
-| ------------------------------ | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Supply-office quartermaster    |                             11 |                        0 |                                       11 |
-| Fighting-service quartermaster |                             11 |                        1 |                                       10 |
+> Both tracks retired under the track-discipline ruling. Neither refined the defining core — keeping a campaign supplied and recorded — and the difference between a quartermaster who buys for the force and one who drills alongside it is already stated by G12 and M01.
 
 ### P27 — Campaign Planner
 
@@ -1052,20 +1092,15 @@ Mutually exclusive tracks:
 
 - **Core route** — _Ordinary arms-instruction apprenticeship_: M10
 - **M10** — _Ordinary arms-instruction apprenticeship_
+- **M02** — _Advanced close-combat instruction_
+- **M05** — _Advanced missile instruction_
+- **F30** — _Swashbuckling fencing instruction_
 
-Mutually exclusive tracks:
+| Valid path        | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
+| ----------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
+| Weapon Instructor |                             13 |                        6 |                                        7 |
 
-- **Close-combat weapon master** — M02 (_Advanced close-combat instruction_)
-- **Fencing master** — F30 (_Swashbuckling fencing instruction_)
-- **Missile weapon master** — M05 (_Advanced missile instruction_)
-
-| Valid path                 | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
-| -------------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Close-combat weapon master |                              8 |                        3 |                                        5 |
-| Fencing master             |                              6 |                        0 |                                        6 |
-| Missile weapon master      |                              7 |                        3 |                                        4 |
-
-> The fencing-master path is deliberately narrow: a single named tradition is the whole occupation.
+> All three tracks retired under the track-discipline ruling: the subject a weapon master teaches is an ordinary weapon choice, already expressed by M02, M05 and F30. The Profession no longer needs the narrow-by-design exemption the one-tradition fencing track required. The instructor still reaches no Combat Experience by any of these routes, which is the point of the Combat Experience ruling: instructing is not exposure.
 
 ### P83 — Gambler
 

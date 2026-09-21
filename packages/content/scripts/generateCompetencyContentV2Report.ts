@@ -95,10 +95,12 @@ groupLines.push(
   "",
   "Product Owner ruling: **3-4 effective base Skills is the preferred centre**. 2 is valid where the",
   "competencies are genuinely learned together. 1 normally requires reconsideration. 5+ requires positive",
-  "justification, and **combat groups may deliberately be larger** where they buy economical broad combat",
-  "competence. Fixed purchase burden is reported separately from player-selected slot breadth, and",
-  "coherence takes precedence over size. Learning Groups are coherent taught or practised curricula, not",
-  "collections of Skills that happen to be useful to the same Profession.",
+  "justification — **except for combat, which the Product Owner has made an explicit exception**: a larger,",
+  "choice-heavy combat group is *desirable*, because it makes broad investment in one narrow competence",
+  "domain economically viable. The three groups at five are therefore not tolerated, they are intended, and",
+  "the build refuses any other group that grows to five. Fixed purchase burden is reported separately from",
+  "player-selected slot breadth, and coherence takes precedence over size. Learning Groups are coherent",
+  "taught or practised curricula, not collections of Skills that happen to be useful to the same Profession.",
   "",
   `Shape: ${catalogue.manifest.groupsInPreferredCentre} in the 3-4 centre, ` +
     `${catalogue.manifest.groupsAtTwo} at two, ` +
@@ -140,15 +142,20 @@ groupLines.push(
   "  family. M04 is its missile counterpart. F30 stays fixed because the tradition is defined by its weapon.",
   "  M11 (Riding, Mounted Combat) and M12 (Lance, Formation Fighting) are the two focused practices that",
   "  replace the oversized F32; a mounted Profession reaches its sidearm through M01 like anyone else.",
-  "- **Broad.** M02, M03 and M05 buy economical breadth and are deliberately at five. Their pools are",
-  "  context-specific and **cross category**: M02 offers Brawling and Throwing beside the melee families,",
-  "  because a close-quarters school genuinely teaches the grapple and the thrown weapon; M03 offers",
-  "  Throwing and the Sling, because a close-order unit issues skirmishing arms alongside the line weapon.",
+  "- **Broad.** M02, M03 and M05 are large and choice-heavy under the Product Owner's explicit combat",
+  "  exception. Each was re-examined under that exception rather than defended against the 5+ rule: none",
+  "  had been trimmed to reach a number, and none is now apologised for. Their pools are context-specific",
+  "  and **cross category**: M02 offers Brawling and Throwing beside the melee families, because a",
+  "  close-quarters school genuinely teaches the grapple and the thrown weapon; M03 offers Throwing and the",
+  "  Sling, because a close-order unit issues skirmishing arms alongside the line weapon. The exception is",
+  "  enforced as an allowlist, so it cannot silently spread to a non-combat group.",
   "- **Brawling is no longer fixed in any weapon course.** It sits in the broad pool, where a learner takes",
   "  it because the school teaches it, not as an unexamined surcharge on every melee curriculum.",
   "- **Combat Experience is out of every instruction group.** It is experiential competence from credible",
-  "  real combat or field exposure, and it now comes only from M06 Campaign service experience and K23",
-  "  Coercive service practice. A Weapon Instructor who has never been in a fight no longer acquires it.",
+  "  real combat or field exposure, and it comes only from M06 Campaign service experience and K23",
+  "  Coercive service practice. A Weapon Instructor who has never been in a fight does not acquire it. The",
+  "  containment is enforced: the build refuses any other group that teaches it, and refuses either of",
+  "  those two if it stops doing so. The route audit is in the [Professions report](./professions-v2.md).",
   "",
   "## Group notes",
   "",
@@ -178,6 +185,73 @@ familyLines.push(
   "",
   `All ${catalogue.manifest.coreRoutes} path/core-route pairs are satisfied by the authored content. ` +
     `${catalogue.manifest.coreRoutesBlocked} core route is recorded as blocked on an external question.`,
+  "",
+  "## Core minimality",
+  "",
+  "A core states what a Profession is not that Profession without — enough for identity, never a rigid",
+  "class build. Every declared core route is audited against that, and the build now refuses any core that",
+  `requires more than two things in total. Largest core in the catalogue: ` +
+    `${Math.max(...catalogue.coreRoutes.map((row) => row.groupIds.length + row.skillIds.length))} requirement(s). ` +
+    `${catalogue.coreRoutes.filter((row) => row.groupIds.length + row.skillIds.length === 1).length} of ` +
+    `${catalogue.coreRoutes.length} path/core pairs are a single Learning Group.`,
+  "",
+  "A Profession may declare a small set of alternative core routes, of which one must be satisfied. None",
+  "is needed today: where the defining training genuinely differs, the difference is carried by a track",
+  "with its own core, which is the same latitude expressed as a named player-visible variant.",
+  "",
+  "## Track discipline",
+  "",
+  "A track is a **named player-visible curriculum variant representing a materially different form of the",
+  "occupation** — not a weapon, Skill or equipment choice, and not a restatement of something the Learning",
+  "Groups already say. The audit applies one mechanisable test: **a track must declare a core route of its",
+  "own.** If the defining training does not differ, the variant is a route choice and belongs in the",
+  "Profession's own group list. The build refuses a track that declares no core.",
+  "",
+  `Result: ${catalogue.families.filter((family) => family.tracks?.length).length} of ` +
+    `${catalogue.manifest.families} Professions keep tracks, carrying ` +
+    `${catalogue.families.reduce((sum, family) => sum + (family.tracks?.length ?? 0), 0)} tracks between them. ` +
+    `Valid paths fall to ${catalogue.manifest.validPaths}.`,
+  "",
+  "| Profession | Tracks before | Tracks after | Why |",
+  "| --- | ---: | ---: | --- |",
+  "| P09 Sailor and Boat Worker | 2 | 2 | Kept. Inshore boat work and rigged-vessel deck service have different defining training — N01 against F09 — so each track carries its own core. |",
+  "| P31 Surgeon | 2 | 2 | Kept. The civil operative surgeon and the field surgeon are defined by different apprenticeships, G18 against F29, and only the field surgeon has an authored route to combat exposure. |",
+  "| P14 Guard, Watcher and Escort | 2 | 0 | Retired. The tracks differed only in which combat group the guard bought; M01 and F30 are now both openly available routes. |",
+  "| P22 Soldier | 4 | 0 | Retired. All four differed only in which combat Learning Group they bought — contingent drill, formation drill, the issued missile arm, the longbow tradition. The Soldier is one identity whose core is repeated service in the field. |",
+  "| P24 Military Scout | 2 | 0 | Retired. Foot and mounted scouting differed only by whether the scout was given a horse, which G05 already says. |",
+  "| P25 Military Commander | 3 | 0 | Retired. Foot, mounted and communal command differed only in the combat groups shared with the command. |",
+  "| P26 Military Quartermaster | 2 | 0 | Retired. Neither refined the defining core; G12 and M01 state the difference themselves. |",
+  "| P82 Weapon Instructor | 3 | 0 | Retired. The subject an arms master teaches is a weapon choice, already expressed by M02, M05 and F30. The narrow-by-design exemption the one-tradition fencing track needed is gone with it. |",
+  "",
+  "The Soldier collapse is the ruling applied at its sharpest, and it is deliberate: breadth that used to be",
+  "split across four near-identical tracks is now what the breadth ruling actually asks for — one identity",
+  "with access to several coherent Learning Groups.",
+  "",
+  "## Combat Experience route audit",
+  "",
+  "Combat Experience is experiential competence from credible real combat or field exposure. Weapon",
+  "instruction, fencing, drill and advanced combat training do not grant it. It is reachable only through",
+  "M06 Campaign service experience and K23 Coercive service practice, and a Profession may expose it only",
+  "through an authored experiential route that explains the exposure. Every path that reaches it is listed",
+  "here; there are no others, and the build enforces that.",
+  "",
+  "| Path | Route group | Authored route |",
+  "| --- | --- | --- |",
+  ...catalogue.paths
+    .filter((path) => path.fixedSkillIds.includes("combat_experience"))
+    .map((path) => {
+      const family = catalogue.families.find(
+        (candidate) => candidate.code === path.professionCode,
+      )!;
+      const bodies = [family, ...(family.tracks ?? [])];
+      const route = bodies
+        .flatMap((body) => body.groups ?? [])
+        .find((candidate) => candidate.groupId === "M06" || candidate.groupId === "K23")!;
+      return `| ${family.code} ${family.name} — ${path.pathName} | ${route.groupId} | *${route.route}* |`;
+    }),
+  "",
+  "Professions that train hard and fight rarely are the point of the audit: the Weapon Instructor, the",
+  "Guard, the Military Quartermaster and the civil Surgeon reach no Combat Experience by any route.",
   "",
   "## Cost invariants",
   "",
@@ -305,7 +379,7 @@ const breadthLines = [
           (row) => `| ${row.professionCode} | ${row.pathName} | ${row.effectiveBreadthNominal} |`,
         ),
       ].join("\n")
-    : "None, other than paths explicitly marked narrow by design.",
+    : "None. Every valid path is at or above the coherence-review floor of seven.",
   "",
   "## Group-size distribution, before and after",
   "",
@@ -336,21 +410,6 @@ const breadthLines = [
   `The first draft carried 283 direct Profession Skill grants; ${catalogue.manifest.directSkillOpportunities} remain. ` +
     "The withdrawals and the reasons for each retention are recorded in the [direct-grant review](./direct-grant-review.md).",
   "",
-  "## Paths marked narrow by design",
-  "",
-  "| Profession | Path | Effective breadth | Why the narrowness is legitimate |",
-  "| --- | --- | ---: | --- |",
-  ...catalogue.families
-    .filter((family) => family.narrowByDesign)
-    .flatMap((family) =>
-      catalogue.paths
-        .filter((path) => path.professionCode === family.code && path.effectiveBreadthNominal < 10)
-        .map(
-          (path) =>
-            `| ${family.code} ${family.name} | ${path.pathName} | ${path.effectiveBreadthNominal} | ${family.note ?? ""} |`,
-        ),
-    ),
-  "",
 ];
 writeFileSync(join(outDir, "breadth-analysis.md"), breadthLines.join("\n"));
 
@@ -370,8 +429,18 @@ const categoryLines = [
   "Skill categories are **broad, semantically predictable human browse categories**. They describe **what",
   "the competency is**, never where or how it was learned. Two consequences follow, and both are applied",
   "here: placement must be predictable enough that a player looking for a competency guesses the right",
-  "category first, and narrow categories must not proliferate — sixteen categories cover all 157",
+  "category first, and narrow categories must not proliferate — fourteen categories cover all 157",
   "competencies.",
+  "",
+  "The roster is **simplified** under the ruling's new latitude, which releases it from preserving awkward",
+  "current categories for compatibility. `Mental` held only Meditation and Mnemonics: two members is",
+  "proliferation, and neither name points a player at the word. Meditation joins `mystical` beside the",
+  "contemplative competencies; Mnemonics joins `knowledge`. `High society` described a milieu — who has",
+  "access — rather than what a competency is: Heraldry joins `knowledge` as the body of lore it is, and",
+  "Politics and Courtly Protocol join `social`. One arbitrary placement is corrected: Agriculture &",
+  "Husbandry defaulted to `trade`, which split the living-animal competencies between two categories, so",
+  "it now defaults to `fieldcraft`, with Cart Driving overridden back to `trade` as the transport trade it",
+  "is. The build refuses a retired category, and refuses any category that falls below four competencies.",
   "",
   "`Special access` is therefore removed as a category. It describes how a competency was reached, not what",
   "kind of competency it is: the same Skill reached through a Learning Group and through a direct Profession",
@@ -505,7 +574,6 @@ writeFileSync(
         proposed: analysis.proposed,
         proposedWorstCase: analysis.proposedMinimum,
         reviewPrompts: analysis.reviewPrompts,
-        narrowByDesignPaths: analysis.narrowByDesignPaths,
       },
       groupSizes: catalogue.groupSizes,
       groupSizeDistribution: catalogue.groupSizeDistribution,
