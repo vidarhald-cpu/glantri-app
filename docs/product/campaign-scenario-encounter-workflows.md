@@ -106,6 +106,12 @@ Campaign players.
 
 The Scenario workspace answers: "Who is concretely in this story situation?"
 
+The approved successor target promotes this surface to the canonical Scenario
+Play Workspace, with the active Encounter as contextual state within it. See
+[Scenario Play Workspace](../architecture/scenario-play-workspace.md). That
+contract does not authorize implementation and does not change the current
+behavior described below.
+
 GM responsibilities:
 
 - Maintain the scenario title, summary, and GM-facing notes.
@@ -167,6 +173,13 @@ projection.
 ## Encounter Workspace
 
 The Encounter workspace answers: "Who is present in this specific moment, and what is currently happening?"
+
+For the in-play surface, the approved successor target is that play happens in
+the Scenario Play Workspace and the active Encounter is contextual state within
+it rather than a separate play destination. The GM Encounter tooling described
+below is not removed by that contract; see
+[Scenario Play Workspace §13](../architecture/scenario-play-workspace.md#13-relationship-to-existing-contracts)
+and decision PO-SPW-3.
 
 GM responsibilities:
 
