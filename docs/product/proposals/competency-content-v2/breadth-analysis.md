@@ -28,15 +28,15 @@ Both sides of the comparison are measured by the same code path, so the before/a
 
 | Measure              | Approved catalogue | Proposal (nominal) | Proposal (worst case) |
 | -------------------- | -----------------: | -----------------: | --------------------: |
-| Valid paths          |                 99 |                 96 |                    96 |
-| Minimum              |                  0 |                  6 |                     5 |
+| Valid paths          |                 99 |                 86 |                    86 |
+| Minimum              |                  0 |                  7 |                     5 |
 | Lower quartile       |                  1 |                  7 |                     7 |
 | Median               |                  3 |                  8 |                     8 |
-| Upper quartile       |                  7 |                 10 |                    10 |
-| Maximum              |                 17 |                 15 |                    14 |
-| Mean                 |               4.39 |               8.86 |                  8.34 |
-| Paths at or above 10 |                 10 |                 32 |                    28 |
-| Paths below 10       |                 89 |                 64 |                    68 |
+| Upper quartile       |                  7 |                 10 |                     9 |
+| Maximum              |                 17 |                 16 |                    14 |
+| Mean                 |               4.39 |               8.84 |                  8.28 |
+| Paths at or above 10 |                 10 |                 25 |                    22 |
+| Paths below 10       |                 89 |                 61 |                    64 |
 
 The worst-case column assumes every single slot selection duplicates a Skill the path already teaches.
 That never happens by design — no slot offers a Skill its own group already fixes — but it bounds the figure honestly.
@@ -61,28 +61,38 @@ That never happens by design — no slot offers a Skill its own group already fi
 | Approved  |                             13 |           1 |
 | Approved  |                             14 |           1 |
 | Approved  |                             17 |           1 |
-| Proposal  |                              6 |           1 |
-| Proposal  |                              7 |          26 |
-| Proposal  |                              8 |          23 |
-| Proposal  |                              9 |          14 |
-| Proposal  |                             10 |          14 |
-| Proposal  |                             11 |          10 |
-| Proposal  |                             12 |           4 |
-| Proposal  |                             13 |           2 |
+| Proposal  |                              7 |          27 |
+| Proposal  |                              8 |          21 |
+| Proposal  |                              9 |          13 |
+| Proposal  |                             10 |          11 |
+| Proposal  |                             11 |           6 |
+| Proposal  |                             12 |           3 |
+| Proposal  |                             13 |           1 |
 | Proposal  |                             14 |           1 |
 | Proposal  |                             15 |           1 |
+| Proposal  |                             16 |           2 |
 
 ## Paths flagged for coherence review (below 7)
 
-None, other than paths explicitly marked narrow by design.
+None. Every valid path is at or above the coherence-review floor of seven.
+
+## Group-size distribution, before and after
+
+The approved catalogue is measured by counting each approved group's base-Skill members; the proposal is
+measured as fixed members plus slot selections.
+
+| Effective size | Approved groups | Proposed groups |
+| -------------: | --------------: | --------------: |
+|              1 |               4 |               0 |
+|              2 |              36 |              36 |
+|              3 |              10 |              45 |
+|              4 |               5 |              12 |
+|              5 |               1 |               3 |
+|              6 |               1 |               0 |
+|              7 |               2 |               0 |
+
+Approved: 59 groups. Proposal: 96 groups — 57 in the 3-4 preferred centre, 36 at two, 0 at one, 3 at five or more. Largest fixed purchase burden of any one group: 4.
 
 ## Direct-grant review
 
-The first draft carried 283 direct Profession Skill grants; 119 remain. The withdrawals and the reasons for each retention are recorded in the [direct-grant review](./direct-grant-review.md).
-
-## Paths marked narrow by design
-
-| Profession            | Path                  | Effective breadth | Why the narrowness is legitimate                                                                  |
-| --------------------- | --------------------- | ----------------: | ------------------------------------------------------------------------------------------------- |
-| P82 Weapon Instructor | Fencing master        |                 6 | The fencing-master path is deliberately narrow: a single named tradition is the whole occupation. |
-| P82 Weapon Instructor | Missile weapon master |                 8 | The fencing-master path is deliberately narrow: a single named tradition is the whole occupation. |
+The first draft carried 283 direct Profession Skill grants; 104 remain. The withdrawals and the reasons for each retention are recorded in the [direct-grant review](./direct-grant-review.md).
