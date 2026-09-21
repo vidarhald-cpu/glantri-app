@@ -93,11 +93,17 @@ groupLines.push(
   "",
   "## Group size review",
   "",
-  "Guidance: a normal centre of 3-4 effective base Skills; 2 is entirely acceptable where competencies",
-  "are genuinely learned together; 1 normally means a direct Skill route or a broader practice fits",
-  "better; 5+ needs positive justification and 6+ should be advanced, compound or materially",
-  "choice-driven. Fixed purchase burden is reported separately from player-selected slot breadth, and",
-  "coherence takes precedence over size.",
+  "Product Owner ruling: **3-4 effective base Skills is the preferred centre**. 2 is valid where the",
+  "competencies are genuinely learned together. 1 normally requires reconsideration. 5+ requires positive",
+  "justification, and **combat groups may deliberately be larger** where they buy economical broad combat",
+  "competence. Fixed purchase burden is reported separately from player-selected slot breadth, and",
+  "coherence takes precedence over size. Learning Groups are coherent taught or practised curricula, not",
+  "collections of Skills that happen to be useful to the same Profession.",
+  "",
+  `Shape: ${catalogue.manifest.groupsInPreferredCentre} in the 3-4 centre, ` +
+    `${catalogue.manifest.groupsAtTwo} at two, ` +
+    `${catalogue.manifest.groupsNeedingReconsideration} at one, ` +
+    `${catalogue.manifest.groupsAtFiveOrMore} at five or more.`,
   "",
   "| Effective size | Groups |",
   "| ---: | ---: |",
@@ -108,24 +114,41 @@ groupLines.push(
   "",
   `Largest fixed purchase burden of any single group: ${catalogue.manifest.maximumFixedGroupBurden}.`,
   "",
-  "### Tail review — every group at 1-2 and 5+",
+  "### Tail review — every group at 1 and at 5+",
   "",
-  "| Group | Name | Fixed | Slot | Effective | Finding |",
-  "| --- | --- | ---: | ---: | ---: | --- |",
+  "| Group | Name | Fixed | Slot | Effective | Shape | Justification |",
+  "| --- | --- | ---: | ---: | ---: | --- | --- |",
   ...catalogue.groupSizes
-    .filter((row) => row.effectiveSize <= 2 || row.effectiveSize >= 5)
+    .filter((row) => row.shape === "reconsider" || row.shape === "justified-large")
     .map(
       (row) =>
-        `| ${row.id} | ${row.name} | ${row.fixedSize} | ${row.slotSize} | ${row.effectiveSize} | ${
-          row.effectiveSize >= 5
-            ? "Above band: advanced or compound and materially choice-driven."
-            : "At two: reviewed and retained — the pair is genuinely learned together."
-        } |`,
+        `| ${row.id} | ${row.name} | ${row.fixedSize} | ${row.slotSize} | ${row.effectiveSize} | ${row.shape} | ${row.justification ?? ""} |`,
     ),
   "",
-  "Two one-Skill groups were found and changed rather than left: F22 gained Plant Lore because seasonal",
-  "kitchen work genuinely teaches what is available when, and F16 was retired because its only base Skill",
-  "was Research, which both its users already reach elsewhere. No group is forced into the 3-4 centre.",
+  "No group teaches one effective base Skill. The two that did are retired by ruling: **F16 Lineage",
+  "investigation apprenticeship** and **F22 Seasonal kitchen and preservation practice** were both a single",
+  "base Skill wrapped around Specialization access. Their Specialization routes are preserved — Genealogy",
+  "through P67 and P76, whose parent History comes from K10, and Food Preservation through C10, whose",
+  "parent Cooking is taught in the same group. No group is forced into the 3-4 centre.",
+  "",
+  "## Combat group structure",
+  "",
+  "Focused and broad combat groups coexist, and the overlap between them is intentional: a Profession's",
+  "breadth is deduplicated, so a Profession that reaches the same weapon family by two routes pays once.",
+  "",
+  "- **Focused.** M01 is the package the ruling describes — Dodge, Parry and one chosen melee weapon",
+  "  family. M04 is its missile counterpart. F30 stays fixed because the tradition is defined by its weapon.",
+  "  M11 (Riding, Mounted Combat) and M12 (Lance, Formation Fighting) are the two focused practices that",
+  "  replace the oversized F32; a mounted Profession reaches its sidearm through M01 like anyone else.",
+  "- **Broad.** M02, M03 and M05 buy economical breadth and are deliberately at five. Their pools are",
+  "  context-specific and **cross category**: M02 offers Brawling and Throwing beside the melee families,",
+  "  because a close-quarters school genuinely teaches the grapple and the thrown weapon; M03 offers",
+  "  Throwing and the Sling, because a close-order unit issues skirmishing arms alongside the line weapon.",
+  "- **Brawling is no longer fixed in any weapon course.** It sits in the broad pool, where a learner takes",
+  "  it because the school teaches it, not as an unexamined surcharge on every melee curriculum.",
+  "- **Combat Experience is out of every instruction group.** It is experiential competence from credible",
+  "  real combat or field exposure, and it now comes only from M06 Campaign service experience and K23",
+  "  Coercive service practice. A Weapon Instructor who has never been in a fight no longer acquires it.",
   "",
   "## Group notes",
   "",
@@ -147,9 +170,36 @@ const familyLines: string[] = [
     "Specializations never count toward base-Skill breadth.",
   "",
 ];
+familyLines.push(
+  "Every Profession declares at least one **defining core route**: the training it is not that Profession",
+  "without. A path is valid only when it satisfies one of its applicable core routes; a track's own core",
+  "routes refine or replace its parent's. This is an annotation over Learning Groups and directly taught",
+  "Skills that already exist, not a separate mechanism, and it needs no GM override.",
+  "",
+  `All ${catalogue.manifest.coreRoutes} path/core-route pairs are satisfied by the authored content. ` +
+    `${catalogue.manifest.coreRoutesBlocked} core route is recorded as blocked on an external question.`,
+  "",
+  "## Cost invariants",
+  "",
+  "Overlapping routes never require duplicate payment for the same competency, and final cost does not",
+  "depend on purchase order. Across all valid paths the routes name a competency more than once on",
+  `${catalogue.costInvariants.reduce((sum, row) => sum + row.duplicatesAvoided, 0)} occasions; every one is ` +
+    "charged exactly once. Accumulating each path's routes in reverse order yields the identical charged",
+  "set, which is what order-independence means here. Both properties are enforced by the build, not asserted",
+  "in prose: a catalogue that broke either would fail to build.",
+  "",
+);
 for (const family of catalogue.families) {
   const paths = catalogue.paths.filter((path) => path.professionCode === family.code);
   familyLines.push(`### ${family.code} — ${family.name}`, "");
+  const cores = catalogue.coreRoutes.filter((row) => row.professionCode === family.code);
+  const distinctCores = [...new Map(cores.map((row) => [row.coreRouteId, row])).values()];
+  for (const core of distinctCores)
+    familyLines.push(
+      `- **Core route** — *${core.label}*: ${[...core.groupIds, ...core.skillIds.map((id) => name(id))].join(", ")}${
+        core.blockedBy ? ` — **blocked:** ${core.blockedBy}` : ""
+      }`,
+    );
   if (family.groups?.length)
     familyLines.push(...family.groups.map((route) => `- **${route.groupId}** — *${route.route}*`));
   if (family.skillIds?.length || family.specializationIds?.length)
@@ -186,6 +236,12 @@ for (const family of catalogue.families) {
 writeFileSync(join(outDir, "professions-v2.md"), familyLines.join("\n"));
 
 /* --- Breadth analysis --------------------------------------------------------------------- */
+const approvedGroupSizeDistribution: Record<number, number> = {};
+for (const group of targetLearningGroupCatalogue.groups) {
+  const size = group.members.filter((member) => member.kind === "base-skill").length;
+  approvedGroupSizeDistribution[size] = (approvedGroupSizeDistribution[size] ?? 0) + 1;
+}
+
 const distributionRows = (label: string, dist: Record<number, number>) => {
   const keys = Object.keys(dist)
     .map(Number)
@@ -251,6 +307,30 @@ const breadthLines = [
       ].join("\n")
     : "None, other than paths explicitly marked narrow by design.",
   "",
+  "## Group-size distribution, before and after",
+  "",
+  "The approved catalogue is measured by counting each approved group's base-Skill members; the proposal is",
+  "measured as fixed members plus slot selections.",
+  "",
+  "| Effective size | Approved groups | Proposed groups |",
+  "| ---: | ---: | ---: |",
+  ...[
+    ...new Set([
+      ...Object.keys(approvedGroupSizeDistribution).map(Number),
+      ...Object.keys(catalogue.groupSizeDistribution).map(Number),
+    ]),
+  ]
+    .sort((a, b) => a - b)
+    .map(
+      (size) =>
+        `| ${size} | ${approvedGroupSizeDistribution[size] ?? 0} | ${catalogue.groupSizeDistribution[size] ?? 0} |`,
+    ),
+  "",
+  `Approved: ${targetLearningGroupCatalogue.groups.length} groups. Proposal: ${catalogue.manifest.groups} groups — ` +
+    `${catalogue.manifest.groupsInPreferredCentre} in the 3-4 preferred centre, ${catalogue.manifest.groupsAtTwo} at two, ` +
+    `${catalogue.manifest.groupsNeedingReconsideration} at one, ${catalogue.manifest.groupsAtFiveOrMore} at five or more. ` +
+    `Largest fixed purchase burden of any one group: ${catalogue.manifest.maximumFixedGroupBurden}.`,
+  "",
   "## Direct-grant review",
   "",
   `The first draft carried 283 direct Profession Skill grants; ${catalogue.manifest.directSkillOpportunities} remain. ` +
@@ -287,10 +367,16 @@ const categoryLines = [
   "",
   "## Skill categories",
   "",
-  "`Special access` is removed as a category. It describes how a competency was reached, not what kind",
-  "of competency it is: the same Skill reached through a Learning Group and through a direct Profession",
-  "route belongs to the same category. The `language` category is preserved and reserved for the spoken",
-  "and written competencies below.",
+  "Skill categories are **broad, semantically predictable human browse categories**. They describe **what",
+  "the competency is**, never where or how it was learned. Two consequences follow, and both are applied",
+  "here: placement must be predictable enough that a player looking for a competency guesses the right",
+  "category first, and narrow categories must not proliferate — sixteen categories cover all 157",
+  "competencies.",
+  "",
+  "`Special access` is therefore removed as a category. It describes how a competency was reached, not what",
+  "kind of competency it is: the same Skill reached through a Learning Group and through a direct Profession",
+  "route belongs to the same category. The `language` category is preserved and reserved for the spoken and",
+  "written competencies below.",
   "",
   "Applying this to the runtime enum, `apps/web/src/lib/chargen/chargenBrowse.ts` and",
   "`getPlayerFacingSkillCategoryId({ preferDirectProfession })` is deliberately out of scope for this",
@@ -304,8 +390,20 @@ const categoryLines = [
   "",
   "## Civilization languages",
   "",
-  "Every canonical Civilization receives a spoken competency, and a written one unless it is explicitly",
-  "authored as having no written tradition. Real-world analogue names are replaced by Glantri names.",
+  "Every canonical Civilization receives a **rollable spoken competency**, and a **rollable written**",
+  "competency unless it is explicitly authored as having no written tradition. Written competence is what a",
+  "reading roll is made against.",
+  "",
+  "Naming follows the Product Owner ruling: the canonical Glantri name where one is established, and the",
+  "appropriate **historical** name where none is. No Glantri name is invented and no linguistic descent is",
+  "asserted. The previous revision's invented names are withdrawn — **Kethran, Old Latian, Palace Scyrian,",
+  "Kaldan and Aspardic**, and the **Harbour, Hill, Palace, Wedge and Chancery** scripts. Where a written",
+  "tradition has an established Glantri language name but no established script name, the competency is named",
+  "for the language alone rather than given an invented script.",
+  "",
+  "**Olog is flagged for later correction and deliberately not corrected here:** it appears modelled from a",
+  "historical stage somewhat later and more advanced than the intended Glantri Olog society. That is a",
+  "separate follow-up, not part of this reconciliation.",
   "",
   "| Civilization | Spoken | Written | Replaces | Needs a Product Owner naming ruling |",
   "| --- | --- | --- | --- | --- |",
@@ -336,6 +434,32 @@ const grantLines = [
   "The first draft of this proposal was authored under breadth pressure and pushed every ordinary path",
   "to at least ten. The Product Owner inverted that pressure: author coherent occupational training",
   "first, then read breadth as a diagnostic. This is the honest accounting of the result.",
+  "",
+  "This revision applies a second ruling on top of it: **direct Profession Skills are exceptional**",
+  "**occupational training routes, not a mechanism for reaching the breadth signal**, and high direct-Skill",
+  "counts are to be reviewed — a coherent cluster belongs in a Learning Group. Four such clusters were found",
+  "and moved: the Guard's watch duty into **K24**, the Thief's street theft into **K25**, the Diviner's and",
+  "Religious Practitioner's contemplative discipline into **K22**, and the Weapon Instructor's salle into",
+  "**M10**.",
+  "",
+  (() => {
+    const counts = catalogue.families.map((family) => ({
+      code: family.code,
+      name: family.name,
+      count:
+        (family.skillIds?.length ?? 0) +
+        (family.tracks ?? []).reduce((sum, track) => sum + (track.skillIds?.length ?? 0), 0),
+    }));
+    const high = counts.filter((row) => row.count >= 3).sort((a, b) => b.count - a.count);
+    return (
+      `Highest remaining direct-Skill count: ${Math.max(...counts.map((row) => row.count))}. ` +
+      (high.length
+        ? `${high.length} Profession(s) still carry three or more — ${high
+            .map((row) => `${row.code} ${row.name} (${row.count})`)
+            .join(", ")} — and each is argued in the table below rather than trimmed to a number.`
+        : "No Profession carries three or more.")
+    );
+  })(),
   "",
   `Direct Skill grants: **283 before, ${catalogue.manifest.directSkillOpportunities} after** — ` +
     `${competencyContentV2DirectGrantDecisions.reduce((sum, row) => sum + row.removedFrom.length, 0)} withdrawn.`,

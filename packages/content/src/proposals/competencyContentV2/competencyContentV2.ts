@@ -70,7 +70,14 @@ export interface BreadthDistribution {
 const EFFECTIVE_BREADTH_SIGNAL = 10;
 /** Below this, a path is flagged for a coherence review — not marked defective. */
 const BREADTH_REVIEW_FLOOR = 7;
-/** Learning Group effective sizes outside this band are reviewed as diagnostics, not corrected on sight. */
+/**
+ * The Product Owner's group-shape ruling, expressed as bands:
+ * 3-4 is the preferred centre, 2 is valid where genuinely coherent, 1 normally requires
+ * reconsideration, and 5+ requires positive justification — which combat groups may legitimately
+ * carry where they provide economical broad combat competence.
+ */
+const GROUP_SIZE_PREFERRED_CENTRE: readonly [number, number] = [3, 4];
+/** Retained for callers that still read the earlier diagnostic band. */
 const GROUP_SIZE_REVIEW_BAND: readonly [number, number] = [2, 4];
 
 function fail(message: string): never {
@@ -215,7 +222,22 @@ export interface GroupSizeRow {
   slotSize: number;
   effectiveSize: number;
   band: "below-band" | "in-band" | "above-band";
+  /** The ruling's own shape vocabulary. */
+  shape: "reconsider" | "acceptable-pair" | "preferred-centre" | "justified-large";
   justification?: string;
+}
+
+/** One path's proof that overlapping routes are charged once and in no particular order. */
+export interface CostInvariantRow {
+  pathId: string;
+  /** Total fixed Skill appearances across every route on the path, before deduplication. */
+  chargedAppearances: number;
+  /** Distinct Skills the learner actually pays for. */
+  distinctCharged: number;
+  /** Appearances that a naive per-route charge would have billed twice. */
+  duplicatesAvoided: number;
+  /** True when accumulating the routes in reverse order yields the identical charged set. */
+  orderIndependent: boolean;
 }
 
 export interface CompetencyContentV2Catalogue {
@@ -227,6 +249,17 @@ export interface CompetencyContentV2Catalogue {
   categories: { competencyId: string; name: string; categoryId: V2PlayerFacingCategoryId }[];
   groupSizes: GroupSizeRow[];
   groupSizeDistribution: Record<number, number>;
+  coreRoutes: {
+    professionCode: string;
+    pathId: string;
+    coreRouteId: string;
+    label: string;
+    groupIds: string[];
+    skillIds: string[];
+    satisfied: boolean;
+    blockedBy?: string;
+  }[];
+  costInvariants: CostInvariantRow[];
   coverage: {
     baseSkills: number;
     baseSkillsInAGroup: number;
@@ -249,6 +282,13 @@ export interface CompetencyContentV2Catalogue {
     groupsWithSelectionSlots: number;
     groupsBelowSizeBand: number;
     groupsAboveSizeBand: number;
+    groupsInPreferredCentre: number;
+    groupsAtTwo: number;
+    groupsNeedingReconsideration: number;
+    groupsAtFiveOrMore: number;
+    coreRoutes: number;
+    coreRoutesBlocked: number;
+    duplicatePaymentsAvoided: number;
     maximumFixedGroupBurden: number;
     selectionSlots: number;
     families: number;
@@ -353,6 +393,17 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
     specializationId: string;
     parentId: string;
   }[] = [];
+  const coreRoutes: {
+    professionCode: string;
+    pathId: string;
+    coreRouteId: string;
+    label: string;
+    groupIds: string[];
+    skillIds: string[];
+    satisfied: boolean;
+    blockedBy?: string;
+  }[] = [];
+  const costInvariants: CostInvariantRow[] = [];
   let groupOpportunities = 0;
   let directSkillOpportunities = 0;
   let directSpecializationOpportunities = 0;
@@ -369,6 +420,8 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
       const fixed = new Set<string>();
       const reachableSpecializations = new Set<string>();
       const groupIds: string[] = [];
+      /** One entry per route on this path: exactly what that route teaches, before deduplication. */
+      const routeSkillLists: string[][] = [];
       let slotSelections = 0;
 
       for (const body of bodies) {
@@ -384,11 +437,13 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
           if (!route.route.trim()) fail(`${family.code} route to ${route.groupId} has no label`);
           if (groupIds.includes(group.id)) fail(`${id} reaches ${group.id} twice`);
           groupIds.push(group.id);
+          routeSkillLists.push([...group.fixedSkillIds]);
           for (const skillId of group.fixedSkillIds) fixed.add(skillId);
           for (const specializationId of group.specializationIds ?? [])
             reachableSpecializations.add(specializationId);
           for (const slot of group.selectionSlots ?? []) slotSelections += slot.chooseCount;
         }
+        if (body.skillIds?.length) routeSkillLists.push([...body.skillIds]);
         for (const skillId of body.skillIds ?? []) {
           const entry =
             entries.get(skillId) ?? fail(`${family.code} names unknown Skill ${skillId}`);
@@ -409,10 +464,72 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
       }
 
       for (const specializationId of reachableSpecializations) {
+        /* Access is not a grant: a reachable Specialization is still purchased separately, and its
+           immediate parent Skill must be reachable on the same path for the purchase to be legal. */
+        if (fixed.has(specializationId))
+          fail(`${id} counts the Specialization ${specializationId} as taught base breadth`);
         const parentId = entries.get(specializationId)?.parent?.id;
         if (parentId && !fixed.has(parentId) && !reachableSpecializations.has(parentId))
           parentGaps.push({ professionCode: family.code, specializationId, parentId });
       }
+
+      /* Every Profession has at least one enforceable defining core route. A track's own list
+         refines or replaces its parent's. */
+      const applicableCores =
+        bodies
+          .slice()
+          .reverse()
+          .find((body) => (body.coreRoutes?.length ?? 0) > 0)?.coreRoutes ?? [];
+      if (!applicableCores.length) fail(`${id} declares no defining core route`);
+      const coreIds = new Set<string>();
+      let satisfiedCore = false;
+      for (const core of applicableCores) {
+        if (coreIds.has(core.id)) fail(`${id} repeats core route ${core.id}`);
+        coreIds.add(core.id);
+        if (!core.label.trim()) fail(`core route ${core.id} has no player-facing label`);
+        if (!core.groupIds.length && !(core.skillIds?.length ?? 0))
+          fail(`core route ${core.id} requires nothing`);
+        for (const groupId of core.groupIds)
+          if (!groupsById.has(groupId))
+            fail(`core route ${core.id} names unknown group ${groupId}`);
+        const met =
+          core.groupIds.every((groupId) => groupIds.includes(groupId)) &&
+          (core.skillIds ?? []).every((skillId) => fixed.has(skillId));
+        if (met) satisfiedCore = true;
+        coreRoutes.push({
+          professionCode: family.code,
+          pathId: id,
+          coreRouteId: core.id,
+          label: core.label,
+          groupIds: [...core.groupIds],
+          skillIds: [...(core.skillIds ?? [])],
+          satisfied: met,
+          blockedBy: core.blockedBy,
+        });
+      }
+      if (!satisfiedCore)
+        fail(`${id} satisfies none of its declared core routes; the Profession is unenforceable`);
+
+      /* Cost invariants: overlapping routes are charged once, and the charged set does not depend
+         on the order the routes are taken in. */
+      const forward = new Set<string>();
+      for (const list of routeSkillLists) for (const skillId of list) forward.add(skillId);
+      const backward = new Set<string>();
+      for (const list of [...routeSkillLists].reverse())
+        for (const skillId of [...list].reverse()) backward.add(skillId);
+      const orderIndependent =
+        forward.size === backward.size && [...forward].every((skillId) => backward.has(skillId));
+      if (!orderIndependent) fail(`${id} charges a different set depending on purchase order`);
+      if (forward.size !== fixed.size)
+        fail(`${id} charges a set that does not match its recorded breadth`);
+      const chargedAppearances = routeSkillLists.reduce((sum, list) => sum + list.length, 0);
+      costInvariants.push({
+        pathId: id,
+        chargedAppearances,
+        distinctCharged: fixed.size,
+        duplicatesAvoided: chargedAppearances - fixed.size,
+        orderIndependent,
+      });
 
       for (const skillId of fixed) {
         if (!skillRoutes.has(skillId)) skillRoutes.set(skillId, new Set());
@@ -518,12 +635,25 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
           : effectiveSize > GROUP_SIZE_REVIEW_BAND[1]
             ? ("above-band" as const)
             : ("in-band" as const),
+      shape:
+        effectiveSize <= 1
+          ? ("reconsider" as const)
+          : effectiveSize < GROUP_SIZE_PREFERRED_CENTRE[0]
+            ? ("acceptable-pair" as const)
+            : effectiveSize <= GROUP_SIZE_PREFERRED_CENTRE[1]
+              ? ("preferred-centre" as const)
+              : ("justified-large" as const),
       justification: group.note,
     };
   });
-  for (const row of groupSizes)
-    if (row.band !== "in-band" && !row.justification)
-      fail(`group ${row.id} sits outside the 2-4 size band with no stated justification`);
+  for (const row of groupSizes) {
+    if (row.shape === "reconsider" && !row.justification)
+      fail(
+        `group ${row.id} teaches one effective base Skill and states no reason to keep it as a group`,
+      );
+    if (row.shape === "justified-large" && !row.justification)
+      fail(`group ${row.id} is 5 or larger and states no justification`);
+  }
   const groupSizeDistribution: Record<number, number> = {};
   for (const row of groupSizes)
     groupSizeDistribution[row.effectiveSize] = (groupSizeDistribution[row.effectiveSize] ?? 0) + 1;
@@ -537,6 +667,8 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
     categories,
     groupSizes,
     groupSizeDistribution,
+    coreRoutes,
+    costInvariants,
     coverage: {
       baseSkills: baseSkills.length,
       baseSkillsInAGroup: baseSkills.filter((entry) => groupedSkillIds.has(entry.id)).length,
@@ -574,6 +706,13 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
         (sum, g) => sum + (g.selectionSlots?.length ?? 0),
         0,
       ),
+      groupsInPreferredCentre: groupSizes.filter((row) => row.shape === "preferred-centre").length,
+      groupsAtTwo: groupSizes.filter((row) => row.shape === "acceptable-pair").length,
+      groupsNeedingReconsideration: groupSizes.filter((row) => row.shape === "reconsider").length,
+      groupsAtFiveOrMore: groupSizes.filter((row) => row.shape === "justified-large").length,
+      coreRoutes: coreRoutes.length,
+      coreRoutesBlocked: coreRoutes.filter((row) => row.blockedBy).length,
+      duplicatePaymentsAvoided: costInvariants.reduce((sum, row) => sum + row.duplicatesAvoided, 0),
       families: competencyContentV2Families.length,
       validPaths: paths.length,
       groupOpportunities,
@@ -599,6 +738,8 @@ export interface CompetencyContentV2Analysis {
   }[];
   groupSizes: GroupSizeRow[];
   groupSizeDistribution: Record<number, number>;
+  coreRoutes: CompetencyContentV2Catalogue["coreRoutes"];
+  costInvariants: CostInvariantRow[];
   directGrantPolicy: readonly string[];
   directGrantDecisions: typeof competencyContentV2DirectGrantDecisions;
 }
@@ -637,6 +778,8 @@ export function analyseCompetencyContentV2(): CompetencyContentV2Analysis {
       })),
     groupSizes: catalogue.groupSizes,
     groupSizeDistribution: catalogue.groupSizeDistribution,
+    coreRoutes: catalogue.coreRoutes,
+    costInvariants: catalogue.costInvariants,
     directGrantPolicy: competencyContentV2DirectGrantPolicy,
     directGrantDecisions: competencyContentV2DirectGrantDecisions,
   };
@@ -647,5 +790,6 @@ export {
   BREADTH_REVIEW_FLOOR,
   competencyContentV2CivilizationLanguages,
   EFFECTIVE_BREADTH_SIGNAL,
+  GROUP_SIZE_PREFERRED_CENTRE,
   GROUP_SIZE_REVIEW_BAND,
 };

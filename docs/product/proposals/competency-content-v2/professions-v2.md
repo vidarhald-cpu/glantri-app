@@ -8,8 +8,24 @@
 
 All 84 approved Profession families are preserved. They yield 96 valid paths (the approved catalogue yields 99). Mutually exclusive tracks are evaluated separately; Specializations never count toward base-Skill breadth.
 
+Every Profession declares at least one **defining core route**: the training it is not that Profession
+without. A path is valid only when it satisfies one of its applicable core routes; a track's own core
+routes refine or replace its parent's. This is an annotation over Learning Groups and directly taught
+Skills that already exist, not a separate mechanism, and it needs no GM override.
+
+All 96 path/core-route pairs are satisfied by the authored content. 1 core route is recorded as blocked on an external question.
+
+## Cost invariants
+
+Overlapping routes never require duplicate payment for the same competency, and final cost does not
+depend on purchase order. Across all valid paths the routes name a competency more than once on
+102 occasions; every one is charged exactly once. Accumulating each path's routes in reverse order yields the identical charged
+set, which is what order-independence means here. Both properties are enforced by the build, not asserted
+in prose: a catalogue that broke either would fail to build.
+
 ### P01 — Hunter and Trapper
 
+- **Core route** — _Ordinary hunting apprenticeship_: G03
 - **G03** — _Ordinary hunting apprenticeship_
 - **F34** — _Trapline service_
 - **G04** — _Season away from settlement_
@@ -22,6 +38,7 @@ All 84 approved Profession families are preserved. They yield 96 valid paths (th
 
 ### P02 — Wild Plant Gatherer
 
+- **Core route** — _Knowing and preparing what grows wild_: G02
 - **G04** — _Seasonal collecting rounds_
 - **G02** — _Supplying and preparing for a remedy maker_
 - **G12** — _Selling the season's collection_
@@ -33,6 +50,7 @@ All 84 approved Profession families are preserved. They yield 96 valid paths (th
 
 ### P03 — Field and Caravan Guide
 
+- **Core route** — _Ordinary guiding service_: G04
 - **G04** — _Ordinary guiding service_
 - **G05** — _Mounted route service_
 - **F06** — _Caravan vehicle service_
@@ -41,10 +59,11 @@ All 84 approved Profession families are preserved. They yield 96 valid paths (th
 
 | Valid path              | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ----------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Field and Caravan Guide |                             11 |                        1 |                                       10 |
+| Field and Caravan Guide |                             10 |                        1 |                                        9 |
 
 ### P04 — Fisher
 
+- **Core route** — _Ordinary fishing-boat apprenticeship_: F10
 - **F10** — _Ordinary fishing-boat apprenticeship_
 - **N01** — _Working the family boat_
 - **G12** — _Selling the catch_
@@ -55,10 +74,11 @@ All 84 approved Profession families are preserved. They yield 96 valid paths (th
 
 ### P05 — Farmer
 
+- **Core route** — _Ordinary holding apprenticeship_: F08
 - **F08** — _Ordinary holding apprenticeship_
 - **F05** — _Keeping the holding's stock_
 - **F06** — _Carting to market_
-- **F22** — _Household kitchen and storing the season_
+- **C10** — _Household brewing and storing the season_
 - _Taught directly in the working year of the holding_: Weather Lore
 
 | Valid path | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
@@ -67,6 +87,7 @@ All 84 approved Profession families are preserved. They yield 96 valid paths (th
 
 ### P06 — Herd Keeper
 
+- **Core route** — _Ordinary stockkeeping apprenticeship_: F05
 - **F05** — _Ordinary stockkeeping apprenticeship_
 - **G05** — _Mounted herding service_
 - **G04** — _Seasonal movement with the herd_
@@ -79,6 +100,7 @@ All 84 approved Profession families are preserved. They yield 96 valid paths (th
 
 ### P07 — Animal Trainer and Falconer
 
+- **Core route** — _Falconry apprenticeship_: F07
 - **F07** — _Falconry apprenticeship_
 - **F05** — _Keeping the animals in condition_
 - **G05** — _Mounted work with trained animals_
@@ -91,6 +113,7 @@ All 84 approved Profession families are preserved. They yield 96 valid paths (th
 
 ### P08 — Driver and Teamster
 
+- **Core route** — _Ordinary driving apprenticeship_: F06
 - **F06** — _Ordinary driving apprenticeship_
 - **G04** — _Long-distance caravan service_
 - **G05** — _Riding with the team_
@@ -102,6 +125,8 @@ All 84 approved Profession families are preserved. They yield 96 valid paths (th
 
 ### P09 — Sailor and Boat Worker
 
+- **Core route** — _Working an open boat under sail and oar_: N01
+- **Core route** — _Deck service in a rigged vessel_: F09
 - **M01** — _Rough shipboard fighting instruction_
 - _Taught directly by the crew one sails with_: Swimming
 
@@ -112,13 +137,14 @@ Mutually exclusive tracks:
 
 | Valid path              | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ----------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Small-craft boat worker |                              8 |                        1 |                                        7 |
-| Rigged-vessel deck hand |                              9 |                        1 |                                        8 |
+| Small-craft boat worker |                              7 |                        1 |                                        6 |
+| Rigged-vessel deck hand |                              8 |                        1 |                                        7 |
 
 > The two deck practices remain alternatives, as recorded for the approved catalogue's Sailor exclusion pair.
 
 ### P10 — Navigator and Pilot
 
+- **Core route** — _Entrusted coastal passage work_: G07
 - **G07** — _Entrusted coastal passage work_
 - **F11** — _Charted open-water instruction_
 - **N01** — _Deck grounding before navigation_
@@ -130,6 +156,7 @@ Mutually exclusive tracks:
 
 ### P11 — Shipmaster
 
+- **Core route** — _Deck service before command_: F09
 - **F09** — _Deck service before command_
 - **G07** — _Responsibility for the passage_
 - **G12** — _Trading the voyage_
@@ -141,6 +168,7 @@ Mutually exclusive tracks:
 
 ### P12 — Courier and Messenger
 
+- **Core route** — _Conditioning for the road_: F04
 - **F04** — _Conditioning for the road_
 - **G05** — _Mounted stage service_
 - **G04** — _Carrying across open country_
@@ -152,6 +180,7 @@ Mutually exclusive tracks:
 
 ### P13 — Trader and Merchant
 
+- **Core route** — _Ordinary trading apprenticeship_: G12
 - **G12** — _Ordinary trading apprenticeship_
 - **G11** — _Keeping the house's records_
 - **G04** — _Travelling the route personally_
@@ -164,8 +193,9 @@ Mutually exclusive tracks:
 
 ### P14 — Guard, Watcher and Escort
 
+- **Core route** — _Ordinary watch and guard instruction_: K24
+- **K24** — _Ordinary watch and guard instruction_
 - **G04** — _Escort duty away from the town_
-- _Taught directly on watch and on escort_: Perception, Streetwise, Intimidation
 
 Mutually exclusive tracks:
 
@@ -174,13 +204,14 @@ Mutually exclusive tracks:
 
 | Valid path             | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Rough-fighting guard   |                             10 |                        1 |                                        9 |
+| Rough-fighting guard   |                              9 |                        1 |                                        8 |
 | Fencing-trained escort |                              9 |                        0 |                                        9 |
 
 > Preserves the approved catalogue's Guard exclusion pair as two explicitly separate valid paths.
 
 ### P15 — Enforcer
 
+- **Core route** — _Ordinary coercive service_: K23
 - **K23** — _Ordinary coercive service_
 - **M01** — _Rough-fighting instruction_
 - **G14** — _Knowing the district one works_
@@ -188,10 +219,11 @@ Mutually exclusive tracks:
 
 | Valid path | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Enforcer   |                             10 |                        1 |                                        9 |
+| Enforcer   |                              9 |                        1 |                                        8 |
 
 ### P16 — Local Informant
 
+- **Core route** — _Ordinary informant practice_: G14
 - **G14** — _Ordinary informant practice_
 - **K18** — _Standing in an illicit milieu_
 - **G16** — _Passing unremarked where one does not belong_
@@ -203,6 +235,7 @@ Mutually exclusive tracks:
 
 ### P17 — Investigator and Intelligence Agent
 
+- **Core route** — _Entrusted inquiry apprenticeship_: G17
 - **G17** — _Entrusted inquiry apprenticeship_
 - **G14** — _Working local contacts_
 - **G16** — _Approach under another identity_
@@ -214,9 +247,11 @@ Mutually exclusive tracks:
 
 ### P18 — Thief
 
+- **Core route** — _Ordinary covert-entry instruction_: G15
 - **G15** — _Ordinary covert-entry instruction_
 - **K18** — _Standing in an illicit milieu_
-- _Taught directly by an established thief_: Sleight of Hand, Climbing, Appraisal, Disguise, Pickpocketing
+- **K25** — _Learning the trade from an established thief_
+- _Taught directly by an established thief_: Disguise
 
 | Valid path | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------- | -----------------------------: | -----------------------: | ---------------------------------------: |
@@ -224,6 +259,7 @@ Mutually exclusive tracks:
 
 ### P19 — Confidence Trickster
 
+- **Core route** — _Ordinary impersonation practice_: G16
 - **G16** — _Ordinary impersonation practice_
 - **G14** — _Finding the mark_
 - **K17** — _Working the gaming tables_
@@ -235,6 +271,7 @@ Mutually exclusive tracks:
 
 ### P20 — Smuggler and Illicit Trader
 
+- **Core route** — _Trading goods that must not be seen, with standing in the milieu that moves them_: G12, K18
 - **G12** — _Trading what is carried_
 - **K18** — _Standing in an illicit milieu_
 - **N01** — _Running the boat oneself_
@@ -246,6 +283,7 @@ Mutually exclusive tracks:
 
 ### P21 — Document Forger
 
+- **Core route** — _Ordinary forging apprenticeship_: K16
 - **K16** — _Ordinary forging apprenticeship_
 - **G11** — _Service inside a records office_
 - **F15** — _Study of older hands_
@@ -258,6 +296,7 @@ Mutually exclusive tracks:
 
 ### P22 — Soldier
 
+- **Core route** — _Repeated service in the field_: M06
 - **M06** — _Repeated service in the field_
 - **G04** — _Marching and camping with the force_
 
@@ -270,8 +309,8 @@ Mutually exclusive tracks:
 
 | Valid path                    | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ----------------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Communal/household contingent |                              9 |                        1 |                                        8 |
-| Close-order formation soldier |                             11 |                        2 |                                        9 |
+| Communal/household contingent |                              8 |                        1 |                                        7 |
+| Close-order formation soldier |                             10 |                        2 |                                        8 |
 | Missile soldier               |                              9 |                        1 |                                        8 |
 | Military longbow specialist   |                             11 |                        1 |                                       10 |
 
@@ -279,7 +318,10 @@ Mutually exclusive tracks:
 
 ### P23 — Mounted Soldier and Lancer
 
-- **F32** — _Mounted troop drill_
+- **Core route** — _Learning to fight from the saddle_: M11
+- **M11** — _Learning to fight from the saddle_
+- **M12** — _Lance and troop drill_
+- **M01** — _Sidearm and close-combat drill_
 - **M06** — _Repeated service in the field_
 - _Taught directly in the troop lines_: Animal Handling
 
@@ -289,10 +331,12 @@ Mutually exclusive tracks:
 
 ### P24 — Military Scout
 
+- **Core route** — _Reconnaissance instruction_: F33
 - **F33** — _Reconnaissance instruction_
 - **G04** — _Working alone forward of the force_
 - **M01** — _Fighting instruction for a scout_
-- _Taught directly by the scouts one serves with_: Battlefield Awareness, Tracking
+- **M06** — _Repeated service forward of the force_
+- _Taught directly by the scouts one serves with_: Tracking
 
 Mutually exclusive tracks:
 
@@ -306,6 +350,7 @@ Mutually exclusive tracks:
 
 ### P25 — Military Commander
 
+- **Core route** — _Mentored unit command_: G09
 - **G09** — _Mentored unit command_
 - **M06** — _Repeated service in the field_
 - _Taught directly by the commander one serves under_: Oratory, Siege Operations
@@ -313,17 +358,18 @@ Mutually exclusive tracks:
 Mutually exclusive tracks:
 
 - **Foot field commander** — M03 (_Formation arms drill with the command_)
-- **Mounted field commander** — F32 (_Mounted troop drill with the command_)
+- **Mounted field commander** — M11 (_Commanding from the saddle_), M12 (_Lance and troop drill with the command_), M01 (_Sidearm and close-combat drill_)
 - **Communal-force commander** — M01 (_Contingent fighting drill_)
 
 | Valid path               | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ------------------------ | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Foot field commander     |                             13 |                        2 |                                       11 |
+| Foot field commander     |                             12 |                        2 |                                       10 |
 | Mounted field commander  |                             14 |                        1 |                                       13 |
-| Communal-force commander |                             11 |                        1 |                                       10 |
+| Communal-force commander |                             10 |                        1 |                                        9 |
 
 ### P26 — Military Quartermaster
 
+- **Core route** — _Keeping a campaign supplied and recorded_: M07
 - **G11** — _Supply-office records_
 - **M07** — _Campaign staff service_
 - **F06** — _Moving the force's supplies_
@@ -337,10 +383,11 @@ Mutually exclusive tracks:
 | Valid path                     | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ------------------------------ | -----------------------------: | -----------------------: | ---------------------------------------: |
 | Supply-office quartermaster    |                             11 |                        0 |                                       11 |
-| Fighting-service quartermaster |                             12 |                        1 |                                       11 |
+| Fighting-service quartermaster |                             11 |                        1 |                                       10 |
 
 ### P27 — Campaign Planner
 
+- **Core route** — _Planning a campaign on a commander's staff_: M07
 - **G09** — _Service beside a commander_
 - **M07** — _Ordinary campaign staff service_
 - **K09** — _Studying the theatre_
@@ -352,6 +399,7 @@ Mutually exclusive tracks:
 
 ### P28 — Siege Engineer
 
+- **Core route** — _Ordinary siege-works apprenticeship_: M08
 - **M08** — _Ordinary siege-works apprenticeship_
 - **F28** — _Design and setting out_
 - **F27** — _Timber mechanism construction_
@@ -365,6 +413,7 @@ Mutually exclusive tracks:
 
 ### P29 — Siege Engine Crew Specialist
 
+- **Core route** — _Ordinary engine-crew instruction_: M09
 - **M09** — _Ordinary engine-crew instruction_
 - **M04** — _Serving in the missile line_
 - **M06** — _Repeated service in the field_
@@ -376,6 +425,7 @@ Mutually exclusive tracks:
 
 ### P30 — Physician
 
+- **Core route** — _Ordinary clinical apprenticeship_: G01
 - **G01** — _Ordinary clinical apprenticeship_
 - **G02** — _Preparing what one prescribes_
 - **K01** — _Learned study of the art_
@@ -387,6 +437,8 @@ Mutually exclusive tracks:
 
 ### P31 — Surgeon
 
+- **Core route** — _Operating under a civil master surgeon_: G18
+- **Core route** — _Operating with a force in the field_: F29
 - **G01** — _Clinical grounding_
 - **K01** — _Learned study of the art_
 - _Taught directly by the operator one assists_: Pharmacy
@@ -403,18 +455,20 @@ Mutually exclusive tracks:
 
 ### P32 — Nurse and Patient Attendant
 
+- **Core route** — _Ordinary attendance apprenticeship_: K14
 - **K14** — _Ordinary attendance apprenticeship_
 - **G01** — _Attendance under a practitioner_
 - **G02** — _Preparing what the patient is given_
-- **F22** — _Feeding the sick household_
+- **C10** — _Feeding and dosing the sick household_
 - _Taught directly at the bedside_: Insight
 
 | Valid path                  | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | --------------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Nurse and Patient Attendant |                              8 |                        0 |                                        8 |
+| Nurse and Patient Attendant |                              9 |                        0 |                                        9 |
 
 ### P33 — Birth Attendant and Midwife
 
+- **Core route** — _Ordinary birth-attendance apprenticeship_: K15
 - **K15** — _Ordinary birth-attendance apprenticeship_
 - **G02** — _Preparing remedies for mother and child_
 - **K14** — _Continuing attendance after the birth_
@@ -428,6 +482,7 @@ Mutually exclusive tracks:
 
 ### P34 — Veterinary Practitioner
 
+- **Core route** — _Ordinary stock-medicine apprenticeship_: K13
 - **K13** — _Ordinary stock-medicine apprenticeship_
 - **G02** — _Preparing animal remedies_
 - **F05** — _Working among kept stock_
@@ -439,6 +494,7 @@ Mutually exclusive tracks:
 
 ### P35 — Herbalist and Remedy Maker
 
+- **Core route** — _Ordinary plant-remedy apprenticeship_: G02
 - **G02** — _Ordinary plant-remedy apprenticeship_
 - **F23** — _Still-room practice_
 - **K12** — _Comparing what is collected_
@@ -450,6 +506,7 @@ Mutually exclusive tracks:
 
 ### P36 — Smith and Weaponsmith
 
+- **Core route** — _Ironmaking and forge apprenticeship_: F24
 - **F24** — _Ironmaking and forge apprenticeship_
 - **F25** — _Weapon-forge and servicing apprenticeship_
 - **F26** — _Armor workshop practice_
@@ -461,6 +518,7 @@ Mutually exclusive tracks:
 
 ### P37 — Smelter
 
+- **Core route** — _Ordinary furnace apprenticeship_: F24
 - **F24** — _Ordinary furnace apprenticeship_
 - **C07** — _Working with the extraction face_
 - **C01** — _Workshop apprenticeship_
@@ -471,6 +529,7 @@ Mutually exclusive tracks:
 
 ### P38 — Armorer
 
+- **Core route** — _Ordinary armor workshop apprenticeship_: F26
 - **F26** — _Ordinary armor workshop apprenticeship_
 - **F25** — _Weapon-forge and servicing work_
 - **C04** — _Hide and strap work for fittings_
@@ -482,6 +541,7 @@ Mutually exclusive tracks:
 
 ### P39 — Carpenter
 
+- **Core route** — _Ordinary timber apprenticeship_: F27
 - **F27** — _Ordinary timber apprenticeship_
 - **C03** — _Working on building sites_
 - **C01** — _Workshop apprenticeship_
@@ -492,6 +552,7 @@ Mutually exclusive tracks:
 
 ### P40 — Shipbuilder
 
+- **Core route** — _Ordinary yard apprenticeship_: F03
 - **F03** — _Ordinary yard apprenticeship_
 - **F27** — _Timber mechanism work in the yard_
 - **C03** — _Setting out and running the yard_
@@ -503,6 +564,7 @@ Mutually exclusive tracks:
 
 ### P41 — Sailmaker
 
+- **Core route** — _Ordinary sail-loft apprenticeship_: C09
 - **C09** — _Ordinary sail-loft apprenticeship_
 - **F02** — _Cloth work behind the canvas_
 - **C01** — _Workshop apprenticeship_
@@ -513,6 +575,7 @@ Mutually exclusive tracks:
 
 ### P42 — Spinner and Weaver
 
+- **Core route** — _Ordinary fibre-to-cloth apprenticeship_: F02
 - **F02** — _Ordinary fibre-to-cloth apprenticeship_
 - **C05** — _Making up what is woven_
 - **C01** — _Workshop apprenticeship_
@@ -524,6 +587,7 @@ Mutually exclusive tracks:
 
 ### P43 — Tailor
 
+- **Core route** — _Ordinary garment apprenticeship_: C05
 - **C05** — _Ordinary garment apprenticeship_
 - **F02** — _Cloth work behind the garment_
 - **C01** — _Workshop apprenticeship_
@@ -535,6 +599,7 @@ Mutually exclusive tracks:
 
 ### P44 — Leatherworker
 
+- **Core route** — _Ordinary leather apprenticeship_: C04
 - **C04** — _Ordinary leather apprenticeship_
 - **C01** — _Workshop apprenticeship_
 - _Taught directly at the bench_: Tailoring, Armoring
@@ -545,6 +610,7 @@ Mutually exclusive tracks:
 
 ### P45 — Potter
 
+- **Core route** — _Ordinary ceramic apprenticeship_: F21
 - **F21** — _Ordinary ceramic apprenticeship_
 - **C01** — _Workshop apprenticeship_
 - _Taught directly at the wheel and the kiln_: Visual Art, Masonry
@@ -555,6 +621,7 @@ Mutually exclusive tracks:
 
 ### P46 — Mason
 
+- **Core route** — _Ordinary stone apprenticeship_: C06
 - **C06** — _Ordinary stone apprenticeship_
 - **C03** — _Running the trades on site_
 - **F28** — _Setting out a building_
@@ -566,6 +633,7 @@ Mutually exclusive tracks:
 
 ### P47 — Miner and Quarry Worker
 
+- **Core route** — _Ordinary extraction apprenticeship_: C07
 - **C07** — _Ordinary extraction apprenticeship_
 - **F24** — _Feeding the furnace_
 - _Taught directly at the face_: Ropework, Appraisal
@@ -576,16 +644,18 @@ Mutually exclusive tracks:
 
 ### P48 — Millwright and Mechanician
 
+- **Core route** — _Ordinary millwright apprenticeship_: F27
 - **F27** — _Ordinary millwright apprenticeship_
 - **C03** — _Installing on site_
-- _Taught directly at the mill and on installation_: Mathematics, Smithing, Ropework
+- _Taught directly at the mill and on installation_: Mathematics, Ropework
 
 | Valid path                 | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | -------------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Millwright and Mechanician |                              8 |                        2 |                                        6 |
+| Millwright and Mechanician |                              7 |                        2 |                                        5 |
 
 ### P49 — Building Designer
 
+- **Core route** — _Ordinary design apprenticeship_: F28
 - **F28** — _Ordinary design apprenticeship_
 - **C03** — _Running the trades on site_
 - **F01** — _Measuring and drawing the site oneself_
@@ -597,17 +667,19 @@ Mutually exclusive tracks:
 
 ### P50 — Surveyor and Mapmaker
 
+- **Core route** — _Ordinary surveying apprenticeship_: F01
 - **F01** — _Ordinary surveying apprenticeship_
 - **K09** — _Assembling what is known of the country_
 - **G04** — _Working away from settlement_
-- _Taught directly in the field and at the drawing table_: Mathematics, Astronomy, Visual Art
+- _Taught directly in the field and at the drawing table_: Mathematics, Astronomy
 
 | Valid path            | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | --------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Surveyor and Mapmaker |                             10 |                        0 |                                       10 |
+| Surveyor and Mapmaker |                              9 |                        0 |                                        9 |
 
 ### P51 — Locksmith
 
+- **Core route** — _Ordinary locksmith apprenticeship_: C13
 - **C13** — _Ordinary locksmith apprenticeship_
 - **C01** — _Workshop apprenticeship_
 - _Taught directly at the bench_: Lockpicking
@@ -618,6 +690,7 @@ Mutually exclusive tracks:
 
 ### P52 — Trapmaker
 
+- **Core route** — _Ordinary trapmaking apprenticeship_: C14
 - **C14** — _Ordinary trapmaking apprenticeship_
 - **C13** — _Mechanism workshop practice_
 - _Taught directly at the bench and on the line_: Carpentry, Ropework, Animal Lore
@@ -628,16 +701,18 @@ Mutually exclusive tracks:
 
 ### P53 — Cook
 
-- **F22** — _Ordinary kitchen apprenticeship_
-- **C10** — _Brewhouse attached to the kitchen_
-- _Taught directly in the kitchen it serves_: Customs, Appraisal, Bargaining, Farming, Baking, Court Cookery
+- **Core route** — _Ordinary kitchen and brewhouse apprenticeship_: C10
+- **C10** — _Ordinary kitchen and brewhouse apprenticeship_
+- **C01** — _Buying for the kitchen as a trained trade_
+- _Taught directly in the kitchen it serves_: Customs, Plant Lore, Baking, Court Cookery
 
 | Valid path | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Cook       |                              7 |                        0 |                                        7 |
+| Cook       |                              7 |                        1 |                                        6 |
 
 ### P54 — Brewer
 
+- **Core route** — _Ordinary brewhouse apprenticeship_: C10
 - **C10** — _Ordinary brewhouse apprenticeship_
 - **C01** — _Workshop apprenticeship_
 - _Taught directly in the brewhouse_: Farming, Plant Lore
@@ -648,6 +723,7 @@ Mutually exclusive tracks:
 
 ### P55 — Vintner
 
+- **Core route** — _Ordinary vineyard apprenticeship_: C11
 - **C11** — _Ordinary vineyard apprenticeship_
 - **C01** — _Workshop apprenticeship_
 - _Taught directly in the vineyard and the cellar_: Plant Lore, Weather Lore
@@ -658,6 +734,7 @@ Mutually exclusive tracks:
 
 ### P56 — Distiller
 
+- **Core route** — _Ordinary still-room apprenticeship_: F23
 - **F23** — _Ordinary still-room apprenticeship_
 - **C10** — _Brewhouse work behind the still_
 - **C15** — _Service in an alchemical workshop_
@@ -669,6 +746,7 @@ Mutually exclusive tracks:
 
 ### P57 — Alchemist
 
+- **Core route** — _Ordinary alchemical apprenticeship_: C15
 - **C15** — _Ordinary alchemical apprenticeship_
 - **K01** — _Learned study of the tradition_
 - **K02** — _Argument about the nature of matter_
@@ -680,6 +758,7 @@ Mutually exclusive tracks:
 
 ### P58 — Clerk and Steward
 
+- **Core route** — _Ordinary records-office service_: G11
 - **G11** — _Ordinary records-office service_
 - **K11** — _Service inside a court or great household_
 - **K21** — _Accounts, measures and the estate_
@@ -691,6 +770,7 @@ Mutually exclusive tracks:
 
 ### P59 — Legal Practitioner and Advocate
 
+- **Core route** — _Ordinary legal apprenticeship_: F13
 - **F13** — _Ordinary legal apprenticeship_
 - **G11** — _Service in a records office_
 - **F15** — _Study of the older record_
@@ -703,6 +783,7 @@ Mutually exclusive tracks:
 
 ### P60 — Envoy
 
+- **Core route** — _Ordinary negotiation apprenticeship_: G10
 - **G10** — _Ordinary negotiation apprenticeship_
 - **K11** — _Service inside a court_
 - **G05** — _Travelling to the other party_
@@ -714,6 +795,7 @@ Mutually exclusive tracks:
 
 ### P61 — Mediator and Community Convenor
 
+- **Core route** — _Ordinary convening practice_: G10
 - **G10** — _Ordinary convening practice_
 - **F14** — _Speaking from memory before the community_
 - **K07** — _Instructing those who will convene after_
@@ -725,6 +807,7 @@ Mutually exclusive tracks:
 
 ### P62 — Banker and Credit Practitioner
 
+- **Core route** — _Ordinary credit-house apprenticeship_: F12
 - **F12** — _Ordinary credit-house apprenticeship_
 - **G12** — _Trading alongside lending_
 - **G11** — _Keeping the house's records_
@@ -736,6 +819,7 @@ Mutually exclusive tracks:
 
 ### P63 — Political Agent and Council Representative
 
+- **Core route** — _Ordinary council practice_: G10
 - **G10** — _Ordinary council practice_
 - **K11** — _Service among those who decide_
 - **G14** — _Working the district for support_
@@ -747,6 +831,7 @@ Mutually exclusive tracks:
 
 ### P64 — Teacher
 
+- **Core route** — _Ordinary instruction apprenticeship_: K07
 - **K07** — _Ordinary instruction apprenticeship_
 - **K01** — _Learned study of what is taught_
 - **F14** — _Delivering from memory_
@@ -758,6 +843,7 @@ Mutually exclusive tracks:
 
 ### P65 — Scribe and Copyist
 
+- **Core route** — _Ordinary records-office service_: G11 — **blocked:** #113 — the defining Written Tradition core cannot be authored until contextual written-tradition availability is resolved
 - **G11** — _Ordinary records-office service_
 - **F15** — _Reading and copying older hands_
 - **K01** — _Learned study behind the copying_
@@ -771,6 +857,7 @@ Mutually exclusive tracks:
 
 ### P66 — Translator and Interpreter
 
+- **Core route** — _Ordinary interpreting apprenticeship_: K08
 - **K08** — _Ordinary interpreting apprenticeship_
 - **F15** — _Working from written originals_
 - **K01** — _Learned study of the languages' matter_
@@ -784,6 +871,7 @@ Mutually exclusive tracks:
 
 ### P67 — Historian and Genealogist
 
+- **Core route** — _Ordinary historical study_: F15
 - **F15** — _Ordinary historical study_
 - **K10** — _Service in a heraldic office_
 - **K01** — _Learned study of the art_
@@ -795,6 +883,7 @@ Mutually exclusive tracks:
 
 ### P68 — Mathematical Practitioner
 
+- **Core route** — _Ordinary applied-calculation apprenticeship_: K21
 - **K21** — _Ordinary applied-calculation apprenticeship_
 - **K01** — _Learned study of method_
 - **K03** — _Calculation applied to the sky_
@@ -805,6 +894,7 @@ Mutually exclusive tracks:
 
 ### P69 — Philosopher
 
+- **Core route** — _Ordinary philosophical study_: K02
 - **K02** — _Ordinary philosophical study_
 - **K01** — _Learned study of the tradition_
 - **K07** — _Teaching within a school_
@@ -816,6 +906,7 @@ Mutually exclusive tracks:
 
 ### P70 — Astronomer
 
+- **Core route** — _Ordinary observational apprenticeship_: K03
 - **K03** — _Ordinary observational apprenticeship_
 - **K01** — _Learned study of the record_
 - **K02** — _Argument about what is observed_
@@ -827,6 +918,7 @@ Mutually exclusive tracks:
 
 ### P71 — Astrologer
 
+- **Core route** — _Ordinary astrological apprenticeship_: K04
 - **K04** — _Ordinary astrological apprenticeship_
 - **K03** — _Observation behind the reading_
 - **K01** — _Learned study of the tradition_
@@ -838,6 +930,7 @@ Mutually exclusive tracks:
 
 ### P72 — Naturalist
 
+- **Core route** — _Ordinary field-study apprenticeship_: K12
 - **K12** — _Ordinary field-study apprenticeship_
 - **G04** — _Working away from settlement_
 - **K01** — _Learned study of the record_
@@ -849,6 +942,7 @@ Mutually exclusive tracks:
 
 ### P73 — Geographer
 
+- **Core route** — _Ordinary chorographic study_: K09
 - **K09** — _Ordinary chorographic study_
 - **F01** — _Measuring the ground oneself_
 - **G04** — _Travelling what one describes_
@@ -860,20 +954,22 @@ Mutually exclusive tracks:
 
 ### P74 — Religious Practitioner
 
+- **Core route** — _Ordinary vocation apprenticeship_: K06
 - **K06** — _Ordinary vocation apprenticeship_
 - **K01** — _Learned study of the tradition_
 - **F14** — _Delivering before the congregation_
-- _Taught directly within the vocation_: Meditation
+- **K22** — _Contemplative discipline within the vocation_
 
 | Valid path             | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Religious Practitioner |                              7 |                        0 |                                        7 |
+| Religious Practitioner |                              8 |                        0 |                                        8 |
 
 ### P75 — Diviner
 
+- **Core route** — _Ordinary divinatory apprenticeship_: K05
 - **K05** — _Ordinary divinatory apprenticeship_
 - **K04** — _Celestial method within the practice_
-- _Taught directly by the diviner one serves_: Meditation, Insight, Mnemonics
+- **K22** — _Contemplative discipline of the practice_
 
 | Valid path | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------- | -----------------------------: | -----------------------: | ---------------------------------------: |
@@ -881,6 +977,7 @@ Mutually exclusive tracks:
 
 ### P76 — Herald
 
+- **Core route** — _Ordinary heraldic office apprenticeship_: K10
 - **K10** — _Ordinary heraldic office apprenticeship_
 - **F14** — _Proclamation from memory_
 - **K11** — _Service inside the court_
@@ -894,6 +991,7 @@ Mutually exclusive tracks:
 
 ### P77 — Musician and Singer
 
+- **Core route** — _Ordinary song apprenticeship_: F17
 - **F17** — _Ordinary song apprenticeship_
 - **F19** — _Composing the matter one performs_
 - **F18** — _Performing with players and dancers_
@@ -905,6 +1003,7 @@ Mutually exclusive tracks:
 
 ### P78 — Actor and Dancer
 
+- **Core route** — _Ordinary company apprenticeship_: F18
 - **F18** — _Ordinary company apprenticeship_
 - **F17** — _Music and song in the company_
 - **F19** — _The matter the company performs_
@@ -916,6 +1015,7 @@ Mutually exclusive tracks:
 
 ### P79 — Visual Artist and Sculptor
 
+- **Core route** — _Ordinary workshop apprenticeship_: F20
 - **F20** — _Ordinary workshop apprenticeship_
 - **F21** — _Modelling and firing_
 - **C01** — _Workshop trade practice_
@@ -927,6 +1027,7 @@ Mutually exclusive tracks:
 
 ### P80 — Storyteller and Poet
 
+- **Core route** — _Ordinary oral composition apprenticeship_: F19
 - **F19** — _Ordinary oral composition apprenticeship_
 - **F14** — _Holding and delivering the matter_
 - **F17** — _Singing what one composes_
@@ -938,6 +1039,7 @@ Mutually exclusive tracks:
 
 ### P81 — Athlete and Physical Performer
 
+- **Core route** — _Ordinary athletic training_: F04
 - **F04** — _Ordinary athletic training_
 - **F18** — _Performing before an audience_
 - _Taught directly by the trainer one works under_: Brawling
@@ -948,7 +1050,8 @@ Mutually exclusive tracks:
 
 ### P82 — Weapon Instructor
 
-- _Taught directly in the salle one instructs in_: Teaching, Weapon Maintenance, Athletics
+- **Core route** — _Ordinary arms-instruction apprenticeship_: M10
+- **M10** — _Ordinary arms-instruction apprenticeship_
 
 Mutually exclusive tracks:
 
@@ -958,14 +1061,15 @@ Mutually exclusive tracks:
 
 | Valid path                 | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | -------------------------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Close-combat weapon master |                             10 |                        3 |                                        7 |
+| Close-combat weapon master |                              8 |                        3 |                                        5 |
 | Fencing master             |                              6 |                        0 |                                        6 |
-| Missile weapon master      |                              8 |                        3 |                                        5 |
+| Missile weapon master      |                              7 |                        3 |                                        4 |
 
 > The fencing-master path is deliberately narrow: a single named tradition is the whole occupation.
 
 ### P83 — Gambler
 
+- **Core route** — _Ordinary gaming-house practice_: K17
 - **K17** — _Ordinary gaming-house practice_
 - **G14** — _Knowing the house and the players_
 - **K18** — _Standing in an illicit milieu_
@@ -978,6 +1082,7 @@ Mutually exclusive tracks:
 
 ### P84 — Diver and Water Worker
 
+- **Core route** — _Ordinary diving apprenticeship_: K20
 - **K20** — _Ordinary diving apprenticeship_
 - **N01** — _Working from a boat_
 - _Taught directly on the working line_: Athletics, Appraisal

@@ -9,6 +9,7 @@ import {
   buildCompetencyContentV2Catalogue,
   competencyContentV2Catalogue,
   EFFECTIVE_BREADTH_SIGNAL,
+  GROUP_SIZE_PREFERRED_CENTRE,
   GROUP_SIZE_REVIEW_BAND,
   measureApprovedBaseline,
 } from "./competencyContentV2";
@@ -55,7 +56,7 @@ describe("deterministic catalogue checks", () => {
       ...competencyContentV2RemovedGroups.map((group) => group.id),
     ]);
     for (const group of targetLearningGroupCatalogue.groups) expect(accounted).toContain(group.id);
-    expect(catalogue.manifest.removedGroups).toBe(11);
+    expect(catalogue.manifest.removedGroups).toBe(13);
   });
 
   it("preserves the 131 base-Skill catalogue without adding or renaming a Skill", () => {
@@ -223,10 +224,43 @@ describe("Civilization language competencies", () => {
       (row) => row.civilizationId === "lankhmar",
     )!;
     expect(lankhmar.replacesAnalogueSpokenName).toBe("Spoken Phoenician");
+    expect(lankhmar.spokenName).toBe("Spoken Lankhmaran");
     expect(lankhmar.requiresProductOwnerNamingRuling).toBe(false);
+  });
+
+  it("carries no invented Glantri language or script name", () => {
+    const withdrawn = [
+      "Kethran",
+      "Old Latian",
+      "Palace Scyrian",
+      "Kaldan",
+      "Aspardic",
+      "Harbour Hand",
+      "Hill Script",
+      "Palace Syllabary",
+      "Wedge Script",
+      "Chancery Script",
+      "Common Hand",
+      "Royal N'kolian",
+    ];
     for (const row of competencyContentV2CivilizationLanguages)
-      if (row.replacesAnalogueSpokenName && row.civilizationId !== "lankhmar")
-        expect(row.requiresProductOwnerNamingRuling).toBe(true);
+      for (const invented of withdrawn) {
+        expect(row.spokenName).not.toContain(invented);
+        expect(row.writtenName ?? "").not.toContain(invented);
+      }
+  });
+
+  it("gives every Civilization a rollable written competency unless it has no writing", () => {
+    for (const row of competencyContentV2CivilizationLanguages)
+      if (row.writtenName !== null) expect(row.writtenName.startsWith("Written ")).toBe(true);
+  });
+
+  it("flags Olog for later correction without correcting it here", () => {
+    const olog = competencyContentV2CivilizationLanguages.find(
+      (row) => row.civilizationId === "olog",
+    )!;
+    expect(olog.spokenName).toBe("Spoken Ologian");
+    expect(olog.note).toContain("FLAGGED FOR LATER CORRECTION");
   });
 });
 
@@ -266,27 +300,164 @@ describe("quantitative effective-breadth analysis", () => {
   });
 });
 
-describe("Learning Group size review", () => {
-  it("has no group outside the 2-4 band without a stated justification", () => {
-    for (const row of catalogue.groupSizes)
-      if (row.band !== "in-band") expect(row.justification?.length ?? 0).toBeGreaterThan(0);
-  });
-
-  it("retired the one-Skill groups the size review found", () => {
-    expect(catalogue.manifest.groupsBelowSizeBand).toBe(0);
-    expect(competencyContentV2LearningGroups.some((group) => group.id === "F16")).toBe(false);
-    const seasonalKitchen = competencyContentV2LearningGroups.find((group) => group.id === "F22")!;
-    expect(seasonalKitchen.fixedSkillIds.length).toBeGreaterThan(1);
-  });
-
-  it("keeps every above-band group advanced, compound or choice-driven", () => {
-    for (const row of catalogue.groupSizes.filter((candidate) => candidate.band === "above-band"))
-      expect(row.slotSize).toBeGreaterThan(0);
+describe("Learning Group shape ruling", () => {
+  it("centres the catalogue on 3-4 effective base Skills", () => {
+    expect(GROUP_SIZE_PREFERRED_CENTRE).toEqual([3, 4]);
     expect(GROUP_SIZE_REVIEW_BAND).toEqual([2, 4]);
+    expect(catalogue.manifest.groupsInPreferredCentre).toBeGreaterThan(
+      catalogue.manifest.groupsAtTwo,
+    );
+  });
+
+  it("leaves no group at one effective base Skill", () => {
+    expect(catalogue.manifest.groupsNeedingReconsideration).toBe(0);
+    expect(catalogue.manifest.groupsBelowSizeBand).toBe(0);
+  });
+
+  it("justifies every group at five or more", () => {
+    const large = catalogue.groupSizes.filter((row) => row.shape === "justified-large");
+    expect(large.length).toBeGreaterThan(0);
+    for (const row of large) expect(row.justification?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  it("retires F16 and F22 while preserving their Specialization routes", () => {
+    for (const id of ["F16", "F22"]) {
+      expect(competencyContentV2LearningGroups.some((group) => group.id === id)).toBe(false);
+      expect(competencyContentV2RemovedGroups.some((group) => group.id === id)).toBe(true);
+    }
+    for (const specializationId of ["spec:genealogy", "spec:food-preservation"])
+      expect(
+        catalogue.paths.filter((path) => path.reachableSpecializationIds.includes(specializationId))
+          .length,
+      ).toBeGreaterThan(0);
+  });
+
+  it("applies the named group corrections", () => {
+    const masterArtisan = competencyContentV2LearningGroups.find((group) => group.id === "C02")!;
+    expect([...masterArtisan.fixedSkillIds].sort()).toEqual(
+      ["skill:appraisal", "skill:bargaining", "skill:teaching"].sort(),
+    );
+    expect(masterArtisan.selectionSlots?.[0]?.chooseCount).toBe(1);
+
+    expect(competencyContentV2LearningGroups.some((group) => group.id === "F32")).toBe(false);
+    const mounted = competencyContentV2LearningGroups.find((group) => group.id === "M11")!;
+    expect([...mounted.fixedSkillIds].sort()).toEqual(["mounted_combat", "skill:riding"].sort());
+    const lance = competencyContentV2LearningGroups.find((group) => group.id === "M12")!;
+    expect([...lance.fixedSkillIds].sort()).toEqual(["formation_fighting", "lance"].sort());
   });
 
   it("keeps the fixed purchase burden of any group within reason", () => {
     expect(catalogue.manifest.maximumFixedGroupBurden).toBeLessThanOrEqual(6);
+  });
+});
+
+describe("combat group structure", () => {
+  const instructionGroupIds = [
+    "M01",
+    "M02",
+    "M03",
+    "M04",
+    "M05",
+    "M10",
+    "M11",
+    "M12",
+    "F30",
+    "F41",
+  ];
+
+  it("keeps Combat Experience out of every weapon-training group", () => {
+    for (const id of instructionGroupIds) {
+      const group = competencyContentV2LearningGroups.find((candidate) => candidate.id === id)!;
+      expect(group.fixedSkillIds).not.toContain("combat_experience");
+      for (const slot of group.selectionSlots ?? [])
+        expect(slot.candidateSkillIds).not.toContain("combat_experience");
+    }
+  });
+
+  it("supplies Combat Experience only through experiential routes", () => {
+    const sources = competencyContentV2LearningGroups.filter((group) =>
+      group.fixedSkillIds.includes("combat_experience"),
+    );
+    expect(sources.map((group) => group.id).sort()).toEqual(["K23", "M06"]);
+    for (const family of competencyContentV2Families)
+      expect(family.skillIds ?? []).not.toContain("combat_experience");
+    expect(
+      catalogue.paths.filter((path) => path.fixedSkillIds.includes("combat_experience")).length,
+    ).toBeGreaterThan(0);
+    expect(
+      catalogue.paths.some(
+        (path) => path.professionCode === "P82" && path.fixedSkillIds.includes("combat_experience"),
+      ),
+    ).toBe(false);
+  });
+
+  it("offers a focused melee package of guard, defence and one chosen weapon", () => {
+    const focused = competencyContentV2LearningGroups.find((group) => group.id === "M01")!;
+    expect([...focused.fixedSkillIds].sort()).toEqual(["dodge", "parry"]);
+    expect(focused.selectionSlots?.[0]?.chooseCount).toBe(1);
+  });
+
+  it("lets broad groups pool across melee, missile, throwing and unarmed", () => {
+    const broad = competencyContentV2LearningGroups.find((group) => group.id === "M02")!;
+    const pool = broad.selectionSlots?.[0]?.candidateSkillIds ?? [];
+    expect(pool).toContain("brawling");
+    expect(pool).toContain("throwing");
+    expect(
+      competencyContentV2LearningGroups.find((group) => group.id === "M03")!.selectionSlots![0]!
+        .candidateSkillIds,
+    ).toContain("sling");
+  });
+
+  it("treats overlap between combat groups as intentional, not as an error", () => {
+    const m01 = competencyContentV2LearningGroups.find((group) => group.id === "M01")!;
+    const m03 = competencyContentV2LearningGroups.find((group) => group.id === "M03")!;
+    const shared = m01.fixedSkillIds.filter((id) => m03.fixedSkillIds.includes(id));
+    expect(shared.length).toBeGreaterThan(0);
+    // Overlap never becomes a double charge: see the cost-invariant checks.
+  });
+});
+
+describe("core routes and cost invariants", () => {
+  it("gives every valid path at least one satisfied defining core route", () => {
+    for (const path of catalogue.paths) {
+      const cores = catalogue.coreRoutes.filter((row) => row.pathId === path.pathId);
+      expect(cores.length).toBeGreaterThan(0);
+      expect(cores.some((row) => row.satisfied)).toBe(true);
+    }
+  });
+
+  it("records the blocked Scribe written-tradition core without inventing it", () => {
+    const blocked = catalogue.coreRoutes.filter((row) => row.blockedBy);
+    expect(blocked.length).toBeGreaterThan(0);
+    for (const row of blocked) expect(row.blockedBy).toContain("#113");
+  });
+
+  it("never charges twice for the same competency on one path", () => {
+    for (const row of catalogue.costInvariants) {
+      expect(row.duplicatesAvoided).toBeGreaterThanOrEqual(0);
+      expect(row.distinctCharged).toBeLessThanOrEqual(row.chargedAppearances);
+    }
+    expect(catalogue.manifest.duplicatePaymentsAvoided).toBeGreaterThan(0);
+  });
+
+  it("makes the final charged set independent of purchase order", () => {
+    for (const row of catalogue.costInvariants) expect(row.orderIndependent).toBe(true);
+  });
+});
+
+describe("Specialization access is access, not a grant", () => {
+  it("never counts a Specialization toward base-Skill breadth", () => {
+    const specializationIds = new Set(
+      fullSkillCatalogueProposal.entries
+        .filter((entry) => entry.competencyType === "specialization")
+        .map((entry) => entry.id),
+    );
+    for (const path of catalogue.paths)
+      for (const skillId of path.fixedSkillIds) expect(specializationIds.has(skillId)).toBe(false);
+  });
+
+  it("keeps the parent Skill reachable on every path that offers the Specialization", () => {
+    expect(catalogue.coverage.specializationsWhoseParentIsUnreachableInTheSameFamily).toEqual([]);
   });
 });
 
@@ -314,5 +485,14 @@ describe("direct-grant review", () => {
 
   it("substantially reduces the direct-grant count", () => {
     expect(catalogue.manifest.directSkillOpportunities).toBeLessThan(150);
+  });
+
+  it("moves coherent direct-grant clusters into Learning Groups", () => {
+    for (const id of ["K22", "K24", "K25", "M10"])
+      expect(competencyContentV2LearningGroups.some((group) => group.id === id)).toBe(true);
+    for (const code of ["P14", "P18", "P74", "P75", "P82"]) {
+      const family = competencyContentV2Families.find((candidate) => candidate.code === code)!;
+      expect((family.skillIds ?? []).length).toBeLessThanOrEqual(1);
+    }
   });
 });
