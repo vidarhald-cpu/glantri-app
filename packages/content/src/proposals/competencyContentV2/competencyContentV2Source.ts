@@ -68,8 +68,33 @@ export interface V2Route {
   route: string;
 }
 
+/**
+ * A defining core route: the training a Profession is not that Profession without.
+ *
+ * This is a data annotation over the Learning Groups and direct Skills that already exist, not a new
+ * conceptual layer. A path satisfies its Profession when it contains every group and Skill of at
+ * least one applicable core route. A body may declare several core routes, which are alternatives;
+ * a track that declares its own core routes refines or replaces its parent's.
+ */
+export interface V2CoreRoute {
+  id: string;
+  /** Player-facing statement of what this core route is. */
+  label: string;
+  /** Learning Groups the core route requires. */
+  groupIds: readonly string[];
+  /** Directly taught Skills the core route requires, when the core is not entirely a group. */
+  skillIds?: readonly string[];
+  /** Set when the core route cannot be finally authored yet, with the blocking reference. */
+  blockedBy?: string;
+}
+
 export interface V2PathBody {
   groups?: readonly V2Route[];
+  /**
+   * Defining core routes for this body. Every Profession declares at least one at family or track
+   * level; a track's list, when present, replaces the family's for that track's paths.
+   */
+  coreRoutes?: readonly V2CoreRoute[];
   skillIds?: readonly string[];
   specializationIds?: readonly string[];
   /**
@@ -94,8 +119,6 @@ export interface V2Family extends V2PathBody {
    * An empty list means the family has exactly one ordinary valid path.
    */
   tracks?: readonly V2Track[];
-  /** Deliberately narrow specialist path; excluded from the "thin package" finding, not from the analysis. */
-  narrowByDesign?: boolean;
   note?: string;
 }
 
@@ -298,7 +321,7 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     shortDescription: "Guard, defence and one actually taught weapon family.",
     disposition: "new",
     supersedes: ["G08", "F35"],
-    fixedSkillIds: ["dodge", "parry", "brawling"],
+    fixedSkillIds: ["dodge", "parry"],
     selectionSlots: [
       {
         id: "melee-family",
@@ -316,15 +339,18 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
       },
     ],
     note:
-      "Restores the historical Basic Melee Training choose-one slot and, with it, general 2-h edged access. " +
-      "The approved catalogue reached 2-h edged only through F37 on two Soldier tracks.",
+      "The focused melee package the ruling describes: Dodge, Parry and one chosen melee weapon family. " +
+      "Brawling was removed — a weapon course teaches guard, defence and the weapon, and unarmed fighting " +
+      "is a different practice, now offered inside the broad cross-category pools. Restores the historical " +
+      "Basic Melee Training choose-one slot and, with it, general 2-h edged access; the approved catalogue " +
+      "reached 2-h edged only through F37 on two Soldier tracks.",
   },
   {
     id: "M02",
     name: "Advanced close-combat weapon practice",
-    shortDescription: "Sustained instruction across several weapon families.",
+    shortDescription: "Sustained instruction across several fighting forms at close quarters.",
     disposition: "new",
-    fixedSkillIds: ["dodge", "parry", "brawling", "combat_experience"],
+    fixedSkillIds: ["dodge", "parry"],
     selectionSlots: [
       {
         id: "advanced-melee-families",
@@ -338,13 +364,21 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
           "two_handed_edged",
           "two_handed_concussion_axe",
           "polearms",
+          "brawling",
+          "throwing",
         ],
         required: true,
       },
     ],
     note:
-      "Restores the historical Advanced Melee Training choose-three slot. Product Owner ruling: pick 3 is " +
-      "accepted. The recovered import's choose-2 reading is retained as provenance, not as an open question.",
+      "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: " +
+      "a broad combat group is desirable precisely because it makes broad investment in one narrow competence " +
+      "domain economically viable. This is not an oversized group tolerated for breadth; it is the shape the " +
+      "ruling asks for. The pool crosses melee, throwing and unarmed, because a close-quarters school genuinely " +
+      "teaches the grapple and the thrown weapon alongside the sword. Combat Experience is absent: this is " +
+      "instruction, and instruction cannot confer what only real exposure teaches. Overlap with M01 and M03 is " +
+      "intentional; Profession breadth is deduplicated. Restores the historical Advanced Melee Training " +
+      "choose-three slot, and the recovered import's choose-2 reading is provenance only.",
   },
   {
     id: "F30",
@@ -361,7 +395,7 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     shortDescription: "Close-order drill with the arms the formation actually carries.",
     disposition: "new",
     supersedes: ["F31", "F36", "F37"],
-    fixedSkillIds: ["dodge", "parry", "brawling", "formation_fighting"],
+    fixedSkillIds: ["dodge", "parry", "formation_fighting"],
     selectionSlots: [
       {
         id: "formation-arms",
@@ -375,41 +409,38 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
           "two_handed_concussion_axe",
           "polearms",
           "throwing",
+          "sling",
         ],
         required: true,
       },
     ],
     note:
-      "Merges the three fixed formation groups. A soldier is charged for the arms actually issued and drilled, " +
-      "not for every weapon family the army fields.",
+      "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: " +
+      "drilled competence in the arms a formation actually carries is worth buying as one course. The pool " +
+      "crosses melee, throwing and the sling, because a close-order unit issues skirmishing arms alongside the " +
+      "line weapon. Merges the three fixed formation groups: a soldier is charged for the arms actually issued " +
+      "and drilled, not for every weapon family the army fields. Brawling is absent — close-order drill is not " +
+      "an unarmed course.",
   },
   {
-    id: "F32",
-    name: "Mounted lance and troop drill",
-    shortDescription: "Troop drill from horseback with lance and a sidearm.",
-    disposition: "revised",
-    fixedSkillIds: [
-      "lance",
-      "mounted_combat",
-      "skill:riding",
-      "dodge",
-      "parry",
-      "formation_fighting",
-    ],
-    selectionSlots: [
-      {
-        id: "mounted-sidearm",
-        label: "Choose one taught mounted sidearm family",
-        chooseCount: 1,
-        chooseCountStatus: "approved",
-        candidateSkillIds: ["one_handed_edged", "one_handed_concussion_axe"],
-        required: true,
-      },
-    ],
+    id: "M11",
+    name: "Mounted combat practice",
+    shortDescription: "Fighting from the saddle, and the horsemanship that makes it possible.",
+    disposition: "new",
+    fixedSkillIds: ["skill:riding", "mounted_combat"],
     note:
-      "Revised: Riding made explicit, and the sidearm becomes a slot instead of a fixed 1-h edged charge. " +
-      "The group-size review also removed Brawling: mounted troop drill teaches fighting from the saddle, " +
-      "not unarmed scuffling, and a fixed burden of seven needed a reason it did not have.",
+      "The first half of the F32 replacement ruled by the Product Owner. Riding and Mounted Combat are one " +
+      "practice: a rider is taught to control the horse and to fight from it in the same course of training.",
+  },
+  {
+    id: "M12",
+    name: "Mounted lance and formation drill",
+    shortDescription: "The lance, delivered in a formed body of horse.",
+    disposition: "new",
+    fixedSkillIds: ["lance", "formation_fighting"],
+    note:
+      "The second half of the F32 replacement ruled by the Product Owner. The lance is a formation weapon; " +
+      "it is taught with the drill that keeps a charge together, not as an individual arm.",
   },
   {
     id: "M04",
@@ -435,7 +466,7 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     name: "Advanced missile practice",
     shortDescription: "Sustained instruction across several missile families.",
     disposition: "new",
-    fixedSkillIds: ["skill:perception", "weapon_maintenance", "combat_experience"],
+    fixedSkillIds: ["skill:perception", "weapon_maintenance"],
     selectionSlots: [
       {
         id: "advanced-missile-families",
@@ -446,7 +477,11 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
         required: true,
       },
     ],
-    note: "Restores the historical Advanced Missile Training choose-three slot.",
+    note:
+      "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: " +
+      "sustained instruction across the missile arms is the economical way to invest broadly in shooting. " +
+      "Combat Experience is absent — a shooting master who has never been shot at has not earned it. Restores " +
+      "the historical Advanced Missile Training choose-three slot.",
   },
   {
     id: "F41",
@@ -462,6 +497,20 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     shortDescription: "What repeated service in the field teaches that drill does not.",
     disposition: "new",
     fixedSkillIds: ["combat_experience", "battlefield_awareness", "skill:survival"],
+    note:
+      "One of exactly two routes to Combat Experience. It is not a course: it is the experiential route, " +
+      "taken by Professions whose ordinary working life is campaign service, and it is deliberately not " +
+      "available to instruction-only Professions such as the Weapon Instructor.",
+  },
+  {
+    id: "M10",
+    name: "Arms instruction practice",
+    shortDescription: "Teaching others to fight, and keeping the weapons the school uses.",
+    disposition: "new",
+    fixedSkillIds: ["skill:teaching", "weapon_maintenance", "skill:athletics"],
+    note:
+      "Collects what had been the Weapon Instructor's three direct Skill grants into the coherent taught " +
+      "practice they always were. It contains no Combat Experience: instructing is not exposure.",
   },
   {
     id: "F33",
@@ -520,6 +569,10 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     shortDescription: "Applying pressure on behalf of someone who pays for it.",
     disposition: "new",
     fixedSkillIds: ["skill:intimidation", "combat_experience", "skill:underworld"],
+    note:
+      "The second and only other route to Combat Experience, and an experiential one: habitual real violence " +
+      "in someone's service, not a weapon course. It is retained under the ruling precisely because it is " +
+      "exposure rather than instruction.",
   },
 
   /* --- Craft, workshop and construction practice (choice slots restored) --------------------- */
@@ -565,10 +618,9 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     selectionSlots: [
       {
         id: "advanced-craft-specialties",
-        label: "Choose the taught crafts",
+        label: "Choose one taught craft",
         chooseCount: 1,
-        chooseCountStatus: "unresolved-source-conflict",
-        conflictingChooseCounts: [1, 2, 3],
+        chooseCountStatus: "approved",
         candidateSkillIds: [
           "pottery",
           "weaving",
@@ -586,10 +638,11 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
       },
     ],
     note:
-      "Restores the Advanced Craft Specialty slot. Its count is NOT settled: the executable data says " +
-      "choose one, its own prose says two specialties, and the master-artisan reading suggests three. The " +
-      "Product Owner has ruled that this conflict must not be resolved by breadth pressure, so the " +
-      "proposal counts the lowest evidenced value (1) and leaves the question open.",
+      "Settled by Product Owner ruling: Appraisal, Bargaining, Teaching and exactly one chosen craft. " +
+      "The earlier source conflict — the executable data said choose one, its own prose said two " +
+      "specialties, and a master-artisan reading suggested three — is closed in favour of one, and the " +
+      "ruling forbids raising the count under breadth pressure. The exact shape is enforced by a " +
+      "deterministic check, so it cannot drift.",
   },
   {
     id: "C03",
@@ -717,23 +770,17 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     fixedSkillIds: ["pottery", "skill:sculpture"],
   },
   {
-    id: "F22",
-    name: "Seasonal kitchen and preservation practice",
-    shortDescription: "Cooking through the season and keeping what the season gives.",
-    disposition: "revised",
-    fixedSkillIds: ["skill:cooking", "skill:plant-lore"],
-    note:
-      "Revised by the group-size review: a one-Skill group was really a direct Cooking route. Seasonal " +
-      "kitchen work genuinely teaches what is available when, so Plant Lore joins it as taught practice.",
-    specializationIds: ["spec:food-preservation"],
-  },
-  {
     id: "C10",
-    name: "Brewhouse practice",
-    shortDescription: "Running a brewhouse and the kitchen work that goes with it.",
+    name: "Brewing and preserving practice",
+    shortDescription: "Brewing, cooking and keeping what the season gives.",
     disposition: "new",
     fixedSkillIds: ["skill:brewing", "skill:cooking"],
     specializationIds: ["spec:food-preservation"],
+    note:
+      "Carries the retired F22's Food Preservation route. Brewing and preserving are the same household or " +
+      "brewhouse cycle — what is not eaten fresh is brewed, salted or dried — so the practice is one " +
+      "curriculum rather than two. Access to Food Preservation is access only: the Specialization is still " +
+      "purchased separately, and its parent Cooking is taught here on the same path.",
   },
   {
     id: "C11",
@@ -811,6 +858,40 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     note:
       "Closes the recorded Herald parent-access gaps: History (parent of Genealogy) and Customs " +
       "(parent of Courtly Protocol) are now supplied inside the Herald's own envelope.",
+  },
+  {
+    id: "K22",
+    name: "Contemplative discipline practice",
+    shortDescription: "Trained stillness, trained memory and the reading of people it sharpens.",
+    disposition: "new",
+    fixedSkillIds: ["meditation", "skill:mnemonics", "skill:insight"],
+    note:
+      "Collects a coherent taught cluster that had been direct Profession grants on the Diviner and the " +
+      "Religious Practitioner. Contemplative houses teach the discipline, the memorised corpus and the " +
+      "attentiveness to people together; none of the three is an occupational exception.",
+  },
+  {
+    id: "K24",
+    name: "Watch and guard practice",
+    shortDescription: "Standing a watch, knowing the ground, and handling people without a fight.",
+    disposition: "new",
+    fixedSkillIds: ["skill:perception", "skill:streetwise", "skill:intimidation"],
+    note:
+      "Collects the Guard's three direct Skill grants into the practice they describe. Watch duty is " +
+      "genuinely taught and drilled: what to look for, whose district this is, and how to make someone " +
+      "stand down without drawing.",
+  },
+  {
+    id: "K25",
+    name: "Street theft practice",
+    shortDescription: "Taking what is worth taking, from places it was not meant to be taken from.",
+    disposition: "new",
+    fixedSkillIds: ["skill:sleight-of-hand", "skill:appraisal", "climb"],
+    specializationIds: ["spec:pickpocketing"],
+    note:
+      "Collects three of the Thief's four direct grants. Knowing what is worth lifting, lifting it, and " +
+      "reaching it over a wall are learned together and from the same people. Pickpocketing moves here as " +
+      "group-linked access; it is still purchased separately, and its parent Sleight of Hand is taught here.",
   },
   {
     id: "K21",
@@ -1058,6 +1139,26 @@ export const competencyContentV2RemovedGroups: readonly V2RemovedGroup[] = [
     replacedBy: ["M04"],
   },
   {
+    id: "F32",
+    name: "Mounted lance and troop drill",
+    reason:
+      "Oversized by Product Owner ruling: a fixed burden of six charged every mounted soldier for the whole " +
+      "of mounted warfare at once. Replaced by two small coherent practices plus the general close-combat " +
+      "group, so a mounted Profession is charged for horsemanship, for the lance in formation and for its " +
+      "sidearm separately.",
+    replacedBy: ["M11", "M12", "M01"],
+  },
+  {
+    id: "F22",
+    name: "Seasonal kitchen and preservation practice",
+    reason:
+      "Retired by Product Owner ruling: its effective base-Skill content was one Skill plus access to Food " +
+      "Preservation, which is a Specialization-access wrapper rather than a taught practice. The Food " +
+      "Preservation route is preserved through C10, whose curriculum genuinely contains it; Cooking is " +
+      "taught by C10 and Plant Lore by G02, K12 and the Cook's own occupational route.",
+    replacedBy: ["C10"],
+  },
+  {
     id: "F16",
     name: "Lineage investigation apprenticeship",
     reason:
@@ -1077,6 +1178,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P01",
     id: "profession:hunter-trapper",
     name: "Hunter and Trapper",
+    coreRoutes: [
+      {
+        id: "profession:hunter-trapper:core",
+        label: "Ordinary hunting apprenticeship",
+        groupIds: ["G03"],
+      },
+    ],
     groups: [
       { groupId: "G03", route: "Ordinary hunting apprenticeship" },
       { groupId: "F34", route: "Trapline service" },
@@ -1090,18 +1198,37 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P02",
     id: "profession:wild-plant-gatherer",
     name: "Wild Plant Gatherer",
+    coreRoutes: [
+      {
+        id: "profession:wild-plant-gatherer:core",
+        label: "Knowing what grows wild, learned directly on the collecting rounds",
+        groupIds: [],
+        skillIds: ["skill:plant-lore"],
+      },
+    ],
     groups: [
       { groupId: "G04", route: "Seasonal collecting rounds" },
       { groupId: "G02", route: "Supplying and preparing for a remedy maker" },
       { groupId: "G12", route: "Selling the season's collection" },
     ],
     directRoute: "Taught directly on the collecting rounds",
-    skillIds: ["climb"],
+    skillIds: ["climb", "skill:plant-lore"],
+    note:
+      "Core settled by the 2026-09-21 Profession-cores ruling: the gatherer is defined by knowing the " +
+      "plant itself, learned on the rounds, not by the remedy maker's preparation curriculum. G02 remains " +
+      "an ordinary optional route for a gatherer who also learns to prepare what is collected.",
   },
   {
     code: "P03",
     id: "profession:field-guide",
     name: "Field and Caravan Guide",
+    coreRoutes: [
+      {
+        id: "profession:field-guide:core",
+        label: "Ordinary guiding service",
+        groupIds: ["G04"],
+      },
+    ],
     groups: [
       { groupId: "G04", route: "Ordinary guiding service" },
       { groupId: "G05", route: "Mounted route service" },
@@ -1115,6 +1242,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P04",
     id: "profession:fisher",
     name: "Fisher",
+    coreRoutes: [
+      {
+        id: "profession:fisher:core",
+        label: "Ordinary fishing-boat apprenticeship",
+        groupIds: ["F10"],
+      },
+    ],
     groups: [
       { groupId: "F10", route: "Ordinary fishing-boat apprenticeship" },
       { groupId: "N01", route: "Working the family boat" },
@@ -1125,11 +1259,18 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P05",
     id: "profession:farmer",
     name: "Farmer",
+    coreRoutes: [
+      {
+        id: "profession:farmer:core",
+        label: "Ordinary holding apprenticeship",
+        groupIds: ["F08"],
+      },
+    ],
     groups: [
       { groupId: "F08", route: "Ordinary holding apprenticeship" },
       { groupId: "F05", route: "Keeping the holding's stock" },
       { groupId: "F06", route: "Carting to market" },
-      { groupId: "F22", route: "Household kitchen and storing the season" },
+      { groupId: "C10", route: "Household brewing and storing the season" },
     ],
     directRoute: "Taught directly in the working year of the holding",
     skillIds: ["skill:weather-lore"],
@@ -1138,6 +1279,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P06",
     id: "profession:herd-keeper",
     name: "Herd Keeper",
+    coreRoutes: [
+      {
+        id: "profession:herd-keeper:core",
+        label: "Ordinary stockkeeping apprenticeship",
+        groupIds: ["F05"],
+      },
+    ],
     groups: [
       { groupId: "F05", route: "Ordinary stockkeeping apprenticeship" },
       { groupId: "G05", route: "Mounted herding service" },
@@ -1152,6 +1300,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P07",
     id: "profession:animal-trainer",
     name: "Animal Trainer and Falconer",
+    coreRoutes: [
+      {
+        id: "profession:animal-trainer:core",
+        label: "Falconry apprenticeship",
+        groupIds: ["F07"],
+      },
+    ],
     groups: [
       { groupId: "F07", route: "Falconry apprenticeship" },
       { groupId: "F05", route: "Keeping the animals in condition" },
@@ -1164,6 +1319,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P08",
     id: "profession:driver",
     name: "Driver and Teamster",
+    coreRoutes: [
+      {
+        id: "profession:driver:core",
+        label: "Ordinary driving apprenticeship",
+        groupIds: ["F06"],
+      },
+    ],
     groups: [
       { groupId: "F06", route: "Ordinary driving apprenticeship" },
       { groupId: "G04", route: "Long-distance caravan service" },
@@ -1182,11 +1344,25 @@ export const competencyContentV2Families: readonly V2Family[] = [
       {
         id: "profession:sailor:small-craft",
         name: "Small-craft boat worker",
+        coreRoutes: [
+          {
+            id: "profession:sailor:small-craft:core",
+            label: "Working an open boat under sail and oar",
+            groupIds: ["N01"],
+          },
+        ],
         groups: [{ groupId: "N01", route: "Working a boat" }],
       },
       {
         id: "profession:sailor:rigged-vessel",
         name: "Rigged-vessel deck hand",
+        coreRoutes: [
+          {
+            id: "profession:sailor:rigged-vessel:core",
+            label: "Deck service in a rigged vessel",
+            groupIds: ["F09"],
+          },
+        ],
         groups: [{ groupId: "F09", route: "Rigged-vessel deck apprenticeship" }],
       },
     ],
@@ -1196,6 +1372,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P10",
     id: "profession:navigator-pilot",
     name: "Navigator and Pilot",
+    coreRoutes: [
+      {
+        id: "profession:navigator-pilot:core",
+        label: "Entrusted coastal passage work",
+        groupIds: ["G07"],
+      },
+    ],
     groups: [
       { groupId: "G07", route: "Entrusted coastal passage work" },
       { groupId: "F11", route: "Charted open-water instruction" },
@@ -1208,6 +1391,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P11",
     id: "profession:shipmaster",
     name: "Shipmaster",
+    coreRoutes: [
+      {
+        id: "profession:shipmaster:core",
+        label: "Deck service before command",
+        groupIds: ["F09"],
+      },
+    ],
     groups: [
       { groupId: "F09", route: "Deck service before command" },
       { groupId: "G07", route: "Responsibility for the passage" },
@@ -1220,18 +1410,49 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P12",
     id: "profession:courier",
     name: "Courier and Messenger",
+    coreRoutes: [
+      {
+        id: "profession:courier:core:foot",
+        label: "Foot courier practice: conditioned to carry it there oneself",
+        groupIds: ["F04"],
+      },
+      {
+        id: "profession:courier:core:mounted",
+        label: "Mounted courier practice: riding the stage and keeping the animal",
+        groupIds: ["G05"],
+      },
+      {
+        id: "profession:courier:core:vehicle",
+        label: "Vehicle courier practice: driving the carrying team",
+        groupIds: ["F06"],
+      },
+    ],
     groups: [
       { groupId: "F04", route: "Conditioning for the road" },
       { groupId: "G05", route: "Mounted stage service" },
+      { groupId: "F06", route: "Driving the carrying team" },
       { groupId: "G04", route: "Carrying across open country" },
     ],
     directRoute: "Taught directly by the stage or household one carries for",
     skillIds: ["skill:geography"],
+    note:
+      "Core settled by the 2026-09-21 Profession-cores ruling: the courier is defined by a practised way " +
+      "of getting it there — on foot, mounted or by vehicle — and any one of the three makes the " +
+      "occupation. These are alternative core routes, which the model already carries; the ruling is " +
+      "explicit that they must not become Profession tracks. F06 is added as an ordinary route so the " +
+      "vehicle alternative is genuinely reachable rather than merely declared.",
   },
   {
     code: "P13",
     id: "profession:trader",
     name: "Trader and Merchant",
+    coreRoutes: [
+      {
+        id: "profession:trader:core",
+        label: "Ordinary trading apprenticeship",
+        groupIds: ["G12"],
+      },
+    ],
     groups: [
       { groupId: "G12", route: "Ordinary trading apprenticeship" },
       { groupId: "G11", route: "Keeping the house's records" },
@@ -1245,27 +1466,36 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P14",
     id: "profession:guard-escort",
     name: "Guard, Watcher and Escort",
-    groups: [{ groupId: "G04", route: "Escort duty away from the town" }],
-    directRoute: "Taught directly on watch and on escort",
-    skillIds: ["skill:perception", "skill:streetwise", "skill:intimidation"],
-    tracks: [
+    coreRoutes: [
       {
-        id: "profession:guard-escort:rough-fighting",
-        name: "Rough-fighting guard",
-        groups: [{ groupId: "M01", route: "Guard and rough-fighting drill" }],
-      },
-      {
-        id: "profession:guard-escort:fencing",
-        name: "Fencing-trained escort",
-        groups: [{ groupId: "F30", route: "Swashbuckling fencing instruction" }],
+        id: "profession:guard-escort:core",
+        label: "Ordinary watch and guard instruction",
+        groupIds: ["K24"],
       },
     ],
-    note: "Preserves the approved catalogue's Guard exclusion pair as two explicitly separate valid paths.",
+    groups: [
+      { groupId: "K24", route: "Ordinary watch and guard instruction" },
+      { groupId: "G04", route: "Escort duty away from the town" },
+      { groupId: "M01", route: "Guard and rough-fighting drill" },
+      { groupId: "F30", route: "Swashbuckling fencing instruction" },
+    ],
+    note:
+      "Both tracks retired under the track-discipline ruling. They differed only in which combat Learning " +
+      "Group the guard bought, and that distinction is already expressed by the groups themselves: a rough " +
+      "house guard takes M01, an escort trained in the fencing tradition takes F30. One Profession, one " +
+      "identity, two openly available fighting curricula.",
   },
   {
     code: "P15",
     id: "profession:enforcer",
     name: "Enforcer",
+    coreRoutes: [
+      {
+        id: "profession:enforcer:core",
+        label: "Ordinary coercive service",
+        groupIds: ["K23"],
+      },
+    ],
     groups: [
       { groupId: "K23", route: "Ordinary coercive service" },
       { groupId: "M01", route: "Rough-fighting instruction" },
@@ -1278,6 +1508,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P16",
     id: "profession:local-informant",
     name: "Local Informant",
+    coreRoutes: [
+      {
+        id: "profession:local-informant:core",
+        label: "Ordinary informant practice",
+        groupIds: ["G14"],
+      },
+    ],
     groups: [
       { groupId: "G14", route: "Ordinary informant practice" },
       { groupId: "K18", route: "Standing in an illicit milieu" },
@@ -1290,6 +1527,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P17",
     id: "profession:investigator",
     name: "Investigator and Intelligence Agent",
+    coreRoutes: [
+      {
+        id: "profession:investigator:core",
+        label: "Entrusted inquiry apprenticeship",
+        groupIds: ["G17"],
+      },
+    ],
     groups: [
       { groupId: "G17", route: "Entrusted inquiry apprenticeship" },
       { groupId: "G14", route: "Working local contacts" },
@@ -1302,18 +1546,32 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P18",
     id: "profession:thief",
     name: "Thief",
+    coreRoutes: [
+      {
+        id: "profession:thief:core",
+        label: "Ordinary covert-entry instruction",
+        groupIds: ["G15"],
+      },
+    ],
     groups: [
       { groupId: "G15", route: "Ordinary covert-entry instruction" },
       { groupId: "K18", route: "Standing in an illicit milieu" },
+      { groupId: "K25", route: "Learning the trade from an established thief" },
     ],
     directRoute: "Taught directly by an established thief",
-    skillIds: ["skill:sleight-of-hand", "climb", "skill:appraisal", "skill:disguise"],
-    specializationIds: ["spec:pickpocketing"],
+    skillIds: ["skill:disguise"],
   },
   {
     code: "P19",
     id: "profession:confidence-trickster",
     name: "Confidence Trickster",
+    coreRoutes: [
+      {
+        id: "profession:confidence-trickster:core",
+        label: "Ordinary impersonation practice",
+        groupIds: ["G16"],
+      },
+    ],
     groups: [
       { groupId: "G16", route: "Ordinary impersonation practice" },
       { groupId: "G14", route: "Finding the mark" },
@@ -1326,6 +1584,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P20",
     id: "profession:smuggler",
     name: "Smuggler and Illicit Trader",
+    coreRoutes: [
+      {
+        id: "profession:smuggler:core",
+        label: "Trading goods that must not be seen, with standing in the milieu that moves them",
+        groupIds: ["G12", "K18"],
+      },
+    ],
     groups: [
       { groupId: "G12", route: "Trading what is carried" },
       { groupId: "K18", route: "Standing in an illicit milieu" },
@@ -1337,6 +1602,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P21",
     id: "profession:forger",
     name: "Document Forger",
+    coreRoutes: [
+      {
+        id: "profession:forger:core",
+        label: "Ordinary forging apprenticeship",
+        groupIds: ["K16"],
+      },
+    ],
     groups: [
       { groupId: "K16", route: "Ordinary forging apprenticeship" },
       { groupId: "G11", route: "Service inside a records office" },
@@ -1350,45 +1622,59 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P22",
     id: "profession:soldier",
     name: "Soldier",
+    coreRoutes: [
+      {
+        id: "profession:soldier:core:contingent",
+        label: "Contingent fighting drill",
+        groupIds: ["M01"],
+      },
+      {
+        id: "profession:soldier:core:formation",
+        label: "Formation arms drill",
+        groupIds: ["M03"],
+      },
+      {
+        id: "profession:soldier:core:missile",
+        label: "Issued missile arm and formation drill",
+        groupIds: ["M04"],
+      },
+    ],
     groups: [
       { groupId: "M06", route: "Repeated service in the field" },
       { groupId: "G04", route: "Marching and camping with the force" },
-    ],
-    tracks: [
-      {
-        id: "profession:soldier:communal-contingent",
-        name: "Communal/household contingent",
-        groups: [{ groupId: "M01", route: "Contingent fighting drill" }],
-      },
-      {
-        id: "profession:soldier:formation-soldier",
-        name: "Close-order formation soldier",
-        groups: [{ groupId: "M03", route: "Formation arms drill" }],
-      },
-      {
-        id: "profession:soldier:missile-soldier",
-        name: "Missile soldier",
-        groups: [{ groupId: "M04", route: "Issued missile arm and formation drill" }],
-      },
-      {
-        id: "profession:soldier:longbow-specialist",
-        name: "Military longbow specialist",
-        groups: [
-          { groupId: "M04", route: "Issued missile arm and formation drill" },
-          { groupId: "F41", route: "Longbow tradition brought into service" },
-        ],
-      },
+      { groupId: "M01", route: "Contingent fighting drill" },
+      { groupId: "M03", route: "Formation arms drill" },
+      { groupId: "M04", route: "Issued missile arm and formation drill" },
+      { groupId: "F41", route: "Longbow tradition brought into service" },
     ],
     note:
-      "Nine fixed-weapon tracks collapse to four. Weapon family is now a choice inside the drill, which is " +
-      "what the historical Basic/Advanced Melee and Missile slots described.",
+      "The approved catalogue's nine fixed-weapon Soldier tracks became four in the previous revision; the " +
+      "track-discipline ruling retires those four as well. Every one of them differed from its siblings only " +
+      "in which combat Learning Group it bought — contingent drill, formation drill, the issued missile arm, " +
+      "the longbow tradition — and a track must not exist for an ordinary weapon or equipment choice. " +
+      "Core settled by the 2026-09-21 Profession-cores ruling: M06 Campaign service experience is NOT core. " +
+      "A soldier is made by being drilled to arms, so the core is one of M01, M03 or M04, stated as " +
+      "alternative core routes rather than as tracks. M06 remains an ordinary route: Combat Experience is " +
+      "experiential competence earned by real service, available to the soldier who sees it and not " +
+      "required of the soldier who does not. That keeps the Combat Experience route audit correct — M06 " +
+      "and K23 remain its only two routes — and it is exactly the access-to-several-groups shape the " +
+      "breadth ruling asks for.",
   },
   {
     code: "P23",
     id: "profession:mounted-soldier",
     name: "Mounted Soldier and Lancer",
+    coreRoutes: [
+      {
+        id: "profession:mounted-soldier:core",
+        label: "Learning to fight from the saddle",
+        groupIds: ["M11"],
+      },
+    ],
     groups: [
-      { groupId: "F32", route: "Mounted troop drill" },
+      { groupId: "M11", route: "Learning to fight from the saddle" },
+      { groupId: "M12", route: "Lance and troop drill" },
+      { groupId: "M01", route: "Sidearm and close-combat drill" },
       { groupId: "M06", route: "Repeated service in the field" },
     ],
     directRoute: "Taught directly in the troop lines",
@@ -1398,79 +1684,90 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P24",
     id: "profession:military-scout",
     name: "Military Scout",
+    coreRoutes: [
+      {
+        id: "profession:military-scout:core",
+        label: "Reconnaissance instruction",
+        groupIds: ["F33"],
+      },
+    ],
     groups: [
       { groupId: "F33", route: "Reconnaissance instruction" },
       { groupId: "G04", route: "Working alone forward of the force" },
       { groupId: "M01", route: "Fighting instruction for a scout" },
+      { groupId: "M06", route: "Repeated service forward of the force" },
+      { groupId: "G05", route: "Mounted reconnaissance service" },
     ],
     directRoute: "Taught directly by the scouts one serves with",
-    skillIds: ["battlefield_awareness", "skill:tracking"],
-    tracks: [
-      { id: "profession:military-scout:foot", name: "Foot military scout" },
-      {
-        id: "profession:military-scout:mounted",
-        name: "Mounted military scout",
-        groups: [{ groupId: "G05", route: "Mounted reconnaissance service" }],
-      },
-    ],
+    skillIds: ["skill:tracking"],
+    note:
+      "Both tracks retired under the track-discipline ruling: foot and mounted scouting differed only by " +
+      "whether the scout was given a horse, which is an equipment choice already expressed by G05.",
   },
   {
     code: "P25",
     id: "profession:military-commander",
     name: "Military Commander",
+    coreRoutes: [
+      {
+        id: "profession:military-commander:core",
+        label: "Mentored unit command",
+        groupIds: ["G09"],
+      },
+    ],
     groups: [
       { groupId: "G09", route: "Mentored unit command" },
       { groupId: "M06", route: "Repeated service in the field" },
+      { groupId: "M03", route: "Formation arms drill with the command" },
+      { groupId: "M11", route: "Commanding from the saddle" },
+      { groupId: "M12", route: "Lance and troop drill with the command" },
+      { groupId: "M01", route: "Contingent and sidearm fighting drill" },
     ],
     directRoute: "Taught directly by the commander one serves under",
     skillIds: ["skill:oratory"],
     specializationIds: ["spec:siege-operations"],
-    tracks: [
-      {
-        id: "profession:military-commander:foot",
-        name: "Foot field commander",
-        groups: [{ groupId: "M03", route: "Formation arms drill with the command" }],
-      },
-      {
-        id: "profession:military-commander:mounted",
-        name: "Mounted field commander",
-        groups: [{ groupId: "F32", route: "Mounted troop drill with the command" }],
-      },
-      {
-        id: "profession:military-commander:communal",
-        name: "Communal-force commander",
-        groups: [{ groupId: "M01", route: "Contingent fighting drill" }],
-      },
-    ],
+    note:
+      "All three tracks retired under the track-discipline ruling. Foot, mounted and communal commanders " +
+      "differed only in which combat Learning Groups they bought; commanding a body of troops is one " +
+      "occupational identity, and the fighting curriculum a commander shares with the command is a route " +
+      "choice, not a separate occupation.",
   },
   {
     code: "P26",
     id: "profession:military-quartermaster",
     name: "Military Quartermaster",
+    coreRoutes: [
+      {
+        id: "profession:military-quartermaster:core",
+        label: "Keeping a campaign supplied and recorded",
+        groupIds: ["M07"],
+      },
+    ],
     groups: [
       { groupId: "G11", route: "Supply-office records" },
       { groupId: "M07", route: "Campaign staff service" },
       { groupId: "F06", route: "Moving the force's supplies" },
+      { groupId: "G12", route: "Buying for the force" },
+      { groupId: "M01", route: "Fighting drill alongside supply duties" },
     ],
     directRoute: "Taught directly in the supply office",
     skillIds: ["mathematics"],
-    tracks: [
-      {
-        id: "profession:military-quartermaster:supply-office",
-        name: "Supply-office quartermaster",
-        groups: [{ groupId: "G12", route: "Buying for the force" }],
-      },
-      {
-        id: "profession:military-quartermaster:fighting-service",
-        name: "Fighting-service quartermaster",
-        groups: [{ groupId: "M01", route: "Fighting drill alongside supply duties" }],
-      },
-    ],
+    note:
+      "Both tracks retired under the track-discipline ruling. Neither refined the defining core — keeping a " +
+      "campaign supplied and recorded — and the difference between a quartermaster who buys for the force " +
+      "and one who drills alongside it is already stated by G12 and M01.",
   },
   {
     code: "P27",
     id: "profession:campaign-planner",
     name: "Campaign Planner",
+    coreRoutes: [
+      {
+        id: "profession:campaign-planner:core",
+        label: "Planning a campaign on a commander's staff",
+        groupIds: ["M07"],
+      },
+    ],
     groups: [
       { groupId: "G09", route: "Service beside a commander" },
       { groupId: "M07", route: "Ordinary campaign staff service" },
@@ -1483,6 +1780,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P28",
     id: "profession:siege-engineer",
     name: "Siege Engineer",
+    coreRoutes: [
+      {
+        id: "profession:siege-engineer:core",
+        label: "Ordinary siege-works apprenticeship",
+        groupIds: ["M08"],
+      },
+    ],
     groups: [
       { groupId: "M08", route: "Ordinary siege-works apprenticeship" },
       { groupId: "F28", route: "Design and setting out" },
@@ -1497,6 +1801,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P29",
     id: "profession:siege-engine-crew",
     name: "Siege Engine Crew Specialist",
+    coreRoutes: [
+      {
+        id: "profession:siege-engine-crew:core",
+        label: "Ordinary engine-crew instruction",
+        groupIds: ["M09"],
+      },
+    ],
     groups: [
       { groupId: "M09", route: "Ordinary engine-crew instruction" },
       { groupId: "M04", route: "Serving in the missile line" },
@@ -1509,6 +1820,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P30",
     id: "profession:physician",
     name: "Physician",
+    coreRoutes: [
+      {
+        id: "profession:physician:core",
+        label: "Ordinary clinical apprenticeship",
+        groupIds: ["G01"],
+      },
+    ],
     groups: [
       { groupId: "G01", route: "Ordinary clinical apprenticeship" },
       { groupId: "G02", route: "Preparing what one prescribes" },
@@ -1531,11 +1849,25 @@ export const competencyContentV2Families: readonly V2Family[] = [
       {
         id: "profession:surgeon:civil",
         name: "Civil operative surgeon",
+        coreRoutes: [
+          {
+            id: "profession:surgeon:civil:core",
+            label: "Operating under a civil master surgeon",
+            groupIds: ["G18"],
+          },
+        ],
         groups: [{ groupId: "G18", route: "Operative care practice" }],
       },
       {
         id: "profession:surgeon:field",
         name: "Field surgeon",
+        coreRoutes: [
+          {
+            id: "profession:surgeon:field:core",
+            label: "Operating with a force in the field",
+            groupIds: ["F29"],
+          },
+        ],
         groups: [
           { groupId: "F29", route: "Field surgical apprenticeship" },
           { groupId: "M06", route: "Repeated service with a force" },
@@ -1547,11 +1879,18 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P32",
     id: "profession:nurse",
     name: "Nurse and Patient Attendant",
+    coreRoutes: [
+      {
+        id: "profession:nurse:core",
+        label: "Ordinary attendance apprenticeship",
+        groupIds: ["K14"],
+      },
+    ],
     groups: [
       { groupId: "K14", route: "Ordinary attendance apprenticeship" },
       { groupId: "G01", route: "Attendance under a practitioner" },
       { groupId: "G02", route: "Preparing what the patient is given" },
-      { groupId: "F22", route: "Feeding the sick household" },
+      { groupId: "C10", route: "Feeding and dosing the sick household" },
     ],
     directRoute: "Taught directly at the bedside",
     skillIds: ["skill:insight"],
@@ -1560,6 +1899,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P33",
     id: "profession:birth-attendant",
     name: "Birth Attendant and Midwife",
+    coreRoutes: [
+      {
+        id: "profession:birth-attendant:core",
+        label: "Ordinary birth-attendance apprenticeship",
+        groupIds: ["K15"],
+      },
+    ],
     groups: [
       { groupId: "K15", route: "Ordinary birth-attendance apprenticeship" },
       { groupId: "G02", route: "Preparing remedies for mother and child" },
@@ -1575,6 +1921,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P34",
     id: "profession:veterinary-practitioner",
     name: "Veterinary Practitioner",
+    coreRoutes: [
+      {
+        id: "profession:veterinary-practitioner:core",
+        label: "Ordinary stock-medicine apprenticeship",
+        groupIds: ["K13"],
+      },
+    ],
     groups: [
       { groupId: "K13", route: "Ordinary stock-medicine apprenticeship" },
       { groupId: "G02", route: "Preparing animal remedies" },
@@ -1587,6 +1940,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P35",
     id: "profession:remedy-maker",
     name: "Herbalist and Remedy Maker",
+    coreRoutes: [
+      {
+        id: "profession:remedy-maker:core",
+        label: "Ordinary plant-remedy apprenticeship",
+        groupIds: ["G02"],
+      },
+    ],
     groups: [
       { groupId: "G02", route: "Ordinary plant-remedy apprenticeship" },
       { groupId: "F23", route: "Still-room practice" },
@@ -1599,6 +1959,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P36",
     id: "profession:smith",
     name: "Smith and Weaponsmith",
+    coreRoutes: [
+      {
+        id: "profession:smith:core",
+        label: "Ironmaking and forge apprenticeship",
+        groupIds: ["F24"],
+      },
+    ],
     groups: [
       { groupId: "F24", route: "Ironmaking and forge apprenticeship" },
       { groupId: "F25", route: "Weapon-forge and servicing apprenticeship" },
@@ -1610,6 +1977,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P37",
     id: "profession:smelter",
     name: "Smelter",
+    coreRoutes: [
+      {
+        id: "profession:smelter:core",
+        label: "Ordinary furnace apprenticeship",
+        groupIds: ["F24"],
+      },
+    ],
     groups: [
       { groupId: "F24", route: "Ordinary furnace apprenticeship" },
       { groupId: "C07", route: "Working with the extraction face" },
@@ -1620,6 +1994,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P38",
     id: "profession:armorer",
     name: "Armorer",
+    coreRoutes: [
+      {
+        id: "profession:armorer:core",
+        label: "Ordinary armor workshop apprenticeship",
+        groupIds: ["F26"],
+      },
+    ],
     groups: [
       { groupId: "F26", route: "Ordinary armor workshop apprenticeship" },
       { groupId: "F25", route: "Weapon-forge and servicing work" },
@@ -1631,16 +2012,37 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P39",
     id: "profession:carpenter",
     name: "Carpenter",
+    coreRoutes: [
+      {
+        id: "profession:carpenter:core",
+        label: "Working timber, learned directly at the bench one is set to",
+        groupIds: [],
+        skillIds: ["carpentry"],
+      },
+    ],
     groups: [
       { groupId: "F27", route: "Ordinary timber apprenticeship" },
       { groupId: "C03", route: "Working on building sites" },
       { groupId: "C01", route: "Workshop apprenticeship" },
     ],
+    directRoute: "Taught directly at the bench by the carpenter one is set to",
+    skillIds: ["carpentry"],
+    note:
+      "Core settled by the 2026-09-21 Profession-cores ruling: the carpenter is defined by working timber " +
+      "itself, not by the millwright's mechanism curriculum. F27 remains an ordinary optional route for a " +
+      "carpenter who also builds working timber mechanisms.",
   },
   {
     code: "P40",
     id: "profession:shipbuilder",
     name: "Shipbuilder",
+    coreRoutes: [
+      {
+        id: "profession:shipbuilder:core",
+        label: "Ordinary yard apprenticeship",
+        groupIds: ["F03"],
+      },
+    ],
     groups: [
       { groupId: "F03", route: "Ordinary yard apprenticeship" },
       { groupId: "F27", route: "Timber mechanism work in the yard" },
@@ -1653,6 +2055,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P41",
     id: "profession:sailmaker",
     name: "Sailmaker",
+    coreRoutes: [
+      {
+        id: "profession:sailmaker:core",
+        label: "Ordinary sail-loft apprenticeship",
+        groupIds: ["C09"],
+      },
+    ],
     groups: [
       { groupId: "C09", route: "Ordinary sail-loft apprenticeship" },
       { groupId: "F02", route: "Cloth work behind the canvas" },
@@ -1663,6 +2072,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P42",
     id: "profession:spinner-weaver",
     name: "Spinner and Weaver",
+    coreRoutes: [
+      {
+        id: "profession:spinner-weaver:core",
+        label: "Ordinary fibre-to-cloth apprenticeship",
+        groupIds: ["F02"],
+      },
+    ],
     groups: [
       { groupId: "F02", route: "Ordinary fibre-to-cloth apprenticeship" },
       { groupId: "C05", route: "Making up what is woven" },
@@ -1676,6 +2092,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P43",
     id: "profession:tailor",
     name: "Tailor",
+    coreRoutes: [
+      {
+        id: "profession:tailor:core",
+        label: "Ordinary garment apprenticeship",
+        groupIds: ["C05"],
+      },
+    ],
     groups: [
       { groupId: "C05", route: "Ordinary garment apprenticeship" },
       { groupId: "F02", route: "Cloth work behind the garment" },
@@ -1688,6 +2111,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P44",
     id: "profession:leatherworker",
     name: "Leatherworker",
+    coreRoutes: [
+      {
+        id: "profession:leatherworker:core",
+        label: "Ordinary leather apprenticeship",
+        groupIds: ["C04"],
+      },
+    ],
     groups: [
       { groupId: "C04", route: "Ordinary leather apprenticeship" },
       { groupId: "C01", route: "Workshop apprenticeship" },
@@ -1699,6 +2129,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P45",
     id: "profession:potter",
     name: "Potter",
+    coreRoutes: [
+      {
+        id: "profession:potter:core",
+        label: "Ordinary ceramic apprenticeship",
+        groupIds: ["F21"],
+      },
+    ],
     groups: [
       { groupId: "F21", route: "Ordinary ceramic apprenticeship" },
       { groupId: "C01", route: "Workshop apprenticeship" },
@@ -1710,6 +2147,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P46",
     id: "profession:mason",
     name: "Mason",
+    coreRoutes: [
+      {
+        id: "profession:mason:core",
+        label: "Ordinary stone apprenticeship",
+        groupIds: ["C06"],
+      },
+    ],
     groups: [
       { groupId: "C06", route: "Ordinary stone apprenticeship" },
       { groupId: "C03", route: "Running the trades on site" },
@@ -1722,6 +2166,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P47",
     id: "profession:miner",
     name: "Miner and Quarry Worker",
+    coreRoutes: [
+      {
+        id: "profession:miner:core",
+        label: "Ordinary extraction apprenticeship",
+        groupIds: ["C07"],
+      },
+    ],
     groups: [
       { groupId: "C07", route: "Ordinary extraction apprenticeship" },
       { groupId: "F24", route: "Feeding the furnace" },
@@ -1733,17 +2184,31 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P48",
     id: "profession:millwright",
     name: "Millwright and Mechanician",
+    coreRoutes: [
+      {
+        id: "profession:millwright:core",
+        label: "Ordinary millwright apprenticeship",
+        groupIds: ["F27"],
+      },
+    ],
     groups: [
       { groupId: "F27", route: "Ordinary millwright apprenticeship" },
       { groupId: "C03", route: "Installing on site" },
     ],
     directRoute: "Taught directly at the mill and on installation",
-    skillIds: ["mathematics", "skill:smithing", "ropework"],
+    skillIds: ["mathematics", "ropework"],
   },
   {
     code: "P49",
     id: "profession:building-designer",
     name: "Building Designer",
+    coreRoutes: [
+      {
+        id: "profession:building-designer:core",
+        label: "Ordinary design apprenticeship",
+        groupIds: ["F28"],
+      },
+    ],
     groups: [
       { groupId: "F28", route: "Ordinary design apprenticeship" },
       { groupId: "C03", route: "Running the trades on site" },
@@ -1757,18 +2222,32 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P50",
     id: "profession:surveyor-mapmaker",
     name: "Surveyor and Mapmaker",
+    coreRoutes: [
+      {
+        id: "profession:surveyor-mapmaker:core",
+        label: "Ordinary surveying apprenticeship",
+        groupIds: ["F01"],
+      },
+    ],
     groups: [
       { groupId: "F01", route: "Ordinary surveying apprenticeship" },
       { groupId: "K09", route: "Assembling what is known of the country" },
       { groupId: "G04", route: "Working away from settlement" },
     ],
     directRoute: "Taught directly in the field and at the drawing table",
-    skillIds: ["mathematics", "astronomy", "skill:visual-art"],
+    skillIds: ["mathematics", "astronomy"],
   },
   {
     code: "P51",
     id: "profession:locksmith",
     name: "Locksmith",
+    coreRoutes: [
+      {
+        id: "profession:locksmith:core",
+        label: "Ordinary locksmith apprenticeship",
+        groupIds: ["C13"],
+      },
+    ],
     groups: [
       { groupId: "C13", route: "Ordinary locksmith apprenticeship" },
       { groupId: "C01", route: "Workshop apprenticeship" },
@@ -1780,6 +2259,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P52",
     id: "profession:trapmaker",
     name: "Trapmaker",
+    coreRoutes: [
+      {
+        id: "profession:trapmaker:core",
+        label: "Ordinary trapmaking apprenticeship",
+        groupIds: ["C14"],
+      },
+    ],
     groups: [
       { groupId: "C14", route: "Ordinary trapmaking apprenticeship" },
       { groupId: "C13", route: "Mechanism workshop practice" },
@@ -1791,18 +2277,37 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P53",
     id: "profession:cook",
     name: "Cook",
+    coreRoutes: [
+      {
+        id: "profession:cook:core",
+        label: "Cooking, learned directly in the kitchen one serves",
+        groupIds: [],
+        skillIds: ["skill:cooking"],
+      },
+    ],
     groups: [
-      { groupId: "F22", route: "Ordinary kitchen apprenticeship" },
-      { groupId: "C10", route: "Brewhouse attached to the kitchen" },
+      { groupId: "C10", route: "Ordinary kitchen and brewhouse apprenticeship" },
+      { groupId: "C01", route: "Buying for the kitchen as a trained trade" },
     ],
     directRoute: "Taught directly in the kitchen it serves",
-    skillIds: ["skill:customs", "skill:appraisal", "skill:bargaining", "skill:farming"],
+    skillIds: ["skill:customs", "skill:plant-lore", "skill:cooking"],
     specializationIds: ["spec:baking", "spec:court-cookery"],
+    note:
+      "Core settled by the 2026-09-21 Profession-cores ruling: the cook is defined by cooking, not by the " +
+      "brewhouse's brewing-and-preserving cycle. C10 remains an ordinary optional route and still carries " +
+      "the Food Preservation access; C10 stays the Brewer's core, which the ruling affirms.",
   },
   {
     code: "P54",
     id: "profession:brewer",
     name: "Brewer",
+    coreRoutes: [
+      {
+        id: "profession:brewer:core",
+        label: "Ordinary brewhouse apprenticeship",
+        groupIds: ["C10"],
+      },
+    ],
     groups: [
       { groupId: "C10", route: "Ordinary brewhouse apprenticeship" },
       { groupId: "C01", route: "Workshop apprenticeship" },
@@ -1814,6 +2319,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P55",
     id: "profession:vintner",
     name: "Vintner",
+    coreRoutes: [
+      {
+        id: "profession:vintner:core",
+        label: "Ordinary vineyard apprenticeship",
+        groupIds: ["C11"],
+      },
+    ],
     groups: [
       { groupId: "C11", route: "Ordinary vineyard apprenticeship" },
       { groupId: "C01", route: "Workshop apprenticeship" },
@@ -1825,6 +2337,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P56",
     id: "profession:distiller",
     name: "Distiller",
+    coreRoutes: [
+      {
+        id: "profession:distiller:core",
+        label: "Ordinary still-room apprenticeship",
+        groupIds: ["F23"],
+      },
+    ],
     groups: [
       { groupId: "F23", route: "Ordinary still-room apprenticeship" },
       { groupId: "C10", route: "Brewhouse work behind the still" },
@@ -1837,6 +2356,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P57",
     id: "profession:alchemist",
     name: "Alchemist",
+    coreRoutes: [
+      {
+        id: "profession:alchemist:core",
+        label: "Ordinary alchemical apprenticeship",
+        groupIds: ["C15"],
+      },
+    ],
     groups: [
       { groupId: "C15", route: "Ordinary alchemical apprenticeship" },
       { groupId: "K01", route: "Learned study of the tradition" },
@@ -1849,6 +2375,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P58",
     id: "profession:clerk-steward",
     name: "Clerk and Steward",
+    coreRoutes: [
+      {
+        id: "profession:clerk-steward:core",
+        label: "Ordinary records-office service",
+        groupIds: ["G11"],
+      },
+    ],
     groups: [
       { groupId: "G11", route: "Ordinary records-office service" },
       { groupId: "K11", route: "Service inside a court or great household" },
@@ -1862,6 +2395,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P59",
     id: "profession:legal-practitioner",
     name: "Legal Practitioner and Advocate",
+    coreRoutes: [
+      {
+        id: "profession:legal-practitioner:core",
+        label: "Ordinary legal apprenticeship",
+        groupIds: ["F13"],
+      },
+    ],
     groups: [
       { groupId: "F13", route: "Ordinary legal apprenticeship" },
       { groupId: "G11", route: "Service in a records office" },
@@ -1875,6 +2415,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P60",
     id: "profession:envoy",
     name: "Envoy",
+    coreRoutes: [
+      {
+        id: "profession:envoy:core",
+        label: "Ordinary negotiation apprenticeship",
+        groupIds: ["G10"],
+      },
+    ],
     groups: [
       { groupId: "G10", route: "Ordinary negotiation apprenticeship" },
       { groupId: "K11", route: "Service inside a court" },
@@ -1888,6 +2435,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P61",
     id: "profession:mediator",
     name: "Mediator and Community Convenor",
+    coreRoutes: [
+      {
+        id: "profession:mediator:core",
+        label: "Ordinary convening practice",
+        groupIds: ["G10"],
+      },
+    ],
     groups: [
       { groupId: "G10", route: "Ordinary convening practice" },
       { groupId: "F14", route: "Speaking from memory before the community" },
@@ -1900,6 +2454,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P62",
     id: "profession:credit-practitioner",
     name: "Banker and Credit Practitioner",
+    coreRoutes: [
+      {
+        id: "profession:credit-practitioner:core",
+        label: "Ordinary credit-house apprenticeship",
+        groupIds: ["F12"],
+      },
+    ],
     groups: [
       { groupId: "F12", route: "Ordinary credit-house apprenticeship" },
       { groupId: "G12", route: "Trading alongside lending" },
@@ -1912,6 +2473,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P63",
     id: "profession:political-agent",
     name: "Political Agent and Council Representative",
+    coreRoutes: [
+      {
+        id: "profession:political-agent:core",
+        label: "Ordinary council practice",
+        groupIds: ["G10"],
+      },
+    ],
     groups: [
       { groupId: "G10", route: "Ordinary council practice" },
       { groupId: "K11", route: "Service among those who decide" },
@@ -1924,6 +2492,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P64",
     id: "profession:teacher",
     name: "Teacher",
+    coreRoutes: [
+      {
+        id: "profession:teacher:core",
+        label: "Ordinary instruction apprenticeship",
+        groupIds: ["K07"],
+      },
+    ],
     groups: [
       { groupId: "K07", route: "Ordinary instruction apprenticeship" },
       { groupId: "K01", route: "Learned study of what is taught" },
@@ -1936,6 +2511,16 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P65",
     id: "profession:scribe",
     name: "Scribe and Copyist",
+    coreRoutes: [
+      {
+        id: "profession:scribe:core",
+        label:
+          "Ordinary records-office service, plus the written tradition the scribe actually writes",
+        groupIds: ["G11"],
+        blockedBy:
+          "#113 — the ruled core shape is G11 plus at least one written-language competency route. G11 is authored here; the second requirement is not, because the written-language competencies are not base Skills and the catalogue carries only 3 written traditions against this proposal's 12 Civilizations. Which tradition a scribe writes is the contextual written-tradition availability question #113 owns.",
+      },
+    ],
     groups: [
       { groupId: "G11", route: "Ordinary records-office service" },
       { groupId: "F15", route: "Reading and copying older hands" },
@@ -1944,13 +2529,30 @@ export const competencyContentV2Families: readonly V2Family[] = [
     directRoute: "Taught directly in the writing room",
     skillIds: ["skill:visual-art"],
     note:
-      "BLOCKED DEPENDENCY: the defining Written Tradition core remains unresolved under #113 and is " +
-      "deliberately not supplied here. This package must not be presented as universal literacy.",
+      "PARTIALLY BLOCKED DEPENDENCY. The 2026-09-21 Profession-cores ruling settles the core SHAPE: G11 " +
+      "plus at least one written-language competency route. The first requirement is authored here. The " +
+      "second is not, and the dependency on #113 is real rather than residual, for two reasons the ruling " +
+      "does not resolve. (1) Representation: a core route requires Learning Groups or base Skills, and a " +
+      "written-language competency is neither — it is a `written-tradition` competency, which no path body " +
+      "can currently carry, and 'at least one of any written tradition' is not expressible as a fixed " +
+      "requirement or as alternative core routes. (2) Content: the approved catalogue holds only 3 written " +
+      "traditions (Sacred Mogrebi, Church Ologian, Phoenician) against the 12 Civilizations this proposal " +
+      "gives written competencies to, and which tradition a given scribe writes is precisely the " +
+      "contextual written-tradition availability question #113 owns. Inventing either the representation " +
+      "or the tradition would distort the content, which the ruling forbids. This package must not be " +
+      "presented as universal literacy.",
   },
   {
     code: "P66",
     id: "profession:translator-interpreter",
     name: "Translator and Interpreter",
+    coreRoutes: [
+      {
+        id: "profession:translator-interpreter:core",
+        label: "Ordinary interpreting apprenticeship",
+        groupIds: ["K08"],
+      },
+    ],
     groups: [
       { groupId: "K08", route: "Ordinary interpreting apprenticeship" },
       { groupId: "F15", route: "Working from written originals" },
@@ -1964,6 +2566,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P67",
     id: "profession:historian",
     name: "Historian and Genealogist",
+    coreRoutes: [
+      {
+        id: "profession:historian:core",
+        label: "Ordinary historical study",
+        groupIds: ["F15"],
+      },
+    ],
     groups: [
       { groupId: "F15", route: "Ordinary historical study" },
       { groupId: "K10", route: "Service in a heraldic office" },
@@ -1977,6 +2586,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P68",
     id: "profession:mathematical-practitioner",
     name: "Mathematical Practitioner",
+    coreRoutes: [
+      {
+        id: "profession:mathematical-practitioner:core",
+        label: "Ordinary applied-calculation apprenticeship",
+        groupIds: ["K21"],
+      },
+    ],
     groups: [
       { groupId: "K21", route: "Ordinary applied-calculation apprenticeship" },
       { groupId: "K01", route: "Learned study of method" },
@@ -1987,6 +2603,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P69",
     id: "profession:philosopher",
     name: "Philosopher",
+    coreRoutes: [
+      {
+        id: "profession:philosopher:core",
+        label: "Ordinary philosophical study",
+        groupIds: ["K02"],
+      },
+    ],
     groups: [
       { groupId: "K02", route: "Ordinary philosophical study" },
       { groupId: "K01", route: "Learned study of the tradition" },
@@ -1999,6 +2622,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P70",
     id: "profession:astronomer",
     name: "Astronomer",
+    coreRoutes: [
+      {
+        id: "profession:astronomer:core",
+        label: "Ordinary observational apprenticeship",
+        groupIds: ["K03"],
+      },
+    ],
     groups: [
       { groupId: "K03", route: "Ordinary observational apprenticeship" },
       { groupId: "K01", route: "Learned study of the record" },
@@ -2011,6 +2641,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P71",
     id: "profession:astrologer",
     name: "Astrologer",
+    coreRoutes: [
+      {
+        id: "profession:astrologer:core",
+        label: "Ordinary astrological apprenticeship",
+        groupIds: ["K04"],
+      },
+    ],
     groups: [
       { groupId: "K04", route: "Ordinary astrological apprenticeship" },
       { groupId: "K03", route: "Observation behind the reading" },
@@ -2023,6 +2660,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P72",
     id: "profession:naturalist",
     name: "Naturalist",
+    coreRoutes: [
+      {
+        id: "profession:naturalist:core",
+        label: "Ordinary field-study apprenticeship",
+        groupIds: ["K12"],
+      },
+    ],
     groups: [
       { groupId: "K12", route: "Ordinary field-study apprenticeship" },
       { groupId: "G04", route: "Working away from settlement" },
@@ -2035,6 +2679,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P73",
     id: "profession:geographer",
     name: "Geographer",
+    coreRoutes: [
+      {
+        id: "profession:geographer:core",
+        label: "Ordinary chorographic study",
+        groupIds: ["K09"],
+      },
+    ],
     groups: [
       { groupId: "K09", route: "Ordinary chorographic study" },
       { groupId: "F01", route: "Measuring the ground oneself" },
@@ -2047,29 +2698,48 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P74",
     id: "profession:religious-practitioner",
     name: "Religious Practitioner",
+    coreRoutes: [
+      {
+        id: "profession:religious-practitioner:core",
+        label: "Ordinary vocation apprenticeship",
+        groupIds: ["K06"],
+      },
+    ],
     groups: [
       { groupId: "K06", route: "Ordinary vocation apprenticeship" },
       { groupId: "K01", route: "Learned study of the tradition" },
       { groupId: "F14", route: "Delivering before the congregation" },
+      { groupId: "K22", route: "Contemplative discipline within the vocation" },
     ],
-    directRoute: "Taught directly within the vocation",
-    skillIds: ["meditation"],
   },
   {
     code: "P75",
     id: "profession:diviner",
     name: "Diviner",
+    coreRoutes: [
+      {
+        id: "profession:diviner:core",
+        label: "Ordinary divinatory apprenticeship",
+        groupIds: ["K05"],
+      },
+    ],
     groups: [
       { groupId: "K05", route: "Ordinary divinatory apprenticeship" },
       { groupId: "K04", route: "Celestial method within the practice" },
+      { groupId: "K22", route: "Contemplative discipline of the practice" },
     ],
-    directRoute: "Taught directly by the diviner one serves",
-    skillIds: ["meditation", "skill:insight", "skill:mnemonics"],
   },
   {
     code: "P76",
     id: "profession:herald",
     name: "Herald",
+    coreRoutes: [
+      {
+        id: "profession:herald:core",
+        label: "Ordinary heraldic office apprenticeship",
+        groupIds: ["K10"],
+      },
+    ],
     groups: [
       { groupId: "K10", route: "Ordinary heraldic office apprenticeship" },
       { groupId: "F14", route: "Proclamation from memory" },
@@ -2086,6 +2756,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P77",
     id: "profession:musician",
     name: "Musician and Singer",
+    coreRoutes: [
+      {
+        id: "profession:musician:core",
+        label: "Ordinary song apprenticeship",
+        groupIds: ["F17"],
+      },
+    ],
     groups: [
       { groupId: "F17", route: "Ordinary song apprenticeship" },
       { groupId: "F19", route: "Composing the matter one performs" },
@@ -2099,6 +2776,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P78",
     id: "profession:stage-performer",
     name: "Actor and Dancer",
+    coreRoutes: [
+      {
+        id: "profession:stage-performer:core",
+        label: "Ordinary company apprenticeship",
+        groupIds: ["F18"],
+      },
+    ],
     groups: [
       { groupId: "F18", route: "Ordinary company apprenticeship" },
       { groupId: "F17", route: "Music and song in the company" },
@@ -2111,6 +2795,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P79",
     id: "profession:visual-artist",
     name: "Visual Artist and Sculptor",
+    coreRoutes: [
+      {
+        id: "profession:visual-artist:core",
+        label: "Ordinary workshop apprenticeship",
+        groupIds: ["F20"],
+      },
+    ],
     groups: [
       { groupId: "F20", route: "Ordinary workshop apprenticeship" },
       { groupId: "F21", route: "Modelling and firing" },
@@ -2123,6 +2814,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P80",
     id: "profession:storyteller",
     name: "Storyteller and Poet",
+    coreRoutes: [
+      {
+        id: "profession:storyteller:core",
+        label: "Ordinary oral composition apprenticeship",
+        groupIds: ["F19"],
+      },
+    ],
     groups: [
       { groupId: "F19", route: "Ordinary oral composition apprenticeship" },
       { groupId: "F14", route: "Holding and delivering the matter" },
@@ -2135,6 +2833,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P81",
     id: "profession:athlete",
     name: "Athlete and Physical Performer",
+    coreRoutes: [
+      {
+        id: "profession:athlete:core",
+        label: "Ordinary athletic training",
+        groupIds: ["F04"],
+      },
+    ],
     groups: [
       { groupId: "F04", route: "Ordinary athletic training" },
       { groupId: "F18", route: "Performing before an audience" },
@@ -2146,33 +2851,37 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P82",
     id: "profession:weapon-instructor",
     name: "Weapon Instructor",
-    groups: [],
-    directRoute: "Taught directly in the salle one instructs in",
-    skillIds: ["skill:teaching", "weapon_maintenance", "skill:athletics"],
-    tracks: [
+    coreRoutes: [
       {
-        id: "profession:weapon-instructor:close-combat",
-        name: "Close-combat weapon master",
-        groups: [{ groupId: "M02", route: "Advanced close-combat instruction" }],
-      },
-      {
-        id: "profession:weapon-instructor:fencing",
-        name: "Fencing master",
-        groups: [{ groupId: "F30", route: "Swashbuckling fencing instruction" }],
-      },
-      {
-        id: "profession:weapon-instructor:missile",
-        name: "Missile weapon master",
-        groups: [{ groupId: "M05", route: "Advanced missile instruction" }],
+        id: "profession:weapon-instructor:core",
+        label: "Ordinary arms-instruction apprenticeship",
+        groupIds: ["M10"],
       },
     ],
-    narrowByDesign: true,
-    note: "The fencing-master path is deliberately narrow: a single named tradition is the whole occupation.",
+    groups: [
+      { groupId: "M10", route: "Ordinary arms-instruction apprenticeship" },
+      { groupId: "M02", route: "Advanced close-combat instruction" },
+      { groupId: "M05", route: "Advanced missile instruction" },
+      { groupId: "F30", route: "Swashbuckling fencing instruction" },
+    ],
+    note:
+      "All three tracks retired under the track-discipline ruling: the subject a weapon master teaches is an " +
+      "ordinary weapon choice, already expressed by M02, M05 and F30. The Profession no longer needs the " +
+      "narrow-by-design exemption the one-tradition fencing track required. The instructor still reaches no " +
+      "Combat Experience by any of these routes, which is the point of the Combat Experience ruling: " +
+      "instructing is not exposure.",
   },
   {
     code: "P83",
     id: "profession:gambler",
     name: "Gambler",
+    coreRoutes: [
+      {
+        id: "profession:gambler:core",
+        label: "Ordinary gaming-house practice",
+        groupIds: ["K17"],
+      },
+    ],
     groups: [
       { groupId: "K17", route: "Ordinary gaming-house practice" },
       { groupId: "G14", route: "Knowing the house and the players" },
@@ -2186,6 +2895,13 @@ export const competencyContentV2Families: readonly V2Family[] = [
     code: "P84",
     id: "profession:diver",
     name: "Diver and Water Worker",
+    coreRoutes: [
+      {
+        id: "profession:diver:core",
+        label: "Ordinary diving apprenticeship",
+        groupIds: ["K20"],
+      },
+    ],
     groups: [
       { groupId: "K20", route: "Ordinary diving apprenticeship" },
       { groupId: "N01", route: "Working from a boat" },
@@ -2205,7 +2921,23 @@ export const competencyContentV2Families: readonly V2Family[] = [
  * Learning Group; only the access label differs. The proposal therefore assigns every competency a
  * real category and proposes that the `special-access` bucket be retired.
  *
- * Applying this to the runtime enum, `chargenBrowse.ts` and
+ * The roster itself is simplified under the ruling's new latitude, which releases it from
+ * preserving awkward current categories for compatibility. Two categories are retired:
+ *
+ * - `mental` held only Meditation and Mnemonics. Two members is category proliferation, and neither
+ *   name points a player at the word "mental". Meditation joins `mystical` with the contemplative
+ *   competencies it is practised beside; Mnemonics joins `knowledge`, where a trained memory belongs.
+ * - `high-society` described a milieu — who has access — rather than what the competency is, which
+ *   is exactly what the ruling forbids. Heraldry is a learned body of lore and joins `knowledge`;
+ *   Politics and Courtly Protocol are ways of dealing with people and join `social`.
+ *
+ * One arbitrary placement is corrected for guessability: Agriculture & Husbandry defaulted to
+ * `trade`, which split the living-animal competencies in two — Animal Husbandry, Falconry and
+ * Steppe Remount Training sat under `trade` while Animal Handling, Herding, Animal Training and
+ * Animal Lore sat under `fieldcraft`. The domain now defaults to `fieldcraft`, and Cart Driving is
+ * overridden back to `trade` because carting is a transport trade rather than land or stock work.
+ *
+ * Applying any of this to the runtime enum, `chargenBrowse.ts` and
  * `getPlayerFacingSkillCategoryId({ preferDirectProfession })` is deliberately OUT OF SCOPE here
  * and belongs to a separate authorized implementation task.
  */
@@ -2218,13 +2950,11 @@ export type V2PlayerFacingCategoryId =
   | "maritime"
   | "healing"
   | "trade"
-  | "high-society"
   | "performance"
   | "social"
   | "covert"
   | "language"
   | "knowledge"
-  | "mental"
   | "mystical"
   | "craft"
   | "physical";
@@ -2233,7 +2963,7 @@ export type V2PlayerFacingCategoryId =
 export const competencyContentV2CategoryByDomain: Readonly<
   Record<string, V2PlayerFacingCategoryId>
 > = {
-  "Agriculture & Husbandry": "trade",
+  "Agriculture & Husbandry": "fieldcraft",
   "Arts & Performance": "performance",
   "Athletics & Movement": "physical",
   "Awareness & Investigation": "fieldcraft",
@@ -2255,9 +2985,12 @@ export const competencyContentV2CategoryByDomain: Readonly<
 };
 
 /**
- * Explicit per-competency overrides. Where the competency also exists in the current runtime
- * catalogue, the override preserves that catalogue's existing player-facing category so the
- * proposal does not silently re-bucket Skills players already see.
+ * Explicit per-competency overrides.
+ *
+ * The controlling test is the ruling's: a player should normally be able to guess the category from
+ * the Skill name and the category labels alone. Where an existing runtime category already passes
+ * that test it is preserved, but compatibility on its own is no longer a reason to keep an awkward
+ * placement — the Product Owner has explicitly released the roster from that constraint.
  */
 export const competencyContentV2CategoryOverrides: Readonly<
   Record<string, V2PlayerFacingCategoryId>
@@ -2268,23 +3001,24 @@ export const competencyContentV2CategoryOverrides: Readonly<
   camouflage: "fieldcraft",
   divination: "mystical",
   gambling: "social",
-  heraldry: "high-society",
+  heraldry: "knowledge",
   herding: "fieldcraft",
   history: "knowledge",
   mechanics: "knowledge",
-  meditation: "mental",
+  meditation: "mystical",
   mounted_combat: "combat",
   ropework: "maritime",
   surveying: "knowledge",
   "skill:animal-handling": "fieldcraft",
   "skill:animal-lore": "fieldcraft",
+  "skill:cart-driving": "trade",
   "skill:cartography": "knowledge",
   "skill:document-forgery": "covert",
   "skill:geography": "knowledge",
   "skill:law": "knowledge",
-  "skill:mnemonics": "mental",
+  "skill:mnemonics": "knowledge",
   "skill:poisons": "covert",
-  "skill:politics": "high-society",
+  "skill:politics": "social",
   "skill:religion": "mystical",
   "skill:sculpture": "craft",
   "skill:siege-engineering": "military",
@@ -2295,7 +3029,7 @@ export const competencyContentV2CategoryOverrides: Readonly<
   "skill:wayfinding": "fieldcraft",
   "spec:court-administration": "trade",
   "spec:court-advocacy": "knowledge",
-  "spec:courtly-protocol": "high-society",
+  "spec:courtly-protocol": "social",
   "spec:fortification": "military",
   "spec:genealogy": "knowledge",
   "spec:omen-reading": "mystical",
@@ -2317,6 +3051,12 @@ export interface V2CivilizationLanguage {
   existingSpokenCompetencyId?: string;
   /** Proposed Glantri written-tradition competency name, or null when authored as having no writing. */
   writtenName: string | null;
+  /**
+   * Required whenever `writtenName` is null: the ruling gives every Civilization a rollable written
+   * competency unless it is explicitly authored as having no writing, so an absence must be authored,
+   * never merely left blank.
+   */
+  writtenAbsenceReason?: string;
   existingWrittenCompetencyId?: string;
   /** Real-world analogue name this proposal replaces, if any. */
   replacesAnalogueSpokenName?: string;
@@ -2327,9 +3067,21 @@ export interface V2CivilizationLanguage {
 }
 
 /**
- * Every canonical Civilization gets a spoken competency, and a written one unless it is explicitly
- * authored as having no writing. Names are proposed in Glantri terms; where the Civilization's own
- * name is still a real-world analogue, the language name inherits that problem and is flagged.
+ * Every canonical Civilization gets a rollable spoken competency, and a rollable written one unless
+ * it is explicitly authored as having no writing; written competence is what a reading roll is made
+ * against.
+ *
+ * Product Owner naming ruling: use the canonical Glantri name where one is established, and the
+ * appropriate historical language or writing-tradition name where none is. Do not invent Glantri
+ * names, linguistic descent, scripts, registers or relationships between Civilizations. The previous
+ * revision's invented names — Kethran, Old Latian, Palace Scyrian, Kaldan, Aspardic, and the Harbour,
+ * Hill, Palace, Wedge and Chancery scripts — stay withdrawn.
+ *
+ * The indefinite blocker around usable written competencies is REMOVED by ruling. Every written
+ * competency below is rollable now, named for its language, and is what a reading roll is made
+ * against. Script, register and conventions are later enrichment and no longer hold anything up, so
+ * no entry requires a further naming ruling: the list below is complete, and a deterministic check
+ * fails the build if any entry reopens one.
  */
 export const competencyContentV2CivilizationLanguages: readonly V2CivilizationLanguage[] = [
   {
@@ -2337,7 +3089,7 @@ export const competencyContentV2CivilizationLanguages: readonly V2CivilizationLa
     civilizationName: "Scandia",
     spokenName: "Spoken Scandian",
     existingSpokenCompetencyId: "spoken:scandian",
-    writtenName: "Written Scandian in Runic Scandian",
+    writtenName: "Written Scandian in runes",
     requiresProductOwnerNamingRuling: false,
     note: "Both names are already Glantri names. Only the missing written competency is added.",
   },
@@ -2346,57 +3098,70 @@ export const competencyContentV2CivilizationLanguages: readonly V2CivilizationLa
     civilizationName: "Iest",
     spokenName: "Spoken Common",
     existingSpokenCompetencyId: "spoken:common",
-    writtenName: "Written Common in the Common Hand",
-    requiresProductOwnerNamingRuling: true,
-    note: "The script, register and conventions of the Common written tradition remain an open case in the approved gap report.",
+    writtenName: "Written Common",
+    requiresProductOwnerNamingRuling: false,
+    note:
+      "Common is an established Glantri name, so the written competency takes it directly and no script " +
+      "name is invented. The competency is rollable as it stands, and a reading roll is made against it. " +
+      "Script, register and conventions are later enrichment, not a blocker: the Product Owner has ruled " +
+      "that written competence must exist now and that detailed prose may follow.",
   },
   {
     civilizationId: "thyatis",
     civilizationName: "Thyatis",
     spokenName: "Spoken Common",
     existingSpokenCompetencyId: "spoken:common",
-    writtenName: "Written Common in the Common Hand",
-    requiresProductOwnerNamingRuling: true,
-    note: "Shares the Common written tradition; the same open case applies.",
+    writtenName: "Written Common",
+    requiresProductOwnerNamingRuling: false,
+    note: "Shares the rollable Common written competency; enrichment of the tradition follows later.",
   },
   {
     civilizationId: "glantri",
     civilizationName: "Glantri",
     spokenName: "Spoken Common",
     existingSpokenCompetencyId: "spoken:common",
-    writtenName: "Written Common in the Common Hand",
-    requiresProductOwnerNamingRuling: true,
-    note: "Shares the Common written tradition; Old Common remains an authored optional second tongue.",
+    writtenName: "Written Common",
+    requiresProductOwnerNamingRuling: false,
+    note:
+      "Shares the rollable Common written competency. Old Common remains an authored optional second " +
+      "tongue; no descent between the two is asserted.",
   },
   {
     civilizationId: "scyria",
     civilizationName: "Scyria",
     spokenName: "Spoken Old Common",
     existingSpokenCompetencyId: "spoken:old-common",
-    writtenName: "Written Old Common in the Old Common Hand",
-    requiresProductOwnerNamingRuling: true,
-    note: "The Old Common written identity must be defined without inferring equivalence with Common.",
+    writtenName: "Written Old Common",
+    requiresProductOwnerNamingRuling: false,
+    note:
+      "Old Common is an established Glantri name and no script name is invented. The written competency is " +
+      "rollable in its own right and is what an Old Common reading roll is made against. No equivalence " +
+      "with Common, and no descent from it, is asserted; the earlier suggestion of Mycenaean descent from " +
+      "Scyria stays withdrawn.",
   },
   {
     civilizationId: "byzantine_empire",
     civilizationName: "Byzantine Empire",
     spokenName: "Spoken Old Common",
     existingSpokenCompetencyId: "spoken:old-common",
-    writtenName: "Written Old Common in the Old Common Hand",
-    requiresProductOwnerNamingRuling: true,
-    note: "The Civilization name itself is a real-world analogue; renaming it is outside this task's scope.",
+    writtenName: "Written Old Common",
+    requiresProductOwnerNamingRuling: false,
+    note:
+      "Shares the rollable Old Common written competency. The Civilization name itself is a real-world " +
+      "analogue; renaming it is outside this task's scope.",
   },
   {
     civilizationId: "lankhmar",
     civilizationName: "Lankhmar",
     spokenName: "Spoken Lankhmaran",
     existingSpokenCompetencyId: "spoken:phoenician",
-    writtenName: "Written Lankhmaran in the Harbour Hand",
+    writtenName: "Written Lankhmaran in the Phoenician script",
     existingWrittenCompetencyId: "written:phoenician:phoenician",
     replacesAnalogueSpokenName: "Spoken Phoenician",
-    replacesAnalogueWrittenName: "Written Phoenician in Phoenician script",
     requiresProductOwnerNamingRuling: false,
-    note: "Clear correction: the Civilization is already a Glantri name, so the language takes it directly.",
+    note:
+      "Lankhmar is an established Glantri name, so the spoken language takes it directly. The script has " +
+      "no established Glantri name, so it keeps its historical one; the invented Harbour Hand is withdrawn.",
   },
   {
     civilizationId: "olog",
@@ -2406,7 +3171,10 @@ export const competencyContentV2CivilizationLanguages: readonly V2CivilizationLa
     writtenName: "Written Ologian in Church Ologian",
     existingWrittenCompetencyId: "written:ologian:church-ologian",
     requiresProductOwnerNamingRuling: false,
-    note: "Already complete in the approved catalogue; carried forward unchanged.",
+    note:
+      "Names already complete in the approved catalogue and carried forward unchanged. FLAGGED FOR LATER " +
+      "CORRECTION, deliberately not corrected here: Olog appears modelled from a historical stage somewhat " +
+      "later and more advanced than the intended Glantri Olog society. That is a separate follow-up.",
   },
   {
     civilizationId: "mogreb",
@@ -2423,81 +3191,86 @@ export const competencyContentV2CivilizationLanguages: readonly V2CivilizationLa
     civilizationName: "N'Kolo",
     spokenName: "Spoken N'kolian",
     existingSpokenCompetencyId: "spoken:nkolian",
-    writtenName: "Written N'kolian in Royal N'kolian",
-    requiresProductOwnerNamingRuling: true,
-    note: "Glantri names already; the written tradition's register and script support remain an open case.",
+    writtenName: "Written N'kolian",
+    requiresProductOwnerNamingRuling: false,
+    note:
+      "N'kolian is an established Glantri name, so the written competency takes it directly and the " +
+      "invented Royal N'kolian register stays withdrawn. The competency is rollable as it stands; no " +
+      "register or script is invented for it.",
   },
   {
     civilizationId: "san_forager_bands",
     civilizationName: "San Forager Bands",
     spokenName: "Spoken Tuu",
     writtenName: null,
-    requiresProductOwnerNamingRuling: true,
+    writtenAbsenceReason:
+      "Authored as having no written tradition: the San forager bands are a non-literate society, so no " +
+      "reading roll is made for them and no written competency is invented to carry one.",
+    requiresProductOwnerNamingRuling: false,
     note:
-      "No spoken competency exists for this Civilization today; one is added. The Civilization is explicitly " +
-      "authored as having no written tradition. The approved gap report still asks for a precise Tuu identity.",
+      "No spoken competency exists for this Civilization today; one is added. No approved Glantri name " +
+      "exists, so the appropriate historical name stands: Tuu is the established scholarly name for the " +
+      "language family the San forager bands speak. Nothing is invented — no descent, no sub-language and " +
+      "no fictional relationship to another Civilization — and the earlier request for a further Tuu " +
+      "identity is answered by the naming ruling rather than left open.",
   },
   {
     civilizationId: "scythians",
     civilizationName: "Scythians",
-    spokenName: "Spoken Kethran",
+    spokenName: "Spoken Scythian",
     existingSpokenCompetencyId: "spoken:scythian",
     writtenName: null,
-    replacesAnalogueSpokenName: "Spoken Scythian",
-    requiresProductOwnerNamingRuling: true,
-    note:
-      "Candidate name only. The Civilization name is itself a real-world analogue, so the language cannot be " +
-      "finally named until the Civilization is. Authored as having no written tradition.",
+    writtenAbsenceReason:
+      "Authored as having no written tradition: the Scythian steppe societies are non-literate, so no " +
+      "reading roll is made for them.",
+    requiresProductOwnerNamingRuling: false,
+    note: "No established Glantri name exists, so the historical name stands. The invented Kethran is withdrawn.",
   },
   {
     civilizationId: "latial_chiefdoms",
     civilizationName: "Latial Chiefdoms",
-    spokenName: "Spoken Old Latian",
+    spokenName: "Spoken Old Latin",
     existingSpokenCompetencyId: "spoken:old-latin",
-    writtenName: "Written Old Latian in the Hill Script",
-    replacesAnalogueSpokenName: "Spoken Old Latin",
-    replacesAnalogueWrittenName: "Old Italic",
-    requiresProductOwnerNamingRuling: true,
-    note: "Candidate names only; the Civilization name is itself a real-world analogue.",
+    writtenName: "Written Old Latin in the Old Italic script",
+    requiresProductOwnerNamingRuling: false,
+    note:
+      "Historical names stand; the invented Old Latian and Hill Script are withdrawn. The written " +
+      "competency is newly added so that a reading roll has something to roll against.",
   },
   {
     civilizationId: "mycenaean_greece",
     civilizationName: "Mycenaean Greece",
-    spokenName: "Spoken Palace Scyrian",
+    spokenName: "Spoken Mycenaean Greek",
     existingSpokenCompetencyId: "spoken:mycenaean-greek",
-    writtenName: "Written Palace Scyrian in the Palace Syllabary",
-    replacesAnalogueSpokenName: "Spoken Mycenaean Greek",
-    replacesAnalogueWrittenName: "Linear B",
-    requiresProductOwnerNamingRuling: true,
+    writtenName: "Written Mycenaean Greek in Linear B",
+    requiresProductOwnerNamingRuling: false,
     note:
-      "Candidate names only. The proposed tie to Scyria is a suggestion about descent, not an established " +
-      "Glantri fact, and needs a ruling.",
+      "Historical names stand. The invented Palace Scyrian is withdrawn, and with it the implied descent " +
+      "from Scyria, which was never an established Glantri fact.",
   },
   {
     civilizationId: "sumer",
     civilizationName: "Sumer",
-    spokenName: "Spoken Kaldan",
+    spokenName: "Spoken Sumerian",
     existingSpokenCompetencyId: "spoken:sumerian",
-    writtenName: "Written Kaldan in the Wedge Script",
-    replacesAnalogueSpokenName: "Spoken Sumerian",
-    replacesAnalogueWrittenName: "Cuneiform",
-    requiresProductOwnerNamingRuling: true,
+    writtenName: "Written Sumerian in Cuneiform",
+    requiresProductOwnerNamingRuling: false,
     note:
-      "Candidate names only. The approved gap report explicitly refuses a universal Cuneiform competence; " +
-      "the language and tradition behind the script still need authoring.",
+      "Historical names stand; the invented Kaldan and Wedge Script are withdrawn. The written competency " +
+      "is Sumerian written in Cuneiform specifically — the approved gap report's refusal of a universal " +
+      "Cuneiform competence is respected, because the competency is tied to one language.",
   },
   {
     civilizationId: "achaemenid_persia",
     civilizationName: "Achaemenid Persia",
-    spokenName: "Spoken Aspardic",
+    spokenName: "Spoken Old Persian",
     existingSpokenCompetencyId: "spoken:old-persian",
-    writtenName: "Written Aspardic in the Chancery Script",
-    replacesAnalogueSpokenName: "Spoken Old Persian",
-    replacesAnalogueWrittenName: "Imperial Aramaic",
-    requiresProductOwnerNamingRuling: true,
+    writtenName: "Written Imperial Aramaic",
+    requiresProductOwnerNamingRuling: false,
     note:
-      "Candidate names only. Language, script and administrative written tradition must still be separated " +
-      "with explicit evidence, as the approved gap report requires.",
+      "Historical names stand; the invented Aspardic and Chancery Script are withdrawn. The spoken tongue " +
+      "and the chancery written tradition are deliberately different languages here, which is what the " +
+      "approved gap report asks for: the written competency is not a way of writing the spoken one.",
   },
 ];
 
@@ -2527,10 +3300,91 @@ export const competencyContentV2DirectGrantPolicy: readonly string[] = [
   "R3 — no generic social polish. Customs is withdrawn wherever the curriculum has no social, ceremonial, courtly or cross-cultural element beyond ordinary life.",
   "R4 — no generic learned top-up. History, Philosophy, Politics, Religion, Geography, Mathematics, Mnemonics and Insight are withdrawn wherever a learned group already supplies the grounding and the Skill is not the family's own subject matter.",
   "R5 — no workshop garnish. Carpentry, Ropework, Mechanics and similar adjacent trades are withdrawn where they were decoration rather than taught craft, and kept where the material genuinely is the craft.",
+  "R7 — a coherent cluster belongs in a Learning Group. Where a family's direct grants described a practice that is genuinely taught and practised together, they were moved into a group rather than left as exceptional routes: the Guard's watch duty into K24, the Thief's street theft into K25, the Diviner's and Religious Practitioner's contemplative discipline into K22, and the Weapon Instructor's salle into M10. Direct grants are exceptional occupational routes, not a breadth mechanism.",
   "R6 — a grant survives on coherence, never on arithmetic. Several retained grants leave their path at 7 or 8; that is an accepted outcome, not a defect to be corrected.",
 ];
 
 export const competencyContentV2DirectGrantDecisions: readonly V2DirectGrantDecision[] = [
+  {
+    skillId: "skill:cooking",
+    removedFrom: [],
+    retainedIn: ["P53"],
+    rationale:
+      "Added by the 2026-09-21 Profession-cores ruling, which makes the direct Cooking route the cook's " +
+      "defining core and states that C10 is not it. Cooking is also taught inside C10, so the grant adds " +
+      "no breadth — overlapping routes are charged once — but it states the occupation's own defining " +
+      "practice as a route the cook always has, independently of the brewhouse curriculum.",
+  },
+  {
+    skillId: "skill:streetwise",
+    removedFrom: ["P14"],
+    retainedIn: [],
+    rationale:
+      "R7. Knowing whose district this is was never an exception for a guard; it is the substance of watch " +
+      "duty, and it moved into K24 with the rest of it.",
+  },
+  {
+    skillId: "skill:intimidation",
+    removedFrom: ["P14"],
+    retainedIn: [],
+    rationale:
+      "R7. Making someone stand down without drawing is taught on watch, not granted. Moved into K24. The " +
+      "Enforcer keeps it through K23, where it is coercion rather than keeping order.",
+  },
+  {
+    skillId: "skill:sleight-of-hand",
+    removedFrom: ["P18"],
+    retainedIn: [],
+    rationale:
+      "R7. The thief's hands are the trade, not an exception to it. Moved into K25 with Appraisal and " +
+      "Climbing, and it is the immediate parent of the Pickpocketing access K25 now carries.",
+  },
+  {
+    skillId: "meditation",
+    removedFrom: ["P74", "P75"],
+    retainedIn: [],
+    rationale:
+      "R7. Contemplative discipline is taught in houses and lineages that teach it alongside the memorised " +
+      "corpus and the reading of people. That is K22, not two separate direct grants.",
+  },
+  {
+    skillId: "weapon_maintenance",
+    removedFrom: ["P82"],
+    retainedIn: [],
+    rationale: "R7. Keeping the salle's weapons is part of instructing in them. Moved into M10.",
+  },
+  {
+    skillId: "battlefield_awareness",
+    removedFrom: ["P24"],
+    retainedIn: [],
+    rationale:
+      "R7. The scout now takes M06 outright. Reading a field is experiential, and the scout's working life " +
+      "is exactly the repeated forward service M06 describes, so the route states what the grant asserted.",
+  },
+  {
+    skillId: "skill:farming",
+    removedFrom: ["P53"],
+    retainedIn: ["P54"],
+    rationale:
+      "R5. Withdrawn from the cook: a kitchen buys its produce, it does not grow it. Retained for the " +
+      "brewer, whose grain supply genuinely is part of the brewhouse year.",
+  },
+  {
+    skillId: "skill:smithing",
+    removedFrom: ["P48"],
+    retainedIn: [],
+    rationale:
+      "R5. The millwright's ironwork is real but it is one of the trades C03 already offers on site, so " +
+      "the route supplies it rather than a standing grant.",
+  },
+  {
+    skillId: "skill:visual-art",
+    removedFrom: ["P50"],
+    retainedIn: ["P21", "P65", "P76"],
+    rationale:
+      "R5. Retained where the drawn or lettered hand is the occupation: the forger, the copyist and the " +
+      "herald. The surveyor's draughtsmanship is Cartography, which F01 and K09 already teach.",
+  },
   {
     skillId: "skill:teaching",
     removedFrom: [
@@ -2558,12 +3412,13 @@ export const competencyContentV2DirectGrantDecisions: readonly V2DirectGrantDeci
       "P77",
       "P79",
       "P81",
+      "P82",
     ],
-    retainedIn: ["P82"],
+    retainedIn: [],
     rationale:
-      "R1. Twenty-four families were told they taught apprentices purely to add a Skill. Instruction is " +
-      "constitutive only for the Weapon Instructor; the master artisan reaches it through C02 and the " +
-      "Teacher through K07.",
+      "R1/R7. Twenty-four families were told they taught apprentices purely to add a Skill. Instruction is " +
+      "constitutive only for the Weapon Instructor, and that case is now the M10 arms-instruction practice " +
+      "rather than a direct grant. The master artisan reaches it through C02 and the Teacher through K07.",
   },
   {
     skillId: "skill:trade",
@@ -2614,18 +3469,20 @@ export const competencyContentV2DirectGrantDecisions: readonly V2DirectGrantDeci
   },
   {
     skillId: "skill:appraisal",
-    removedFrom: ["P05", "P19", "P34", "P35", "P52", "P56", "P57", "P65"],
-    retainedIn: ["P18", "P40", "P46", "P47", "P53", "P58", "P84"],
+    removedFrom: ["P05", "P19", "P34", "P35", "P52", "P56", "P57", "P65", "P18", "P53"],
+    retainedIn: ["P40", "P46", "P47", "P58", "P84"],
     rationale:
-      "R2. Retained where judging worth is the work itself: the thief's loot, the shipwright's and mason's " +
-      "material selection, the miner's ore, the cook's provisions, the steward's estate, the diver's salvage.",
+      "R2/R7. Retained where judging worth is the work itself: the shipwright's and mason's material " +
+      "selection, the miner's ore, the steward's estate, the diver's salvage. The thief's eye for loot " +
+      "moved into K25 and the cook's buying into C01, in both cases as taught practice rather than a grant.",
   },
   {
     skillId: "skill:bargaining",
-    removedFrom: ["P05", "P16", "P19", "P35", "P49", "P83"],
-    retainedIn: ["P53"],
+    removedFrom: ["P05", "P16", "P19", "P35", "P49", "P83", "P53"],
+    retainedIn: [],
     rationale:
-      "R2. Retained only for the cook, whose buying at market is part of running the kitchen.",
+      "R2. No family now takes Bargaining directly. The cook's buying at market is real, but it is the " +
+      "ordinary trained commerce C01 already teaches, so the cook takes the route rather than the grant.",
   },
   {
     skillId: "skill:administration",
@@ -2668,19 +3525,20 @@ export const competencyContentV2DirectGrantDecisions: readonly V2DirectGrantDeci
   },
   {
     skillId: "skill:mnemonics",
-    removedFrom: ["P17", "P27", "P32", "P33", "P60"],
-    retainedIn: ["P16", "P75", "P77", "P78"],
+    removedFrom: ["P17", "P27", "P32", "P33", "P60", "P75"],
+    retainedIn: ["P16", "P77", "P78"],
     rationale:
-      "R4. Retained where holding material without writing is the practice: the informant's ear, the " +
-      "diviner's tradition, the musician's and the player's repertoire.",
+      "R4/R7. Retained where holding material without writing is the practice: the informant's ear, the " +
+      "musician's and the player's repertoire. The diviner's trained memory moved into K22, where it sits " +
+      "with the discipline that produces it.",
   },
   {
     skillId: "skill:insight",
-    removedFrom: ["P62", "P64", "P74", "P80"],
-    retainedIn: ["P32", "P33", "P59", "P71", "P75"],
+    removedFrom: ["P62", "P64", "P74", "P80", "P75"],
+    retainedIn: ["P32", "P33", "P59", "P71"],
     rationale:
-      "R4. Retained where reading the person in front of you is the work: the attendant, the midwife, the " +
-      "advocate, the astrologer and the diviner with their clients.",
+      "R4/R7. Retained where reading the person in front of you is the work: the attendant, the midwife, " +
+      "the advocate and the astrologer. The diviner reaches it through K22 instead.",
   },
   {
     skillId: "skill:animal-lore",
@@ -2700,10 +3558,12 @@ export const competencyContentV2DirectGrantDecisions: readonly V2DirectGrantDeci
   {
     skillId: "carpentry",
     removedFrom: ["P08", "P49", "P51", "P54", "P55", "P79"],
-    retainedIn: ["P29", "P52"],
+    retainedIn: ["P29", "P52", "P39"],
     rationale:
       "R5. Retained where timber is the material worked: siege-engine carriages and constructed traps. " +
-      "Withdrawn where it stood in for 'repairs things made of wood'.",
+      "Withdrawn where it stood in for 'repairs things made of wood'. Added to P39 by the 2026-09-21 " +
+      "Profession-cores ruling, which makes the direct Carpentry route the carpenter's defining core: " +
+      "timber is not adjacent to this occupation, it is the occupation.",
   },
   {
     skillId: "ropework",
@@ -2715,11 +3575,14 @@ export const competencyContentV2DirectGrantDecisions: readonly V2DirectGrantDeci
   },
   {
     skillId: "skill:plant-lore",
-    removedFrom: ["P05", "P31", "P42", "P53"],
-    retainedIn: ["P54", "P55", "P56", "P57"],
+    removedFrom: ["P05", "P31", "P42"],
+    retainedIn: ["P54", "P55", "P56", "P57", "P53", "P02"],
     rationale:
-      "R4. Retained where the plant is the raw material of the process. The farmer and the cook now reach " +
-      "it through the revised F22, and the surgeon and weaver did not need it.",
+      "R4. Retained where the plant is the raw material of the process, and restored to the cook when F22 " +
+      "was retired: a kitchen genuinely teaches what is available when. The farmer reaches it through the " +
+      "holding's own year, and the surgeon and weaver did not need it. Added to P02 by the 2026-09-21 " +
+      "Profession-cores ruling, which makes the direct Plant Lore route the gatherer's defining core: this " +
+      "is the ruling's exceptional-occupational-route case, not a breadth top-up.",
   },
   {
     skillId: "skill:first-aid",
@@ -2731,9 +3594,11 @@ export const competencyContentV2DirectGrantDecisions: readonly V2DirectGrantDeci
   },
   {
     skillId: "skill:perception",
-    removedFrom: ["P09", "P15", "P51"],
-    retainedIn: ["P14", "P16"],
-    rationale: "R4. Retained where watching is the duty: the watchman and the informant.",
+    removedFrom: ["P09", "P15", "P51", "P14"],
+    retainedIn: ["P16"],
+    rationale:
+      "R4/R7. Retained for the informant, whose eye is his own stock in trade. The guard's watching moved " +
+      "into K24 with the rest of watch duty.",
   },
   {
     skillId: "skill:cartography",
@@ -2792,11 +3657,12 @@ export const competencyContentV2DirectGrantDecisions: readonly V2DirectGrantDeci
   },
   {
     skillId: "climb",
-    removedFrom: ["P09", "P84"],
-    retainedIn: ["P02", "P18"],
+    removedFrom: ["P09", "P84", "P18"],
+    retainedIn: ["P02"],
     rationale:
-      "R5. Retained for the cliff-and-tree collector and the thief. The rigged-vessel sailor reaches it " +
-      "through F09, and the diver works on a line rather than a face.",
+      "R5/R7. Retained for the cliff-and-tree collector. The thief's climbing moved into K25, where it is " +
+      "taught with what it is for. The rigged-vessel sailor reaches it through F09, and the diver works on " +
+      "a line rather than a face.",
   },
   {
     skillId: "skill:survival",
@@ -2807,10 +3673,11 @@ export const competencyContentV2DirectGrantDecisions: readonly V2DirectGrantDeci
   },
   {
     skillId: "skill:athletics",
-    removedFrom: ["P22"],
-    retainedIn: ["P78", "P82", "P84"],
+    removedFrom: ["P22", "P82"],
+    retainedIn: ["P78", "P84"],
     rationale:
-      "R6. Marching is already what G04 and M06 describe; stage movement, salle conditioning and breath work are taught.",
+      "R6/R7. Marching is already what G04 and M06 describe. Stage movement and the diver's breath work are " +
+      "genuinely taught; the instructor's salle conditioning moved into M10 with the rest of that cluster.",
   },
   {
     skillId: "tailoring",
