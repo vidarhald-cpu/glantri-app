@@ -136,6 +136,7 @@ export function ArtifactDetails({
                         optional: false,
                         targetArtifactId: artifact.id,
                         resourceId: "media",
+                        attachments: [],
                         dependencies: [],
                         metadata: {
                           title: artifact.title,

@@ -46,6 +46,9 @@ function repositoryStub() {
     async ensureDefaultEquipmentLocations() {
       return locations;
     },
+    async getCampaignEquipmentItemGmNotes() {
+      return {};
+    },
     async getCampaignEquipmentItems(campaignId) {
       return [...items.values()].filter((item) => item.campaignContextId === campaignId).map(clone);
     },

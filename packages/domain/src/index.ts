@@ -86,3 +86,4 @@ export * from "./equipment";
 export * from "./profession/professions";
 export * from "./rules/ruleTable";
 export * from "./campaign/artifactPackage";
+export * from "./campaign/aiIntake";

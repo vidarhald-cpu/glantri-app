@@ -62,6 +62,7 @@ function toGmDto(record: ArtifactRecord): ArtifactGmDto {
     cleanupRequired: record.storageDeletePending,
     createdAt: record.createdAt.toISOString(),
     description: optionalString(record.description),
+    gmNotes: optionalString(record.gmNotes),
     digest: optionalString(record.sha256Digest),
     id: record.id,
     legacyNeedsUpload: record.storageState === "legacy_reference",

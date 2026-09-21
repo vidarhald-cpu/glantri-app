@@ -199,11 +199,15 @@ export function createCampaignItemRoutes(
         const campaignId = parseId(request.params, "campaignId", "Campaign id");
         await requireCampaignAuthor(user.id, campaignId);
         const current = services();
-        const [state, characters] = await Promise.all([
+        // GM notes are fetched separately and only here. They are never part of
+        // the equipment read model, which players reach through the character
+        // equipment and encounter routes. This route is GM-authorized above.
+        const [state, characters, gmNotesById] = await Promise.all([
           current.readService.getCampaignEquipmentState(campaignId),
           campaignCharacters(campaignId),
+          current.readService.getCampaignEquipmentGmNotes(campaignId),
         ]);
-        return { characters, state };
+        return { characters, gmNotesById, state };
       } catch (error) {
         return handleRouteError(error, reply);
       }

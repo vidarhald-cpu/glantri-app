@@ -2,8 +2,11 @@
 import { useEffect, useRef, useState } from "react";
 import {
   artifactPackageSchema,
+  type ArtifactImportPreviewItem,
   type ArtifactPackage,
   type ArtifactImportPreview,
+  type ArtifactRelationshipBinding,
+  type ArtifactRelationshipTarget,
 } from "@glantri/domain";
 import {
   acceptArtifactImport,
@@ -28,6 +31,57 @@ const labels = {
   conflict: "Conflict",
   invalid: "Invalid",
 };
+function candidateValue(candidate: { kind: string; id: string }): string {
+  return `${candidate.kind}:${candidate.id}`;
+}
+
+function candidateTarget(value: string): ArtifactRelationshipTarget | null {
+  const [kind, ...rest] = value.split(":");
+  const id = rest.join(":");
+  if (kind === "item") return { kind: "item", itemId: id };
+  if (kind === "artifact") return { kind: "artifact", artifactId: id };
+  if (kind === "local") return { kind: "local", id };
+  return null;
+}
+
+const relationshipHeadings: Record<string, string> = {
+  ambiguous: "Relationship — ambiguous, not resolved",
+  bound: "Relationship — bound by you",
+  cleared: "Relationship — cleared",
+  not_found: "Relationship — no match, not resolved",
+  resolved: "Relationship — proposed",
+  unsupported: "Relationship — not supported here",
+};
+
+/** What Glantri derived, shown so the GM can confirm they never supplied it. */
+function DerivedFacts({ item }: { item: ArtifactImportPreviewItem }) {
+  if (!item.derived) return null;
+  return (
+    <dl style={{ display: "grid", fontSize: "0.85rem", gap: 2, margin: "8px 0 0" }}>
+      <div>
+        <dt style={{ display: "inline", fontWeight: 600 }}>Derived format: </dt>
+        <dd style={{ display: "inline", margin: 0 }}>{item.derived.mediaType}</dd>
+      </div>
+      <div>
+        <dt style={{ display: "inline", fontWeight: 600 }}>Derived size: </dt>
+        <dd style={{ display: "inline", margin: 0 }}>{item.derived.byteSize} bytes</dd>
+      </div>
+      <div>
+        <dt style={{ display: "inline", fontWeight: 600 }}>Derived SHA-256: </dt>
+        <dd style={{ display: "inline", margin: 0, overflowWrap: "anywhere" }}>
+          {item.derived.sha256}
+        </dd>
+      </div>
+      <div>
+        <dt style={{ display: "inline", fontWeight: 600 }}>Storage identity: </dt>
+        <dd style={{ display: "inline", margin: 0, overflowWrap: "anywhere" }}>
+          {item.derived.storageProvider}:{item.derived.storageKey}
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
 export function ArtifactImportReview({
   campaignId,
   initial,
@@ -39,14 +93,32 @@ export function ArtifactImportReview({
 }) {
   const [preview, setPreview] = useState(initial),
     [approved, setApproved] = useState<string[]>([]),
+    [bindings, setBindings] = useState<ArtifactRelationshipBinding[]>(initial.bindings ?? []),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string>();
   const pending = useRef(false);
   useEffect(() => {
     setPreview(initial);
     setApproved([]);
+    setBindings(initial.bindings ?? []);
     setError(undefined);
   }, [initial]);
+  function bind(objectId: string, target: ArtifactRelationshipTarget | null | undefined) {
+    const next =
+      target === undefined
+        ? bindings.filter((entry) => entry.objectId !== objectId)
+        : [...bindings.filter((entry) => entry.objectId !== objectId), { objectId, target }];
+    setBindings(next);
+    setApproved([]);
+    void act(() =>
+      reviewArtifactImport(
+        campaignId,
+        preview.id,
+        preview.items.filter((x) => x.selected).map((x) => x.id),
+        next,
+      ),
+    );
+  }
   async function act(action: () => Promise<ArtifactImportPreview>) {
     if (pending.current) return;
     pending.current = true;
@@ -67,6 +139,13 @@ export function ArtifactImportReview({
     }
   }
   const selected = preview.items.filter((x) => x.selected);
+  const acceptedIds = new Set(Object.keys(preview.result ?? {}));
+  const accepted = {
+    artifacts: preview.items.filter(
+      (x) => acceptedIds.has(x.id) && (x.objectType ?? "Artifact") === "Artifact",
+    ).length,
+    items: preview.items.filter((x) => acceptedIds.has(x.id) && x.objectType === "Item").length,
+  };
   return (
     <section
       aria-label="Artifact import review"
@@ -76,13 +155,15 @@ export function ArtifactImportReview({
       <h3>{preview.title}</h3>
       {preview.state === "accepted" ? (
         <p role="status">
-          Accepted: {Object.keys(preview.result ?? {}).length} Artifacts. New Artifacts are private
-          until explicitly shared. Existing sharing was preserved.
+          Accepted: {accepted.artifacts} Artifacts
+          {accepted.items ? ` and ${accepted.items} Items` : ""}. New Artifacts are private until
+          explicitly shared. Existing sharing was preserved.
         </p>
       ) : (
         <p>
-          Proposed content — nothing is accepted yet. Updates create a new version of the same
-          Artifact; existing uses will show the new media.
+          Proposed content — nothing exists in the Campaign yet. Confirming is what creates
+          canonical state. Updates create a new version of the same Artifact; existing uses will
+          show the new media.
         </p>
       )}
       {error || preview.error ? <p role="alert">{error ?? preview.error}</p> : null}
@@ -106,7 +187,7 @@ export function ArtifactImportReview({
                   ? [...selected.map((x) => x.id), item.id]
                   : selected.filter((x) => x.id !== item.id).map((x) => x.id);
                 setApproved([]);
-                void act(() => reviewArtifactImport(campaignId, preview.id, ids));
+                void act(() => reviewArtifactImport(campaignId, preview.id, ids, bindings));
               }}
             />{" "}
             {item.title}
@@ -118,7 +199,69 @@ export function ArtifactImportReview({
                 ? acceptedLabels[item.status]
                 : labels[item.status]}
             {!item.optional ? " · Required" : ""}
+            {item.objectType
+              ? ` · ${
+                  item.objectType === "Item"
+                    ? item.attachedObjectIds?.length || item.attachedArtifactIds?.length
+                      ? "Canonical Item with attached Artifact representation"
+                      : "Canonical Item"
+                    : "Artifact"
+                }`
+              : ""}
           </p>
+          {item.itemDescription ? <p>{item.itemDescription}</p> : null}
+          {item.gmNotes ? (
+            <p style={{ whiteSpace: "pre-wrap" }}>
+              <strong>GM notes (never player-facing): </strong>
+              {item.gmNotes}
+            </p>
+          ) : null}
+          {item.relationship ? (
+            <div
+              style={{ border: "1px dashed #b9bdb6", borderRadius: 6, marginTop: 8, padding: 8 }}
+            >
+              <p style={{ margin: 0 }}>
+                <strong>{relationshipHeadings[item.relationship.status]}</strong>
+              </p>
+              <p style={{ margin: "4px 0" }}>{item.relationship.explanation}</p>
+              {preview.state === "review" ? (
+                <label style={{ display: "block" }}>
+                  Link {item.title} to
+                  <select
+                    disabled={busy}
+                    onChange={(event) =>
+                      bind(
+                        item.id,
+                        event.target.value === "__cleared__"
+                          ? null
+                          : event.target.value === "__suggested__"
+                            ? undefined
+                            : candidateTarget(event.target.value),
+                      )
+                    }
+                    value={
+                      bindings.find((entry) => entry.objectId === item.id)
+                        ? bindings.find((entry) => entry.objectId === item.id)!.target === null
+                          ? "__cleared__"
+                          : candidateValue(
+                              bindings.find((entry) => entry.objectId === item.id)!
+                                .target as unknown as { id: string; kind: string },
+                            )
+                        : "__suggested__"
+                    }
+                  >
+                    <option value="__suggested__">Whatever Glantri proposed</option>
+                    {item.relationship.candidates.map((candidate) => (
+                      <option key={candidateValue(candidate)} value={candidateValue(candidate)}>
+                        {candidate.label} ({candidate.kind})
+                      </option>
+                    ))}
+                    <option value="__cleared__">Do not link anything</option>
+                  </select>
+                </label>
+              ) : null}
+            </div>
+          ) : null}
           {item.existingTitle ? (
             <p>
               {preview.state === "accepted" && item.status === "update"
@@ -144,6 +287,7 @@ export function ArtifactImportReview({
               Inspect proposed media
             </a>
           ) : null}
+          <DerivedFacts item={item} />
           {item.selected && item.status === "update" && preview.state === "review" ? (
             <label style={{ display: "block", marginTop: 8 }}>
               <input
@@ -174,6 +318,7 @@ export function ArtifactImportReview({
                   campaignId,
                   preview.id,
                   selected.map((x) => x.id),
+                  bindings,
                 ),
               )
             }
@@ -189,7 +334,11 @@ export function ArtifactImportReview({
             }
             onClick={() => void act(() => acceptArtifactImport(campaignId, preview, approved))}
           >
-            {busy ? "Working…" : "Accept selected Artifacts"}
+            {busy
+              ? "Working…"
+              : selected.some((x) => x.objectType === "Item")
+                ? "Confirm and create selected content"
+                : "Accept selected Artifacts"}
           </button>
         </div>
       ) : null}

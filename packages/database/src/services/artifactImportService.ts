@@ -3,6 +3,7 @@ import {
   artifactPackageSchema,
   type ArtifactImportPreview,
   type ArtifactPackage,
+  type ArtifactRelationshipBinding,
   ARTIFACT_PACKAGE_LIMITS,
 } from "@glantri/domain";
 import {
@@ -107,8 +108,14 @@ export class ArtifactImportService {
       manifest.objects.map((x) => x.id),
     );
   }
-  async preview(campaignId: string, userId: string, id: string, selected: string[]) {
-    return this.repository.preview(campaignId, userId, id, selected);
+  async preview(
+    campaignId: string,
+    userId: string,
+    id: string,
+    selected: string[],
+    bindings: ArtifactRelationshipBinding[] = [],
+  ) {
+    return this.repository.preview(campaignId, userId, id, selected, bindings);
   }
   async get(campaignId: string, userId: string, id: string): Promise<ArtifactImportPreview> {
     const session = await this.repository.get(campaignId, userId, id);

@@ -25,6 +25,7 @@ import { ArtifactDetails } from "./ArtifactDetails";
 import { ArtifactImportPanel } from "./ArtifactImportPanel";
 import { ArtifactInspectionDialog, type InspectedArtifact } from "./ArtifactInspectionDialog";
 import { OrdinaryArtifactUploadPanel } from "./OrdinaryArtifactUploadPanel";
+import { AiIntakePanel } from "./intake/AiIntakePanel";
 
 function audienceLabel(artifact: ArtifactGmDto): string {
   if (artifact.audience === "campaign") return "Shared with Campaign";
@@ -149,6 +150,7 @@ export function ArtifactPanel({
       {mode === "gm" ? (
         <OrdinaryArtifactUploadPanel campaignId={campaignId} onAccepted={refresh} />
       ) : null}
+      {mode === "gm" ? <AiIntakePanel campaignId={campaignId} onAccepted={refresh} /> : null}
       {mode === "gm" ? <ArtifactImportPanel campaignId={campaignId} onAccepted={refresh} /> : null}
 
       <div

@@ -37,6 +37,7 @@ export async function resetTestDatabase(prisma: PrismaClient): Promise<void> {
   await prisma.equipmentTransitionEvent.deleteMany({});
   await prisma.scenarioEventLog.deleteMany({});
   await prisma.artifactAuditEvent.deleteMany({});
+  await prisma.campaignItemArtifactAttachment.deleteMany({});
   await prisma.scenarioArtifactReference.deleteMany({});
   // Map links may form cycles, so markers must be removed before their maps.
   await prisma.campaignMapMarker.deleteMany({});

@@ -53,7 +53,7 @@ describe("Artifact review decisions", () => {
     fireEvent.click(screen.getByLabelText(/Approve updating Captain/));
     expect(accept).toBeEnabled();
     fireEvent.click(screen.getByLabelText("Optional seal"));
-    await waitFor(() => expect(mocks.review).toHaveBeenCalledWith("campaign", "import", ["a"]));
+    await waitFor(() => expect(mocks.review).toHaveBeenCalledWith("campaign", "import", ["a"], []));
     expect(screen.getByLabelText(/Approve updating Captain/)).not.toBeChecked();
     expect(accept).toBeDisabled();
   });
