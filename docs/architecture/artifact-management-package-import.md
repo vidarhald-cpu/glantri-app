@@ -276,6 +276,10 @@ None of the following automatically transfers ownership:
 
 An explicit supported ownership operation would be required to transfer ownership.
 
+In-play reveal, share, and Blackboard projection are exactly such non-transferring acts. See
+[Scenario Play Workspace §5](scenario-play-workspace.md#5-presence-versus-visibility)
+and [§8](scenario-play-workspace.md#8-blackboard-boundary).
+
 ## 6.5 Future extensibility
 
 Artifact identity and permission architecture must not assume that Campaign ownership is the only possible model forever.
