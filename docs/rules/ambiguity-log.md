@@ -38,3 +38,26 @@ Track unresolved rules questions and implementation decisions.
   - Throw for unknown table ids rather than inventing additional mappings
 - Follow-up:
   - Add the remaining society/class-roll source pages or tables before making social-class generation depend on selected society end-to-end
+
+## Secondary Critical `Sec` Grammar
+
+- Status: reconciled from source; four questions returned to the Product Owner
+- Scope:
+  - `docs/rules/secondary-critical-sec-grammar.md`
+  - `docs/decisions/rules/0006-secondary-critical-resolution.md`
+  - `data/raw/glantri/Themistogenes 1.07.xlsx`, sheet `Weapon1`, column `Q`
+- Source facts confirmed:
+  - `Weapon1!Q` (`Second crit.`) is populated in exactly twelve rows, every value two characters,
+    grade letter `A`-`D` and family letter `S`/`P`/`C`
+  - the family letter routes `S` to `sharp`, `P` to `pointed_weapons`, and `C` to `blunt`
+  - no workbook formula reads `Weapon1!Q`; the widest weapon-table ranges stop at column `P`
+- What is still missing:
+  - the anchor the authored absolute `Sec` grade letter is measured against to yield the relative
+    reduction ruled in decision 0006 (the weapon's own `Crit 1` grade, or a constant `F`)
+  - whether the authorized vocabulary is the full `A-D` by `S|P|C` matrix or only the six attested
+    codes
+  - whether `Sec` is deliberately melee-only, leaving five frozen catalogue families unreachable
+  - whether the Secondary Critical reuses the Primary Critical's hit location
+- Decision in code:
+  - none; no runtime Secondary Critical work is authorized
+  - parsing work preserves the raw code and provenance and fails closed on unrecognized grammar
