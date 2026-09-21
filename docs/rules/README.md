@@ -47,6 +47,14 @@ GM-adjudication contract is
 [decision 0004](../decisions/rules/0004-c1-critical-authoring-and-adjudication.md); its exact five-key
 payload is non-executable recovery evidence until separately authorized implementation work lands.
 
+The weapon-authored Secondary Critical is governed by
+[decision 0006](../decisions/rules/0006-secondary-critical-resolution.md). Its deferred `Sec` code
+grammar, Critical-family routing, per-code grade reduction, source exceptions, and remaining
+Product Owner questions are reconciled in
+[Secondary Critical `Sec` grammar reconciliation](./secondary-critical-sec-grammar.md). That
+reconciliation is documentation only; it authorizes no runtime work and does not change the 608
+primary catalogue positions.
+
 The approved future Critical and shared-effect target is
 [decision 0005](../decisions/rules/0005-critical-effect-semantics-and-timing.md). It defines
 Stunned/Dazed, source-preserving stacking, canonical complete-round duration, C1-style future Bleed,
