@@ -71,6 +71,8 @@ export const artifactGmDtoSchema = z.object({
   cleanupRequired: z.boolean(),
   createdAt: z.string().min(1),
   description: z.string().optional(),
+  /** GM-private notes. Deliberately absent from the player-facing projection. */
+  gmNotes: z.string().optional(),
   digest: z
     .string()
     .regex(/^[0-9a-f]{64}$/)

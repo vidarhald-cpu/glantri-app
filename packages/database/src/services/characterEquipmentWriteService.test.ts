@@ -107,6 +107,9 @@ function createRepositoryStub(input?: {
     async getCanonicalEquipmentItemById(itemId) {
       return items.get(itemId) ?? null;
     },
+    async getCampaignEquipmentItemGmNotes() {
+      return {};
+    },
     async getCampaignEquipmentItems() {
       return [];
     },

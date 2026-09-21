@@ -74,6 +74,18 @@ export class CharacterEquipmentReadModelService {
     private readonly repository: CharacterEquipmentRepository = createPrismaCharacterEquipmentRepository(),
   ) {}
 
+  /**
+   * GM-private Item notes for a campaign, keyed by Item id.
+   *
+   * Deliberately not part of any equipment read model. The campaign and
+   * character read models are reachable by players through the encounter and
+   * equipment routes, so GM-only prose is never folded into them; it is fetched
+   * separately by the GM-authorized Campaign Items surface alone.
+   */
+  async getCampaignEquipmentGmNotes(campaignId: string): Promise<Record<string, string>> {
+    return this.repository.getCampaignEquipmentItemGmNotes(campaignId);
+  }
+
   async getCampaignEquipmentState(campaignId: string): Promise<CampaignEquipmentReadModel> {
     return {
       itemsById: indexById(await this.repository.getCampaignEquipmentItems(campaignId)),

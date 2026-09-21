@@ -83,6 +83,9 @@ function repositoryWith(item: AssignedEquipmentItem): CharacterEquipmentReposito
     async getCanonicalEquipmentItemById(itemId) {
       return itemId === item.id ? item : null;
     },
+    async getCampaignEquipmentItemGmNotes() {
+      return {};
+    },
     async getCampaignEquipmentItems() {
       return [item];
     },

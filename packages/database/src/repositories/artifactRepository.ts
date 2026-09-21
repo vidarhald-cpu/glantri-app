@@ -13,6 +13,7 @@ const artifactSelect = {
   currentRevisionId: true,
   createdAt: true,
   description: true,
+  gmNotes: true,
   id: true,
   lifecycleState: true,
   mediaTypeDetected: true,

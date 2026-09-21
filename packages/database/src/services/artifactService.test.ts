@@ -16,6 +16,7 @@ function artifact(overrides: Partial<ArtifactRecord> = {}): ArtifactRecord {
     createdAt: now,
     currentRevisionId: null,
     description: "Private map",
+    gmNotes: null,
     id: "artifact-1",
     lifecycleState: "active",
     mediaTypeDetected: "image/png",

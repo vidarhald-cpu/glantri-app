@@ -246,11 +246,16 @@ export async function stageArtifactPackage(
     await parseResponse<{ preview: import("@glantri/domain").ArtifactImportPreview }>(response)
   ).preview;
 }
-export async function reviewArtifactImport(campaignId: string, id: string, selected: string[]) {
+export async function reviewArtifactImport(
+  campaignId: string,
+  id: string,
+  selected: string[],
+  bindings: import("@glantri/domain").ArtifactRelationshipBinding[] = [],
+) {
   return (
     await sendJson<{ preview: import("@glantri/domain").ArtifactImportPreview }>(
       `/campaigns/${campaignId}/artifact-imports/${id}/preview`,
-      { method: "POST", headers: mutationHeaders, body: JSON.stringify({ selected }) },
+      { method: "POST", headers: mutationHeaders, body: JSON.stringify({ bindings, selected }) },
     )
   ).preview;
 }
