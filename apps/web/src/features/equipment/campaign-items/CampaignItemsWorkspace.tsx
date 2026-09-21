@@ -1229,6 +1229,9 @@ export default function CampaignItemsWorkspace({
   }
 
   const [characters, setCharacters] = useState<CampaignItemCharacterOption[]>([]);
+  // Held apart from the Item state on purpose: GM notes travel only on the
+  // GM-authorized campaign Items read, never inside an Item.
+  const [gmNotesById, setGmNotesById] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
@@ -1264,6 +1267,7 @@ export default function CampaignItemsWorkspace({
         if (cancelled) return;
         setState(response.state);
         setCharacters(response.characters);
+        setGmNotesById(response.gmNotesById ?? {});
         setError(undefined);
       })
       .catch(
@@ -1549,6 +1553,12 @@ export default function CampaignItemsWorkspace({
                 {item.storageAssignment?.carryMode === "equipped" ? "Equipped" : "Not equipped"}
               </div>
               {item.notes ? <p style={{ margin: 0 }}>{item.notes}</p> : null}
+              {gmNotesById[item.id] ? (
+                <p style={{ margin: 0, overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
+                  <strong>GM notes (never player-facing): </strong>
+                  {gmNotesById[item.id]}
+                </p>
+              ) : null}
               <ItemFactsPresentation item={item} showVisibility template={template} />
             </article>
           );

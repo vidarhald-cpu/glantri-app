@@ -55,11 +55,11 @@ file, alongside the loose files it describes.
 | `title`               | yes                  | the name of the Item or Artifact                                             |
 | `filename`            | for `artifact`       | exact name of a supplied file; an `item` may be described without one        |
 | `kind`                | when a file is named | `map`, `image`, `portrait`, `document` or `handout`                          |
-| `description`         | no                   | shared description of the object or the media                                |
+| `description`         | no                   | the object's player-visible description                                      |
 | `gmNotes`             | no                   | GM-private notes, never player-facing                                        |
 | `playerDescription`   | no                   | becomes the Artifact alt text                                                |
 | `suggestedVisibility` | no                   | `gm_private` or `campaign`; recorded as a suggestion only                    |
-| `tags`                | no                   | suggested tags, retained as GM notes                                         |
+| `tags`                | no                   | suggested tags, retained as Artifact GM notes                                |
 | `relatedTo`           | no                   | plain name of another object                                                 |
 
 Unknown fields, a wrong `format` or `version`, a truncated paste, a missing
@@ -69,6 +69,26 @@ valid context is never partly accepted.
 
 Free text is retained as GM notes only. **V1 does no prose-to-structure
 parsing.**
+
+## Where the text goes
+
+`description` is player-visible. For a described Item it becomes the Item's
+own description — the same field the Campaign Items surface labels
+_Description_ — and for a pure Artifact it becomes the Artifact description.
+
+`gmNotes` is GM-private and has a genuine private home on both sides: a
+canonical Item carries its own GM-private notes column, and an Artifact carries
+`gmNotes`. Neither is part of any player-facing projection; the Item notes are
+not even carried inside an Item value, so they cannot travel into one. The GM
+reads Item GM notes on the Campaign Items surface.
+
+When one entry describes an Item **and** supplies a file, the generic GM note
+about the physical object stays on the Item and is not duplicated onto the
+representation merely because a representation exists.
+
+`tags` and `suggestedVisibility` concern how the GM files and shares the media,
+so they are retained with the Artifact. They are never written into any Item
+text field: intake scaffolding is not Item prose.
 
 ## Item versus Artifact
 
@@ -105,8 +125,9 @@ unsupported rather than approximated.
 ## Visibility
 
 Every Artifact intake creates begins **GM-private**, whatever the context
-suggested. A suggested visibility is shown in the preview and kept in the GM
-notes; sharing stays a separate, deliberate act on the Artifact surface.
+suggested. A suggested visibility is shown in the preview and kept in the
+Artifact's GM notes; sharing stays a separate, deliberate act on the Artifact
+surface.
 
 ## What the preview shows
 

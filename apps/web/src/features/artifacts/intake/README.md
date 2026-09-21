@@ -31,3 +31,17 @@ Two things are deliberately not done here. The panel never parses prose into
 structure — free text is retained as GM notes. And a suggested visibility is
 shown but never applied: new material is always created GM-private and shared
 afterwards through the Artifact surface.
+
+## Where each kind of text goes
+
+- `description` is the object's **player-visible** description. For an Item it
+  becomes the Item's description; for an Artifact it becomes the Artifact
+  description.
+- `gmNotes` is **GM-private**. For a described Item it becomes the Item's own
+  GM-private notes, which no player-facing projection carries; for a pure
+  Artifact it becomes the Artifact's GM notes. When an entry describes an Item
+  _and_ supplies a file, the note stays on the Item and is not duplicated onto
+  the representation.
+- `tags` and `suggestedVisibility` are suggestions about filing and sharing the
+  **media**, so they stay with the Artifact. They are never written into any
+  Item text: intake scaffolding is not Item prose.

@@ -57,6 +57,12 @@ export interface CampaignItemFactDraft {
 
 export interface CampaignItemsResponse {
   characters: CampaignItemCharacterOption[];
+  /**
+   * GM-private Item notes, keyed by Item id. Supplied only by the GM-authorized
+   * campaign Items read; it is never part of the equipment state a player can
+   * reach.
+   */
+  gmNotesById?: Record<string, string>;
   state: CampaignEquipmentState;
 }
 

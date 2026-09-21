@@ -466,6 +466,8 @@ model CharacterEquipmentItem {
   valueOverride         Float?
   itemFactsJson         Json
   notes                 String?
+  /// GM-private Item notes. Never included in any player-facing projection.
+  gmNotes               String?
   isEquipped            Boolean?
   isFavorite            Boolean?
   acquiredFrom          String?

@@ -123,24 +123,121 @@ export function parseAiIntakeContext(raw: string): AiIntakeParseFailure | AiInta
   if (!result.success)
     return {
       ok: false,
-      problems: result.error.issues.map((issue) =>
-        issue.path.length ? `${issue.path.join(".")}: ${issue.message}` : issue.message,
-      ),
+      problems: [
+        ...new Set(result.error.issues.map((issue) => describeIntakeProblem(issue, parsed))),
+      ],
     };
   return { ok: true, context: result.data };
 }
 
-/** Retains the semantic notes that have no canonical structured home. */
+/** What each documented field may say, in the GM's own vocabulary. */
+const intakeFieldExpectation: Record<string, string> = {
+  description: "plain text",
+  filename: "the exact name of one of the chosen files",
+  gmNotes: "plain text",
+  kind: "one of map, image, portrait, document or handout",
+  playerDescription: "plain text",
+  relatedTo: "the plain name of another described object",
+  represents: "either “item” for a physical game-world object or “artifact” for reference media",
+  suggestedVisibility: "either “gm_private” or “campaign”",
+  tags: "a list of short plain-text tags",
+  title: "a name",
+};
+
+const NOT_THE_DOCUMENTED_FORMAT =
+  "This is not a Glantri intake context, or it was written for a different version of the format. Ask for the documented format again and paste the whole reply.";
+
+function intakeEntryLabel(parsed: unknown, index: number): string {
+  const entries = (parsed as { entries?: unknown } | null)?.entries;
+  const entry = Array.isArray(entries) ? entries[index] : undefined;
+  const title =
+    entry && typeof entry === "object" ? (entry as { title?: unknown }).title : undefined;
+  return typeof title === "string" && title.trim() ? `“${title.trim()}”` : `Entry ${index + 1}`;
+}
+
+function quotedList(values: readonly PropertyKey[]): string {
+  const quoted = values.map((value) => `“${String(value)}”`);
+  if (quoted.length <= 1) return quoted[0] ?? "";
+  return `${quoted.slice(0, -1).join(", ")} and ${quoted[quoted.length - 1]}`;
+}
+
+/**
+ * Restates a schema rejection in the language of the documented intake format.
+ * Raw validation output names paths, literals and internal types that belong to
+ * the implementation, so it is never shown to the GM.
+ */
+function describeIntakeProblem(issue: z.ZodIssue, parsed: unknown): string {
+  const [head, index, field] = issue.path;
+
+  if (head === "format" || head === "version") return NOT_THE_DOCUMENTED_FORMAT;
+
+  if (head !== "entries")
+    return issue.code === "custom" ? issue.message : NOT_THE_DOCUMENTED_FORMAT;
+
+  if (typeof index !== "number") {
+    if (issue.code === "custom") return issue.message;
+    if (issue.code === "too_big")
+      return `One intake context may describe at most ${AI_INTAKE_MAX_ENTRIES} objects. Keep the rest for another intake.`;
+    return "The intake context must list at least one described object under “entries”.";
+  }
+
+  const who = intakeEntryLabel(parsed, index);
+
+  if (issue.code === "unrecognized_keys")
+    return `${who} carries ${quotedList(issue.keys)}, which the intake format does not define. Describe only the documented facts — Glantri derives every technical fact from the files itself.`;
+
+  if (issue.code === "custom") return issue.message;
+
+  if (typeof field !== "string")
+    return `${who} is not shaped like a described object. Ask for the documented format again.`;
+
+  const expectation = intakeFieldExpectation[field] ?? "the documented value";
+
+  if (issue.code === "too_big")
+    return `${who} gives a “${field}” that is longer than Glantri accepts. Shorten it.`;
+
+  if (issue.code === "invalid_type" && issue.received === "undefined")
+    return `${who} is missing “${field}”, which must be ${expectation}.`;
+
+  return `${who} gives a “${field}” Glantri cannot use. It must be ${expectation}.`;
+}
+
+/**
+ * GM-authored prose about the described object itself. This is what reaches the
+ * object's own GM-private notes; it never carries intake scaffolding, because
+ * suggestions about how to file the result are not part of the game world.
+ */
+export function aiIntakeObjectGmNotes(
+  entry: AiIntakeEntry,
+  contextNotes: string | undefined,
+): string | undefined {
+  const lines = [entry.gmNotes, contextNotes].filter((line): line is string => Boolean(line));
+  return lines.length ? lines.join("\n\n") : undefined;
+}
+
+/**
+ * Suggestions that concern the Artifact representation rather than the object:
+ * how the GM might file and share the media. They stay an Artifact concern and
+ * are never written to an Item.
+ */
+export function aiIntakeArtifactSuggestionNotes(entry: AiIntakeEntry): string | undefined {
+  const lines = [
+    entry.tags?.length ? `Suggested tags: ${entry.tags.join(", ")}` : undefined,
+    entry.suggestedVisibility
+      ? `Suggested visibility: ${entry.suggestedVisibility === "campaign" ? "campaign" : "GM private"} (new material is always created GM-private; share it afterwards).`
+      : undefined,
+  ].filter((line): line is string => Boolean(line));
+  return lines.length ? lines.join("\n\n") : undefined;
+}
+
+/** Everything a pure Artifact entry retains as its GM-private notes. */
 export function aiIntakeGmNotes(
   entry: AiIntakeEntry,
   contextNotes: string | undefined,
 ): string | undefined {
   const lines = [
     entry.gmNotes,
-    entry.tags?.length ? `Suggested tags: ${entry.tags.join(", ")}` : undefined,
-    entry.suggestedVisibility
-      ? `Suggested visibility: ${entry.suggestedVisibility === "campaign" ? "campaign" : "GM private"} (new material is always created GM-private; share it afterwards).`
-      : undefined,
+    aiIntakeArtifactSuggestionNotes(entry),
     contextNotes ? `Intake notes: ${contextNotes}` : undefined,
   ].filter((line): line is string => Boolean(line));
   return lines.length ? lines.join("\n\n") : undefined;
@@ -177,6 +274,7 @@ Field rules:
 - "filename": the exact name of a file supplied alongside. Required for "artifact".
   An "item" may be described without a file.
 - "kind": one of map, image, portrait, document, handout. Required whenever a file is named.
+- "description" is player-visible. "gmNotes" is GM-private and never shown to players.
 - "playerDescription" becomes the Artifact alt text.
 - "relatedTo": the plain name of another object. Glantri proposes a link only when the
   name matches exactly one candidate; otherwise it asks the GM to bind it.

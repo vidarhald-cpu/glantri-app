@@ -32,6 +32,7 @@ import { projectEquipmentItem } from "@glantri/rules-engine";
 import { randomUUID } from "node:crypto";
 
 import {
+  buildCampaignEquipmentItemId,
   createPrismaCharacterEquipmentRepository,
   retryCharacterEquipmentRead,
   StaleEquipmentTransferError,
@@ -121,10 +122,6 @@ function buildBootstrapItemId(characterId: string, itemId: string): string {
 
 function buildCharacterEquipmentItemId(characterId: string): string {
   return `${characterId}:item-${randomUUID()}`;
-}
-
-function buildCampaignEquipmentItemId(campaignId: string): string {
-  return `${campaignId}:item-${randomUUID()}`;
 }
 
 export interface CreateCampaignEquipmentItemInput {

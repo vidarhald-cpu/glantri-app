@@ -13,6 +13,7 @@ import {
 import { prisma } from "../client";
 import { ArtifactConflictError, ArtifactNotFoundError } from "../services/artifactService";
 import {
+  buildCampaignEquipmentItemId,
   buildDescriptiveCampaignEquipmentItem,
   campaignEquipmentItemCreateData,
 } from "./characterEquipmentRepository";
@@ -160,6 +161,11 @@ export class ArtifactImportRepository {
       },
       select: { id: true, sha256Digest: true, title: true },
     });
+    /**
+     * Resolves the relationship and reports whether it blocks confirmation.
+     * The explanation itself is not repeated into `reasons`: the preview already
+     * renders it once, under the relationship, where the GM acts on it.
+     */
     const relationshipFor = (object: ArtifactPackage["objects"][number], reasons: string[]) => {
       const relationship = resolveRelationship({
         binding: bindings.find((entry) => entry.objectId === object.id),
@@ -167,7 +173,7 @@ export class ArtifactImportRepository {
         manifest,
         object,
       });
-      if (relationship && relationshipBlocks(relationship)) reasons.push(relationship.explanation);
+      const blocked = Boolean(relationship && relationshipBlocks(relationship));
       if (
         relationship?.target?.kind === "local" &&
         ["resolved", "bound"].includes(relationship.status) &&
@@ -176,7 +182,7 @@ export class ArtifactImportRepository {
         reasons.push(
           "The related object in this proposal is excluded. Include it, or clear the link.",
         );
-      return relationship;
+      return { blocked, relationship };
     };
 
     return manifest.objects.map((object) => {
@@ -204,8 +210,9 @@ export class ArtifactImportRepository {
         for (const artifactId of proposal.attachedArtifactIds ?? [])
           if (!relationships.artifactsById.has(artifactId))
             reasons.push("An attached existing Artifact is unavailable in this Campaign.");
-        proposal.relationship = relationshipFor(object, reasons);
-        if (reasons.length) proposal.status = "invalid";
+        const resolved = relationshipFor(object, reasons);
+        proposal.relationship = resolved.relationship;
+        if (reasons.length || resolved.blocked) proposal.status = "invalid";
         return proposal;
       }
       const item: ArtifactImportPreviewItem = {
@@ -221,7 +228,8 @@ export class ArtifactImportRepository {
         derived: derivedFor(object.resourceId),
         gmNotes: object.gmNotes,
       };
-      item.relationship = relationshipFor(object, reasons);
+      const resolvedRelationship = relationshipFor(object, reasons);
+      item.relationship = resolvedRelationship.relationship;
       if (
         manifest.resources.find((resource) => resource.id === object.resourceId)?.mediaType ===
           "application/pdf" &&
@@ -299,7 +307,8 @@ export class ArtifactImportRepository {
         ).length > 1
       )
         reasons.push("Select only one proposed update for each existing Artifact.");
-      if (reasons.length) item.status = item.status === "conflict" ? "conflict" : "invalid";
+      if (reasons.length || resolvedRelationship.blocked)
+        item.status = item.status === "conflict" ? "conflict" : "invalid";
       return item;
     });
   }
@@ -528,16 +537,19 @@ export class ArtifactImportRepository {
         for (const proposal of items.filter((x) => x.selected && x.objectType === "Item")) {
           const object = manifest.objects.find((x) => x.id === proposal.id)!;
           if (!object.itemMetadata) throw new ArtifactConflictError();
-          const itemId = `${campaignId}:item-${randomUUID()}`;
+          const itemId = buildCampaignEquipmentItemId(campaignId);
           await tx.characterEquipmentItem.create({
+            // The described object's own description is the Item's
+            // player-visible text; the GM notes go to the GM-private column,
+            // which no player-facing Item projection carries.
             data: campaignEquipmentItemCreateData(
               buildDescriptiveCampaignEquipmentItem({
                 campaignId,
                 description: object.itemMetadata.description ?? null,
                 id: itemId,
-                notes: object.gmNotes ?? null,
                 title: object.itemMetadata.title,
               }),
+              object.gmNotes ?? null,
             ),
           });
           result[proposal.id] = itemId;

@@ -2,7 +2,9 @@ import {
   AI_INTAKE_PRODUCER,
   artifactPackageSchema,
   parseAiIntakeContext,
+  aiIntakeArtifactSuggestionNotes,
   aiIntakeGmNotes,
+  aiIntakeObjectGmNotes,
   type AiIntakeContext,
   type AiIntakeEntry,
   type ArtifactPackage,
@@ -113,7 +115,15 @@ export async function buildIntakeProposal(
   withFiles.forEach((planned, index) => {
     const id = `artifact-${index + 1}`;
     artifactIdOf.set(planned.entry, id);
-    const notes = aiIntakeGmNotes(planned.entry, plan.context.notes);
+    // A pure Artifact entry keeps everything the context said about it. When
+    // the entry describes a physical object, the generic GM note belongs on the
+    // Item below and is not duplicated here merely because a representation
+    // exists; only the suggestions about filing and sharing the media — an
+    // Artifact concern — stay with the Artifact.
+    const notes =
+      planned.entry.represents === "artifact"
+        ? aiIntakeGmNotes(planned.entry, plan.context.notes)
+        : aiIntakeArtifactSuggestionNotes(planned.entry);
     objects.push({
       attachments: [],
       dependencies: [],
@@ -122,7 +132,7 @@ export async function buildIntakeProposal(
       ...(planned.entry.represents === "artifact" && planned.entry.relatedTo
         ? { relationshipLabel: planned.entry.relatedTo }
         : {}),
-      ...(planned.entry.represents === "artifact" && notes ? { gmNotes: notes } : {}),
+      ...(notes ? { gmNotes: notes } : {}),
       id,
       metadata: {
         altText: planned.entry.playerDescription || undefined,
@@ -141,7 +151,9 @@ export async function buildIntakeProposal(
     .filter((planned) => planned.entry.represents === "item")
     .forEach((planned, index) => {
       const attachedId = artifactIdOf.get(planned.entry);
-      const notes = aiIntakeGmNotes(planned.entry, plan.context.notes);
+      // Only GM-authored prose reaches the Item. Intake scaffolding — suggested
+      // tags, suggested visibility — is never persisted as Item text.
+      const notes = aiIntakeObjectGmNotes(planned.entry, plan.context.notes);
       objects.push({
         // A described physical object becomes the canonical Item; the file, if
         // any, becomes its attached representation rather than the object.

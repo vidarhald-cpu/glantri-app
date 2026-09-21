@@ -95,6 +95,44 @@ describe("intake proposal", () => {
     expect(item.resourceId).toBeUndefined();
   });
 
+  it("keeps intake scaffolding off the Item and leaves media suggestions with the Artifact", async () => {
+    const planned = planIntake(
+      context({
+        notes: "From the session-three chat.",
+        entries: [
+          {
+            represents: "item",
+            filename: "torn-map.png",
+            title: "Torn Treasure Map",
+            kind: "map",
+            description: "A salt-stained sea chart.",
+            gmNotes: "The harbourmaster holds the other half.",
+            suggestedVisibility: "campaign",
+            tags: ["clue", "harbour"],
+          },
+        ],
+      }),
+      [pngFile("torn-map.png")],
+    );
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) return;
+    const { manifest } = await buildIntakeProposal(planned.plan);
+
+    const item = manifest.objects.find((object) => object.type === "Item")!;
+    expect(item.gmNotes).toBe(
+      "The harbourmaster holds the other half.\n\nFrom the session-three chat.",
+    );
+    expect(item.gmNotes).not.toContain("Suggested tags");
+    expect(item.gmNotes).not.toContain("Suggested visibility");
+
+    // The generic GM note is not duplicated onto the representation; only the
+    // suggestions about filing and sharing the media stay an Artifact concern.
+    const artifact = manifest.objects.find((object) => object.type === "Artifact")!;
+    expect(artifact.gmNotes).toContain("Suggested tags: clue, harbour");
+    expect(artifact.gmNotes).toContain("always created GM-private");
+    expect(artifact.gmNotes).not.toContain("The harbourmaster holds the other half.");
+  });
+
   it("proposes a pure Artifact with no Item and keeps its own relationship", async () => {
     const planned = planIntake(
       context({

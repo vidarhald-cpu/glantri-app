@@ -24,6 +24,7 @@ function services(): CampaignItemRouteServices {
       getCharacterById: vi.fn(async () => ({ id: "character-1", name: "Alaric" })),
     } as unknown as CampaignItemRouteServices["characterService"],
     readService: {
+      getCampaignEquipmentGmNotes: vi.fn(async () => ({ "campaign-1:item-1": "GM only." })),
       getCampaignEquipmentState: vi.fn(async () => ({ itemsById: {}, templatesById: {} })),
     } as unknown as CampaignItemRouteServices["readService"],
     writeService: {
@@ -104,6 +105,8 @@ describe("campaign item routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       characters: [{ id: "character-1", name: "Alaric" }],
+      // GM-private Item notes travel only on this GM-authorized read.
+      gmNotesById: { "campaign-1:item-1": "GM only." },
       state: { itemsById: {}, templatesById: {} },
     });
     await app.close();

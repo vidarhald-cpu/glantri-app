@@ -11,11 +11,14 @@ import { ArtifactImportRepository } from "../repositories/artifactImportReposito
 import {
   buildDescriptiveCampaignEquipmentItem,
   campaignEquipmentItemCreateData,
+  createPrismaCharacterEquipmentRepository,
 } from "../repositories/characterEquipmentRepository";
-import { createTestCampaign, createTestUser } from "../testing/factories";
+import { createTestCampaign, createTestCharacter, createTestUser } from "../testing/factories";
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
 import { ArtifactImportService } from "./artifactImportService";
 import { ArtifactConflictError } from "./artifactService";
+import { CharacterEquipmentReadModelService } from "./characterEquipmentReadModelService";
+import { CharacterEquipmentWriteService } from "./characterEquipmentWriteService";
 
 const prisma = getTestPrismaClient();
 const png = Buffer.from("89504e470d0a1a0a00000000", "hex");
@@ -143,7 +146,6 @@ else
           campaignId: campaign.id,
           description: null,
           id: `${campaign.id}:item-${title.replace(/\W+/g, "-")}`,
-          notes: null,
           title,
         });
         await prisma!.characterEquipmentItem.create({
@@ -200,7 +202,10 @@ else
       expect(item.displayName).toBe("Torn Treasure Map");
       expect(item.campaignContextId).toBe(campaign.id);
       expect(item.holderCharacterId).toBeNull();
-      expect(item.notes).toBe("The harbourmaster holds the missing half.");
+      // The player-visible description is the described object's description;
+      // the GM's private prose lives in the GM-only column.
+      expect(item.notes).toBe("A salt-stained half of a sea chart.");
+      expect(item.gmNotes).toBe("The harbourmaster holds the missing half.");
       expect(accepted.result!["item-1"]).toBe(item.id);
 
       const attachment = (await prisma!.campaignItemArtifactAttachment.findMany())[0]!;
@@ -228,7 +233,6 @@ else
             campaignId: campaign.id,
             description: null,
             id: `${campaign.id}:item-varro-2`,
-            notes: null,
             title: "captain varro",
           }),
         ),
@@ -239,6 +243,10 @@ else
       expect(proposal.relationship?.status).toBe("ambiguous");
       expect(proposal.relationship?.candidates).toHaveLength(2);
       expect(proposal.status).toBe("invalid");
+      // The explanation is shown once, under the relationship. It is not
+      // repeated into the problem list beneath it.
+      expect(proposal.reasons).not.toContain(proposal.relationship!.explanation);
+      expect(proposal.reasons).toEqual([]);
       expect(preview.valid).toBe(false);
       await expect(
         service.accept(campaign.id, gm.id, preview.id, preview.previewToken, []),
@@ -302,5 +310,81 @@ else
       const preview = await stage(pureArtifactManifest("Harbour Watch"));
       expect(preview.items[0]!.relationship?.status).toBe("unsupported");
       expect(preview.valid).toBe(false);
+    });
+
+    it("never delivers an intake Item's GM notes to the player holding it", async () => {
+      const { campaign, gm, service, stage } = await setup();
+      const preview = await stage(intakeManifest());
+      await service.accept(campaign.id, gm.id, preview.id, preview.previewToken, []);
+
+      const secret = "The harbourmaster holds the missing half.";
+      const item = (await prisma!.characterEquipmentItem.findMany())[0]!;
+
+      // The GM hands the Item to a rostered Character through the ordinary
+      // assignment route, exactly as they would with any campaign Item.
+      const player = await createTestUser(prisma!, { roles: ["player"] });
+      const character = await createTestCharacter(prisma!, player.id);
+      await prisma!.campaignRosterEntry.create({
+        data: {
+          campaignId: campaign.id,
+          category: "pc",
+          createdByUserId: gm.id,
+          sourceId: character.id,
+          sourceType: "character",
+        },
+      });
+      const repository = createPrismaCharacterEquipmentRepository(prisma!);
+      const writeService = new CharacterEquipmentWriteService(repository);
+      await writeService.ensureCharacterEquipmentInitialized(character.id);
+      const aggregate = await repository.getCharacterEquipmentAggregateState(character.id);
+      await writeService.assignCampaignEquipmentItem({
+        campaignId: campaign.id,
+        evidence: { actorAuthority: "campaign_gm", actorUserId: gm.id },
+        itemId: item.id,
+        targetCharacterId: character.id,
+        targetExpectedRevision: aggregate.revision,
+      });
+
+      const readService = new CharacterEquipmentReadModelService(repository);
+      const held = await readService.getCharacterEquipmentState(character.id, {
+        kind: "holder",
+        characterId: character.id,
+      });
+
+      // Assert on the payload the player actually receives, not on the UI.
+      const holderPayload = JSON.stringify(held);
+      expect(held.itemsById[item.id]).toBeDefined();
+      expect(holderPayload).not.toContain(secret);
+      expect(holderPayload).not.toContain("gmNotes");
+      expect(Object.keys(held.itemsById[item.id]!)).not.toContain("gmNotes");
+      // The player-visible description still arrives.
+      expect(held.itemsById[item.id]!.notes).toBe("A salt-stained half of a sea chart.");
+
+      // The campaign-wide equipment read model is reachable by players through
+      // the encounter routes, so it must not carry the notes either.
+      const campaignState = await readService.getCampaignEquipmentState(campaign.id);
+      expect(JSON.stringify(campaignState)).not.toContain(secret);
+      expect(JSON.stringify(campaignState)).not.toContain("gmNotes");
+
+      // Every repository read every service and route sits on top of: the
+      // holder list, the campaign list, the single canonical read and the
+      // whole character aggregate. None of them carries the field.
+      const payloads = await Promise.all([
+        repository.getCharacterEquipmentItems(character.id),
+        repository.getCampaignEquipmentItems(campaign.id),
+        repository.getCanonicalEquipmentItemById(item.id),
+        repository.getCharacterEquipmentState(character.id),
+        repository.getCharacterEquipmentAggregateState(character.id),
+      ]);
+      for (const payload of payloads) {
+        expect(JSON.stringify(payload)).not.toContain(secret);
+        expect(JSON.stringify(payload)).not.toContain("gmNotes");
+      }
+
+      // The GM-scoped read, and only it, returns them.
+      expect(item.gmNotes).toBe(secret);
+      expect(await readService.getCampaignEquipmentGmNotes(campaign.id)).toEqual({
+        [item.id]: secret,
+      });
     });
   });

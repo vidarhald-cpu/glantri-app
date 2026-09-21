@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   CharacterLoadoutSchema,
   CanonicalEquipmentItemSchema,
@@ -57,20 +59,28 @@ function serializeItemFacts(value: CanonicalEquipmentItem["itemFacts"]): Prisma.
 }
 
 /**
- * The single canonical mapping from a domain Item to its stored row. Shared so
- * that every writer — including staged intake acceptance, which must create the
- * Item inside the same transaction as its Artifact — uses one derivation.
+ * The single canonical derivation of a campaign Item identifier. Every writer —
+ * the Campaign Items surface and staged intake acceptance alike — uses it, so
+ * the identifier shape is never restated.
  */
+export function buildCampaignEquipmentItemId(campaignId: string): string {
+  return `${campaignId}:item-${randomUUID()}`;
+}
+
 /**
  * A descriptive-only campaign Item: a game-world object the GM described in
  * words, with no Equipment template and therefore no mechanical behaviour. It
  * has campaign presence and no holder until somebody picks it up.
+ *
+ * `description` becomes the Item's player-visible description, which is the
+ * same `notes` field the Campaign Items surface writes and labels
+ * "Description". GM-only prose has no place here; it is stored separately and
+ * passed to {@link campaignEquipmentItemCreateData}.
  */
 export function buildDescriptiveCampaignEquipmentItem(input: {
   campaignId: string;
   description: string | null;
   id: string;
-  notes: string | null;
   title: string;
 }): CanonicalEquipmentItem {
   return CanonicalEquipmentItemSchema.parse({
@@ -90,16 +100,7 @@ export function buildDescriptiveCampaignEquipmentItem(input: {
     isStackable: false,
     itemFacts: EquipmentItemFactsV1Schema.parse({
       activeMechanics: [],
-      descriptiveTraits: input.description
-        ? [
-            {
-              category: "other",
-              id: `intake-description-${input.id}`,
-              text: input.description,
-              visibility: "revealed",
-            },
-          ]
-        : [],
+      descriptiveTraits: [],
       templateOverrides: [],
       unsupportedCapabilities: [],
       version: 1,
@@ -107,7 +108,7 @@ export function buildDescriptiveCampaignEquipmentItem(input: {
     itemKind: "descriptive_only",
     material: "other",
     mechanicalOverrides: [],
-    notes: input.notes,
+    notes: input.description,
     physicalBaseEncumbrance: null,
     previousStorageAssignment: null,
     quality: "standard",
@@ -120,10 +121,21 @@ export function buildDescriptiveCampaignEquipmentItem(input: {
   });
 }
 
+/**
+ * The single canonical mapping from a domain Item to its stored row. Shared so
+ * that every writer — including staged intake acceptance, which must create the
+ * Item inside the same transaction as its Artifact — uses one derivation.
+ *
+ * `gmNotes` is deliberately not part of the domain Item. It is stored beside
+ * the Item and read only through the GM-scoped path, so it cannot travel inside
+ * any Item value and therefore cannot reach a player-facing projection.
+ */
 export function campaignEquipmentItemCreateData(
   item: CanonicalEquipmentItem,
+  gmNotes?: string | null,
 ): Prisma.CharacterEquipmentItemUncheckedCreateInput {
   return {
+    gmNotes: gmNotes ?? null,
     acquiredFrom: item.acquiredFrom ?? null,
     campaignContextId: item.campaignContextId,
     category: item.category,
@@ -391,6 +403,12 @@ export interface CharacterEquipmentRepository {
   getCharacterEquipmentItems(characterId: string): Promise<AssignedEquipmentItem[]>;
   getCanonicalEquipmentItemById(itemId: string): Promise<CanonicalEquipmentItem | null>;
   getCampaignEquipmentItems(campaignId: string): Promise<CanonicalEquipmentItem[]>;
+  /**
+   * GM-private Item notes, keyed by Item id. Deliberately a separate read: the
+   * notes are never carried inside an Item value, so no Item projection can
+   * disclose them and every caller of this method must be GM-scoped.
+   */
+  getCampaignEquipmentItemGmNotes(campaignId: string): Promise<Record<string, string>>;
   getCharacterStorageLocations(characterId: string): Promise<StorageLocation[]>;
   getCharacterLoadouts(characterId: string): Promise<DomainCharacterLoadout[]>;
   getCharacterEquipmentState(characterId: string): Promise<{
@@ -1953,6 +1971,14 @@ export function createPrismaCharacterEquipmentRepository(
       });
 
       return item ? mapCanonicalEquipmentItem(item) : null;
+    },
+    async getCampaignEquipmentItemGmNotes(campaignId) {
+      const rows = await prisma.characterEquipmentItem.findMany({
+        select: { gmNotes: true, id: true },
+        where: { campaignContextId: campaignId, gmNotes: { not: null } },
+      });
+
+      return Object.fromEntries(rows.map((row) => [row.id, row.gmNotes!]));
     },
     async getCampaignEquipmentItems(campaignId) {
       const items = await prisma.characterEquipmentItem.findMany({
