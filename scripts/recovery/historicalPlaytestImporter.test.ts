@@ -131,22 +131,28 @@ describe("fail-closed target guards", () => {
   });
 
   it("derives names, labels, markers, and confirmations for another linked-worktree key", () => {
-    const qaIdentity = deriveRecoveryIdentity(
-      "/Users/qa/.codex/worktrees/1ed7/glantri-app-forgejo",
-    );
+    const qaRoot = "/Users/qa/.codex/worktrees/1ed7/glantri-app-forgejo";
+    const qaIdentity = deriveRecoveryIdentity(qaRoot);
+    const key = qaIdentity.worktreeKey;
 
-    expect(qaIdentity.worktreeKey).toBe("1ed7");
+    // The key is stable/deterministic for this exact path, and distinct from the current
+    // (repository-root-derived) worktree's own key.
+    expect(deriveRecoveryIdentity(qaRoot).worktreeKey).toBe(key);
+    expect(key).not.toBe(RECOVERY_IDENTITY.worktreeKey);
+
     expect(qaIdentity.source).toEqual({
-      container: "glantri-task-issue-61-1ed7-r5c-source-pg16",
-      database: "glantri_task_issue_61_1ed7_r5c_source",
+      container: `glantri-task-issue-61-${key}-r5c-source-pg16`,
+      database: `glantri_task_issue_61_${key.replace(/-/g, "_")}_r5c_source`,
       purpose: "source",
-      volume: "glantri-task-issue-61-1ed7-r5c-source-data",
+      volume: `glantri-task-issue-61-${key}-r5c-source-data`,
     });
-    expect(qaIdentity.targets["target-a"].database).toBe("glantri_task_issue_61_1ed7_r5c_target_a");
-    expect(recoveryLabels(qaIdentity, "target-a")["glantri.db.worktree"]).toBe("1ed7");
-    expect(targetConfirmationFor(qaIdentity, "target-a")).toBe("issue-61-1ed7-target-a");
+    expect(qaIdentity.targets["target-a"].database).toBe(
+      `glantri_task_issue_61_${key.replace(/-/g, "_")}_r5c_target_a`,
+    );
+    expect(recoveryLabels(qaIdentity, "target-a")["glantri.db.worktree"]).toBe(key);
+    expect(targetConfirmationFor(qaIdentity, "target-a")).toBe(`issue-61-${key}-target-a`);
     expect(targetMarkerFor(qaIdentity, "target-a")).toBe(
-      "glantri:r5c:issue-61:worktree-1ed7:target-a:prepared",
+      `glantri:r5c:issue-61:worktree-${key}:target-a:prepared`,
     );
   });
 
