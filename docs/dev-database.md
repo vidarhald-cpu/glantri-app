@@ -40,7 +40,7 @@ application database: glantri_task_issue_<task>_<worktree_key>
 test database: glantri_task_issue_<task>_<worktree_key>_test
 ```
 
-The worktree key comes from the parent directory assigned to the Git worktree. Every operation derives that key again from the current linked worktree; values declared by `.env.task` are never accepted as proof on their own. Docker chooses an unused loopback port. Names and ownership are deterministic; the port is recorded explicitly in the generated `.env.task`.
+The worktree key is derived from the linked worktree's own full, resolved filesystem path (its directory name plus a short digest of that path), not merely its parent directory name. Two sibling worktrees that share a parent directory (for example a Builder at `/private/tmp/glantri-260-builder` and QA at `/private/tmp/glantri-260-qa`) still get distinct keys. Every operation derives that key again from the current linked worktree; values declared by `.env.task` are never accepted as proof on their own. Docker chooses an unused loopback port. Names and ownership are deterministic; the port is recorded explicitly in the generated `.env.task`.
 
 Set up and verify the target:
 
@@ -111,7 +111,7 @@ pnpm db:task:cleanup
 
 Each migration, reset, seed, application, client, and integration-test path validates the current `.env.task`, current-worktree identity, PostgreSQL 16 image, ownership labels, running state, and bound port before database access. It prints a preflight line containing only the ownership marker, host, port, and database name. Passwords are never printed. Direct Prisma commands are unsupported; Prisma's configuration and every repository-owned direct `PrismaClient` construction path apply the same worktree environment guard so they cannot use a copied environment or an inherited protected/foreign target.
 
-Two concurrent worktrees necessarily get different ownership markers, container names, ports, application databases, and test databases. A copied foreign `.env.task`, a foreign full shell environment, and a cleanup attempt through foreign ownership all fail before container or database access. Builder and independent QA each set up and clean up their own target.
+Two distinct linked worktrees — including sibling worktrees for the same issue under one shared parent directory, such as a Builder and QA lane — necessarily get different ownership markers, container names, ports, application databases, and test databases, because the worktree key is derived from each worktree's own full resolved path rather than its parent directory name. A copied foreign `.env.task`, a foreign full shell environment, and a cleanup attempt through foreign ownership all fail before container or database access. Builder and independent QA each set up and clean up their own target.
 
 ## Protected Shared Database Backup Expectations
 
