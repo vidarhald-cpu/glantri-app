@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import net from "node:net";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { assertPortsFree, sanitizeLogs, validateMetadata } from "./current-run-services.mjs";
+import {
+  assertPortsFree,
+  identifySelfJobContainer,
+  planStaleServiceReclamation,
+  sanitizeLogs,
+  validateMetadata,
+} from "./current-run-services.mjs";
 
 const CONTAINER_ID = "a".repeat(64);
 const IMAGE_ID = `sha256:${"b".repeat(64)}`;
@@ -386,3 +395,194 @@ for (const { name, input } of incompleteSensitiveStructuredCases) {
     assert.match(direct, /Readiness failed/);
   });
 }
+
+const SELF_JOB_ID = "c".repeat(64);
+const OTHER_JOB_ID = "d".repeat(64);
+const DEAD_JOB_ID = "e".repeat(64);
+const SELF_JOB = {
+  id: SELF_JOB_ID,
+  name: `FORGEJO-ACTIONS-TASK-900_WORKFLOW-${"a".repeat(64)}_JOB-application-docker-test`,
+};
+const OTHER_JOB = {
+  id: OTHER_JOB_ID,
+  name: `FORGEJO-ACTIONS-TASK-901_WORKFLOW-${"a".repeat(64)}_JOB-application-docker-test`,
+};
+
+function browserService(name, labels = {}) {
+  return { id: name.padEnd(64, "0").slice(0, 64), name, labels };
+}
+
+test("reclaims a cancelled run's orphaned service container whose owning job container is gone", () => {
+  const orphan = browserService("glantri-web-test-733-1", {
+    "com.glantri.ci.owner": "glantri-browser-service",
+    "com.glantri.ci.resource-suffix": "733-1",
+    "com.glantri.ci.job-container": DEAD_JOB_ID,
+  });
+  const plan = planStaleServiceReclamation({
+    serviceContainers: [orphan],
+    runningJobContainers: [SELF_JOB],
+    selfJobContainerId: SELF_JOB_ID,
+    currentSuffix: "812-1",
+  });
+
+  assert.deepEqual(
+    plan.stale.map((entry) => entry.container.name),
+    ["glantri-web-test-733-1"],
+  );
+  assert.deepEqual(plan.retained, []);
+  assert.deepEqual(plan.unresolved, []);
+  assert.match(plan.stale[0].reason, /no longer runs/);
+});
+
+test("never reclaims services owned by an actually active run", () => {
+  const active = browserService("glantri-api-test-900-1", {
+    "com.glantri.ci.owner": "glantri-browser-service",
+    "com.glantri.ci.resource-suffix": "900-1",
+    "com.glantri.ci.job-container": OTHER_JOB_ID,
+  });
+  const ours = browserService("glantri-api-test-812-1", {
+    "com.glantri.ci.owner": "glantri-browser-service",
+    "com.glantri.ci.resource-suffix": "812-1",
+    "com.glantri.ci.job-container": SELF_JOB_ID,
+  });
+  const plan = planStaleServiceReclamation({
+    serviceContainers: [active, ours],
+    runningJobContainers: [SELF_JOB, OTHER_JOB],
+    selfJobContainerId: SELF_JOB_ID,
+    currentSuffix: "812-1",
+  });
+
+  assert.deepEqual(plan.stale, []);
+  assert.deepEqual(plan.retained.map((entry) => entry.container.name).sort(), [
+    "glantri-api-test-812-1",
+    "glantri-api-test-900-1",
+  ]);
+  assert.match(
+    plan.retained.find((entry) => entry.container.name === "glantri-api-test-900-1").reason,
+    /still running/,
+  );
+});
+
+test("reclaims unanchored debris only when this job container is provably the only live job", () => {
+  const legacy = browserService("glantri-web-test-401-1");
+
+  const soleJob = planStaleServiceReclamation({
+    serviceContainers: [legacy],
+    runningJobContainers: [SELF_JOB],
+    selfJobContainerId: SELF_JOB_ID,
+    currentSuffix: "812-1",
+  });
+  assert.deepEqual(
+    soleJob.stale.map((entry) => entry.container.name),
+    ["glantri-web-test-401-1"],
+  );
+
+  const concurrent = planStaleServiceReclamation({
+    serviceContainers: [legacy],
+    runningJobContainers: [SELF_JOB, OTHER_JOB],
+    selfJobContainerId: SELF_JOB_ID,
+    currentSuffix: "812-1",
+  });
+  assert.deepEqual(concurrent.stale, []);
+  assert.deepEqual(
+    concurrent.unresolved.map((entry) => entry.container.name),
+    ["glantri-web-test-401-1"],
+  );
+  assert.match(concurrent.unresolved[0].reason, /concurrent run cannot be ruled out/);
+});
+
+test("refuses every unanchored reclamation when this job container cannot be identified", () => {
+  const plan = planStaleServiceReclamation({
+    serviceContainers: [browserService("glantri-web-test-401-1")],
+    runningJobContainers: [OTHER_JOB],
+    selfJobContainerId: undefined,
+    currentSuffix: "812-1",
+  });
+
+  assert.equal(plan.selfIdentified, false);
+  assert.deepEqual(plan.stale, []);
+  assert.deepEqual(
+    plan.unresolved.map((entry) => entry.container.name),
+    ["glantri-web-test-401-1"],
+  );
+});
+
+test("requires a current run resource suffix before planning any reclamation", () => {
+  assert.throws(
+    () => planStaleServiceReclamation({ serviceContainers: [], currentSuffix: "" }),
+    /run resource suffix/,
+  );
+});
+
+test("identifies this job container only through proven possession of a fresh token", () => {
+  const written = new Map();
+  const identity = identifySelfJobContainer({
+    candidates: [OTHER_JOB, SELF_JOB],
+    writeToken: (filePath, token) => written.set(filePath, token),
+    removeToken: (filePath) => written.delete(filePath),
+    exec: (containerId, filePath) =>
+      containerId === SELF_JOB_ID
+        ? { status: 0, stdout: `${written.get(filePath)}\n` }
+        : { status: 1, stdout: "" },
+  });
+  assert.equal(identity, SELF_JOB_ID);
+  assert.equal(written.size, 0);
+
+  assert.equal(
+    identifySelfJobContainer({
+      candidates: [OTHER_JOB],
+      writeToken: (filePath, token) => written.set(filePath, token),
+      removeToken: (filePath) => written.delete(filePath),
+      exec: () => ({ status: 0, stdout: "a-token-we-did-not-generate\n" }),
+    }),
+    undefined,
+  );
+  assert.equal(identifySelfJobContainer({ candidates: [] }), undefined);
+});
+
+test("treats a wedged Docker daemon as a failed call and refuses rather than reclaims", () => {
+  // Finding 7: a Docker call that never returns must not hold the job open, and
+  // the abandoned call must carry no evidence of liveness, so the only safe
+  // conclusion is to refuse. This exercises the real spawnSync path.
+  const stubDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "glantri-ci-wedged-docker-"));
+  const stubPath = path.join(stubDirectory, "docker");
+  // The stub must hang on its own terms, so it invokes this Node binary by
+  // absolute path rather than depending on anything resolvable through PATH.
+  fs.writeFileSync(
+    stubPath,
+    `#!/bin/sh\nexec ${process.execPath} -e 'setTimeout(() => {}, 30000)'\n`,
+    { mode: 0o755 },
+  );
+
+  const previousPath = process.env.PATH;
+  const previousTimeout = process.env.CI_DOCKER_TIMEOUT_MS;
+  process.env.PATH = `${stubDirectory}${path.delimiter}${previousPath ?? ""}`;
+  process.env.CI_DOCKER_TIMEOUT_MS = "250";
+  let identity;
+  const startedAt = Date.now();
+  try {
+    identity = identifySelfJobContainer({ candidates: [SELF_JOB] });
+  } finally {
+    process.env.PATH = previousPath;
+    if (previousTimeout === undefined) delete process.env.CI_DOCKER_TIMEOUT_MS;
+    else process.env.CI_DOCKER_TIMEOUT_MS = previousTimeout;
+    fs.rmSync(stubDirectory, { recursive: true, force: true });
+  }
+
+  assert.ok(Date.now() - startedAt < 20_000, "a wedged Docker call must be abandoned, not awaited");
+  assert.equal(identity, undefined);
+
+  const plan = planStaleServiceReclamation({
+    serviceContainers: [browserService("glantri-web-test-401-1")],
+    runningJobContainers: [SELF_JOB],
+    selfJobContainerId: identity,
+    currentSuffix: "812-1",
+  });
+  assert.equal(plan.selfIdentified, false);
+  assert.equal(plan.soleRunningJob, false);
+  assert.deepEqual(plan.stale, []);
+  assert.deepEqual(
+    plan.unresolved.map((entry) => entry.container.name),
+    ["glantri-web-test-401-1"],
+  );
+});

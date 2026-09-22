@@ -113,6 +113,146 @@ build layers reduce later runtime; pnpm and Playwright downloads are not shared
 across jobs. Record actual cold/warm timings from the proof PR rather than
 replacing them with estimates.
 
+## CI service lifecycle and port model
+
+`application-docker-test` publishes its API and Web containers on the fixed DIND
+ports 4000 and 3000 and names them `glantri-api-test-<run>-<attempt>` and
+`glantri-web-test-<run>-<attempt>` from `CI_RESOURCE_SUFFIX`. Those ports are
+fixed because the runner has capacity one and advertises a single
+`glantri-private-ci` label, so two `application-docker-test` jobs cannot execute
+at the same time on this instance. Fixed ports are therefore safe against
+concurrency, but they are not safe against debris: a container that outlives its
+own run keeps holding port 3000 or 4000 and blocks every later run.
+
+A cancelled or aborted run is exactly that case. Forgejo Runner destroys the job
+container immediately, so the workflow's `always()` teardown never executes and
+the service containers it created over the DIND daemon survive as orphans.
+Nothing inside a killed job can clean up after itself, and Docker offers no way
+to bind a sibling container's lifetime to the job container that created it.
+The guarantee is therefore recovery-based: orphans may briefly exist, but they
+can never block a later run.
+
+### Ownership attribution
+
+Every browser-service container is created with three labels:
+
+| Label                            | Value                                                                                                                 |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `com.glantri.ci.owner`           | `glantri-browser-service`                                                                                             |
+| `com.glantri.ci.resource-suffix` | the owning run's `CI_RESOURCE_SUFFIX`                                                                                 |
+| `com.glantri.ci.job-container`   | the full ID of the owning runner job container, or empty when that run could not prove which job container it runs in |
+
+The owner label defines the scope the lifecycle helper may act on. The resource
+suffix identifies the owning run and attempt. The job-container label is the
+liveness anchor. `verify` additionally refuses a container whose labelled
+resource suffix is not the current run's, so a recorded service identity can
+never silently point at another run's container.
+
+The job discovers its own runner job container by writing a freshly generated
+token inside itself and then proving possession of that token through the DIND
+daemon, testing each running container named
+`FORGEJO-ACTIONS-TASK-<task>_WORKFLOW-<hash>_JOB-<job>`. The proven ID is written
+to `<CI_SERVICE_STATE_DIR>/owner-job-container` and applied as the anchor label.
+Nothing is inferred from a hostname or a name convention alone.
+
+When that proof fails the file is empty, the anchor label is applied empty, and
+the service is thereafter indistinguishable from unanchored debris: it keeps the
+owner and resource-suffix labels, but it loses its liveness attribution. The
+direction is safe — an unanchored container is refused, never reclaimed on a
+guess — but the degradation is not silent. Each service-start step emits a
+workflow warning naming the missing anchor, so a run whose self-identification
+broke is visible in the job log rather than only in a later run's refusal.
+
+### Reclamation, and what happens when liveness is unknown
+
+`node scripts/ci/current-run-services.mjs reclaim-stale <state-dir> <suffix>`
+runs as the first Docker step of `application-docker-test`, before the retained
+port assertion. For each in-scope container it decides:
+
+| Observation                                                                   | Decision                                 |
+| ----------------------------------------------------------------------------- | ---------------------------------------- |
+| Carries the current run's resource suffix                                     | Retained; it is this run's own container |
+| Anchored to a job container that is still running                             | Retained; that run is genuinely active   |
+| Anchored to a job container that no longer runs                               | Reclaimed; its run is finished           |
+| Unanchored, and this job container is provably the only running job container | Reclaimed; no other run can be live      |
+| Unanchored while another job container is running                             | Refused and reported                     |
+| This process could not prove which job container it runs in                   | Refused and reported                     |
+
+The helper never removes a container on a guess. When liveness cannot be
+established it reclaims nothing, prints why, and exits successfully; the
+unchanged port assertion then fails the run closed with the occupied ports
+named. Refusing to clean up is always preferred to terminating a live run's
+services.
+
+The retained `assert-ports-free` check is deliberately kept after reclamation so
+that a genuine within-run collision — including one caused by a container the
+helper declined to touch — still refuses to start browser services.
+
+### If runner capacity is ever raised
+
+Capacity one is what makes fixed ports 3000/4000 sufficient. Raising it does not
+silently corrupt a run: the anchor label makes a concurrent run's services
+visibly active, reclamation declines to touch them, and the port assertion fails
+closed. It would, however, make `application-docker-test` unable to run
+concurrently with itself. Per-run dynamic host-port allocation is the change
+that capacity above one would require, and it is deliberately not implemented
+while capacity is one.
+
+### Regression coverage
+
+`scripts/ci/current-run-services.test.mjs` covers the decision table as pure
+logic, including the cancelled-run orphan, the active-run protection, the
+unanchored cases and the token-possession self-identification.
+`scripts/ci/current-run-services.synthetic.sh` proves the same behaviour against
+a real Docker daemon: it creates an orphan anchored to a dead job container,
+confirms the port gate rejects it, reclaims it, confirms the port is free again,
+and confirms that a service anchored to a running job container and its owning
+job container are both left untouched.
+
+It then stops its own fake job container, which makes the job container running
+the synthetic the only running runner job container, and proves the
+sole-running-job branch with a throwaway module written into its disposable
+state directory. That proof decides the branch from real daemon state — the
+helper's own live job-container enumeration and its own token-possession
+self-identification — over a container list restricted, by construction, to the
+containers the synthetic created. It never removes anything, and it is not a
+fifth committed helper, so the gate's exact-path tooling classification is
+unchanged.
+
+The branch is proven rather than invoked deliberately. Invoking it runs
+reclamation over every in-scope container on the daemon, which is correct for
+`application-docker-test`, whose run owns that population, and wrong for the
+synthetic's sole-job phase, which must never remove bystander containers.
+Phase 1's `reclaim-stale` call is deliberately destructive within a bounded
+radius: it may reclaim a service container whose owning job container is
+provably dead, because that is the production reclamation behaviour being
+tested. The radius is exactly the in-scope containers carrying a 64-hex
+ownership anchor whose owning job container is not in the running-job list —
+nothing unanchored, nothing keyed only to the current resource suffix, nothing
+anchored to a live job; those remain refused and reported per the decision
+table above. The sole-running-job branch therefore still belongs to
+`application-docker-test` alone; the test suites establish its decision, not
+its effect. See issue #289 for the remaining hardening follow-ups, including
+this residual radius.
+
+The synthetic asserts that reclamation reported the job container it proved it
+runs in, in both phases. Self-identification silently failing therefore fails the
+synthetic rather than passing it, and so does identifying the wrong container:
+the sole-job proof requires exactly one running job container and requires the
+token-possession probe to have identified that one, so the synthetic cannot pass
+unless self-identification was both successful and correct. The reclamation
+decisions are only meaningful when the job knows which job container is its
+own. Both suites run in the `tooling` job
+and in `application-docker-test`, and the `tooling` job runs whenever these
+scripts change, so the real-Docker proof does not depend on the runtime gate
+selecting `application-docker-test`.
+
+A Docker call that never returns is abandoned after `CI_DOCKER_TIMEOUT_MS`
+milliseconds, defaulting to 60000, and is then treated as a failed call. A
+wedged daemon therefore cannot hold a job open to its workflow timeout, and
+because an abandoned call proves nothing about liveness, the outcome is always a
+refusal and never a reclamation.
+
 ## Bootstrap on this Mac
 
 Prerequisites are Docker Desktop, the running loopback `glantri-forgejo`
@@ -230,7 +370,11 @@ throwaway proof behavior. Confirm `main` is unchanged before and after the proof
 When a job fails or is canceled, first verify `docker-test` reached a terminal
 state. Check the workflow's final cleanup step and the dedicated DIND daemon for
 run-specific `glantri-api-test-*` / `glantri-web-test-*` containers and images.
-Remove only resources bearing that exact run suffix. Forgejo job logs plus the
+A cancelled run cannot run its own teardown, so such containers are expected;
+the next `application-docker-test` reclaims them automatically, as described in
+[CI service lifecycle and port model](#ci-service-lifecycle-and-port-model).
+Hand removal is a last resort for debris the helper reports that it refused to
+touch, and then only for resources bearing that exact run suffix. Forgejo job logs plus the
 Playwright HTML report, retained trace/test results, and API/Web container logs
 remain in Forgejo under the configured seven-day retention policy when
 Playwright fails.
