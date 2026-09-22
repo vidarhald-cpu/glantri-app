@@ -10513,6 +10513,111 @@ describe("scenarios route contract", () => {
     });
   });
 
+  /**
+   * Product Owner ruling of 2026-09-22 on Forgejo issue #287: a participant may have at most one
+   * live Perform Task at a time, and a second one is refused until the existing task is completed,
+   * cancelled or resolved. This is refusal at creation only. It is not the enforcement point —
+   * `getCombatRoundOpenPerformTaskForParticipant` remains the single chokepoint that stops already
+   * persisted two-live-task state from granting two primary actions.
+   */
+  function setupSecondPerformTaskDeclaration(input: { status: string }) {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const encounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const earlierTaskId = "round:1:participant:encounter-participant-1:declaration:perform_task";
+    encounter.currentRound = 2;
+    encounter.combatRoundState = combatRoundStateSchema.parse({
+      ...initializeCombatRoundState({ encounter }),
+      genericActions: [
+        {
+          createdAt: "2026-09-18T08:00:00.000Z",
+          declarationKind: "perform_task",
+          duration: { kind: "gm_decided" },
+          id: earlierTaskId,
+          intent: "Bar the gate.",
+          lastUpdatedAt: "2026-09-18T08:00:00.000Z",
+          ownerParticipantId: "encounter-participant-1",
+          progress: { completedRounds: 0 },
+          status: input.status,
+          ...(input.status === "completed"
+            ? {
+                resolution: {
+                  resolvedAt: "2026-09-18T08:05:00.000Z",
+                  text: "The gate is barred.",
+                  visibleToParticipantIds: [],
+                },
+              }
+            : {}),
+        },
+      ],
+      roundNumber: 2,
+    });
+    setupCombatDeclarationRoute({
+      encounter,
+      participants: [
+        makeCombatScenarioParticipant({ id: "participant-1" }),
+        makeCombatScenarioParticipant({
+          controlledByUserId: "other-player",
+          id: "participant-2",
+        }),
+      ],
+    });
+    return { earlierTaskId };
+  }
+
+  async function declareSecondPerformTask() {
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "perform_task",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        intent: {
+          primaryAction: {
+            actionId: "perform_task",
+            description: "Haul the cart across the gate.",
+          },
+          relativePositions: [],
+        },
+        movementId: "hold",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+    return response;
+  }
+
+  it("refuses a second Perform Task while the participant already holds a live one", async () => {
+    for (const status of ["declared", "reviewed", "active"]) {
+      vi.clearAllMocks();
+      setupSecondPerformTaskDeclaration({ status });
+      const response = await declareSecondPerformTask();
+      expect(response.statusCode, JSON.stringify(response.json())).toBe(400);
+      expect(response.json().error).toMatch(/already has a Combat Task in progress/);
+      expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    }
+  });
+
+  it("accepts the next Perform Task once the earlier one is completed, cancelled or interrupted", async () => {
+    for (const status of ["completed", "cancelled", "interrupted"]) {
+      vi.clearAllMocks();
+      const prepared = setupSecondPerformTaskDeclaration({ status });
+      const response = await declareSecondPerformTask();
+      expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+      const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+      const tasks = updatedEncounter.combatRoundState.genericActions;
+      expect(tasks).toHaveLength(2);
+      expect(tasks[0]).toMatchObject({ id: prepared.earlierTaskId, status });
+      expect(tasks[1]).toMatchObject({
+        id: "round:2:participant:encounter-participant-1:declaration:perform_task",
+        intent: "Haul the cart across the gate.",
+        status: "declared",
+      });
+    }
+  });
+
   it.each([
     ["close", 1],
     ["open", 3],

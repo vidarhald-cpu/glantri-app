@@ -2290,6 +2290,13 @@ function normalizeCombatDeclarationMovementIntent(input: {
   });
 }
 
+/** A Combat generic action in one of these statuses is no longer live. */
+const TERMINAL_COMBAT_GENERIC_ACTION_STATUSES: ReadonlySet<string> = new Set([
+  "completed",
+  "interrupted",
+  "cancelled",
+]);
+
 function materializeCombatDeclarationTasks(input: {
   createdAt: string;
   createdByUserId: string;
@@ -2339,8 +2346,7 @@ function materializeCombatDeclarationTasks(input: {
       throw new Error("The selected Combat Task is not available to this participant.");
     }
     const existing =
-      requestedExisting &&
-      !new Set(["completed", "interrupted", "cancelled"]).has(requestedExisting.status)
+      requestedExisting && !TERMINAL_COMBAT_GENERIC_ACTION_STATUSES.has(requestedExisting.status)
         ? requestedExisting
         : undefined;
     const taskId = existing?.id ?? `${declarationId}:${declarationKind}`;
@@ -2352,6 +2358,30 @@ function materializeCombatDeclarationTasks(input: {
         updatedAt: input.createdAt,
       });
     } else {
+      // A participant may hold at most one live Perform Task at a time, under the Product Owner
+      // ruling of 2026-09-22 on Forgejo issue #287. A second one is refused until the existing task
+      // is completed, cancelled or resolved. The already-existing task with this exact id is not a
+      // second task: re-declaring the same round's task is idempotent.
+      //
+      // This refusal is not an enforcement point. It makes the two-live-task state rarer; it
+      // repairs nothing already persisted. The single chokepoint that prevents malformed legacy
+      // state from granting two primary actions remains the domain gate in
+      // `getCombatRoundOpenPerformTaskForParticipant`, whose two witnesses and selection rule are
+      // unchanged by this refusal.
+      if (declarationKind === "perform_task") {
+        const live = genericActions.find(
+          (action) =>
+            action.declarationKind === "perform_task" &&
+            action.ownerParticipantId === input.ownerParticipantId &&
+            action.id !== taskId &&
+            !TERMINAL_COMBAT_GENERIC_ACTION_STATUSES.has(action.status),
+        );
+        if (live) {
+          throw new Error(
+            "This character already has a Combat Task in progress. Complete, resolve or cancel it before declaring another.",
+          );
+        }
+      }
       genericActions = declareCombatGenericAction({
         action: {
           createdAt: input.createdAt,
