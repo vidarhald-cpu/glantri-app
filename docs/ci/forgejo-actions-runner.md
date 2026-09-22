@@ -207,14 +207,34 @@ unanchored cases and the token-possession self-identification.
 a real Docker daemon: it creates an orphan anchored to a dead job container,
 confirms the port gate rejects it, reclaims it, confirms the port is free again,
 and confirms that a service anchored to a running job container and its owning
-job container are both left untouched. It then stops that job container and runs
-reclamation again, so the sole-running-job branch — the only path that clears
-pre-anchor debris — executes against the real daemon too.
+job container are both left untouched.
+
+It then stops its own fake job container, which makes the job container running
+the synthetic the only running runner job container, and proves the
+sole-running-job branch with a throwaway module written into its disposable
+state directory. That proof decides the branch from real daemon state — the
+helper's own live job-container enumeration and its own token-possession
+self-identification — over a container list restricted, by construction, to the
+containers the synthetic created. It never removes anything, and it is not a
+fifth committed helper, so the gate's exact-path tooling classification is
+unchanged.
+
+The branch is proven rather than invoked deliberately. Invoking it runs
+reclamation over every in-scope container on the daemon, which is correct for
+`application-docker-test`, whose run owns that population, and wrong for a test
+sharing a daemon with other lanes: a test must never remove a container it did
+not create. The sole-running-job branch therefore still belongs to
+`application-docker-test` alone; the test suites establish its decision, not its
+effect.
 
 The synthetic asserts that reclamation reported the job container it proved it
-runs in. Self-identification silently failing therefore fails the synthetic
-rather than passing it: the reclamation decisions are only meaningful when the
-job knows which job container is its own. Both suites run in the `tooling` job
+runs in, in both phases. Self-identification silently failing therefore fails the
+synthetic rather than passing it, and so does identifying the wrong container:
+the sole-job proof requires exactly one running job container and requires the
+token-possession probe to have identified that one, so the synthetic cannot pass
+unless self-identification was both successful and correct. The reclamation
+decisions are only meaningful when the job knows which job container is its
+own. Both suites run in the `tooling` job
 and in `application-docker-test`, and the `tooling` job runs whenever these
 scripts change, so the real-Docker proof does not depend on the runtime gate
 selecting `application-docker-test`.

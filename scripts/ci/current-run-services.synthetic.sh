@@ -266,32 +266,147 @@ echo "An actually active run's service and its owning job container were left un
 test "$(docker inspect --format '{{.State.Running}}' "$legacy_id")" = true
 echo "Unanchored debris was refused while a concurrent job container could not be ruled out."
 
-# Sole-running-job reclamation, against a real daemon. With the synthetic job
-# container stopped, this job container is the only running runner job
+# Sole-running-job reclamation, decided against a real daemon. With the synthetic
+# job container stopped, this job container is the only running runner job
 # container, so unanchored legacy debris becomes provably reclaimable. This is
 # the only path that clears pre-anchor debris, and it is unreachable while any
 # other job container runs.
+#
+# The branch is proven, not invoked. Invoking it runs reclamation over every
+# in-scope container on the daemon, and a test must never remove a container it
+# did not create: on the shared runner daemon that is unbounded cleanup of other
+# lanes' debris. The proof below feeds the exported decision function the
+# helper's own live job-container enumeration and its own token-possession
+# self-identification, over a container list restricted by construction to the
+# containers this synthetic created. It is written into the disposable state
+# directory rather than committed as a fifth helper, so the gate's exact-path
+# tooling classification is unchanged.
 docker stop "$job_id" >/dev/null
 test "$(docker inspect --format '{{.State.Running}}' "$job_id")" = false
 
-sole_output="$(node "$helper" reclaim-stale "$state_directory" "$CI_RESOURCE_SUFFIX" 2>&1)"
+sole_job_proof="$state_directory/sole-job-proof.mjs"
+cat >"$sole_job_proof" <<'PROOF'
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+const [helperPath, currentSuffix, ...ownContainerIds] = process.argv.slice(2);
+const { identifySelfJobContainer, planStaleServiceReclamation } = await import(
+  pathToFileURL(path.resolve(helperPath)).href
+);
+
+function fail(message) {
+  console.log(message);
+  process.exit(1);
+}
+
+function inspectOwnContainer(containerId) {
+  const result = spawnSync("docker", ["inspect", "--format", "{{json .}}", containerId], {
+    encoding: "utf8",
+  });
+  if (result.status !== 0) fail(`The synthetic could not inspect its own container ${containerId}.`);
+  const details = JSON.parse(result.stdout);
+  return {
+    id: details.Id,
+    name: String(details.Name ?? "").replace(/^\//, ""),
+    labels: details.Config?.Labels ?? {},
+  };
+}
+
+// Real self-identification: the exported helper writes a fresh token into this
+// process's own filesystem and proves possession of it through the daemon.
+const selfJobContainerId = identifySelfJobContainer();
+if (!selfJobContainerId) {
+  fail("Sole-job reclamation could not prove which runner job container it runs in.");
+}
+console.log(`This job runs in runner job container ${selfJobContainerId}.`);
+
+// The helper's own live-candidate enumeration, captured without restating the
+// job-container name pattern here: an exec stub that never matches forces the
+// probe to visit every candidate the helper itself considers a running runner
+// job container. The count is therefore the daemon's, not the harness's.
+const runningJobContainers = [];
+identifySelfJobContainer({
+  exec: (containerId) => {
+    runningJobContainers.push({ id: containerId });
+    return { status: 1, stdout: "" };
+  },
+});
+console.log(
+  `The daemon reports ${runningJobContainers.length} running runner job container(s): ` +
+    `${runningJobContainers.map((container) => container.id).join(", ")}.`,
+);
+
+const serviceContainers = ownContainerIds.map(inspectOwnContainer);
+const ownContainerIdSet = new Set(serviceContainers.map((container) => container.id));
+const plan = planStaleServiceReclamation({
+  serviceContainers,
+  runningJobContainers,
+  selfJobContainerId,
+  currentSuffix,
+});
+
+for (const entry of plan.retained) {
+  console.log(`Retaining service container ${entry.container.name} because ${entry.reason}.`);
+}
+for (const entry of plan.unresolved) {
+  console.log(
+    `Refusing to reclaim service container ${entry.container.name} because ${entry.reason}.`,
+  );
+}
+for (const entry of plan.stale) {
+  console.log(`Planned reclamation of ${entry.container.name} because ${entry.reason}.`);
+}
+
+if (!plan.selfIdentified) {
+  fail("Sole-job reclamation could not prove which runner job container it runs in.");
+}
+if (!plan.soleRunningJob) {
+  fail("The sole-running-job reclamation branch did not execute against a real daemon.");
+}
+// Invariant, not a discovery: the judged population is the synthetic's own
+// containers. Asserting it keeps a future widening of the argument list honest.
+const foreign = plan.stale.filter((entry) => !ownContainerIdSet.has(entry.container.id));
+if (foreign.length > 0) {
+  fail(`The proof planned to reclaim ${foreign.length} container(s) the synthetic did not create.`);
+}
+console.log(
+  "The sole-running-job branch was decided from real daemon state over the synthetic's own " +
+    "containers only; no container was removed by this phase.",
+);
+PROOF
+
+set +e
+sole_output="$(
+  node "$sole_job_proof" "$helper" "$CI_RESOURCE_SUFFIX" "$legacy_id" "$active_id" 2>&1
+)"
+sole_status=$?
+set -e
 printf '%s\n' "$sole_output"
+if [ "$sole_status" -ne 0 ]; then
+  echo "The sole-running-job reclamation branch could not be proven against a real daemon."
+  exit 1
+fi
 if [[ "$sole_output" != *"This job runs in runner job container "* ]]; then
   echo "Sole-job reclamation could not prove which runner job container it runs in."
   exit 1
 fi
-if [[ "$sole_output" != *"this job container is the only running job container, so no other run is live"* ]]; then
+if [[ "$sole_output" != *"Planned reclamation of ${legacy_name} because this job container is the only running job container, so no other run is live."* ]]; then
   echo "The sole-running-job reclamation branch did not execute against a real daemon."
   exit 1
 fi
-if docker inspect "$legacy_id" >/dev/null 2>&1; then
-  echo "Unanchored debris survived sole-running-job reclamation."
+if [[ "$sole_output" != *"Planned reclamation of ${active_name} because its owning job container ${job_container_id} no longer runs."* ]]; then
+  echo "A service whose owning job container has since stopped was not judged stale."
   exit 1
 fi
-legacy_id=""
-if docker inspect "$active_id" >/dev/null 2>&1; then
-  echo "A service whose owning job container has since stopped survived reclamation."
+
+# The phase must be inert. Its own fixtures are still here; cleanup removes them.
+if ! docker inspect "$legacy_id" >/dev/null 2>&1; then
+  echo "The sole-job proof removed a container instead of deciding about it."
   exit 1
 fi
-active_id=""
-echo "Unanchored debris was reclaimed once this job container was provably the only running job container, and the service whose owner had since stopped was reclaimed with it."
+if ! docker inspect "$active_id" >/dev/null 2>&1; then
+  echo "The sole-job proof removed a container instead of deciding about it."
+  exit 1
+fi
+echo "Unanchored debris and a service whose owner had since stopped were both judged reclaimable once this job container was provably the only running job container, without removing any container."
