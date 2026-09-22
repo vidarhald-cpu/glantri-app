@@ -221,11 +221,19 @@ unchanged.
 
 The branch is proven rather than invoked deliberately. Invoking it runs
 reclamation over every in-scope container on the daemon, which is correct for
-`application-docker-test`, whose run owns that population, and wrong for a test
-sharing a daemon with other lanes: a test must never remove a container it did
-not create. The sole-running-job branch therefore still belongs to
-`application-docker-test` alone; the test suites establish its decision, not its
-effect.
+`application-docker-test`, whose run owns that population, and wrong for the
+synthetic's sole-job phase, which must never remove bystander containers.
+Phase 1's `reclaim-stale` call is deliberately destructive within a bounded
+radius: it may reclaim a service container whose owning job container is
+provably dead, because that is the production reclamation behaviour being
+tested. The radius is exactly the in-scope containers carrying a 64-hex
+ownership anchor whose owning job container is not in the running-job list —
+nothing unanchored, nothing keyed only to the current resource suffix, nothing
+anchored to a live job; those remain refused and reported per the decision
+table above. The sole-running-job branch therefore still belongs to
+`application-docker-test` alone; the test suites establish its decision, not
+its effect. See issue #289 for the remaining hardening follow-ups, including
+this residual radius.
 
 The synthetic asserts that reclamation reported the job container it proved it
 runs in, in both phases. Self-identification silently failing therefore fails the
