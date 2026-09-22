@@ -33,6 +33,10 @@ each still requires its own authorization through the canonical lifecycle.
 This contract **introduces no new domain primitive**. Section 10 records the
 existing domain evidence for that claim.
 
+The [Player Play V1](player-play-v1.md) contract layers player-facing
+composition and navigation on top of this one. It decides no domain question,
+and it does not reopen, narrow, or supersede any ruling recorded here.
+
 ### Out of scope
 
 - AI-friendly Artifact intake, tracked separately as
@@ -487,10 +491,25 @@ and S1 establishes its player-facing presentation.
 **Exclusions.** No Encounter-context Reveal. No Items. No Blackboard placement.
 No new persistence. No change to the visibility projection itself.
 
-**Likely surfaces.** `apps/web/app/(app)/campaigns/[campaignId]/scenarios/[scenarioId]/player/`,
-`apps/web/src/features/artifacts/`, the existing artifact read routes.
+**Likely surfaces.**
+`apps/web/app/(app)/campaigns/[campaignId]/CampaignWorkspaceShell.tsx`,
+`apps/web/src/features/artifacts/`, the existing artifact read routes. The player
+Scenario route
+`apps/web/app/(app)/campaigns/[campaignId]/scenarios/[scenarioId]/player/` was
+named here when this contract was written; a read-only codebase survey has since
+established that it is a 22-line `redirect()` into the Campaign workspace, so the
+real player surface is the workspace shell.
 
-**Dependencies.** None. This is the first slice.
+**Dependencies.** No slice dependency inside this contract: S1 needs nothing from
+S2–S6, and S1 and S2 may still proceed in parallel. **S1 is no longer the first
+slice to implement.** The 2026-09-22 Product Owner ruling recorded in
+[Player Play V1 §17.4](player-play-v1.md#174-recommended-sequencing-and-the-portfolio-constraint)
+settles the first implementation sequence as Play shell navigation, then the
+Situation view, then playtest, because `CampaignWorkspaceShell.tsx` is already the
+real player arena and already composes the relevant views; building an Artifact
+surface first merely to rearrange it immediately afterward is wasted work. **This
+records implementation ordering only.** Every domain requirement, outcome and
+exclusion of S1 stands unchanged.
 
 **Product decision needed first.** No.
 
