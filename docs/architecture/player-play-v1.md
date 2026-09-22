@@ -241,6 +241,12 @@ Rules:
   [section 9.3](#93-gm-announcements-versus-scene-text).
 - Where Scenario and Encounter each have scene text, **Encounter framing takes
   precedence while the Encounter is active.**
+- Scene text is **distinct from the static Scenario description.** A Scenario may
+  carry replaceable player-facing scene text and an Encounter may carry its own
+  replaceable framing; an existing field may be reused **only if it already has
+  exactly these semantics**, and otherwise this is a small separate persisted
+  capability. Settled 2026-09-22; see
+  [OPEN-PPV1-1](#open-ppv1-1--settled-scenario-and-encounter-each-may-carry-replaceable-scene-text).
 - **The round tracker does not belong in the common Play header.** It appears on
   Action only when the game is actually tracking time in 3-second rounds. See
   [section 10.1](#101-round-tracker).
@@ -339,6 +345,17 @@ is already cheaply available.
   durable shared material must remain reachable separately, in the
   [durable shared-material collection](scenario-play-workspace.md#83-the-durable-shared-material-collection)
   that #268 already requires.
+
+> **Sequencing of the Artifacts rail — settled, 2026-09-22.** The narrowing
+> above remains the durable product intent, but it is **not in the first
+> composition pass.** That pass **preserves the existing player-accessible/shared
+> Artifact visibility projection** and shows that accessible set with simple
+> search; the visibility projection **must not be changed merely to manufacture
+> Scenario-scoped filtering now**. The narrowing arrives as a
+> [later bounded capability](#later-bounded-capability--scenario--and-encounter-relevant-artifact-filtering)
+> once semantic associations to Scenario, Encounter, person or Item exist to
+> filter on. See
+> [OPEN-PPV1-2](#open-ppv1-2--settled-the-first-composition-pass-preserves-the-existing-artifact-visibility-projection).
 
 People and Items are projections, never authorities: what is **present** is
 canonical state, and what is **visible** is a separate axis, exactly as
@@ -557,12 +574,18 @@ Place the existing Skill Roll / task widget **below** the Combat area.
 - Outside Combat there is **no empty Combat block**; Action then contains
   primarily Skill Roll plus relevant status and outcomes.
 
-> **Model constraint.** There is no Scenario-level roll surface to compose:
-> `roleplayState` is a field on the Encounter session, not on the Scenario. With
-> no active Encounter, Action can carry status and history but **no Skill Roll
-> widget** without promoting roleplay state to Scenario scope. Recorded as
-> [OPEN-PPV1-3](#open-ppv1-3--skill-roll-outside-an-active-encounter-is-not-reachable-by-composition);
-> **not resolved by this contract.**
+> **Recorded constraint — settled, and not a defect.** There is no Scenario-level
+> roll surface to compose: `roleplayState` is a field on the Encounter session,
+> not on the Scenario. **With no active Encounter, Action carries status and
+> history but no Skill Roll widget.** The Product Owner ruling of 2026-09-22
+> settles that players **must ultimately** be able to make Skill Rolls during
+> ordinary Scenario play without an Encounter, that this **must not** be achieved
+> by silently creating an ambient or implicit Encounter, and that Scenario-level
+> roleplay state is a **separately authorized capability**. Until that capability
+> exists, **the Action view is deliberately partially constrained here.** A
+> Builder encountering this must **not** treat it as a bug and must not work
+> around it. See
+> [OPEN-PPV1-3](#open-ppv1-3--settled-scenario-level-skill-rolls-are-a-separately-authorized-capability).
 
 ### 10.4 Roll history
 
@@ -924,14 +947,14 @@ recorded so that no slice is planned against the wrong file.
 #268's [slice plan](scenario-play-workspace.md#11-proposed-implementation-slices)
 is **not replaced and its dependency model is not changed**.
 
-| #268 slice                                                                                                                                           | Status under this contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [S1 revealed Artifacts on the player Scenario surface](scenario-play-workspace.md#slice-s1--player-scenario-surface-shows-revealed-artifacts)        | **Useful as-is for the campaign-visible list**, which P2 consumes without re-doing. **Its exclusions do not reach §6.1's scenario-scoped rail** — see [OPEN-PPV1-2](#open-ppv1-2--the-scenario-scoped-situation-artifacts-rail-conflicts-with-268-s1s-exclusions) and [P3](#p3--scenario-scoped-situation-artifacts-rail). Its "likely surfaces" naming the `player/` route predates that route becoming a redirect ([section 17.1](#171-the-existing-player-surface--verified-facts)); the surface is the workspace shell. |
-| [S2 active Encounter as contextual state](scenario-play-workspace.md#slice-s2--active-encounter-as-contextual-state-in-the-scenario-workspace)       | **Useful as-is**, and is the prerequisite for the arena's Encounter indication. P1 shares its shell hotspot; one integration owner is required.                                                                                                                                                                                                                                                                                                                                                                             |
-| [S3 Encounter-context Artifact Reveal](scenario-play-workspace.md#slice-s3--encounter-context-artifact-reveal)                                       | **Useful as-is.** Its Reveal events are a source of Activity entries under [section 9.1](#91-what-activity-is); no Player Play slice changes the Reveal operation.                                                                                                                                                                                                                                                                                                                                                          |
-| [S4 Items present in the play context](scenario-play-workspace.md#slice-s4--items-present-in-the-play-context)                                       | **Useful as-is.** It supplies the presence/visibility data the Situation Items rail projects; `ScenarioSessionPanel` already renders the available-object set it extends.                                                                                                                                                                                                                                                                                                                                                   |
-| [S5 player play inventory projection](scenario-play-workspace.md#slice-s5--player-play-inventory-as-a-scenario-aware-projection)                     | **Useful as-is.** It supplies the equipment summary surfaced from Character in [section 11.2](#112-permanent-character-versus-campaign-state).                                                                                                                                                                                                                                                                                                                                                                              |
-| [S6 attached representation + Blackboard sharing](scenario-play-workspace.md#slice-s6--item-attached-artifact-representation-and-blackboard-sharing) | **Useful as-is.** The Inspector's Item -> attached Artifact path depends on it; this contract adds no requirement to it and does not touch PO-SPW-1.                                                                                                                                                                                                                                                                                                                                                                        |
+| #268 slice                                                                                                                                           | Status under this contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [S1 revealed Artifacts on the player Scenario surface](scenario-play-workspace.md#slice-s1--player-scenario-surface-shows-revealed-artifacts)        | **Useful as-is for the player-accessible list**, which P2 consumes without re-doing. **Its exclusions stand untouched**: [OPEN-PPV1-2](#open-ppv1-2--settled-the-first-composition-pass-preserves-the-existing-artifact-visibility-projection) settles that the first pass preserves the existing projection, so §6.1's scenario-scoped narrowing is a [later bounded capability](#later-bounded-capability--scenario--and-encounter-relevant-artifact-filtering) rather than a conflict. Its "likely surfaces" naming the `player/` route and its "first slice" ordering predate the verified facts in [section 17.1](#171-the-existing-player-surface--verified-facts); both are corrected in #268, and the implementation ordering is settled in [section 17.4](#174-recommended-sequencing-and-the-portfolio-constraint). |
+| [S2 active Encounter as contextual state](scenario-play-workspace.md#slice-s2--active-encounter-as-contextual-state-in-the-scenario-workspace)       | **Useful as-is**, and is the prerequisite for the arena's Encounter indication. P1 shares its shell hotspot; one integration owner is required.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| [S3 Encounter-context Artifact Reveal](scenario-play-workspace.md#slice-s3--encounter-context-artifact-reveal)                                       | **Useful as-is.** Its Reveal events are a source of Activity entries under [section 9.1](#91-what-activity-is); no Player Play slice changes the Reveal operation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| [S4 Items present in the play context](scenario-play-workspace.md#slice-s4--items-present-in-the-play-context)                                       | **Useful as-is.** It supplies the presence/visibility data the Situation Items rail projects; `ScenarioSessionPanel` already renders the available-object set it extends.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| [S5 player play inventory projection](scenario-play-workspace.md#slice-s5--player-play-inventory-as-a-scenario-aware-projection)                     | **Useful as-is.** It supplies the equipment summary surfaced from Character in [section 11.2](#112-permanent-character-versus-campaign-state).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| [S6 attached representation + Blackboard sharing](scenario-play-workspace.md#slice-s6--item-attached-artifact-representation-and-blackboard-sharing) | **Useful as-is.** The Inspector's Item -> attached Artifact path depends on it; this contract adds no requirement to it and does not touch PO-SPW-1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 **Shared hotspots between the two plans:** the Campaign workspace/scenario
 orchestration shell (S1, S2, P1, P2, P4, P5, P7), the Campaign Blackboard
@@ -978,7 +1001,9 @@ Naming uses `P` to avoid collision with #268's `S` slices.
 - **Player-visible outcome.** The Situation screen of
   [section 8](#8-situation--the-main-new-v1-screen): People/Items/Artifacts
   selector rails, a dominant Inspector, and full-width Activity below — with the
-  Artifacts rail showing the **existing campaign-visible Artifact list**.
+  Artifacts rail showing the **existing player-accessible/shared Artifact set
+  with simple search**, under
+  [OPEN-PPV1-2](#open-ppv1-2--settled-the-first-composition-pass-preserves-the-existing-artifact-visibility-projection).
 - **Reused.** The participant, Encounter and available-object rendering already
   in `ScenarioSessionPanel.tsx`; the player-visible Artifact projection from
   #268 S1; the existing full-viewport inspection pattern; and the existing
@@ -988,51 +1013,70 @@ Naming uses `P` to avoid collision with #268's `S` slices.
 - **Scope and exclusions.** No new domain model in the Inspector. **No new event
   model and no second player log** ([section 9.4](#94-the-existing-event-and-roll-model)).
   No sophisticated filtering. **No change to the player visibility projection**
-  — the Artifacts rail here is the campaign-visible list, and the scenario-scoped
-  rail §6.1 asks for is [P3](#p3--scenario-scoped-situation-artifacts-rail).
+  — the Artifacts rail here is the existing player-accessible/shared set, which
+  [OPEN-PPV1-2](#open-ppv1-2--settled-the-first-composition-pass-preserves-the-existing-artifact-visibility-projection)
+  settles as correct for the first composition pass. The scenario-scoped
+  narrowing §6.1 describes is deferred to a
+  [later bounded capability](#later-bounded-capability--scenario--and-encounter-relevant-artifact-filtering)
+  and is **not** part of this slice or the first pass.
 - **Dependencies.** P1; #268 S1 for Artifacts; #268 S4 for Items presence.
 - **Hotspots.** Workspace shell; Campaign/Scenario Item routes and UI.
-- **Persistence/schema.** None. **Recorded precondition:** Scenario-level
-  replaceable scene text — see
-  [OPEN-PPV1-1](#open-ppv1-1--scenario-level-scene-text-storage).
+- **Persistence/schema.** None. Scenario-level replaceable scene text
+  ([OPEN-PPV1-1](#open-ppv1-1--settled-scenario-and-encounter-each-may-carry-replaceable-scene-text))
+  is **settled and does not block this slice**; it is no longer a precondition.
 - **QA level.** Ordinary independent QA with perspective-sensitive checks.
-  `projectScenarioObjectiveHistory` already performs the player filtering, so
-  this slice **presents** an existing projection rather than changing one.
-  **Stop condition:** if the slice finds it cannot present Activity without
+  **The Artifacts rail does not make this a floor-class slice**, because
+  OPEN-PPV1-2 settles that the rail uses the existing projection unchanged.
+  `projectScenarioObjectiveHistory` already performs the player filtering for
+  Activity, so this slice **presents** existing projections rather than changing
+  one. **Stop condition:** if the slice finds it cannot present Activity without
   altering that projection or its payload, it stops and is re-classified as a
-  mandatory QA floor slice.
+  mandatory QA floor slice. That remains the only route by which this slice
+  becomes floor-class.
 - **Possibly redundant later.** Parts of the current Scenario tab body.
 - **Composition or redesign?** Composition.
 
-#### P3 — Scenario-scoped Situation Artifacts rail
+#### Later bounded capability — Scenario- and Encounter-relevant Artifact filtering
 
-- **Player-visible outcome.** The Situation Artifacts rail shows **current
-  relevant/shared material for this Scenario** rather than every Artifact
-  visible in the Campaign, as [section 8.1](#81-left-selectors) requires.
-- **Reused.** P2's rail presentation; the existing scoped reference listing;
-  #268's durable shared-material collection as the separate full route.
-- **Minimal new UI/glue.** None on the client beyond re-pointing P2's rail. The
-  work is server-side.
-- **Scope and exclusions.** **This slice changes the player visibility
-  projection.** `artifactCommonDtoSchema` in
+This is **not a slice of the first composition pass, and it is not blocked.**
+[OPEN-PPV1-2](#open-ppv1-2--settled-the-first-composition-pass-preserves-the-existing-artifact-visibility-projection)
+settles that the first pass preserves the existing player-accessible/shared
+Artifact visibility projection, and that the narrowing
+[section 8.1](#81-left-selectors) describes arrives later, **once semantic
+associations to Scenario, Encounter, person or Item exist to filter on**. It is
+recorded here, in the manner of
+[#268's later bounded capability](scenario-play-workspace.md#later-bounded-capability--player-created-collaboration-artifacts),
+so the architecture keeps room for it and **no slice above absorbs it**.
+
+- **Eventual player-visible outcome.** The Situation Artifacts rail shows
+  **current relevant/shared material for this Scenario** rather than the whole
+  accessible set.
+- **Why it cannot be done now.** `artifactCommonDtoSchema` in
   `packages/domain/src/campaign/artifact.ts` picks only `altText`,
   `artifactKind`, `campaignId`, `description`, `id`, `mediaType` and `title` —
-  it carries **no scenario scope** — and the scoped reference listing is GM-only,
-  so the rail **cannot** be achieved by client-side filtering.
-- **Dependencies.** P2. **Blocked on
-  [OPEN-PPV1-2](#open-ppv1-2--the-scenario-scoped-situation-artifacts-rail-conflicts-with-268-s1s-exclusions),
-  which is not resolved by this contract.**
-- **Hotspots.** Artifact domain DTOs, artifact read routes and services, the
-  player visibility projection.
-- **Persistence/schema.** Projection change; possible persisted scope semantics
-  depending on how OPEN-PPV1-2 is decided.
-- **QA level.** **Mandatory QA floor — privacy projection.** Full adversarial
-  independent QA at the strongest reasonably capable model, in a visible
-  dedicated QA session, at an exact PR head.
-- **Possibly redundant later.** Nothing.
-- **Composition or redesign?** **Not composition.** It crosses
-  [section 3](#3-governing-guardrail--composition-not-redesign) and is returned
-  for Product Owner decision rather than assumed authorized.
+  it carries **no scenario scope** — and the scoped reference listing is GM-only.
+  A player client therefore has nothing to filter on. The ruling forbids
+  changing the visibility projection **merely to manufacture that filtering
+  now**.
+- **Preservation requirement on the first pass.** P2's rail must present the
+  accessible set with simple search in a way that a later scoped source can
+  replace **without reworking the rail's presentation**.
+- **Recorded properties when it is authorized.** It changes the player
+  visibility projection and therefore carries the
+  **[mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) — privacy
+  projection**: full adversarial independent QA at the strongest reasonably
+  capable model, in a visible dedicated QA session, at an exact PR head. It is
+  **not composition** under
+  [section 3](#3-governing-guardrail--composition-not-redesign) and requires its
+  own Product Owner authorization. The **durable wider shared-material
+  collection remains independently available** either way.
+
+> **Slice numbering is deliberately preserved.** The scenario-scoped rail was
+> previously numbered **P3**. It is not renumbered into, and does not renumber,
+> the slices below: **P4 to P7 keep their existing numbers, and there is no P3
+> slice.** Numbering is left with that gap on purpose so that every existing
+> reference to P4, P5, P6 and P7 — in this document, in #282 and in #283 —
+> continues to mean the same slice.
 
 #### P4 — View state preservation across the arena
 
@@ -1087,8 +1131,12 @@ Naming uses `P` to avoid collision with #268's `S` slices.
 - **Scope and exclusions.** **No Combat control redesign. No new action engine.
   No new Skill calculation path.** No empty Combat block outside Combat.
   **Action outside an active Encounter carries status and history but no Skill
-  Roll widget** — see
-  [OPEN-PPV1-3](#open-ppv1-3--skill-roll-outside-an-active-encounter-is-not-reachable-by-composition).
+  Roll widget.** That is a **settled constraint, not a defect**, and it stands
+  until Scenario-level roleplay state arrives as a separately authorized
+  capability — see
+  [OPEN-PPV1-3](#open-ppv1-3--settled-scenario-level-skill-rolls-are-a-separately-authorized-capability).
+  **This slice may not resolve it**, and specifically may not create an ambient
+  or implicit Encounter.
 - **Dependencies.** P1. Independent of P4, but a player who switches away from a
   half-built declaration still loses it until P4 lands.
 - **Hotspots.** Encounter API clients and live synchronization; combat
@@ -1144,19 +1192,35 @@ Naming uses `P` to avoid collision with #268's `S` slices.
 
 ### 17.4 Recommended sequencing, and the portfolio constraint
 
+**The first implementation sequence is settled** by Product Owner ruling of
+2026-09-22: **P1 navigation -> P2 Situation -> playtest.** **P4 remains later and
+runs alone, with elevated/adversarial QA.**
+
 ```text
 #268 S2 -> P1 play shell navigation
-              ├── P2 situation over campaign-visible material  (also needs #268 S1, S4)
-              │     └── P3 scenario-scoped artifacts rail  — BLOCKED on OPEN-PPV1-2, QA floor
-              ├── P4 view state preservation  — scheduled ALONE, elevated QA
-              ├── P5 action                   (see OPEN-PPV1-3)
+              ├── P2 situation over the accessible material  (also needs #268 S1, S4)
+              ├── P4 view state preservation  — later, scheduled ALONE, elevated QA
+              ├── P5 action                   (partially constrained; see OPEN-PPV1-3)
               ├── P6 map + blackboard
               └── P7 character                (also needs #268 S5)
+
+later bounded capability: Scenario-/Encounter-relevant Artifact filtering
+              — not in the first pass, not blocked, QA floor when authorized
 ```
 
 P5, P6 and P7 are available in parallel after P1. P4 is not: it is scheduled on
 its own so that any regression in a composed view is attributable to the mount
 lifecycle change alone.
+
+**P1 is not blocked by #268's recorded "S1 is the first slice" ordering.** The
+verified codebase fact in
+[section 17.1](#171-the-existing-player-surface--verified-facts) is that
+`CampaignWorkspaceShell.tsx` is already the real player arena and already
+composes the relevant views, so building an Artifact surface first merely to
+rearrange it immediately afterward is wasted work. #268's underlying domain
+requirements are **unchanged**; only its recorded implementation ordering and its
+named surface are corrected, in
+[#268 S1](scenario-play-workspace.md#slice-s1--player-scenario-surface-shows-revealed-artifacts).
 
 > **This UI work must not silently displace the current playtest-foundation
 > priorities:** finishing Content V2 completion and canonicalization and then
@@ -1171,23 +1235,27 @@ lifecycle change alone.
 > hazards, plus a CI flake
 > ([#280](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/280)).
 
-Therefore the decomposition and sequencing are **returned, not started**. Choose
-the smallest useful composition changes that make actual playtesting better
-while the Skill and Combat foundations are completed.
+The sequence below is therefore **settled but not started**: it fixes the order
+of work without dispatching any of it. Choose the smallest useful composition
+changes that make actual playtesting better while the Skill and Combat
+foundations are completed.
 
-On that basis the **recommended smallest useful sequence** is:
+The **settled smallest useful sequence** is:
 
 1. **this contract document itself** — already the cheapest useful output, and a
    precondition for sizing anything else;
 2. **P1**, the navigation and five-view slice — the largest coherent
    player-visible gain for the least new surface, on a shell that already hosts
    every composed view;
-3. **P2**, the Situation slice over existing campaign-visible material — the one
-   genuinely new screen, achievable without touching a projection.
+3. **P2**, the Situation slice over the existing player-accessible material —
+   the one genuinely new screen, achievable without touching a projection;
+4. **playtest** on that arena before scheduling anything further.
 
-**P4 is the next slice after those, and it runs alone.** P3 is not scheduled at
-all until [OPEN-PPV1-2](#open-ppv1-2--the-scenario-scoped-situation-artifacts-rail-conflicts-with-268-s1s-exclusions)
-is decided by the Product Owner.
+**P4 is the next slice after those, and it runs alone**, with elevated
+adversarial QA. Scenario- and Encounter-relevant Artifact filtering is **not
+scheduled in the first pass at all**; it is a
+[later bounded capability](#later-bounded-capability--scenario--and-encounter-relevant-artifact-filtering)
+awaiting the semantic associations it would filter on.
 
 ---
 
@@ -1197,12 +1265,40 @@ Recorded in the style of
 [Scenario Play Workspace §12](scenario-play-workspace.md#12-product-owner-decisions--all-settled).
 **No decision here reopens anything settled by #268.**
 
-### OPEN-PPV1-1 — Scenario-level scene text storage
+**This contract has no remaining open Product Owner decision.** OPEN-PPV1-1,
+OPEN-PPV1-2 and OPEN-PPV1-3 were all **settled and closed** by the Product Owner
+ruling recorded on #282 on 2026-09-22, and the first implementation sequence is
+settled in [section 17.4](#174-recommended-sequencing-and-the-portfolio-constraint).
+Each original question text is retained below rather than deleted, so the history
+shows what was asked and how the ruling answered it. **No implementation is
+dispatched or authorized by any ruling below.**
 
-**Status:** Open — recorded for control-plane decision, not resolved here.\
-**Gates:** Nothing today. It is a **precondition to confirm before P2 is
-scheduled**, not a blocker on this contract.
+### OPEN-PPV1-1 — SETTLED: Scenario and Encounter each may carry replaceable scene text
 
+**Status:** **Settled and closed** by Product Owner ruling, 2026-09-22.\
+**Gates:** **Nothing.** Scene-text persistence **does not block
+[P1](#p1--play-shell-navigation-and-the-five-views) or
+[P2](#p2--situation-view-over-existing-campaign-visible-material)**.
+
+**The ruling.**
+
+- A **Scenario may have replaceable player-facing scene/framing text.**
+- An **Encounter may have its own replaceable framing.**
+- **Active Encounter framing takes precedence while the Encounter is active**,
+  as [section 6](#6-shared-play-header-and-scene-text) already requires.
+- This scene text is **distinct from the static Scenario description** and
+  **distinct from GM announcements and Activity**
+  ([section 9.3](#93-gm-announcements-versus-scene-text)).
+- **Reuse an existing field only if that field already has these exact
+  semantics.** Otherwise record a **small separate persisted capability** for it.
+- **Scene-text persistence does not block P1 or P2.** Neither slice waits for it,
+  and neither slice may introduce it on its own authority.
+
+Because a separate persisted capability is a storage change, it remains subject
+to [section 11.4](#114-storage-and-calculation-architecture-is-not-redesigned-here):
+it arrives as its own authorized capability, not inside a UI composition slice.
+
+**The question as originally recorded.**
 [Section 6](#6-shared-play-header-and-scene-text) requires replaceable GM scene
 text at Scenario level, with Encounter framing taking precedence while an
 Encounter is active. The existing model records a **player-facing situation
@@ -1211,30 +1307,49 @@ message on the Encounter**
 and Scenario title, summary and GM-facing notes
 ([Scenario Workspace](../product/campaign-scenario-encounter-workflows.md#scenario-workspace)),
 but no separately identified player-facing Scenario scene text distinct from the
-Scenario summary.
+Scenario summary. Two readings were recorded: that Scenario scene text is the
+existing player-safe Scenario summary presented as scene text, with no storage
+change; or that it is a distinct replaceable field, which is a storage change.
+**The ruling chose the second reading, conditionally** — the existing field is
+reusable only where its semantics already match exactly, and otherwise a small
+separate persisted capability is recorded.
 
-Two readings are available, and the choice is a product decision:
+### OPEN-PPV1-2 — SETTLED: the first composition pass preserves the existing Artifact visibility projection
 
-1. Scenario scene text is the existing player-safe Scenario summary, presented
-   as scene text. No storage change.
-2. Scenario scene text is a distinct replaceable field. That is a storage
-   change, and under
-   [section 11.4](#114-storage-and-calculation-architecture-is-not-redesigned-here)
-   it must be returned for control-plane decision rather than introduced by a UI
-   slice.
+**Status:** **Settled and closed** by Product Owner ruling, 2026-09-22.\
+**Gates:** **Nothing.** There is no blocked slice left to gate: the
+scenario-scoped rail is no longer part of the first pass and is recorded instead
+as a
+[later bounded capability](#later-bounded-capability--scenario--and-encounter-relevant-artifact-filtering).
 
-**This contract does not choose.** It records the question and forbids a Builder
-from resolving it unilaterally.
+**The ruling.**
 
-### OPEN-PPV1-2 — The scenario-scoped Situation Artifacts rail conflicts with #268 S1's exclusions
+- For the **first Player Play composition pass, preserve the current
+  player-accessible/shared Artifact visibility projection.**
+- [Situation](#8-situation--the-main-new-v1-screen) may initially show **that
+  accessible Artifact set with simple search**.
+- **Do not change the visibility projection merely to manufacture
+  Scenario-scoped filtering now.**
+- **Scenario- and Encounter-relevant Artifact filtering becomes a later bounded
+  capability**, once semantic associations to Scenario, Encounter, person or
+  Item exist to filter on.
+- The **durable wider shared-material collection remains independently
+  available**, as
+  [#268 §8.3](scenario-play-workspace.md#83-the-durable-shared-material-collection)
+  already requires.
 
-**Status:** Open — a genuine contract conflict, recorded for control-plane
-decision and **not resolved here**.\
-**Gates:** [P3](#p3--scenario-scoped-situation-artifacts-rail). P3 is not
-schedulable until this is decided. It does not gate P1 or P2, which use the
-existing campaign-visible list.
+**Consequences recorded in [section 17](#17-proposed-implementation-decomposition).**
+The slice previously numbered P3 is **not blocked** and is **not part of the
+first pass**; it is recorded as a
+[later bounded capability](#later-bounded-capability--scenario--and-encounter-relevant-artifact-filtering).
+[P2](#p2--situation-view-over-existing-campaign-visible-material) uses the
+existing projection and therefore **carries no mandatory-QA-floor classification
+on the Artifact rail's account**. **#268 S1's exclusions are not widened**: "no
+change to the visibility projection itself" stands exactly as #268 recorded it.
 
-Two current requirements cannot both hold under the existing model.
+**The conflict as originally recorded, and why it is dissolved.**
+
+Two requirements could not both hold under the existing model.
 
 - [#268 slice S1's exclusions](scenario-play-workspace.md#slice-s1--player-scenario-surface-shows-revealed-artifacts)
   state: **"No new persistence. No change to the visibility projection
@@ -1253,29 +1368,50 @@ projection**, which is exactly what S1 excludes and which is a
 [mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) class on privacy
 grounds.
 
-Readings available, stated neutrally and **not chosen**:
+Three readings were recorded:
 
-1. **V1 ships the campaign-visible list.** P2's rail shows campaign-visible
-   Artifacts; §6.1's narrowing is deferred. S1's exclusions stand untouched.
+1. **V1 ships the accessible list.** The Situation rail shows the existing
+   player-accessible Artifacts; §6.1's narrowing is deferred. S1's exclusions
+   stand untouched.
 2. **S1's exclusions are widened by explicit Product Owner decision** to permit
-   a scenario-scoped player projection, which is then built as P3 under the
-   mandatory QA floor.
+   a scenario-scoped player projection, built under the mandatory QA floor.
 3. **The rail is scoped by an existing non-projection signal** — for example
-   #268's durable shared-material collection or Blackboard placement — if one
-   can carry the narrowing without a projection change. Whether any such signal
-   exists is an open question, not an assumption.
+   #268's durable shared-material collection or Blackboard placement.
 
-**This contract does not choose, and does not reopen anything #268 settled.** S1
-remains #268's slice with #268's exclusions until the Product Owner decides
-otherwise.
+**The ruling chose the first reading for the first pass**, and deferred the
+narrowing to a later bounded capability conditioned on semantic associations
+existing. The projection is therefore not changed, S1's exclusions stand
+untouched, and **nothing #268 settled is reopened.**
 
-### OPEN-PPV1-3 — Skill Roll outside an active Encounter is not reachable by composition
+### OPEN-PPV1-3 — SETTLED: Scenario-level Skill Rolls are a separately authorized capability
 
-**Status:** Open — recorded for control-plane decision, not resolved here.\
-**Gates:** the "outside Combat" half of
-[section 10.3](#103-skill-roll), and
-[P5](#p5--action-view-composition)'s scope.
+**Status:** **Settled and closed** by Product Owner ruling, 2026-09-22.\
+**Gates:** **No slice.** [P1](#p1--play-shell-navigation-and-the-five-views) and
+[P2](#p2--situation-view-over-existing-campaign-visible-material) may proceed
+before the capability exists. It leaves
+[P5](#p5--action-view-composition) and the "outside Combat" half of
+[section 10.3](#103-skill-roll) **recorded as partially constrained**, which is a
+settled constraint and **not a defect**.
 
+**The ruling.**
+
+- Players **must ultimately be able to make Skill Rolls during ordinary Scenario
+  play without requiring an Encounter.**
+- **Do not implement this by silently creating an ambient or implicit
+  Encounter.** That option is **rejected**.
+- Scenario-level roleplay / Skill Roll state is a **separately authorized
+  capability**, because it crosses the composition-only boundary in
+  [section 3](#3-governing-guardrail--composition-not-redesign).
+- **P1 and P2 may proceed before it.** The Action view **remains partially
+  constrained** until that capability exists: outside an active Encounter,
+  Action carries status and roll history but no Skill Roll widget.
+
+**A Builder must not treat that constraint as a defect to repair**, and must not
+resolve it by promoting roleplay state, by auto-provisioning an Encounter, or by
+creating a parallel Scenario-level roll path. The constraint is recorded at
+[section 10.3](#103-skill-roll) for exactly that reason.
+
+**The question as originally recorded.**
 [Section 10.3](#103-skill-roll) requires that outside Combat, Action contains
 primarily Skill Roll plus relevant status and outcomes. The existing model does
 not offer a Scenario-level roll surface to compose.
@@ -1291,7 +1427,7 @@ Therefore, with no active Encounter, Action can contain status and history but
 subsystem redesign that #282 §2 and
 [section 3](#3-governing-guardrail--composition-not-redesign) do not authorize.
 
-Options, stated neutrally and **not chosen**:
+Three options were recorded:
 
 1. **Accept the constraint for V1.** Action outside an active Encounter shows
    status and roll history only; the Skill Roll widget appears when an Encounter
@@ -1304,15 +1440,22 @@ Options, stated neutrally and **not chosen**:
    named above, with a schema and projection change, and would carry the
    mandatory QA floor.
 
-**This contract does not choose.** It records the constraint and forbids a
-Builder from resolving it unilaterally.
+**The ruling rejected option 2 outright.** It accepted option 1 as the interim
+state of the Action view and directed that the eventual answer arrive as a
+**separately authorized capability** rather than inside a composition slice.
+Whether that capability takes the shape of option 3 is not settled here; what is
+settled is that it is separately authorized and that no ambient or implicit
+Encounter is created.
 
 ### Contract conflicts and reconciliations
 
-One genuine conflict exists and is recorded above as
-[OPEN-PPV1-2](#open-ppv1-2--the-scenario-scoped-situation-artifacts-rail-conflicts-with-268-s1s-exclusions).
-[OPEN-PPV1-3](#open-ppv1-3--skill-roll-outside-an-active-encounter-is-not-reachable-by-composition)
-is a model constraint rather than a conflict between contracts.
+One genuine conflict was recorded above as
+[OPEN-PPV1-2](#open-ppv1-2--settled-the-first-composition-pass-preserves-the-existing-artifact-visibility-projection),
+and the 2026-09-22 ruling **dissolved it** by preserving the existing projection
+for the first pass, leaving #268 S1's exclusions untouched.
+[OPEN-PPV1-3](#open-ppv1-3--settled-scenario-level-skill-rolls-are-a-separately-authorized-capability)
+is a model constraint rather than a conflict between contracts, and the ruling
+left it recorded as a settled constraint on the Action view.
 
 Beyond those, no conflict was found between this specification and
 [Scenario Play Workspace](scenario-play-workspace.md),
@@ -1357,11 +1500,15 @@ Every Player Play slice must prove:
    [section 14](#14-deferred-capabilities) was partially implemented.
 
 Slice classification follows [section 17.3](#173-proposed-player-play-slices),
-not this list. In particular: **P3 is a mandatory QA floor class** because it
-changes the player visibility projection; **P6's Blackboard** is a
-privacy-projection surface under #268's proofs; and **P4 carries elevated
-adversarial QA** for its arena-wide mount-lifecycle change even though it is not
-a floor class. P2 presents an existing projection and stops if it finds it
-cannot, at which point it becomes a floor-class slice. Every floor-class slice
+not this list. In particular: **P6's Blackboard** is a privacy-projection surface
+under #268's proofs; and **P4 carries elevated adversarial QA** for its
+arena-wide mount-lifecycle change even though it is not a floor class. P2
+presents existing projections and stops if it finds it cannot present Activity
+without altering one, at which point it becomes a floor-class slice — its
+Artifact rail no longer forces that classification, because
+[OPEN-PPV1-2](#open-ppv1-2--settled-the-first-composition-pass-preserves-the-existing-artifact-visibility-projection)
+settles that the rail uses the existing projection unchanged. **Scenario- and
+Encounter-relevant Artifact filtering is a mandatory QA floor class** when it is
+later authorized, because it changes the player visibility projection. Every floor-class slice
 requires full adversarial independent QA at the strongest reasonably capable
 model, in a visible dedicated QA session, at an exact PR head.
