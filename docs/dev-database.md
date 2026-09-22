@@ -106,12 +106,66 @@ pnpm db:task:cleanup
 - `db:task:reset` accepts only `application` or `test` and requires `--confirm`.
 - `db:task:seed` seeds only the owned application database.
 - `db:task:test` migrates the owned test database, then runs the database integration suite with the explicit test URL.
-- `db:task:exec` supplies both owned URLs to application or other database-capable commands.
+- `db:task:exec` supplies both owned URLs, and the task stack's own loopback host and ports, to application or other database-capable commands.
 - `db:task:cleanup` re-derives current-worktree ownership and verifies the Docker task/worktree ownership labels before removing the exact disposable container and `.env.task`.
 
 Each migration, reset, seed, application, client, and integration-test path validates the current `.env.task`, current-worktree identity, PostgreSQL 16 image, ownership labels, running state, and bound port before database access. It prints a preflight line containing only the ownership marker, host, port, and database name. Passwords are never printed. Direct Prisma commands are unsupported; Prisma's configuration and every repository-owned direct `PrismaClient` construction path apply the same worktree environment guard so they cannot use a copied environment or an inherited protected/foreign target.
 
 Two distinct linked worktrees — including sibling worktrees for the same issue under one shared parent directory, such as a Builder and QA lane — necessarily get different ownership markers, container names, ports, application databases, and test databases, because the worktree key is derived from each worktree's own full resolved path rather than its parent directory name. A copied foreign `.env.task`, a foreign full shell environment, and a cleanup attempt through foreign ownership all fail before container or database access. Builder and independent QA each set up and clean up their own target.
+
+## Task Stack Ports and Addresses
+
+Worktree filesystem isolation is not database isolation, and a disposable database is not stack
+isolation either. A task-isolated stack that keeps the shared application defaults — API `4000`,
+Web `3000` — competes for those ports with every other stack on the machine, including the primary
+checkout's own `pnpm dev` and the standing playtest runtime.
+
+That competition does not fail cleanly. On macOS and BSD a wildcard bind (`0.0.0.0:4000`) succeeds
+even while another process already holds `127.0.0.1:4000`, and the kernel keeps delivering loopback
+traffic to the more specific listener. The second stack reports itself as started, receives nothing,
+and the browser that was meant to reach it talks to the first stack instead — including that
+stack's database. Forgejo #276 records the incident: a correctly provisioned, correctly cleaned-up
+QA lane wrote two rows into the shared playtest database while doing everything else right.
+
+`db:task:exec` therefore owns the stack's network identity as well as its database identity:
+
+- **Ports are derived from the same worktree key as the database target**, so the two can never
+  drift apart. The API port falls in `4100`–`4499` and the Web port in `3100`–`3499`, clear of the
+  shared defaults and clear of the macOS ephemeral range. Derivation is deterministic, so one
+  worktree always reaches the same URLs.
+- **`API_HOST`, `API_PORT`, `WEB_HOST`, `WEB_PORT`, `WEB_ORIGIN` and `NEXT_PUBLIC_API_BASE_URL` are
+  propagated together**, so the frontend, the API bind and the API's allowed origin all name the
+  same stack. `turbo.json` declares each of them on the `dev` task; Turborepo's strict environment
+  mode drops anything undeclared.
+- **Addresses use the `127.0.0.1` literal**, not `localhost`. The bind address and both
+  browser-facing URLs are then byte-identical, so CORS matches exactly and no resolver decides
+  between `127.0.0.1` and `::1`. `127.0.0.1` is still a secure context, so Web Crypto works.
+- **A wildcard bind is refused when `GLANTRI_DB_MODE=task`.** The API requires an explicit
+  `API_HOST` and `API_PORT` in task mode and rejects `0.0.0.0` and `::`. Outside task mode the
+  wildcard default is unchanged, because a container must bind its whole namespace.
+- **A held port fails the stack before any process starts.** `db:task:exec` probes each port on
+  the loopback address — both a bind and a connect, because a wildcard holder is invisible to the
+  bind alone — and refuses to continue when either is contended. The probe itself never binds a
+  wildcard address.
+
+A `Stack preflight:` line is printed next to the database preflight lines, naming the owner, the
+API base URL, the Web origin and the bind address. Record it in handoff evidence alongside the
+database markers, and open the stack at the printed `http://127.0.0.1:<port>` addresses.
+
+In the rare case that two worktrees derive the same port window, set `GLANTRI_TASK_API_PORT` and
+`GLANTRI_TASK_WEB_PORT` explicitly before `db:task:exec`. That is the supported escape hatch; a
+conflicting inherited `API_PORT` or `NEXT_PUBLIC_API_BASE_URL` is refused rather than silently
+preferred, exactly as a conflicting inherited `DATABASE_URL` already is.
+
+`scripts/database/taskStackIsolation.test.ts` is the regression proof: it starts two stacks
+concurrently, follows each one's `NEXT_PUBLIC_API_BASE_URL`, and asserts that each reaches only its
+own API and its own database, and that a port collision surfaces as a loud refusal rather than a
+silent redirection.
+
+This is the developer-machine model. The CI service and port model is a deliberately separate
+document — see [the private Forgejo Actions runner](./ci/forgejo-actions-runner.md), whose fixed
+DIND ports are safe for a different reason (runner capacity one) and whose isolation problem is
+orphaned containers rather than environment propagation.
 
 ## Protected Shared Database Backup Expectations
 
@@ -141,6 +195,7 @@ Database-capable Builder/QA handoffs record:
 - sanitized application and test host, port, and database names;
 - PostgreSQL 16 verification;
 - migration/reset/seed/integration commands actually run;
+- the `Stack preflight:` line when a dev stack was started, so the API base URL, Web origin and bind address are on record;
 - proof that concurrent targets did not see or mutate each other's sentinel data when concurrency is in scope; and
 - cleanup result, including any intentionally retained disposable target.
 

@@ -42,6 +42,8 @@ test("the turbo dev task declares the environment local startup depends on", () 
     "GLANTRI_DB_TASK",
     "API_HOST",
     "API_PORT",
+    "WEB_HOST",
+    "WEB_PORT",
     "WEB_ORIGIN",
     "NEXT_PUBLIC_API_BASE_URL",
   ]) {
@@ -57,4 +59,14 @@ test("the canonical local startup chain still runs through the guarded database 
 
   assert.equal(scripts.dev, "node --import tsx scripts/database/guardedDatabaseCommand.ts dev");
   assert.equal(scripts["dev:full"], "pnpm --filter @glantri/content build && pnpm dev");
+});
+
+// `next dev` picks the next free port when its own is taken and says so only in a log line, so a
+// stack whose Web port is unspecified can end up on another stack's neighbourhood of ports while
+// still looking healthy. The dev script therefore always states the bind address and port; the
+// default keeps the pre-#276 behaviour for the primary checkout.
+test("the web dev server binds an explicitly stated host and port", () => {
+  const { scripts } = readJson("apps/web/package.json");
+
+  assert.equal(scripts.dev, "next dev --hostname ${WEB_HOST:-0.0.0.0} --port ${WEB_PORT:-3000}");
 });
