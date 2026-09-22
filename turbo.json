@@ -15,7 +15,9 @@
         "LOG_LEVEL",
         "NEXT_PUBLIC_*",
         "NODE_ENV",
-        "WEB_ORIGIN"
+        "WEB_HOST",
+        "WEB_ORIGIN",
+        "WEB_PORT"
       ]
     },
     "build": {
