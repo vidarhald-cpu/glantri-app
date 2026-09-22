@@ -539,6 +539,7 @@ test("actual workflow parses and preserves aggregate dependencies, event head an
   const dockerCommands = dockerSteps.map((step) => step.run).join("\n");
   for (const command of [
     "assert-ports-free",
+    "current-run-services.mjs reclaim-stale",
     "current-run-services.test.mjs",
     "current-run-services.synthetic.sh",
     "current-run-services.mjs record",
@@ -553,6 +554,27 @@ test("actual workflow parses and preserves aggregate dependencies, event head an
     dockerSteps.find((s) => s.name === "Remove run-owned Docker resources").if,
     "always()",
   );
+  const reclaimIndex = dockerSteps.findIndex((s) => s.run?.includes("reclaim-stale"));
+  const assertPortsIndex = dockerSteps.findIndex((s) => s.run?.includes("assert-ports-free"));
+  assert.ok(reclaimIndex >= 0, "stale service reclamation must run in application-docker-test");
+  assert.ok(
+    reclaimIndex < assertPortsIndex,
+    "stale service reclamation must precede the retained port collision assertion",
+  );
+  for (const service of ["api", "web"]) {
+    const start = dockerSteps.find(
+      (s) => s.name === `Start ${service === "api" ? "API" : "Web"} container`,
+    );
+    for (const label of [
+      "--label com.glantri.ci.owner=glantri-browser-service",
+      '--label "com.glantri.ci.resource-suffix=$CI_RESOURCE_SUFFIX"',
+      '--label "com.glantri.ci.job-container=$owner_job_container"',
+    ])
+      assert.ok(
+        start.run.includes(label),
+        `${service} service must carry ownership label ${label}`,
+      );
+  }
   assert.ok(dockerSteps.some((s) => s.run?.includes("prisma migrate deploy")));
   assert.ok(dockerSteps.some((s) => s.run?.includes("playwright test --reporter=list,html")));
   assert.equal(

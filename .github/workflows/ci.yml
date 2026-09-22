@@ -178,6 +178,11 @@ jobs:
           test "$(docker version --format '{{.Server.Version}}' | cut -d. -f1)" = "29"
           test -n "$CI_RESOURCE_SUFFIX"
 
+      - name: Reclaim stale run-owned browser services
+        run: >-
+          node scripts/ci/current-run-services.mjs reclaim-stale
+          "$CI_SERVICE_STATE_DIR" "$CI_RESOURCE_SUFFIX"
+
       - name: Verify browser service ports are free
         run: node scripts/ci/current-run-services.mjs assert-ports-free "$CI_DIND_HOST" 3000 4000
 
@@ -235,6 +240,10 @@ jobs:
           api_image_tag="glantri-api-test-$CI_RESOURCE_SUFFIX"
           api_image_id="$(docker image inspect --format '{{.Id}}' "$api_image_tag")"
           api_container_id=""
+          owner_job_container="$(cat "$CI_SERVICE_STATE_DIR/owner-job-container" 2>/dev/null || true)"
+          if [ -z "$owner_job_container" ]; then
+            echo "::warning::Starting the API service without a runner job-container ownership anchor: this run could not prove which job container it runs in, so com.glantri.ci.job-container will be empty and a later run will treat this container as unanchored."
+          fi
           log_api_startup_failure() {
             startup_status=$?
             if [ "$startup_status" -ne 0 ] && [ -n "$api_container_id" ]; then
@@ -244,6 +253,9 @@ jobs:
           }
           trap log_api_startup_failure EXIT
           api_container_id="$(docker run -d --name "$api_image_tag" \
+            --label com.glantri.ci.owner=glantri-browser-service \
+            --label "com.glantri.ci.resource-suffix=$CI_RESOURCE_SUFFIX" \
+            --label "com.glantri.ci.job-container=$owner_job_container" \
             --add-host host.docker.internal:host-gateway \
             -p 4000:4000 \
             -e DATABASE_URL="postgresql://postgres:postgres@host.docker.internal:5432/glantri_test" \
@@ -260,6 +272,10 @@ jobs:
           web_image_tag="glantri-web-test-$CI_RESOURCE_SUFFIX"
           web_image_id="$(docker image inspect --format '{{.Id}}' "$web_image_tag")"
           web_container_id=""
+          owner_job_container="$(cat "$CI_SERVICE_STATE_DIR/owner-job-container" 2>/dev/null || true)"
+          if [ -z "$owner_job_container" ]; then
+            echo "::warning::Starting the Web service without a runner job-container ownership anchor: this run could not prove which job container it runs in, so com.glantri.ci.job-container will be empty and a later run will treat this container as unanchored."
+          fi
           log_web_startup_failure() {
             startup_status=$?
             if [ "$startup_status" -ne 0 ] && [ -n "$web_container_id" ]; then
@@ -269,6 +285,9 @@ jobs:
           }
           trap log_web_startup_failure EXIT
           web_container_id="$(docker run -d --name "$web_image_tag" \
+            --label com.glantri.ci.owner=glantri-browser-service \
+            --label "com.glantri.ci.resource-suffix=$CI_RESOURCE_SUFFIX" \
+            --label "com.glantri.ci.job-container=$owner_job_container" \
             -p 3000:3000 \
             -e NODE_ENV="production" \
             "$web_image_tag")"
