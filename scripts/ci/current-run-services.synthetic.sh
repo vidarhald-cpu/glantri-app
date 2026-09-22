@@ -238,7 +238,17 @@ if node "$helper" assert-ports-free "$CI_DIND_HOST" "$orphan_port"; then
 fi
 echo "Cancelled-run orphan reproduced the later-run port blockage."
 
-node "$helper" reclaim-stale "$state_directory" "$CI_RESOURCE_SUFFIX"
+reclaim_output="$(node "$helper" reclaim-stale "$state_directory" "$CI_RESOURCE_SUFFIX" 2>&1)"
+printf '%s\n' "$reclaim_output"
+
+# Self-identification must be proven, not merely survived. Without this the
+# whole synthetic is satisfied equally by a working mechanism and by a run that
+# could not identify its own job container at all.
+if [[ "$reclaim_output" != *"This job runs in runner job container "* ]]; then
+  echo "Reclamation could not prove which runner job container it runs in, so this synthetic proves nothing about ownership anchoring."
+  exit 1
+fi
+echo "Self-identification through the Docker daemon was proven against a real daemon."
 
 if docker inspect "$orphan_id" >/dev/null 2>&1; then
   echo "Cancelled-run orphan survived stale service reclamation."
@@ -255,3 +265,33 @@ echo "An actually active run's service and its owning job container were left un
 
 test "$(docker inspect --format '{{.State.Running}}' "$legacy_id")" = true
 echo "Unanchored debris was refused while a concurrent job container could not be ruled out."
+
+# Sole-running-job reclamation, against a real daemon. With the synthetic job
+# container stopped, this job container is the only running runner job
+# container, so unanchored legacy debris becomes provably reclaimable. This is
+# the only path that clears pre-anchor debris, and it is unreachable while any
+# other job container runs.
+docker stop "$job_id" >/dev/null
+test "$(docker inspect --format '{{.State.Running}}' "$job_id")" = false
+
+sole_output="$(node "$helper" reclaim-stale "$state_directory" "$CI_RESOURCE_SUFFIX" 2>&1)"
+printf '%s\n' "$sole_output"
+if [[ "$sole_output" != *"This job runs in runner job container "* ]]; then
+  echo "Sole-job reclamation could not prove which runner job container it runs in."
+  exit 1
+fi
+if [[ "$sole_output" != *"this job container is the only running job container, so no other run is live"* ]]; then
+  echo "The sole-running-job reclamation branch did not execute against a real daemon."
+  exit 1
+fi
+if docker inspect "$legacy_id" >/dev/null 2>&1; then
+  echo "Unanchored debris survived sole-running-job reclamation."
+  exit 1
+fi
+legacy_id=""
+if docker inspect "$active_id" >/dev/null 2>&1; then
+  echo "A service whose owning job container has since stopped survived reclamation."
+  exit 1
+fi
+active_id=""
+echo "Unanchored debris was reclaimed once this job container was provably the only running job container, and the service whose owner had since stopped was reclaimed with it."

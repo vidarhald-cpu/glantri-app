@@ -136,11 +136,11 @@ can never block a later run.
 
 Every browser-service container is created with three labels:
 
-| Label                            | Value                                          |
-| -------------------------------- | ---------------------------------------------- |
-| `com.glantri.ci.owner`           | `glantri-browser-service`                      |
-| `com.glantri.ci.resource-suffix` | the owning run's `CI_RESOURCE_SUFFIX`          |
-| `com.glantri.ci.job-container`   | the full ID of the owning runner job container |
+| Label                            | Value                                                                                                                 |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `com.glantri.ci.owner`           | `glantri-browser-service`                                                                                             |
+| `com.glantri.ci.resource-suffix` | the owning run's `CI_RESOURCE_SUFFIX`                                                                                 |
+| `com.glantri.ci.job-container`   | the full ID of the owning runner job container, or empty when that run could not prove which job container it runs in |
 
 The owner label defines the scope the lifecycle helper may act on. The resource
 suffix identifies the owning run and attempt. The job-container label is the
@@ -154,6 +154,14 @@ daemon, testing each running container named
 `FORGEJO-ACTIONS-TASK-<task>_WORKFLOW-<hash>_JOB-<job>`. The proven ID is written
 to `<CI_SERVICE_STATE_DIR>/owner-job-container` and applied as the anchor label.
 Nothing is inferred from a hostname or a name convention alone.
+
+When that proof fails the file is empty, the anchor label is applied empty, and
+the service is thereafter indistinguishable from unanchored debris: it keeps the
+owner and resource-suffix labels, but it loses its liveness attribution. The
+direction is safe — an unanchored container is refused, never reclaimed on a
+guess — but the degradation is not silent. Each service-start step emits a
+workflow warning naming the missing anchor, so a run whose self-identification
+broke is visible in the job log rather than only in a later run's refusal.
 
 ### Reclamation, and what happens when liveness is unknown
 
@@ -199,8 +207,23 @@ unanchored cases and the token-possession self-identification.
 a real Docker daemon: it creates an orphan anchored to a dead job container,
 confirms the port gate rejects it, reclaims it, confirms the port is free again,
 and confirms that a service anchored to a running job container and its owning
-job container are both left untouched. Both run in the `tooling` job and in
-`application-docker-test`.
+job container are both left untouched. It then stops that job container and runs
+reclamation again, so the sole-running-job branch — the only path that clears
+pre-anchor debris — executes against the real daemon too.
+
+The synthetic asserts that reclamation reported the job container it proved it
+runs in. Self-identification silently failing therefore fails the synthetic
+rather than passing it: the reclamation decisions are only meaningful when the
+job knows which job container is its own. Both suites run in the `tooling` job
+and in `application-docker-test`, and the `tooling` job runs whenever these
+scripts change, so the real-Docker proof does not depend on the runtime gate
+selecting `application-docker-test`.
+
+A Docker call that never returns is abandoned after `CI_DOCKER_TIMEOUT_MS`
+milliseconds, defaulting to 60000, and is then treated as a failed call. A
+wedged daemon therefore cannot hold a job open to its workflow timeout, and
+because an abandoned call proves nothing about liveness, the outcome is always a
+refusal and never a reclamation.
 
 ## Bootstrap on this Mac
 

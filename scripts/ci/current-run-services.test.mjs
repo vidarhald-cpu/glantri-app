@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import net from "node:net";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -535,4 +538,51 @@ test("identifies this job container only through proven possession of a fresh to
     undefined,
   );
   assert.equal(identifySelfJobContainer({ candidates: [] }), undefined);
+});
+
+test("treats a wedged Docker daemon as a failed call and refuses rather than reclaims", () => {
+  // Finding 7: a Docker call that never returns must not hold the job open, and
+  // the abandoned call must carry no evidence of liveness, so the only safe
+  // conclusion is to refuse. This exercises the real spawnSync path.
+  const stubDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "glantri-ci-wedged-docker-"));
+  const stubPath = path.join(stubDirectory, "docker");
+  // The stub must hang on its own terms, so it invokes this Node binary by
+  // absolute path rather than depending on anything resolvable through PATH.
+  fs.writeFileSync(
+    stubPath,
+    `#!/bin/sh\nexec ${process.execPath} -e 'setTimeout(() => {}, 30000)'\n`,
+    { mode: 0o755 },
+  );
+
+  const previousPath = process.env.PATH;
+  const previousTimeout = process.env.CI_DOCKER_TIMEOUT_MS;
+  process.env.PATH = `${stubDirectory}${path.delimiter}${previousPath ?? ""}`;
+  process.env.CI_DOCKER_TIMEOUT_MS = "250";
+  let identity;
+  const startedAt = Date.now();
+  try {
+    identity = identifySelfJobContainer({ candidates: [SELF_JOB] });
+  } finally {
+    process.env.PATH = previousPath;
+    if (previousTimeout === undefined) delete process.env.CI_DOCKER_TIMEOUT_MS;
+    else process.env.CI_DOCKER_TIMEOUT_MS = previousTimeout;
+    fs.rmSync(stubDirectory, { recursive: true, force: true });
+  }
+
+  assert.ok(Date.now() - startedAt < 20_000, "a wedged Docker call must be abandoned, not awaited");
+  assert.equal(identity, undefined);
+
+  const plan = planStaleServiceReclamation({
+    serviceContainers: [browserService("glantri-web-test-401-1")],
+    runningJobContainers: [SELF_JOB],
+    selfJobContainerId: identity,
+    currentSuffix: "812-1",
+  });
+  assert.equal(plan.selfIdentified, false);
+  assert.equal(plan.soleRunningJob, false);
+  assert.deepEqual(plan.stale, []);
+  assert.deepEqual(
+    plan.unresolved.map((entry) => entry.container.name),
+    ["glantri-web-test-401-1"],
+  );
 });

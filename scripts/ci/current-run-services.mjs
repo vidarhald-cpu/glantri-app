@@ -20,6 +20,7 @@ const OWNER_LABEL_VALUE = "glantri-browser-service";
 const RESOURCE_SUFFIX_LABEL = "com.glantri.ci.resource-suffix";
 const JOB_CONTAINER_LABEL = "com.glantri.ci.job-container";
 const OWNER_JOB_CONTAINER_FILE = "owner-job-container";
+const DEFAULT_DOCKER_TIMEOUT_MS = 60_000;
 const SENSITIVE_KEY_PATTERN =
   /authorization|cookie|password|passwd|token|secret|session|api[_-]?key/i;
 const COMPOUND_SECRET_KEY = String.raw`(?:authorization|proxy[_-]?authorization|cookie|set[_-]?cookie|password|passwd|token|secret|session(?:[_-]?id)?|access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|client[_-]?secret)`;
@@ -100,12 +101,34 @@ function readMetadata(stateDirectory, service) {
   return validateMetadata(metadata);
 }
 
+/**
+ * How long a single Docker call may take before it is abandoned. A wedged
+ * daemon must not hold a job open until its workflow timeout. The override
+ * exists so the timeout path itself can be exercised by the regression suite.
+ */
+function dockerTimeoutMs() {
+  const override = Number.parseInt(process.env.CI_DOCKER_TIMEOUT_MS ?? "", 10);
+  return Number.isInteger(override) && override > 0 ? override : DEFAULT_DOCKER_TIMEOUT_MS;
+}
+
 function runDocker(args, { allowFailure = false } = {}) {
+  const timeout = dockerTimeoutMs();
   const result = spawnSync("docker", args, {
     encoding: "utf8",
     maxBuffer: 20 * 1024 * 1024,
+    timeout,
   });
-  if (result.error) fail(`Could not execute Docker: ${result.error.message}`);
+  if (result.error) {
+    const timedOut = result.error.code === "ETIMEDOUT";
+    const detail = timedOut
+      ? `Docker ${args[0]} did not respond within ${timeout}ms.`
+      : `Could not execute Docker: ${result.error.message}`;
+    // A timed-out call carries no evidence, so it must read as a failed call:
+    // callers that tolerate failure learn nothing and therefore refuse.
+    if (!allowFailure) fail(detail);
+    console.log(`${detail} Treating it as a failed Docker call.`);
+    return { ...result, status: 1, stdout: "", stderr: "" };
+  }
   if (!allowFailure && result.status !== 0) {
     const detail = sanitizeLogs(`${result.stdout ?? ""}${result.stderr ?? ""}`).trim();
     fail(`Docker ${args[0]} failed${detail ? `: ${detail}` : "."}`);

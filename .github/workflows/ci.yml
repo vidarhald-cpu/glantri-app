@@ -241,6 +241,9 @@ jobs:
           api_image_id="$(docker image inspect --format '{{.Id}}' "$api_image_tag")"
           api_container_id=""
           owner_job_container="$(cat "$CI_SERVICE_STATE_DIR/owner-job-container" 2>/dev/null || true)"
+          if [ -z "$owner_job_container" ]; then
+            echo "::warning::Starting the API service without a runner job-container ownership anchor: this run could not prove which job container it runs in, so com.glantri.ci.job-container will be empty and a later run will treat this container as unanchored."
+          fi
           log_api_startup_failure() {
             startup_status=$?
             if [ "$startup_status" -ne 0 ] && [ -n "$api_container_id" ]; then
@@ -270,6 +273,9 @@ jobs:
           web_image_id="$(docker image inspect --format '{{.Id}}' "$web_image_tag")"
           web_container_id=""
           owner_job_container="$(cat "$CI_SERVICE_STATE_DIR/owner-job-container" 2>/dev/null || true)"
+          if [ -z "$owner_job_container" ]; then
+            echo "::warning::Starting the Web service without a runner job-container ownership anchor: this run could not prove which job container it runs in, so com.glantri.ci.job-container will be empty and a later run will treat this container as unanchored."
+          fi
           log_web_startup_failure() {
             startup_status=$?
             if [ "$startup_status" -ne 0 ] && [ -n "$web_container_id" ]; then
